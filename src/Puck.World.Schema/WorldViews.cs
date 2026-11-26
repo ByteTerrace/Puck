@@ -243,7 +243,8 @@ public enum WorldSeatYawReference : byte {
 /// </summary>
 /// <param name="Id">The row's stable id, unique within the section; the camera read-back names the held row by it.</param>
 /// <param name="Program">The camera program the seat's camera eases to: a name in the document's program table
-/// (<c>views.programs</c>, a <c>cameras[].rig</c>). Its <c>anchor</c>'s <c>reference</c> subject is the seat's body.</param>
+/// (<c>views.programs</c>, a <c>cameras[].rig</c>). Its <c>anchor</c>'s <c>reference</c> subject is the seat's body, and
+/// a binding keyed <c>$body</c> in any of its operands reads the seat's body, as the row's condition does.</param>
 /// <param name="When">The row holds while this is positive. A binding keyed <c>$body</c> reads the cell of the seat's
 /// own body, so the row frames only the seats that satisfy it.</param>
 /// <param name="Near">The framing's near-plane distance from its eye, in world units, so nothing nearer draws (a

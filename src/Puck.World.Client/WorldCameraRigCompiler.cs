@@ -14,6 +14,10 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
     /// <summary>Gets or sets the group spread an authored <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/>
     /// widens by. Inert for a program authoring no pullback.</summary>
     float Spread { get; set; }
+    /// <summary>Gets or sets the reads a bound operand keyed <c>$body</c> (<see cref="StateBinding.BodyKey"/>) resolves
+    /// through, bound to the body the program frames, such as a seat framing's own body; <see langword="null"/> reads
+    /// every operand through the mirror alone, where such a key names no body and reads its fallback.</summary>
+    WorldStateLease? Reads { get; set; }
     /// <summary>Gets the response the last resolve reported (the program's
     /// <see cref="WorldCameraProgramOp.Dynamics"/>, or <see cref="SdfCameraDynamics.None"/>).</summary>
     SdfCameraDynamics Dynamics { get; }
@@ -574,9 +578,21 @@ public static class WorldCameraRigCompiler {
             set => m_rig.Look = value;
         }
         public float Spread { get; set; }
+        public WorldStateLease? Reads { get; set; }
         public SdfCameraClearance? Clearance => m_rig.Clearance;
         public SdfCameraFirstPerson? FirstPerson => m_rig.FirstPerson;
 
+        // One bound operand's presented value: a binding keyed $body through the framed body's reads, anything else
+        // through the mirror, an angle's keys along the shorter arc.
+        private float Read(in ScalarSource source, in BindableScalar value) {
+            if ((value.State is { Key: StateBinding.BodyKey }) && (Reads is { } reads)) {
+                return reads.Scalar(fallback: source.Fallback, scalar: in value);
+            }
+
+            return (source.IsAngle
+                ? m_mirror.Angle(angle: new BindableAngle(value: value), fallback: source.Fallback)
+                : m_mirror.Scalar(fallback: source.Fallback, scalar: in value));
+        }
         // Refills the evaluator's per-frame slots: a bound operand presents its state mirror slot, which the mirror
         // read at the delivered tick and engine tick and the frame interpolated, and a keyed one its keys at their
         // clock's presented phase; a placement subject reads the live
@@ -596,20 +612,9 @@ public static class WorldCameraRigCompiler {
                             mirror: m_mirror,
                             scalar: in value,
                             site: source.Site,
-                            value: (source.IsAngle
-                                ? m_mirror.Angle(
-                                    angle: new BindableAngle(value: value),
-                                    fallback: source.Fallback
-                                )
-                                : m_mirror.Scalar(
-                                    fallback: source.Fallback,
-                                    scalar: in value
-                                ))
+                            value: Read(source: in source, value: in value)
                         )
-                        : m_mirror.Scalar(
-                            fallback: source.Fallback,
-                            scalar: in value
-                        ))
+                        : Read(source: in source, value: in value))
                     : (1f + (source.SpreadPullback * MathF.Max(
                         x: Spread,
                         y: 0f

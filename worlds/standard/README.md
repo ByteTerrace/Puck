@@ -18,6 +18,16 @@ its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
 
+[station.puck](station.puck) is engagement with a thing a player walks up to and
+uses in place: `stationPlay(stations)` authors the context button's engage and
+step back, the `station` binding group, the framing that eases the seat's camera
+to each station's camera and the reach cells a lamp can read, and
+`stationFamily()` is the input family a world lists to suspend its movement while
+a seat is engaged. Its `pointerCapture` row makes a press that lands on a pointer
+surface the surface's alone until release; `stationPlay` lists it, and a world
+with surfaces but no stations lists it itself. The debug world's gallery displays
+are the worked use ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)).
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 

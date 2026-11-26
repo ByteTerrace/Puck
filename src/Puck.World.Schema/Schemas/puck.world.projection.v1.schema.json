@@ -4666,7 +4666,7 @@
                 "type": "string"
               },
               "program": {
-                "description": "The camera program the seat\u0027s camera eases to: a name in the document\u0027s program table (views.programs, a cameras[].rig). Its anchor\u0027s reference subject is the seat\u0027s body.",
+                "description": "The camera program the seat\u0027s camera eases to: a name in the document\u0027s program table (views.programs, a cameras[].rig). Its anchor\u0027s reference subject is the seat\u0027s body, and a binding keyed $body in any of its operands reads the seat\u0027s body, as the row\u0027s condition does.",
                 "type": "string"
               },
               "when": {

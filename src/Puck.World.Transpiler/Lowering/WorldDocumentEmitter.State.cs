@@ -109,9 +109,10 @@ public static partial class WorldDocumentEmitter {
     }
     private static void LowerStateWorldBlock(BlockNode block, JsonObject stateObj, DocumentScope scope, string statePointer) {
         // Authoring is judged per scope: rows a `use` stamped here were authored by that module, so a block written
-        // beside them appends to them rather than authoring the section twice.
-        if (scope.Annotations.ContainsKey(key: "StateWorldArrayForm") ||
-            scope.Annotations.ContainsKey(key: "StateWorldDeclarationBlock")) {
+        // beside them appends to them rather than authoring the section twice. Declaration blocks compose as every other
+        // section written twice does (a template's block beside the document's own appends to it), and a row name is
+        // unique across all of them.
+        if (scope.Annotations.ContainsKey(key: "StateWorldArrayForm")) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateWorldSectionMixed,
                 message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
@@ -121,7 +122,10 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        scope.Annotations["StateWorldDeclarationBlock"] = true;
+        if (!scope.Annotations.TryGetValue(key: "StateWorldDeclarationBlock", value: out var declared) || (declared is not HashSet<string> seenNames)) {
+            seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+            scope.Annotations["StateWorldDeclarationBlock"] = seenNames;
+        }
 
         JsonArray worldArr;
 
@@ -139,7 +143,6 @@ public static partial class WorldDocumentEmitter {
             span: block.Span
         );
 
-        var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var pendingReferences = new List<PendingStateReference>();
         var totalVectorBytes = 0L;
 
