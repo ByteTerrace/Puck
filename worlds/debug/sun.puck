@@ -65,6 +65,11 @@ let companionBody = 14
 let companionLethal = (companionStar.radius + 100)
 let companionWarning = (companionStar.radius + 500)
 let companionReach = 1500
+// How much slower the outpost's own time runs at the pass, how many hours either side of it the star's well slows it,
+// and how bright, in lumens, the pad's beacon flashes on that time.
+let dilationDepth = 0.5
+let dilationHours = 1
+let beaconFlash = 60000
 
 // The star rides the top slot; a ship and its pilot arrive from the moon as two.
 bodies {
@@ -156,6 +161,8 @@ timeline {
   clocks [
     { name: day, state: day, spanSeconds: 24h }
     { name: pair, state: pair, spanSeconds: pairSeconds }
+    // A turn of the outpost's own time a second, which the pad's beacon pulses on.
+    { name: beat, state: perihelionTime, spanSeconds: 1 }
   ]
 }
 
@@ -180,12 +187,24 @@ state {
       follows { destination: "debug", delaySeconds: sunDelayPlanet }
     }
     // The pair's turn, which this world owns and the valley and the moon follow: one turn of the companion about the
-    // star every `pairSeconds`.
+    // star every `pairSeconds` of the day, run on the day (moon-frame.puck's `pairAdvance`), so holding the day in the
+    // valley holds the binary with the star.
     {
       name: "pair"
       kind: "Fixed"
       value: "0"
-      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
+      advance: pairAdvance
+    }
+    // The outpost's own time, in seconds. It keeps the day's pace, and runs slow as the star passes (stars.puck's
+    // `starWellTime`): `dilationDepth` slower at the pass, over `dilationHours` either side. Its rate follows the day's
+    // phase, so it reads in closed form at any tick however long the world stood unwatched, and the beacon on the pad,
+    // which pulses on it, slows as the star nears and quickens as it leaves. `world.state perihelionTime` beside
+    // `world.state day` shows the outpost falling behind the valley across the pass.
+    {
+      name: "perihelionTime"
+      kind: "Fixed"
+      value: "0"
+      advance: starWellTime(clock: "day", secondsPerTurn: sharedDaySeconds, passHour: sunPassHour, window: dilationHours, depth: dilationDepth)
     }
     // What this world publishes: its light and its mass, each a share of the whole.
     { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
@@ -434,6 +453,22 @@ render {
       )
       // The companion, from where its turn puts it about the star: a second, redder light and a second shadow.
       starLight(of: companionStar, turns: [sunTurn, companionTurn], focus: sunSystemCentre)
+      // The pad's beacon, over the corner opposite the frame: a flash at the top of every second of the outpost's own
+      // time (`beat`), fading over a quarter of it, so its pulse slows as the star passes and the outpost's clock runs
+      // slow.
+      point(
+        name: "beacon",
+        position: [(0 - (padHalf - 0.8)), (padTop + 1.2), (0 - (padHalf - 0.8))],
+        temperature: 2000K,
+        power: {
+          clock: beat
+          keys [
+            { at: 0, value: beaconFlash }
+            { at: 0.25, value: 0 }
+            { at: 0.9, value: 0 }
+          ]
+        }
+      )
     ]
   }
   sky {

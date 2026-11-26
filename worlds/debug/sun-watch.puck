@@ -30,7 +30,7 @@ state {
       name: "pair"
       kind: "Fixed"
       value: "0"
-      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
+      advance: pairAdvance
       follows { destination: "sun" }
     }
   ]
