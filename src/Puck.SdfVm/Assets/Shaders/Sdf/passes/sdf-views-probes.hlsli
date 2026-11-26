@@ -290,7 +290,10 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, uint rate
 // share of the blend, or its cell's extra alone; none for a pixel that does not read the volume (sdfViewsProbesWanted)
 // and none where no slot it names answers. A slot whose gather no probe answered leaves the blend, so a pixel beside an
 // unmeasured cell reads the measured ones about it. The struct carries only the slots and their shares (and a share of
-// one where any answers); it holds no cage and no corner weight, and every reader below reads the slots' words.
+// one where any answers); it holds no cage and no corner weight, and every reader below reads the slots' words. Where
+// any answers, each of the four slots names a slot that can be read, a slot of no share repeating one of the pixel's
+// own, so a reader reads all four with no branch between its loads (a branch on each slot's share runs the slots one
+// after another wherever the wave's lanes differ).
 SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
     SdfMeshProbes probes = sdfMeshProbesNone();
 
@@ -312,7 +315,7 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
         }
         if ((state & 0xFFFFu) != 0u) {
             probes.share = 1.0;
-            probes.slots.x = (slot.first + 1u);
+            probes.slots = (slot.first + 1u).xxxx;
             probes.slotStride = slot.stride;
             probes.slotWeights.x = 1.0;
         }
@@ -322,25 +325,39 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
     float2 fraction;
     int2 base = sdfViewsProbeMixBase(p.pixel, fraction);
     float4 weights = float4(float(mix & 0x7Fu), float((mix >> 7u) & 0x7Fu), float((mix >> 14u) & 0x7Fu), float((mix >> 21u) & 0x7Fu));
-    uint4 slots = uint4(0u, 0u, 0u, 0u);
+    uint4 slots;
+    // Each corner's cell among the four by four its tile's pixels blend, plus one (sdfViewsStoreTileShares), which every
+    // corner of a pixel of the tile lies in.
+    uint4 cells;
+    int2 last = (int2(sdfViewsProbeCells()) - 1);
+    int2 ring = ((int2(p.pixel / SDF_VISIBILITY_GROUP_EDGE) * int(SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE)) - 1);
 
-    // The lookup gives a share only to a cell inside the view that holds a representative.
+    // The lookup gives a share only to a cell inside the view that holds a representative. Each corner's state is read,
+    // a cell outside the view at the nearest one inside it, whose share is zero.
     [unroll] for (uint corner = 0u; (corner < 4u); corner++) {
-        if (weights[corner] > 0.0) {
-            uint record = sdfViewsProbeRecord(uint2(base + int2((corner & 1u), (corner >> 1u))), p.viewIndex);
+        int2 cell = (base + int2((corner & 1u), (corner >> 1u)));
+        uint record = sdfViewsProbeRecord(uint2(clamp(cell, int2(0, 0), last)), p.viewIndex);
+        uint2 inRing = uint2(clamp((cell - ring), int2(0, 0), int2(3, 3)));
 
-            if ((sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)] & 0xFFFFu) == 0u) {
-                weights[corner] = 0.0;
-            }
-            slots[corner] = (record + 1u);
+        if ((sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)] & 0xFFFFu) == 0u) {
+            weights[corner] = 0.0;
         }
+        slots[corner] = (record + 1u);
+        cells[corner] = (((inRing.y * 4u) + inRing.x) + 1u);
     }
 
     float total = dot(weights, float4(1.0, 1.0, 1.0, 1.0));
 
     if (total > 0.0) {
+        uint answering = ((weights.x > 0.0) ? 0u : ((weights.y > 0.0) ? 1u : ((weights.z > 0.0) ? 2u : 3u)));
+        uint answeringSlot = sdfComponent(slots, answering);
+        uint answeringCell = sdfComponent(cells, answering);
+
         probes.share = 1.0;
-        probes.slots = slots;
+        probes.slots = uint4(((weights.x > 0.0) ? slots.x : answeringSlot), ((weights.y > 0.0) ? slots.y : answeringSlot),
+            ((weights.z > 0.0) ? slots.z : answeringSlot), ((weights.w > 0.0) ? slots.w : answeringSlot));
+        probes.slotCells = uint4(((weights.x > 0.0) ? cells.x : answeringCell), ((weights.y > 0.0) ? cells.y : answeringCell),
+            ((weights.z > 0.0) ? cells.z : answeringCell), ((weights.w > 0.0) ? cells.w : answeringCell));
         probes.slotStride = sdfViewsProbePlane();
         probes.slotWeights = (weights / total);
     }
@@ -348,27 +365,25 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
     return probes;
 }
 
-// The share of the probes about one slot's receiver that see a traced light (sdfMeshLightVisibility), from the slot whose
-// first word lies at `first`, its words `stride` apart: every measured corner's summed weight for a light all of them
-// see, zero for one none sees, and the listed share for a light they disagree on.
-float sdfViewsSlotLightVisibility(uint first, uint stride, uint lightIndex) {
-    uint word = (lightIndex >> 5u);
+// The share of the probes about one slot's receiver that see a traced light (sdfMeshLightVisibility), from the slot's
+// agreement and list: every measured corner's summed weight `allWeight` for a light all of them see (`seenByAll`, the
+// agreement's word that holds the light's bit), zero for one none sees (`seenByAny`, likewise), and the listed share for a
+// light they disagree on (`partial`, the list's four words).
+float sdfViewsSlotShareOf(uint seenByAll, uint seenByAny, float allWeight, uint4 partial, uint lightIndex) {
     uint bit = (1u << (lightIndex & 31u));
 
-    if ((sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeLightsWord + word) * stride)] & bit) != 0u) {
-        return asfloat(sdfViewsProbeRecordBuffer[first + (SdfViewsProbeLightsWeightWord * stride)]);
+    if ((seenByAll & bit) != 0u) {
+        return allWeight;
     }
-    if ((sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeLightsAnyWord + word) * stride)] & bit) == 0u) {
+    if ((seenByAny & bit) == 0u) {
         return 0.0;
     }
 
     float share = 0.0;
 
     [unroll] for (uint pair = 0u; (pair < (SdfViewsProbePartialLights / 2u)); pair++) {
-        uint entries = sdfViewsProbeRecordBuffer[first + ((SdfViewsProbePartialWord + pair) * stride)];
-
         [unroll] for (uint side = 0u; (side < 2u); side++) {
-            uint entry = ((entries >> (16u * side)) & 0xFFFFu);
+            uint entry = ((partial[pair] >> (16u * side)) & 0xFFFFu);
 
             if (((entry & SdfViewsProbePartialValid) != 0u) && (((entry >> 8u) & 0x7Fu) == lightIndex)) {
                 share = (float(entry & 0xFFu) / 255.0);
@@ -377,18 +392,51 @@ float sdfViewsSlotLightVisibility(uint first, uint stride, uint lightIndex) {
     }
     return share;
 }
-// The share of the probes about a views pixel that see a traced light: its slots' shares, blended.
+// sdfViewsSlotShareOf from the slot whose first word lies at `first`, its words `stride` apart, every word it reads loaded
+// before any answer is known.
+float sdfViewsSlotLightVisibility(uint first, uint stride, uint lightIndex) {
+    uint word = (lightIndex >> 5u);
+    uint4 partial;
+
+    [unroll] for (uint pair = 0u; (pair < (SdfViewsProbePartialLights / 2u)); pair++) {
+        partial[pair] = sdfViewsProbeRecordBuffer[first + ((SdfViewsProbePartialWord + pair) * stride)];
+    }
+    return sdfViewsSlotShareOf(sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeLightsWord + word) * stride)],
+        sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeLightsAnyWord + word) * stride)],
+        asfloat(sdfViewsProbeRecordBuffer[first + (SdfViewsProbeLightsWeightWord * stride)]), partial, lightIndex);
+}
+// The share of the probes about a views pixel that see a traced light: its slots' shares, blended. A binned pixel takes a
+// light its tile's shares resolve from them (sdfViewsProbesTile), its slots' cells' words in the shade bins, where the
+// filter pass wrote each cell's share once for the whole tile (sdfViewsStoreTileShares); any other light, and every light
+// of a pixel that reads an extra, reads its slots' own agreement and list. Every slot is read, none behind a branch, so the
+// four slots' words load together however the wave's lanes differ (sdfViewsProbesAt names a readable slot in each of the
+// four whenever the volume answers).
 float sdfViewsLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     if (lightIndex >= (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)) {
         return 1.0;
     }
 
     float share = 0.0;
+#if defined(SDF_VIEWS_BINNED)
+    uint lightWord = (lightIndex >> 5u);
+    uint lightBit = (1u << (lightIndex & 31u));
+    uint resolved = sdfComponent(probes.tileTraced, lightWord);
+
+    if ((resolved & lightBit) != 0u) {
+        uint rank = (countbits(resolved & (lightBit - 1u)) + ((lightWord > 0u) ? countbits(probes.tileTraced.x) : 0u)
+            + ((lightWord > 1u) ? countbits(probes.tileTraced.y) : 0u) + ((lightWord > 2u) ? countbits(probes.tileTraced.z) : 0u));
+
+        [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
+            uint pair = sdfShadeTiles[(probes.tileShares + ((probes.slotCells[slot] - 1u) * (SDF_SHADE_TILE_SHARED_LIGHTS / 2u))) + (rank >> 1u)];
+
+            share += (probes.slotWeights[slot] * (float((pair >> (16u * (rank & 1u))) & 0xFFFFu) / 65535.0));
+        }
+        return share;
+    }
+#endif
 
     [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
-        if (probes.slotWeights[slot] > 0.0) {
-            share += (probes.slotWeights[slot] * sdfViewsSlotLightVisibility((probes.slots[slot] - 1u), probes.slotStride, lightIndex));
-        }
+        share += (probes.slotWeights[slot] * sdfViewsSlotLightVisibility((probes.slots[slot] - 1u), probes.slotStride, lightIndex));
     }
     return share;
 }
@@ -449,15 +497,13 @@ float3 sdfViewsCubeAt(SdfMeshProbes probes, uint word, float3 direction) {
     float3 value = 0.0;
 
     [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
-        if (probes.slotWeights[slot] > 0.0) {
-            uint first = ((probes.slots[slot] - 1u) + (word * probes.slotStride));
-            float3 cube = 0.0;
+        uint first = ((probes.slots[slot] - 1u) + (word * probes.slotStride));
+        float3 cube = 0.0;
 
-            [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
-                cube += (squared[axis] * puckUnpackSharedExponent(sdfViewsProbeRecordBuffer[first + (faces[axis] * probes.slotStride)]));
-            }
-            value += (probes.slotWeights[slot] * cube);
+        [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
+            cube += (squared[axis] * puckUnpackSharedExponent(sdfViewsProbeRecordBuffer[first + (faces[axis] * probes.slotStride)]));
         }
+        value += (probes.slotWeights[slot] * cube);
     }
     return value;
 }
@@ -468,16 +514,14 @@ float sdfViewsSkyShareAt(SdfMeshProbes probes, float3 direction) {
     float sky = 0.0;
 
     [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
-        if (probes.slotWeights[slot] > 0.0) {
-            uint first = ((probes.slots[slot] - 1u) + (SdfViewsProbeSkyWord * probes.slotStride));
-            uint2 words = uint2(sdfViewsProbeRecordBuffer[first], sdfViewsProbeRecordBuffer[first + probes.slotStride]);
-            float share = 0.0;
+        uint first = ((probes.slots[slot] - 1u) + (SdfViewsProbeSkyWord * probes.slotStride));
+        uint2 words = uint2(sdfViewsProbeRecordBuffer[first], sdfViewsProbeRecordBuffer[first + probes.slotStride]);
+        float share = 0.0;
 
-            [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
-                share += (squared[axis] * (float((((faces[axis] < 3u) ? words.x : words.y) >> (10u * (faces[axis] % 3u))) & 0x3FFu) / 1023.0));
-            }
-            sky += (probes.slotWeights[slot] * share);
+        [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
+            share += (squared[axis] * (float((((faces[axis] < 3u) ? words.x : words.y) >> (10u * (faces[axis] % 3u))) & 0x3FFu) / 1023.0));
         }
+        sky += (probes.slotWeights[slot] * share);
     }
     return sky;
 }

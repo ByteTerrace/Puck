@@ -280,7 +280,8 @@ public sealed partial class WorldBenchmarkCommandModule {
         if (chapter.Driven) {
             node["stepsReached"] = chapter.StepReached;
             node["plans"] = chapter.Plans;
-            node["authorityTicks"] = chapter.AuthorityTicks;
+            node["chargedTicks"] = chapter.ChargedTicks;
+            node["authorityTicks"] = chapter.AuthoritySpan;
             node["predictedTicks"] = chapter.PredictedTicks;
             node["prediction"] = chapter.Prediction;
             node["controlLines"] = chapter.ControlLines;

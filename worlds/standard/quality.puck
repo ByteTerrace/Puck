@@ -47,7 +47,9 @@ render {
   //
   // The RTX 2060's table is the `high` look along the 2060's own path, at 1920 by 1080: its views shade three quarters
   // of the display's width and height and reconstruct the rest over time (the jittered temporal resolve the high preset
-  // already runs), so the views, surface and probe-gather passes shade a little over half the pixels; its irradiance
+  // already runs), so the views, surface and probe-gather passes shade a little over half the pixels, each at full rate:
+  // a coarser views rate decides each cell by reading up to 144 visibility records about it (`sdfRateCell`) and cost more
+  // than it saved even on the RTX 4070, until the decision reads the edge distances the filter pass measures; its irradiance
   // volume is the medium tier's, whose finest level is 2 m cells over a 64 m window, two thirds of the high tier's probes,
   // and the hit cache and the published and feedback tables are sized by it; its distant shadow map draws 1024 texels a
   // side (a texel about 2.3 m across the 1200 m reach) and holds through a fifth of a degree of the sun's turn, so the
@@ -81,7 +83,7 @@ render {
       hostMemoryMiB: 6144
       frameBar { width: 1920, height: 1080, hertz: 60 }
       table {
-        viewsRate { maxRate: 2, tileSize: 4 }
+        viewsRate { maxRate: 1, tileSize: 4 }
         reflections { cell: 2, steps: 24 }
         distantShadows { reach: 1200, texels: 1024, frames: 4 }
         farShadows { hertz: 15 }

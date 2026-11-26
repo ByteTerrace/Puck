@@ -432,7 +432,7 @@ uint sdfShadeTileCount() {
     return (sdfShadeTilesAcross() * ((passGroup.imageExtent.y + (SDF_VISIBILITY_GROUP_EDGE - 1u)) / SDF_VISIBILITY_GROUP_EDGE));
 }
 uint sdfShadeBinsBase(uint viewIndex) {
-    return (viewIndex * (SDF_SHADE_TILE_HEADER_WORDS + ((2u + SDF_SHADE_TILE_LIGHT_WORDS) * sdfShadeTileCount())));
+    return (viewIndex * (SDF_SHADE_TILE_HEADER_WORDS + (((2u + SDF_SHADE_TILE_LIGHT_WORDS) + SDF_SHADE_TILE_SHARE_WORDS) * sdfShadeTileCount())));
 }
 uint sdfShadeTileBinWord(uint viewIndex, uint tile) {
     return ((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + tile);
@@ -443,6 +443,11 @@ uint sdfShadeListWord(uint viewIndex, uint entry) {
 // The first word of a tile's light masks: the tile's light mask words, then its screen mask.
 uint sdfShadeTileLightsWord(uint viewIndex, uint tile) {
     return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + (2u * sdfShadeTileCount())) + (SDF_SHADE_TILE_LIGHT_WORDS * tile));
+}
+// The first word of a tile's traced-light shares (sdf-views-lights.hlsli), after every tile's light masks.
+uint sdfShadeTileSharesWord(uint viewIndex, uint tile) {
+    return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + ((2u + SDF_SHADE_TILE_LIGHT_WORDS) * sdfShadeTileCount()))
+        + (SDF_SHADE_TILE_SHARE_WORDS * tile));
 }
 // The tile a pixel lies in, in the row order the bins count tiles in.
 uint sdfShadeTileOf(uint2 pixel) {

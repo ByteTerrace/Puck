@@ -16,7 +16,7 @@ let plinthPalette = [
   { color: "#EFE3C8", roughness: 0.55, specular: 0.25 }
   { color: "#E0A13A", roughness: 0.45, specular: 0.3 }
   { color: "#2C5A63", roughness: 0.6, specular: 0.2 }
-  { color: "#14262E", roughness: 0.15, specular: 0.5 }
+  { color: "#0F5866", roughness: 0.15, specular: 0.5, emissive: 900 }
   { color: "#C8902E", roughness: 0.3, metal: 1 }
   { color: "#FFC46A", roughness: 0.4, emissive: 2.5 }
 ]

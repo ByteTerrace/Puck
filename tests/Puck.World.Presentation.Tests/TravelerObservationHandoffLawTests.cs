@@ -9,9 +9,10 @@ namespace Puck.World.Presentation.Tests;
 /// CONTRACT UNDER TEST: a remote player's observation of its traveler is one stream for as long as the authority it
 /// entered through holds its connection. The player's host hands the traveler to a destination behind its door and
 /// observes it there; the traveler then walks to a second authority of the destination's host and back. The entry
-/// authority keeps the stream open across both crossings: each reaches the reader as a cut of the stream it already
-/// holds, followed by the whole document of the world the traveler now stands in, served by the entry authority
-/// itself or relayed from the other one. The reader's one ingress takes every record, the stream's identity never
+/// authority keeps the stream open across both crossings: each reaches the reader as one record of the stream it
+/// already holds, the whole document of the world the traveler now stands in, which carries the cut, served by the
+/// entry authority itself or relayed from the other one, so the reader never holds no document between the two
+/// worlds. The reader's one ingress takes every record, the stream's identity never
 /// changes, its span is never closed, and the traveler is back at the entry authority as the peer principal it left
 /// as, with the grants its admission gives an arrival.
 /// </summary>
@@ -19,7 +20,7 @@ public sealed class TravelerObservationHandoffLawTests {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(seconds: 60);
 
     // A reader as a mirror is one: every record passes its one ingress, a cut or a generation step withdraws what it
-    // held, and a close of the span ends it.
+    // held, a generation opens only with its whole document, and a close of the span ends it.
     private sealed class Reader : IClientSink {
         private readonly Lock m_gate = new();
         private readonly WorldStreamIngress m_ingress;
@@ -30,6 +31,8 @@ public sealed class TravelerObservationHandoffLawTests {
         private int m_cuts;
         private int m_terminalCuts;
         private int m_withdrawals;
+        private int m_openings;
+        private int m_bare;
 
         public Reader() => m_ingress = new WorldStreamIngress(withdraw: () => {
             m_document = null;
@@ -40,41 +43,57 @@ public sealed class TravelerObservationHandoffLawTests {
         public WorldStreamSpan Span => m_ingress.Span;
         public long Refusals => m_ingress.Refusals;
         public int Closes { get { lock (m_gate) { return m_closes; } } }
+        // The cut records taken: a generation opened with no document to carry its cut.
         public int Cuts { get { lock (m_gate) { return m_cuts; } } }
         public int TerminalCuts { get { lock (m_gate) { return m_terminalCuts; } } }
         public int Withdrawals { get { lock (m_gate) { return m_withdrawals; } } }
+        // The documents that opened a later generation of the stream the reader was bound to: each carried its cut.
+        public int Openings { get { lock (m_gate) { return m_openings; } } }
+        // The deliveries after which a reader that had held a document held none: the gap a separate cut record leaves
+        // until the new generation's document arrives.
+        public int Bare { get { lock (m_gate) { return m_bare; } } }
         // Each authority a snapshot named after the one before it named another: the worlds the reader was shown, in order.
         public string[] Authorities { get { lock (m_gate) { return [.. m_authorities]; } } }
         // The authority whose document and bodies the reader holds now, or null while it holds either of neither.
         public string? Shown { get { lock (m_gate) { return ((m_document is null) ? null : m_authority); } } }
 
+        // Notes, after a delivery, a reader left without the document it had held.
+        private void Settle() {
+            if ((m_withdrawals > 1) && (m_document is null)) { m_bare++; }
+        }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (!m_ingress.Admit(stream: in stream)) { return; }
+                if (!m_ingress.Admit(opens: false, stream: in stream)) { return; }
                 m_authority = snapshot.Authority;
                 if ((m_authorities.Count == 0) || (m_authorities[^1] != snapshot.Authority)) {
                     m_authorities.Add(item: snapshot.Authority);
                 }
+                Settle();
             }
         }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (m_ingress.Admit(stream: in stream)) { m_document = definition; }
+                var held = m_ingress.Span;
+
+                if (!m_ingress.Admit(stream: in stream)) { return; }
+                m_document = definition;
+                if ((held.Stream != 0UL) && (stream.Generation > held.Generation)) { m_openings++; }
             }
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (m_ingress.Admit(stream: in stream)) { m_document = definition; }
+                if (m_ingress.Admit(opens: false, stream: in stream)) { m_document = definition; }
             }
         }
         public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
-            lock (m_gate) { _ = m_ingress.Admit(stream: in stream); }
+            lock (m_gate) { _ = m_ingress.Admit(opens: false, stream: in stream); }
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
             lock (m_gate) {
                 if (!m_ingress.Cut(stream: in stream, terminal: terminal)) { return; }
                 m_cuts++;
                 if (terminal) { m_terminalCuts++; }
+                Settle();
             }
         }
         public void CloseSpan(ulong stream) {
@@ -93,9 +112,7 @@ public sealed class TravelerObservationHandoffLawTests {
 
         while (!condition()) {
             Assert.False(condition: deadline.IsCancellationRequested, userMessage: $"timed out waiting until {what}");
-            hosts.Destination.DrainPendingTransfers();
-            hosts.Destination.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-            hosts.Source.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+            hosts.Step();
             Thread.Sleep(millisecondsTimeout: 1);
         }
     }
@@ -126,20 +143,31 @@ public sealed class TravelerObservationHandoffLawTests {
     }
     // Walks the source row's lowest traveler to another row of the destination host, under its own admitted principal,
     // as a crossing the row's own scan mints does.
-    private static void Walk(FederatedHosts hosts, string from, WorldServer source, string to, WorldServer target) {
-        var slot = TravelerSlot(server: source);
+    private static void Walk(FederatedHosts hosts, string from, WorldServer source, string to, WorldServer target) => Walk(
+        destination: WorldInstanceHost.TransferDestination.Existing(name: to),
+        from: from,
+        host: hosts.Destination,
+        hosts: hosts,
+        source: source,
+        target: target,
+        to: to
+    );
+    // Walks the traveler at body index `slot` of the source row, or its lowest traveler, from a row of `host` to
+    // `destination`, which may be a row of another host.
+    private static void Walk(FederatedHosts hosts, WorldInstanceHost host, string from, WorldServer source, WorldInstanceHost.TransferDestination destination, string to, WorldServer target, int? slot = null) {
+        slot ??= TravelerSlot(server: source);
 
         Assert.True(condition: (slot >= 0), userMessage: $"'{from}' holds no remote traveler to walk to '{to}'");
-        var traveling = source.ExecuteAuthorityOperation(operation: () => source.Population.PeerPrincipal(index: slot));
+        var traveling = source.ExecuteAuthorityOperation(operation: () => source.Population.PeerPrincipal(index: slot.Value));
         var leaving = TravelerSlots(server: source).Length;
         var landing = TravelerSlots(server: target).Length;
 
-        _ = hosts.Destination.EnqueueTransfer(
+        _ = host.EnqueueTransfer(
             actingPrincipal: traveling,
-            destination: WorldInstanceHost.TransferDestination.Existing(name: to),
+            destination: destination,
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: from,
-            sourceSlot: slot
+            sourceSlot: slot.Value
         );
         StepUntil(
             condition: () => ((TravelerSlots(server: source).Length == (leaving - 1)) && (TravelerSlots(server: target).Length == (landing + 1))),
@@ -208,9 +236,10 @@ public sealed class TravelerObservationHandoffLawTests {
 
     // THE LAW: an authority whose traveler stands in another process serves its recipient's stream from there without
     // ending it. It lends the far authority the stream's counters with the request; the far authority stamps its
-    // records as the stream's next generation, behind a cut; the relaying authority's lineage follows each stamp; and
-    // when the traveler moves on, the far authority hands the stream back with a record the recipient never sees.
-    // Asked again, the same stream goes on, here from the authority the traveler walked on to, behind another cut.
+    // records as the stream's next generation, opening with its whole document, which carries the cut; the relaying
+    // authority's lineage follows each stamp; and when the traveler moves on, the far authority hands the stream back
+    // with a record the recipient never sees. Asked again, the same stream goes on, here from the authority the
+    // traveler walked on to, opening with that world's document.
     [Fact]
     public async Task ARelayedSegmentContinuesItsStreamAcrossASocketAndIsHandedBackWhenTheTravelerMovesOn() {
         WorldRemoteAuthority? traveler = null;
@@ -238,7 +267,7 @@ public sealed class TravelerObservationHandoffLawTests {
         StepUntil(condition: () => relayed.Shows(authority: entry.AuthorityIdentity), hosts: hosts, what: "the far authority's world is relayed");
         var opening = relayed.Records[0];
 
-        Assert.Equal(expected: WorldFederationResponse.Cut, actual: opening.Kind);
+        Assert.Equal(expected: WorldFederationResponse.Definition, actual: opening.Kind);
         Assert.Equal(expected: new WorldStreamStamp(Generation: (own.Generation + 1L), Ordinal: (own.Ordinal + 1L), Stream: lineage.Stream), actual: opening.Stamp);
 
         Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
@@ -255,7 +284,7 @@ public sealed class TravelerObservationHandoffLawTests {
         StepUntil(condition: () => relayed.Shows(authority: onward.AuthorityIdentity), hosts: hosts, what: "the neighbour's world is relayed");
         var records = relayed.Records;
 
-        Assert.Equal(expected: WorldFederationResponse.Cut, actual: records[handed].Kind);
+        Assert.Equal(expected: WorldFederationResponse.Definition, actual: records[handed].Kind);
         Assert.True(condition: (records[handed].Stamp.Generation > last.Generation), userMessage: "the next segment opens a later generation");
         Assert.DoesNotContain(collection: records, filter: static record => (record.Kind is WorldFederationResponse.ProjectionMoved or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal));
         for (var index = 0; (index < records.Length); index++) {
@@ -269,6 +298,150 @@ public sealed class TravelerObservationHandoffLawTests {
         await lifetime.CancelAsync();
         try { _ = await second; } catch (Exception exception) when (exception is OperationCanceledException or IOException) { }
         try { await relayed.Reading; } catch (OperationCanceledException) { }
+    }
+    // Asserts the reader saw `authorities` in order on one stream it bound to at generation zero: never closed, never
+    // refused a record, each handoff one document that carried its cut, and never a delivery that left it without one.
+    private static void AssertOneObservation(Reader reader, WorldStreamSpan bound, string[] authorities) {
+        var span = reader.Span;
+
+        Assert.Equal(expected: bound.Stream, actual: span.Stream);
+        Assert.False(condition: span.Closed);
+        Assert.Equal(expected: 0, actual: reader.Closes);
+        Assert.Equal(expected: 0, actual: reader.TerminalCuts);
+        Assert.Equal(expected: 0L, actual: reader.Refusals);
+        Assert.Equal(expected: 0, actual: reader.Cuts);
+        Assert.Equal(expected: (authorities.Length - 1), actual: reader.Openings);
+        Assert.Equal(expected: 0, actual: reader.Bare);
+        Assert.Equal(expected: authorities, actual: reader.Authorities);
+    }
+
+    // THE LAW: a remote player's observation is one stream when its traveler walks from the authority it entered through
+    // to an authority on another host and back. The entry authority relays the far authority's segment over a socket,
+    // takes the stream back when the traveler returns, and serves its own view again: one stream identity, a later
+    // generation at each handoff, each opened by the next world's document.
+    [Fact]
+    public void ATravelerWalksToAThirdProcessAndBackOnOneObservation() {
+        WorldRemoteAuthority? traveler = null;
+        using var hosts = FederatedHosts.Build(far: true, travelerRouteStarted: wrapper => traveler = wrapper);
+        var entry = hosts.DestinationRow.Server;
+        var far = hosts.FarRow!.Server;
+
+        Enter(hosts: hosts, slot: 0);
+        Assert.NotNull(@object: traveler);
+        var reader = new Reader();
+
+        using var observing = traveler.AttachSink(sink: reader);
+
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world");
+        var bound = reader.Span;
+
+        Walk(destination: hosts.FarDestination, from: FederatedHosts.DestinationName, host: hosts.Destination, hosts: hosts, source: entry, target: far, to: FederatedHosts.FarName);
+        StepUntil(condition: () => (reader.Shown == far.AuthorityIdentity), hosts: hosts, what: "the reader holds the far host's world");
+        var away = reader.Span;
+
+        Assert.True(condition: (away.Generation > bound.Generation), userMessage: "the handoff to the far host opens a generation of the same stream");
+
+        Walk(destination: hosts.RemoteDestination, from: FederatedHosts.FarName, host: hosts.FarHost!, hosts: hosts, source: far, target: entry, to: FederatedHosts.DestinationName);
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world again");
+
+        Assert.True(condition: (reader.Span.Generation > away.Generation), userMessage: "the handoff back opens a later generation of the same stream");
+        AssertOneObservation(authorities: [entry.AuthorityIdentity, far.AuthorityIdentity, entry.AuthorityIdentity], bound: bound, reader: reader);
+    }
+    // THE LAW: a traveler whose kept body index was taken while it was away still comes back on one observation. A
+    // second traveler takes the next index while the first is away; a connection admission, which takes the highest free
+    // index, then takes the index kept for the first. The second walks away too, and the first returns to the index
+    // kept for the second, the only free one, as a new peer: allowed, and its stream goes on all the same.
+    [Fact]
+    public void ATravelerWhoseKeptIndexWasTakenReturnsAsANewPeerOnOneObservation() {
+        WorldRemoteAuthority? traveler = null;
+        using var hosts = FederatedHosts.Build(travelerRouteStarted: wrapper => traveler ??= wrapper);
+        var entry = hosts.DestinationRow.Server;
+        var onward = hosts.OnwardRow.Server;
+
+        Enter(hosts: hosts, slot: 0);
+        Assert.NotNull(@object: traveler);
+        var body = TravelerSlot(server: entry);
+        var admitted = entry.ExecuteAuthorityOperation(operation: () => entry.Population.PeerPrincipal(index: body));
+        var reader = new Reader();
+
+        using var observing = traveler.AttachSink(sink: reader);
+
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world");
+        var bound = reader.Span;
+
+        Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
+        StepUntil(condition: () => (reader.Shown == onward.AuthorityIdentity), hosts: hosts, what: "the reader holds the neighbour's world");
+        Enter(hosts: hosts, slot: 1);
+        Assert.Equal(expected: [(body + 1)], actual: TravelerSlots(server: entry));
+
+        // A connection admission takes the highest free index: the one kept for the first traveler.
+        var verdict = WorldAdmissionVerdict.Restore(identityDomain: "connection.test", identitySubject: "kept-index-taker", templates: [], tier: WorldDisclosureTier.Replica, trustIdentity: null);
+        var connection = entry.ExecuteAuthorityOperation(operation: () => {
+            Assert.True(condition: entry.TryAdmitPeerConnection(verdict: verdict, expectedAdmissionEntries: entry.Definition.Admission, admitted: out var peer, refusal: out var refusal), userMessage: refusal);
+            return peer;
+        });
+
+        Assert.Equal(expected: body, actual: connection.BodyIndex);
+        Walk(destination: WorldInstanceHost.TransferDestination.Existing(name: FederatedHosts.OnwardName), from: FederatedHosts.DestinationName, host: hosts.Destination, hosts: hosts, slot: (body + 1), source: entry, target: onward, to: FederatedHosts.OnwardName);
+
+        // The first traveler walks back: its own index is held by the connection, so it lands where the second left.
+        var returning = TravelerSlots(server: onward)[0];
+
+        Walk(destination: WorldInstanceHost.TransferDestination.Existing(name: FederatedHosts.DestinationName), from: FederatedHosts.OnwardName, host: hosts.Destination, hosts: hosts, slot: returning, source: onward, target: entry, to: FederatedHosts.DestinationName);
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world again");
+
+        var landed = entry.ExecuteAuthorityOperation(operation: () => entry.Population.PeerPrincipal(index: (body + 1)));
+
+        Assert.True(condition: entry.ExecuteAuthorityOperation(operation: () => entry.IsLivePeer(principal: landed)));
+        Assert.NotEqual(expected: admitted, actual: landed);
+        AssertOneObservation(authorities: [entry.AuthorityIdentity, onward.AuthorityIdentity, entry.AuthorityIdentity], bound: bound, reader: reader);
+    }
+
+    // THE LAW: a route an authority kept from a traveler's departure is recovered from the authority's durable image
+    // and still retires when the traveler lands there again. The traveler walks on; the entry authority's host table is
+    // captured into a checkpoint, encoded, decoded and restored, which replaces the live route with the recovered one;
+    // the traveler walks back, the recovered route retires, and the traveler's next departure publishes the route its
+    // stream follows.
+    [Fact]
+    public void ARouteRecoveredFromACheckpointRetiresWhenItsTravelerReturns() {
+        WorldRemoteAuthority? traveler = null;
+        using var hosts = FederatedHosts.Build(travelerRouteStarted: wrapper => traveler = wrapper);
+        var entry = hosts.DestinationRow.Server;
+        var onward = hosts.OnwardRow.Server;
+        WorldForwardedBodyCheckpoint[] Routes() => [.. hosts.Destination.CaptureRow(row: hosts.DestinationRow.Instance).ForwardedBodies];
+
+        Enter(hosts: hosts, slot: 0);
+        Assert.NotNull(@object: traveler);
+        var reader = new Reader();
+
+        using var observing = traveler.AttachSink(sink: reader);
+
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world");
+        var bound = reader.Span;
+
+        Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
+        StepUntil(condition: () => (reader.Shown == onward.AuthorityIdentity), hosts: hosts, what: "the reader holds the neighbour's world");
+        var kept = Assert.Single(collection: Routes());
+
+        // The entry authority's durable image, as a recovery reads it.
+        var image = entry.ExecuteAuthorityOperation(operation: () => {
+            Assert.True(condition: entry.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: hosts.Destination.CaptureRow(row: hosts.DestinationRow.Instance), reason: out var reason), userMessage: reason);
+            return WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+        });
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: image, checkpoint: out var recovered, reason: out var decodeReason), userMessage: decodeReason);
+        hosts.Destination.RestoreRow(row: hosts.DestinationRow.Instance, slice: recovered!.HostRow);
+        Assert.Equal(expected: kept, actual: Assert.Single(collection: Routes()));
+
+        Walk(from: FederatedHosts.OnwardName, hosts: hosts, source: onward, target: entry, to: FederatedHosts.DestinationName);
+        StepUntil(condition: () => (Routes().Length == 0), hosts: hosts, what: "the recovered route retired when the traveler landed");
+        StepUntil(condition: () => (reader.Shown == entry.AuthorityIdentity), hosts: hosts, what: "the reader holds the entry authority's world again");
+
+        // The traveler leaves again: the route it leaves by is the one its stream follows.
+        Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
+        StepUntil(condition: () => (reader.Shown == onward.AuthorityIdentity), hosts: hosts, what: "the reader holds the neighbour's world again");
+        Assert.True(condition: (Assert.Single(collection: Routes()).Mobility.Epoch > kept.Mobility.Epoch), userMessage: "the new departure's route is published at a later epoch");
+        AssertOneObservation(authorities: [entry.AuthorityIdentity, onward.AuthorityIdentity, entry.AuthorityIdentity, onward.AuthorityIdentity], bound: bound, reader: reader);
     }
     [Fact]
     public void ARemoteTravelerWalksToAnotherInstanceAndBackOnOneObservationAsOnePeer() {
@@ -320,7 +493,11 @@ public sealed class TravelerObservationHandoffLawTests {
         Assert.Equal(expected: 0, actual: reader.Closes);
         Assert.Equal(expected: 0, actual: reader.TerminalCuts);
         Assert.Equal(expected: 0L, actual: reader.Refusals);
-        Assert.Equal(expected: 2, actual: reader.Cuts);
+        // Each handoff is one record: the new world's document, which carries the cut, so the reader never held no
+        // document between losing one world and being shown the next.
+        Assert.Equal(expected: 0, actual: reader.Cuts);
+        Assert.Equal(expected: 2, actual: reader.Openings);
+        Assert.Equal(expected: 0, actual: reader.Bare);
         Assert.Equal(
             expected: [entry.AuthorityIdentity, onward.AuthorityIdentity, entry.AuthorityIdentity],
             actual: reader.Authorities

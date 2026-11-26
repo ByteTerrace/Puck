@@ -69,6 +69,17 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// <summary>Composes through the capability and advances only this delivery's cursor. Hidden-only changes
     /// reuse the shared row images; a read of the same view cannot seed this feed.</summary>
     public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {
+        var walked = WorldDocumentWalker.MembersVisited;
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+
+        try {
+            return ComposeCore(view: view, cursor: cursor);
+        } finally {
+            WorldProjectionWork.Count(amount: (WorldDocumentWalker.MembersVisited - walked), kind: WorldProjectionWork.WalkedMembers);
+            WorldProjectionWork.Count(amount: (GC.GetAllocatedBytesForCurrentThread() - allocated), kind: WorldProjectionWork.ComposedBytes);
+        }
+    }
+    private WorldProjectionDelivery ComposeCore(WorldRecipientView view, WorldDeliveryCursor cursor) {
         if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
         var identity = view.Images.DefinitionIdentity(view);
         if ((identity == m_recipientIdentity) && m_held is not null) {
@@ -81,6 +92,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         if (TryComposeStateOnly(view: view, cursor: cursor, identity: identity, frame: frame, delivery: out var stateDelivery)) {
             return stateDelivery;
         }
+        WorldProjectionWork.Count(kind: WorldProjectionWork.WholeCompositions);
         m_recipientIdentity = identity;
         RecordBasis(view: view, frame: frame);
         var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;

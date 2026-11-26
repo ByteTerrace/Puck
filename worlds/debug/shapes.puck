@@ -531,7 +531,13 @@ template displayScreen(display) {
       name: $"gallery-screen-{display.id}"
       schema: "puck.creation.v1"
       palette [
-        { color: "#14262E", roughness: 0.15, specular: 0.5, paints: displayScreenPaints(display) }
+        {
+          color: plinthPalette[plinthScreen].color
+          roughness: plinthPalette[plinthScreen].roughness
+          specular: plinthPalette[plinthScreen].specular
+          emissive: plinthPalette[plinthScreen].emissive
+          paints: displayScreenPaints(display)
+        }
       ]
       for (across, n) in displayPanes {
         shape Box $"pane-{n}" {

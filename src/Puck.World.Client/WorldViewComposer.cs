@@ -72,24 +72,16 @@ public sealed class WorldViewComposer {
     /// (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> EndSlots => m_endSlots;
 
-    // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set. The operator camera
-    // is the one override that also takes the seat slots: it frames the world whatever the layout shows.
+    // Every slot that frames this world, a seat's included, resolves to the live camera override (SelectCamera, or the
+    // operator camera) when one is set: an override frames the world whatever the layout shows. A slot showing another
+    // instance keeps it.
     private void ApplyCameraOverride(string? cameraOverride) {
         if (cameraOverride is not { } camera) {
             return;
         }
 
-        var operatorCamera = string.Equals(
-            a: camera,
-            b: OperatorCameraName,
-            comparisonType: StringComparison.Ordinal
-        );
-
         for (var index = 0; (index < m_targetSlots.Count); index++) {
-            if (
-                (m_targetSlots[index].Instance is null) &&
-                (operatorCamera || (m_targetSlots[index].Camera is not null))
-            ) {
+            if (m_targetSlots[index].Instance is null) {
                 m_targetSlots[index] = (m_targetSlots[index] with { Camera = camera });
             }
         }

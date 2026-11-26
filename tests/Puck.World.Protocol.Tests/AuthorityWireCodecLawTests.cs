@@ -44,7 +44,7 @@ public sealed class AuthorityWireCodecLawTests {
         var oracle = new LocalKeySigningOracle(
             key: key,
             subject: "authority-a",
-            validity: TimeSpan.FromMinutes(value: 1)
+            validity: WorldAttestedAuthenticator.MaximumClaimAge
         );
         var prover = new WorldAttestedAuthenticator(oracle: oracle);
         var verifier = new WorldAttestedAuthenticator(trustEntries: () => []);
@@ -61,7 +61,7 @@ public sealed class AuthorityWireCodecLawTests {
         var oracle = new LocalKeySigningOracle(
             key: key,
             subject: "authority-a",
-            validity: TimeSpan.FromMinutes(value: 1)
+            validity: WorldAttestedAuthenticator.MaximumClaimAge
         );
         var entry = new WorldAdmissionEntry(
             Domain: domain,

@@ -323,6 +323,12 @@ struct SdfMeshProbes {
     uint4 slots;
     uint slotStride;
     float4 slotWeights;
+    // A binned views pixel's slots as cells of its tile's traced-light shares (sdfViewsProbesTile): each slot's cell among
+    // the four by four the tile's pixels blend, plus one (zero for a pixel that reads an extra), the traced lights the
+    // shares resolve and the shares' first word in the shade bins; no light where the pixel reads none.
+    uint4 slotCells;
+    uint4 tileTraced;
+    uint tileShares;
 };
 
 // The two stages' cages a reader of the gathered probes resolves once before its corners (sdfMeshProbeAt).
@@ -468,6 +474,9 @@ SdfMeshProbes sdfMeshProbesNone() {
     probes.slots = uint4(0u, 0u, 0u, 0u);
     probes.slotStride = 0u;
     probes.slotWeights = float4(0.0, 0.0, 0.0, 0.0);
+    probes.slotCells = uint4(0u, 0u, 0u, 0u);
+    probes.tileTraced = uint4(0u, 0u, 0u, 0u);
+    probes.tileShares = 0u;
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
