@@ -92,7 +92,9 @@ the hold system had these gaps. Each is closed once, in the engine, as a mechani
 The invariant: **a mantle moves a body only to a landing the body's own sweeps proved.** One place enforces it:
 `WorldBody.TryBeginMantle` is the only code that starts a mantle, and it starts one only from the landing
 `FixedStepUp.TryStep` returned (raise, step in, lower onto walkable support, each through the body's own sweep, the
-step a kerb takes). The move then runs through the ordinary swept contact step, as every timed move does. The
+step a kerb takes), and only where `FixedStepUp.Stands` finds ground under her axis at the landing, so she stands on
+it rather than resting on its far edge and rolling off. A top narrower than the landing's depth is no landing, and she
+hangs under it. The move then runs through the ordinary swept contact step, as every timed move does. The
 guarantee stops at the path between: the move follows a parabola through the top of the proven raise and not the
 proven L itself, so contact may shorten it, and a shortened mantle leaves her on the wall or in the air above the
 ledge, never inside geometry.
@@ -175,7 +177,8 @@ them. Three properties of the climb bear on its shape:
   relief deeper than about a hand (0.1 m) with sharp sides reads as separate faces.
 - Faces from 60 to 120 degrees from up are climbed. Branch tops within 60 degrees of level are walked, and a mantle
   lands on them whether or not they are holdable.
-- A mantle needs a landing 0.8 m in from the edge with her height clear above it.
+- A mantle needs a landing 0.8 m in from the edge with her height clear above it and the top still under her middle
+  there: a branch thinner than about 0.45 m in the direction she climbs is held, not stood on.
 
 The gallery's ground-floor walls are holdable (`gallery/shell.puck`). The upper floors' are not: level 1's so that
 the toybox is not reached round its lattice, and the others until the tree gives a route to them. Most of the long

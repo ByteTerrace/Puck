@@ -422,6 +422,15 @@ than the step height above the start and higher than the blocked step. A wall co
 two sweeps; an accepted step costs four sweeps and one support-distance query. The World calls
 it from the kit's `motion.stepHeight`, zero by default.
 
+`FixedStepUp.Stands` says whether a body resting on support stands there or rests on an edge it will roll off. A
+contact alone cannot tell them apart: a round body resting on an edge meets a normal that leans just as a slope's
+does. What differs is the ground under the body's axis. On a face, level or sloped, the support's plane lies under
+the axis no deeper than its slope drops across the body's footprint; past an edge, the axis stands over the drop.
+`Stands` lowers a probe of radius `AxisProbeRadius` from the foot point through the field's own support distance and
+accepts ground within that depth. A mantle requires it of its landing (`WorldBody.TryBeginMantle`), so a top
+narrower than the landing's depth leaves the climber hanging rather than balanced on the far edge. A walking
+step-up does not: a walker keeps moving and rolls on over the kerb's near edge.
+
 Exact chamfered-box and superellipsoid contacts use GJK followed by EPA. GJK
 reduction computes triangle barycentrics from oriented areas, avoiding the
 cancellation in a squared-area Gram determinant. Closest points and their

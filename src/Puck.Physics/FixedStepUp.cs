@@ -125,6 +125,59 @@ public static class FixedStepUp {
         return TryAccept(landed: landed, landing: in landing, moved: moved, uncertain: uncertain, result: out result);
     }
 
+    /// <summary>Gets the radius, in metres, of the probe <see cref="Stands"/> lowers along a body's axis: small enough
+    /// that it meets an edge only where the axis passes within this distance of it.</summary>
+    public static FixedQ4816 AxisProbeRadius { get; } = FixedQ4816.FromRawBits(value: 512L);
+
+    /// <summary>Returns whether a body resting on support stands there rather than on an edge it rolls off: the ground
+    /// under its foot point, where the axis its weight acts along meets the ground, lies no deeper below the foot point
+    /// than the plane of the support it rests on reaches across the body's footprint. A body on a face, level or a
+    /// walkable slope, has that plane under its axis; a body whose axis has passed an edge rests on the edge alone,
+    /// whose normal leans out over a drop, and the next steps roll it off. A probe of radius
+    /// <see cref="AxisProbeRadius"/> is lowered from the foot point through the field's own support distance, so every
+    /// provider answers it as it answers a ground snap; it moves no body.</summary>
+    /// <param name="field">The contact field the body rests in.</param>
+    /// <param name="position">The body's foot point, which no volume of the body lies below along
+    /// <paramref name="up"/>.</param>
+    /// <param name="orientation">The body's local-to-world orientation.</param>
+    /// <param name="volumes">The body's volumes, whose extent across <paramref name="up"/> bounds how far the support
+    /// may lie from the axis.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <param name="groundNormal">The unit normal of the walkable support the body rests on
+    /// (<see cref="ContactResolution.GroundNormal"/>).</param>
+    /// <returns><see langword="true"/> when ground lies under the axis within the depth the support's plane allows;
+    /// <see langword="false"/> when it does not, or the normal does not face up.</returns>
+    public static bool Stands(IContactField field, in FixedVector3 position, in FixedQuaternion orientation,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, in FixedVector3 groundNormal) {
+        var rise = FixedVector3.Dot(left: groundNormal, right: up);
+
+        if (rise <= FixedQ4816.Zero) {
+            return false;
+        }
+
+        // The support plane drops by its slope over the distance from the contact to the axis, and the contact lies
+        // no further from the axis than the body reaches up the slope, against the way the normal leans.
+        var depth = AxisProbeRadius;
+        var lean = groundNormal.RejectFrom(unitAxis: up);
+
+        if (lean.TryLength(length: out var leaning) && (leaning > FixedQ4816.Zero)) {
+            var downhill = (lean / leaning);
+            var footprint = FixedQ4816.Zero;
+
+            foreach (var volume in volumes) {
+                footprint = FixedQ4816.Max(x: footprint, y: -FixedColliderBounds.MinimumProjection(normal: downhill,
+                    orientation: in orientation, position: FixedVector3.Zero, volume: in volume));
+            }
+
+            depth += ((footprint * leaning) / rise);
+        }
+
+        ReadOnlySpan<FixedBodyColliderVolume> probe = [FixedBodyColliderVolume.Sphere(center: (up * AxisProbeRadius), radius: AxisProbeRadius)];
+
+        return field.TrySupportDistance(descent: out _, orientation: FixedQuaternion.Identity, position: in position,
+            reach: depth, up: in up, volumes: probe);
+    }
+
     /// <summary>Tries the step-up for one blocked step.</summary>
     /// <typeparam name="TStep">The caller's sweep.</typeparam>
     /// <param name="step">The sweep every move and probe runs through.</param>

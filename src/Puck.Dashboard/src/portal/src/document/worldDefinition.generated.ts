@@ -9394,13 +9394,13 @@ export type WorldHudRect = {
 
 export type WorldHudSection = {
   /**
-   * The section defaults.
+   * Gets the section defaults. Absent reads as InertDefaults, coalesced in the accessor as Elements is.
    */
-  defaults: WorldHudDefaults;
+  defaults?: WorldHudDefaults | null;
   /**
    * Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
-  panels: (WorldHudPanel | null)[];
+  panels?: (WorldHudPanel | null)[] | null;
 };
 
 /**
