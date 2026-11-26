@@ -34,6 +34,10 @@ public enum SdfKernel {
     /// <summary>The mesh bake's field sampler over the lattices that ask a gradient: the same walk in forward mode, a
     /// value and its analytic gradient from one interpretation (field/sdf-dual.hlsli).</summary>
     MeshBakeGradient,
+    /// <summary>The shadow block reduction: each block of a shadow layer pair's fitted plane, depth bounds and glass
+    /// flag, which the residency's shadow upload dispatches after each drawing into the pair and the surface pass
+    /// classifies receivers by.</summary>
+    ShadowBlocks,
     /// <summary>The pyramid pass: the mesh depth pyramid the surface pass's occlusion reads, from the mesh target.</summary>
     MeshPyramid,
     /// <summary>The surface pass: every pixel's visibility record from the mesh target, screen-space occlusion and the

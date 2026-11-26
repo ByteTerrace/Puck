@@ -38,6 +38,8 @@ the debug world does not hold.
 
 The main view's rows are `world.gpu-timing` at the stage with the camera
 standing and the route's chapter means moving; the others are the route's.
+The `views-probes`, `surface` and `resolve` rows are readings of the kernels
+before steps 1, 3 and 5 changed them, and none has been read since.
 
 Ink's share is taken from shading, where the outline it replaced read its
 neighbours. Its row is the difference `SDF_VIEWS_OMIT_INK` makes
@@ -64,7 +66,7 @@ Per-pixel storage of the main view at 2560 by 1440 (`host.memory families 0`):
 | Glass sums, target, depth and lit image | 340 | 40 | Allocated for the tiles glass covers |
 | History surface and colour | 227 | 120 | Motion and identity in the sample record |
 | Visibility records, mesh target and depth | 186 | 150 | A draw and triangle in one word of the target |
-| Lit images, sky runs, transport, reactivity, filter | 330 | 200 | Sky runs at half size; transport from the sample record |
+| Lit images, sky runs, transport, reactivity, filter | 330, and by arithmetic 28 for the samples' air (two words a render pixel, unread) | 200 | Sky runs at half size; transport from the sample record |
 | The root's frame (`main`) | 230 | 60 | The stages are gone with the one placement pass; what is left is one published image a frame in flight |
 | **Total** | **about 2,200** | **under 1,000** | |
 
@@ -77,12 +79,13 @@ against the same frame:
 - **`surface`**: about half is the cascade shadows (`world.shadows off`), a
   quarter the ambient occlusion (`world.ao off`), and a fifth the record's
   load, normal and store.
-- **`views-probes`**: a third remains with `world.indirect off`, which is the
-  classification of each cell's four pixels and the state it writes. The rest
-  resolves each gather into a slot: sixteen corners of 25 words each, for the
-  representative and for each pixel that gathers for itself. Moving through
-  foliage, where many pixels gather for themselves, it is the largest pass
-  after views.
+- **`views-probes`**, as read before the coarser lookup of step 1, when a
+  cell was two pixels a side: a third remains with `world.indirect off`, which
+  is the classification of each cell's four pixels and the state it writes.
+  The rest resolves each gather into a slot: sixteen corners of 25 words each,
+  for the representative and for each pixel that gathers for itself. Moving
+  through foliage, where many pixels gather for themselves, it is the largest
+  pass after views.
 - **`views-filter`**: two fifths is the tiles' light masks
   (`SDF_VIEWS_OMIT_LIGHTS`), the rest the occlusion and shadow filter, and in
   a view that inks the edge search beside them (`SDF_VIEWS_OMIT_INK`).
@@ -194,9 +197,9 @@ only some pixels need lies in a pool, not in every pixel's record.
 |---|---|---|
 | Indirect light and traced-light visibility | `views-probes` | A slot: blended cubes, the lights' agreement, the lights the corners disagree on (`sdf-views-probes.hlsli`) |
 | Lights that reach a sample | `views-filter`, by cluster | A list of light indices a cluster, any count |
-| Shadow visibility | `surface`, after a classification by depth bounds | The record's shadow word |
+| Shadow visibility | `surface`, after a classification by each layer's block bounds, which the shadow upload reduces (`sdfMeshShadowClass`) | The record's shadow word |
 | The reflected environment | The environment node | A prefiltered map, one lookup a roughness |
-| Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel |
+| Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel; the air is built (`SdfWorldPackage.SampleAir`), motion and identity are step 5 |
 
 Indirect light is the first input built this way. Before it, 1.6 ms of the
 views pass at the stage was the code that read a gather's sixteen corners,
@@ -335,38 +338,65 @@ pass's cost. Then the time:
    about 68 MiB at 2560 by 1440 by a reading of 21 MiB at 1280 by 900, and no
    cell shows in the hall or along the walk into it. Check, in the quiet
    window: `views-probes` under 0.8 ms at the stage and moving.
-2. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
-   the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
-   renders with each cluster's list holding only its own.
-3. **Classify a receiver's shadow before filtering it.** The
-   [rendering plan](rendering.md#gpu-submission-and-routed-worlds)'s item, with
-   one correction to its shape. A plain depth bound for each block of a layer
-   answers umbra, but it answers lit only for a receiver that faces the light:
-   the filter compares each tap against the receiver's own plane
-   (`sdfMeshShadowGap`'s `gradient`), and open ground under a slanted sun
-   changes depth across a block by more than any caster stands off it, so the
-   block's nearest depth always reads in front of the receiver. The bound that
-   classifies the common case is relative to a plane: for each block of 32
-   texels a side (the filter's reach, `SdfKernelInterfaces.MeshShadowFilterTexels`,
-   spans at most two a side, so four reads) the layer's least-squares plane
-   and the least and greatest depth off it, for the depth and the exit layer,
-   and whether the block holds glass extinction. A receiver is lit where its
-   own plane lies behind every block's plane less its nearest residual at the
-   footprint's corners, in umbra where it lies in front of every block's plane
-   plus its farthest residual by the filter's slope and cone margins, and
-   filters otherwise; a block with extinction classifies nothing. The bounds
-   belong to a layer pair (`SdfWorldShadows`' `Pair`) and are reduced by one
-   compute kernel after each drawing into it, over the blocks its area
-   touches. The invariant: a classified receiver's visibility is what the
-   filter's taps would sum to, which a device law holds by running both over
-   one layer. Check: `surface` under 1.2 ms at the stage, and the law.
-4. **A prefiltered environment.** The environment node writes the reflected
-   sky, its panels included, at a few roughness levels; views takes one lookup.
-   Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
-5. **A sample record for the resolve.** Views writes each render pixel's luma
-   and chroma, reactivity, identity, distance, motion and air; the resolve
-   reads nine records and no mesh. Check: `resolve` under 1.2 ms moving, and
-   the history surface holds four words.
+2. **Light lists.** As above, as one change: a list in place of a tile's mask
+   moves nothing while the tile's test still fills a mask of the table's
+   width in group memory (`sdfViewsLightTile`), so the lists land with the
+   host's grid, which hands a tile the lights of the cells its boxes meet.
+   What holds the width today, each to be replaced in that change: the pass
+   block's `lightMask` and `SdfLightSelection`'s `UInt128`; a tile's eight
+   words (`SdfWorldPackage.ShadeTileLightWords`) and the walk's mask words
+   (`SdfLightWalk`); the unsplit kernels' group masks; a probe's four words of
+   traced bits and a slot's agreement (`SdfMeshIrradianceProbe.LightWords`,
+   `sdfMeshLightAgreement`); and the document's bound, the shadow
+   allocator's and the selection's fixed arrays (`WorldDefinitionValidator`,
+   `WorldShadowAllocator`, `WorldShadowSelection`). Check: the walk's visits
+   a pixel are unchanged in the debug world; `SdfLights.MaxLights` is gone; a
+   row of 512 point lights renders with each cluster's list holding only its
+   own.
+3. **The shadow classes' time.** A receiver's shadow is classified before it is
+   filtered ([the reference](../rendering/sdf/reference/shading-ao-shadows.md#shadows),
+   `sdfMeshShadowClass`): each layer pair keeps, for every block of 32 texels a
+   side, the layer's fitted plane and the least and greatest depth off it over
+   the block and the filter's reach about it, which
+   `passes/sdf-shadow-blocks.comp.hlsl` reduces after each drawing into the
+   pair, and the surface pass reads one record a receiver in place of the
+   search's twelve taps and the filter's sixteen wherever the record proves the
+   receiver lit or in umbra. The record is a plane's because open ground under
+   a slanted sun changes depth across a block by more than any caster stands
+   off it, so a plain depth bound never reads it lit. The bounds hold every
+   texel within the filter's reach of the block, so one read serves a
+   receiver; a whole layer's reduction reads each block's 62 by 62 texels.
+   Check, in the quiet window: `surface` under 1.2 ms at the stage; a paused
+   still under `world.debug-view shadow` unchanged against a reload with
+   `SDF_SURFACE_OMIT_SHADOW_CLASSES` defined; and `world.residency`'s
+   `shadows` line, whose `blocks…in…` counts say how many blocks each entry
+   reduced in how many dispatches, beside the pass's measured time under a
+   turning sun.
+4. **A prefiltered environment, if its share is the environment's.** The
+   environment node writes the reflected sky, its panels included, at a few
+   roughness levels; views takes one lookup. Read first what
+   `SDF_VIEWS_OMIT_REFLECTION` removes, since the switch also compiles out the
+   slots' reflection read (`sdfViewsReflectionSeen`, up to twenty words of
+   the probe records) and the lobe's directional albedo. The environment
+   itself (`worldEnvironmentReflection`) reads eight words of the map, the
+   nine coefficient records and each sky layer's kind and visibility for the
+   panel loop, and evaluates one harmonic basis; a prefiltered map replaces
+   that with sixteen words at two roughness levels. The map's irradiance
+   needs the coefficients the reduction writes after the map, so the planes
+   are a second output of the reduction pass (`sdf-sky-environment-reduce`),
+   a row of the map a lane, bound as a World table beside the map. A panel's
+   edge is then as sharp as a map texel, about three degrees, where views
+   evaluates it exactly today, so a sky that authors panels keeps the loop
+   for a mirror. Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
+5. **A sample record for the resolve.** The air is built: views stores each
+   render sample's air (`SdfWorldPackage.SampleAir`, two words) from the
+   atmosphere it evaluates once a pixel for the transmittance, and the resolve
+   scales it by the sample's coverage, where it evaluated the atmosphere again
+   for each of the 169 samples a group of 64 pixels gathers. What is left:
+   views writes each render pixel's motion and identity beside it, so the
+   resolve reprojects through no mesh table (`sdfPreviousPoint`) and the
+   history surface drops to four words. Check: `resolve` under 1.2 ms moving,
+   and the history surface holds four words.
 6. **One probe cache a residency.** The hashed table above. Check: no view
    holds a probe history; a nested view rated to five frames a second gathers
    only what entered it.
@@ -389,10 +419,11 @@ pass's cost. Then the time:
    phase every frame: it
    [replaces one term](frame-production.md#3-the-main-view-costs-a-pixel-what-changed-in-it)
    of a mean it keeps.
-10. **Count what the slots give up.** A slot lists at most eight lights its
-    corners disagree on, and the pool holds an extra for one pixel in eight.
-    Count the lights rounded and the groups that kept no extra, on
-    `world.counters gpu pass sdf.world$views-probes`. Check: both read zero
+10. **Read what the slots give up.** A slot lists at most eight lights its
+    corners disagree on, and the pool holds one extra slot a cell. The lookup
+    counts the lights rounded and the groups that kept no extra
+    (`lights-rounded` and `groups-without-extras` on
+    `world.counters gpu pass sdf.world$views-probes`). Check: both read zero
     over the route, or the list and the pool grow.
 
 ## The invariant the slots rest on
