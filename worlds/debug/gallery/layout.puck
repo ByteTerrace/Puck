@@ -356,16 +356,25 @@ let treeTreadRise = 0.225
 let treeLimbs = [
   { level: 1, side: "south", tread: 14, x: bayX(4) }
   { level: 1, side: "north", tread: 24, x: bayX(8) }
-  { level: 2, side: "south", tread: 36, x: 38 }
-  { level: 2, side: "north", tread: 46, x: 22 }
+  { level: 2, side: "south", tread: 36, x: bayX(8) }
+  { level: 2, side: "north", tread: 46, x: bayX(4) }
   { level: 3, side: "south", tread: 58, x: bayX(5) }
   { level: 3, side: "north", tread: 68, x: bayX(7) }
 ]
 // Where a level's branch lands on one side, and the arcade bay that x stands in.
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
 function bayOf(x) = floor(((x - pierX(0)) / arcadePitch))
+// Every branch lands at a bay's centre, midway between two piers, so it never meets a pier and its doorway (levels 2 and
+// 3) or sieve (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
+let treeDoorWidth = 2
+let treeDoorPost = 0.22
+let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)
 let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
 let treeOverhang = 0.7
+// Where a branch meets a doorway (levels 2 and 3) its walking line runs on through the opening and this far onto the
+// floor, so the tip rests inside the aisle rather than ending on the threshold.
+let treeDoorOverhang = 1.5
+function treeOverhangOf(b) = ((b.level >= 2) ? treeDoorOverhang : treeOverhang)
 let treeLandingLift = 0.08
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
 // middle line `out` metres from the bark.
@@ -378,4 +387,4 @@ function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
 ))
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
-function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhang) : (naveNorth + treeOverhang))]
+function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))]

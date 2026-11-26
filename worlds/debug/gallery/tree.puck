@@ -39,7 +39,9 @@ function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
   (treeTreadAngle(b.tread) + treeAuthorTurn),
   (((treeBranchC(b)[1] - treeBranchA(b)[1]) / 2) + 0.35)
 ))
-function treeBranchB(b) = ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2)
+// A branch that meets a doorway (levels 2 and 3) puts its control point straight back from the landing, so its last run
+// crosses the doorway square, through the middle of the opening.
+function treeBranchB(b) = ((b.level >= 2) ? [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
 // Branch widths and depths, full, metres, at the trunk and at the balcony: broad enough at the tip to walk, narrow enough
 // to pass level 1's gate and level 2's balustrade gap, swelled by `treeBranchCollar` where each leaves the trunk.
 let treeBranchWidth = [1.9, 1.3]

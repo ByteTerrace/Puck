@@ -1293,7 +1293,24 @@ template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
 // caps and a brass inlay down each face, a lintel over the opening with a shallow arched soffit, and a brass threshold
 // plate across the floor, all standing on y 0 and facing ±Z. Posts and lintel collide; the inlays, caps and the plate's
 // bevel are drawn only. `height` is the opening's clear height under the lintel's crown.
+// The radius of an arch spanning `width` that rises `rise` at its middle.
+function doorArchRadius(width, rise) = ((((width / 2) * (width / 2)) + (rise * rise)) / (2 * rise))
 template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32, depth = 0.3) {
+  shape Box "door-lintel" {
+    material: (base + kitTeal)
+    position [0, (height + (lintel / 2)), 0]
+    scale [((width / 2) + post), (lintel / 2), (depth / 2)]
+    rounding: 0.03
+  }
+  // The soffit's arch: a wide cylinder across the opening cut out of the lintel's underside, rising four tenths
+  // of the lintel's depth at the middle. It comes before the posts, so it cuts the lintel alone.
+  shape Cylinder "door-arch" {
+    blend: Subtraction
+    material: (base + kitTeal)
+    position [0, ((height + (lintel * 0.4)) - doorArchRadius(width, (lintel * 0.4))), 0]
+    rotation: rotate([1, 0, 0], 90deg)
+    scale [doorArchRadius(width, (lintel * 0.4)), ((depth / 2) + 0.05), doorArchRadius(width, (lintel * 0.4))]
+  }
   for side in [-1, 1] {
     shape Box $"door-post-{side}" {
       material: (base + kitTeal)
@@ -1314,20 +1331,6 @@ template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32
       scale [((post / 2) + 0.03), 0.04, ((depth / 2) + 0.03)]
       rounding: 0.02
     }
-  }
-  shape Box "door-lintel" {
-    material: (base + kitTeal)
-    position [0, (height + (lintel / 2)), 0]
-    scale [((width / 2) + post), (lintel / 2), (depth / 2)]
-    rounding: 0.03
-  }
-  // The soffit's arch: a wide cylinder across the opening cut out of the lintel's underside.
-  shape Cylinder "door-arch" {
-    blend: Subtraction
-    material: (base + kitTeal)
-    position [0, (height - (width * 0.9)), 0]
-    rotation: rotate([1, 0, 0], 90deg)
-    scale [(width * 0.98), ((depth / 2) + 0.05), (width * 0.98)]
   }
   shape Box "door-threshold" {
     material: (base + kitBrass)
