@@ -1,10 +1,17 @@
 // Gameplay eligibility follows body registers and engagement, independently of camera pages.
 import "../standard/instrument"
 import "../standard/typing"
+import "../standard/station"
 
 let movement = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
 let controls = ["jump", "suit", "noclip"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
+// A seat engaged anywhere, at a bench or at a station, has none of the families that move her or play an instrument.
+let engagedAnywhere = [
+  { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
+  { family: "typing", states ["seated"] }
+  { family: "station", states ["engaged"] }
+]
 
 inputModes {
   // A tap reaches a pointer surface in every mode, as the context button reaches what is beside her.
@@ -22,10 +29,7 @@ inputModes {
         // A craft (the launch field's ship): a body no seat is, which flies on the movement and rise channels.
         { name: "craft", values ["4", "5"], channels: concat(movement, ["rise"]) }
       ]
-      suspendedBy [
-        { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
-        { family: "typing", states ["seated"] }
-      ]
+      suspendedBy: engagedAnywhere
       transitions [
         { from: "pilot", to: "suited", keep: movement }
         { from: "suited", to: "pilot", keep: movement }
@@ -69,11 +73,16 @@ inputModes {
       transitions []
     }
     // The instrument's vents are offered while the breath holds it up (bard.puck), and a seat engaged anywhere has none.
-    instrumentFamily(suspendedBy: [
+    instrumentFamily(suspendedBy: engagedAnywhere)
+    // The press's typed text is offered while the seat sits at its bench (press.puck), in place of her movement.
+    typingFamily(suspendedBy: [
+      { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
+      { family: "station", states ["engaged"] }
+    ])
+    // A gallery display's console takes the seat's taps and its step back while she uses it (gallery/gallery.puck).
+    stationFamily(suspendedBy: [
       { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
       { family: "typing", states ["seated"] }
     ])
-    // The press's typed text is offered while the seat sits at its bench (press.puck), in place of her movement.
-    typingFamily(suspendedBy: [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }])
   ]
 }

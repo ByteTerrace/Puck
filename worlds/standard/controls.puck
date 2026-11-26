@@ -601,7 +601,8 @@ bindingOverlays [
           }
         }
         // The left mouse button alone is a tap: a pointer surface's rules read it where the pointer lands
-        // (pointer(<seat>, <surface>, press, tap)). It passes through, so the button keeps its own orbit drag.
+        // (pointer(<seat>, <surface>, press, tap)). It passes through, so the button keeps its own orbit drag; a press
+        // that lands on a surface is the surface's alone where a world lists pointer capture (station.puck).
         {
           held [
             "mouse.button1"

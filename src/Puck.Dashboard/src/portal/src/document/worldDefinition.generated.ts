@@ -14585,7 +14585,7 @@ export type WorldSeatFraming = {
    */
   id: string;
   /**
-   * The camera program the seat's camera eases to: a name in the document's program table (views.programs, a cameras[].rig). Its anchor's reference subject is the seat's body.
+   * The camera program the seat's camera eases to: a name in the document's program table (views.programs, a cameras[].rig). Its anchor's reference subject is the seat's body, and a binding keyed $body in any of its operands reads the seat's body, as the row's condition does.
    */
   program: string;
   /**

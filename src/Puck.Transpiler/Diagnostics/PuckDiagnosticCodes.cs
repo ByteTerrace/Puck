@@ -162,8 +162,8 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK049: a <c>table</c>/<c>slot</c>/<c>pile</c>/<c>grid</c> declaration outside <c>state.world</c> —
     /// in <c>state.body</c>, <c>state.identity</c>, or anywhere else the owning vocabulary does not admit one.</summary>
     public const string StateDeclarationOutsideWorld = "PUCK049";
-    /// <summary>PUCK050: <c>state.world</c> authored more than once — as the array form and a declaration block, as
-    /// two declaration blocks, or as two arrays.</summary>
+    /// <summary>PUCK050: <c>state.world</c> authored as both the array form and a declaration block. Declaration blocks
+    /// compose: a second block (a template's, beside the document's own) appends its rows.</summary>
     public const string StateWorldSectionMixed = "PUCK050";
     /// <summary>PUCK051: a declaration reusing a row name already declared in the same <c>state.world</c>, or a
     /// <c>table</c>/<c>grid</c> cell reusing a key already declared in the same row.</summary>

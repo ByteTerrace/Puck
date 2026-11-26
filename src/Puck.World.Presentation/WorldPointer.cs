@@ -159,6 +159,9 @@ public sealed class WorldPointer {
             ((Volatile.Read(location: ref m_buttons[slot]) & (1 << button)) != 0)
         );
     }
+    /// <summary>Indicates whether a seat currently holds any pointer button.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public bool IsAnyButtonDown(int slot) => (InRange(slot: slot) && (Volatile.Read(location: ref m_buttons[slot]) != 0));
     /// <summary>Gets a seat's motion report count — a peek that never drains, so a consumer can tell "moved since I
     /// last looked" without disturbing <see cref="TakeMotion"/>'s accumulator.</summary>
     /// <param name="slot">The 0-based seat slot.</param>

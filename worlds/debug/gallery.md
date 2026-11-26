@@ -107,9 +107,37 @@ beside a list of every exhibit, the chosen one lit amber with its group beside
 it; and the right of the screen gives the chosen exhibit's title, its group and
 its place in the catalog, and its note. A tap on a row shows that exhibit; a
 drag scrolls the list a row for each row the pointer travels and taps nothing;
-PREV and NEXT turn it a page. `gallery.station <display>` frames the console
-with the exhibit. [shapes.md](shapes.md#the-displays) lists the displays and
-the console lines.
+PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists the
+displays and the console lines.
+
+The owner's ruling: a player walks up to a display, uses it, and ends up at
+the hero angle every display shares, and while using it the inputs go to the
+display, as a result of Puck code rather than an engine special case. So every
+display is a station ([station.puck](../standard/station.puck), expanded in
+[gallery/gallery.puck](gallery/gallery.puck)):
+
+- Standing before a console (within 1.6 m of the display's spawn point), the
+  context button (E, or the pad's RB) uses it: she stands at the display's
+  spawn point and the seat's camera eases to the display's station view
+  (`gallery-station-<id>`, look.puck's `lookStation`), whose near plane cuts
+  her away where she stands between the camera and the console. In the debug
+  world the E key's lamp lights while she is in reach.
+- While she uses it, the left mouse button is the console's tap and nothing
+  turns the camera or walks her: the seat's controls are the station's binding
+  group, and the debug world's `station` input family suspends her movement
+  (input-modes.puck). E or Backspace (RB or B, or the right mouse button)
+  steps back, and the camera eases back to the chase camera. Leaving the
+  reach any other way (`gallery.go`, a pose) steps back too.
+- Outside a station, a press that lands on a console's glass is still the
+  console's alone until it is released (pointer capture, the standard's
+  `pointerCapture` row): a drag on the list scrolls it and never orbits the
+  camera, while a press anywhere else is the camera's drag.
+- `gallery.station <display>` still films a display from the station view
+  without using it.
+
+Read the state with `world.state stationNear` and `world.state stationAt`
+(keyed by body index: the display's place in `galleryDisplays` plus one, 0 for
+none) and `player.bindings 1` (`group=station` while engaged).
 
 Every part of a display is an engine mechanism a world authors:
 
@@ -256,11 +284,13 @@ as the other world-space pieces are.
     brick by link cable and plays it on the console's screen, as old Nintendo
     kiosk stations did;
   - player shape molding ([Molding a shape later](#molding-a-shape-later)).
-- **A mouse tap still orbits.** The left button is both the camera's orbit drag
-  and the tap, so a drag on the list in the chase view also turns the camera;
-  `gallery.station` films from a camera the drag does not move. A press that
-  lands on a pointer surface should be captured by it
-  ([the UI decisions](../../docs/decisions/ui.md#layout-text-and-interaction)).
+- **Pointer capture ignores occlusion.** A press is the console's when the
+  pointer's ray meets any console's glass, as the `$pointer:` read does, so a
+  console far behind a wall under the cursor still takes the press from the
+  camera's drag.
+- **The station's pad controls are the leave buttons alone.** While a seat uses
+  a display, the pad steps back (RB, B) but does not yet drive the list; a pad
+  cursor or a focus over the list is the console's keyboard and gamepad work.
 - **Touch reaches the console through contacts.** The console's rules read the
   first pointing seat's ray and its tap channel. A touchscreen's contacts (a
   finger, a pen tip, the mouse while its button is held) carry their own phase

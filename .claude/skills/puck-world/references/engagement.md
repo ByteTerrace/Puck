@@ -562,9 +562,43 @@ outside it or off the surface (`WorldPointerRegion.RowOf`). `any` requires
 `Control` over the surface's subject: the screen, or the placement. The windowed
 host casts the OS pointer whenever a placement carries a surface. The standard's
 `tap` channel is a surface's press: the left mouse button alone presses it
-(passing through to its orbit drag), and a touchscreen contact presses it.
-`body.channels` echoes each surface's hit and the regions it lies in
-(`placement:<id>=on(u, v){list#3}`).
+(passing through to its orbit drag in the resting page). `body.channels` echoes
+each surface's hit and the regions it lies in (`placement:<id>=on(u, v){list#3}`);
+`WorldPointerSurfaces.Of` is the one enumeration of a document's surfaces and their
+mappings, which that echo and the host's pointer capture both walk.
+
+**Pointer capture is a binding group.** The same cast publishes each seat's
+`pointer` context family (`WorldContextFamilies.Pointer`, from
+`WorldPointerRayCapture.PublishPointer`): `surface` while the seat's ray lands on
+a surface (`WorldPointerSurfaces.Lands`), `none` otherwise, re-read only while the
+seat holds no pointer button (`WorldPointer.IsAnyButtonDown`). So a press that
+lands on a surface keeps whatever group a context row gives `surface` until its
+release, and a drag begun elsewhere stays the seat's own controls' when it crosses
+one. The standard's `pointerCapture` overlay row (`worlds/standard/station.puck`)
+is that row: its `pointer` group's page inherits the resting page and binds the
+left button to `tap` alone, so a drag on a console scrolls it and never orbits the
+camera. A context group's page may inherit a default-group page
+(`BindingProfile`'s inheritance walk), which is what lets it refine the resting
+page rather than restate it. The test ignores occlusion, as the `$pointer:` read
+does: a surface behind a wall under the cursor still takes the press.
+
+**Stations: engaging a placement in Puck code.** A gallery display's console is
+engaged without a control application: the standard's `stationPlay` template
+(`worlds/standard/station.puck`) authors it as rules over `$players` and the
+`interact` channel, as the typing bench is. A body within reach of a station's
+`at` sets its `stationNear` cell; the context button sets `stationAt` and the body
+register `station` to the station's number and poses the body at its spawn point;
+the context button again, `cancel`, or leaving the reach zeroes both. The engine
+supplies only generic mechanisms: the `station` input family (`stationFamily`,
+a `BodyState` selector) suspends the movement families a world names, a
+`state:stationAt` context row (keyed by the seat's body) gives the seat the
+station's binding group, and one `views.framings` row eases the seat camera to
+`station-view`, a `selectProgram` keyed `state.stationAt.$body` over each
+station's camera. A framing program's bound operands read `$body` through the
+seat's own reads (`IWorldCameraProgramRig.Reads`, set by `WorldSeatFramings`), as
+its `when` does. The screen-route and tabletop engagements stay for what needs a
+control application (a machine's pad, a board's seat reads); a station needs none,
+because its console's rules already read the seat's pointer and channels.
 
 ## `Dissolve` — three outcomes, no repair
 

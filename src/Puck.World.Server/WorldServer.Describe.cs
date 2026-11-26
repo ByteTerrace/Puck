@@ -303,20 +303,8 @@ public sealed partial class WorldServer {
 
         var hits = new List<string>();
 
-        foreach (var screen in Definition.Screens) {
-            if (screen.Route.Input == SourceDestination.Simulation) {
-                hits.Add(item: DescribeSurfaceHit(mapping: WorldScreenMappings.Normalized(screen: screen), name: $"screen:{screen.Index}", ray: pointer, regions: screen.Route.Regions));
-            }
-        }
-        foreach (var placement in Definition.Placements) {
-            if (placement?.Pointer is { } surface) {
-                hits.Add(item: DescribeSurfaceHit(
-                    mapping: surface.MappingIn(frame: WorldDefinitionRows.ResolvedFrame(definition: Definition, placement: placement), placementId: placement.Id),
-                    name: $"placement:{placement.Id}",
-                    ray: pointer,
-                    regions: surface.Regions
-                ));
-            }
+        foreach (var target in WorldPointerSurfaces.Of(definition: Definition)) {
+            hits.Add(item: DescribeSurfaceHit(mapping: target.Mapping, name: target.Name, ray: pointer, regions: target.Regions));
         }
 
         return $"{Vector(value: pointer.Origin)}->{Vector(value: pointer.Direction)}[{string.Join(

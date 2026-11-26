@@ -1843,6 +1843,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 [WorldContextFamilies.Roster] = WorldContextFamilies.RosterUnjoined,
                 [WorldContextFamilies.Engagement] = WorldContextFamilies.EngagementNone,
                 [WorldContextFamilies.Editor] = WorldContextFamilies.EditorPlay,
+                [WorldContextFamilies.Pointer] = WorldContextFamilies.PointerNone,
             };
             m_seatContexts[slot] = (seedDocument.Contexts ?? []);
             m_composed[slot] = seedDocument;
