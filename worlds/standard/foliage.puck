@@ -258,6 +258,98 @@ template leafSpray(label, tip, ahead, size, material, smooth = 0.25) {
   }
 }
 
+// The turn that lays a flat Prism leaf (long along local +Y, thin along local Z) out along yaw `phi` at `a` radians off
+// vertical, its face looking up and its width horizontal: yaw(-phi) * roll about Z(-a) * yaw(pi/2).
+function leafTurn(phi, a) = compose(rotate([0, 1, 0], -phi * 1rad), rotate([0, 0, 1], -a * 1rad), rotate([0, 1, 0], 90))
+// The direction such a leaf runs.
+function leafRun(phi, a) = [sine(a) * cosine(phi), cosine(a), sine(a) * sine(phi)]
+
+// A leaf's outline, a convex profile from its tip clockwise in units of its half width and half length: widest below its
+// middle and drawn to a point at the tip.
+let leafOutline = [[0, 1], [0.5, 0.5], [0.85, -0.05], [0.7, -0.6], [0.3, -0.95], [-0.3, -0.95], [-0.7, -0.6], [-0.85, -0.05], [-0.5, 0.5]]
+// Where leaf `i` of `count` springs from a clump: its angle from straight up, in radians, on a spiral that covers the
+// clump evenly from its top down to height `low` (1 the top, -1 the underside's middle), and its bearing, each a golden
+// angle round from the last.
+function leafPolar(count, i, low) = arcCosine(1 - ((1 - low) * ((i + 0.5) / count)))
+function leafBearing(i) = i * 2.39996323
+function leafRoot(radii, polar, bearing) = [radii[0] * sine(polar) * cosine(bearing), radii[1] * cosine(polar), radii[2] * sine(polar) * sine(bearing)]
+
+// The radii of the ellipsoid a leafy clump's leaves stand off, in the clump's own units.
+let leafyRadii = [1.2, 0.8, 1.15]
+// A leafy clump's palette row: a canopy triple (dark, middle, light) shaded as one soft volume over the clump's radii
+// (softVolume, `soft` of the way), so the clump's leaves read by their outline and their colour while the light falls
+// across the clump as across one round mass.
+function leafySurface(leaves, seed, radii = leafyRadii, soft = 0.85) = softVolume(canopySurface(leaves, seed), radii, soft)
+
+// A clump of foliage as a creation of its own, to be placed many times (leafyClumps): an inner mass and `count` flat
+// leaves standing off an ellipsoid of `radii` about the creation's origin, each springing from the ellipsoid and running
+// outward and down over it like the leaves of a spray, so the clump's outline is leaf tips rather than a ball's. Every
+// leaf is whole, a flat prism of `leaf` (half width, half length, half thickness) grown by up to a quarter either way,
+// turned `lift` radians (from, to) down from the outward direction and `spin` radians (peak to peak) about it, sprung
+// up to `wander` of the spacing between leaves off its place on the spiral, and coloured by one of the rows `tones` at
+// random. Every `fringeEvery`-th leaf stands out instead, `fringe` radians (from, to) off the outward direction, so
+// the leaves that lie over the mass cover it and the ones that stand out make its outline. The row `inner` colours the
+// mass, `core` its share of the radii, held clear of the leaves. The rows are finished palette rows (leafySurface,
+// under whatever style the world lights by).
+//
+// A placement of any uniform scale and yaw keeps the clump's shading, and every copy draws the one baked mesh, so a
+// canopy of hundreds of clumps bakes one. A leaf costs about the same triangles whatever its size, at every level of
+// detail, and a view draws every copy's, so `count` is the clump's cost.
+template leafyClump(id, tones, inner, radii = leafyRadii, count = 120, leaf = [0.12, 0.21, 0.012], low = -0.97, lift = [0.95, 1.45], fringe = [0.5, 0.9], fringeEvery = 4, spin = 1.0, wander = 0.6, core = 0.88) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: "leafy-clump"
+      palette: concat(tones, [inner])
+      shape Superellipsoid "core" {
+        exponent: landscapeExponent
+        position [0, 0, 0]
+        scale: (radii * core)
+        material: length(tones)
+      }
+      for i in range(0, count) {
+        // The spacing between leaves on a unit sphere, as an angle: the spiral gives each an equal share of its area.
+        let pitch = squareRoot((4 * pi) / count)
+        let polar = (leafPolar(count, i, low) + ((weylShare((i + 1), 0.4142135624) - 0.5) * wander * pitch))
+        let place = (leafBearing(i) + ((weylShare((i + 1), 0.7320508076) - 0.5) * wander * pitch))
+        let bearing = (place + ((weylShare((i + 1), 0.7548776662) - 0.5) * spin))
+        let tilt = (((i % fringeEvery) == 0) ? fringe : lift)
+        let droop = (polar + tilt[0] + ((tilt[1] - tilt[0]) * weylShare((i + 1), 0.5698402910)))
+        let grow = (0.75 + (0.5 * weylShare((i + 1), 0.3819660113)))
+        shape Prism $"leaf-{i}" {
+          profile {
+            kind: "Convex"
+            vertices: leafOutline
+          }
+          position: (leafRoot(radii, polar, place) + (leafRun(bearing, droop) * (leaf[1] * grow * 0.55)))
+          scale: (leaf * grow)
+          rotation: leafTurn(bearing, droop)
+          material: floor((weylShare((i + 1), 0.2360679775) * length(tones)))
+        }
+      }
+    }
+  }
+}
+
+// The placements that clothe a crown in leafy clumps, one where each of leafClusters' lobes would stand (leafClusterAt)
+// and as large: `prototype` is a leafyClump whose radii are `unit`, and each copy is scaled so its first radius is its
+// lobe's, turned to a bearing of its own. `centre` and the lobes are author-frame points of a creation placed at
+// `origin` under `parent`, a half turn about up from the placement's frame, so a lobe at author (x, y, z) stands at
+// origin + (-x, y, -z).
+template leafyClumps(label, prototype, origin, centre, radius, height, count, size, parent = null, turn = 0, unit = leafyRadii[0]) {
+  for i in range(0, count) {
+    let at = leafClusterAt(centre, radius, height, count, i, turn)
+    let t = leafClusterShare(count, i)
+    placement $"{label}-{i}" {
+      prototype: prototype
+      parent: parent
+      position [(origin[0] - at[0]), (origin[1] + at[1]), (origin[2] - at[2])]
+      scale: ((size[0] / unit) * ((1.15 - (0.4 * t)) * (0.8 + (0.4 * weylShare((i + 1), 0.7548776662)))))
+      yawDegrees: (360 * weylShare((i + 1), 0.4142135624))
+    }
+  }
+}
+
 // One grouped-shape tree: a tapered, gently bowed trunk flaring into a few buttress roots, tapering limbs whose ends are
 // buried inside the canopy, and overlapping crown masses blended wide into one canopy and coloured as one mass. Rows
 // are authored upright; `lean` tips the trunk, limbs and crowns, never the roots.
@@ -850,12 +942,6 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
     }
   }
 }
-
-// The turn that lays a flat Prism leaf (long along local +Y, thin along local Z) out along yaw `phi` at `a` radians off
-// vertical, its face looking up and its width horizontal: yaw(-phi) * roll about Z(-a) * yaw(pi/2).
-function leafTurn(phi, a) = compose(rotate([0, 1, 0], -phi * 1rad), rotate([0, 0, 1], -a * 1rad), rotate([0, 1, 0], 90))
-// The direction such a leaf runs.
-function leafRun(phi, a) = [sine(a) * cosine(phi), cosine(a), sine(a) * sine(phi)]
 
 // Fronds arching out from a centre: each is a flat, tapered leaf rising from the crown and a second, longer one that
 // arches over and droops toward its tip.

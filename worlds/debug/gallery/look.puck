@@ -117,11 +117,13 @@ function lookTelevisionPalette(t) = [
 // The central tree (tree.puck): an old broadleaf's bark, a warm grey-brown streaked along the grain, with a darker
 // under-tone in its furrows and moss settling where it faces up; its shelves wear paler where feet have polished them,
 // its branches a shade warmer than the trunk, and shelf fungus in ochre to cream (dark underneath, pale on top) grows
-// along the climb. The canopy's three greens run dark underneath to sunlit on top, leaning a breath toward the toybox's
-// mint, and a few sprays of blossom in the toybox's candy pink hang among the branches' leaves. `relief` is the bark's
-// lumpy relief in metres and `grain` its features a metre; `clump` and `clumpGrain` are the same for the canopy's leaf
-// masses. `streak` is the bark grain's frequency along and across it (fine across, long along), and `twist` how many
-// radians a metre the trunk's grain turns as it climbs.
+// along the climb. The canopy is leafy clumps in four families (`foliage`): the crown's greens, a deeper tier under it,
+// a warmer one under that, and golden clumps at some of the forks, echoing the hall's amber glass. Each family names
+// the three tones its leaves draw from at random and its inner mass, every one a canopy triple that runs dark underneath
+// to sunlit on top; `soft` is how far a clump's leaves take the clump's own round shading (0 each leaf's own, 1 the
+// clump's alone). `relief` is the bark's lumpy relief in metres and `grain` its features a metre. `streak` is the bark
+// grain's frequency along and across it (fine across, long along), and `twist` how many radians a metre the trunk's
+// grain turns as it climbs.
 let lookTree = {
   bark: "#8A6B4F"
   barkUnder: "#3F2F24"
@@ -131,15 +133,27 @@ let lookTree = {
   branch: "#7E664E"
   branchUnder: "#4F3E2F"
   fungus ["#6E3A1E", "#B8703A", "#EBC88E"]
-  leaves ["#1E3F33", "#3E7444", "#A8C25E"]
-  // The forks' accent clumps: a golden turn among the greens, echoing the hall's amber glass.
-  blossom ["#9A5A1E", "#D99A3A", "#F7D77E"]
-  leavesDeep ["#13302A", "#2C5E40", "#7FA552"]
-  leavesWarm ["#2B4A26", "#5E8A3A", "#C9CF6A"]
+  foliage {
+    crown {
+      tones [["#1E3F33", "#3E7444", "#A8C25E"], ["#19382F", "#33663E", "#8FB054"], ["#27492F", "#4E8545", "#BFD069"]]
+      inner ["#142E27", "#2A553A", "#6F9A4C"]
+    }
+    deep {
+      tones [["#13302A", "#2C5E40", "#7FA552"], ["#0F2824", "#245038", "#6C9148"], ["#193A2C", "#376E44", "#93B75B"]]
+      inner ["#0D2420", "#1F4633", "#56803F"]
+    }
+    warm {
+      tones [["#2B4A26", "#5E8A3A", "#C9CF6A"], ["#25412A", "#4F7C3C", "#B3C562"], ["#35532A", "#70983C", "#DAD877"]]
+      inner ["#1E3722", "#426C34", "#93AD55"]
+    }
+    blossom {
+      tones [["#9A5A1E", "#D99A3A", "#F7D77E"], ["#8A4C1B", "#C98732", "#EEC66C"], ["#A9661F", "#E6AE48", "#FBE391"]]
+      inner ["#70401A", "#AD732C", "#D9B05E"]
+    }
+  }
+  soft: 0.85
   relief: 0.035
   grain: 1.6
-  clump: 0.24
-  clumpGrain: 1.5
   streak [0.22, 7, 7]
   twist: 0.09
 }

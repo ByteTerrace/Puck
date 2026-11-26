@@ -4,13 +4,16 @@
 // a branch learns the branches lead to the other floors. The gallery module imports this, so the gallery booted alone
 // (gallery-root.puck) and the debug world both grow it.
 //
-// It is two creations on one spot. `gallery-tree` is the wood, solid: the trunk with its flare and buttress roots, the
+// It is two creations on one spot and the foliage placed about them. `gallery-tree` is the wood, solid: the trunk with its flare and buttress roots, the
 // shelves grown out of its bark, and the branches, which taper from collars at the trunk, fork and carry knots. It sets
 // `contact: Shapes`, so a body collides with the hard union of the masses it stands on and climbs (a stack of cylinders
 // inside the drawn cone, the shelves, the branch masses, the roots): analytic primitives, inside the solid the smooth
 // blends draw, with no field solve. The cone itself, the forks, knots, burls and fungus brackets are drawn only.
-// `gallery-tree-canopy` is what a body never touches, with no collision: a crown of separate leaf clusters high in the
-// void under the skylights, the limbs that carry them, and a spray of leaves at the end of each branch's fork.
+// `gallery-tree-canopy` is what a body never touches, with no collision: the limbs that carry the foliage high in the
+// void under the skylights and the dark mass that closes the crown over the trunk's top. The foliage itself is leafy
+// clumps (foliage.puck's leafyClump), one creation a colour family, placed once for every clump of the crown, of the tiers
+// under it and of each branch's fork (leafyClumps): every copy draws its family's one baked mesh at its own size and
+// turn, and shades as one soft volume, so a change to the leaves bakes one clump.
 //
 // Every dimension is layout.puck's (the trunk, the shelves, the branches and where they land), every colour and look
 // value look.puck's (lookTree). Shapes are authored in the creation's frame, a half turn about up from the plan's, so a
@@ -65,17 +68,17 @@ let treeBurlCount = 7
 // crevices between them stay deep.
 let treeStems = { count: 5, segments: 4, turn: 160, out [2.05, 1.15], radius [0.85, 0.42], bow: 0.22, smooth: 0.1 }
 
-// The crown: separate leaf clusters on a dome high in the void (foliage.puck's leafClusters), a broad mass closing it
-// over the trunk's top, and limbs from the trunk's top into every `treeCrownLimbEvery`-th cluster.
-let treeCrown = { centre [0, 15.25, 0], radius: 6.4, height: 1.55, count: 34, size [1.2, 0.8, 1.15], turn: 20 }
-// The crown's lower tiers: wider, sparser rings of smaller clusters stepping down and out over the branches, so the
+// The crown: leafy clumps on a dome high in the void (where foliage.puck's leafClusterAt stands each, `size` its radii),
+// a broad mass closing it over the trunk's top, and limbs from the trunk's top into every `treeCrownLimbEvery`-th clump.
+let treeCrown = { centre [0, 15.25, 0], radius: 6.4, height: 1.55, count: 24, size [1.5, 1.0, 1.44], turn: 20 }
+// The crown's lower tiers: wider, sparser rings of smaller clumps stepping down and out over the branches, so the
 // canopy reads as layered foliage with depth instead of one cap, and light falls through between the tiers.
 let treeCrownTiers = [
-  { centre [0, 13.2, 0], radius: 8.6, height: 1.2, count: 40, size [0.95, 0.62, 0.9], turn: 47 }
-  { centre [0, 11.0, 0], radius: 10.4, height: 0.9, count: 30, size [0.75, 0.5, 0.72], turn: 83 }
+  { centre [0, 13.2, 0], radius: 8.6, height: 1.2, count: 28, size [1.2, 0.8, 1.15], turn: 47 }
+  { centre [0, 11.0, 0], radius: 10.4, height: 0.9, count: 20, size [0.95, 0.63, 0.91], turn: 83 }
 ]
 // Each fork's foliage: a loose cluster of small clumps round its tip rather than one spray.
-let treeForkFoliage = { radius: 1.5, height: 0.7, count: 9, size [0.62, 0.42, 0.58] }
+let treeForkFoliage = { radius: 1.4, height: 0.7, count: 6, size [0.8, 0.53, 0.77] }
 let treeCrownCore = { at [0, 16.35, 0], r [2.8, 1.05, 2.8] }
 let treeCrownLimbEvery = 4
 
@@ -86,10 +89,13 @@ let treeFungus = 2
 function treeBranchBark(i) = (3 + i)
 let treeLeaf = 0
 let treeTwig = 1
-let treeBlossom = 2
-// The lower tiers' leaves, a shade apart from the crown's so the canopy reads in depth: the first tier deeper, the second
-// warmer.
-function treeTierLeaf(k) = (3 + k)
+// The families of leafy clump (look.puck's lookTree.foliage) and the creation each is.
+let treeFamilies = ["crown", "deep", "warm", "blossom"]
+function treeClump(family) = $"gallery-tree-clump-{family}"
+// The lower tiers' families: the first tier deeper, the second warmer, so the canopy reads in depth.
+let treeTierFamilies = ["deep", "warm"]
+// Every third fork's foliage is golden.
+function treeForkFamily(i) = (((i % 3) == 2) ? "blossom" : "crown")
 // Bark whose grain runs along `frame` (limbs.puck's barkAlong, barkUpright), twisting `twist` radians a metre about the
 // trunk's axis.
 function treeBarkSurface(color, under, seed, frame, twist = 0) = galleryCel(landscapeSurface(
@@ -275,53 +281,16 @@ prototypes {
       name: "gallery-tree-canopy"
       schema: "puck.creation.v1"
       palette [
-        galleryCel(canopySurface(lookTree.leaves, 6115))
+        galleryCel(canopySurface(lookTree.foliage.crown.inner, 6115))
         treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
-        galleryCel(canopySurface(lookTree.blossom, 6117))
-        galleryCel(canopySurface(lookTree.leavesDeep, 6119))
-        galleryCel(canopySurface(lookTree.leavesWarm, 6121))
       ]
-      // The leaf masses' breakup, one relief over the whole canopy.
-      noise {
-        frequency: lookTree.clumpGrain
-        amplitude: lookTree.clump
-        octaves: 3
-        gain: 0.45
-        seed: 6115
-      }
-      leafClusters(
-        label: "crown",
-        centre: treeCrown.centre,
-        radius: treeCrown.radius,
-        height: treeCrown.height,
-        count: treeCrown.count,
-        size: treeCrown.size,
-        material: treeLeaf,
-        smooth: 0.35,
-        turn: treeCrown.turn
-      )
-      for (tier, k) in treeCrownTiers {
-        leafClusters(
-          label: $"crown-tier-{k}",
-          centre: tier.centre,
-          radius: tier.radius,
-          height: tier.height,
-          count: tier.count,
-          size: tier.size,
-          material: treeTierLeaf(k),
-          smooth: 0.25,
-          turn: tier.turn
-        )
-      }
       shape Superellipsoid "crown-core" {
         material: treeLeaf
         exponent: landscapeExponent
         position: treeCrownCore.at
         scale: treeCrownCore.r
-        blend: SmoothUnion
-        smooth: 0.5
       }
-      // The limbs from the trunk's top out into the crown's clusters.
+      // The limbs from the trunk's top out into the crown's clumps.
       for n in range(0, floor((treeCrown.count / treeCrownLimbEvery))) {
         let into = leafClusterAt(treeCrown.centre, treeCrown.radius, treeCrown.height, treeCrown.count, ((n * treeCrownLimbEvery) + 2), treeCrown.turn)
         shape Sweep $"crown-limb-{n}" {
@@ -337,8 +306,8 @@ prototypes {
           }
         }
       }
-      // Limbs from the trunk out into every cluster of each lower tier, each leaving the trunk below its cluster
-      // and rising to it, so no clump floats.
+      // Limbs from the trunk out into every clump of each lower tier, each leaving the trunk below its clump and rising
+      // to it, so no clump floats.
       for (tier, k) in treeCrownTiers {
         for n in range(0, tier.count) {
           let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
@@ -356,20 +325,8 @@ prototypes {
           }
         }
       }
-      // A cluster of leaves round each branch's fork, every third in blossom.
+      // A twig from each fork's tip into each of its clumps, so none floats.
       for (b, i) in treeLimbs {
-        leafClusters(
-          label: $"fork-{i}",
-          centre: (treeForkTip(b, i) + [0, 0.3, 0]),
-          radius: treeForkFoliage.radius,
-          height: treeForkFoliage.height,
-          count: treeForkFoliage.count,
-          size: treeForkFoliage.size,
-          material: (((i % 3) == 2) ? treeBlossom : treeLeaf),
-          smooth: 0.22,
-          turn: (31 * i)
-        )
-        // A twig from the fork's tip into each of its clumps, so none floats.
         for n in range(0, treeForkFoliage.count) {
           let into = leafClusterAt((treeForkTip(b, i) + [0, 0.3, 0]), treeForkFoliage.radius, treeForkFoliage.height, treeForkFoliage.count, n, (31 * i))
           shape Sweep $"fork-twig-{i}-{n}" {
@@ -388,6 +345,13 @@ prototypes {
       }
     }
   }
+  for (family, k) in treeFamilies {
+    leafyClump(
+      id: treeClump(family),
+      tones: map(lookTree.foliage[family].tones, (leaves, j) => galleryCel(leafySurface(leaves, ((6130 + (10 * k)) + j), soft: lookTree.soft))),
+      inner: galleryCel(leafySurface(lookTree.foliage[family].inner, (6139 + (10 * k)), soft: lookTree.soft))
+    )
+  }
 }
 
 placements {
@@ -401,6 +365,47 @@ placements {
     prototype: "gallery-tree-canopy"
     parent: "gallery"
     position [treeX, galleryFloor[0], treeZ]
+  }
+  // The foliage: a leafy clump for every clump of the crown, of each tier under it and of each fork.
+  leafyClumps(
+    label: "gallery-tree-crown",
+    prototype: treeClump("crown"),
+    origin: [treeX, galleryFloor[0], treeZ],
+    parent: "gallery",
+    centre: treeCrown.centre,
+    radius: treeCrown.radius,
+    height: treeCrown.height,
+    count: treeCrown.count,
+    size: treeCrown.size,
+    turn: treeCrown.turn
+  )
+  for (tier, k) in treeCrownTiers {
+    leafyClumps(
+      label: $"gallery-tree-tier-{k}",
+      prototype: treeClump(treeTierFamilies[k]),
+      origin: [treeX, galleryFloor[0], treeZ],
+      parent: "gallery",
+      centre: tier.centre,
+      radius: tier.radius,
+      height: tier.height,
+      count: tier.count,
+      size: tier.size,
+      turn: tier.turn
+    )
+  }
+  for (b, i) in treeLimbs {
+    leafyClumps(
+      label: $"gallery-tree-fork-{i}",
+      prototype: treeClump(treeForkFamily(i)),
+      origin: [treeX, galleryFloor[0], treeZ],
+      parent: "gallery",
+      centre: (treeForkTip(b, i) + [0, 0.3, 0]),
+      radius: treeForkFoliage.radius,
+      height: treeForkFoliage.height,
+      count: treeForkFoliage.count,
+      size: treeForkFoliage.size,
+      turn: (31 * i)
+    )
   }
 }
 

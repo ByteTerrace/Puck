@@ -255,11 +255,17 @@ on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
   relief, which would collide as drawn; its texture is a grain that runs along
   each limb's own axis (foliage.puck's `landscapeSurface` with `grain`), and
   twists as the trunk climbs.
-- `gallery-tree-canopy`, not solid: a crown of separate leaf clusters on a
-  dome high in the void under the skylights, laid in a sunflower spiral so sky
-  shows between them (foliage.puck's `leafClusters`), the limbs carrying them,
-  and a spray of leaves at each branch's fork, one in three blossoming in the
-  toybox's candy pink.
+- `gallery-tree-canopy`, not solid: the limbs that carry the foliage and the
+  dark mass closing the crown over the trunk's top.
+- The foliage, not solid: leafy clumps (foliage.puck's `leafyClump`, a dark
+  mass clothed in whole flat leaves), one creation for each colour family
+  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed once for
+  every clump of the crown, of the two tiers under it and of each branch's fork
+  (`leafyClumps`: a sunflower spiral on a dome high in the void under the
+  skylights, so sky shows between the clumps). Every copy draws its family's
+  one baked mesh at its own size and turn, and shades as one soft volume
+  (`softVolume`), so a clump's outline is leaf tips while the light falls across
+  it as across a round mass. One fork in three is golden.
 
 **Climbing it.** The shelves start on the trunk's east side, just south of
 east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the

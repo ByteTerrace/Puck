@@ -60,6 +60,7 @@ SdfShadeStamp sdfShadeStamp(SdfMaterialData material, float3 position, float3 la
         sdfMeshCarryDirection(record, sdfMeshWorldDirection(record, float3(0,0,1)))));
     sdfShadeSet_surface_position(stamp, position);
     sdfShadeSet_surface_layerPosition(stamp, layerPosition);
+    sdfShadeSet_surface_objectPosition(stamp, frameSlot != SDF_TRANSFORM_SLOT_NONE ? layerPosition : sdfMeshObjectPoint(record, position));
     sdfShadeSet_surface_geometricNormal(stamp, normal);
     sdfShadeSet_surface_normal(stamp, normal);
     sdfShadeSet_surface_curvature(stamp, curvature);
