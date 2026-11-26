@@ -815,11 +815,7 @@ public static partial class WorldFederationCodec {
         }
         var writer = new WireWriter(capacity: 1024);
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
         writer.WriteUInt64(value: submission.Tick);
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
 
@@ -955,6 +951,18 @@ public static partial class WorldFederationCodec {
 
         return writer.ToArray();
     }
+    // The credential every routed leaf opens with: the source namespace that handed the traveler on, then the traveler.
+    private static void WriteCredential(WireWriter writer, string sourceAuthority, in WorldMobilityIdentity mobility) {
+        writer.WriteString(value: sourceAuthority);
+        WorldWireLeaves.WriteMobility(
+            mobility: mobility,
+            writer: writer
+        );
+    }
+    private static void ReadCredential(ref WireReader reader, string field, out string sourceAuthority, out WorldMobilityIdentity mobility) {
+        sourceAuthority = reader.ReadRequiredString(field: field);
+        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+    }
     /// <summary>Encodes a committed-transfer credential without a gameplay payload.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
     /// <param name="mobility">The traveler's incarnation and committed epoch.</param>
@@ -962,11 +970,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeRouteCredential(string sourceAuthority, in WorldMobilityIdentity mobility) {
         var writer = new WireWriter();
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
 
         return writer.ToArray();
     }
@@ -978,11 +982,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodePresence(string sourceAuthority, in WorldMobilityIdentity mobility, bool present) {
         var writer = new WireWriter();
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
         writer.WriteBoolean(value: present);
 
         return writer.ToArray();
@@ -1110,11 +1110,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeSubmission(string sourceAuthority, in WorldMobilityIdentity mobility, ReadOnlySpan<byte> frame) {
         var writer = new WireWriter(capacity: (frame.Length + 256));
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
         writer.WriteBytes(value: frame);
 
         return writer.ToArray();
@@ -1474,8 +1470,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out IntentSubmission submission, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "intent source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "intent source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
 
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
@@ -1769,8 +1764,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeRouteCredential(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "route credential source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "route credential source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
 
         return Finish(
             failure: out failure,
@@ -1787,8 +1781,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodePresence(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out bool present, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "presence source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "presence source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
         present = reader.ReadBoolean();
 
         return Finish(
@@ -1964,8 +1957,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeSubmission(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out byte[] frame, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "submission source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "submission source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
         frame = reader.ReadRest(
             field: "submission frame",
             maxBytes: WorldPeerWireFormat.MaxUpstreamFrameBytes
