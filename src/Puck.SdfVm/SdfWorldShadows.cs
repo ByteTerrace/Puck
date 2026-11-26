@@ -1657,7 +1657,9 @@ internal sealed class SdfWorldShadows : IDisposable {
                     descriptorSetHandle: set, imageViewHandle: pair.Depth.Image.ImageViewHandle);
                 gpu.Bindings.WriteSampledImage(arrayElement: 0, binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfKernelInterfaces.ShadowBlocksExit),
                     descriptorSetHandle: set, imageViewHandle: pair.Exit.Image.ImageViewHandle);
-                tables.WriteInterfaceBuffer(buffer: (Optical ?? tables.DummyBuffer), layout: layout, member: SdfKernelInterfaces.ShadowBlocksOptical, set: set);
+                // An extinction no upload has cleared holds nothing to read: the filler, which ends before a tile bitmap,
+                // marks no glass.
+                tables.WriteInterfaceBuffer(buffer: ((m_opticalInitialized ? Optical : null) ?? tables.DummyBuffer), layout: layout, member: SdfKernelInterfaces.ShadowBlocksOptical, set: set);
                 tables.WriteInterfaceBuffer(buffer: pair.Blocks, layout: layout, member: SdfKernelInterfaces.ShadowBlocksWritten, set: set);
                 recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle,
                     sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,

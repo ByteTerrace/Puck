@@ -167,13 +167,18 @@ defects, not looks.
 
 1. **`gpu-frame`: the GPU frame to 8 ms at 2560 by 1440 on the RTX 4070.**
    Build [the frame budget](frame-budget.md)'s architecture end to end in one
-   lane: each lighting input resolved once into a compact record; the coarse
-   probe lookup (start from `wip/gpu-architecture`); light lists replacing
-   the 128-light masks; shadow classification before filtering; the
-   prefiltered environment; pass merges; windows allocated by octave; main
-   view storage under 1,000 MiB; ink's edge search inside its share. Success
-   line: the whole route at or under 10 ms in the quiet window, the look held
-   in motion on both backends; 8 ms is the budget it keeps going toward.
+   lane. Built and unread (the `gpu-frame` readings under
+   [verification debts](#verification-debts)): the coarse probe lookup, the
+   shadow classes ahead of the filter, the samples' air for the resolve, and
+   the counts of what the probe slots give up. Left, in
+   [the budget's order](frame-budget.md#the-steps): light lists replacing the
+   128-light masks; the rest of the resolve's sample record (motion and
+   identity); windows allocated by octave; main view storage under 1,000 MiB
+   (the stationary window, glass by coverage, the history surface); the
+   prefiltered environment and ink's edge search, each after the reading that
+   says its share is still over. Success line: the whole route at or under
+   10 ms in the quiet window, the look held in motion on both backends; 8 ms
+   is the budget it keeps going toward.
    It owns, first, the diagnosis of the gallery's near-black exhibits and the
    8-frame still shimmer ([verification debts](#verification-debts), item 1),
    since its rewrite is judged against the gallery, with the 2060's captures
@@ -398,6 +403,32 @@ packet; these are the ones owed now, most valuable first.
      reference the next cache sets are checked against, and the 24 tour
      exhibits' stored meshes are audited from it
      ([bake detail](#bake-detail)).
+9. **`gpu-frame`: the frame budget's built steps, unread.** One windowed World
+   a backend at 2560 by 1440 with `--debug-layers`, bakes and lighting
+   settled, `world.cadence off`, `world.rates off`, `world.gpu-timing on`:
+   - `world.gpu-timing` at the stage standing, at the hall's level 0 and on
+     the lawn, then over `world.benchmark run debug`: `sdf.world$surface`
+     (under 1.2 ms), `sdf.world$views-probes` (under 0.8 ms), and
+     `sdf.world$resolve` moving and standing, each beside the frame's total.
+   - The shadow classes change no image: `world.rate pause`,
+     `world.exposure pin`, `world.debug-view shadow`, a settled capture at the
+     hall's east wall and one on the lawn at a tree's shadow edge; then
+     `world.shaders.reload` of a scratch copy of the kernel tree with
+     `#define SDF_SURFACE_OMIT_SHADOW_CLASSES` at the head of
+     `passes/sdf-surface-stage.hlsli`, and the same two captures. The pairs
+     are equal, and the reload's `sdf.world$surface` reading is the classes'
+     share.
+   - `world.residency`'s `shadows` line under the turning day, read twice a
+     minute apart: each entry's `blocks…in…` counts rise with its redraws and
+     rectangles, and the pass's `recent=` time stays where it was before the
+     bounds (the reduction reads 62 by 62 texels a block).
+   - `world.counters gpu pass sdf.world$views-probes` over the route:
+     `lights-rounded` and `groups-without-extras` read zero, or the frame
+     budget's step 10 grows the list and the pool.
+   - A presented burst of a fogged silhouette (the valley rim against the
+     far wall, `world.screenshot <path>.png presented 16`) on both backends:
+     the resolve reads each sample's air from views, so the haze along a
+     silhouette holds as it did.
 3. **Three render-graph laws to read before calling them stale or real.**
    Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
    of the GPU leap:

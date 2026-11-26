@@ -335,9 +335,21 @@ pass's cost. Then the time:
    about 68 MiB at 2560 by 1440 by a reading of 21 MiB at 1280 by 900, and no
    cell shows in the hall or along the walk into it. Check, in the quiet
    window: `views-probes` under 0.8 ms at the stage and moving.
-2. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
-   the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
-   renders with each cluster's list holding only its own.
+2. **Light lists.** As above, as one change: a list in place of a tile's mask
+   moves nothing while the tile's test still fills a mask of the table's
+   width in group memory (`sdfViewsLightTile`), so the lists land with the
+   host's grid, which hands a tile the lights of the cells its boxes meet.
+   What holds the width today, each to be replaced in that change: the pass
+   block's `lightMask` and `SdfLightSelection`'s `UInt128`; a tile's eight
+   words (`SdfWorldPackage.ShadeTileLightWords`) and the walk's mask words
+   (`SdfLightWalk`); the unsplit kernels' group masks; a probe's four words of
+   traced bits and a slot's agreement (`SdfMeshIrradianceProbe.LightWords`,
+   `sdfMeshLightAgreement`); and the document's bound, the shadow
+   allocator's and the selection's fixed arrays (`WorldDefinitionValidator`,
+   `WorldShadowAllocator`, `WorldShadowSelection`). Check: the walk's visits
+   a pixel are unchanged in the debug world; `SdfLights.MaxLights` is gone; a
+   row of 512 point lights renders with each cluster's list holding only its
+   own.
 3. **The shadow classes' time.** A receiver's shadow is classified before it is
    filtered ([the reference](../rendering/sdf/reference/shading-ao-shadows.md#shadows),
    `sdfMeshShadowClass`): each layer pair keeps, for every block of 32 texels a
@@ -357,9 +369,22 @@ pass's cost. Then the time:
    `shadows` line, whose `blocks…in…` counts say how many blocks each entry
    reduced in how many dispatches, beside the pass's measured time under a
    turning sun.
-4. **A prefiltered environment.** The environment node writes the reflected
-   sky, its panels included, at a few roughness levels; views takes one lookup.
-   Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
+4. **A prefiltered environment, if its share is the environment's.** The
+   environment node writes the reflected sky, its panels included, at a few
+   roughness levels; views takes one lookup. Read first what
+   `SDF_VIEWS_OMIT_REFLECTION` removes, since the switch also compiles out the
+   slots' reflection read (`sdfViewsReflectionSeen`, up to twenty words of
+   the probe records) and the lobe's directional albedo. The environment
+   itself (`worldEnvironmentReflection`) reads eight words of the map, the
+   nine coefficient records and each sky layer's kind and visibility for the
+   panel loop, and evaluates one harmonic basis; a prefiltered map replaces
+   that with sixteen words at two roughness levels. The map's irradiance
+   needs the coefficients the reduction writes after the map, so the planes
+   are a second output of the reduction pass (`sdf-sky-environment-reduce`),
+   a row of the map a lane, bound as a World table beside the map. A panel's
+   edge is then as sharp as a map texel, about three degrees, where views
+   evaluates it exactly today, so a sky that authors panels keeps the loop
+   for a mirror. Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
 5. **A sample record for the resolve.** The air is built: views stores each
    render sample's air (`SdfWorldPackage.SampleAir`, two words) from the
    atmosphere it evaluates once a pixel for the transmittance, and the resolve
