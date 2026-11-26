@@ -102,8 +102,8 @@ let surfaceLevel = 3
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
-  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
+  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved, blends, folds" }
+  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets" }
   { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
   { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
 ]
@@ -133,12 +133,12 @@ let galleryDisplayRows = [
     x: 32, z: displaySouth, yaw: 180
   }
   {
-    id: "blends", title: "BLENDS", level: 1, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
-    x: 24, z: displayNorth, yaw: 0
+    id: "blends", title: "BLENDS", level: 0, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
+    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
-    id: "folds", title: "FOLDS", level: 1, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
-    x: 40, z: displayNorth, yaw: 0
+    id: "folds", title: "FOLDS", level: 0, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
+    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
     id: "motion", title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
