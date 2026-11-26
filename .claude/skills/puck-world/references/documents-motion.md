@@ -260,7 +260,7 @@ multiplier) — a shaping row's boost is this seam under that name, never a
 second channel; resolved to `FixedSpeed.HeldOrdinal` the same way a producer's
 `BodyProducerParameter.Press` channel argument resolves its own ordinal
 (`CompiledBodyProducer.Channel`), since a channel name needs the world's
-compiled channel table and a body's own compile step has none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default) and
+compiled channel table and a body's own compile step has none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default / `.Aim`) and
 `FacingSnap` — `Heading` is tank controls; `World` (every kit that never
 sets this field) treats `MoveAdvance`/`MoveStrafe`
 as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
@@ -268,9 +268,18 @@ the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
 `Atan2` of the commanded direction every tick carrying input, no ramp — the
 camera-frame 3D-platformer feel a `FacingSnap` kit authors.
-Under `World` a seat's aim elevation also splits the commanded
-forward into planar and vertical channels client-side; the explicit `MoveUp`
-channel is orthogonal and stays live regardless of `MoveFrame`.
+`Aim` is `World` to the sim (`MotionMoveFrames.SubmitsWorldAxes`, the one
+reading every server check makes); while the delivered body carries the
+`Unsupported` fact (a free hold with lift) and the seat is not free-looking,
+`WorldClient.ComposeAim` resolves rows and stick against the camera's live yaw
+and pitch: forward splits into `cos(pitch)` on the planar pair (and the
+`MoveX/Y/Z` triple when declared) and `-sin(pitch)` added to the `MoveUp` role
+the free hold's `thrust` reads, so a flier travels its view ray. On a surface
+it composes as `World`. The noclip kit (`worlds/debug/noclip.puck`) and the
+standard free camera opt in. The client reads the body's own delivered kit,
+not the world's default seat kit, so a kit selected by state moves in its own
+frame. The explicit `MoveUp` channel stays live under every `MoveFrame` and
+sums with the aimed part.
 
 **Shaping-row ORDER shadows regimes — author air rows first.** The shaping
 table evaluates in order, first open gate wins, and a `recently Grounded`

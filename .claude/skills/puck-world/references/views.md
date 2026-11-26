@@ -194,7 +194,9 @@ For each fixed tick:
    dead-zone, physical-axis inversion, and 3D projection happen before the
    existing final semantic yaw/pitch inversion.
 2. `WorldClient` rotates left-stick movement through that logical yaw when the
-   selected kit authors `moveFrame: World`.
+   body's delivered kit authors `moveFrame: World` or `Aim`; under `Aim`, while
+   a free hold holds the body, rows and stick follow the logical pitch too (the
+   view ray), its vertical part on `MoveUp`.
 3. Standard `player.move.strafe` preserves heading, and the kit disables
    movement-facing attitude snap, so lateral left-stick input is a true strafe.
    It resolves against live look yaw every tick, so forward travel turns with

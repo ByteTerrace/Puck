@@ -83,8 +83,9 @@ kits {
   }
   rows [
     // Free flight with nothing to collide as: no collider, so the contact field never solves her, and overlap with every
-    // other body. One free hold cancels gravity whole, so she hovers where she stops: the movement keys and stick move
-    // her at her flight pace, 5 m/s and 10 running, and rise and descend (Space, Left Ctrl or M; C) climb and sink at it.
+    // other body. One free hold cancels gravity whole, so she hovers where she stops: the movement keys, the stick and
+    // both mouse buttons move her at her flight pace, 5 m/s and 10 running, along where the camera aims (the `Aim`
+    // frame: looking up while moving forward climbs), and rise and descend (Space, Left Ctrl or M; C) climb and sink.
     {
       bodyMotionProgram: "walk"
       mass: 0
@@ -102,7 +103,7 @@ kits {
             thrust: 1
           }
         ]
-        moveFrame: World
+        moveFrame: Aim
         shaping [
           {
             along {

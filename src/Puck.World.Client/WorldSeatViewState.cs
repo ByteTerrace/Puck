@@ -462,6 +462,28 @@ public sealed class WorldSeatViewState {
             return (AuthoredPitch(views: views) + m_pitch);
         }
     }
+    /// <summary>Returns the live look a steered camera application's rig folds into its orbit: the presented yaw over
+    /// the yaw reference and the whole presented pitch, the seat rig's authored pitch included. A program that orbits
+    /// at zero yaw and pitch therefore looks exactly where <see cref="LogicalYaw"/> and <see cref="LogicalPitch"/>
+    /// say the seat aims, the direction its movement composes against.</summary>
+    /// <param name="views">The routed world's views section.</param>
+    /// <param name="bodyOrientation">The perceived body's orientation.</param>
+    /// <param name="interpolationAlpha">How far the frame sits between the last two fixed ticks, in <c>[0, 1]</c>.</param>
+    /// <returns>The look sample.</returns>
+    public SdfCameraLook ApplicationLook(WorldViewDefaults views, Quaternion bodyOrientation, float interpolationAlpha) {
+        views = Framing(views: views);
+
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        var (yaw, pitch) = PresentedLook(interpolationAlpha: interpolationAlpha);
+
+        return WorldSeatCameraResolver.Look(
+            bodyOrientation: bodyOrientation,
+            livePitch: (AuthoredPitch(views: views) + pitch),
+            liveYaw: yaw,
+            yawReference: views.SeatControl.YawReference
+        );
+    }
     public float LogicalYaw(WorldViewDefaults views, Quaternion bodyOrientation) {
         // The seat's FACING — what steering writes and movement frames against: the live look yaw over the yaw
         // reference, and nothing of the camera program. The rig's orbit yaw (authored or state-bound — look behind)

@@ -548,7 +548,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// heading; camera-framed channel rows retain their authored movement-facing behavior;
     /// <c>player.steer</c> or <c>player.look.steer</c> composes after this and wins. Under a kit on the sim's own
     /// <see cref="MotionMoveFrame.Heading"/> arm nothing rotates (the validator keeps such a world's pair
-    /// World-framed) — the stick folds in raw beside the rows. Nothing rotates either for a seat its authority holds
+    /// World-framed) — the stick folds in raw beside the rows. The kit is the body's own, as its authority last
+    /// delivered it. Under <see cref="MotionMoveFrame.Aim"/>, while the delivered body is held up by a free hold
+    /// and the seat is not free-looking, rows and stick both resolve against the camera's live yaw and pitch, the
+    /// vertical part riding the <c>MoveUp</c> role. Nothing rotates either for a seat its authority holds
     /// captured on a device (<see cref="WorldAuthorityEndpoint.DrivesDevice"/>): the rows and the stick sum raw, so a
     /// screen's pad and a board's rules read right as right whichever way the camera faces.</summary>
     /// <param name="slot">The 0-based local seat whose camera and body frame the movement.</param>
@@ -606,10 +609,22 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 : intent);
         }
 
-        if (
-            (ResolveSeatKit(definition: definition) is not { } kit) ||
-            (kit.Motion.MoveFrame != MotionMoveFrame.World)
-        ) {
+        // The frame is the body's own kit's, as the authority last delivered it: a kit selected by state (noclip, a
+        // craft) moves in its own frame, not the world's default seat kit's.
+        if (!endpoint.Mirror.TryReadBody(
+            body: out var body,
+            index: bodyIndex
+        )) {
+            return intent;
+        }
+
+        var kits = definition.Kits;
+        var moveFrame = ((body.Kit < kits.Count)
+            ? kits[body.Kit].Motion.MoveFrame
+            : MotionMoveFrame.Heading
+        );
+
+        if (!moveFrame.SubmitsWorldAxes()) {
             return WriteMove(
                 forward: (rowForward + stickForward),
                 intent: intent,
@@ -646,6 +661,35 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             views: definition.Views,
             bodyOrientation: bodyOrientation
         );
+
+        if (
+            (moveFrame == MotionMoveFrame.Aim) &&
+            ((body.Facts & BodyFacts.Unsupported) != 0) &&
+            !seat.FreeLooking
+        ) {
+            seat.CameraFrameYaw = null;
+
+            UnitDisc(
+                forward: ref rowForward,
+                strafe: ref rowStrafe
+            );
+            UnitDisc(
+                forward: ref stickForward,
+                strafe: ref stickStrafe
+            );
+
+            return ComposeAim(
+                bodyOrientation: bodyOrientation,
+                forward: (rowForward + stickForward),
+                intent: intent,
+                pitch: seat.View.LogicalPitch(views: definition.Views),
+                roles: roles,
+                strafe: (rowStrafe + stickStrafe),
+                view: seat.View,
+                yaw: liveCameraYaw
+            );
+        }
+
         var latchedCameraYaw = (seat.CameraFrameYaw ?? liveCameraYaw);
         var latchesCameraYaw = (
             ((frame == ChannelFrame.Camera) && rowsMove) ||
@@ -820,20 +864,88 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             value: FixedQ4816.FromDouble(value: (-MathF.Cos(x: yaw) * planar))
         );
     }
-    private static WorldKit? ResolveSeatKit(WorldDefinition definition) {
-        var kits = definition.Kits;
+    // The Aim composition (MotionMoveFrame.Aim, while a free hold holds the body): the (forward, strafe) command
+    // resolved against the camera's whole view, yaw and pitch. The view direction at yaw ψ and pitch θ is
+    // (-sin ψ cos θ, -sin θ, -cos ψ cos θ), the orbit's convention, where a positive pitch is the eye above its target
+    // looking down. Forward therefore splits into cos θ along the camera's planar heading, which rides the planar pair
+    // (and the triple, when declared) exactly as a World frame's would, and -sin θ along the body's up, which is added
+    // to the MoveUp role the free hold's thrust reads, beside whatever the rise rows hold. Strafe stays level. The
+    // command's length is kept across the split, so the body flies the view ray at the speed it walks the plane. The
+    // body faces the camera's heading while it moves.
+    private static PlayerIntent ComposeAim(RoleChannelOrdinals roles, PlayerIntent intent, WorldSeatViewState view, Quaternion bodyOrientation, float forward, float strafe, float yaw, float pitch) {
+        UnitDisc(
+            forward: ref forward,
+            strafe: ref strafe
+        );
 
-        for (var index = 0; (index < kits.Count); index++) {
-            if (string.Equals(
-                a: kits[index].Name,
-                b: definition.DefaultSeatKit,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return kits[index];
-            }
+        var (sinPitch, cosPitch) = MathF.SinCos(x: pitch);
+        var level = (forward * cosPitch);
+        var (worldForward, worldStrafe) = Rotate(
+            forward: level,
+            strafe: strafe,
+            yaw: yaw
+        );
+
+        intent = WriteMove(
+            forward: worldForward,
+            intent: intent,
+            roles: roles,
+            strafe: worldStrafe
+        );
+
+        if (roles.HasMoveDirection) {
+            intent = WriteMoveDirection(
+                bodyOrientation: bodyOrientation,
+                intent: intent,
+                roles: roles,
+                rowForward: level,
+                rowStrafe: strafe,
+                rowYaw: yaw,
+                stickForward: 0f,
+                stickStrafe: 0f,
+                stickYaw: 0f,
+                view: view
+            );
         }
 
-        return null;
+        intent = roles.Write(
+            intent: intent,
+            role: ChannelRole.MoveUp,
+            value: FixedQ4816.Clamp(
+                value: (roles.Read(
+                    intent: in intent,
+                    role: ChannelRole.MoveUp
+                ) + FixedQ4816.FromDouble(value: (-forward * sinPitch))),
+                minimum: -FixedQ4816.One,
+                maximum: FixedQ4816.One
+            )
+        );
+
+        if (
+            (roles.FaceX < 0) ||
+            (roles.FaceZ < 0)
+        ) {
+            return intent;
+        }
+
+        var (sinYaw, cosYaw) = MathF.SinCos(x: yaw);
+
+        intent = roles.Write(
+            intent: intent,
+            role: ChannelRole.FaceX,
+            value: FixedQ4816.FromDouble(value: -sinYaw)
+        );
+        intent = roles.Write(
+            intent: intent,
+            role: ChannelRole.FaceY,
+            value: FixedQ4816.Zero
+        );
+
+        return roles.Write(
+            intent: intent,
+            role: ChannelRole.FaceZ,
+            value: FixedQ4816.FromDouble(value: -cosYaw)
+        );
     }
     // The inverse of WorldBody's world-frame read (planarTarget = (MoveStrafe, -MoveAdvance) in world X/Z): rotate a
     // frame-relative (forward, strafe) pair by the frame's yaw into that same world-frame pair.
