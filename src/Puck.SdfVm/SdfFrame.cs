@@ -220,6 +220,7 @@ public sealed record SdfFrame(
         public ISdfPickMap? PickMap;
         public IReadOnlyList<int>? MeshAssetSlots;
         public IReadOnlyList<SdfMeshInstance>? MeshInstances;
+        public IReadOnlyList<SdfMeshTemplateRange>? MeshTemplateRanges;
         public SdfSampledSet? Sampled;
         public GpuRowChanges? MeshCopyChanges;
         public long MeshCopyChangesSerial;
@@ -283,15 +284,17 @@ public sealed record SdfFrame(
     /// for the frame it was dressed into.</summary>
     /// <param name="meshAssetSlots">The baked template slots.</param>
     /// <param name="meshInstances">The copies of local geometry assets.</param>
+    /// <param name="meshTemplateRanges">The instance ranges that hold static templates.</param>
     /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
     /// <param name="slotClips">The slot ranges every emitter's stamp pool draws on both sides of a portal.</param>
     /// <param name="copyChanges">The journal of the copies that changed in <paramref name="meshInstances"/>, or
     /// <see langword="null"/> when a consumer must compare the whole list.</param>
     /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
-    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled,
+    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, IReadOnlyList<SdfMeshTemplateRange> meshTemplateRanges, SdfSampledSet sampled,
         IReadOnlyList<SdfSlotClip> slotClips, GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
         m_composition.MeshAssetSlots = meshAssetSlots;
         m_composition.MeshInstances = meshInstances;
+        m_composition.MeshTemplateRanges = meshTemplateRanges;
         m_composition.Sampled = sampled;
         m_composition.MeshCopyChanges = copyChanges;
         m_composition.MeshCopyChangesSerial = copyChangesSerial;
@@ -367,6 +370,12 @@ public sealed record SdfFrame(
     public IReadOnlyList<int> MeshAssetSlots {
         get => (m_composition.MeshAssetSlots ?? []);
         init => m_composition.MeshAssetSlots = value;
+    }
+    /// <summary>Gets the instance ranges that hold static templates, which draw only through the copies in
+    /// <see cref="MeshInstances"/> that name them.</summary>
+    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges {
+        get => (m_composition.MeshTemplateRanges ?? []);
+        init => m_composition.MeshTemplateRanges = value;
     }
     /// <summary>Gets the copies of local geometry assets.</summary>
     public IReadOnlyList<SdfMeshInstance> MeshInstances {

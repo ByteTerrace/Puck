@@ -59,7 +59,7 @@ public sealed partial class WorldColliderSet : IContactField {
         FixedQuaternion Rotation, FixedVector3? ReflectionNormal) {
         public StateBinding? SizeBinding { get; } = StateBinding.Parse(token: Creation.Document.SizeBy);
         public CellName SizeKey { get; } = CellName.Parse(candidate: ((StateBinding.Parse(token: Creation.Document.SizeBy)?.Key is StateBinding.BodyKey)
-            ? IndexKeyCache.Get(index: Placement.Attach!.BodyIndex) : (StateBinding.Parse(token: Creation.Document.SizeBy)?.Key ?? StateRow.SlotKey.Value)));
+            ? IndexKeyCache.Get(index: (Placement.Attach!.BodyIndex ?? 0)) : (StateBinding.Parse(token: Creation.Document.SizeBy)?.Key ?? StateRow.SlotKey.Value)));
 
         public StateCatalog? SizeCatalog;
         public StateHandle SizeHandle;

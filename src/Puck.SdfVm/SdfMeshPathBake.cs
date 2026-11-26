@@ -669,6 +669,7 @@ public sealed partial class SdfMeshPathBake {
     private readonly Dictionary<int, List<int>> m_instanceCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+    private SdfMeshTemplateRange[] m_copyTemplateRanges = [];
     // The same slots as a set, which CopiesOf asks of every dynamic group.
     private readonly HashSet<int> m_copyAssetSlotSet = [];
     // The copy journal's endpoint the layout was last compared at, the runs it named, and whether they are every copy
@@ -894,6 +895,8 @@ public sealed partial class SdfMeshPathBake {
 
         m_copiesWhole = whole;
         if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        if (m_copyTemplateRanges.Length != frame.MeshTemplateRanges.Count) { return false; }
+        for (var index = 0; (index < m_copyTemplateRanges.Length); index++) { if (m_copyTemplateRanges[index] != frame.MeshTemplateRanges[index]) { return false; } }
         if (whole) {
             for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
         }
@@ -929,6 +932,12 @@ public sealed partial class SdfMeshPathBake {
         }
         m_copyLayoutRevision++;
         m_demandCopyLayout = true;
+        // Every static template's instances are indexed, with no copies, before the copies that name them: CopiesOf then
+        // answers an empty list for a template nothing copies this frame, so it draws nothing rather than as itself.
+        m_copyTemplateRanges = [.. frame.MeshTemplateRanges];
+        foreach (var range in m_copyTemplateRanges) {
+            for (var instance = 0; (instance < range.InstanceCount); instance++) { _ = m_instanceCopies.TryAdd(key: (range.FirstInstance + instance), value: []); }
+        }
         for (var index = 0; (index < frame.MeshInstances.Count); index++) {
             var copy = frame.MeshInstances[index];
 

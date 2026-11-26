@@ -14,11 +14,18 @@
       },
       "position": {
         "$ref": "./common.schema.json#/$defs/DocumentVector3",
-        "description": "The seat\u0027s spawn position."
+        "description": "The seat\u0027s spawn position: in the world, or in Parent\u0027s frame."
       },
       "yawDegrees": {
-        "description": "The spawn yaw about \u002BY, in degrees.",
+        "description": "The spawn yaw about \u002BY, in degrees, added to Parent\u0027s yaw when it has one.",
         "type": "number"
+      },
+      "parent": {
+        "description": "The placement whose composed frame the pose is authored in, or null for a world-space pose. SpawnPoints hands every reader the pose resolved into the world with this member cleared, so a group of rows placed under one root placement keeps its spawn points when the root moves or turns.",
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "additionalProperties": false,

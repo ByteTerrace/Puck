@@ -12,20 +12,33 @@ namespace Puck.World.Client;
 /// same order.</para>
 /// </summary>
 public static class WorldAttachedPose {
+    /// <summary>Returns whether the body a row rides is live this frame: the row draws and resolves a pose only then.</summary>
+    /// <param name="attach">The row's attach facet.</param>
+    /// <param name="source">The world whose bodies the row rides.</param>
+    /// <returns><see langword="true"/> when the facet resolves an active body.</returns>
+    public static bool IsRiding(WorldPlacementAttach attach, IWorldStampSource source) {
+        ArgumentNullException.ThrowIfNull(argument: attach);
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        return (attach.TryCarrier(inhabitants: source, index: out var carrier) && WorldBodiesLimits.IsBodyIndex(index: carrier) && source.IsActive(index: carrier));
+    }
     /// <summary>Returns the presented root pose of a row riding a body.</summary>
     /// <param name="attach">The row's attach facet.</param>
     /// <param name="source">The world whose interpolated body poses the row rides.</param>
-    /// <returns>The root's position and orientation.</returns>
+    /// <returns>The root's position and orientation; the carrier's pose reads as the origin's while the row names a
+    /// placement no body inhabits, which <see cref="IsRiding"/> tells apart.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="attach"/> or <paramref name="source"/> is
     /// <see langword="null"/>.</exception>
     public static (Vector3 Position, Quaternion Orientation) Root(WorldPlacementAttach attach, IWorldStampSource source) {
         ArgumentNullException.ThrowIfNull(argument: attach);
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        var bodyOrientation = source.Orientation(index: attach.BodyIndex);
+        _ = attach.TryCarrier(inhabitants: source, index: out var carrier);
+
+        var bodyOrientation = source.Orientation(index: carrier);
 
         return (
-            (source.Position(index: attach.BodyIndex) + Vector3.Transform(value: attach.LocalOffset, rotation: bodyOrientation)),
+            (source.Position(index: carrier) + Vector3.Transform(value: attach.LocalOffset, rotation: bodyOrientation)),
             Quaternion.Normalize(value: (bodyOrientation * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: float.DegreesToRadians(degrees: attach.LocalYawDegrees))))
         );
     }

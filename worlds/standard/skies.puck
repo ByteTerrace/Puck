@@ -131,7 +131,7 @@ function sunHourIlluminance(h, peak) = peak * maximum(0, cosine(sunHourAngle(h))
 
 // The sun's illuminance through the day, keyed every hour on `clock`: what `dayCycle` keys the light named `key` by. A
 // world that keys that light's illuminance itself nests this as a key's value, so its keys stand over the day's and the
-// day still turns the sun where they say (a sun that rises with the viewer's height above the valley, hall.puck).
+// day still turns the sun where they say (a sun that rises with the viewer's height above the valley, gallery/gallery.puck).
 function sunIlluminance(clock, peak = 100000) = {
   clock: clock
   keys: map(range(0, 24), h => { at: h * 3600, value: sunHourIlluminance(h, peak) })

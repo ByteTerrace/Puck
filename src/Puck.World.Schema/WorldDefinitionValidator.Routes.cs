@@ -70,7 +70,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var places = new HashSet<string>(collection: definition.Placements.Where(predicate: static placement => (placement?.Region is not null)).Select(selector: static placement => placement.Id), comparer: StringComparer.Ordinal);
-        var spawns = new HashSet<string>(collection: definition.SpawnPoints.Select(selector: static spawn => spawn.Id), comparer: StringComparer.Ordinal);
+        var spawns = new HashSet<string>(collection: (definition.SpawnPointsRaw ?? definition.SpawnPoints).Select(selector: static spawn => spawn.Id), comparer: StringComparer.Ordinal);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < definition.Routes.Count); index++) {

@@ -583,7 +583,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         Remove: null,
         Read: ReadRow(
             info: WorldJsonContext.Default.WorldSpawnPointArray,
-            select: static definition => [.. definition.SpawnPoints]
+            // The authored rows, a point's parent included, so a row read back and set again keeps its frame.
+            select: static definition => [.. (definition.SpawnPointsRaw ?? definition.SpawnPoints)]
         )
     ),
         // A sub-row of a whole-section row submits its own field-scoped mutation, composed against the section as it

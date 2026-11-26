@@ -31,7 +31,7 @@ export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s
 // The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the playing surface over the
 // table's origin and the card's size. A card is the deck's 1.76 by 2.48 creation scaled to 10.6 by 14.9 cm, and lies a
 // layer above the one under it: the deck's thickness (0.04 scaled) and its raised rims and pips on both faces.
-let cardTable = [60.8, 8.55, 35.9]
+let cardTable = [38, 8.55, 17.2]
 let cardSurface = 1.309
 let cardScale = 0.06
 let cardHalfWide = 0.0528
