@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using System.Collections.ObjectModel;
 using System.Numerics;
@@ -107,21 +108,24 @@ public sealed partial class SdfProgram {
     private readonly SdfSweepCurve[] m_sweepCurves;
     private readonly SdfInstanceRange[] m_instances;
     private readonly ReadOnlyCollection<SdfInstanceRange> m_instancesView;
-    private readonly SdfInstruction[] m_instructions;
-    private readonly ReadOnlyCollection<SdfInstruction> m_instructionsView;
+    // The field's words (FieldWords) and the instructions they were packed from, written by the constructor and never
+    // after, so a program that takes another appearance (WithAppearance) shares them (SdfProgram.Storage.cs).
+    private readonly FieldStorage m_storage;
+    private readonly MemoryList<SdfInstruction> m_instructionsView;
     // What the field may know of its appearance: the material count, the glass materials, the declared screens and the
     // appearance section's size. No material value: the field derivation never reads one.
     private readonly SdfAppearanceOutline m_outline;
-    // The field's words (FieldWords), written by the constructor and never after, so a program that takes another
-    // appearance (WithAppearance) shares them.
-    private readonly uint[] m_words;
     // The appearance section (ShadingWords), m_appearanceWordCount words: allocated and packed by Of, replaced only on a
-    // fresh copy that takes another appearance (WithAppearance). A program the constructor alone made (an excerpt, which
-    // carries no appearance) holds none until a reader asks for its words, which are then zero: an excerpt is sized by
-    // the whole world's outline, and a long-lived one (a skinned bake group's source) would otherwise hold that many
-    // zero words for nothing.
+    // fresh copy that takes another appearance (WithAppearance); native when the field's storage is (m_ownedAppearance).
+    // A program the constructor alone made (an excerpt, which carries no appearance) holds none until a reader asks for
+    // its words, which are then zero: an excerpt is sized by the whole world's outline, and a long-lived one (a skinned
+    // bake group's source) would otherwise hold that many zero words for nothing.
     private uint[]? m_appearanceWords;
     private readonly int m_appearanceWordCount;
+    // The header's lanes a reader of a released program may still ask for (MaterialCount, WordCount), kept apart from
+    // the words its last claim frees.
+    private readonly int m_fieldWordCount;
+    private readonly int m_materialCount;
 
     /// <summary>Gets the content identity of the pixels the program's <see cref="SdfShapeType.Glyph"/> shapes sample: the
     /// value of the one atlas image's hash their builder laid them out against
@@ -160,7 +164,10 @@ public sealed partial class SdfProgram {
     /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>).</param>
     /// <param name="glyphStroke">The thinnest stroke the glyph shapes are taken to have (<see cref="GlyphStroke"/>).</param>
     /// <param name="rawExcerptShapes">In an excerpt, the shape indices whose source candidates the full field reads unscaled.</param>
-    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke, HashSet<int>? rawExcerptShapes = null) {
+    /// <param name="field">The storage holding a snapshot of <paramref name="instructions"/> the words are packed beside,
+    /// which a refusal leaves to its caller to release (<see cref="Of"/>); <see langword="null"/> snapshots them into
+    /// managed arrays.</param>
+    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke, HashSet<int>? rawExcerptShapes = null, FieldStorage? field = null) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
         if (!float.IsFinite(f: glyphStroke) || (glyphStroke < 0f)) {
@@ -177,7 +184,9 @@ public sealed partial class SdfProgram {
         // from one call.
         m_outline = appearance;
         m_instances = [.. (instances ?? [])];
-        m_instructions = [.. instructions];
+        m_storage = (field ?? new FieldStorage(instructions: instructions, storage: null));
+        m_instructionsView = new MemoryList<SdfInstruction>(memory: m_storage.Instructions);
+        m_materialCount = appearance.Materials;
         m_sweepCurves = [.. (sweepCurves ?? [])];
         m_sampledBindings = [.. (sampledBindings ?? [])];
         m_paths = (paths ?? []).Select(selector: path => new SdfCompiledPath(path.InstructionIndex, path.Edges.ToArray())).ToArray();
@@ -192,7 +201,6 @@ public sealed partial class SdfProgram {
         }
 
         m_instancesView = Array.AsReadOnly(array: m_instances);
-        m_instructionsView = Array.AsReadOnly(array: m_instructions);
 
         ValidateIsa();
 
@@ -218,20 +226,20 @@ public sealed partial class SdfProgram {
 
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
             instances: m_instances,
-            instructions: m_instructions
+            instructions: InstructionRows
         );
 
         // The Lipschitz pass PATCHES scoped PopField instructions in place (Data1.y gains the scope's 1/L candidate
         // scale), so it runs before packing: the packed words and the typed stream describe one program. A warp-free,
         // seam-free program gets exactly 1.0f, and a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale).
-        StepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, maskSlopes: ReliefMaskSlopes(), rawExcerptShapes: rawExcerptShapes, reliefCharges: out var reliefCharges, shapeStepScales: out m_shapeStepScales, sweepCurves: m_sweepCurves);
+        StepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: InstructionRows, maskSlopes: ReliefMaskSlopes(), rawExcerptShapes: rawExcerptShapes, reliefCharges: out var reliefCharges, shapeStepScales: out m_shapeStepScales, sweepCurves: m_sweepCurves);
 
         FieldScopeClamps = ReadFieldScopeClamps(instructionOwners: instructionOwners);
 
         StepScaleBinder = AnalyzeStepScaleBinder(
             chainFactors: chainFactors,
             instances: m_instances,
-            instructions: m_instructions,
+            instructions: InstructionRows,
             reliefCharges: reliefCharges
         );
 
@@ -240,7 +248,7 @@ public sealed partial class SdfProgram {
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();
 
-        var instructionCount = m_instructions.Length;
+        var instructionCount = InstructionRows.Length;
         var worldSegmentCount = 0;
 
         foreach (var segment in segments) {
@@ -301,9 +309,9 @@ public sealed partial class SdfProgram {
         var pathEnd = layout.PathOffset;
 
         foreach (var path in m_paths) {
-            var instruction = m_instructions[path.InstructionIndex];
+            var instruction = InstructionRows[path.InstructionIndex];
 
-            m_instructions[path.InstructionIndex] = instruction with {
+            InstructionRows[path.InstructionIndex] = instruction with {
                 Data0 = new Vector4(BitConverter.UInt32BitsToSingle(value: ((uint)pathEnd)), instruction.Data0.Y, instruction.Data0.Z, instruction.Data0.W),
             };
             pathEnd = checked((pathEnd + (2 * path.Edges.Count)));
@@ -315,19 +323,20 @@ public sealed partial class SdfProgram {
         PartCompilationWordCapacity = layout.PartCompilationWordCapacity(appearanceVectors: appearance.Vectors, reservedPathWords: reservedPathWords);
 
         InstructionCount = instructionCount;
-        m_words = new uint[checked((materialOffsetVectors * WordsPerVector))];
+        m_fieldWordCount = checked((materialOffsetVectors * WordsPerVector));
+        m_storage.AllocateWords(count: m_fieldWordCount);
         m_appearanceWordCount = checked((appearance.Vectors * WordsPerVector));
 
         // PATCH every ConvexPolygon instruction's Data0.x (its host-emitted placeholder is 0f) to the real packed
-        // (table offset, vertex count) it will carry — BEFORE the instruction-header loop below packs m_instructions
-        // into m_words, exactly like AnalyzeLipschitz patches a scoped PopField's Data1.y in place before packing:
+        // (table offset, vertex count) it will carry — BEFORE the instruction-header loop below packs InstructionRows
+        // into PackedWords, exactly like AnalyzeLipschitz patches a scoped PopField's Data1.y in place before packing:
         // the typed stream and the packed words must describe the same program.
         for (var profileIndex = 0; (profileIndex < m_convexPolygonProfiles.Length); profileIndex++) {
             var (instructionIndex, vertices) = m_convexPolygonProfiles[profileIndex];
             var packed = SdfPrismProfile.PackConvexReference(count: vertices.Length, tableVector: convexPolygonProfileOffsets[profileIndex]);
-            var instruction = m_instructions[instructionIndex];
+            var instruction = InstructionRows[instructionIndex];
 
-            m_instructions[instructionIndex] = (instruction with {
+            InstructionRows[instructionIndex] = (instruction with {
                 Data0 = new Vector4(
                     w: instruction.Data0.W,
                     x: BitConverter.UInt32BitsToSingle(value: packed),
@@ -341,9 +350,9 @@ public sealed partial class SdfProgram {
         // alongside it — the table entry is fixed-size).
         for (var curveIndex = 0; (curveIndex < m_sweepCurves.Length); curveIndex++) {
             var instructionIndex = m_sweepCurves[curveIndex].InstructionIndex;
-            var instruction = m_instructions[instructionIndex];
+            var instruction = InstructionRows[instructionIndex];
 
-            m_instructions[instructionIndex] = (instruction with {
+            InstructionRows[instructionIndex] = (instruction with {
                 Data0 = new Vector4(
                     w: instruction.Data0.W,
                     x: BitConverter.UInt32BitsToSingle(value: ((uint)sweepCurveOffsets[curveIndex])),
@@ -353,28 +362,28 @@ public sealed partial class SdfProgram {
             });
         }
 
-        m_words[ProgramInstructionCountLane] = ((uint)instructionCount);
-        m_words[ProgramMaterialCountLane] = ((uint)appearance.Materials);
-        m_words[ProgramDataOffsetLane] = ((uint)dataOffsetVectors);
-        m_words[ProgramMaterialOffsetLane] = ((uint)materialOffsetVectors);
+        PackedWords[ProgramInstructionCountLane] = ((uint)instructionCount);
+        PackedWords[ProgramMaterialCountLane] = ((uint)appearance.Materials);
+        PackedWords[ProgramDataOffsetLane] = ((uint)dataOffsetVectors);
+        PackedWords[ProgramMaterialOffsetLane] = ((uint)materialOffsetVectors);
 
         for (var index = 0; (index < instructionCount); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
             var headerBase = ((ProgramHeaderVectors + index) * WordsPerVector);
 
-            m_words[(headerBase + InstructionOpLane)] = ((uint)instruction.Op);
-            m_words[(headerBase + InstructionShapeLane)] = instruction.Shape;
-            m_words[(headerBase + InstructionBlendLane)] = instruction.Blend;
-            m_words[(headerBase + InstructionMaterialLane)] = instruction.Material;
+            PackedWords[(headerBase + InstructionOpLane)] = ((uint)instruction.Op);
+            PackedWords[(headerBase + InstructionShapeLane)] = instruction.Shape;
+            PackedWords[(headerBase + InstructionBlendLane)] = instruction.Blend;
+            PackedWords[(headerBase + InstructionMaterialLane)] = instruction.Material;
             if ((m_rootFrames is { } rootFrames) && (rootFrames[index] is { Length: > 0 } root)) {
-                m_words[(headerBase + InstructionShapeLane)] = ((uint)root.Length);
-                m_words[(headerBase + InstructionBlendLane)] = ((uint)root.Key);
+                PackedWords[(headerBase + InstructionShapeLane)] = ((uint)root.Length);
+                PackedWords[(headerBase + InstructionBlendLane)] = ((uint)root.Key);
             }
 
             var dataBase = ((dataOffsetVectors + (InstructionDataVectors * index)) * WordsPerVector);
 
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: dataBase,
                 w: instruction.Data0.W,
                 x: instruction.Data0.X,
@@ -382,7 +391,7 @@ public sealed partial class SdfProgram {
                 z: instruction.Data0.Z
             );
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: (dataBase + WordsPerVector),
                 w: instruction.Data1.W,
                 x: instruction.Data1.X,
@@ -458,11 +467,11 @@ public sealed partial class SdfProgram {
     /// word offset. Empty for a program with no Path shape.</summary>
     internal IReadOnlyList<SdfCompiledPath> Paths => m_paths;
 
-    /// <summary>Gets the number of materials in this program's palette — read back from the packed header lane
-    /// (<c>m_words[1]</c>), which is the single source of truth. Exposed so a caller rebuilding a similar program (a
+    /// <summary>Gets the number of materials in this program's palette: the value the packed header's material lane
+    /// carries, readable after the program's last claim is released. Exposed so a caller rebuilding a similar program (a
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
     /// list-capacity hint without needing its own copy of the material table.</summary>
-    public int MaterialCount => ((int)m_words[ProgramMaterialCountLane]);
+    public int MaterialCount => m_materialCount;
     /// <summary>Gets the appearance section, the stream's tail after <see cref="FieldWords"/>, starting at word
     /// <c>FieldWords.Length</c>: the material and paint tables, values that shade a surface and never change the field,
     /// the instruction stream or any bound. Every vector offset it holds is absolute in the whole stream.</summary>
@@ -473,26 +482,28 @@ public sealed partial class SdfProgram {
     /// offset (lanes 1 and 3), which only the shading kernels read; the offset follows the field's size. No material,
     /// paint or screen value is in it, so a change to a material's values or its paints leaves it as it was, and a
     /// palette's size moves lane 1 alone; the bake's field fingerprint describes the encoding over it. Programs that share
-    /// a field (<see cref="SharesField"/>) share these words.</summary>
-    public ReadOnlySpan<uint> FieldWords => m_words;
+    /// a field (<see cref="SharesField"/>) share these words.
+    /// <para>A program that owns native storage (<see cref="OwnsNativeStorage"/>) answers only while a claim on it stands
+    /// (<see cref="Acquire"/>); the span ends with the reader's claim.</para></summary>
+    /// <exception cref="ObjectDisposedException">The program owns native storage and its last claim was released.</exception>
+    public ReadOnlySpan<uint> FieldWords => PackedWords;
     /// <summary>Gets the packed stream's length in 32-bit words: <see cref="FieldWords"/> then
-    /// <see cref="ShadingWords"/>, as the device holds them.</summary>
-    public int WordCount => (m_words.Length + m_appearanceWordCount);
+    /// <see cref="ShadingWords"/>, as the device holds them; readable after the program's last claim is released.</summary>
+    public int WordCount => (m_fieldWordCount + m_appearanceWordCount);
 
     /// <summary>Copies the packed stream, <see cref="FieldWords"/> then <see cref="ShadingWords"/>, into a destination.</summary>
     /// <param name="destination">The destination, at least <see cref="WordCount"/> words.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="WordCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The program owns native storage and its last claim was released.</exception>
     public void CopyWordsTo(Span<uint> destination) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: destination.Length, other: WordCount, paramName: nameof(destination));
-        m_words.CopyTo(destination: destination);
-        if (m_appearanceWords is { } section) {
-            section.CopyTo(destination: destination[m_words.Length..]);
-        } else {
-            destination.Slice(start: m_words.Length, length: m_appearanceWordCount).Clear();
-        }
+        PackedWords.CopyTo(destination: destination);
+        AppearanceSection().CopyTo(destination: destination[m_fieldWordCount..]);
     }
-    // The appearance section, allocated on first use for a program that carries none (m_appearanceWords).
-    private uint[] AppearanceSection() {
+    // The appearance section: the program's own native buffer, its array, or (for a program that carries none) an array of
+    // zeros allocated on first use.
+    private Span<uint> AppearanceSection() {
+        if (m_ownedAppearance is { } owned) { return owned.GetSpan(); }
         if (m_appearanceWords is { } section) { return section; }
 
         _ = Interlocked.CompareExchange(location1: ref m_appearanceWords, value: new uint[m_appearanceWordCount], comparand: null);
@@ -568,7 +579,7 @@ public sealed partial class SdfProgram {
     // `< 0` guard is defence in depth — it keeps the packed words a total, deterministic function of any range set
     // that reaches here.
     private int[] BuildInstructionOwners() {
-        var owners = new int[m_instructions.Length];
+        var owners = new int[InstructionRows.Length];
 
         Array.Fill(
             array: owners,
@@ -587,7 +598,7 @@ public sealed partial class SdfProgram {
 
         return owners;
     }
-    private static int CalculateRequiredDynamicTransformCapacity(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange> instances) {
+    private static int CalculateRequiredDynamicTransformCapacity(ReadOnlySpan<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange> instances) {
         var required = 0;
 
         foreach (var instruction in instructions) {
@@ -907,7 +918,7 @@ public sealed partial class SdfProgram {
         var scopeHasShape = false;
 
         for (var index = first; (index < end); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if (
                 (instruction.Op == SdfOp.ShapeBlend) &&
@@ -1093,7 +1104,7 @@ public sealed partial class SdfProgram {
         Span<float> parents = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
 
         for (var index = first; (index < end); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if (instruction.Op == SdfOp.PushField) {
                 parents[scopeDepth++] = scopeReach;
@@ -1162,7 +1173,7 @@ public sealed partial class SdfProgram {
         var margin = 0.0f;
 
         for (var index = first; (index < end); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             // The Blend lane + Data1.x carry a compose blend + smooth radius on a ShapeBlend AND on a PopField (whose
             // scope composes into the parent through that blend), but mean something else on the fold ops (CellJitter's
@@ -1219,15 +1230,15 @@ public sealed partial class SdfProgram {
 
                 var metadata = (boundsOffsetVectors + (BoundRecordVectors * index) + 1) * WordsPerVector;
 
-                m_words[metadata + BoundShapeStepScaleLane] = BitConverter.SingleToUInt32Bits(value: scales[index]);
+                PackedWords[metadata + BoundShapeStepScaleLane] = BitConverter.SingleToUInt32Bits(value: scales[index]);
             }
         }
 
         var segmentHeaderBase = (segmentOffsetVectors * WordsPerVector);
 
-        m_words[(segmentHeaderBase + SegmentCountLane)] = ((uint)segments.Count);
+        PackedWords[(segmentHeaderBase + SegmentCountLane)] = ((uint)segments.Count);
         // Absolute uint4 offset of the plan directory, which follows the world-segment list.
-        m_words[(segmentHeaderBase + SegmentRigidPlanLane)] = ((uint)rigidPlanOffsetVectors);
+        PackedWords[(segmentHeaderBase + SegmentRigidPlanLane)] = ((uint)rigidPlanOffsetVectors);
 
         for (var index = 0; (index < segments.Count); index++) {
             var record = segments[index];
@@ -1248,7 +1259,7 @@ public sealed partial class SdfProgram {
     // equals this instance's index — sound because splits/merges never let a segment straddle an instance boundary, so
     // that run is always contiguous and never empty.
     private void PackInstances(int instanceOffsetVectors, List<BoundRecord> segments) {
-        m_words[((instanceOffsetVectors * WordsPerVector) + InstanceCountLane)] = ((uint)m_instances.Length);
+        PackedWords[((instanceOffsetVectors * WordsPerVector) + InstanceCountLane)] = ((uint)m_instances.Length);
 
         // Resolve every instance's contiguous [segmentFirst, segmentEnd) directory range in ONE pass over the segment
         // list in O(instances + segments). Splits/merges never let a
@@ -1285,7 +1296,7 @@ public sealed partial class SdfProgram {
             var entryBase = (((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * instanceIndex)) * WordsPerVector);
 
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: entryBase,
                 w: m_instanceRadii[instanceIndex],
                 x: instance.Center.X,
@@ -1293,16 +1304,16 @@ public sealed partial class SdfProgram {
                 z: instance.Center.Z
             );
 
-            m_words[(entryBase + WordsPerVector)] = (instance.IsDynamic
+            PackedWords[(entryBase + WordsPerVector)] = (instance.IsDynamic
                 ? (instance.BoundInSlotFrame ? BoundModeDynamicLocal : BoundModeDynamic)
                 : BoundModeStatic
             );
-            m_words[((entryBase + WordsPerVector) + 1)] = ((uint)instance.Slot);
-            m_words[((entryBase + WordsPerVector) + 2)] = ((uint)Math.Max(
+            PackedWords[((entryBase + WordsPerVector) + 1)] = ((uint)instance.Slot);
+            PackedWords[((entryBase + WordsPerVector) + 2)] = ((uint)Math.Max(
                 val1: segmentFirst[instanceIndex],
                 val2: 0
             ));
-            m_words[((entryBase + WordsPerVector) + 3)] = ((uint)Math.Max(
+            PackedWords[((entryBase + WordsPerVector) + 3)] = ((uint)Math.Max(
                 val1: segmentEnd[instanceIndex],
                 val2: 0
             ));
@@ -1314,7 +1325,7 @@ public sealed partial class SdfProgram {
     // segment-directory order — the always-evaluated side of mapCore's world/visible-instance merge, enumerated
     // directly instead of owner-testing every segment per map() call.
     private void PackWorldSegments(List<BoundRecord> segments, int worldSegmentCount, int worldSegmentOffsetVectors) {
-        m_words[((worldSegmentOffsetVectors * WordsPerVector) + WorldSegmentCountLane)] = ((uint)worldSegmentCount);
+        PackedWords[((worldSegmentOffsetVectors * WordsPerVector) + WorldSegmentCountLane)] = ((uint)worldSegmentCount);
 
         var next = 0;
 
@@ -1323,7 +1334,7 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            m_words[(((worldSegmentOffsetVectors + DirectoryHeaderVectors) + next) * WordsPerVector)] = ((uint)segment);
+            PackedWords[(((worldSegmentOffsetVectors + DirectoryHeaderVectors) + next) * WordsPerVector)] = ((uint)segment);
             next++;
         }
     }
@@ -1605,7 +1616,7 @@ public sealed partial class SdfProgram {
     }
     private void WriteBound(int entryBase, in BoundRecord record) {
         WriteVector4(
-            words: m_words,
+            words: PackedWords,
             baseIndex: entryBase,
             w: ((record.Radius * BoundRadiusScale) + BoundRadiusPadding),
             x: record.Center.X,
@@ -1613,10 +1624,10 @@ public sealed partial class SdfProgram {
             z: record.Center.Z
         );
 
-        m_words[(entryBase + WordsPerVector)] = record.Mode;
-        m_words[((entryBase + WordsPerVector) + 1)] = ((uint)record.Slot);
-        m_words[((entryBase + WordsPerVector) + 2)] = ((uint)record.Instruction);
-        m_words[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
+        PackedWords[(entryBase + WordsPerVector)] = record.Mode;
+        PackedWords[((entryBase + WordsPerVector) + 1)] = ((uint)record.Slot);
+        PackedWords[((entryBase + WordsPerVector) + 2)] = ((uint)record.Instruction);
+        PackedWords[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
     }
 
     internal static void WriteVector4(Span<uint> words, int baseIndex, float x, float y, float z, float w) {

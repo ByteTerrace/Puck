@@ -825,8 +825,11 @@ laws exercise that boundary.
   half a rung (`SdfMeshTier.Biased`), taken back once the finer demand would
   fit again. The first plan is budgeted the same way from the plan's own
   measure. `world.residency` reports `tiers-owed`, `owed-error` (the worst
-  owing group's resident cell in display pixels), `owed-frames`, the worst of
-  each since the bake started, `retiers`, the resident triangles by tier, the
+  owing group's drawn cell in display pixels), `owed-frames`, the worst of
+  each since the bake started, which count only groups that draw a mesh
+  coarser than their demand (a group still bringing its first mesh is a hole,
+  counted on the floor line, and starts its hold once it lands), `retiers`,
+  the resident triangles by tier, the
   budget's account (`region-budget`, `region-named`, `tiers-spare`,
   `tiers-held-back`, `coarsened`, `detail-bias`, `bias-raised`,
   `bias-lowered`) and, per demand point, the groups and triangles that point
@@ -888,7 +891,7 @@ laws exercise that boundary.
   floors bakes as one union whose lattice is sized by its height, so a 0.3 m
   slab between two samples never crosses and is dropped while it still
   collides. Give each storey's floor its own prototype and placement
-  (`worlds/debug/hall.puck`), so each is a flat group. Trim set into a large
+  (`worlds/debug/gallery/gallery.puck`), so each is a flat group. Trim set into a large
   union is the same case: the hall's walls bake at 15 cm, so the cassettes at
   their window heads, set 2 cm and 5 cm back from the wall's faces, are a row
   per level and face of their own (`hall-cassettes-*`), each baking at 5 cm.
@@ -964,7 +967,7 @@ laws exercise that boundary.
   kept by the distance test (`SdfMeshPathBakeLawTests`, the plates law: four
   standalone 48 m strips); keeping samples within half a cell's diagonal
   instead fattens the converged box until the final lattice steps over the
-  plates and the group bakes nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
+  plates and the group bakes nothing. `gallery/gallery.puck`'s strips ride each slab (`hallStrips`) as thin
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
@@ -1680,7 +1683,9 @@ laws exercise that boundary.
   reading: `dispatches` and the `live-dispatches` among them, `groups-baked`
   and `live-baked`, `rungs-missed` and the `rungs-missed-live` among them,
   `loads-declined` and `rungs-filled`. A rung is missed at one door
-  (`CountRungMissed`), which names it (`[sdf.mesh-bake] rung-missed`); a sampled
+  (`CountRungMissed`), which names it and why the tier was asked (`[sdf.mesh-bake]
+  rung-missed … plan|first-detail|finer|coarser`); every program restart plans
+  again, so one tier can be counted once a restart; a sampled
   field's reader asked at a snapshot the world then moves past
   (`ReclassifyReaderMisses`, on `Revisit`'s resample) is live geometry, and its
   misses move to `rungs-missed-live` with a `rung-missed-live` line. A boot

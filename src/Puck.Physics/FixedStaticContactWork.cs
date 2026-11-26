@@ -49,13 +49,16 @@ public sealed class FixedStaticContactWork : WorkLedger<ShardedWorkCounterSet> {
     /// analytic collider or to none of its solid (<see cref="FixedFieldPartition"/>), so no field solve ran: a body its
     /// carves cannot reach.</summary>
     public static WorkKind FieldNarrowed { get; } = new(name: "physics.contact.field-narrowed", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the leaps a sweep took: each is a run of slices proved clear by the boxes' closing
+    /// speed (<c>FixedAabb.ClearFraction</c>) and crossed without a solve.</summary>
+    public static WorkKind Leaps { get; } = new(name: "physics.contact.leaps", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger every analytic solve counts into. Declared after the kinds, which its counter set reads as
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
 
     /// <summary>Initializes a new instance of the <see cref="FixedStaticContactWork"/> class, every kind at zero.</summary>
     public FixedStaticContactWork() : base(counters: new(
-        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed],
+        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed, Leaps],
         name: SourceName
     )) { }
 
@@ -101,6 +104,8 @@ public sealed class FixedStaticContactWork : WorkLedger<ShardedWorkCounterSet> {
             shard.Count(kind: FieldUnproved);
         }
     }
+    /// <summary>Counts one leap over slices a sweep proved clear (<see cref="Leaps"/>).</summary>
+    public void CountLeap() => Counters.Count(kind: Leaps);
     /// <summary>Counts one field-collider query its partition narrowed (<see cref="FieldNarrowed"/>).</summary>
     public void CountNarrowed() => Counters.Count(kind: FieldNarrowed);
 }

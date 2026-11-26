@@ -101,7 +101,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         Description = "Override the root of the device caches (held compiles, compiled worlds, baked meshes), each a subdirectory of it. Absent uses the per-user Puck directory (%LOCALAPPDATA%/Puck on Windows). A developer/deployment override, the --state-dir pattern: an empty root boots as a machine's first boot does, baking every mesh.",
     };
     var meshCacheOption = new Option<Puck.SdfVm.SdfMeshCachePolicy?>(name: "--mesh-cache") {
-        Description = "What the boot does about a tier of a mesh its store lacks: demand bakes the tier the view asks; ladder also bakes every other tier of each mesh it draws, into the store alone, which is how a shipped cache is produced (world.wait bakes then waits for all of them); stored draws stored tiers alone, holding the nearest stored tier where one is missing and baking only a shape the store holds no tier of. Absent is stored in a complete player build, which never bakes, and demand anywhere else. world.counters reads what a boot asked of its cache beyond a hit as sdf.mesh-cache.",
+        Description = "What the boot does about a tier of a mesh its store lacks: demand bakes the tier the view asks; ladder also bakes every other tier of each mesh it draws, into the store alone, which is how a shipped cache is produced (world.wait bakes then waits for all of them); stored starts from the stored tiers: a mesh draws the nearest stored tier of its shape at once, and a tier the store lacks is counted and then baked under the detail budget as demand bakes it, so a shipped cache is a warm start. Absent is stored in a player's build and demand anywhere else. world.counters reads what a boot asked of its cache beyond a hit as sdf.mesh-cache.",
     };
     var captureDirOption = new Option<string?>(name: "--capture-dir") {
         DefaultValueFactory = static _ => null,
@@ -193,6 +193,12 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "Boot into a remote authority (an \"ip:port\" pair) through the normal window/headless composition. --world supplies the initial definition until the authority's definition revision arrives.",
     };
+    // The other half of naming a remote authority: where it is reached is --connect, and who it must prove to be is
+    // this. Both are this one run's inputs, so neither is read from a document the run happens to boot.
+    var connectAuthorityOption = new Option<string?>(name: "--connect-authority") {
+        DefaultValueFactory = static _ => null,
+        Description = "The authority namespace the remote at --connect must prove at its handshake (its host.authorityNamespace). Requires --connect. Absent expects the namespace the --world document declares.",
+    };
     var federationKeyFileOption = new Option<string?>(name: "--federation-key-file") {
         DefaultValueFactory = static _ => null,
         Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
@@ -260,6 +266,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         backendOption,
         debugAllocatorOption,
         connectOption,
+        connectAuthorityOption,
         controlOption,
         devicesOption,
         federationKeyFileOption,
@@ -331,6 +338,12 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         Console.Error.WriteLine(value: "[memory.guard] native allocations are guarded: double frees, overruns and writes after free end the run");
     }
     var connectTarget = parseResult.GetValue(option: connectOption);
+    var connectAuthority = parseResult.GetValue(option: connectAuthorityOption);
+
+    if ((connectAuthority is not null) && ((connectTarget is null) || string.IsNullOrWhiteSpace(value: connectAuthority))) {
+        Console.Error.WriteLine(value: "[world.connect: --connect-authority names the namespace the authority at --connect must prove; it needs --connect and a value]");
+        return 1;
+    }
     Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
 
     if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPath) {
@@ -771,6 +784,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     ) {
         CaptureDirectory = parseResult.GetValue(option: captureDirOption),
         CaptureTool = captureTool,
+        ConnectAuthority = connectAuthority,
         ConnectEndpoint = connectTarget,
         ConnectionSubject = connectionSubject,
         Control = parseResult.GetValue(option: controlOption),

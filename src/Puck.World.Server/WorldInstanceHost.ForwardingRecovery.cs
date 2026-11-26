@@ -182,19 +182,44 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
-    private void RetireForwardedTraveler(in WorldMobilityIdentity mobility) {
-        // A traveler can revisit an authority. Terminal leave retires every retained local branch for this
-        // incarnation, including a stale route owned by the final authority that this request did not traverse.
+    /// <inheritdoc/>
+    /// <remarks>Queued for the host loop (<see cref="DrainPendingTransfers"/>): the authority that retired the body
+    /// calls this under its own gate, and no authority's gate is held while another authority is entered.</remarks>
+    public void RetireTraveler(WorldEntityAddress incarnation) => m_endedTravelers.Enqueue(item: incarnation);
+    /// <inheritdoc/>
+    /// <remarks>Queued for the host loop, as <see cref="RetireTraveler"/> is.</remarks>
+    public void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present) =>
+        m_travelerPresence.Enqueue(item: (source, mobility.Incarnation, present));
+
+    // Applies, in the order they were queued, what the authorities of this host learned since the last drain about
+    // travelers they forward: whether each one's source still attends to it, passed to the authority it stands at, and
+    // each one whose body was retired where it stood. Runs on the host loop.
+    private void RetireEndedTravelers() {
+        while (m_travelerPresence.TryDequeue(result: out var presence)) {
+            if (m_forwardedBodies.TryGetValue(key: (presence.Source, presence.Incarnation), value: out var route)) {
+                route.Authority.SetPresence(present: presence.Present);
+            }
+        }
+        while (m_endedTravelers.TryDequeue(result: out var incarnation)) {
+            RetireForwardedTraveler(incarnation: incarnation);
+        }
+    }
+    // The one retirement of a traveler that is gone for good: every authority of this host that still forwards to it
+    // drops its route and its credential. An accepted leave reaches it when the leave's answer arrives, and a body
+    // retired where it stood (its reconnect grace ran out, or it disconnected with none) reaches it from the authority
+    // that retired it. A traveler can revisit an authority, so every retained branch for the incarnation goes, a stale
+    // route the last request did not traverse included.
+    private void RetireForwardedTraveler(WorldEntityAddress incarnation) {
         foreach (var pair in m_forwardedBodies) {
             if (
-                (pair.Key.Incarnation == mobility.Incarnation) &&
+                (pair.Key.Incarnation == incarnation) &&
                 m_forwardedBodies.TryRemove(
                 key: pair.Key,
                 value: out var retired
             )
             ) {
                 (retired.Authority as IDisposable)?.Dispose();
-                pair.Key.Server.RetireTransferredMobility(mobility: in mobility);
+                pair.Key.Server.RetireTransferredIncarnation(incarnation: incarnation);
             }
         }
     }

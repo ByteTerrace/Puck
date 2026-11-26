@@ -1189,7 +1189,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         var previous = Definition;
         if (!rows.TryApply(previous, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster and placement rows."); }
-        var adopted = m_stateView.Adopt(delivered: changed, valuesFollow: true);
+        // The values follow in the snapshots, under the same state section, only within one activation, as for a state
+        // delivery.
+        var adopted = m_stateView.Adopt(delivered: changed, valuesFollow: (version.Activation == m_documentVersion.Activation));
         m_lastDelivered = changed;
         if ((rows.Creations.Length != 0) || (rows.Shades.Length != 0) || !rows.MovesPlacements) {
             m_definitionRevision++;

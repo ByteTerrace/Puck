@@ -173,7 +173,7 @@ plinth makes a new character, a pedestal per offered avatar dresses the
 current one, and standing in the picker's ring returns the seat to `Pending`
 so the stick cycles the account's characters in full colour. Each is wired by
 mechanisms the debug world already uses: a rule sets a body register while the
-body stands in a reach box (the lift's call plates, `worlds/debug/hall.puck`),
+body stands in a reach box (the lift's call plates, `worlds/debug/gallery/gallery.puck`),
 an input-mode family selects on that register, and a binding overlay keyed on
 it declares the context button as the verb, with static text. No world rule
 calls an account verb: the seat's own press does, under its own principal.

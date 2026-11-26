@@ -17,6 +17,55 @@ template boundsBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
   }
 }
 
+// The same box with its edges rounded by `rounding`, for a thick shell's soft corners.
+template boundsRound(label, x0, x1, y0, y1, z0, z1, slot, rounding) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+    rounding: rounding
+  }
+}
+
+// One storey of wall running along x between `z0` and `z1`, from `x0` to `x1` and `y0` to `y1`, as the union of boxes
+// round its openings: each opening `{ a0, a1, y0, y1 }` spans `a0 .. a1` along the wall from `y0` to `y1` above the
+// storey's base, the openings in ascending order and clear of one another. A pier stands between neighbours, a sill
+// under each opening that starts above the base and a head over each that stops short of the top.
+function wallEdges(start, openings) = concat([{ a1: start }], openings)
+template wallAlongX(label, x0, x1, y0, y1, z0, z1, openings, slot) {
+  for (open, i) in openings {
+    for from in (((open.a0 - wallEdges(x0, openings)[i].a1) > 0.001) ? [wallEdges(x0, openings)[i].a1] : []) {
+      boundsBox(label: $"{label}-pier-{i}", x0: from, x1: open.a0, y0: y0, y1: y1, z0: z0, z1: z1, slot: slot)
+    }
+    for sill in ((open.y0 > 0.001) ? [open.y0] : []) {
+      boundsBox(label: $"{label}-sill-{i}", x0: open.a0, x1: open.a1, y0: y0, y1: (y0 + sill), z0: z0, z1: z1, slot: slot)
+    }
+    for head in (((y0 + open.y1) < (y1 - 0.001)) ? [open.y1] : []) {
+      boundsBox(label: $"{label}-head-{i}", x0: open.a0, x1: open.a1, y0: (y0 + head), y1: y1, z0: z0, z1: z1, slot: slot)
+    }
+  }
+  for from in (((x1 - wallEdges(x0, openings)[length(openings)].a1) > 0.001) ? [wallEdges(x0, openings)[length(openings)].a1] : []) {
+    boundsBox(label: $"{label}-end", x0: from, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1, slot: slot)
+  }
+}
+// The same wall running along z between `x0` and `x1`, its openings spanning `a0 .. a1` along z.
+template wallAlongZ(label, x0, x1, y0, y1, z0, z1, openings, slot) {
+  for (open, i) in openings {
+    for from in (((open.a0 - wallEdges(z0, openings)[i].a1) > 0.001) ? [wallEdges(z0, openings)[i].a1] : []) {
+      boundsBox(label: $"{label}-pier-{i}", x0: x0, x1: x1, y0: y0, y1: y1, z0: from, z1: open.a0, slot: slot)
+    }
+    for sill in ((open.y0 > 0.001) ? [open.y0] : []) {
+      boundsBox(label: $"{label}-sill-{i}", x0: x0, x1: x1, y0: y0, y1: (y0 + sill), z0: open.a0, z1: open.a1, slot: slot)
+    }
+    for head in (((y0 + open.y1) < (y1 - 0.001)) ? [open.y1] : []) {
+      boundsBox(label: $"{label}-head-{i}", x0: x0, x1: x1, y0: (y0 + head), y1: y1, z0: open.a0, z1: open.a1, slot: slot)
+    }
+  }
+  for from in (((z1 - wallEdges(z0, openings)[length(openings)].a1) > 0.001) ? [wallEdges(z0, openings)[length(openings)].a1] : []) {
+    boundsBox(label: $"{label}-end", x0: x0, x1: x1, y0: y0, y1: y1, z0: from, z1: z1, slot: slot)
+  }
+}
+
 // One box given its bounds in the creation's own frame, with no conversion: a painting's, whose x runs across the canvas,
 // y up and z out of the wall.
 template localBox(label, x0, x1, y0, y1, z0, z1, slot) {

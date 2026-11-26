@@ -259,7 +259,7 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
   contact kernels, sweeps, the rigid solver's mechanism and sabotage cases,
   navigation, lattices, neighborhoods), filtered to the class you touched.
   Body integration laws are in `tests/Puck.World.Server.Tests`.
-- Scenarios in the debug world: `puck test worlds/debug/hall-tests.puck --jobs 1`
+- Scenarios in the debug world: `puck test worlds/debug/gallery-tests.puck --jobs 1`
   (stairs, slabs, the lift), `noclip-tests`, `suit-tests`, the `water-*-tests`,
   `meadow-tests`; add `--reproduce` for anything that moves a pose.
 - Live read-backs over stdin: `body.where` (pose, support,

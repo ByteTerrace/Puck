@@ -28,7 +28,7 @@ public readonly record struct SdfInstanceCost(int OwnedWords, int Shapes, int Sc
 public readonly record struct SdfSkipSphere(uint Mode, int Slot, Vector3 Center, float Radius);
 public sealed partial class SdfProgram {
     /// <summary>Gets the number of entries in the packed segment directory, after adjacent skippable segments merged.</summary>
-    public int SkipSegmentCount => ((int)m_words[(SegmentDirectoryWord() + SegmentCountLane)]);
+    public int SkipSegmentCount => ((int)PackedWords[(SegmentDirectoryWord() + SegmentCountLane)]);
     /// <summary>Gets the number of directory segments that carry a rigid-leaf plan (<see cref="SegmentRigidPlanFlag"/>).</summary>
     public int RigidSegmentCount {
         get {
@@ -36,7 +36,7 @@ public sealed partial class SdfProgram {
             var count = 0;
 
             for (var segment = 0; (segment < SkipSegmentCount); segment++) {
-                if ((m_words[((segments + ((DirectoryHeaderVectors + (BoundRecordVectors * segment)) * WordsPerVector)) + WordsPerVector)] & SegmentRigidPlanFlag) != 0u) {
+                if ((PackedWords[((segments + ((DirectoryHeaderVectors + (BoundRecordVectors * segment)) * WordsPerVector)) + WordsPerVector)] & SegmentRigidPlanFlag) != 0u) {
                     count++;
                 }
             }
@@ -51,7 +51,7 @@ public sealed partial class SdfProgram {
     /// <exception cref="ArgumentOutOfRangeException">The index is absent.</exception>
     public SdfSkipSphere ShapeSkipSphere(int instruction) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: instruction);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: instruction, other: m_instructions.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: instruction, other: InstructionRows.Length);
 
         return ReadSkipSphere(word: (BoundsWord() + ((BoundRecordVectors * instruction) * WordsPerVector)), modeMask: uint.MaxValue);
     }
@@ -75,16 +75,16 @@ public sealed partial class SdfProgram {
         var instance = m_instances[index];
         var instructionCount = (instance.End - instance.First);
         var segments = SegmentDirectoryWord();
-        var instances = (segments + ((DirectoryHeaderVectors + (BoundRecordVectors * ((int)m_words[(segments + SegmentCountLane)]))) * WordsPerVector));
+        var instances = (segments + ((DirectoryHeaderVectors + (BoundRecordVectors * ((int)PackedWords[(segments + SegmentCountLane)]))) * WordsPerVector));
         var entry = (instances + (((DirectoryHeaderVectors + (BoundRecordVectors * index)) + 1) * WordsPerVector));
-        var firstSegment = ((int)m_words[(entry + 2)]);
-        var endSegment = ((int)m_words[(entry + 3)]);
-        var rigid = (((int)m_words[(segments + SegmentRigidPlanLane)]) * WordsPerVector);
+        var firstSegment = ((int)PackedWords[(entry + 2)]);
+        var endSegment = ((int)PackedWords[(entry + 3)]);
+        var rigid = (((int)PackedWords[(segments + SegmentRigidPlanLane)]) * WordsPerVector);
         var vectors = (((((1 + InstructionDataVectors) + BoundRecordVectors) * instructionCount) + BoundRecordVectors)
             + ((BoundRecordVectors + 1) * (endSegment - firstSegment)));
 
         for (var segment = firstSegment; (segment < endSegment); segment++) {
-            vectors += (3 * ((int)m_words[((rigid + (segment * WordsPerVector)) + 1)]));
+            vectors += (3 * ((int)PackedWords[((rigid + (segment * WordsPerVector)) + 1)]));
         }
         foreach (var profile in m_convexPolygonProfiles) {
             if (Owns(instruction: profile.InstructionIndex)) { vectors += profile.Vertices.Length.CeilingDivide(divisor: 2); }
@@ -95,17 +95,17 @@ public sealed partial class SdfProgram {
         foreach (var path in m_paths) {
             if (Owns(instruction: path.InstructionIndex)) { vectors += (path.Edges.Count * 2); }
         }
-        var part = (((int)m_words[(instances + InstancePartProgramsLane)]) * WordsPerVector);
+        var part = (((int)PackedWords[(instances + InstancePartProgramsLane)]) * WordsPerVector);
 
         if (part != 0) {
-            var bindings = ((int)(m_words[((part + ((1 + index) * WordsPerVector)) + 2)] & PartLeafCountMask));
+            var bindings = ((int)(PackedWords[((part + ((1 + index) * WordsPerVector)) + 2)] & PartLeafCountMask));
 
             vectors += (1 + bindings);
         }
         var shapes = 0;
 
         for (var instruction = instance.First; (instruction < instance.End); instruction++) {
-            if (m_instructions[instruction].Op == SdfOp.ShapeBlend) { shapes++; }
+            if (InstructionRows[instruction].Op == SdfOp.ShapeBlend) { shapes++; }
         }
         var clamps = 0;
 
@@ -127,16 +127,16 @@ public sealed partial class SdfProgram {
 
     // The first word of the per-instruction bound table, which follows the instruction data, then of the segment
     // directory that follows it: as the field interpreter finds them (sdfLoadProgramLayout).
-    private int BoundsWord() => (BoundsVectorOf(dataOffset: ((int)m_words[ProgramDataOffsetLane]), instructions: m_instructions.Length) * WordsPerVector);
-    private int SegmentDirectoryWord() => (BoundsWord() + ((BoundRecordVectors * m_instructions.Length) * WordsPerVector));
+    private int BoundsWord() => (BoundsVectorOf(dataOffset: ((int)PackedWords[ProgramDataOffsetLane]), instructions: InstructionRows.Length) * WordsPerVector);
+    private int SegmentDirectoryWord() => (BoundsWord() + ((BoundRecordVectors * InstructionRows.Length) * WordsPerVector));
     private SdfSkipSphere ReadSkipSphere(int word, uint modeMask) => new(
-        Mode: m_words[(word + WordsPerVector)] & modeMask,
-        Slot: ((int)m_words[((word + WordsPerVector) + 1)]),
+        Mode: PackedWords[(word + WordsPerVector)] & modeMask,
+        Slot: ((int)PackedWords[((word + WordsPerVector) + 1)]),
         Center: new Vector3(
-            x: BitConverter.UInt32BitsToSingle(value: m_words[word]),
-            y: BitConverter.UInt32BitsToSingle(value: m_words[(word + 1)]),
-            z: BitConverter.UInt32BitsToSingle(value: m_words[(word + 2)])
+            x: BitConverter.UInt32BitsToSingle(value: PackedWords[word]),
+            y: BitConverter.UInt32BitsToSingle(value: PackedWords[(word + 1)]),
+            z: BitConverter.UInt32BitsToSingle(value: PackedWords[(word + 2)])
         ),
-        Radius: BitConverter.UInt32BitsToSingle(value: m_words[(word + 3)])
+        Radius: BitConverter.UInt32BitsToSingle(value: PackedWords[(word + 3)])
     );
 }

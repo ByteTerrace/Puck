@@ -69,15 +69,13 @@ public static class WorldPresentationCopy {
     private static IReadOnlyDictionary<TKey, WorldObservedSession> CopySessions<TKey>(WorldInstanceHost instances,
         IReadOnlyDictionary<TKey, WorldObservationSession> published, IReadOnlyDictionary<TKey, WorldObservedSession> held, ref bool changed)
         where TKey : notnull {
-        var moved = (published.Count != held.Count);
-        Dictionary<TKey, WorldObservedSession>? copied = null;
+        // The host publishes its indexes as dictionaries, whose enumerator a steady collect walks without allocating.
+        var sessions = ((published as Dictionary<TKey, WorldObservationSession>) ?? new Dictionary<TKey, WorldObservationSession>(collection: published));
+        var moved = (sessions.Count != held.Count);
 
-        foreach (var (key, session) in published) {
-            var was = held.GetValueOrDefault(key: key);
-            var record = Session(held: was, instances: instances, session: session);
-
-            moved |= !ReferenceEquals(objA: record, objB: was);
-            (copied ??= new Dictionary<TKey, WorldObservedSession>(capacity: published.Count))[key] = record;
+        foreach (var (key, session) in sessions) {
+            if (moved) { break; }
+            moved = (!held.TryGetValue(key: key, value: out var was) || !ReferenceEquals(objA: Session(held: was, instances: instances, session: session), objB: was));
         }
         if (!moved) {
             return held;
@@ -85,7 +83,12 @@ public static class WorldPresentationCopy {
 
         changed = true;
 
-        return ((IReadOnlyDictionary<TKey, WorldObservedSession>?)copied ?? new Dictionary<TKey, WorldObservedSession>());
+        var copied = new Dictionary<TKey, WorldObservedSession>(capacity: sessions.Count);
+
+        foreach (var (key, session) in sessions) {
+            copied[key] = Session(held: held.GetValueOrDefault(key: key), instances: instances, session: session);
+        }
+        return copied;
     }
     // One session's record: the held one while every value it copies is the same.
     private static WorldObservedSession Session(WorldObservationSession session, WorldObservedSession? held, WorldInstanceHost instances) {
@@ -94,8 +97,10 @@ public static class WorldPresentationCopy {
         }
 
         var admission = Admission(held: held?.Observation, instanceName: session.InstanceName, instances: instances, observation: session.Observation);
+        // The mirror the session presents: its own, or the image of the class it follows (WorldImageClasses).
+        var mirror = session.Mirror.Presented;
 
-        if ((held is not null) && ReferenceEquals(objA: admission, objB: held.Observation) && Equals(objA: held.Source, objB: session.Source) &&
+        if ((held is not null) && ReferenceEquals(objA: admission, objB: held.Observation) && ReferenceEquals(objA: held.Mirror, objB: mirror) && Equals(objA: held.Source, objB: session.Source) &&
             string.Equals(a: held.InstanceName, b: session.InstanceName, comparisonType: StringComparison.Ordinal) &&
             (held.GenerationId == session.GenerationId) && string.Equals(a: held.Refusal, b: session.Refusal, comparisonType: StringComparison.Ordinal)) {
             return held;
@@ -104,7 +109,7 @@ public static class WorldPresentationCopy {
         return new WorldObservedSession(
             GenerationId: session.GenerationId,
             InstanceName: session.InstanceName,
-            Mirror: session.Mirror,
+            Mirror: mirror,
             Observation: admission,
             Refusal: session.Refusal,
             Source: session.Source,

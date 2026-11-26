@@ -222,11 +222,12 @@ public sealed partial class WorldInstanceHost {
                 case WorldCrossingRecord.Lease lease:
                     row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoLease(
                         floor: lease.Floor,
+                        guest: lease.Guest,
                         key: lease.Key
                     ));
                     break;
                 case WorldCrossingRecord.Tombstone tombstone:
-                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(burned: tombstone.Burned, key: tombstone.Key));
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(burned: tombstone.Burned, guest: tombstone.Guest, key: tombstone.Key));
                     break;
                 case WorldCrossingRecord.Allocation allocation:
                     row.NextTransferId = Math.Max(

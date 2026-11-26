@@ -14,7 +14,7 @@ export read auctionIn1, auctionIn2, auctionIn3, auctionIn4
 
 let auctionSeats = 4
 let auctionLots = 3
-let auctionTable = [56.5, boardRoomFloor - 0.5, 15.6]
+let auctionTable = [43.5, boardRoomFloor - 0.5, 17.2]
 
 state {
   world {

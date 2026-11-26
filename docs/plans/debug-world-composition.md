@@ -77,7 +77,7 @@ route between neighbours crosses a seam this page names.
 
 | Place | Where | Why there |
 |---|---|---|
-| The gallery hall (`hall.puck`, `shapes.puck`) | Its footprint, x 10 to 70, z 12 to 40, four storeys at 4.5 m; the entrance in the south wall facing the spawn | The centre every other place is measured from; its east wings stack the play rooms (below) and its upper west windows and lift tower look over the stream to the falls |
+| The gallery hall (`gallery/gallery.puck`, `shapes.puck`) | Its footprint, x 10 to 70, z 12 to 40, four storeys at 4.5 m; the entrance in the south wall facing the spawn | The centre every other place is measured from; its east wings stack the play rooms (below) and its upper west windows and lift tower look over the stream to the falls |
 | The painting wing (`paintings.puck`) | Level 0's east end, x 51 to 69.7, z 12.3 to 39.7 | Stays; the B projecting wing. Its north wall paintings face the valley's north lawn behind the building, so a window through a painting and the real window beside it are compared from one spot |
 | The rules arcade (port lane 7, with lane 1's pass) | Level 1's east end, over the painting wing | The play rooms stack in the projecting wing: portals on 0, the drawn-board arcade on 1, the tables on 2. One lift and one stair serve all three, so a visitor climbs from doors to boards to tables |
 | The board game room and every table (lanes 5, 8, 11, 12) | Level 2's east end, x 51 to 69.7, z 12.3 to 39.7 ([the room](../../worlds/debug/shapes.md#the-board-game-room)) | Stays; its east window band looks over the climate wing to the traversal course and the lowest wall, which is the "canyon terrace" the discovery pack gives it |

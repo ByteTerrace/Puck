@@ -19,4 +19,13 @@ public static class WorldTransferLimits {
     /// source that never lets its floor rise, or asks after keys it never reserved, fills its own share and not every
     /// source's.</summary>
     public const int TransferKeysPerSource = 4096;
+    /// <summary>Bounds the ledger rows one guest session of a closed rewind group holds, whatever each key holds and
+    /// its floor included. A session needs a row per seat it is sending or has landed and one per settled key above its
+    /// floor, which rises with each reservation, so this is several times what an honest client uses.</summary>
+    public const int GuestTransferKeysPerSession = 32;
+    /// <summary>Bounds the ledger rows every guest session of a closed rewind group holds together. Guests are counted
+    /// apart from the group's own worlds: <see cref="TransferKeys"/>, <see cref="Transactions"/> and
+    /// <see cref="MobilityAdmissions"/> bound what the worlds hold without counting a guest's rows, so no number of
+    /// present players takes a row, a transaction or a credential a world of the group could have used.</summary>
+    public const int GuestTransferKeys = 4096;
 }

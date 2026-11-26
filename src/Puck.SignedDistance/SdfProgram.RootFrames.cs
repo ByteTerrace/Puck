@@ -36,7 +36,7 @@ public sealed partial class SdfProgram {
 
             if (length == 0) { continue; }
 
-            frames ??= new RootFrame[m_instructions.Length];
+            frames ??= new RootFrame[InstructionRows.Length];
             var frame = new RootFrame(Key: (start + 1), Length: length);
 
             frames[start] = frame;
@@ -52,15 +52,15 @@ public sealed partial class SdfProgram {
 
     private int SharedPrefix(int start, int last, (int Start, int End) next, int owner, int[] instructionOwners) {
         if ((instructionOwners[next.Start] != owner) ||
-            (m_instructions[start].Op != SdfOp.ResetPoint) ||
-            (m_instructions[next.Start].Op != SdfOp.ResetPoint)) { return 0; }
+            (InstructionRows[start].Op != SdfOp.ResetPoint) ||
+            (InstructionRows[next.Start].Op != SdfOp.ResetPoint)) { return 0; }
 
         var limit = Math.Min(val1: (last - start - 1), val2: (next.End - next.Start - 1));
         var length = 0;
 
         while (length < limit) {
-            var left = m_instructions[(start + length + 1)];
-            var right = m_instructions[(next.Start + length + 1)];
+            var left = InstructionRows[(start + length + 1)];
+            var right = InstructionRows[(next.Start + length + 1)];
 
             if ((left != right) || !IsRootFrameTransform(instruction: left)) { break; }
             length++;

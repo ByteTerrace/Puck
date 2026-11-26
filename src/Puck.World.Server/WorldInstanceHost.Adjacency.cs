@@ -745,7 +745,7 @@ public sealed partial class WorldInstanceHost {
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    RetireForwardedTraveler(mobility: in traveler);
+                    RetireForwardedTraveler(incarnation: traveler.Incarnation);
                 }
 
                 completion(obj: result);

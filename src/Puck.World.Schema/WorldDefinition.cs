@@ -742,9 +742,13 @@ public sealed partial record WorldDefinition(
     /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
     /// added under that id — the point <see cref="WorldBodiesDefaults.SeatSpawns"/>' own absence derivation
     /// addresses. A document that authors its own <c>spawnPoints</c> (even an explicit empty list) gets no implicit
-    /// point; a seat spawn naming one it does not declare then refuses by name like any other dangling reference.</summary>
+    /// point; a seat spawn naming one it does not declare then refuses by name like any other dangling reference.
+    /// Every point is in world space: one authored in a placement's frame (<see cref="WorldSpawnPoint.Parent"/>) is
+    /// composed over that placement's resolved frame, and its parent cleared.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldSpawnPoint> SpawnPoints => (SpawnPointsRaw ?? [WorldSpawnPointDefaults.ImplicitOrigin]);
+    public IReadOnlyList<WorldSpawnPoint> SpawnPoints => ((SpawnPointsRaw is { } authored)
+        ? WorldSpawnPointFrames.Resolve(definition: this, points: authored, section: m_placements)
+        : [WorldSpawnPointDefaults.ImplicitOrigin]);
     /// <summary>Gets the placeable speaker rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldSpeaker> Speakers => (SpeakersRaw ?? []);

@@ -29,11 +29,14 @@ public sealed partial class WorldSiloHost {
                 RefuseActivation(row: RowKey(identity: identity), reason: $"pipeline {pipelineReason}");
                 return false;
             }
-            // The group's worlds, and the issuer whose players it admits as guests: a silo with no issuer admits none.
+            // The group's worlds, the issuer whose players it admits as guests (a silo with no issuer admits none), and
+            // how much of each row's crossing ledger those guests may hold.
             if (ClosedGroupRewind) {
                 server.ConstrainTransferAuthorities(boundary: new WorldTransferBoundary(
                     contains: ContainsRewindAuthority,
-                    guestIssuer: m_issuer?.Domain
+                    guestIssuer: m_issuer?.Domain,
+                    guestKeys: m_guestKeys,
+                    guestKeysPerSession: m_guestKeysPerSession
                 ));
             }
             // The desktop host uses this same mount transaction. Attachment also restores the checkpoint's guest image

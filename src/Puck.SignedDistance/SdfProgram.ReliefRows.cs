@@ -21,7 +21,7 @@ public sealed partial class SdfProgram {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="instructionIndex"/> names no instruction.</exception>
     public IReadOnlyList<SdfReliefMask> ReliefMasksAt(int instructionIndex) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: instructionIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: instructionIndex, other: m_instructions.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: instructionIndex, other: InstructionRows.Length);
 
         return (m_reliefMasks?[instructionIndex] ?? []);
     }
@@ -30,8 +30,8 @@ public sealed partial class SdfProgram {
     private void DecodeReliefRuns(int[] instructionOwners, string paramName) {
         var runStart = -1;
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
             var stream = SdfFieldOps.StreamOf(value: instruction.Op);
 
             if (stream == SdfReliefStreamRole.ReliefRow) {
@@ -55,7 +55,7 @@ public sealed partial class SdfProgram {
                         }
                     }
 
-                    (m_reliefMasks ??= new SdfReliefMask[]?[m_instructions.Length])[index] = SdfReliefMask.Read(firstIndex: runStart, paramName: paramName, run: m_instructions.AsSpan(start: runStart, length: rows));
+                    (m_reliefMasks ??= new SdfReliefMask[]?[InstructionRows.Length])[index] = SdfReliefMask.Read(firstIndex: runStart, paramName: paramName, run: InstructionRows.Slice(start: runStart, length: rows));
                 }
             } else if (runLength > 0) {
                 throw new ArgumentException(message: $"Relief mask rows {runStart}..{(index - 1)} are followed by instruction {index} ({instruction.Op}); a row stands only in a run closed by the NoiseDisplace that reads it.", paramName: paramName);

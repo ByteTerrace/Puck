@@ -378,7 +378,10 @@ room is never narrowed by the bytes beyond the owners: play's owners fit the
 bar less the headroom on what they hold and have promised, and fixed
 allocations, region floors, the forced job and an owner's progress floor
 (`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) may spend
-the headroom. No admission can shrink the bytes beyond the owners, so a limit
+the bar's headroom, though the forced job and a progress floor never the
+machine's: neither is admitted while the system signals low memory or past
+the machine's free physical memory less the headroom (`MemoryAccount.FitsMachine`),
+so a bake on a short machine waits instead of exhausting it. No admission can shrink the bytes beyond the owners, so a limit
 taken from the bar less those bytes refused the owners exactly while unclaimed
 memory grew, and a refused mesh store read baked again, which made more
 unclaimed memory. Play's part of those bytes past the bar with what play holds marks
@@ -2101,7 +2104,9 @@ step 10): the valley's north-west wall cannot reach the 1.56 m spacing its
 relief declares inside one lattice's fine-sample budget
 (`SdfSampledLattice.MaxFineSamples`), and splitting the sector across lattices
 is the fix at the cause, not a larger budget (the terrain pass's report on what
-set a sector's cell). It needs nothing below. The second is the floor
+set a sector's cell). Its core is built (`WorldPlacementStamper.SourceTilesOf`,
+[the terrain pass's step 2](terrain-pass.md#what-the-bake-needs) names what
+remains). It needs nothing below. The second is the floor
 (step 5), which needs only step 3, built.
 
 A step's number is its name, which other pages cite, and it stays when the

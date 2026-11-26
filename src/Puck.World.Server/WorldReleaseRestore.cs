@@ -230,10 +230,10 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
             );
         }
         foreach (var checkpoint in checkpoints) {
-            WorldReleaseRewindBoundary.RequireContained(
-            checkpoint: checkpoint,
-            containsAuthority: authorities.Contains
-        );
+            WorldReleaseRewindBoundary.RequireBaseline(
+                authorities: authorities,
+                checkpoint: checkpoint
+            );
         }
         return new(
             CurrentDurableTicks: ticks,

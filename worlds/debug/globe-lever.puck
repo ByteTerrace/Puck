@@ -17,11 +17,11 @@ let globeTurns = [
   { name: "east", vector [globePull, 0, 0], indicator: "#8FE87F" }
 ]
 
-// The post stands on the wing's floor two metres out from the west wall, south of the globe painting (which hangs at
-// z 18); the reach box is the floor round it.
-let leverPostX = 53.3
-let leverPostZ = 20.4
-let leverReach = { x0: 52.5, x1: 54.1, z0: 19.6, z1: 21.2, y0: -0.5, y1: 1 }
+// The post stands on the wing's floor two metres out from the west fin and north of the globe painting on it (which
+// hangs at z 14.4); the reach box is the floor round it.
+let leverPostX = 42.4
+let leverPostZ = 17
+let leverReach = { x0: 41.6, x1: 43.2, z0: 16.2, z1: 17.8, y0: -0.5, y1: 1 }
 
 state {
   world [

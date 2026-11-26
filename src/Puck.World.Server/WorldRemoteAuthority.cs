@@ -24,6 +24,8 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         authority.Definition
     );
     /// <inheritdoc/>
+    public void SetPresence(bool present) { }
+    /// <inheritdoc/>
     public ValueTask<byte[]?> FetchPrototypeAsync(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
         authority.FetchPrototypeAsync(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
     /// <inheritdoc/>

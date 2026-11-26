@@ -26,7 +26,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink, IWorldWatchingSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 256;
-    /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
+    /// <summary>The retained records at or below which a subscriber that fell behind is caught up: half the queue, so
+    /// the catch-up and what follows it have room.</summary>
+    public const int ResumeDeliveryLimit = (PendingDeliveryLimit / 2);
+    /// <summary>The deliveries a subscriber may miss while its wire consumer drains a full queue. One whose consumer
+    /// has not drained to <see cref="ResumeDeliveryLimit"/> by then is not slow but stalled, and is detached.</summary>
+    public const int StalledDeliveryLimit = (4 * PendingDeliveryLimit);
+    /// <summary>The named reason for detaching an observer whose wire queue filled and whose consumer then stalled.</summary>
     public const string BackpressureDetachReason = "world.observation.backpressure";
     /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
     public const string InvalidatedDetachReason = "world.observation.invalidated";
@@ -83,11 +89,41 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     /// <inheritdoc/>
     public string? DetachReason { get; private set; }
 
+    // Set from the record the full queue refused until the wire consumer has drained to ResumeDeliveryLimit. A
+    // subscriber that is behind is sent nothing more, and nothing is composed for it: what it missed is not repaired
+    // record by record. When its consumer has drained, the stream cuts to a new generation, which owes the whole
+    // disclosed document and a primer snapshot before anything newer, so the peer catches up on its open stream at the
+    // rate its link carries, and never holds content of the span it missed part of.
+    private bool m_behind;
+    private int m_missed;
+    // The route this stream last primed, sent again with the catch-up when the queue refused it.
+    private WorldAuthorityRouteDescription? m_route;
+    private bool m_routeOwed;
+
     private bool Current() {
         if (m_invalidated) { return false; }
-        if (isCurrent?.Invoke() != false) { return true; }
-        End(reason: InvalidatedDetachReason);
+        if (isCurrent?.Invoke() == false) {
+            End(reason: InvalidatedDetachReason);
 
+            return false;
+        }
+        return !Behind();
+    }
+    // Whether this delivery is missed because the wire consumer is behind. The delivery that finds the queue drained
+    // decides the cut the catch-up rides and goes ahead.
+    private bool Behind() {
+        if (!m_behind) {
+            return false;
+        }
+        if (m_frames.Reader.Count > ResumeDeliveryLimit) {
+            if (++m_missed > StalledDeliveryLimit) {
+                End(reason: BackpressureDetachReason);
+            }
+            return true;
+        }
+        m_behind = false;
+        m_missed = 0;
+        m_cursor.Lapse();
         return false;
     }
     private void End(string reason) {
@@ -159,6 +195,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         m_manifestBasis = null;
         m_history.Clear();
         Write(WorldFederationResponse.Cut, WorldFederationCodec.EncodeCut(stream: m_cursor.Stamp(), terminal: false));
+        if (m_routeOwed && (m_route is { } route)) {
+            m_routeOwed = false;
+            PrimeRoute(route: in route);
+        }
 
         return true;
     }
@@ -208,12 +248,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
 
             return;
         }
-        if (!m_frames.Writer.TryWrite(record)) {
-            // The stream's primer, definition revisions, and authority route cannot be reconstructed from a lone
-            // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
-            // Completing the channel successfully keeps the queued records ahead of the terminal reason; the hub
-            // detaches on the reason after this delivery, whether or not the wire consumer ever drains again.
-            End(reason: BackpressureDetachReason);
+        if (m_behind || !m_frames.Writer.TryWrite(record)) {
+            // The stream's primer, definition revisions and authority route cannot be reconstructed from a lone latest
+            // snapshot, so a refused record is not skipped over: everything after it is missed too, and the stream
+            // catches up whole once its consumer has drained (Behind). The queued records keep their order ahead of
+            // the cut that follows them.
+            m_behind = true;
+            m_routeOwed |= (record.Kind == WorldFederationResponse.Route);
         }
     }
 
@@ -297,12 +338,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if (!Current()) { return; }
         // A body policy that moved with the edit owes a cut, which the row path refuses so the document door primes it.
         _ = ObserveBodies();
-        if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+        // The wire carries creation and shade rows alone (WorldPresentationRows.TryDeserialize refuses placement rows),
+        // so rows that move placements travel as the whole document.
+        if (rows.MovesPlacements || tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
             DeliverDocument(replaced: true, rows: rows);
         } else if (moved) {
             m_manifestBasis = null;
-            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
+            var payload = rows.Payload;
+            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(payload.Span, tier, Version));
             WorldOutputHub.CountPresentationRows(rows);
+            WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, payload.Length);
         }
     }
 
@@ -319,8 +364,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if (!Current()) {
             return;
         }
-        // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now.
-        if (m_feed is not null) {
+        // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now. A
+        // stream that owes a cut owes its whole projection behind the cut record instead, which this tick's snapshot
+        // sends (WriteSnapshot), so no delta of the new generation goes ahead of it.
+        if ((m_feed is not null) && !m_cursor.CutOwed) {
             Present(
                 delivery: m_feed.Step(m_view!, m_cursor, snapshot.Tick, snapshot.EngineTick),
                 engineTick: snapshot.EngineTick,
@@ -386,10 +433,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDocument(replaced: false); }
     }
-    public void PrimeRoute(in WorldAuthorityRouteDescription route) => WriteRecord(
-        WorldFederationResponse.Route,
-        WorldFederationCodec.EncodeRoute(route: in route, tier: tier)
-    );
+    public void PrimeRoute(in WorldAuthorityRouteDescription route) {
+        m_route = route;
+        WriteRecord(
+            WorldFederationResponse.Route,
+            WorldFederationCodec.EncodeRoute(route: in route, tier: tier)
+        );
+    }
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
     /// authority gate once the sink is detached, so no delivery follows it.</summary>
     public void Release() {

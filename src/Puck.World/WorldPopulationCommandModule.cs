@@ -609,7 +609,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
                 _ => "unknown",
             };
             var ride = ((area.Attach is { } attach)
-                ? $"body:{attach.BodyIndex}"
+                ? ((attach.BodyIndex is { } carrier) ? $"body:{carrier}" : $"placement:{attach.Placement}")
                 : "static"
             );
             var bindings = string.Concat(

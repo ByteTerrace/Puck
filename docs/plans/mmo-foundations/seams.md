@@ -457,7 +457,7 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 - `src/Puck.World.Client/WorldAdjacencySceneEmitter.cs:1-300`
 - `worlds/debug/debug.puck:1-200`
 - `worlds/debug/garden.puck:1-150`
-- `worlds/debug/paintings.puck:1-582`
+- `worlds/debug/paintings.puck:1-438`
 - `worlds/debug/painting-kit.puck:1-38`
 
 ### Web sources summarized (`[summary]` — pages for a reader lane to open if exact quotes are needed)

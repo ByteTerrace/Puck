@@ -49,6 +49,7 @@ public sealed partial class WorldInputOwner {
             if (checkpoint.Sources[index].Source != m_sources[index].Source) { throw new ArgumentException(message: "input checkpoint source registry differs", paramName: nameof(checkpoint)); }
         }
         Restores++;
+        TouchRetained();
         Array.Clear(array: HoldScratch);
         foreach (var hold in checkpoint.Holds) {
             if ((hold.Channel >= m_catalog.Channels.Length) || (mapping.Address(logicalId: hold.Channel) < 0) || (hold.Press == 0) ||
@@ -117,20 +118,68 @@ public sealed partial class WorldInputOwner {
         Array.Clear(array: m_matchCached);
     }
     /// <summary>Hashes canonical future-decision state independently of ring storage layout.</summary>
-    public void AppendStateHash(ref Fnv1aHash hash) {
+    /// <param name="hash">The running hash.</param>
+    /// <param name="recompute">Whether the retained rings and tables fold afresh instead of from the digest cached at
+    /// their last write: the full recompute the cache is checked against.</param>
+    /// <remarks>What an admission without events moves (the step, the image, each source's level) folds each time,
+    /// the sources' fixed registrations as the digest the constructor folded; the retained rings and tables (the last
+    /// switch and the switch ring, holds, history, crossings, claims), which only an event, an expiry, a switch, a
+    /// consumption or a restore changes, fold once per such write as one digest.</remarks>
+    public void AppendStateHash(ref Fnv1aHash hash, bool recompute = false) {
         hash.Add(value: Revision); hash.Add(value: Epoch); hash.Add(value: Mapping.Id);
         Image.AppendStateHash(hash: ref hash);
         hash.Add(value: Calibration.Value); hash.Add(value: RefusedBatches); hash.Add(value: m_sequence); hash.Add(value: m_eventId);
         AddInterval(hash: ref hash, interval: m_lastCapture); hash.Add(value: m_lastOffset.Value); hash.Add(value: m_step); hash.Add(value: ((uint)m_stepEvents));
+        hash.Add(value: (recompute ? SourceRegistryDigest(sources: m_sources) : m_sourceRegistryDigest));
+        foreach (var source in m_sources) {
+            hash.Add(value: source.RawValue); hash.Add(value: source.Activation); hash.Add(value: ((byte)(source.AwaitingNeutral ? 1 : 0)));
+        }
+        if (recompute) {
+            hash.Add(value: RetainedDigest());
+            return;
+        }
+        if (!m_retainedDigestKnown || (m_retainedDigestVersion != m_retainedVersion)) {
+            m_retainedDigest = RetainedDigest();
+            m_retainedDigestVersion = m_retainedVersion;
+            m_retainedDigestKnown = true;
+            RetainedDigestFolds++;
+        }
+        hash.Add(value: m_retainedDigest);
+    }
+    /// <summary>Gets how many times this owner folded its retained rings and tables for a hash: a load-independent
+    /// count, which a steady admission never adds to.</summary>
+    public long RetainedDigestFolds { get; private set; }
+
+    // The retained state's digest and the write it was folded after. Every method that writes a retained ring or table
+    // moves m_retainedVersion (TouchRetained) before it returns, and the hash is taken only between calls, under the
+    // authority gate; a write that skipped the touch is caught by the full recompute (`recompute`), which
+    // `puck test --reproduce` takes every replayed tick.
+    private ulong m_retainedVersion;
+    private ulong m_retainedDigestVersion;
+    private ulong m_retainedDigest;
+    private bool m_retainedDigestKnown;
+
+    private void TouchRetained() => m_retainedVersion++;
+
+    // The sources' registrations, fixed from the constructor on (a restore refuses a different registry), folded once
+    // there into m_sourceRegistryDigest.
+    private static ulong SourceRegistryDigest(WorldInputSourceState[] sources) {
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: ((uint)sources.Length));
+        foreach (var source in sources) {
+            hash.Add(value: source.Source.Handle); hash.Add(value: source.Source.Channel); hash.Add(value: ((byte)source.Source.Kind));
+            hash.Add(value: source.Source.Name); hash.Add(value: source.Source.Binding);
+        }
+        return hash.Value;
+    }
+
+    private ulong RetainedDigest() {
+        var hash = Fnv1aHash.Create();
+
         AddSwitch(ref hash, LastSwitch);
         hash.Add(value: ((uint)m_switchCount));
         for (var index = 0; (index < m_switchCount); index++) { AddSwitch(ref hash, SwitchRecord(index: index)); }
-        hash.Add(value: ((uint)m_sources.Length));
-        foreach (var source in m_sources) {
-            hash.Add(value: source.Source.Handle); hash.Add(value: source.Source.Channel); hash.Add(value: ((byte)source.Source.Kind));
-            hash.Add(value: source.Source.Name); hash.Add(value: source.Source.Binding);
-            hash.Add(value: source.RawValue); hash.Add(value: source.Activation); hash.Add(value: ((byte)(source.AwaitingNeutral ? 1 : 0)));
-        }
         foreach (var hold in m_holds) {
             hash.Add(value: hold.Press);
             if (hold.Press == 0) { continue; }
@@ -148,6 +197,7 @@ public sealed partial class WorldInputOwner {
                 hash.Add(value: ((byte)((m_claimed[group][((int)(record.Id % ((ulong)m_historyCapacity)))] == record.Id) ? 1 : 0)));
             }
         }
+        return hash.Value;
     }
 
     private static void AddInterval(ref Fnv1aHash hash, WorldInputInterval interval) {

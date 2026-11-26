@@ -422,6 +422,9 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Stopwatch m_clock = new();
 
+    // The program the bake meshes, under the bake's claim (SdfProgram.Exchange) from Adopt to Retire: everything that reads
+    // it under the gate reads it claimed, and pool work that reads it outside the gate takes a claim of its own
+    // (ClaimProgram).
     private SdfProgram? m_program;
     // The field m_program derives, counted: it moves when the bake adopts a program that does not share the held one's
     // field (SdfProgram.SharesField), and only then. A group's checkpoint keys name the field they were taken from by this
@@ -431,7 +434,14 @@ public sealed partial class SdfMeshPathBake {
     // Under the gate: holds a program, moving the field count when its field is not the held one's.
     private void Adopt(SdfProgram program) {
         if (!program.SharesField(other: m_program)) { Volatile.Write(location: ref m_field, value: (m_field + 1L)); }
-        m_program = program;
+        SdfProgram.Exchange(held: ref m_program, next: program);
+    }
+    // A claim on the program the bake meshes, for pool work that reads it outside the gate, while its field is still the
+    // one the work was queued for; null once the bake adopted another field or was retired. The caller releases it.
+    private SdfProgram? ClaimProgram(long field) {
+        using (EnterGate(site: BakeGate.Read)) {
+            return (((m_program is { } program) && (Volatile.Read(location: ref m_field) == field) && program.TryAcquire()) ? program : null);
+        }
     }
 
     // The baked sampled set the groups were planned at (SdfSampledSet.Baked): a frame carrying another resamples the groups
@@ -669,6 +679,7 @@ public sealed partial class SdfMeshPathBake {
     private readonly Dictionary<int, List<int>> m_instanceCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+    private SdfMeshTemplateRange[] m_copyTemplateRanges = [];
     // The same slots as a set, which CopiesOf asks of every dynamic group.
     private readonly HashSet<int> m_copyAssetSlotSet = [];
     // The copy journal's endpoint the layout was last compared at, the runs it named, and whether they are every copy
@@ -894,6 +905,8 @@ public sealed partial class SdfMeshPathBake {
 
         m_copiesWhole = whole;
         if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        if (m_copyTemplateRanges.Length != frame.MeshTemplateRanges.Count) { return false; }
+        for (var index = 0; (index < m_copyTemplateRanges.Length); index++) { if (m_copyTemplateRanges[index] != frame.MeshTemplateRanges[index]) { return false; } }
         if (whole) {
             for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
         }
@@ -929,6 +942,12 @@ public sealed partial class SdfMeshPathBake {
         }
         m_copyLayoutRevision++;
         m_demandCopyLayout = true;
+        // Every static template's instances are indexed, with no copies, before the copies that name them: CopiesOf then
+        // answers an empty list for a template nothing copies this frame, so it draws nothing rather than as itself.
+        m_copyTemplateRanges = [.. frame.MeshTemplateRanges];
+        foreach (var range in m_copyTemplateRanges) {
+            for (var instance = 0; (instance < range.InstanceCount); instance++) { _ = m_instanceCopies.TryAdd(key: (range.FirstInstance + instance), value: []); }
+        }
         for (var index = 0; (index < frame.MeshInstances.Count); index++) {
             var copy = frame.MeshInstances[index];
 
