@@ -36,6 +36,7 @@ import "../shapes"
 import "layout"
 import "shell"
 import "look"
+import "flaw"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
@@ -136,9 +137,9 @@ let carPads = map(
 let carPanelY = 1.25
 let carPanelZ = 1.395
 
-// The room lights. `hallLights` holds each level's state, Off or On, and every level starts On. Off swaps the slab or
-// roof above that level for its dark variant, so its ceiling strips stop glowing, and darkens the fixtures that level
-// owns (`hallLamps`); the lift car's lamp rides the car whatever its level. A level's switch stands on the south wall
+// The room lights. `hallLights` holds each level's state, Off or On, and every level starts On. Off quiets the light of
+// the stretch of the flaw that storey holds (`hallLamps`) and the lamps it owns; the lift car's lamp rides the car
+// whatever its level. A level's switch stands on the south wall
 // east of the lift's door, 1.1 to 1.46 m over the floor; the context button (`interact`, E or RB on a pad) flips it
 // while a body stands in the switch's reach box before it.
 let switchX = 20.8
@@ -161,43 +162,11 @@ let hallSwitchStates = [
   { name: "off", indicator: "#5BE38A", glow: 200 }
 ]
 
-// The ceiling fixtures a level owns, by `hallLamps` key, with the luminous power, in lumens, each emits while its level
-// is On: every level's downlights, the nave's high bays under the roof (on level 0's switch, whose floor they light)
-// and the stairwell's pendant on level 1's. A fixture stands still, so the irradiance volume traces it: its light
-// bounces about its room and stops at the slab under it.
+// What each `hallLamps` cell holds while its level is On: a storey's stretch of the flaw, its light in candela per metre
+// (look.puck's lookFlaw), and the stairwell's pendant, in lumens, on level 1's switch.
 let hallLampLevels = concat(
-  map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 5000 }),
-  [{ key: "stairs", level: 1, lumens: 800 }, { key: "nave", level: 0, lumens: 30000 }]
-)
-// The downlights, 10 cm under each level's ceiling: along both aisles, over the bridge and the lift's landing, and on
-// the wing's storeys along the projection. Level 0's south aisle east of the lobby is the painting wing, which hangs its
-// own; the terrace takes level 3's west.
-let hallDownlights = flatMap(range(0, 4), k => concat(
-  map(((k == 3) ? [] : [4, 9]), x => { level: k, x: x, z: 4.6 }),
-  map(((k == 0) ? [26] : [26, 34, 42, 50, 57]), x => { level: k, x: x, z: 4.6 }),
-  map([4, 12, 20, 28, 36, 44, 52, 58], x => { level: k, x: x, z: northAisleMid }),
-  [{ level: k, x: 6, z: naveMid }, { level: k, x: liftX, z: 3.2 }],
-  map(((k >= wingLevel) ? [26, 34, 42, 50, 57] : []), x => { level: k, x: x, z: -1.9 })
-))
-// The nave's high bays, under the roof either side of the skylights, and the washes on level 1's balcony edges that
-// light level 0's two lines from the side.
-let naveHighBays = flatMap([14, 28, 42, 56], x => [{ x: x, z: (naveSouth + 0.8) }, { x: x, z: (naveNorth - 0.8) }])
-let naveWashes = flatMap([18, 30, 42, 54], x => [
-  { x: x, z: (naveSouth + 0.5), aim [0, -1, 0.4] }
-  { x: x, z: (naveNorth - 0.5), aim [0, -1, -0.4] }
-])
-// The painting wing's own fixtures (paintings.puck), lit whatever level 0's switch says, since its paintings are its
-// exhibits: a row of downlights down its middle, and a wash 1.3 m off each wall a painting hangs on, aimed down the wall
-// at a canvas's height.
-let courtDownlights = map([33, 39, 45, 51, 57], x => { x: x, z: 6.4 })
-let courtWashes = concat(
-  map([34.4, 38, 41.6, 48.5, 52.5], x => { x: x, z: 1.9, aim [0, -2.65, -1.2] }),
-  [
-    { x: (courtWest + 1.6), z: 2.4, aim [-1.2, -2.65, 0] }
-    { x: (courtFin + 1.6), z: 2.4, aim [-1.2, -2.65, 0] }
-    { x: (galleryEast - 1.6), z: 2.4, aim [1.2, -2.65, 0] }
-    { x: (galleryEast - 1.6), z: 6.6, aim [1.2, -2.65, 0] }
-  ]
+  map(range(0, 4), k => { key: $"level{k}", level: k, value: lookFlaw.intensity }),
+  [{ key: "stairs", level: 1, value: 800 }]
 )
 
 // The tour: every exhibit in walking order, level by level and display by display (shapes.puck's galleryCatalog).
@@ -225,6 +194,7 @@ dynamics [
 
 prototypes {
   shellPrototypes()
+  flawPrototype()
 
   // A floor's light switch, its plate facing +Z in its own frame. A warm indicator is on; a green locator glow
   // (findable in the dark) is off.
@@ -536,6 +506,7 @@ placements {
     position: gallerySite
   }
   shellPlacements()
+  flawPlacement()
 
   for k in range(0, 4) {
     placement $"hall-switch-{k}" {
@@ -751,14 +722,13 @@ placements {
   displayPlacements()
 }
 
-// The building's lights, each anchored to the root: a fixture stands where the root puts it and, standing still there,
+// The building's lights, each anchored to the root: a light stands where the root puts it and, standing still there,
 // is traced into the irradiance volume, which bounces its light and occludes it where the probes about a surface
-// cannot see it. The ceilings' fixtures light the inside: a downlight along each aisle, the nave's high bays and the
-// washes on its balcony edges, a pendant in the stairwell, a lamp riding the lift car's body under its ceiling, and the
-// painting wing's downlights and washes. A level's fixture reads its power from the level's `hallLamps` cell, so it
-// follows that level's switch; the wing's stay lit whatever the lobby's switch says. The lift car's lamp rides a body,
-// so it is neither traced nor bounced. The rooms' light is also the emissive strips' and the windows', carried by the
-// traced indirect light, the shadows and the occlusion.
+// cannot see it. The flaw (flaw.puck) lights the inside: its tube lights run the whole of its length, each in one
+// storey, reading its power from that storey's `hallLamps` cell. Beside it stand only what it cannot do: the
+// stairwell's pendant, since the flaw never enters the core's stair shaft, and the lamp riding the lift car's body
+// under its ceiling, which moves with the car through the shaft, so it is neither traced nor bounced. The coffers'
+// small lamps are paint, and the windows' daylight is the world's sun.
 render {
   lighting {
     lights: concat(
@@ -791,71 +761,7 @@ render {
           power: 6000lm
         )
       ],
-      map(
-        range(0, length(hallDownlights)),
-        i => spot(
-          name: $"hall-down-{i}",
-          anchor: placement(placementId: gallery),
-          position: [hallDownlights[i].x, (galleryCeiling[hallDownlights[i].level] - 0.1), hallDownlights[i].z],
-          direction: [0, -1, 0],
-          angle: 50deg,
-          innerAngle: 30deg,
-          temperature: 5600K,
-          power: $"state.hallLamps.level{hallDownlights[i].level}"
-        )
-      ),
-      map(
-        range(0, length(naveHighBays)),
-        i => spot(
-          name: $"nave-bay-{i}",
-          anchor: placement(placementId: gallery),
-          position: [naveHighBays[i].x, (galleryCeiling[3] - 0.15), naveHighBays[i].z],
-          direction: [0, -1, 0],
-          angle: 38deg,
-          innerAngle: 24deg,
-          temperature: 5600K,
-          power: "state.hallLamps.nave"
-        )
-      ),
-      map(
-        range(0, length(naveWashes)),
-        i => spot(
-          name: $"nave-wash-{i}",
-          anchor: placement(placementId: gallery),
-          position: [naveWashes[i].x, (galleryCeiling[0] - 0.45), naveWashes[i].z],
-          direction: naveWashes[i].aim,
-          angle: 48deg,
-          innerAngle: 30deg,
-          temperature: 5600K,
-          power: "state.hallLamps.level0"
-        )
-      ),
-      map(
-        range(0, length(courtDownlights)),
-        i => spot(
-          name: $"wing-down-{i}",
-          anchor: placement(placementId: gallery),
-          position: [courtDownlights[i].x, (galleryCeiling[0] - 0.1), courtDownlights[i].z],
-          direction: [0, -1, 0],
-          angle: 50deg,
-          innerAngle: 30deg,
-          temperature: 4000K,
-          power: 8000lm
-        )
-      ),
-      map(
-        range(0, length(courtWashes)),
-        i => spot(
-          name: $"wing-wash-{i}",
-          anchor: placement(placementId: gallery),
-          position: [courtWashes[i].x, (galleryCeiling[0] - 0.1), courtWashes[i].z],
-          direction: courtWashes[i].aim,
-          angle: 35deg,
-          innerAngle: 20deg,
-          temperature: 3500K,
-          power: 4000lm
-        )
-      )
+      flawLights(placement(placementId: gallery))
     )
   }
 }
@@ -952,14 +858,13 @@ state {
       screens = 1
       fill = 0
     }
-    // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
+    // Each level's light by the level that owns it (hallLampLevels): zero while its level is Off.
     table hallLamps {
-      level0 = 5000
-      level1 = 5000
-      level2 = 5000
-      level3 = 5000
+      level0 = lookFlaw.intensity
+      level1 = lookFlaw.intensity
+      level2 = lookFlaw.intensity
+      level3 = lookFlaw.intensity
       stairs = 800
-      nave = 30000
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
@@ -1259,12 +1164,12 @@ for reach in switchReach {
   }
 }
 
-// A level's point lights follow its state.
+// A level's lights follow its state.
 for lamp in hallLampLevels {
   rule $"hall-lamp-{lamp.key}-on" {
     when hallLights[$"level{lamp.level}"] == 1
     mode: Edge
-    hallLamps[$"{lamp.key}"] = lamp.lumens
+    hallLamps[$"{lamp.key}"] = lamp.value
   }
   rule $"hall-lamp-{lamp.key}-off" {
     when hallLights[$"level{lamp.level}"] == 0
@@ -1275,7 +1180,7 @@ for lamp in hallLampLevels {
 
 // The inspection lever: On fills every surface with a flat sky ambient, pins the camera at one exposure and takes the
 // screens out of the traced light, so an agent's capture or a person's eye reads albedo and form the same at every
-// exhibit; Off writes the authored values back. The physical lighting (fixtures, strips, blinds, the traced bounce) is
+// exhibit; Off writes the authored values back. The physical lighting (the flaw, the lamps, blinds, the traced bounce) is
 // untouched either way, so a lighting check turns it Off.
 rule "gallery-inspect-on" {
   when galleryInspect[$"mode"] == 1
@@ -1357,7 +1262,7 @@ commands [
   }
   {
     name: "gallery.lights"
-    help: "Switches a level's room lights in the gallery hall (0 to 3) on or off, as its wall switch does: off darkens the level's ceiling strips and its fixtures."
+    help: "Switches a level's room lights in the gallery hall (0 to 3) on or off, as its wall switch does: off quiets the light of the stretch of the flaw that level holds, and its lamps."
     parameters [
       { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
       { name: "state", kind: Choice, values ["On", "Off"] }

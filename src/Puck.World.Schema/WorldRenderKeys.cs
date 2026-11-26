@@ -188,6 +188,21 @@ public static class WorldRenderKeys {
                         ),
                     };
                 }
+            case WorldRenderLight.Tube tube: {
+                    var parts = Parts(
+                        keys: stated,
+                        select: static part => (part as WorldRenderLight.Tube)
+                    );
+
+                    return tube with {
+                        From = Vector(authored: tube.From, clock: clock, field: static part => part.From, parts: parts),
+                        To = Vector(authored: tube.To, clock: clock, field: static part => part.To, parts: parts),
+                        Color = Color(authored: tube.Color, clock: clock, field: static part => part.Color, parts: parts),
+                        Intensity = Scalar(authored: tube.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
+                        Power = Scalar(authored: tube.Power, clock: clock, field: static part => part.Power, parts: parts),
+                        Temperature = Scalar(authored: tube.Temperature, clock: clock, field: static part => part.Temperature, parts: parts),
+                    };
+                }
             case WorldRenderLight.Spot spot: {
                     var parts = Parts(
                         keys: stated,

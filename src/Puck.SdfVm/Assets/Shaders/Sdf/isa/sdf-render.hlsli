@@ -106,6 +106,7 @@
 #define SDF_LIGHT_RIM         1u
 #define SDF_LIGHT_POINT       2u
 #define SDF_LIGHT_OCCLUDER    3u
+#define SDF_LIGHT_LINE        4u
 
 // Puck.SdfVm.SdfVisibilityKind.
 #define SDF_VISIBILITY_KIND_BACKGROUND 0u

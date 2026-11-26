@@ -358,6 +358,18 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 }
+            case WorldRenderLight.Tube tube: {
+                    RequireKeyVector(errors: errors, path: $"{path}.from", value: tube.From);
+                    RequireKeyVector(errors: errors, path: $"{path}.to", value: tube.To);
+                    RefuseStructure(errors: errors, path: $"{path}.anchor", stated: (tube.Anchor is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.radius", stated: (tube.Radius != 0f));
+                    RequireKeyColor(errors: errors, path: $"{path}.color", value: tube.Color);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: tube.Intensity);
+                    RequireKeyScalar(errors: errors, path: $"{path}.power", value: tube.Power);
+                    RequireKeyScalar(errors: errors, path: $"{path}.temperature", value: tube.Temperature);
+
+                    break;
+                }
             case WorldRenderLight.Spot spot: {
                     RequireKeyVector(errors: errors, path: $"{path}.position", value: spot.Position);
                     RequireKeyDirection(errors: errors, path: $"{path}.direction", value: spot.Direction);
