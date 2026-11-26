@@ -104,7 +104,7 @@ public static partial class CreationCanonicalizer {
                 if (paint.Stroke is > 0f) {
                     Refuse(field: "stroke", message: "a text paint carries no stroke: its glyphs are its coverage.");
                 }
-                if (SdfSolidGeometry.GetLocalBounds(type: paint.Type).IsUnbounded) {
+                if (SdfSolidGeometry.IsUnbounded(type: paint.Type)) {
                     Refuse(field: "type", message: $"a text paint needs a bounded primitive to lay its text out in, not {paint.Type}.");
                 }
             }

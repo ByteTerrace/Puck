@@ -127,6 +127,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private Puck.Abstractions.HostResourceUnavailableException? m_hostUnavailable;
 
     private readonly WorldAttestationIssuer? m_issuer;
+    private readonly int m_guestKeysPerSession;
+    private readonly int m_guestKeys;
 
     /// <summary>Initializes the silo host over a validated document and its resolved blob store.</summary>
     /// <param name="definition">The validated silo document.</param>
@@ -143,8 +145,16 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     /// <see langword="null"/> is an empty set.</param>
     /// <exception cref="Puck.Abstractions.PuckExtensionException">The issuer names a sign-in provider that is not installed.</exception>
     /// <exception cref="ArgumentException">The issuer's root key or sign-in settings are refused.</exception>
+    /// <param name="guestKeysPerSession">The crossing-ledger rows one guest session may hold in a row of a closed
+    /// rewind group (<see cref="WorldTransferBoundary.GuestKeysPerSession"/>). No production composition passes it; a
+    /// law passes a small one to reach the bound.</param>
+    /// <param name="guestKeys">The crossing-ledger rows every guest session together may hold in a row of a closed
+    /// rewind group (<see cref="WorldTransferBoundary.GuestKeys"/>), under the same rule.</param>
     public WorldSiloHost(WorldSiloDefinition definition, IObjectBlobStore blobStore, SiloConsoleRouting routing, ObjectStorageTarget storageTarget, WorldMachineCatalog? machineCatalog = null,
-        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null, TimeProvider? timeProvider = null, Puck.Abstractions.PuckExtensionSet? extensions = null) {
+        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null, TimeProvider? timeProvider = null, Puck.Abstractions.PuckExtensionSet? extensions = null,
+        int guestKeysPerSession = WorldTransferLimits.GuestTransferKeysPerSession, int guestKeys = WorldTransferLimits.GuestTransferKeys) {
+        m_guestKeysPerSession = guestKeysPerSession;
+        m_guestKeys = guestKeys;
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: blobStore);
         ArgumentNullException.ThrowIfNull(argument: routing);

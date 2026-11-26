@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Memory;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -91,7 +92,7 @@ public sealed partial class SdfMeshIrradiance {
 
             for (var at = 0; (at < nodes.Length);) {
                 ref readonly var node = ref nodes[at];
-                var placed = Overlaps(high: node.High, low: node.Low, otherHigh: (centre + placement), otherLow: (centre - placement));
+                var placed = SdfBoundAlgebra.BoxesMeet(high: node.High, low: node.Low, otherHigh: (centre + placement), otherLow: (centre - placement));
 
                 if (!placed && !Near(high: node.High, low: node.Low, origin: origin, radius: reach)) {
                     at = node.Escape;
@@ -149,12 +150,6 @@ public sealed partial class SdfMeshIrradiance {
         }
         return false;
     }
-    private static bool Overlaps(Vector3 low, Vector3 high, Vector3 otherLow, Vector3 otherHigh) {
-        var from = Vector3.Max(value1: low, value2: otherLow);
-        var to = Vector3.Min(value1: high, value2: otherHigh);
-
-        return ((from.X <= to.X) && (from.Y <= to.Y) && (from.Z <= to.Z));
-    }
     // Whether a box comes within a radius of a point.
     private static bool Near(Vector3 low, Vector3 high, Vector3 origin, float radius) {
         var outside = Vector3.Max(value1: Vector3.Max(value1: (low - origin), value2: (origin - high)), value2: Vector3.Zero);
@@ -204,7 +199,7 @@ public sealed partial class SdfMeshIrradiance {
         bool Meets(Vector3 low, Vector3 high);
     }
     private readonly record struct BoxRegion(Vector3 Low, Vector3 High) : IChangeRegion {
-        public bool Meets(Vector3 low, Vector3 high) => Overlaps(high: high, low: low, otherHigh: High, otherLow: Low);
+        public bool Meets(Vector3 low, Vector3 high) => SdfBoundAlgebra.BoxesMeet(high: high, low: low, otherHigh: High, otherLow: Low);
     }
     // A segment from a point along a unit direction, given by its reciprocal, for a length.
     private readonly record struct SegmentRegion(Vector3 From, Vector3 Inverse, float Length, Vector3 Grow) : IChangeRegion {

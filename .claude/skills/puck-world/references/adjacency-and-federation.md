@@ -352,17 +352,39 @@ the issuer root whose players it admits
 - The door is `WorldTransferEscrow.Admit`. Reserve, commit, abort, acknowledge
   and status take a `caller`; a new ingress passes one or is refused in a closed
   group. `TryReland`, `RedoLease` and `RedoTombstone` redo recorded decisions
-  (`WorldTransferAdmission.Recorded`) and are the only paths that skip it.
-- Guest shape: `WorldTransferBoundary.GuestReservationRefusal` (human seats, no
-  companion, an untitled incarnation minted in the guest's own session) and
-  `GuestCommitRefusal` (a `Spawn` arrival carrying no registers, continuum,
-  companion or drive reference). A new carried field on a reservation or commit
-  member is added to the matching check.
+  (`WorldTransferAdmission.Recorded`) and are the only paths that skip it. Each
+  record says whether a guest's session wrote it (`WorldCrossingArrival.Guest`,
+  and the same member on the lease and tombstone records); the escrow keeps that
+  mark per source and checkpoints it (`WorldTransferEscrowCheckpoint.Guests`),
+  and nothing after the door asks the boundary whether a source is a guest.
+- A federation connection gets a credential in a closed group only as a guest
+  (`WorldTransferBoundary.CredentialRefusal`, at the handshake in
+  `WorldPeerHost`), so a door that reads the connection's namespace reads a
+  guest's.
+- Guest shape: `WorldTransferBoundary.GuestReservationRefusal` (seats a person
+  holds, live or idle and never a producer's, no companion, an untitled
+  incarnation minted in the guest's own session) and `GuestCommitRefusal` (a
+  `Spawn` arrival carrying no arrival turn, registers, continuum, companion or
+  drive reference). Both also shape what they admit: the world's own border and
+  body index, and the identity `GuestIdentity` leaves (the vouched subject as
+  its id, no speeds, facts or records). A new carried field on a reservation or
+  commit member is refused or replaced in the matching function.
+- Guest budgets: `RowRefusal` bounds a guest session by the boundary's
+  `GuestKeysPerSession` and all guests by `GuestKeys`, and bounds everyone else
+  without counting a guest's rows. A guest's status or commit for a key that
+  holds no row answers `Missing` and writes no row or tombstone.
 - A guest's session holds rows only while it holds a lease or a landed
   traveler (`WorldTransferEscrow.ReclaimGuest`). A world that holds nothing of a
   session answers `WorldTransferStatus.Ended` to status and commit and
   `WorldFederationRefusal.SessionEnded` to a traveler observation, and writes
   nothing.
+- A traveler's body retired where it stands (`RetireDepartedPeer`: grace ran
+  out, or a disconnect with none) is retired at every world of the host that
+  forwards to it: `IWorldTransferForwarder.RetireTraveler` queues it, and the
+  host loop runs `RetireForwardedTraveler`, the same retirement an accepted
+  leave's answer runs. Park and resume follow a traveler that walked on
+  (`SetTravelerPresence`), so its grace runs where its body is. Both are queued
+  under the calling authority's gate and applied in `DrainPendingTransfers`.
 - A recovery point is captured as a baseline
   (`WorldReleaseRewindBoundary.Baseline`). Restoring one ends every traveler
   minted outside the group inside `WorldPersistence.EndRewoundGuests`, so a

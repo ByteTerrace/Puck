@@ -9,8 +9,8 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// THE LAW: every way of authoring a placement's response facet wrong is refused BY NAME, and the one well-formed
 /// spelling validates. An unknown target creation, an unknown condition field, and a malformed comparison each
-/// refuse; a target creation carrying timeline frames refuses; the facet composes with an attachment and refuses
-/// inhabit/faceSources.
+/// refuse; a row that can show a creation carrying timeline frames refuses a mirror; the facet composes with an
+/// attachment and refuses inhabit/faceSources.
 /// <para>Each arm is a denial paired with a control differing in exactly one authored field.</para>
 /// </summary>
 public sealed class PlacementResponseValidationLawTests {
@@ -192,26 +192,28 @@ public sealed class PlacementResponseValidationLawTests {
         );
         Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
-    /// <summary>DENIAL: a response entry targeting an ANIMATED creation (timeline frames) — a response only ever
-    /// swaps between static creations. CONTROL: the static target.</summary>
+    /// <summary>DENIAL: a row that can show an ANIMATED creation (timeline frames) carrying a mirror, which only a static
+    /// stamp carries. CONTROL: the animated target on a row without a mirror, and the mirror over static targets.</summary>
     [Fact]
-    public void EntryPrototypeMustBeStatic() {
+    public void AnimatedEntryRefusesStaticOnlyFacets() {
         var document = Fixtures.BuildDocument();
-        var animated = (document with {
+        var mirror = new WorldPlacementMirror(Normal: new DocumentVector3(value: Vector3.UnitX), Offset: 0f);
+        WorldDefinition Animated(WorldPlacement placement) => (document with {
             StateRaw = FieldsSection(),
             CreationsRaw = [Creation(id: BaseCreation), Creation(
                 animated: true,
                 id: TargetCreation
             )],
-            PlacementRowsRaw = [WellFormed()],
+            PlacementRowsRaw = [placement],
         });
 
         Laws.Refuses(
-            definition: animated,
+            definition: Animated(placement: (WellFormed() with { Mirror = mirror })),
             locally: true,
-            needle: "carries timeline frames"
+            needle: "carries no distribution or mirror"
         );
-        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: Animated(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: (WellFormed() with { Mirror = mirror })));
     }
     /// <summary>A response preserves an attachment, while population looks and face sources retain their own
     /// prototype ownership.</summary>

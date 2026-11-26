@@ -503,6 +503,13 @@ public sealed class WorldPeerHost : IDisposable {
                         refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(false);
                     return;
                 }
+                // A closed rewind group gives a credential to a guest's session alone, so no door behind this one ever
+                // decides for a network identity by a namespace that could spell a world of the group.
+                if (m_server.TransferBoundary?.CredentialRefusal(identity: identityProof) is { } closedGroupRefusal) {
+                    await WriteFederationRefusal(ct: handshakeCt, detail: closedGroupRefusal,
+                        refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(false);
+                    return;
+                }
                 var federationAuthority = identityProof.Authority;
                 var currentProof = identityProof;
                 var hadArrivalAdmission = WorldAdmissionDoor.AdmitsAnyArrival(verifiedPolicy, federationAuthority);
@@ -513,7 +520,7 @@ public sealed class WorldPeerHost : IDisposable {
                     var latest = Volatile.Read(ref currentProof);
                     if (latest.TrustIsCurrent?.Invoke() != false) { return latest; }
                     var next = await m_authenticator.VerifyAsync(boundChallenge, federationProof, token).ConfigureAwait(false);
-                    if (next?.Authority != federationAuthority) { return null; }
+                    if ((next?.Authority != federationAuthority) || (m_server.TransferBoundary?.CredentialRefusal(identity: next) is not null)) { return null; }
                     Volatile.Write(ref currentProof, next);
                     return next;
                 }

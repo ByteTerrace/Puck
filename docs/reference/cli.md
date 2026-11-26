@@ -3241,7 +3241,10 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   without the key row and runs it with an issuer (`--issuer-config-file`, a fresh root and one `puck.accounts`
   account), and the measured World signs in through it with `--authentication-config-file` and holds no key the
   document pins, as a hosted world's player does. `--remote <ip:port>` connects to an authority already listening,
-  signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
+  signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). The measured World
+  expects that authority to prove the namespace its own `--world` document declares; a World run by hand against an
+  authority whose namespace its document does not declare names it with `Puck.World`'s `--connect-authority <namespace>`.
+  A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
   are `attached`. `--seats <n>` plays the route on that many seats of one client (`world.benchmark run ... seats <n>`).
   `--jitter-ms <n>` with `--remote` runs every peer stream of the measured World, and of a local authority, on a seeded
   delivery schedule (`Puck.World`'s `--peer-jitter-ms` and `--peer-jitter-seed`): messages held up to `n` ms, bursts
@@ -3883,8 +3886,8 @@ of each sample is a fresh process, so a window reads the first crossing after
 boot:
 
 ```sh
-puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --backend directx
-puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --headless
+puck bench frames --plan worlds/debug/sweep.json --stop route-blends-display --window --backend directx
+puck bench frames --plan worlds/debug/sweep.json --stop route-blends-display --window --headless
 ```
 
 `--backend`, `--width` and `--height` select the renderer and window (2560×1440

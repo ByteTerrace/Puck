@@ -131,6 +131,7 @@ public sealed class WorldRigidAssetLawTests {
 
         public int DynamicSlotCount => m_assets.SlotCount;
         public IReadOnlyList<int> MeshAssetSlots => m_assets.Slots;
+        public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_assets.TemplateRanges;
         public IReadOnlyList<SdfMeshInstance> MeshInstances => m_assets.Copies;
         public ISdfPickMap? PickMap => m_picks.Snapshot(pool: []);
 

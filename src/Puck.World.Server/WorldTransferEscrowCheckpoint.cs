@@ -22,6 +22,9 @@ namespace Puck.World.Server;
 /// and every row of a source outside them, inside the restore, so each reader of the same bytes restores the same
 /// world. A live capture never sets it; only a recovery point's capture does
 /// (<see cref="WorldReleaseRewindBoundary.Baseline"/>).</param>
+/// <param name="Guests">The source namespaces the door admitted as guests' sessions of a closed rewind group and that
+/// still hold a row, in ordinal order. The restored ledger drops a session's rows when it holds nothing live by this
+/// mark, whether or not the world that restores it has a boundary.</param>
 public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
     IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
@@ -33,8 +36,11 @@ public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<(WorldTransferKey Key, bool Committed, bool Durable)> SpentKeys,
     IReadOnlyList<(string SourceAuthority, ulong Floor)> Floors,
     IReadOnlyList<WorldCrossingRecord>? Custody = null,
-    IReadOnlyList<string>? RewindBaseline = null
+    IReadOnlyList<string>? RewindBaseline = null,
+    IReadOnlyList<string>? Guests = null
 ) {
+    /// <summary>Gets the source namespaces admitted as guests' sessions that still hold a row.</summary>
+    public IReadOnlyList<string> Guests { get; init; } = (Guests ?? []);
     /// <summary>Gets every custody record the authority folded, in fold order.</summary>
     public IReadOnlyList<WorldCrossingRecord> Custody { get; init; } = (Custody ?? []);
     /// <summary>Gets the authority namespaces of the closed rewind group this image is a recovery point of, or empty

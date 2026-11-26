@@ -44,9 +44,11 @@ when a world is restaged into an existing directory; no other world's files or
 ## Observation delivery and session query disclosure
 
 `WorldOutputHub` delivers borrowed snapshots synchronously. The federation projection sink retains at most
-`WorldFederationProjectionSink.PendingDeliveryLimit` (eight) encoded records per subscriber. Overflow detaches
-with `world.observation.backpressure`; the peer reopens for a fresh primer because definition and route records
-cannot be recovered from the latest snapshot alone. Session queries use `WorldSessionSink.AllowsQuery`, the
+`WorldFederationProjectionSink.PendingDeliveryLimit` encoded records per subscriber. A subscriber that overflows
+is sent nothing while its wire drains, then catches up behind a cut (a new generation, the whole document and a
+primer) once the queue is at `ResumeDeliveryLimit`, because definition and route records cannot be recovered from
+the latest snapshot alone. One that has not drained within `StalledDeliveryLimit` deliveries detaches with
+`world.observation.backpressure` and reopens. Session queries use `WorldSessionSink.AllowsQuery`, the
 same tier and observer-disclosure decision as deliveries: Frames reads nothing, Presentation reads only
 recipient-filtered state observations, and authoritative readbacks require a full Replica. Test these with
 `SessionObservationLawTests` and `WorldProjectionBackpressureLawTests`.

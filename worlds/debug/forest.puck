@@ -42,7 +42,7 @@ prototypes {
     seed: 7291,
     amplitude: 0.12,
     frequency: 1.6,
-    surface: groundSurface("#6C8A33")
+    surface: groundSurface("#58772E")
   )
   sceneryPatch(
     id: "forest-west-bank",
@@ -51,7 +51,7 @@ prototypes {
     seed: 4821,
     amplitude: 0.035,
     frequency: 0.7,
-    surface: groundSurface("#6C8A33")
+    surface: groundSurface("#58772E")
   )
   sceneryPatch(
     id: "forest-east-bank",
@@ -60,7 +60,7 @@ prototypes {
     seed: 9182,
     amplitude: 0.035,
     frequency: 0.8,
-    surface: groundSurface("#6C8A33")
+    surface: groundSurface("#58772E")
   )
   for (tile, i) in forestGrassTiles {
     windMeadowTile(

@@ -2104,7 +2104,9 @@ step 10): the valley's north-west wall cannot reach the 1.56 m spacing its
 relief declares inside one lattice's fine-sample budget
 (`SdfSampledLattice.MaxFineSamples`), and splitting the sector across lattices
 is the fix at the cause, not a larger budget (the terrain pass's report on what
-set a sector's cell). It needs nothing below. The second is the floor
+set a sector's cell). Its core is built (`WorldPlacementStamper.SourceTilesOf`,
+[the terrain pass's step 2](terrain-pass.md#what-the-bake-needs) names what
+remains). It needs nothing below. The second is the floor
 (step 5), which needs only step 3, built.
 
 A step's number is its name, which other pages cite, and it stays when the

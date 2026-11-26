@@ -995,6 +995,7 @@ public static class WorldBootComposition {
             if (sp.GetService<WorldBootInputs>() is { ConnectEndpoint: { } remoteEndpoint } bootInputs) {
                 host.JoinRemote(
                     authority: remoteEndpoint,
+                    authorityNamespace: bootInputs.ConnectAuthority,
                     documentPath: bootOrigin.SourcePath,
                     listens: (bootInputs.HostSettings.Listen is not null)
                 );

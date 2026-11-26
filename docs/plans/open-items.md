@@ -554,57 +554,53 @@ measured.**
     unverified; then one built CLI
     ([the authoring loop](iteration/authoring-loop.md#build-order)'s step 9),
     which ends the stale global tool.
-13. [high] [Lighting and GI](#lighting-and-gi): the probes read wrong surface
-    materials in some boots, which tints the closed gallery hall orange and
-    olive and darkens its bounce. The gallery is the engine's self-test, so
-    every other look reading waits on this diagnosis.
 
 **Then, each chosen for what it stresses.**
 
-14. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
+13. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
     town, a moon on another authority, and live authoring on the hosted
     world.
-15. [high] [The visual bar](#the-visual-bar)'s engine gaps, each ahead of any
+14. [high] [The visual bar](#the-visual-bar)'s engine gaps, each ahead of any
     look lane that would sculpt around it: the water's gaps 5, 6 and 9
     ([water](#water)), the terrain pass's steps
     ([the valley's terrain](#the-valleys-terrain)), the contour rule and the
     moving cutter ([bake detail](#bake-detail)). They compete for the same
     rendering lanes and run in the order written here (the lead's decision).
-16. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
+15. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
     shimmers on an 8-frame cycle. The fix is the reconstruction's
     ([rendering P15](rendering.md#p15--temporal-reconstruction)): a jitter
     period that follows the render scale and history clipped by variance.
-17. [high] [Bake proportional to change](#bake-proportional-to-change): the
+16. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
     source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
-18. [high, before the hosted world admits players] [Security review](#security-review):
+17. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
     [rule faults](rule-faults.md) lists as not built.
-19. [high] [Edit to running](#edit-to-running-hot-reload-and-boot):
+18. [high] [Edit to running](#edit-to-running-hot-reload-and-boot):
     [the authoring loop](iteration/authoring-loop.md#build-order)'s step 5.
-20. [high] [Residency and streaming](#residency-and-streaming):
+19. [high] [Residency and streaming](#residency-and-streaming):
     [the streaming plan](streaming-and-memory.md#the-build-order)'s next step,
     and the mesh region's growth without a second buffer on Vulkan.
-21. [high] [Lighting and GI](#lighting-and-gi), after item 13: emitters
+20. [high] [Lighting and GI](#lighting-and-gi): emitters
     integrated over their solid angle, then what the GPU trace still owes
     under a moving sun.
-22. [high] [Refactoring campaign](#refactoring-campaign) and
+21. [high] [Refactoring campaign](#refactoring-campaign) and
     [code size](code-size.md#the-build-order): the generator families, as
     parallel lanes beside everything above.
-23. [high] [The benchmark](#the-benchmark): a route against a remote
+22. [high] [The benchmark](#the-benchmark): a route against a remote
     authority and a four-seat route, without which neither milestone has a
     verdict; then stage 4's remainder.
-24. [high] [Transfers, federation and server](#transfers-federation-and-server),
+23. [high] [Transfers, federation and server](#transfers-federation-and-server),
     [dense landscapes](#dense-landscapes), [transmission](transmission.md)
     and [test runner and replay](#test-runner-and-replay) (the body's write
     door from step D5), each at its plan's next step.
-25. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh),
+24. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh),
     [certified field contact](#certified-field-contact),
     [language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard).
-26. Then, by ordinary priority:
+25. Then, by ordinary priority:
     [the port](#port-the-experimental-worlds-missing-features),
     [rigid bodies](#rigid-bodies-and-physics),
     [MCP](#mcp-and-the-operator-attachment),
@@ -1128,11 +1124,36 @@ open.
   - What a hosted world's rules write on a guest's identity copy ends with the
     guest's body. Player progress that outlives a visit needs a record the
     group owns and restores with itself.
-  - The law covers one entry row. A restore taken after a guest walked from one
-    world of the group to another rests on each row ending what it holds by
-    the traveler's origin, which no law runs. Check: the probe hops the guest
-    from `alpha` to `beta` before its capture and both restored rows hold no
-    guest and no forwarding route.
+  - The law walks a guest from `alpha` to `beta` and ends it there when its
+    grace runs out, but takes its capture before the walk. A restore taken
+    after a guest walked on rests on each row ending what it holds by the
+    traveler's origin, which no law runs. Check: the probe hops the guest
+    before its capture and both restored rows hold no guest and no forwarding
+    route.
+  - A world that retires a traveler's body tells its host, which drops the
+    routes and credentials of the worlds that forwarded to it on its next loop
+    (`IWorldTransferForwarder.RetireTraveler`). A process that dies between
+    the two leaves the forwarding world with a route to a traveler its
+    neighbour no longer holds, and the player's client is answered
+    `RouteUnknown` there until the next restore. Check: when a recovered route
+    binds its colocated destination (`WorldInstanceHost.ResolveForwardedRecoveries`),
+    retire it if the destination holds no credential for the traveler, and
+    show a crash between the retirement and the drain recovers to no route.
+  - The same word stops at a socket. A traveler retired by a world in another
+    process is retired upstream only when an accepted leave's answer comes
+    back, and a player's absence reaches a remote hop only as the streams to
+    it ending. Closed groups run in one process, so this is an open-world
+    gap. Check: a forwarding world retires its route when its next hop
+    answers that it holds no credential for the traveler.
+  - Two parts of the guest design are covered by their predicate and not by a
+    run. A federation handshake by a vouched identity that signed for no
+    session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),
+    and the law asks the predicate, since the engine's own client always signs
+    a session. A seat whose traveler ended while its departure is still in
+    doubt is returned by that departure alone (`WorldInstanceHost.ReturnSeatHome`),
+    and the law's restore finds the departure already settled. Check: a
+    session-less issued claim against a closed group's door, and a restore
+    taken between a client's commit and its settlement.
   - A crash recovery redoes arrivals from the crossing log and no retirement
     the tick made between them. Two arrivals in one journal tail, with the first
     traveler retired in between, redo as two bodies, and a second arrival that
@@ -2548,39 +2569,6 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
-- [high] The probes read wrong surface materials, so a closed room takes
-  coloured light it does not hold. In the gallery hall at a pinned noon, with
-  the blinds down and the cascades shadowing every interior surface, one boot's
-  probes under the `ellipsoid` exhibit (`world.probe 35.55 0.85 16 -0.9 -0.4 0`)
-  published an orange bounce of about (121, 42, 18) while their neighbours
-  stayed near neutral, the blinds took an olive bounce, and the volume's whole
-  light ran near a tenth of another boot's; that boot's beauty showed an
-  orange blob in the exhibit and olive exhibits and blinds until well past a
-  minute. A second boot of the same tree published neutral cubes about ten
-  times brighter, while its CPU reference (`world.probe`'s `reference-*`
-  fields, which name the face the relights disagree on most and the material
-  the reference's hits there weigh most in) read the floor under those probes
-  as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
-  bounce. Turning `world.rays off` and resetting the layout (`world.indirect
-  medium`, then `high`) gave a neutral hall where the same reset with rays on
-  gave the orange and olive tints again. The tint is the device's: on a cold
-  D3D12 boot whose restores write the ids a mesh carries
-  (`SdfMesh.Restore.cs`), settled, the probe
-  at `(35.5, 1.5, 15.5)` published `(36.91, 10.65, 1.73)` against the CPU
-  reference's `(243.44, 216.28, 207.14)` (`reference-local-error=0.99994`,
-  `reference-visibility-errors=0`, the reference's face material 3058), and the
-  whole hall, grey exhibits included, read deep orange while `world.indirect
-  off` showed them grey on a peach floor. Unverified lead: a hardware-ray hit
-  takes its triangle from the bottom structure (`TryTakeStructures`, bottoms
-  keyed by geometry and shared through `TraceBottoms`), which keeps the
-  positions it was built from, while its material is read from the mesh
-  region at the instance's placement (`sdfProbeSurface`), so a trace mesh whose
-  region words were taken back or unmapped (a kept floor no list names,
-  `SdfMeshRegionStore.Cover`) still hits on the device and reads zero words,
-  program material 0. Next: on a cold boot, compare `world.rays off` against
-  on for that probe (published against reference), and check whether every
-  instance a published top level names still stands in the region
-  (`SdfMeshRegionStore.StandsUnderGate`) for as long as the top is used.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
@@ -5102,17 +5090,17 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] On a remote authority (`puck benchmark --route debug --remote local
-  --headless`, which now arrives in all seven chapters at `Presentation`
-  disclosure over `worlds/debug`'s authored `authorityNamespace` and
-  `visitorAdmissionRow`), an observer that falls eight records behind is
-  detached and reconnects (`WorldFederationProjectionSink.PendingDeliveryLimit`).
-  Each detach withdraws the mirror to `Undisclosed` until the projection
-  re-arrives and re-admits the traveller's input profile, dropping batches that
-  named the prior input epoch.
-- [medium] `--connect` resolves the expected remote `authorityNamespace` from
-  the booted document (`WorldInstanceHost`'s remote destination resolution)
-  rather than taking the remote subject as a CLI run input beside the endpoint.
+- [low] An observer whose wire falls a full queue behind is no longer detached:
+  it is sent nothing while its wire drains, and the next delivery cuts its
+  stream to a new generation and sends the whole projection and a primer behind
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
+  left. The catch-up rides a delivery, so on a paused authority, which makes
+  none, a drained observer keeps what it held until the world steps; and the
+  receiver's side of a catch-up has been read only as records on the wire.
+  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
+  jitter that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer is
+  primed when its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it
@@ -6022,6 +6010,13 @@ screen and see the change hot reload.
   [decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
   designs that as an `Operate` grant the world gives, in place of the console's
   principal kind.
+- The owner's direction for the gallery's display stations: a player molds
+  their own shape on a display with basic operations. A display's selection
+  names an exhibit by its catalog index; an operation is a cell beside it keyed
+  by the display (a scale, a second exhibit to blend or subtract and its
+  amount), read by a creation of the display's own that its turntable shows
+  through one more response entry, and the console gains a reach for each
+  operation ([the gallery's displays](../../worlds/debug/gallery.md#molding-a-shape-later)).
 
 ### Media and capture
 

@@ -119,25 +119,18 @@ let shellKit = map(
 )
 let shellStructure = [shellBrushed((structurePalette[0] with { color: lookTeal }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
 
-// A level's cream pads: one under each exhibit line on it, from 1.05 m behind the plinths to 1.45 m before their
-// consoles, as a rounded rectangle painted into the floor over its tiles. A paint on a static creation is placed in the
-// world's frame.
-function shellPad(line, y) = {
+// A level's cream pads: one under each display on it, reaching `lookPadReach` past the plinth's sides and shifted
+// toward its console so the floor a player stands on to work it is the pad's too, as a rounded rectangle painted into
+// the floor over its tiles. A paint on a static creation is placed in the world's frame.
+function shellPad(display) = {
   type: "Prism"
   profile { kind: "RoundedRectangle", cornerRadius: lookPadCorner }
-  position: galleryWorld(
-    (line.x + ((line.pitch * (line.count - 1)) / 2)),
-    y,
-    (line.z + ((line.yaw == 0) ? -0.2 : 0.2))
-  )
+  position: displayWorld(display, [0, 0, ((lookPadHalfDepth - ((displayScale * plinthCapHalf[1]) + lookPadReach)) / displayScale)])
   rotation [0.7071, 0, 0, 0.7071]
-  scale [(((line.pitch * (line.count - 1)) / 2) + lookPadReach), lookPadHalfDepth, 0.2]
+  scale [((displayScale * plinthCapHalf[0]) + lookPadReach), lookPadHalfDepth, 0.2]
   color: lookPad
 }
-function shellPads(level) = flatMap(
-  filter(galleryRows, row => (row.level == level)),
-  row => map(row.lines, line => shellPad(line, galleryFloor[level]))
-)
+function shellPads(level) = map(filter(galleryDisplays, display => (display.level == level)), display => shellPad(display))
 
 // The window bays, one row a bay: its level, the face it stands in and its centre along that face. A face's wall leaves
 // each its opening, and a kit bay stands in it.
@@ -246,7 +239,7 @@ template shellWalls(level) {
       z1: galleryNorth,
       openings: concat(
         map(filter(shellFaceBays(level, "east"), at => (at < naveSouth)), at => bayOpening(at)),
-        map(tallBayZs, at => tallOpening(level, at)),
+        map(((level < 2) ? tallBayZs : []), at => tallOpening(level, at)),
         map(filter(shellFaceBays(level, "east"), at => (at > naveNorth)), at => bayOpening(at))
       ),
       slot: skin.slot
@@ -319,10 +312,12 @@ function shellFloorPieces(level) = concat(
     { id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }
   ])
 )
-// The roof: the same plan without the stairs' well and the terrace, the nave closed over between three skylights.
+// The roof: the same plan without the stairs' well and the terrace, the nave closed over between three skylights, each
+// 2.5 m in from the balcony edges.
 let skylights = [{ x0: 16, x1: 26 }, { x0: 30, x1: 40 }, { x0: 44, x1: 54 }]
-let skylightSouth = 10.5
-let skylightNorth = 17.5
+let skylightSouth = (naveSouth + 2.5)
+let skylightNorth = (naveNorth - 2.5)
+let skylightHalf = ((skylightNorth - skylightSouth) / 2)
 let shellRoofPieces = concat(
   [
     { id: "north", x0: galleryWall, x1: galleryEast, z0: naveNorth, z1: galleryNorth }
@@ -347,8 +342,8 @@ function shellStrips(wing) = concat(
   [
     { id: "south-west", x0: 1, x1: (stairWest - 0.6), z0: 4.4, z1: 4.8 }
     { id: "south-east", x0: (wingWest + 0.6), x1: 58.5, z0: 4.4, z1: 4.8 }
-    { id: "north", x0: 1, x1: 58.5, z0: 23.2, z1: 23.6 }
-    { id: "bridge", x0: 5.8, x1: 6.2, z0: 10, z1: 18 }
+    { id: "north", x0: 1, x1: 58.5, z0: (northAisleMid - 0.2), z1: (northAisleMid + 0.2) }
+    { id: "bridge", x0: 5.8, x1: 6.2, z0: (naveSouth + 1), z1: (naveNorth - 1) }
     { id: "landing", x0: 17, x1: 20.6, z0: 3, z1: 3.4 }
   ],
   ((wing == 1) ? [{ id: "wing", x0: (wingWest + 0.6), x1: 58.5, z0: -2.2, z1: -1.8 }] : [])
@@ -514,7 +509,7 @@ template shellTower() {
 // The cream bands of the outside: a thick rounded band round the building at each upper floor and a deeper one as the
 // roof's parapet, each a strip standing proud of a wall face. A strip names the face it lies on (the fixed coordinate
 // and the side the outside is on) and its run along it.
-// The tall bays pass through levels 1 and 3, so the east wall's bands there stop at the bays' outer jambs.
+// The tall bays pass through level 1, so the east wall's band there stops at the bays' outer jambs.
 let tallBaysSouth = ((tallBayZs[0] - (tallBayWidth / 2)) - 0.6)
 let tallBaysNorth = ((tallBayZs[2] + (tallBayWidth / 2)) + 0.6)
 let shellRings = concat(
@@ -522,10 +517,10 @@ let shellRings = concat(
     [
       { id: $"north-{k}", axis: "x", at: galleryDepth, out: 1, a0: 0, a1: galleryWidth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"west-{k}", axis: "z", at: 0, out: -1, a0: 0, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
-      { id: $"east-{k}", axis: "z", at: galleryWidth, out: 1, a0: ((k >= wingLevel) ? wingSouth : 0), a1: (((k % 2) == 1) ? tallBaysSouth : galleryDepth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
+      { id: $"east-{k}", axis: "z", at: galleryWidth, out: 1, a0: ((k >= wingLevel) ? wingSouth : 0), a1: ((k == 1) ? tallBaysSouth : galleryDepth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"south-{k}", axis: "x", at: 0, out: -1, a0: 0, a1: ((k >= wingLevel) ? wingWest : galleryWidth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
     ],
-    (((k % 2) == 1) ? [
+    ((k == 1) ? [
       { id: $"east-north-{k}", axis: "z", at: galleryWidth, out: 1, a0: tallBaysNorth, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
     ] : []),
     ((k >= wingLevel) ? [
@@ -599,11 +594,7 @@ let shellRails = concat(
       { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180, short: 0 }
       { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0, short: 0 }
     ]),
-    [
-      { id: $"rail-bridge-{k}-0", x: (naveWest - 0.08), y: galleryFloor[k], z: 11, yaw: 270, short: 0 }
-      { id: $"rail-bridge-{k}-1", x: (naveWest - 0.08), y: galleryFloor[k], z: 15, yaw: 270, short: 0 }
-      { id: $"rail-bridge-{k}-2", x: (naveWest - 0.08), y: galleryFloor[k], z: 18, yaw: 270, short: 1 }
-    ]
+    map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - 0.08), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
   [
     { id: "rail-fall-south", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] - fallHole) - 0.08), yaw: 180, short: 1 }
@@ -617,27 +608,31 @@ let shellRails = concat(
 // The piers of the nave's end wall stand between its tall bays and either side of them.
 let naveEndSpan = ((tallBayZs[1] - tallBayZs[0]) / 2)
 let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * naveEndSpan) * i)))
-let shellPlanters = [
-  { x: 58.75, y: 0, z: 12.45, yaw: 90 }, { x: 58.75, y: 0, z: 15.55, yaw: 90 }
-  { x: 57.4, y: 0, z: 9.75, yaw: 0 }, { x: 57.4, y: 0, z: 18.25, yaw: 0 }
-  { x: 44, y: 0, z: 9.6, yaw: 0 }, { x: 44, y: 0, z: 18.4, yaw: 0 }
-  { x: 22.2, y: 0, z: 7.4, yaw: 0 }, { x: 29, y: 0, z: 7.4, yaw: 0 }
-  { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: 1.2, y: 0, z: 26.6, yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
-  { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: 13.9, yaw: 90 }, { x: 24.5, y: 1, z: 7.9, yaw: 0 }, { x: 58.9, y: 1, z: 1.4, yaw: 90 }
-  { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: 13.9, yaw: 90 }, { x: 22, y: 2, z: 7.9, yaw: 0 }, { x: 40, y: 2, z: 7.9, yaw: 0 }, { x: 58, y: 2, z: 7.9, yaw: 0 }
-  { x: 2, y: 3, z: 1, yaw: 0 }, { x: 6, y: 3, z: 1, yaw: 0 }, { x: 10, y: 3, z: 1, yaw: 0 }, { x: 0.9, y: 3, z: 4.6, yaw: 90 }
-  { x: 10.5, y: 3, z: 13.9, yaw: 90 }, { x: 24, y: 3, z: 7.9, yaw: 0 }, { x: 56, y: 3, z: 7.9, yaw: 0 }
-]
+// The planters: either side of each pier between the end wall's bays and at the nave's corners, along its edges, and
+// about the aisles, the bridge and the galleries.
+let shellPlanters = concat(
+  map(range(0, 2), i => { x: 58.75, y: 0, z: ((tallBayZs[i] + tallBayZs[(i + 1)]) / 2), yaw: 90 }),
+  [
+    { x: 57.4, y: 0, z: (naveSouth + 0.75), yaw: 0 }, { x: 57.4, y: 0, z: (naveNorth - 0.75), yaw: 0 }
+    { x: 42, y: 0, z: (naveSouth + 0.6), yaw: 0 }, { x: 42, y: 0, z: (naveNorth - 0.6), yaw: 0 }
+    { x: 22.2, y: 0, z: 7.4, yaw: 0 }, { x: 29, y: 0, z: 7.4, yaw: 0 }
+    { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: 1.2, y: 0, z: (galleryNorth - 1.1), yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
+    { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: (naveMid - 0.1), yaw: 90 }, { x: 24.5, y: 1, z: 7.9, yaw: 0 }, { x: 58.9, y: 1, z: 1.4, yaw: 90 }
+    { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: (naveMid - 0.1), yaw: 90 }, { x: 22, y: 2, z: 7.9, yaw: 0 }, { x: 40, y: 2, z: 7.9, yaw: 0 }, { x: 58, y: 2, z: 7.9, yaw: 0 }
+    { x: 2, y: 3, z: 1, yaw: 0 }, { x: 6, y: 3, z: 1, yaw: 0 }, { x: 10, y: 3, z: 1, yaw: 0 }, { x: 0.9, y: 3, z: 4.6, yaw: 90 }
+    { x: 10.5, y: 3, z: (naveMid - 0.1), yaw: 90 }, { x: 24, y: 3, z: 7.9, yaw: 0 }, { x: 56, y: 3, z: 7.9, yaw: 0 }
+  ]
+)
 let shellBenches = [
-  { x: 37.5, y: 0, z: 6.6, yaw: 0 }, { x: 50, y: 0, z: 3.2, yaw: 0 }, { x: 6, y: 0, z: 5, yaw: 0 }, { x: 31, y: 0, z: 21.6, yaw: 0 }
-  { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: 14, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
-  { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: 14, yaw: 90 }
-  { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: 14, yaw: 90 }, { x: 38, y: 3, z: 6.4, yaw: 0 }
+  { x: 37.5, y: 0, z: 6.6, yaw: 0 }, { x: 50, y: 0, z: 3.2, yaw: 0 }, { x: 6, y: 0, z: 5, yaw: 0 }, { x: 31, y: 0, z: (northAisleMid - 1.8), yaw: 0 }
+  { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
+  { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
+  { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: 6.4, yaw: 0 }
 ]
-// A banner hangs on the nave's side of every third pier of level 0's arcades, and four large ones on the blank wall
+// A banner hangs on the nave's side of every other pier of level 0's arcades, and four large ones on the blank wall
 // behind the forecourt's arches.
 let shellBanners = concat(
-  flatMap([16, 28, 40, 52], x => [
+  flatMap(filter(arcadeXs, x => ((((x - naveWest) / arcadePitch) % 2) == 1)), x => [
     { id: $"banner-south-{x}", x: x, y: 3.5, z: (arcadeSouth + 0.42), yaw: 180, large: 0 }
     { id: $"banner-north-{x}", x: x, y: 3.5, z: (arcadeNorth - 0.42), yaw: 0, large: 0 }
   ]),
@@ -722,18 +717,20 @@ template shellPrototypes() {
       }
     }
   }
-  // A skylight: one pane in a teal frame, a creation of its own so the pane bakes at its own thickness.
+  // A skylight: one pane in a teal frame, ribbed across and along, a creation of its own so the pane bakes at its own
+  // thickness.
   prototype "gallery-skylight" {
     document {
       name: "gallery-skylight"
       schema: "puck.creation.v1"
       palette: shellPlain
-      boundsBox(label: "pane", x0: -5.1, x1: 5.1, y0: 0.04, y1: 0.16, z0: -3.6, z1: 3.6, slot: shellGlass)
-      boundsBox(label: "frame-south", x0: -5.2, x1: 5.2, y0: 0, y1: 0.3, z0: -3.7, z1: -3.5, slot: shellTrim)
-      boundsBox(label: "frame-north", x0: -5.2, x1: 5.2, y0: 0, y1: 0.3, z0: 3.5, z1: 3.7, slot: shellTrim)
-      boundsBox(label: "frame-west", x0: -5.2, x1: -5, y0: 0, y1: 0.3, z0: -3.7, z1: 3.7, slot: shellTrim)
-      boundsBox(label: "frame-east", x0: 5, x1: 5.2, y0: 0, y1: 0.3, z0: -3.7, z1: 3.7, slot: shellTrim)
-      boundsBox(label: "frame-rib", x0: -0.08, x1: 0.08, y0: 0, y1: 0.26, z0: -3.6, z1: 3.6, slot: shellTrim)
+      boundsBox(label: "pane", x0: -5.1, x1: 5.1, y0: 0.04, y1: 0.16, z0: (0 - (skylightHalf + 0.1)), z1: (skylightHalf + 0.1), slot: shellGlass)
+      boundsBox(label: "frame-south", x0: -5.2, x1: 5.2, y0: 0, y1: 0.3, z0: (0 - (skylightHalf + 0.2)), z1: (0 - skylightHalf), slot: shellTrim)
+      boundsBox(label: "frame-north", x0: -5.2, x1: 5.2, y0: 0, y1: 0.3, z0: skylightHalf, z1: (skylightHalf + 0.2), slot: shellTrim)
+      boundsBox(label: "frame-west", x0: -5.2, x1: -5, y0: 0, y1: 0.3, z0: (0 - (skylightHalf + 0.2)), z1: (skylightHalf + 0.2), slot: shellTrim)
+      boundsBox(label: "frame-east", x0: 5, x1: 5.2, y0: 0, y1: 0.3, z0: (0 - (skylightHalf + 0.2)), z1: (skylightHalf + 0.2), slot: shellTrim)
+      boundsBox(label: "frame-rib", x0: -0.08, x1: 0.08, y0: 0, y1: 0.26, z0: (0 - (skylightHalf + 0.1)), z1: (skylightHalf + 0.1), slot: shellTrim)
+      boundsBox(label: "frame-spine", x0: -5, x1: 5, y0: 0, y1: 0.26, z0: -0.08, z1: 0.08, slot: shellTrim)
     }
   }
   prototype "gallery-stairs" {
@@ -775,7 +772,7 @@ template shellPrototypes() {
       name: "gallery-pier"
       schema: "puck.creation.v1"
       palette: shellStructure
-      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: 2)
+      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2))
     }
   }
   // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.
@@ -822,7 +819,7 @@ template shellPrototypes() {
       }
     }
   }
-  for k in [0, 2] {
+  for k in [0] {
     prototype $"gallery-fan-tall-{k}" {
       document {
         name: $"gallery-fan-tall-{k}"
@@ -954,7 +951,7 @@ template shellPlacements() {
       solid
     }
   }
-  for tier in [0, 2] {
+  for tier in [0] {
     for (z, n) in naveEndPiers {
       placement $"gallery-nave-pier-{tier}-{n}" {
         prototype: "gallery-nave-pier"
@@ -993,7 +990,7 @@ template shellPlacements() {
       yawDegrees: shellBayYaw(bay.face)
     }
   }
-  for tier in [0, 2] {
+  for tier in [0] {
     for (z, n) in tallBayZs {
       placement $"gallery-bay-tall-{tier}-{n}" {
         prototype: "gallery-bay-tall"

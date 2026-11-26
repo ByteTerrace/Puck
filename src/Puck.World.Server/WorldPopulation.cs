@@ -380,6 +380,10 @@ public sealed partial class WorldPopulation : IWorldInhabitants {
         m_dynamicContactTravel = new FixedQ4816[m_entries.Length];
         m_dynamicContactIncluded = new bool[m_entries.Length];
         m_stepBodies = new int[m_entries.Length];
+        m_curveOrder = new CurveOrderedIndex(capacity: m_entries.Length);
+        m_curveCellX = new long[m_entries.Length];
+        m_curveCellY = new long[m_entries.Length];
+        m_planBodies = new int[m_entries.Length];
         m_sleepQueries = new int[m_entries.Length];
         m_sleepSpheres = new FixedSweepSphere[m_entries.Length];
         m_sleepIndex = new FixedSweepGrid(capacity: m_entries.Length);

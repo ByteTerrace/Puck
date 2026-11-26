@@ -1,24 +1,27 @@
-// The shape gallery: every authorable signed-distance construct, one prototype an exhibit, each held 1.2 m over a
-// labelled plinth so it reads from every side, underside included. The debug world expands `galleryPrototypes()` inside
-// its `prototypes` block, `galleryPlacements()` inside its `placements` block and `galleryState()` (the motion rows'
-// console controls) inside its `state.world` block. The exhibits stand inside the gallery (gallery/gallery.puck), on
-// the lines its plan gives (gallery/layout.puck, gallery.md): the nave's two lines and the north aisle on level 0, and
-// the galleries round the nave's void above, each plinth's console facing its walkway:
+// The shape gallery: every authorable signed-distance construct, one prototype an exhibit, shown on interactive display
+// stations. A display is a large display plinth whose turntable shows one exhibit of its list at a time, the list one of
+// the gallery's groups (primitives, stretched, extruded, revolved, and so on); a player standing at its console steps
+// through the list with the context button, and the console's screen shows the list's neighbours, the exhibit's name
+// and what it shows. The debug world expands `galleryPrototypes()` inside its `prototypes` block,
+// `galleryPlacements()` inside its `placements` block and `galleryState()` (the displays' selections and screens and
+// the motion exhibits' console controls) inside its `state.world` block. The displays stand inside the gallery
+// (gallery/gallery.puck), where its plan puts them (gallery/layout.puck, gallery.md):
 //
-//   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
+//   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved, in the nave
 //   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
 //   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
 //            board game room fills its south gallery (gallery.md)
 //   level 3  form and surface: parameter forms, palette channels and wear, cel styles, glass
 //
-// A sign hangs over the start of each row naming the row, a map board in the lobby by the entrance lists the levels
-// and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
-// to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it (gallerySpawns says how she
-// stands there so the chase camera frames the exhibit), and the gallery.* commands
-// (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
-// the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
-// to. This file is a library: debug.puck and gallery/gallery.puck expand its templates and lets.
+// A sign hangs beside each display naming its group, a map board in the lobby by the entrance lists the levels and
+// groups, and a board over the lift door names each level. Each display has a spawn point before its console, named
+// after its turntable's placement, and each exhibit one at the same place named after it (gallerySpawns says how she
+// stands there so the chase camera frames the exhibit); the gallery.* commands (galleryCommands) walk to, show, frame,
+// inspect and flag exhibits through them. shapes.md beside this file holds the displays, the coverage table and the
+// console controls the motion exhibits answer to. This file is a library: debug.puck and gallery/gallery.puck expand
+// its templates and lets, and gallery/gallery.puck holds the displays' rules.
 import "gallery/layout"
+import "reach"
 import "../standard/styles"
 import "../standard/rig"
 import "../standard/architecture"
@@ -105,112 +108,166 @@ let galleryLevels = [
   { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
 ]
 
-// Every row, in walking order: its sign's title, its level, the lines its exhibits stand on in order (layout.puck's
-// `galleryLine`), where its sign hangs and the yaw the sign faces from, and what it shows.
-let galleryRows = [
+// The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
+// cells and the stem of its placements' names), its sign's title and what the group shows, its level, where it stands
+// in the building's frame and the yaw its console faces (layout.puck's display lines), and its exhibits in order.
+let galleryDisplays = [
   {
-    title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
-    lines [galleryLine(14.4, naveLineSouth, 3.4, 2, 180), galleryLine(28.6, naveLineSouth, 3.4, 8, 180)]
-    sign { x: 28.6, z: naveLineSouth, yaw: 90 }
+    id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
+    x: displayNaveXs[0], z: displayNaveSouth, yaw: 180
   }
   {
-    title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
-    lines [galleryLine(14.4, naveLineNorth, 3.4, 2, 0), galleryLine(28.6, naveLineNorth, linePitch, 10, 0)]
-    sign { x: 28.6, z: naveLineNorth, yaw: 90 }
+    id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
+    x: displayNaveXs[1], z: displayNaveSouth, yaw: 180
   }
   {
-    title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
-    lines [galleryLine(2.6, 24.2, 2.5, 11, 0)]
-    sign { x: 27.6, z: 24.2, yaw: 270 }
+    id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
+    x: displayNaveXs[0], z: displayNaveNorth, yaw: 0
   }
   {
-    title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
-    lines [galleryLine(34, 24.2, 4, 6, 0)]
-    sign { x: 34, z: 24.2, yaw: 90 }
+    id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
+    x: displayNaveXs[1], z: displayNaveNorth, yaw: 0
   }
   {
-    title: "SWEEPS AND FACETS", level: 1, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
-    lines [galleryLine(28, southOuter, linePitch, 7, 180), galleryLine(28, southInner, linePitch, 6, 0)]
-    sign { x: 28, z: ((southOuter + southInner) / 2), yaw: 90 }
+    id: "facets", title: "SWEEPS AND FACETS", level: 1, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
+    x: 32, z: displaySouth, yaw: 180
   }
   {
-    title: "BLENDS", level: 1, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
-    lines [galleryLine(14, northInner, linePitch, 14, 180)]
-    sign { x: 14, z: northInner, yaw: 90 }
+    id: "blends", title: "BLENDS", level: 1, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
+    x: 24, z: displayNorth, yaw: 0
   }
   {
-    title: "FOLDS", level: 1, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
-    lines [galleryLine(3, northOuter, linePitch, 16, 0)]
-    sign { x: 3, z: northOuter, yaw: 0 }
+    id: "folds", title: "FOLDS", level: 1, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
+    x: 40, z: displayNorth, yaw: 0
   }
   {
-    title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
-    lines [galleryLine(2.6, northOuter, linePitch, 11, 0)]
-    sign { x: 2.6, z: northOuter, yaw: 0 }
+    id: "motion", title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
+    x: 20, z: displayNorth, yaw: 0
   }
   {
-    title: "MOTION II", level: motionLevel, names: motionRowB, what: "moving paints, twist, bend, cells, IK"
-    lines [galleryLine(14, northInner, linePitch, 10, 180)]
-    sign { x: 14, z: northInner, yaw: 90 }
+    id: "motion2", title: "MOTION II", level: motionLevel, names: motionRowB, what: "moving paints, twist, bend, cells, IK"
+    x: 34, z: displayNorth, yaw: 0
   }
   {
-    title: "WARPS II", level: 2, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
-    lines [galleryLine(33.6, northOuter, linePitch, 9, 0)]
-    sign { x: 33.6, z: northOuter, yaw: 90 }
+    id: "warps", title: "WARPS II", level: motionLevel, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
+    x: 48, z: displayNorth, yaw: 0
   }
   {
-    title: "FORMS", level: surfaceLevel, names: formRow, what: "exponents, tapers, paths, a braid"
-    lines [galleryLine(14, northInner, linePitch, 14, 180)]
-    sign { x: 14, z: northInner, yaw: 90 }
+    id: "forms", title: "FORMS", level: surfaceLevel, names: formRow, what: "exponents, tapers, paths, a braid"
+    x: 24, z: displayNorth, yaw: 0
   }
   {
-    title: "SURFACES", level: surfaceLevel, names: surfaceRow, what: "palette channels, wear, panels, text"
-    lines [galleryLine(3, northOuter, linePitch, 18, 0)]
-    sign { x: 3, z: northOuter, yaw: 0 }
+    id: "surfaces", title: "SURFACES", level: surfaceLevel, names: surfaceRow, what: "palette channels, wear, panels, text"
+    x: 40, z: displayNorth, yaw: 0
   }
   {
-    title: "STYLES", level: surfaceLevel, names: styleRow, what: "a cel style per material, beside continuous ones, the grey card and tiles"
-    lines [galleryLine(28, 2.5, 4, 4, 180)]
-    sign { x: 28, z: 2.5, yaw: 90 }
+    id: "styles", title: "STYLES", level: surfaceLevel, names: styleRow
+    what: "a cel style per material, beside continuous ones, the grey card and tiles"
+    x: 30, z: displaySouth, yaw: 180
   }
   {
-    title: "GLASS", level: surfaceLevel, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost"
-    lines [galleryLine(50, 2.5, 4, 1, 180)]
-    sign { x: 50, z: 2.5, yaw: 90 }
+    id: "glass", title: "GLASS", level: surfaceLevel, names: glassRow
+    what: "glass over the opaque image: tint, depth, refraction, frost"
+    x: 44, z: displaySouth, yaw: 180
   }
 ]
 
-// Every exhibit's station, in walking order: its name, its level and floor height, where its plinth stands in the
-// building's frame, the yaw it stands at, and `front`, the sign of z its console faces along (-1 at yaw 0, 1 at 180).
-function galleryLineSlots(line) = map(
-  range(0, line.count),
-  i => { x: (line.x + (line.pitch * i)), z: line.z, yaw: line.yaw, front: ((line.yaw == 0) ? -1 : 1) }
+// Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
+// the display that shows it (its index in galleryDisplays), its place in that display's list (`slot`) and in the
+// catalog (`index`). An exhibit's catalog index is its identity: a display's selection cell (`gallerySelect`) holds it.
+let galleryDisplayFirsts = map(
+  range(0, length(galleryDisplays)),
+  i => reduce(map(range(0, i), j => length(galleryDisplays[j].names)), 0, (sum, count) => (sum + count))
 )
-function galleryRowSlots(row) = flatMap(row.lines, line => galleryLineSlots(line))
-let galleryStations = flatMap(
-  galleryRows,
-  row => map(
-    row.names,
-    (name, index) => galleryRowSlots(row)[index] with { name: name, level: row.level, y: galleryFloor[row.level] }
-  )
+let galleryCatalog = flatMap(
+  range(0, length(galleryDisplays)),
+  i => map(galleryDisplays[i].names, (name, slot) => { name: name, display: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) })
+)
+let galleryLast = (length(galleryCatalog) - 1)
+
+// A display's floor height, and `front`, the sign of z its console faces along (1 at yaw 180, -1 at yaw 0).
+function displayFloor(display) = galleryFloor[display.level]
+function displayFront(display) = ((display.yaw == 0) ? -1 : 1)
+// A point given in the display plinth's own author frame (architecture.puck's: +X to the right of a viewer facing the
+// console, +Y up, +Z toward that viewer), placed in the building's frame: the plinth stands at `displayScale`, a yaw-180
+// display's author axes are the building's, and a yaw-0 display's turn x and z about.
+function displayPoint(display, p) = [
+  (display.x + (displayFront(display) * displayScale * p[0])),
+  (displayFloor(display) + (displayScale * p[1])),
+  (display.z + (displayFront(display) * displayScale * p[2]))
+]
+// The same point in the world, where the debug world stands the building: a static creation's paints stand there.
+function displayWorld(display, p) = galleryWorld(displayPoint(display, p)[0], displayPoint(display, p)[1], displayPoint(display, p)[2])
+// The turn that carries a paint's +X along the console's face to the viewer's right, its +Y up the face and its +Z out
+// of it, in the world: the plinth's own face turn (`plinthFace`) at yaw 180, and the same turned half round at yaw 0.
+function displayFaceTurn(display) = ((display.yaw == 0) ? [0, plinthFace[3], (0 - plinthFace[0]), 0] : plinthFace)
+// A region before the console from author-frame x and z spans, in the building's frame, from half a metre under the
+// display's floor to a metre over it.
+function displayBox(display, x0, x1, z0, z1) = {
+  x0: minimum(displayPoint(display, [x0, 0, z0])[0], displayPoint(display, [x1, 0, z1])[0])
+  x1: maximum(displayPoint(display, [x0, 0, z0])[0], displayPoint(display, [x1, 0, z1])[0])
+  y0: (displayFloor(display) - 0.5)
+  y1: (displayFloor(display) + 1)
+  z0: minimum(displayPoint(display, [x0, 0, z0])[2], displayPoint(display, [x1, 0, z1])[2])
+  z1: maximum(displayPoint(display, [x0, 0, z0])[2], displayPoint(display, [x1, 0, z1])[2])
+}
+// The two buttons before the console, each a reach (reach.puck) a press of the context button acts in, in the plinth's
+// author frame: the console's left steps the list back, and the rest of it, where a body stands as it arrives, steps
+// it on.
+let displayBackSpan = [-1, -0.3]
+let displayNextSpan = [-0.3, 1]
+let displayReachDepth = [0.9, 1.9]
+// Where a body stands before the console, in the plinth's author frame: in the step-on reach, 1.25 m clear of the
+// console.
+let displayStand = [0, 0, 1.75]
+// The exhibit on the turntable stands this far over the display's floor (layout.puck's displayExhibitScale): the
+// exhibits' own frame puts the plinth's cap at 0.75, and the display's cap stands at plinthCapTop times displayScale.
+let displayExhibitDrop = ((plinthCapTop * displayScale) - (0.75 * displayExhibitScale))
+
+// Every exhibit's station: its name, its catalog index and slot, and its display's place (the turntable's centre, its
+// level and floor height, the yaw it stands at and `front`).
+let galleryStations = map(
+  galleryCatalog,
+  entry => {
+    name: entry.name
+    index: entry.index
+    slot: entry.slot
+    display: galleryDisplays[entry.display].id
+    level: galleryDisplays[entry.display].level
+    x: galleryDisplays[entry.display].x
+    y: displayFloor(galleryDisplays[entry.display])
+    z: galleryDisplays[entry.display].z
+    yaw: galleryDisplays[entry.display].yaw
+    front: displayFront(galleryDisplays[entry.display])
+  }
 )
 function galleryStation(name) = filter(galleryStations, station => (station.name == name))[0]
+// Where a point an exhibit authors in its own frame stands in the building: its display's turntable, set down by
+// displayExhibitDrop, the point scaled by `displayExhibitScale` and turned as the display is.
+function exhibitPoint(station, p) = [
+  (station.x + (station.front * displayExhibitScale * p[0])),
+  (station.y + displayExhibitDrop + (displayExhibitScale * p[1])),
+  (station.z + (station.front * displayExhibitScale * p[2]))
+]
 
-// A spawn point per exhibit, named after it, 2.8 m in front of the plinth's console, so `body.pose spawn:<exhibit>` and
-// `gallery.go <exhibit>` walk to any exhibit by name. She stands turned `gallerySpawnTurn` degrees past facing the
-// exhibit, because the chase camera keeps its place behind her: square to the exhibit, her body stands between the
-// camera and the exhibit at 1.2 m and hides it. Turned, the camera (4 m back along her heading, 1.2 m over her pivot)
-// sees the exhibit about 16 degrees left of her, its plaque 24 degrees off square, with the next exhibit along the
-// line behind her. The points are authored in the building's frame, under its root placement.
+// A spawn point per display before its console, named after its turntable's placement (`display-<id>`), then one per
+// exhibit at its display's, named after the exhibit, so `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to
+// any exhibit by name. The display's own comes first, so a verb that takes the spawn point nearest a body
+// (`gallery.flag near`) names the display, and a slice of the one at hand (`gallery.slice near`) cuts its turntable.
+// She stands turned `gallerySpawnTurn` degrees past facing the display, because the chase camera keeps its place behind
+// her: square to it, her body stands between the camera and the console and hides it. Turned, the camera (4 m back
+// along her heading, 1.2 m over her pivot) sees the exhibit and the console beside her. The points are authored in the
+// building's frame, under its root placement.
 let gallerySpawnTurn = 40
-let gallerySpawns = map(
-  galleryStations,
-  station => {
-    id: station.name
-    parent: gallery
-    position [station.x, station.y, (station.z + (2.8 * station.front))]
-    yawDegrees: (((station.yaw + 180) % 360) + gallerySpawnTurn)
-  }
+function displaySpawn(id, display) = {
+  id: id
+  parent: gallery
+  position: displayPoint(display, displayStand)
+  yawDegrees: (((display.yaw + 180) % 360) + gallerySpawnTurn)
+}
+let gallerySpawns = concat(
+  map(galleryDisplays, display => displaySpawn($"display-{display.id}", display)),
+  map(galleryCatalog, entry => displaySpawn(entry.name, galleryDisplays[entry.display]))
 )
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
@@ -224,14 +281,15 @@ let galleryHexClip = [
   [-0.45, 0.259808]
 ]
 
-// Slot 0 the exhibit, slot 1 the plinth, slot 2 the label, slot 3 an exhibit's own second material (a blend's tool,
-// a palette channel under test) and slots past it whatever else an exhibit appends.
+// Slot 0 the exhibit, slots 1 and 2 a dark and a pale tone in the gallery's cel look (the signs' board and lettering),
+// slot 3 an exhibit's own second material (a blend's tool, a palette channel under test) and slots past it whatever
+// else an exhibit appends.
 let exhibitMaterial = 0
 let accentMaterial = 3
-// The gallery's cel look, its walls, plinths, labels and signs (galleryCel): the shade a near-neutral step, so a lit room
+// The gallery's cel look, its walls and signs (galleryCel): the shade a near-neutral step, so a lit room
 // still reflects untinted light onto its exhibits and an albedo reads as itself, and a thin cool ink on the building's
 // silhouettes and folds, even along its length as a drafted line is. An exhibit's subject (slot 0 of an exhibit's palette, and the slots it adds) keeps its own
-// shading: the gallery is the engine's self-test, and its plaques say what each subject shows.
+// shading: the gallery is the engine's self-test, and its displays' screens say what each subject shows.
 let galleryStyle = celStyle with {
   threshold: 0.08
   softness: 0.1
@@ -257,7 +315,7 @@ let exhibitSubjects = {
   superellipsoid { color: "#9FC6DC", roughness: 0.18, specular: 0.05, coat: 0.5 }
 }
 // The exhibits' own grey is a plain dielectric, so a subject's form reads by its shading and no exhibit is glossier than
-// its plaque says: an exhibit that shows gloss, metal or a coat authors it in its own slots.
+// its screen says: an exhibit that shows gloss, metal or a coat authors it in its own slots.
 let galleryPalette = [
   { color: "#B9C4D0", roughness: 0.5, specular: 0.04 }
   galleryCel({ color: "#3A3F47", roughness: 0.85 })
@@ -265,47 +323,237 @@ let galleryPalette = [
 ]
 let accent = { color: "#D9822B", roughness: 0.5, specular: 0.04 }
 
-// The palette, the plinth beneath the exhibit, the plinth's label and its plaque. Expanded after the exhibit's own
-// shapes, so an exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on,
-// `runs` text runs after the label, and `note` is the plaque: what the exhibit demos and what to look for, in small
-// type under the label (each non-whitespace glyph adds bake work, so a note stays under ~120 glyphs).
-template exhibit(label, extra = [], runs = [], note = "", subject = galleryPalette[0]) {
+// An exhibit's document: its palette and any text runs the exhibit itself shows, expanded after the exhibit's own
+// shapes. `label` names the creation; the display's screen shows its copy (galleryCopy). `extra` appends palette slots
+// from 3 on, and `runs` the exhibit's own lettering.
+template exhibit(label, extra = [], runs = [], subject = galleryPalette[0]) {
   name: label
   schema: "puck.creation.v1"
   palette: concat([subject], map(range(1, (length(galleryPalette) - 1)), i => galleryPalette[i]), extra)
-  textRuns: concat(
-    [
-      {
-        text: label
-        position: plinthOnFace(0, 0.1, 0.014)
-        rotation: plinthFace
-        emHeight: 0.06
-        depth: 0.004
-        mode: "emboss"
-        material: 2
-        align: "center"
-      }
-    ],
-    ((note == "") ? [] : [
-      {
-        text: note
-        position: plinthOnFace(0, 0.035, 0.014)
-        rotation: plinthFace
-        emHeight: 0.024
-        depth: 0.003
-        mode: "emboss"
-        material: 2
-        align: "center"
-        maxWidth: 0.98
-        lineSpacing: 1.15
-      }
-    ]),
-    runs
-  )
+  textRuns: runs
 }
 
-// A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a row's sign,
-// and the board game room's over its doorway (gallery/gallery.puck). Its placement's yaw turns the text's face.
+// Each exhibit's copy, which its display's screen shows while the exhibit stands on the turntable: its name, and what it
+// shows and what to look for. A screen line draws at most 64 glyphs (SdfSurfaceTextLayout.MaxGlyphs), so a note stays
+// under that.
+let galleryCopy = {
+  "shape-sphere" { title: "SPHERE", note: "The sphere primitive at a uniform scale." }
+  "shape-box" { title: "BOX", note: "The box primitive at a uniform scale." }
+  "shape-torus" { title: "TORUS", note: "The torus primitive at a uniform scale." }
+  "shape-cylinder" { title: "CYLINDER", note: "The cylinder primitive at a uniform scale." }
+  "shape-capsule" { title: "CAPSULE", note: "The capsule primitive at a uniform scale." }
+  "shape-ellipsoid" { title: "ELLIPSOID", note: "The ellipsoid primitive at a uniform scale." }
+  "shape-round-cone" { title: "ROUND CONE", note: "The round cone primitive at a uniform scale." }
+  "shape-cone" { title: "CONE", note: "The cone primitive at a uniform scale." }
+  "shape-superellipsoid" { title: "SUPERELLIPSOID", note: "A superellipsoid at exponent 4." }
+  "shape-plane" { title: "PLANE CUT", note: "A sphere intersected with a tilted plane." }
+  "shape-sphere-xyz" { title: "SPHERE XYZ", note: "A sphere scaled unevenly on all three axes." }
+  "shape-box-xyz" { title: "BOX XYZ", note: "A box scaled unevenly on all three axes." }
+  "shape-torus-xz" { title: "TORUS XZ", note: "A torus with X and Z scaled differently." }
+  "shape-torus-y" { title: "TORUS Y", note: "A torus with Y alone stretched." }
+  "shape-cylinder-xz" { title: "CYLINDER XZ", note: "A cylinder with X and Z scaled differently." }
+  "shape-capsule-xz" { title: "CAPSULE XZ", note: "A capsule with X and Z scaled differently." }
+  "shape-ellipsoid-xyz" { title: "ELLIPSOID XYZ", note: "An ellipsoid scaled unevenly." }
+  "shape-round-cone-xyz" { title: "ROUND CONE XYZ", note: "A round cone scaled unevenly." }
+  "shape-cone-xz" { title: "CONE XZ", note: "A cone with X and Z scaled differently." }
+  "shape-superellipsoid-xyz" { title: "SUPER XYZ", note: "A superellipsoid at exponent 3, scaled unevenly." }
+  "shape-stretch-cut" { title: "STRETCH CUT", note: "A stretched capsule, cone and torus cut from a slab." }
+  "shape-stretch-smooth" { title: "STRETCH SMOOTH", note: "The same three cut smoothly: each fillet one width." }
+  "shape-trapezoid" { title: "TRAPEZOID", note: "A trapezoid profile, extruded." }
+  "shape-rounded-rectangle" { title: "ROUNDED RECT", note: "A rounded rectangle profile, extruded." }
+  "shape-polygon-6" { title: "POLYGON 6", note: "A hexagon profile, extruded." }
+  "shape-polygon-12" { title: "POLYGON 12", note: "A twelve-sided polygon profile, extruded." }
+  "shape-polygon-12-xy" { title: "POLYGON 12 XY", note: "The twelve-gon extruded with X and Y unequal." }
+  "shape-ellipse" { title: "ELLIPSE", note: "An ellipse profile, extruded." }
+  "shape-chamfered-rectangle" { title: "CHAMFER RECT", note: "A chamfered rectangle profile, extruded." }
+  "shape-convex" { title: "CONVEX", note: "A convex pentagon profile, extruded." }
+  "shape-path-fill" { title: "PATH FILL", note: "A filled path of lines and curves, extruded." }
+  "shape-path-stroke" { title: "PATH STROKE", note: "An open stroked path, extruded." }
+  "shape-path-stroke-xy" { title: "PATH STROKE XY", note: "The stroked path extruded with X and Y unequal." }
+  "shape-revolve-trapezoid" { title: "REV TRAPEZOID", note: "A trapezoid profile revolved into a ring." }
+  "shape-revolve-rounded-rectangle" { title: "REV ROUND RECT", note: "A rounded rectangle revolved into a ring." }
+  "shape-revolve-polygon-6" { title: "REV POLYGON 6", note: "A hexagon revolved into a ring." }
+  "shape-revolve-ellipse" { title: "REV ELLIPSE", note: "An ellipse revolved into a ring." }
+  "shape-revolve-chamfered-rectangle" { title: "REV CHAMFER", note: "A chamfered rectangle revolved into a ring." }
+  "shape-revolve-convex" { title: "REV CONVEX", note: "A convex pentagon revolved into a ring." }
+  "shape-sweep" { title: "SWEEP", note: "A round tube of one radius along a quadratic curve." }
+  "shape-sweep-tapered" { title: "SWEEP TAPER", note: "A swept tube tapering, with a mid-span bulge." }
+  "shape-sweep-strands" { title: "SWEEP STRANDS", note: "Three strands twisted round a curve: a rope." }
+  "shape-rounding" { title: "ROUNDING", note: "A cylinder with its rim rounded 0.12 m." }
+  "shape-chamfer" { title: "CHAMFER", note: "A box bevelled 0.1 m on every edge." }
+  "shape-onion" { title: "ONION", note: "A 4 cm shell of a sphere, a window cut in it." }
+  "shape-dilate" { title: "DILATE", note: "A box inflated 0.1 m: rounded, no creases." }
+  "shape-flare" { title: "FLARE", note: "A cylinder whose section scales along its height." }
+  "shape-shear" { title: "SHEAR", note: "A box sheared into a curving lean." }
+  "shape-bumps" { title: "BUMPS", note: "Two gaussian pushes: a swelling and a dent." }
+  "shape-cells-f1" { title: "CELLS F1", note: "Worley F1 relief: raised cells with creased walls." }
+  "shape-cells-f2" { title: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls." }
+  "shape-polar-fold" { title: "POLAR FOLD", note: "One box folded into six sectors about Y." }
+  "shape-blend-union" { title: "UNION", note: "Box and sphere unioned: a hard crease at the seam." }
+  "shape-blend-subtraction" { title: "SUBTRACTION", note: "The sphere carved out of the box." }
+  "shape-blend-intersection" { title: "INTERSECTION", note: "Only where the box and the sphere overlap." }
+  "shape-blend-xor" { title: "XOR", note: "Either but not both: the overlap cut away." }
+  "shape-smooth-union" { title: "SMOOTH UNION", note: "A 0.15 m fillet where the sphere meets the box." }
+  "shape-smooth-subtraction" { title: "SMOOTH SUBTRACT", note: "The carve's rim rounded over 0.1 m." }
+  "shape-smooth-intersection" { title: "SMOOTH INTERSECT", note: "The intersection's edges rounded over 0.1 m." }
+  "shape-chamfer-union" { title: "CHAMFER UNION", note: "A flat 45 degree bevel along the seam." }
+  "shape-chamfer-subtraction" { title: "CHAMFER SUBTRACT", note: "The carve's rim bevelled at 45 degrees." }
+  "shape-chamfer-intersection" { title: "CHAMFER INTERSECT", note: "The intersection's edges bevelled at 45 degrees." }
+  "shape-groove-union" { title: "GROOVE UNION", note: "A round groove cut along the seam." }
+  "shape-pipe-union" { title: "PIPE UNION", note: "A round bead laid along the seam." }
+  "shape-groove-subtraction" { title: "GROOVE SUBTRACT", note: "A groove cut along the carve's rim." }
+  "shape-pipe-subtraction" { title: "PIPE SUBTRACT", note: "A bead laid along the carve's rim." }
+  "shape-symmetry" { title: "SYMMETRY", note: "A tilted capsule mirrored across x = 0: a V." }
+  "shape-repeat" { title: "REPEAT 5", note: "One sphere repeated 0.25 m apart: five copies." }
+  "shape-repeat-grid" { title: "REPEAT 3X3", note: "One box on a 3 by 3 lattice in x and z." }
+  "shape-repeat-even" { title: "REPEAT EVEN", note: "A symmetry over a repeat: four spheres." }
+  "shape-repeat-clipped" { title: "REPEAT CLIPPED", note: "An unbounded lattice of spheres clipped by a box." }
+  "shape-polar-mirror" { title: "POLAR MIRROR", note: "Five mirrored sectors: a kaleidoscope." }
+  "shape-polar-z" { title: "POLAR Z", note: "Eight copies about Z through an origin: a wheel." }
+  "shape-polar-stride" { title: "POLAR STRIDE", note: "Six sectors, each a palette row: six colours." }
+  "shape-wallpaper-pmm" { title: "WALLPAPER PMM", note: "A tile mirrored across both cell axes." }
+  "shape-wallpaper-p4m" { title: "WALLPAPER P4M", note: "Square symmetry: eight images per cell." }
+  "shape-wallpaper-p3m1" { title: "WALLPAPER P3M1", note: "A hex lattice of mirrors, clipped by a hexagon." }
+  "shape-wallpaper-p6m" { title: "WALLPAPER P6M", note: "The richest hex group: twelve images per cell." }
+  "shape-wallpaper-stride" { title: "WALLPAPER STRIDE", note: "P4M with a material stride: a checkerboard." }
+  "shape-erode" { title: "ERODE", note: "A lane erodes the sphere, here halfway through." }
+  "shape-noise-mask" { title: "RELIEF MASK", note: "A mask keeps the pressed bowl smooth; the slab stays rough." }
+  "shape-noise" { title: "NOISE", note: "Creation noise lumps the whole sphere." }
+  "motion-spin" { title: "SPIN", note: "A rigid rotation on a linear wave." }
+  "motion-rock" { title: "ROCK", note: "A sine swing about a pivot." }
+  "motion-slide" { title: "SLIDE", note: "A translation on the gallery clock." }
+  "motion-chain" { title: "PARENT CHAIN", note: "A chain of parented swings." }
+  "motion-smooth-blend" { title: "MOVING BLEND", note: "A skinned fillet stretching as the sphere slides." }
+  "motion-state-blend" { title: "STATE BLEND", note: "The blend placed by state; each write rebakes." }
+  "motion-carve" { title: "MOVING CUT", note: "A smooth cut whose bowl follows a sliding tool." }
+  "motion-mirror" { title: "MOVING MIRROR", note: "A mirrored shape riding a yawing hinge." }
+  "motion-polar" { title: "MOVING POLAR", note: "A polar-folded blade spinning on its hub." }
+  "motion-nod" { title: "NODDING BLEND", note: "A head nodding; the throat fillet bends with it." }
+  "motion-three" { title: "THREE OWNERS", note: "Three moving owners: rigid parts, creased joins." }
+  "motion-paint" { title: "MOVING PAINT", note: "Paints riding a swinging panel." }
+  "motion-inset" { title: "MOVING INSET", note: "An eye inset that turns with its shape." }
+  "motion-twist" { title: "TWIST", note: "A twist, drawn on the stamp-pool path." }
+  "motion-bend" { title: "BEND", note: "A bend, drawn on the stamp-pool path." }
+  "motion-pulse" { title: "RADIAL PULSE", note: "Six petals sliding out from a core and back." }
+  "motion-cells" { title: "MOVING CELLS", note: "Cells relief on a swinging shape." }
+  "motion-volume" { title: "MOVING VOLUME", note: "A plume riding a tilting nozzle." }
+  "motion-ik" { title: "IK REACH", note: "A two-bone arm reaching for a state point." }
+  "motion-frames" { title: "FRAMES", note: "Timeline frames stepped on the render clock." }
+  "motion-seam-paint" { title: "PAINT ACROSS A SEAM", note: "Expected to swim on the fillet until step 4." }
+  "shape-warp" { title: "DOMAIN WARP", note: "A sphere warped by sines: a smooth wobble." }
+  "shape-displace" { title: "SINE RELIEF", note: "A sine product added to a box's field." }
+  "shape-elongate" { title: "ELONGATE", note: "A sphere elongated into an exact rounded slab." }
+  "shape-jitter" { title: "JITTER", note: "Each cell moves and recolours its sphere by hash." }
+  "shape-jitter-tumble" { title: "JITTER TUMBLE", note: "Boxes tumbled on a blue-noise lattice." }
+  "shape-log-sphere" { title: "LOG SPHERE", note: "Self-similar shells spiralling inward." }
+  "shape-stairs-union" { title: "STAIRS UNION", note: "A seam that climbs four steps." }
+  "shape-stairs-subtraction" { title: "STAIRS SUBTRACT", note: "A carve whose rim steps three times." }
+  "shape-morph" { title: "MORPH", note: "The box's and sphere's fields averaged: a soft cube." }
+  "shape-superellipsoid-2" { title: "SUPER EXP 2", note: "A superellipsoid at exponent 2." }
+  "shape-superellipsoid-8" { title: "SUPER EXP 8", note: "A superellipsoid at exponent 8, nearly a box." }
+  "shape-prism-triangle" { title: "TAPER 0", note: "A prism at taper 0." }
+  "shape-prism-rectangle" { title: "TAPER 1", note: "A prism at taper 1." }
+  "shape-polygon-3" { title: "POLYGON 3", note: "A triangle profile, extruded." }
+  "shape-prism-rounding" { title: "PRISM ROUNDING", note: "An extruded prism with rounded edges." }
+  "shape-prism-chamfer" { title: "PRISM CHAMFER", note: "An extruded prism with chamfered edges." }
+  "shape-cylinder-chamfer" { title: "CYLINDER CHAMFER", note: "A cylinder with chamfered rims." }
+  "shape-revolve-solid" { title: "REV SOLID", note: "A profile revolved at offset 0: a solid." }
+  "shape-path-holes" { title: "PATH HOLES", note: "An even-odd fill: a cubic edge, a round hole." }
+  "shape-path-shear" { title: "PATH SHEAR", note: "An extruded path, sheared." }
+  "shape-path-closed-stroke" { title: "PATH CLOSED", note: "A closed cubic stroke." }
+  "shape-path-stroke-ramp" { title: "PATH RAMP", note: "A stroke whose radius ramps along an arc." }
+  "shape-sweep-braid" { title: "SWEEP BRAID", note: "Four strands braided along a sweep." }
+  "shape-metal" { title: "METAL", note: "The palette's metal channel." }
+  "shape-coat" { title: "COAT", note: "A clear coat over the base colour." }
+  "shape-sheen" { title: "SHEEN", note: "The sheen channel: a soft rim like cloth." }
+  "shape-emissive" { title: "EMISSIVE", note: "An emissive surface, lit from within." }
+  "shape-wrap-soften" { title: "WRAP SOFTEN", note: "Wrap and soften on cells relief." }
+  "shape-fill-bleed" { title: "FILL BLEED", note: "Fill, bleed and receive between palette slots." }
+  "shape-weathering-edge" { title: "WEAR EDGE", note: "Edge weathering in two stages." }
+  "shape-weathering-lines" { title: "WEAR LINES", note: "Line weathering across the surface." }
+  "shape-weathering-settle" { title: "WEAR SETTLE", note: "Settle weathering: a deposit on the upper faces." }
+  "shape-panel-recess" { title: "PANEL RECESS", note: "A recessed panel set into the face." }
+  "shape-panel-raise" { title: "PANEL RAISE", note: "A raised panel standing off the face." }
+  "shape-trims" { title: "TRIMS", note: "A trim band round the box's equator." }
+  "shape-paint-world" { title: "PAINT WORLD", note: "A world-space paint on a static placement." }
+  "shape-text-engrave" { title: "TEXT ENGRAVE", note: "Text engraved into the surface." }
+  "shape-text-ride" { title: "TEXT ON SHAPE", note: "Text riding a shape, wrapped to a width." }
+  "shape-volume-flow" { title: "VOLUME FLOW", note: "A flow volume pulsing from a nozzle." }
+  "shape-volume-cloud" { title: "VOLUME CLOUD", note: "A cloud volume." }
+  "shape-state-color" { title: "STATE COLOR", note: "A colour bound to state: galleryInputs.tint." }
+  "shape-cel" { title: "CEL STYLE", note: "Left: a cel style with its shadow kept under the band; right: continuous." }
+  "shape-cel-hard" { title: "CEL HARD", note: "Left: the band over light and shadow together; right: continuous." }
+  "shape-grey-card" { title: "GREY CARD", note: "Matte 3 to 90% patches: the 18% patch reads as middle grey." }
+  "shape-paint-tiles" { title: "PAINT TILES", note: "One box paint on a 30 cm lattice: tiles, each tone hashed." }
+  "shape-glass" { title: "GLASS", note: "Tinted, thin, thick and frosted glass." }
+}
+
+// A display's screen: dark glass over the console's three panes and a strip under them, each a little proud of the
+// plinth's own, in the plinth's author frame. The panes list the display's exhibits (the one before the turntable's,
+// the turntable's with its place in the list, the one after it) and the strip its note, each a text paint bound to the
+// display's screen cells (gallery/gallery.puck's `gallery-screen-<id>` rule writes them). A static placement draws a
+// paint in the world's frame, so each display's paints are placed at its console in the world.
+let displayPanes = [-0.33, 0, 0.33]
+let displayPaneUp = 0.075
+let displayPaneHalf = [0.158, 0.078]
+let displayNoteUp = -0.03
+let displayNoteHalf = [0.5, 0.026]
+let displayGlassOut = 0.003
+let displayInk = "#FFC46A"
+let displayInkDim = "#C9B79A"
+// One text paint on the screen, `across` and `up` its box's centre on the console's face, `half` its half-extents.
+function displayText(display, across, up, half, template, ink, em) = {
+  type: "Box"
+  position: displayWorld(display, plinthOnFace(across, up, (displayGlassOut + 0.012)))
+  rotation: displayFaceTurn(display)
+  scale [(displayScale * half[0]), (displayScale * half[1]), 0.03]
+  color: ink
+  text { template: template, emHeight: em, fit: true }
+}
+function displayScreenPaints(display) = [
+  displayText(display, displayPanes[0], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenBefore.{display.id}}}", displayInkDim, 0.045)
+  displayText(
+    display,
+    displayPanes[1],
+    displayPaneUp,
+    displayPaneHalf,
+    $"{{state.galleryScreenTitle.{display.id}}}\n{{state.galleryPlace.{display.id}}} / {length(display.names)}",
+    displayInk,
+    0.06
+  )
+  displayText(display, displayPanes[2], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenAfter.{display.id}}}", displayInkDim, 0.045)
+  displayText(display, 0, displayNoteUp, displayNoteHalf, $"{{state.galleryScreenNote.{display.id}}}", displayInkDim, 0.032)
+]
+template displayScreen(display) {
+  prototype $"gallery-screen-{display.id}" {
+    document {
+      name: $"gallery-screen-{display.id}"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#14262E", roughness: 0.15, specular: 0.5, paints: displayScreenPaints(display) }
+      ]
+      for (across, n) in displayPanes {
+        shape Box $"pane-{n}" {
+          material: 0
+          position: plinthOnFace(across, displayPaneUp, displayGlassOut)
+          rotation: plinthFace
+          scale [displayPaneHalf[0], displayPaneHalf[1], 0.012]
+          rounding: 0.008
+        }
+      }
+      shape Box "note" {
+        material: 0
+        position: plinthOnFace(0, displayNoteUp, displayGlassOut)
+        rotation: plinthFace
+        scale [displayNoteHalf[0], displayNoteHalf[1], 0.012]
+        rounding: 0.008
+      }
+    }
+  }
+}
+
+// A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a display's
+// sign, and the board game room's over its doorway (gallery/gallery.puck). Its placement's yaw turns the text's face.
 template sectionSign(name, title, what) {
   prototype name {
     document {
@@ -352,10 +600,10 @@ template sectionSign(name, title, what) {
   }
 }
 
-// The hanging boards face down the hall toward the landing (-X); plinth labels still face -Z.
+// A display's board names its group; it faces the way its display's console does.
 template signPrototypes() {
-  for (row, index) in galleryRows {
-    sectionSign(name: $"gallery-sign-{index}", title: row.title, what: row.what)
+  for display in galleryDisplays {
+    sectionSign(name: $"gallery-sign-{display.id}", title: display.title, what: display.what)
   }
   // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
   prototype "gallery-map" {
@@ -419,9 +667,9 @@ template signPrototypes() {
             galleryLevels,
             (level, index) => {
               text: reduce(
-                filter(galleryRows, row => (row.level == level.level)),
+                filter(galleryDisplays, display => (display.level == level.level)),
                 "",
-                (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")
+                (text, display) => ((text == "") ? display.title : $"{text}, {display.title}")
               )
               position [0, (1.775 - (0.19 * index)), 0.015]
               rotation [0, 0, 0, 1]
@@ -435,7 +683,7 @@ template signPrototypes() {
           ),
           [
             {
-              text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>"
+              text: "E at a display's console steps its list   gallery.go <exhibit>   gallery.next"
               position [0, 1.08, 0.015]
               rotation [0, 0, 0, 1]
               emHeight: 0.026
@@ -476,14 +724,16 @@ template signPrototypes() {
   }
 }
 
-// The map hangs in the lobby facing the entrance; a row's board hangs where the row begins (`sign`).
+// The map hangs in the lobby facing the entrance; a display's board hangs beside it, on the console's right, facing the
+// way the console does.
+let displaySign = [2.3, 0, -0.2]
 template gallerySignPlacements() {
-  for (row, index) in galleryRows {
-    placement $"gallery-sign-{index}" {
-      prototype: $"gallery-sign-{index}"
+  for display in galleryDisplays {
+    placement $"gallery-sign-{display.id}" {
+      prototype: $"gallery-sign-{display.id}"
       parent: "gallery"
-      position [row.sign.x, galleryFloor[row.level], row.sign.z]
-      yawDegrees: row.sign.yaw
+      position: displayPoint(display, displaySign)
+      yawDegrees: display.yaw
     }
   }
   placement "gallery-map" {
@@ -493,23 +743,34 @@ template gallerySignPlacements() {
   }
 }
 
-// The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit's spawn
-// point, isolate an exhibit's shape, flag one that looks wrong (world.flag writes the record and its capture into the
-// package's git-ignored flags folder), cycle the debug views, and slice an exhibit's field into the package's slices
-// folder. world.debug-view and world.slice.save exist only in a rendered World, so a headless host refuses those two
-// commands when they run.
+// The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit and
+// show it on its display, isolate an exhibit's shape, flag one that looks wrong (world.flag writes the record and its
+// capture into the package's git-ignored flags folder), cycle the debug views, and slice the exhibit at hand's field
+// into the package's slices folder. world.debug-view and world.slice.save exist only in a rendered World, so a headless
+// host refuses those two commands when they run.
 let galleryCommands = [
   {
     name: "gallery.go"
-    help: "Walks a body to an exhibit's spawn point (its prototype name, or gallery for the entrance) and returns the view to the chase camera."
+    help: "Walks a body to an exhibit's display and shows that exhibit on its turntable (its prototype name), or walks it to the entrance (gallery, the default), and returns the view to the chase camera."
     parameters [
-      { name: "exhibit", kind: Spawn, default: "gallery" }
+      { name: "exhibit", kind: Choice, values: concat(["gallery"], map(galleryCatalog, entry => entry.name)), default: "gallery" }
       { name: "body", kind: Body, default: "0" }
     ]
     lines [
       "body.pose spawn:{exhibit} {body}"
+      "world.state.cell.set galleryPick {exhibit} 1"
       "view.override camera auto"
       "view.override layout play"
+    ]
+  }
+  {
+    name: "gallery.show"
+    help: "Shows an exhibit on its display's turntable (its prototype name) without moving anyone, as stepping its console's list does."
+    parameters [
+      { name: "exhibit", kind: Choice, values: map(galleryCatalog, entry => entry.name) }
+    ]
+    lines [
+      "world.state.cell.set galleryPick {exhibit} 1"
     ]
   }
   {
@@ -525,7 +786,7 @@ let galleryCommands = [
   }
   {
     name: "gallery.flag"
-    help: "Flags an exhibit that looks wrong (near, the default, names the one the seat stands at): world.flag writes worlds/debug/flags/<exhibit>.json (the note, the seat's pose and camera) and captures the view to <exhibit>.png beside it, for an agent to read back."
+    help: "Flags an exhibit that looks wrong (near, the default, names the display the seat stands at; its capture shows the exhibit on the turntable): world.flag writes worlds/debug/flags/<exhibit>.json (the note, the seat's pose and camera) and captures the view to <exhibit>.png beside it, for an agent to read back."
     parameters [
       { name: "exhibit", kind: Text, default: "near" }
       { name: "note", kind: Text, default: "looks-wrong" }
@@ -554,11 +815,11 @@ let galleryCommands = [
   }
   {
     name: "gallery.slice"
-    help: "Cuts an exhibit's field (near, the default, names the one the seat stands at) on a plane through its placement and writes the distance diagnostic to worlds/debug/slices/<exhibit>-<axis>.png: by default the level plane through the exhibit's middle, 1.2 m over its floor; an x or z cut wants offset 0 to pass through its centre."
+    help: "Cuts the field of the exhibit on a display's turntable (near, the default, names the display the seat stands at; a turntable is display-<id>) on a plane through its placement and writes the distance diagnostic to worlds/debug/slices/<display>-<axis>.png: by default the level plane through the exhibit's middle, the offset in metres over the turntable's placement; an x or z cut wants offset 0 to pass through its centre."
     parameters [
       { name: "exhibit", kind: Text, default: "near" }
       { name: "axis", kind: Choice, values ["y", "x", "z"], default: "y" }
-      { name: "offset", kind: Number, default: "1.2" }
+      { name: "offset", kind: Number, default: $"{1.2 * displayExhibitScale}" }
     ]
     lines [
       "world.slice.save {exhibit} {axis} offset {offset}"
@@ -566,39 +827,157 @@ let galleryCommands = [
   }
 ]
 
+// The exhibits' signs and the lobby's map, which a world places beside the gallery module (debug.puck,
+// gallery-root.puck); the displays themselves are the module's (displayPlacements).
 template galleryPlacements() {
-  for station in galleryStations {
-    placement $"{station.name}" {
-      prototype: station.name
-      parent: "gallery"
-      position [station.x, station.y, station.z]
-      yawDegrees: station.yaw
-    }
-    placement $"{station.name}-plinth" {
-      prototype: "gallery-plinth"
-      parent: "gallery"
-      position [station.x, station.y, station.z]
-      yawDegrees: station.yaw
-    }
-  }
-  // The noisy sphere over the NOISE plinth: a separate creation keeps the noise off the plinth.
-  placement "shape-noise-subject" {
-    prototype: "shape-noise-subject"
-    parent: "gallery"
-    position [galleryStation("shape-noise").x, galleryStation("shape-noise").y, galleryStation("shape-noise").z]
-    yawDegrees: galleryStation("shape-noise").yaw
-  }
   gallerySignPlacements()
 }
 
-// The gallery's motion controls. Every driver in the motion rows reads `galleryClock`, gallery seconds advancing at the
+// Each display, which gallery/gallery.puck places beside the rules that work it: its plinth, solid, and its screen over
+// the console's panes, both at `displayScale`; the two buttons before its console; and the exhibit on its turntable,
+// which shows the display's first exhibit and, through its response facet, whichever one the display's `gallerySelect`
+// cell holds. A display of one exhibit carries no response.
+template displayPlacements() {
+  for display in galleryDisplays {
+    placement $"display-{display.id}-plinth" {
+      prototype: "gallery-display"
+      parent: "gallery"
+      position [display.x, displayFloor(display), display.z]
+      yawDegrees: display.yaw
+      scale: displayScale
+      solid
+    }
+    placement $"display-{display.id}-screen" {
+      prototype: $"gallery-screen-{display.id}"
+      parent: "gallery"
+      position [display.x, displayFloor(display), display.z]
+      yawDegrees: display.yaw
+      scale: displayScale
+    }
+    for button in [{ name: "back", span: displayBackSpan }, { name: "next", span: displayNextSpan }] {
+      placement $"display-{display.id}-{button.name}" {
+        prototype: "place"
+        parent: "gallery"
+        position: boundsCentre(displayBox(display, button.span[0], button.span[1], displayReachDepth[0], displayReachDepth[1]))
+        region {
+          halfExtents: boundsHalf(displayBox(display, button.span[0], button.span[1], displayReachDepth[0], displayReachDepth[1]))
+          capacity: reachCapacity
+        }
+      }
+    }
+  }
+  for (display, index) in galleryDisplays {
+    for many in ((length(display.names) > 1) ? [1] : []) {
+      placement $"display-{display.id}" {
+        prototype: display.names[0]
+        parent: "gallery"
+        position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
+        yawDegrees: display.yaw
+        scale: displayExhibitScale
+        respond: map(
+          range(1, (length(display.names) - 1)),
+          slot => {
+            when: state(state: gallerySelect, key: display.id, comparison: Equal, value: (galleryDisplayFirsts[index] + slot))
+            prototypeId: display.names[slot]
+          }
+        )
+      }
+    }
+    for one in ((length(display.names) == 1) ? [1] : []) {
+      placement $"display-{display.id}" {
+        prototype: display.names[0]
+        parent: "gallery"
+        position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
+        yawDegrees: display.yaw
+        scale: displayExhibitScale
+      }
+    }
+  }
+}
+
+// The displays' state, which gallery/gallery.puck declares beside the rules that write it. A display's `gallerySelect`
+// cell holds the catalog index of the exhibit its turntable shows, one of its own list's; its console's buttons,
+// gallery.go and gallery.show, and the tour write it, and its screen cells (`galleryScreen*`, `galleryPlace`) follow
+// it. `galleryTitles` and `galleryNotes` hold every exhibit's copy by catalog index, which the screen rule copies from;
+// `galleryPick` is the mailbox gallery.go and gallery.show write an exhibit's name to (`gallery`, the entrance, stands
+// at no display).
+//
+// The motion exhibits' controls, which a world declares (galleryState). Every driver in the motion rows reads `galleryClock`, gallery seconds advancing at the
 // row's rate; a rate of zero freezes every pose where it stands, and writing the cell scrubs it. Each driver is gated on
 // `galleryMotion.all` and on its exhibit's own `galleryMotion` key: a zero eases that exhibit back to its rest pose.
 // `galleryInputs` holds text cells three exhibits read: `probe` places motion-state-blend's sphere, `reach` is the world
-// point motion-ik's arm reaches for, and `tint` colours shape-state-color. shapes.md gives the console lines.
+// point motion-ik's arm reaches for (before its turntable), and `tint` colours shape-state-color. shapes.md gives the
+// console lines.
 let reachStation = galleryStation("motion-ik")
+let reachPoint = exhibitPoint(reachStation, [-0.35, 1.45, 0.25])
+// A display's first exhibit, which its cells hold at boot.
+function displayFirst(index) = galleryCatalog[galleryDisplayFirsts[index]]
+function displayAround(index, step) = galleryCatalog[
+  (galleryDisplayFirsts[index] + ((length(galleryDisplays[index].names) + step) % length(galleryDisplays[index].names)))
+]
+
+// One Int cell a display, keyed by its id and seeded from `values`, a value a display in galleryDisplays' order.
+template displayCells(name, values) {
+  row {
+    name: name
+    kind: Int
+    capacity: length(galleryDisplays)
+    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: values[index] })
+  }
+}
+
+template displayState() {
+  displayCells(name: "gallerySelect", values: galleryDisplayFirsts)
+  displayCells(name: "galleryShownAt", values: galleryDisplayFirsts)
+  displayCells(name: "galleryPlace", values: map(galleryDisplays, display => 1))
+  displayCells(name: "galleryBefore", values: map(range(0, length(galleryDisplays)), index => displayAround(index, -1).index))
+  displayCells(name: "galleryAfter", values: map(range(0, length(galleryDisplays)), index => displayAround(index, 1).index))
+  row {
+    name: "galleryTitles"
+    kind: Text
+    capacity: length(galleryCatalog)
+    cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryCopy[entry.name].title })
+  }
+  row {
+    name: "galleryNotes"
+    kind: Text
+    capacity: length(galleryCatalog)
+    cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryCopy[entry.name].note })
+  }
+  row {
+    name: "galleryScreenTitle"
+    kind: Text
+    capacity: length(galleryDisplays)
+    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayFirst(index).name].title })
+  }
+  row {
+    name: "galleryScreenNote"
+    kind: Text
+    capacity: length(galleryDisplays)
+    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayFirst(index).name].note })
+  }
+  row {
+    name: "galleryScreenBefore"
+    kind: Text
+    capacity: length(galleryDisplays)
+    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayAround(index, -1).name].title })
+  }
+  row {
+    name: "galleryScreenAfter"
+    kind: Text
+    capacity: length(galleryDisplays)
+    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayAround(index, 1).name].title })
+  }
+  row {
+    name: "galleryPick"
+    kind: Int
+    capacity: (length(galleryCatalog) + 1)
+    cells: concat([{ key: "gallery", value: 0 }], map(galleryCatalog, entry => { key: entry.name, value: 0 }))
+  }
+}
 
 template galleryState() {
+
   slot galleryClock = 0.5 advance(perSecond: 1)
 
   table galleryMotion {
@@ -626,10 +1005,9 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{gallerySite[0] + reachStation.x - (0.35 * reachStation.front)}, {reachStation.y + 1.45}, {gallerySite[2] + reachStation.z + (0.25 * reachStation.front)}]"
+    reach = $"[{gallerySite[0] + reachPoint[0]}, {gallerySite[1] + reachPoint[1]}, {gallerySite[2] + reachPoint[2]}]"
     tint = "#D9822B"
   }
-
 }
 
 // The one driver every motion exhibit runs on: the gallery clock times `cadence` radians a gallery second, gated on
@@ -660,7 +1038,6 @@ let blendExhibits = [
     smooth: 0
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface"
   }
   {
     id: "shape-blend-subtraction"
@@ -669,7 +1046,6 @@ let blendExhibits = [
     smooth: 0
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp"
   }
   {
     id: "shape-blend-intersection"
@@ -678,7 +1054,6 @@ let blendExhibits = [
     smooth: 0
     tool [0.1, 1.28, 0.08]
     radius [0.4, 0.4, 0.4]
-    note: "only where both overlap: a box with spherical corners, the sphere's colour on its own faces"
   }
   {
     id: "shape-blend-xor"
@@ -687,7 +1062,6 @@ let blendExhibits = [
     smooth: 0
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "either but not both: the overlap is cut away, leaving a void you can see into from the seam"
   }
   {
     id: "shape-smooth-union"
@@ -696,7 +1070,6 @@ let blendExhibits = [
     smooth: 0.15
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step"
   }
   {
     id: "shape-smooth-subtraction"
@@ -705,7 +1078,6 @@ let blendExhibits = [
     smooth: 0.1
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "the carve's rim rounded over 0.1 m into the box"
   }
   {
     id: "shape-smooth-intersection"
@@ -714,7 +1086,6 @@ let blendExhibits = [
     smooth: 0.1
     tool [0.1, 1.28, 0.08]
     radius [0.4, 0.4, 0.4]
-    note: "the intersection's edges rounded over 0.1 m"
   }
   {
     id: "shape-chamfer-union"
@@ -723,7 +1094,6 @@ let blendExhibits = [
     smooth: 0.1
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet"
   }
   {
     id: "shape-chamfer-subtraction"
@@ -732,7 +1102,6 @@ let blendExhibits = [
     smooth: 0.08
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "the carve's rim bevelled at 45 degrees"
   }
   {
     id: "shape-chamfer-intersection"
@@ -741,7 +1110,6 @@ let blendExhibits = [
     smooth: 0.08
     tool [0.1, 1.28, 0.08]
     radius [0.4, 0.4, 0.4]
-    note: "the intersection's edges bevelled at 45 degrees"
   }
   {
     id: "shape-groove-union"
@@ -750,7 +1118,6 @@ let blendExhibits = [
     smooth: 0.05
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a round groove cut along the seam curve, 0.05 m: a recessed line following the join"
   }
   {
     id: "shape-pipe-union"
@@ -759,7 +1126,6 @@ let blendExhibits = [
     smooth: 0.04
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a round bead laid along the seam curve, 0.04 m: a raised weld following the join"
   }
   {
     id: "shape-groove-subtraction"
@@ -768,7 +1134,6 @@ let blendExhibits = [
     smooth: 0.04
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a groove cut along the carve's rim"
   }
   {
     id: "shape-pipe-subtraction"
@@ -777,13 +1142,12 @@ let blendExhibits = [
     smooth: 0.04
     tool [0.22, 1.42, 0.16]
     radius [0.28, 0.28, 0.28]
-    note: "a bead laid along the carve's rim"
   }
 ]
 
 // A slab with a capsule, a cone and a torus pressed half way into its front face, each scaled apart in its own X and Z
 // (the torus is turned so its ring faces the label). The three stretched primitives whose field is a bound, as cutters.
-template stretchPrototype(id, label, blend, smooth, note) {
+template stretchPrototype(id, label, blend, smooth) {
   prototype $"{id}" {
     document {
       shape Box "subject" {
@@ -813,7 +1177,7 @@ template stretchPrototype(id, label, blend, smooth, note) {
         scale [0.08, 0.1, 0.17]
         smooth: smooth
       }
-      exhibit(label: label, extra: [accent], note: note)
+      exhibit(label: label, extra: [accent])
     }
   }
 }
@@ -834,7 +1198,7 @@ template blendPrototypes() {
           scale: entry.radius
           smooth: entry.smooth
         }
-        exhibit(label: entry.label, extra: [accent], note: entry.note)
+        exhibit(label: entry.label, extra: [accent])
       }
     }
   }
@@ -864,7 +1228,7 @@ template foldPrototypes() {
         rotation [0, 0, 0.258819, 0.965926]
         scale [0.08, 0.25, 0.08]
       }
-      exhibit(label: "SYMMETRY", note: "one tilted capsule mirrored across x = 0: a V, the pair exactly symmetric")
+      exhibit(label: "SYMMETRY")
     }
   }
   prototype "shape-repeat" {
@@ -878,8 +1242,7 @@ template foldPrototypes() {
         scale [0.1, 0.1, 0.1]
       }
       exhibit(
-        label: "REPEAT 5",
-        note: "one sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each"
+        label: "REPEAT 5"
       )
     }
   }
@@ -893,7 +1256,7 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.07, 0.07, 0.07]
       }
-      exhibit(label: "REPEAT 3X3", note: "one box on a 3 by 3 lattice in x and z")
+      exhibit(label: "REPEAT 3X3")
     }
   }
   // Four copies: the symmetry fold keeps author +X, and the repeat lays three cells from engine x -0.375 to 0.125,
@@ -910,8 +1273,7 @@ template foldPrototypes() {
         scale [0.09, 0.09, 0.09]
       }
       exhibit(
-        label: "REPEAT EVEN",
-        note: "an even count from a symmetry over an odd repeat: four spheres, the middle gap closed"
+        label: "REPEAT EVEN"
       )
     }
   }
@@ -935,8 +1297,7 @@ template foldPrototypes() {
         scale [0.45, 0.45, 0.45]
       }
       exhibit(
-        label: "REPEAT CLIPPED",
-        note: "an unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut"
+        label: "REPEAT CLIPPED"
       )
     }
   }
@@ -952,8 +1313,7 @@ template foldPrototypes() {
         scale [0.05, 0.25, 0.1]
       }
       exhibit(
-        label: "POLAR MIRROR",
-        note: "five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls"
+        label: "POLAR MIRROR"
       )
     }
   }
@@ -967,7 +1327,7 @@ template foldPrototypes() {
         position [0, 1.5, 0]
         scale [0.04, 0.12, 0.04]
       }
-      exhibit(label: "POLAR Z", note: "eight copies about z through an origin above the plinth: a wheel facing you")
+      exhibit(label: "POLAR Z")
     }
   }
   prototype "shape-polar-stride" {
@@ -989,8 +1349,7 @@ template foldPrototypes() {
           { color: "#C23B3B", roughness: 0.45 }
           { color: "#8E5BD9", roughness: 0.45 }
           { color: "#E3C547", roughness: 0.45 }
-        ],
-        note: "six sectors, each striding the palette one row: six colours, one sphere"
+        ]
       )
     }
   }
@@ -1009,8 +1368,7 @@ template foldPrototypes() {
         scale [0.07, 0.03, 0.02]
       }
       exhibit(
-        label: "WALLPAPER PMM",
-        note: "a tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images"
+        label: "WALLPAPER PMM"
       )
     }
   }
@@ -1026,8 +1384,7 @@ template foldPrototypes() {
         scale [0.07, 0.03, 0.02]
       }
       exhibit(
-        label: "WALLPAPER P4M",
-        note: "square symmetry with mirrors through the 4-fold centres: eight images per cell"
+        label: "WALLPAPER P4M"
       )
     }
   }
@@ -1057,8 +1414,7 @@ template foldPrototypes() {
         scale [1, 1, 0.1]
       }
       exhibit(
-        label: "WALLPAPER P3M1",
-        note: "a hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases"
+        label: "WALLPAPER P3M1"
       )
     }
   }
@@ -1085,8 +1441,7 @@ template foldPrototypes() {
         scale [1, 1, 0.1]
       }
       exhibit(
-        label: "WALLPAPER P6M",
-        note: "the richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly"
+        label: "WALLPAPER P6M"
       )
     }
   }
@@ -1102,8 +1457,7 @@ template foldPrototypes() {
       }
       exhibit(
         label: "WALLPAPER STRIDE",
-        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }],
-        note: "p4m with a material stride: cells alternate colour by parity, a checkerboard"
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }]
       )
     }
   }
@@ -1121,23 +1475,32 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "ERODE", note: "a lane erodes the sphere, here halfway through")
+      exhibit(label: "ERODE")
     }
   }
   // Creation noise displaces every shape and text run of the creation it sits in, with no per-shape or per-group
-  // scope, so the plinth and label stay clean by living in a second prototype: "shape-noise" is the bare exhibit
-  // (plinth, label and plaque) and "shape-noise-subject" the noisy sphere, placed at the same spot by galleryPlacements().
+  // scope: the display plinth is a creation of its own, so the whole sphere lumps.
   prototype "shape-noise" {
     document {
-      exhibit(label: "NOISE", note: "fBm noise lumps the sphere; the plinth stays clean")
+      exhibit(label: "NOISE")
+      noise {
+        frequency: 4
+        amplitude: 0.12
+        seed: 11
+      }
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.4, 0.4, 0.4]
+      }
     }
   }
   // One prototype under two relief masks, whose weights multiply: the bowl's region is its own carve with an inside
   // weight of zero, so the bowl keeps its authored surface exactly, and a box about the slab keeps the relief on the slab
-  // alone (inside 1, outside 0), so the plinth and its lettering stay clean in the same creation.
+  // alone (inside 1, outside 0), so the rest of the creation stays clean.
   prototype "shape-noise-mask" {
     document {
-      exhibit(label: "RELIEF MASK", note: "the bowl stays smooth; the slab around it stays rough")
+      exhibit(label: "RELIEF MASK")
       noise {
         frequency: 6
         amplitude: 0.04
@@ -1165,23 +1528,6 @@ template foldPrototypes() {
         material: exhibitMaterial
         position [0, 1.27, 0]
         scale [0.22, 0.22, 0.22]
-      }
-    }
-  }
-  prototype "shape-noise-subject" {
-    document {
-      name: "shape-noise-subject"
-      schema: "puck.creation.v1"
-      palette: galleryPalette
-      noise {
-        frequency: 4
-        amplitude: 0.12
-        seed: 11
-      }
-      shape Sphere "subject" {
-        material: exhibitMaterial
-        position [0, 1.2, 0]
-        scale [0.4, 0.4, 0.4]
       }
     }
   }
@@ -1495,8 +1841,9 @@ template formPrototypes() {
 }
 
 // The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
-// space, so the stripe names its own exhibit's place in the surface row (index 12, on level 3).
+// space, so the stripe names the place its exhibit stands at, the middle of its display's turntable exhibit.
 let paintStation = galleryStation("shape-paint-world")
+let paintCentre = exhibitPoint(paintStation, [0, 1.2, 0])
 
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
 // colour, each on slot 3.
@@ -1592,8 +1939,7 @@ template surfacePrototypes() {
         extra: [
           celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celStyle)
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
-        ],
-        note: "left: its own cel style, the shadow kept under the band; right: continuous"
+        ]
       )
     }
   }
@@ -1614,13 +1960,12 @@ template surfacePrototypes() {
         extra: [
           celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle)
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
-        ],
-        note: "left: the band over light and shadow together; right: continuous"
+        ]
       )
     }
   }
   // The grey card the display transform is read against: a matte wedge of reflectances (3, 9, 18, 36, 59 and 90%) over
-  // the three primaries, on the near-black board's +Z face: the plinth label's side, which faces the spawn point. Each
+  // the three primaries, on the near-black board's +Z face: the console's side, which faces the spawn point. Each
   // patch's hex is the sRGB code of its reflectance, so at an exposure that maps a white surface's light to display
   // white, each patch reads back as its own code; the 18% patch reads 118 (the presented burst's `level` over a region
   // of it). The primaries catch a display transform that converts its primaries wrongly, which a grey alone passes.
@@ -1689,8 +2034,7 @@ template surfacePrototypes() {
           { color: "#FF0000", roughness: 1, specular: 0 }
           { color: "#00FF00", roughness: 1, specular: 0 }
           { color: "#0000FF", roughness: 1, specular: 0 }
-        ],
-        note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly"
+        ]
       )
     }
   }
@@ -1721,8 +2065,7 @@ template surfacePrototypes() {
               }
             ]
           }
-        ],
-        note: "one box paint repeated on a 30 cm lattice: 1 cm joints, each tile's tone hashed"
+        ]
       )
     }
   }
@@ -1869,7 +2212,7 @@ template surfacePrototypes() {
             paints [
               {
                 type: "Plane"
-                position [(gallerySite[0] + paintStation.x), (paintStation.y + 1.2), (gallerySite[2] + paintStation.z)]
+                position: galleryWorld(paintCentre[0], paintCentre[1], paintCentre[2])
                 rotation [0, 0, 0.258819, 0.965926]
                 stroke: 0.035
                 color: "#1F4E79"
@@ -2065,8 +2408,7 @@ template surfacePrototypes() {
           { color: "#F58220", roughness: 0.05, glass { depth: 0.12, ior: 1.49 } }
           { color: "#C8F0DC", roughness: 0, glass { depth: 0.01, ior: 1.5 } }
           { color: "#F0F0F0", roughness: 0.7, glass { depth: 0.01, ior: 1.5 } }
-        ],
-        note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods."
+        ]
       )
     }
   }
@@ -2206,8 +2548,7 @@ template motionPrototypes() {
       }
       exhibit(
         label: "MOVING BLEND",
-        extra: [accent],
-        note: "a skinned fillet: the sphere slides 6 cm and the fillet stretches with it, never tearing, stepping or popping"
+        extra: [accent]
       )
     }
   }
@@ -2258,8 +2599,7 @@ template motionPrototypes() {
       }
       exhibit(
         label: "MOVING CUT",
-        extra: [accent],
-        note: "a smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it"
+        extra: [accent]
       )
     }
   }
@@ -2287,8 +2627,7 @@ template motionPrototypes() {
       }
       exhibit(
         label: "NODDING BLEND",
-        extra: [accent],
-        note: "a head nods on its neck: the throat fillet bends with the nod, no crack, spike or fold at either extreme"
+        extra: [accent]
       )
     }
   }
@@ -2327,8 +2666,7 @@ template motionPrototypes() {
       }
       exhibit(
         label: "THREE OWNERS",
-        extra: [accent],
-        note: "three moving owners meet: the bake splits them into rigid parts, so expect creases where they join, never tears"
+        extra: [accent]
       )
     }
   }
@@ -2478,8 +2816,7 @@ template motionPrototypesB() {
               { parent: "anchor", type: "Plane", position [0, 0, 0], stroke: 0.025, color: "#E4572E" }
             ]
           }
-        ],
-        note: "expected to fail until step 4: the stripe holds on box and sphere but slides across the fillet as the sphere moves"
+        ]
       )
     }
   }
@@ -2783,14 +3120,18 @@ template motionPrototypesB() {
 }
 
 template galleryPrototypes() {
-  // The display plinth every exhibit stands on (architecture.puck), one creation every exhibit's placement stamps.
-  prototype "gallery-plinth" {
+  // The display plinth (architecture.puck), one creation every display's plinth placement stamps, and each display's
+  // screen over its console.
+  prototype "gallery-display" {
     document {
-      name: "gallery-plinth"
+      name: "gallery-display"
       schema: "puck.creation.v1"
       palette: plinthPalette
       exhibitPlinth(base: 0)
     }
+  }
+  for display in galleryDisplays {
+    displayScreen(display: display)
   }
   // Each primitive at a uniform scale.
   prototype "shape-sphere" {
@@ -3012,15 +3353,13 @@ template galleryPrototypes() {
     id: "shape-stretch-cut",
     label: "STRETCH CUT",
     blend: "Subtraction",
-    smooth: 0,
-    note: "a stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth"
+    smooth: 0
   )
   stretchPrototype(
     id: "shape-stretch-smooth",
     label: "STRETCH SMOOTH",
     blend: "SmoothSubtraction",
-    smooth: 0.04,
-    note: "the same three cut smoothly at 0.04 m: each rim's fillet one width all the way round"
+    smooth: 0.04
   )
 
   // Each prism profile, extruded along local Z.
@@ -3347,8 +3686,7 @@ template galleryPrototypes() {
         }
       }
       exhibit(
-        label: "SWEEP",
-        note: "a tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable"
+        label: "SWEEP"
       )
     }
   }
@@ -3367,8 +3705,7 @@ template galleryPrototypes() {
         }
       }
       exhibit(
-        label: "SWEEP TAPER",
-        note: "the radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch"
+        label: "SWEEP TAPER"
       )
     }
   }
@@ -3389,8 +3726,7 @@ template galleryPrototypes() {
         }
       }
       exhibit(
-        label: "SWEEP STRANDS",
-        note: "three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced"
+        label: "SWEEP STRANDS"
       )
     }
   }
@@ -3403,8 +3739,7 @@ template galleryPrototypes() {
         scale [0.4, 0.4, 0.4]
       }
       exhibit(
-        label: "ROUNDING",
-        note: "a cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact"
+        label: "ROUNDING"
       )
     }
   }
@@ -3417,8 +3752,7 @@ template galleryPrototypes() {
         scale [0.4, 0.4, 0.4]
       }
       exhibit(
-        label: "CHAMFER",
-        note: "a box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round"
+        label: "CHAMFER"
       )
     }
   }
@@ -3437,8 +3771,7 @@ template galleryPrototypes() {
         scale [0.35, 0.3, 0.35]
       }
       exhibit(
-        label: "ONION",
-        note: "a 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even"
+        label: "ONION"
       )
     }
   }
@@ -3450,7 +3783,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.3, 0.3, 0.3]
       }
-      exhibit(label: "DILATE", note: "a 0.3 box inflated by 0.1: rounded by the inflation, 0.4 across, no creases")
+      exhibit(label: "DILATE")
     }
   }
   prototype "shape-flare" {
@@ -3469,8 +3802,7 @@ template galleryPrototypes() {
         scale [0.25, 0.5, 0.25]
       }
       exhibit(
-        label: "FLARE",
-        note: "a cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here"
+        label: "FLARE"
       )
     }
   }
@@ -3488,8 +3820,7 @@ template galleryPrototypes() {
         }
       }
       exhibit(
-        label: "SHEAR",
-        note: "a box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z"
+        label: "SHEAR"
       )
     }
   }
@@ -3513,8 +3844,7 @@ template galleryPrototypes() {
         scale [0.5, 0.5, 0.5]
       }
       exhibit(
-        label: "BUMPS",
-        note: "two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring"
+        label: "BUMPS"
       )
     }
   }
@@ -3532,7 +3862,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "CELLS F1", note: "worley F1 relief, amplitude 0.18: raised cells with creased walls, like chitin")
+      exhibit(label: "CELLS F1")
     }
   }
   prototype "shape-cells-f2" {
@@ -3549,7 +3879,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls, hollows at their centres")
+      exhibit(label: "CELLS F2 F1")
     }
   }
   prototype "shape-polar-fold" {
@@ -3563,8 +3893,7 @@ template galleryPrototypes() {
         scale [0.1, 0.3, 0.06]
       }
       exhibit(
-        label: "POLAR FOLD",
-        note: "one box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors"
+        label: "POLAR FOLD"
       )
     }
   }
@@ -3597,8 +3926,7 @@ template warpPrototypes() {
         }
       }
       exhibit(
-        label: "DOMAIN WARP",
-        note: "a sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases"
+        label: "DOMAIN WARP"
       )
     }
   }
@@ -3618,8 +3946,7 @@ template warpPrototypes() {
         scale [reliefHalf, reliefHalf, reliefHalf]
       }
       exhibit(
-        label: "SINE RELIEF",
-        note: "a box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face"
+        label: "SINE RELIEF"
       )
     }
   }
@@ -3632,8 +3959,7 @@ template warpPrototypes() {
         scale [0.16, 0.16, 0.16]
       }
       exhibit(
-        label: "ELONGATE",
-        note: "a sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere"
+        label: "ELONGATE"
       )
     }
   }
@@ -3657,8 +3983,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "JITTER",
-        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }],
-        note: "a repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall"
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }]
       )
     }
   }
@@ -3680,8 +4005,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "JITTER TUMBLE",
-        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }],
-        note: "boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped"
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }]
       )
     }
   }
@@ -3705,8 +4029,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "LOG SPHERE",
-        extra: [accent],
-        note: "self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward"
+        extra: [accent]
       )
     }
   }
@@ -3727,8 +4050,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "STAIRS UNION",
-        extra: [accent],
-        note: "a union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet"
+        extra: [accent]
       )
     }
   }
@@ -3749,8 +4071,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "STAIRS SUBTRACT",
-        extra: [accent],
-        note: "a carve whose rim steps three times over 0.15 m: terraces into the cut"
+        extra: [accent]
       )
     }
   }
@@ -3775,8 +4096,7 @@ template warpPrototypes() {
       }
       exhibit(
         label: "MORPH",
-        extra: [accent],
-        note: "the box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge"
+        extra: [accent]
       )
     }
   }

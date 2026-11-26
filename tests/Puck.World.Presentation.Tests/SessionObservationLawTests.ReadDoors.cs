@@ -119,9 +119,9 @@ public sealed partial class SessionObservationLawTests {
 
         Assert.NotNull(@object: observation);
         Assert.Empty(collection: refusal);
-        // Nothing drains the wire, so the primer and the ticks after it fill the queue; the step that overflows it
-        // must end the session then, not when a reader that never comes drains what was retained.
-        for (var step = 0; ((step <= WorldFederationProjectionSink.PendingDeliveryLimit) && (sink.DetachReason is null)); step++) {
+        // Nothing drains the wire, so the primer and the ticks after it fill the queue, and the sink is sent nothing more
+        // while it waits. A reader that never comes ends the session by name once the sink counts it stalled.
+        for (var step = 0; ((step < (WorldFederationProjectionSink.PendingDeliveryLimit + WorldFederationProjectionSink.StalledDeliveryLimit + 2)) && (sink.DetachReason is null)); step++) {
             fixture.Step();
         }
         Assert.Equal(expected: WorldFederationProjectionSink.BackpressureDetachReason, actual: sink.DetachReason);

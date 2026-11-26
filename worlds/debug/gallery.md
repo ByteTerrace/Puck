@@ -17,13 +17,14 @@ wall's outer face, y up from the ground. The debug world stands the building
 at `gallerySite`, with the entrance in the south wall facing the spawn.
 
 ```text
-  z 28 +----------------------------------------------------------------------+
-       |  north aisle (level 0) and north gallery (levels 1 to 3)             |
-  z 19 |- o - o - o - o - o - o - o - o - o - o - o - o - - - north arcade - -|
-       |  bridge |                                                            E  three
-       |  on     |   NAVE: a void from level 0's floor to the skylights       E  tall
-       |  1 to 3 |                                                            E  bays
-  z  9 |- o - o - o - o - o - o - o - o - o - o - o - o - - - south arcade - -|
+  z 38 +----------------------------------------------------------------------+
+       |  north aisle (level 0) and north gallery (levels 1 to 3): displays   |
+  z 29 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
+       |  bridge |                                                            E  one
+       |  on     |   NAVE: a void from level 0's floor to the skylights,      E  tier of
+       |  1 to 3 |   four displays staged either side of the centre aisle      E  three
+       |         |                                                            E  wide bays
+  z  9 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
        |  west   |stairs|      | lobby |  painting wing (level 0)             |
        |  hall   |      | lift |       |  board game room (level 2)           |
   z  0 +---------+------+-[  ]-+=door==+--------------------------------------+
@@ -33,34 +34,91 @@ at `gallerySite`, with the entrance in the south wall facing the spawn.
 
 | What | Where | Size |
 |---|---|---|
-| Footprint | x 0 to 60, z 0 to 28 | walls 0.3 m thick |
+| Footprint | x 0 to 60, z 0 to 38 | walls 0.3 m thick |
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
-| Nave | x 12 to the east wall, z 9 to 19 | 10 m wide, 47.7 m long, open from level 0 to three skylights |
-| Arcades | piers every 4 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall |
+| Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
+| Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
 | Balcony edges | round the nave's void on levels 1 to 3 | glass balustrade, brass rail 1.1 m up |
 | Stairs | x 12.4 to 16.2, against the south wall | two 1.8 m flights a storey, eighteen 0.25 m risers, treads 0.4 m |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
 | Terrace | x 0 to 12.4, z 0 to 8.7, off level 3 | the roof of the west wing's south aisle |
-| Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's east wall holds three 2.6 by 7.3 m bays in two tiers |
-| Exhibit plinths | on lines along x | cap 0.75 m up, 2.5 to 3.4 m apart, consoles facing the walkway |
+| Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's end wall holds one tier of three 5 by 7.3 m bays through levels 0 and 1 |
+| Display stations | the nave's two lines, 4.5 m in from each balcony edge, and along the middle of each gallery | a display plinth 2.5 m wide with its cap 1.05 m up, staged 12 m or more apart on a cream pad |
 
 The Moth is 2.06 m tall in her suit, so a door is 2.7 m or more, every
-walkway between two lines of plinths is 2 m clear, and the stairs keep 2.4 m
+display leaves a walkway of 2.5 m or more round it, and the stairs keep 2.4 m
 of headroom over every tread.
 
 ## What stands where
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | West hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); stairs, lift and lobby; the painting wing east of the lobby | Two exhibit lines flanking the centre aisle, a cross aisle from the entrance | Two exhibit lines in the north aisle |
-| 1 | A lounge west of the stairs; one row in two facing lines east of the lobby; the rail round the endless fall's well | void | Two rows, facing each other across a walkway |
-| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | Three rows |
-| 3 | The terrace west of the stairs; two rows in the projecting wing | void | Two rows |
+| 0 | West hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); stairs, lift and lobby; the painting wing east of the lobby | Four displays flanking the centre aisle: primitives and stretched to the south, extruded and revolved to the north | The north aisle, open |
+| 1 | A lounge west of the stairs; the sweeps and facets display east of the lobby; the rail round the endless fall's well | void | The blends and folds displays |
+| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion, motion II and warps II displays |
+| 3 | The terrace west of the stairs; the styles and glass displays | void | The forms and surfaces displays |
 
-[shapes.md](shapes.md) lists the rows and what each exhibit shows,
+[shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
+
+## The displays
+
+The owner's ruling, in the plan's own words: "The nave should widen and have
+fewer larger exhibits." The level-0 slice is judged against the kit pack's
+[level-zero exhibit hall](../../docs/game/art/gallery-kit-pack/level-zero-exhibit-hall.png),
+whose hall reads about twice as wide as the old one, with one tier of wide bays
+and a few large exhibits staged far apart on pads, not two dense lines of
+plinths. And: "These new displays are intended to be very high tech devices
+that players will actually interact with as a form of tutorial. They'll be able
+to select from a list of shapes, like what we have now but player selectable
+per display. Eventually we'll let the player mold their own shape using basic
+operations/tools."
+
+So the exhibits stand on display stations, each built to the kit pack's
+[display plinth](../../docs/game/art/gallery-kit-pack/display-plinth.png) and the
+discovery pack's [shape workbench](../../docs/game/art/canyon-discovery-pack/shape-workbench-v2.png):
+a teal base, the ochre body, a cream cap with the glowing turntable, and a
+console whose dark screen lists the shapes. Each display holds one of the
+gallery's groups (primitives, stretched, extruded, revolved, and so on), and its
+turntable shows one exhibit of the group at a time, at twice the exhibits' own
+scale. A player standing before the console steps through the list with the
+context button (E, or RB on a pad): the console's left steps back, the rest of
+it steps on, each wrapping round. The screen's three panes show the exhibit
+before the turntable's, the turntable's with its place in the list, and the one
+after it, and the strip under them says what the exhibit shows.
+[shapes.md](shapes.md#the-displays) lists the displays and the console lines.
+
+Every part of a display is an engine mechanism a world authors:
+
+- A display's `gallerySelect` cell holds the catalog index of the exhibit its
+  turntable shows: an exhibit's place in the whole gallery's walking order,
+  which is its identity. A button, `gallery.go`, `gallery.show` and the tour
+  each write it.
+- The turntable is one placement whose `respond` entries swap which exhibit's
+  prototype stands there, one entry an exhibit after the first (up to
+  `WorldResponseCapacity.MaxEntries`), each a state condition on the
+  display's cell. A response may show an animated creation,
+  so the motion exhibits keep their clock and their controls on a display.
+- The buttons are reaches ([reach.puck](reach.puck)) before the console, each a
+  rule over whoever stands in it, as the lift's buttons are.
+- The screen's lines are text paints bound to the display's screen cells, which
+  one rule copies from the catalog's copy by index (`setState` with a `$cell:`
+  key) whenever the selection moves, however it moved.
+
+### Molding a shape later
+
+The display's state is shaped for player operations. The selection names an
+exhibit by its catalog index, so an operation is a cell beside it, keyed by the
+display (`galleryMold<operation>.<display>`: a scale, a second exhibit to blend
+or subtract and its amount), and the molded shape is a creation of the display's
+own whose shapes read those cells, as `motion-state-blend` reads
+`galleryInputs.probe` and re-emits its seam. The turntable then shows that
+creation through one more response entry, and the console's buttons gain reaches
+for the operations. Nothing about the station, its list or its screen changes.
+The in-world editing packet ([open items](../../docs/plans/open-items.md#in-world-editing))
+holds this as open work.
 
 ## The module
 
@@ -88,7 +146,7 @@ What does not follow the root yet is named under
 The pieces that repeat are the standard's
 ([`architecture.puck`](../standard/architecture.puck)), built to the
 [gallery kit pack](../../docs/game/art/gallery-kit-pack/README.md)'s sheets and
-stamped by the shell: the display plinth, the branched pier, the window bay,
+stamped by the shell and the displays: the display plinth, the branched pier, the window bay,
 the fan shade, the balustrade, the planter, the bench and the banner.
 [`gallery-kit.puck`](gallery-kit.puck) holds one of each for
 `puck mesh preview`. A piece bakes once however many times the plan stamps it.
@@ -102,8 +160,9 @@ them.
 
 The reference for level 0 is the kit pack's
 [level-zero exhibit hall](../../docs/game/art/gallery-kit-pack/level-zero-exhibit-hall.png):
-from the centre aisle at 1.6 m, the near consoles, the exhibits beyond them
-and the canyon beyond the tall bays all read, with teal branches meeting cream
+from the centre aisle at 1.6 m, the near displays' consoles, the large
+exhibits on their turntables, the far displays and the canyon beyond the end
+wall's wide bays all read, with teal branches meeting cream
 balcony edges under brass rails on both sides. The entrance and the nave's
 west end answer the workshop pack's
 [entrance atrium](../../docs/game/art/canyon-workshop-pack/entrance-atrium-v2.png),
@@ -114,7 +173,7 @@ the wings meet, deep-teal arches under the projecting wing and orange fan
 shades on dark hubs.
 
 Floors are glazed terracotta tiles 1.2 m square with a 1 cm joint, a repeating
-paint, and each exhibit line stands on a cream pad painted over them with the
+paint, and each display stands on a cream pad painted over them with the
 joints carried across it. Ceilings are coffered on the same module. Every
 large surface is brushed (the standard's `brushed` shade program): its value
 drifts a few hundredths over patches a couple of metres across, so no wall,
@@ -140,9 +199,9 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 
 | Shot | What it faces |
 |---|---|
-| `hall` | The level-zero hall painting's viewpoint: the centre aisle 23 m from the east wall, 1.6 m up, looking east. The slice the look is judged on |
-| `hall-side` | The same bay from the south line, looking north-east across the nave |
-| `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: a station, the north arcade, the tall bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
+| `hall` | The level-zero hall painting's viewpoint: the centre aisle 30 m from the east wall, 1.6 m up, looking east between the nave's four displays. The slice the look is judged on |
+| `hall-side` | The nave from beside its south arcade, looking north-east across it |
+| `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: the primitives display's console, the north arcade, the end wall's wide bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
 | `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
 
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
