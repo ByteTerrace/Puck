@@ -61,7 +61,7 @@ of headroom over every tread.
 |---|---|---|---|
 | 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
-| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
+| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | none (every display is on level 0) |
 | 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,

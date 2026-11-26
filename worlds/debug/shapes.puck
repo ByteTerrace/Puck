@@ -100,76 +100,70 @@ let warpRow = [
   "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"
 ]
 
-let motionLevel = 2
-let surfaceLevel = 3
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds" }
+  { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds, motion" }
   { level: 1, title: "LEVEL 1  TOYBOX", what: "deck stations: arcade cabinets and television sets" }
-  { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, the board game room" }
+  { level: 2, title: "LEVEL 2  GAMES", what: "the board game room" }
   { level: 3, title: "LEVEL 3  GALLERIES", what: "open galleries over the nave" }
 ]
 
 // The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
 // cells and the stem of its placements' names), its sign's title and what the group shows, its level, where it stands
-// in the building's frame and the yaw its console faces (layout.puck's display lines), and its exhibits in order.
+// in the building's frame and the yaw its console faces (layout.puck's display lines), its exhibits in order, and the
+// exhibit it shows when the world starts (`default`, any exhibit of the catalog). All twelve stand on level 0, one to
+// each showcase bay's side, and their defaults are the gallery's showpieces, the plain sphere among them: the first
+// shape anyone draws, the one every other exhibit departs from. The stamp pool's motion exhibits list on the blends'
+// and the stretched shapes' consoles.
 let galleryDisplayRows = [
   {
-    id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
+    id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale", default: "shape-sphere"
     x: bayX(showcaseBays[3]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
-    id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
+    id: "stretched", title: "STRETCHED", level: 0, names: concat(stretchedRow, motionRowB), what: "each primitive scaled unevenly", default: "motion-twist"
     x: bayX(showcaseBays[4]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
-    id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
+    id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded", default: "shape-jitter-tumble"
     x: bayX(showcaseBays[3]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
+    id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved", default: "shape-morph"
     x: bayX(showcaseBays[4]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "facets", title: "SWEEPS AND FACETS", level: 0, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
+    id: "facets", title: "SWEEPS AND FACETS", level: 0, names: facetRow, what: "sweeps, rounding, shells, warps, relief", default: "shape-cells-f2"
     x: bayX(showcaseBays[2]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
-    id: "blends", title: "BLENDS", level: 0, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
+    id: "blends", title: "BLENDS", level: 0, names: concat(map(blendExhibits, entry => entry.id), motionRow), what: "every blend of a box and a sphere", default: "motion-smooth-blend"
     x: bayX(showcaseBays[5]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
-    id: "folds", title: "FOLDS", level: 0, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
+    id: "folds", title: "FOLDS", level: 0, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds", default: "shape-wallpaper-p6m"
     x: bayX(showcaseBays[5]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "motion", title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
-    x: 20, z: displayNorth, yaw: 0
-  }
-  {
-    id: "motion2", title: "MOTION II", level: motionLevel, names: motionRowB, what: "moving paints, twist, bend, cells, IK"
-    x: 34, z: displayNorth, yaw: 0
-  }
-  {
-    id: "warps", title: "WARPS II", level: 0, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
+    id: "warps", title: "WARPS II", level: 0, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph", default: "shape-log-sphere"
     x: bayX(showcaseBays[0]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "forms", title: "FORMS", level: 0, names: formRow, what: "exponents, tapers, paths, a braid"
+    id: "forms", title: "FORMS", level: 0, names: formRow, what: "exponents, tapers, paths, a braid", default: "shape-sweep-braid"
     x: bayX(showcaseBays[2]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "surfaces", title: "SURFACES", level: 0, names: surfaceRow, what: "palette channels, wear, panels, text"
+    id: "surfaces", title: "SURFACES", level: 0, names: surfaceRow, what: "palette channels, wear, panels, text", default: "shape-volume-cloud"
     x: bayX(showcaseBays[1]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
-    id: "styles", title: "STYLES", level: 0, names: styleRow
+    id: "styles", title: "STYLES", level: 0, names: styleRow, default: "shape-volume-flow"
     what: "a cel style per material, beside continuous ones, the grey card and tiles"
     x: bayX(showcaseBays[1]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
-    id: "glass", title: "GLASS", level: 0, names: glassRow
+    id: "glass", title: "GLASS", level: 0, names: glassRow, default: "shape-glass"
     what: "glass over the opaque image: tint, depth, refraction, frost"
     x: bayX(showcaseBays[0]), z: tileZ(showcaseRowSouth), yaw: 180
   }
@@ -977,10 +971,12 @@ template displayCells(name, values) {
   }
 }
 
+// Each display's default exhibit, by its catalog index.
+let galleryDisplayDefaults = map(galleryDisplays, display => filter(galleryCatalog, entry => (entry.name == display.default))[0].index)
 template displayState() {
-  displayCells(name: "gallerySelect", values: galleryDisplayFirsts)
-  displayCells(name: "galleryShownAt", values: galleryDisplayFirsts)
-  displayCells(name: "galleryPlace", values: map(galleryDisplayFirsts, first => (first + 1)))
+  displayCells(name: "gallerySelect", values: galleryDisplayDefaults)
+  displayCells(name: "galleryShownAt", values: galleryDisplayDefaults)
+  displayCells(name: "galleryPlace", values: map(galleryDisplayDefaults, shown => (shown + 1)))
   displayCells(name: "galleryScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
   displayCells(name: "galleryRowsAt", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
   displayCells(name: "galleryRowsChosen", values: galleryDisplayFirsts)

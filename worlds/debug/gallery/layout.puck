@@ -255,10 +255,8 @@ let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
 let flawCrossings = loopCrossings(flawRoute, flawCuts)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
-// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
-// gallery's displays stand along its middle, their consoles toward its balcony edge.
+// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
 let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
-let displayNorth = (northAisleMid + 0.6)
 let displaySouth = 4.4
 // A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, its cap's top 1.05 m up,
 // and the exhibit on its turntable stands at `displayExhibitScale`, set down so the plinth's cap of the exhibits' own
