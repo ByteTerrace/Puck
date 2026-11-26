@@ -153,6 +153,85 @@ public readonly record struct FixedAabb(FixedVector3 Minimum, FixedVector3 Maxim
         (FixedQ4816.Max(x: Minimum.Y, y: other.Minimum.Y) <= FixedQ4816.Min(x: Maximum.Y, y: other.Maximum.Y)) &&
         (FixedQ4816.Max(x: Minimum.Z, y: other.Minimum.Z) <= FixedQ4816.Min(x: Maximum.Z, y: other.Maximum.Z)));
 
+    /// <summary>The largest coordinate gap or displacement component, in raws, <see cref="ClearFraction"/> evaluates;
+    /// past it the squared gaps could leave the carrier, so the fraction is zero.</summary>
+    public const long ClearFractionRawLimit = (1L << 36);
+
+    /// <summary>Returns the fraction of a straight move a box may travel while staying farther than a margin from
+    /// another box: the exact time of contact of two translating boxes, bounded from below by their separation's own
+    /// closing speed rather than by the move's length.</summary>
+    /// <param name="moving">The box that translates by <c>fraction · displacement</c>.</param>
+    /// <param name="target">The box that stays.</param>
+    /// <param name="displacement">The whole move, each component below <see cref="ClearFractionRawLimit"/> raws.</param>
+    /// <param name="margin">The clearance, in metres, to keep; at least zero.</param>
+    /// <returns>A fraction in <c>[0, 1]</c>: zero when the boxes are within the margin already (or the move or a gap is
+    /// past <see cref="ClearFractionRawLimit"/>), one when the move never brings them within it, and otherwise a value
+    /// the Euclidean distance between the boxes provably stays above <paramref name="margin"/> up to.</returns>
+    /// <remarks>The boxes' distance along the move is <c>D(t) = √Σ(gₖ − cₖt)²</c> over the axes on which they are apart
+    /// (gap <c>gₖ</c>, closing speed <c>cₖ</c>), the distance from a point to a box, and is convex in <c>t</c>; a
+    /// convex function lies on or above its tangent, so <c>D(t) &gt; margin</c> for every <c>t</c> below
+    /// <c>(D(0) − margin) / −D′(0)</c>. One <see cref="FixedJet2"/> evaluation gives <c>D</c> and <c>D′</c> (and the
+    /// curvature <c>D″</c>, which the bound does not use: it is nonnegative here, never a lower bound on the later
+    /// curvature). Conservative advancement by the Lipschitz bound advances by <c>(D − margin) / |displacement|</c>
+    /// instead, which a move that grazes past the target, or runs along it, takes many more steps to cover. The result
+    /// is rounded down, from <c>D(0)</c> lowered and <c>−D′(0)</c> raised by the rounding of the jet, and a gap past
+    /// the limit is clamped down to it, which only lowers the bound.</remarks>
+    public static FixedQ4816 ClearFraction(in FixedAabb moving, in FixedAabb target, FixedVector3 displacement, FixedQ4816 margin) {
+        if (moving.IsEmpty || target.IsEmpty) {
+            return FixedQ4816.One;
+        }
+
+        if ((FusedArithmetic.RawMagnitude(value: displacement.X.Value) >= ((ulong)ClearFractionRawLimit)) ||
+            (FusedArithmetic.RawMagnitude(value: displacement.Y.Value) >= ((ulong)ClearFractionRawLimit)) ||
+            (FusedArithmetic.RawMagnitude(value: displacement.Z.Value) >= ((ulong)ClearFractionRawLimit))) {
+            return FixedQ4816.Zero;
+        }
+
+        var squared = FixedJet2.AdditiveIdentity;
+
+        squared += AxisGapSquared(moveHigh: moving.Maximum.X.Value, moveLow: moving.Minimum.X.Value, speed: displacement.X.Value, targetHigh: target.Maximum.X.Value, targetLow: target.Minimum.X.Value);
+        squared += AxisGapSquared(moveHigh: moving.Maximum.Y.Value, moveLow: moving.Minimum.Y.Value, speed: displacement.Y.Value, targetHigh: target.Maximum.Y.Value, targetLow: target.Minimum.Y.Value);
+        squared += AxisGapSquared(moveHigh: moving.Maximum.Z.Value, moveLow: moving.Minimum.Z.Value, speed: displacement.Z.Value, targetHigh: target.Maximum.Z.Value, targetLow: target.Minimum.Z.Value);
+
+        var distance = FixedJet2.Sqrt(value: squared);
+        var clearance = (((Int128)distance.Real.Value) - Math.Max(val1: margin.Value, val2: 0L) - 1L);
+
+        if (clearance <= Int128.Zero) {
+            return FixedQ4816.Zero;
+        }
+
+        var closing = (-((Int128)distance.First.Value));
+
+        if (closing <= Int128.Zero) {
+            return FixedQ4816.One;
+        }
+
+        var fraction = ((clearance << FixedQ4816.FractionBitCount) / (closing + 2L));
+
+        return FixedQ4816.FromRawBits(value: ((long)Int128.Min(x: fraction, y: FixedQ4816.One.Value)));
+    }
+
+    // One axis of the box distance as a jet in the move's fraction: (gap − closing·t)², the gap clamped to the limit
+    // and the closing speed zero where the boxes overlap on the axis or move apart on it.
+    private static FixedJet2 AxisGapSquared(long moveLow, long moveHigh, long targetLow, long targetHigh, long speed) {
+        var above = (((Int128)targetLow) - moveHigh);
+        var below = (((Int128)moveLow) - targetHigh);
+        var gap = Int128.Max(x: above, y: below);
+
+        if (gap <= Int128.Zero) {
+            return FixedJet2.AdditiveIdentity;
+        }
+
+        var closing = ((above >= below) ? Int128.Max(x: ((Int128)speed), y: Int128.Zero) : Int128.Max(x: -((Int128)speed), y: Int128.Zero));
+        var axis = new FixedJet2(
+            Real: FixedQ4816.FromRawBits(value: ((long)Int128.Min(x: gap, y: ClearFractionRawLimit))),
+            First: FixedQ4816.FromRawBits(value: ((long)(-closing))),
+            Second: FixedQ4816.Zero
+        );
+
+        return FixedJet2.Square(value: axis);
+    }
+
     // The floor average (low & high) + ((low ^ high) >> 1) cannot overflow; an odd sum's half rounds to the even
     // neighbour.
     private static long Midpoint(long low, long high) {

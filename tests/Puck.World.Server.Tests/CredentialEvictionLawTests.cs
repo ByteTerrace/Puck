@@ -495,6 +495,8 @@ public sealed class CredentialEvictionLawTests {
         public ValueTask<byte[]?> FetchForwardedPrototypeAsync(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin) =>
             ValueTask.FromResult<byte[]?>(result: null);
         public bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility) => true;
+        public void RetireTraveler(WorldEntityAddress incarnation) { }
+        public void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present) { }
         public abstract Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct);
         public string? TimelineResetRefusal(WorldServer source) => null;
         public bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason) {

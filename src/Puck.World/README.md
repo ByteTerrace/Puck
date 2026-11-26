@@ -312,7 +312,12 @@ for scope and binding-layout limits; `world.reload` remains the world-document v
 the QUIC peer endpoint (`WorldPeerHost`) so a remote peer can join the same
 ordered domain a local script drives; `--connect <ip:port>` keeps the normal
 world/presentation composition while its local seats are authorized and driven
-by that remote authority. Listening and connecting may coexist on the shared
+by that remote authority. `--connect-authority <namespace>` names the authority
+namespace that remote must prove at its handshake (its
+`host.authorityNamespace`); it requires `--connect`, and without it the run
+expects the namespace the `--world` document declares. A remote that proves
+another namespace is refused, and a run that names none either way refuses the
+join by name. Listening and connecting may coexist on the shared
 `Puck.Networking.Peers.Peer`; neither is enabled by default. The listener binds
 while the host starts and narrates `[world.listen: bound <ip:port> …]`; port 0
 binds any free port, and that line names the one bound. An endpoint that is not

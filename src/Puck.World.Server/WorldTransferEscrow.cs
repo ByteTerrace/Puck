@@ -102,7 +102,11 @@ public sealed record WorldTransferReservationRequest(
     bool PeerAdmission,
     IReadOnlyList<WorldTransferReservationMember> Members,
     ulong SourceFloor = 0UL
-);
+) {
+    /// <summary>The border of a transfer that crosses no authored border: a join, a console transfer, a pose home. A
+    /// closed rewind group lands every guest under it, whatever border the guest named.</summary>
+    public const string Unbordered = "transfer";
+}
 /// <summary>A transfer's destination-wide identity. SourceAuthority is the authenticated source namespace; the
 /// numeric id is only required to be unique inside that namespace.</summary>
 public readonly record struct WorldTransferKey(string SourceAuthority, ulong TransferId);
@@ -150,7 +154,8 @@ public enum WorldTransferStatus : byte {
 /// <param name="MobilityLeases">The traveler incarnations a live lease holds.</param>
 /// <param name="TransferKeys">The key ledger's rows: every key holding anything here (a live lease, a retained commit,
 /// an uncertain arrival or a settled key above its source's floor) and one floor per source.</param>
-public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases, int TransferKeys);
+/// <param name="GuestTransferKeys">The key ledger's rows that guest sessions of a closed rewind group hold, floors included.</param>
+public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases, int TransferKeys, int GuestTransferKeys = 0);
 /// <summary>One named action register carried across an authority change. A destination accepts it only when its
 /// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
 public readonly record struct WorldTransferActionRegister(string Name, ActionStateKind Kind, FixedQ4816 Value, ulong TimerTicks);
@@ -426,7 +431,8 @@ public sealed partial class WorldTransferEscrow {
             CrossingSequence: m_crossingSequence,
             SpentKeys: [.. m_spent.Select(selector: static pair => (pair.Key, pair.Value.Committed, pair.Value.Durable))],
             Floors: [.. m_floors.Select(selector: static pair => (pair.Key, pair.Value))],
-            Custody: [.. Custody.History]
+            Custody: [.. Custody.History],
+            Guests: [.. m_sources.Where(predicate: static pair => pair.Value.Guest).Select(selector: static pair => pair.Key).Order(comparer: StringComparer.Ordinal)]
         );
     }
     /// <summary>Restores every table this escrow owns from a previously captured checkpoint. Every table is cleared
@@ -447,8 +453,9 @@ public sealed partial class WorldTransferEscrow {
         m_borderAdmissions.Clear();
         m_detachedIdentities.Clear();
         m_spent.Clear();
-        m_rows.Clear();
-        m_sourceRows.Clear();
+        m_sources.Clear();
+        m_guests = default;
+        m_keyRows = 0;
         m_floors.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
 
@@ -537,6 +544,7 @@ public sealed partial class WorldTransferEscrow {
         foreach (var row in checkpoint.BorderAdmissions) {
             m_borderAdmissions[row.Slot] = row.Border;
         }
+        RebuildSources(guests: checkpoint.Guests);
     }
 
     // Whether the arrival verdict's own templates would mint Drive over the body a commit assigns. Resolved through
@@ -666,6 +674,8 @@ public sealed partial class WorldTransferEscrow {
             return;
         }
         _ = m_deadlines.Remove(token: key);
+        var released = 0;
+
         foreach (var member in lease.Request.Members) {
             var mobility = member.Mobility!.Value;
 
@@ -677,8 +687,10 @@ public sealed partial class WorldTransferEscrow {
                 (mobilityLease.Transfer == key)
             ) {
                 _ = m_mobilityLeases.Remove(key: mobility.Incarnation);
+                released++;
             }
         }
+        Tally(held: -1, mobilityLeases: -released, sourceAuthority: key.SourceAuthority);
     }
     private static bool ReservationMatches(WorldTransferReservationRequest left, WorldTransferReservationRequest right) {
         if (
@@ -733,6 +745,7 @@ public sealed partial class WorldTransferEscrow {
         if (!m_committed.Remove(item: key)) {
             return;
         }
+        Tally(held: -1, sourceAuthority: key.SourceAuthority);
         Spend(
             committed: true,
             key: key
@@ -779,19 +792,14 @@ public sealed partial class WorldTransferEscrow {
         }
     }
     private bool TryKnownMobilityEpoch(WorldEntityAddress incarnation, out ulong epoch) {
-        var found = false;
-
         epoch = 0;
-        foreach (var pair in m_mobilityAdmissions) {
-            if (
-                (pair.Key.Incarnation == incarnation) &&
-                (!found || (pair.Value.Epoch > epoch))
-            ) {
-                found = true;
-                epoch = pair.Value.Epoch;
-            }
+        if (!m_incarnationSources.TryGetValue(key: incarnation, value: out var sources)) {
+            return false;
         }
-        return found;
+        foreach (var source in sources) {
+            epoch = Math.Max(val1: epoch, val2: m_mobilityAdmissions[(source, incarnation)].Epoch);
+        }
+        return true;
     }
 
     /// <summary>Releases a live reservation; its key is dead here from then on. A committed, uncertain or unknown key
@@ -867,10 +875,17 @@ public sealed partial class WorldTransferEscrow {
             reason = $"transfer {transferId}: this authority holds nothing of the session '{sourceAuthority}'; its entry here ended";
             return WorldTransferStatus.Ended;
         }
+        // A guest's commit is shaped before anything compares or lands it, so the receipt a retry is matched against
+        // and the arrival that is recorded are both the shaped commit. One that has no such shape is refused under
+        // its lease (CommitUnder), which dies with the refusal.
+        var guestRefusal = ((admission.GuestSubject is { } subject)
+            ? WorldTransferBoundary.GuestCommitRefusal(members: members, shaped: out members, subject: subject)
+            : null);
+
         try {
             return CommitAdmitted(
-                admission: in admission,
                 confirmed: confirmed,
+                guestRefusal: guestRefusal,
                 members: members,
                 reason: out reason,
                 sourceAuthority: sourceAuthority,
@@ -881,7 +896,8 @@ public sealed partial class WorldTransferEscrow {
         }
     }
     // The commit behind the door: a live one decided by Admit, or a recorded one redone as it was admitted.
-    private WorldTransferStatus CommitAdmitted(in WorldTransferAdmission admission, string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
+    // `guestRefusal` is why a live guest's commit has no shape the group lands, or null.
+    private WorldTransferStatus CommitAdmitted(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null, string? guestRefusal = null) {
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
@@ -894,7 +910,7 @@ public sealed partial class WorldTransferEscrow {
 
         try {
             status = CommitUnder(
-                guest: admission.IsGuest,
+                guestRefusal: guestRefusal,
                 key: key,
                 members: members,
                 reason: out reason
@@ -922,7 +938,7 @@ public sealed partial class WorldTransferEscrow {
         // A guest's session that holds nothing live after its refused commit keeps no row, so its key needs no
         // tombstone: the key died with the session, and every later question about it answers Ended. A commit that
         // landed and rolled back still records the generations it burned.
-        if (admission.IsGuest && (m_rolledBack.Count == 0) && !HoldsLive(sourceAuthority: sourceAuthority)) {
+        if (IsGuest(sourceAuthority: sourceAuthority) && (m_rolledBack.Count == 0) && !HoldsLive(sourceAuthority: sourceAuthority)) {
             ForgetSource(sourceAuthority: sourceAuthority);
             return WorldTransferStatus.Missing;
         }
@@ -932,7 +948,7 @@ public sealed partial class WorldTransferEscrow {
             reason: ref reason
         );
     }
-    private WorldTransferStatus CommitUnder(WorldTransferKey key, IReadOnlyList<WorldTransferCommitMember> members, bool guest, out string reason) {
+    private WorldTransferStatus CommitUnder(WorldTransferKey key, IReadOnlyList<WorldTransferCommitMember> members, string? guestRefusal, out string reason) {
         var transferId = key.TransferId;
 
         if (IsUncertain(
@@ -979,8 +995,9 @@ public sealed partial class WorldTransferEscrow {
 
             return WorldTransferStatus.Missing;
         }
-        // A guest's commit lands only in the shape a closed rewind group admits; a recorded one already passed here.
-        if (guest && !m_relanding && (WorldTransferBoundary.GuestCommitRefusal(members: members) is { } guestRefusal)) {
+        // A guest's commit lands only in the shape a closed rewind group admits; a recorded one was shaped when it was
+        // admitted and carries no refusal.
+        if (guestRefusal is not null) {
             reason = $"transfer {transferId}: {guestRefusal}";
             return WorldTransferStatus.Missing;
         }
@@ -1208,6 +1225,7 @@ public sealed partial class WorldTransferEscrow {
             ordinals: landedOrdinals
         ) with {
             Generations = [.. generations],
+            Guest = IsGuest(sourceAuthority: key.SourceAuthority),
             Leased = (m_relanding
                 ? [.. m_relandLeased]
                 : ((landedOrdinals.Count < lease.Request.Members.Count)
@@ -1269,7 +1287,9 @@ public sealed partial class WorldTransferEscrow {
             return WorldTransferStatus.Missing;
         }
 
-        m_committed.Add(item: key);
+        if (m_committed.Add(item: key)) {
+            Tally(held: 1, sourceAuthority: key.SourceAuthority);
+        }
         m_committedLanded[key] = [.. arrival.Request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal))];
         // The arrival's custody effect (a re-adoption at home) folds wherever it lands: live, in recovery and in a re-drive.
         Custody.Apply(record: new WorldCrossingRecord.Arrival(Value: arrival));
@@ -1304,16 +1324,17 @@ public sealed partial class WorldTransferEscrow {
             _ = committedIncarnations.Add(item: mobility.Incarnation);
             // Returning to an authority refreshes every authenticated upstream alias for this incarnation so an old
             // route resolves the new live generation instead of forwarding around a loop.
-            foreach (var alias in m_mobilityAdmissions.Keys.Where(predicate: candidate => (candidate.Incarnation == mobility.Incarnation)).ToArray()) {
-                m_mobilityAdmissions[alias] = new MobilityAdmission(
-                    Epoch: mobility.Epoch,
-                    Principal: principal
-                );
-            }
-            m_mobilityAdmissions[(lease.Request.SourceAuthority, mobility.Incarnation)] = new MobilityAdmission(
+            var landed = new MobilityAdmission(
                 Epoch: mobility.Epoch,
                 Principal: principal
             );
+
+            if (m_incarnationSources.TryGetValue(key: mobility.Incarnation, value: out var aliases)) {
+                foreach (var alias in aliases) {
+                    SetCredential(admission: landed, incarnation: mobility.Incarnation, sourceAuthority: alias);
+                }
+            }
+            SetCredential(admission: landed, incarnation: mobility.Incarnation, sourceAuthority: lease.Request.SourceAuthority);
         }
         m_committedIncarnations[key] = committedIncarnations;
         var adopted = AdoptHomeProfiles(arrival: arrival);
@@ -1738,20 +1759,35 @@ public sealed partial class WorldTransferEscrow {
         ArgumentNullException.ThrowIfNull(argument: request);
         var admission = Admit(caller: caller, sourceAuthority: request.SourceAuthority);
 
-        return ReserveAdmitted(
-            admission: in admission,
-            confirmed: confirmed,
-            request: request
-        );
+        try {
+            return ReserveAdmitted(
+                admission: in admission,
+                confirmed: confirmed,
+                request: request
+            );
+        } finally {
+            // A guest's reservation that leased nothing leaves no mark and no row of a session that holds nothing else.
+            ReclaimGuest(sourceAuthority: request.SourceAuthority);
+        }
     }
     // The reservation behind the door: a live one decided by Admit, or a recorded one redone as it was admitted.
     private WorldTransferReservationReply ReserveAdmitted(in WorldTransferAdmission admission, WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
         if (admission.Refused) {
             return WorldTransferReservationReply.Refused(reason: WorldTransferBoundary.Refusal);
         }
-        if (admission.IsGuest && (WorldTransferBoundary.GuestReservationRefusal(request: request) is { } guestRefusal)) {
-            return WorldTransferReservationReply.Refused(reason: guestRefusal);
+        if (admission.IsGuest) {
+            // A live guest's reservation is shaped here, once, before anything compares, leases or records it; a
+            // recorded one carries the shape it was admitted in. The session is marked before its first row, so the
+            // guests' budgets bound it and its rows go when it holds nothing live.
+            if (
+                (admission.GuestSubject is { } subject) &&
+                (WorldTransferBoundary.GuestReservationRefusal(request: request, shaped: out request, subject: subject) is { } guestRefusal)
+            ) {
+                return WorldTransferReservationReply.Refused(reason: guestRefusal);
+            }
+            MarkGuest(sourceAuthority: request.SourceAuthority);
         }
+        var guest = admission.IsGuest;
         var key = new WorldTransferKey(
             SourceAuthority: request.SourceAuthority,
             TransferId: request.TransferId
@@ -1833,13 +1869,15 @@ public sealed partial class WorldTransferEscrow {
         ) is { } rowRefusal) {
             return WorldTransferReservationReply.Refused(reason: rowRefusal);
         }
-        if (((m_leases.Count + m_committed.Count) + m_uncertain.Count) >= WorldTransferLimits.Transactions) {
+        // A guest's transactions and credentials each stand behind a row of its session's budget or a body it holds
+        // here, so the two bounds below are the group's own worlds' and count nothing a guest holds.
+        if (!guest && ((((m_leases.Count + m_committed.Count) + m_uncertain.Count) - m_guests.Held) >= WorldTransferLimits.Transactions)) {
             return WorldTransferReservationReply.Refused(reason: $"transfer history capacity is full ({WorldTransferLimits.Transactions}); acknowledge commits or retire travelers before reserving again");
         }
         var additionalAdmissions = request.Members.Count(predicate: member => ((member.Mobility is { } mobility) &&
             !m_mobilityAdmissions.ContainsKey(key: (request.SourceAuthority, mobility.Incarnation))));
         // Each live lease holds space for every alias its commit may add. Failed and aborted leases release it.
-        if (((((long)m_mobilityAdmissions.Count) + m_mobilityLeases.Count) + additionalAdmissions) > WorldTransferLimits.MobilityAdmissions) {
+        if (!guest && (((((((long)m_mobilityAdmissions.Count) + m_mobilityLeases.Count) - m_guests.Credentials) - m_guests.MobilityLeases) + additionalAdmissions) > WorldTransferLimits.MobilityAdmissions)) {
             return WorldTransferReservationReply.Refused(reason: $"transfer mobility admission capacity is full ({WorldTransferLimits.MobilityAdmissions}); retire travelers before reserving again");
         }
 
@@ -2035,6 +2073,7 @@ public sealed partial class WorldTransferEscrow {
             reason: out var leaseDetail,
             record: new WorldCrossingRecord.Lease(
                 Floor: floor,
+                Guest: guest,
                 Key: key
             )
         );
@@ -2512,6 +2551,7 @@ public sealed partial class WorldTransferEscrow {
                 )
             );
         }
+        Tally(held: 1, mobilityLeases: request.Members.Count, sourceAuthority: key.SourceAuthority);
 
         return new WorldTransferReservationReply(
             Accepted: true,
@@ -2557,11 +2597,13 @@ public sealed partial class WorldTransferEscrow {
         }
 
         // A checkpoint can hold the original reservation's lease; the exact request answers it again. Otherwise the
-        // lease the arrival bound is restored as it was decided.
+        // lease the arrival bound is restored as it was decided. The arrival says whether a guest's session made it.
         var request = arrival.Request;
+
+        if (arrival.Guest) { MarkGuest(sourceAuthority: request.SourceAuthority); }
         var reply = (m_leases.ContainsKey(key: arrival.Key)
             ? ReserveAdmitted(
-                admission: WorldTransferAdmission.Recorded(boundary: m_boundary, sourceAuthority: request.SourceAuthority),
+                admission: WorldTransferAdmission.Recorded(guest: arrival.Guest),
                 request: request
             )
             : RestoreLease(
@@ -2605,7 +2647,6 @@ public sealed partial class WorldTransferEscrow {
 
         try {
             var status = CommitAdmitted(
-                admission: WorldTransferAdmission.Recorded(boundary: m_boundary, sourceAuthority: request.SourceAuthority),
                 members: arrival.Members,
                 reason: out reason,
                 sourceAuthority: request.SourceAuthority,
@@ -2631,9 +2672,12 @@ public sealed partial class WorldTransferEscrow {
             m_relandRolledBack = false;
         }
     }
+    /// <summary>Retires one traveler here for good: a lease that holds it dies, the commit that landed it is
+    /// superseded, and every credential for it goes, whichever source handed it over.</summary>
+    /// <param name="mobility">The traveler's credential.</param>
     public void RetireMobility(in WorldMobilityIdentity mobility) => RetireIncarnation(incarnation: mobility.Incarnation);
 
-    private void RetireIncarnation(WorldEntityAddress incarnation) {
+    internal void RetireIncarnation(WorldEntityAddress incarnation) {
         if (m_mobilityLeases.TryGetValue(
             key: incarnation,
             value: out var mobilityLease
@@ -2649,27 +2693,33 @@ public sealed partial class WorldTransferEscrow {
                 key: committedTransfer
             );
         }
-        foreach (var key in m_mobilityAdmissions.Keys.Where(predicate: candidate => (candidate.Incarnation == incarnation)).ToArray()) {
-            _ = m_mobilityAdmissions.Remove(key: key);
+        if (!m_incarnationSources.TryGetValue(key: incarnation, value: out var sources)) {
+            return;
+        }
+        foreach (var source in sources.ToArray()) {
+            RemoveCredential(incarnation: incarnation, sourceAuthority: source);
             // The traveler was the last thing a guest's session held here once its credential goes.
-            ReclaimGuest(sourceAuthority: key.SourceAuthority);
+            ReclaimGuest(sourceAuthority: source);
         }
     }
 
+    // The body a peer landed as was retired here and went nowhere: its reconnect grace ran out, or it disconnected
+    // with none. The traveler is retired at this authority, and every authority that still forwards to it here is
+    // told through the host, so none keeps a route or a credential for a traveler that no longer exists.
     internal void RetireDepartedPeer(Principal peer) {
-        foreach (var (key, admission) in m_mobilityAdmissions.ToArray()) {
-            if (admission.Principal == peer) {
-                RetireIncarnation(incarnation: key.Incarnation);
-            }
+        if (!m_peerIncarnations.TryGetValue(key: peer, value: out var incarnation)) {
+            return;
         }
+        RetireIncarnation(incarnation: incarnation);
+        m_server.TransferForwarder?.RetireTraveler(incarnation: incarnation);
     }
 
     internal IReadOnlyList<(WorldEntityAddress Incarnation, ulong Epoch)> SourceMobilities(string sourceAuthority) {
         var result = new List<(WorldEntityAddress Incarnation, ulong Epoch)>();
 
-        foreach (var (key, admission) in m_mobilityAdmissions) {
-            if (string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                result.Add(item: (key.Incarnation, admission.Epoch));
+        if (m_sources.TryGetValue(key: sourceAuthority, value: out var ledger)) {
+            foreach (var incarnation in ledger.Travelers) {
+                result.Add(item: (incarnation, m_mobilityAdmissions[(sourceAuthority, incarnation)].Epoch));
             }
         }
         return result;
@@ -2760,6 +2810,7 @@ public sealed partial class WorldTransferEscrow {
         ActiveTransactions: ((m_leases.Count + m_committed.Count) + m_uncertain.Count),
         MobilityCredentials: m_mobilityAdmissions.Count,
         MobilityLeases: m_mobilityLeases.Count,
+        GuestTransferKeys: m_guests.Rows,
         TransferKeys: TotalRows
     );
 }

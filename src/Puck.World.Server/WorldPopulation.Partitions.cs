@@ -7,8 +7,9 @@ namespace Puck.World.Server;
 
 // THE KIT ADVANCE SPLIT. A body whose step is local (WorldBody.StepIsLocal and ProducerIsLocal: it writes only its own
 // motion, sections and producer-side state, emits nothing and needs no kit transaction) advances in a kit partition:
-// the population's slots in fixed runs of KitPartitionSlots, each run's local bodies in ascending slot order. Every
-// other body advances afterwards, serially, in index order, inside the kit transaction (AdvanceSerialBody).
+// the awake bodies in runs of KitPartitionSlots along the Hilbert curve of their ground cells (OrderStepBodiesByCurve),
+// so a partition holds bodies near one another, each run's local bodies in curve order. Every other body advances
+// afterwards, serially, in index order, inside the kit transaction (AdvanceSerialBody).
 //
 // A tick runs five phases for the local bodies: a plan fork (which bodies are local, their sleep, field inputs and
 // cadence), a serial settlement of the plan (the wakes it logged, the goal fields its bodies will read, the perception
@@ -21,7 +22,8 @@ namespace Puck.World.Server;
 // - The frozen image. A producer reads another body only through m_perception, frozen before the plan, so a body's
 //   view of the others does not depend on which bodies stepped before it (ReadProducerSensors).
 // - Partition-owned writes. A partition writes its own bodies, their entries, its ProducerWork, StepOutputs and
-//   WorldBodyStepLog, and the slot notes of its own slots (the notes partition by the same KitPartitionSlots). A body
+//   WorldBodyStepLog, and the slot notes of its own slots (the plan assigns each body's notes to its partition's list,
+//   SlotNotes.Assign, so no two workers append to one list). A body
 //   reaches its population only through the bound step log; BodyWoke, DisturbBody and NoteBodyFactChanged throw while
 //   m_partitioned holds, as do the input runtime's entry points (ThrowIfPartitioned), so a step that is not local
 //   fails loudly at one worker as at many.
@@ -29,15 +31,16 @@ namespace Puck.World.Server;
 //   a function of the document and state, never of the worker count, and one worker runs the same partitions inline.
 // - The navigation hand-off. The plan's settlement resolves every goal field a due steering body will read
 //   (PrepareGoalField), bakes the domain a route search will read, and builds every perception neighbourhood, serially,
-//   in partition order, which is the order one thread walking the slots would ask in. The navigation runtime is
+//   in partition order, which is the order one thread walking the curve would ask in. The navigation runtime is
 //   read-only while a fork runs (NavigationRuntime.EnterReadOnly): a goal field read, a cross-domain route, a network
 //   join or a bake adoption throws there, and a domain's own path search rents a workspace of its own. A sight test
 //   reads the target field, whose queries hold no mutable state.
 // Where it stops: a body whose step can write state, reach another body or emit outputs stays serial; a per-partition
 // kit transaction for those is the open item the engine job system plan names.
 public sealed partial class WorldPopulation {
-    /// <summary>The slots one kit partition holds: the body hash segment, and the run of slots one slot-notes
-    /// partition holds, so a partition's section writes append only to its own notes.</summary>
+    /// <summary>The bodies one kit partition holds: a run of this many along the tick's curve order, whose slot notes
+    /// the plan assigns to one slot-notes partition, so a partition's section writes append only to its own notes. It is
+    /// also the body hash segment.</summary>
     public const int KitPartitionSlots = HashSegmentSlots;
 
     // The producer-side scratch and statistics the serial steps use; each partition owns its own, merged in at the join.
@@ -55,6 +58,33 @@ public sealed partial class WorldPopulation {
     private int m_kitMoves;
     // Whether a kit partition is running: the shared population state a partition must not write refuses while it holds.
     private bool m_partitioned;
+
+    // The side of one curve cell, as a shift of a Q48.16 raw position: 2^4 metres. A body's cell changes only when it
+    // crosses a cell edge, and only a body that changed cell is sorted again (CurveOrderedIndex).
+    private const int CurveCellShift = (FixedQ4816.FractionBitCount + 4);
+    // The tick's step bodies in Hilbert-curve order of their cells (ties by slot), and the cells that order reads.
+    private readonly CurveOrderedIndex m_curveOrder;
+    private readonly long[] m_curveCellX;
+    private readonly long[] m_curveCellY;
+    // What the plan fork reads: the curve order, copied out of the index so the plan's runs stay fixed while it runs.
+    private readonly int[] m_planBodies;
+
+    // Orders the step bodies along the Hilbert curve of the ground plane (x and z) and returns them as the plan's walk.
+    // The order is a function of the bodies' positions and slots alone, never of the worker count or of earlier ticks
+    // (CurveOrderedIndex), so the partitions cut from it are deterministic; a partition is a run of KitPartitionSlots
+    // bodies near one another, and the notes each partition's bodies write are assigned to its own list by the caller.
+    private ReadOnlySpan<int> OrderStepBodiesByCurve(ReadOnlySpan<int> stepBodies) {
+        foreach (var index in stepBodies) {
+            var position = ((m_entries[index].Body is { } body) ? body.FixedPosition : default);
+
+            m_curveCellX[index] = (position.X.Value >> CurveCellShift);
+            m_curveCellY[index] = (position.Z.Value >> CurveCellShift);
+        }
+        WorldBodyWork.Process.Add(amount: m_curveOrder.Sync(cellX: m_curveCellX, cellY: m_curveCellY, members: stepBodies), kind: WorldBodyWork.CurveResorts);
+        m_curveOrder.Sorted.CopyTo(destination: m_planBodies);
+
+        return m_planBodies.AsSpan(start: 0, length: stepBodies.Length);
+    }
 
     /// <summary>Throws while a kit partition runs: the door every shared mutator a body step could reach passes, so a
     /// step that is not local fails at once, at every worker count.</summary>
@@ -116,9 +146,10 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    // One run of KitPartitionSlots slots and the local bodies the plan found in it this tick, with everything a body's
+    // One run of KitPartitionSlots curve-ordered bodies and the local ones the plan found in it this tick, with everything a body's
     // step carries from one phase to the next. A body's place is its ordinal among the partition's bodies.
     private sealed class KitPartition {
+        // The local bodies' slots, in the plan's curve order.
         public readonly int[] Bodies = new int[KitPartitionSlots];
         public readonly AutonomyStep[] Steps = new AutonomyStep[KitPartitionSlots];
         // Whether the body moves this tick: its cadence's answer.
@@ -222,9 +253,7 @@ public sealed partial class WorldPopulation {
         (producer.Flock is not { } flock) ||
         ((flock.Source.CohesionAffinity is null) && (flock.Source.AlignmentAffinity is null));
 
-    private KitPartition KitPartitionOf(int index) {
-        var ordinal = (index / KitPartitionSlots);
-
+    private KitPartition KitPartitionOf(int ordinal) {
         if (m_kitPartitions.Length != Capacity.CeilingDivide(divisor: KitPartitionSlots)) {
             m_kitPartitions = new KitPartition?[Capacity.CeilingDivide(divisor: KitPartitionSlots)];
         }
@@ -237,7 +266,7 @@ public sealed partial class WorldPopulation {
     // order: the wakes the plan logged, the bodies left to the serial loop, the goal field each due producer will read
     // and the perception grids, which read and write what the partitions share.
     //
-    // The invariant: the plan leaves every body, entry and shared set as one thread walking the slots in order would.
+    // The invariant: the plan leaves every body, entry and shared set as one thread walking the curve order would.
     // What enforces it: a partition's plan writes only its own bodies, their entries and its own lists; whatever would
     // write shared state is logged or listed and applied by the settlement in slot order, and the shared mutators throw
     // while a partition runs (ThrowIfPartitioned), so a plan step that reached one fails at one worker as at many.
@@ -258,20 +287,16 @@ public sealed partial class WorldPopulation {
         m_kitSteers = 0;
         m_kitMoves = 0;
 
-        // The step bodies are in slot order, so each partition's share is one run of them.
-        KitPartition? share = null;
-        var shareOrdinal = -1;
+        // The step bodies cut into runs of KitPartitionSlots along the curve, so each partition is spatially compact.
+        var planBodies = OrderStepBodiesByCurve(stepBodies: stepBodies);
 
-        for (var at = 0; (at < stepBodies.Length); at++) {
-            var ordinal = (stepBodies[at] / KitPartitionSlots);
+        for (var start = 0; (start < planBodies.Length); start += KitPartitionSlots) {
+            var share = KitPartitionOf(ordinal: (start / KitPartitionSlots));
 
-            if (ordinal != shareOrdinal) {
-                share = KitPartitionOf(index: stepBodies[at]);
-                share.PlanStart = at;
-                shareOrdinal = ordinal;
-                m_planKitPartitions.Add(item: share);
-            }
-            share!.PlanCount++;
+            share.PlanStart = start;
+            share.PlanCount = Math.Min(val1: KitPartitionSlots, val2: (planBodies.Length - start));
+            m_planKitPartitions.Add(item: share);
+            for (var at = 0; (at < share.PlanCount); at++) { m_slotNotes.Assign(slot: planBodies[(start + at)], partition: (start / KitPartitionSlots)); }
         }
         if (m_planKitPartitions.Count == 0) {
             return;
@@ -324,12 +349,14 @@ public sealed partial class WorldPopulation {
                 m_kitMoves += (partition.Moves[at] ? 1 : 0);
             }
         }
+        // The serial loop runs in index order whatever order the partitions walked: it is the kit transaction's order.
+        m_serialKitBodies.Sort();
         ResolveGoalFields();
         if (perceives) { m_perception?.BuildDeclared(); }
     }
     // One partition's plan: its share of the tick's step bodies, in slot order.
     private void PlanKitPartition(KitPartition partition, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion) {
-        var bodies = m_stepBodies.AsSpan(length: partition.PlanCount, start: partition.PlanStart);
+        var bodies = m_planBodies.AsSpan(length: partition.PlanCount, start: partition.PlanStart);
 
         foreach (var index in bodies) {
             var entry = m_entries[index];

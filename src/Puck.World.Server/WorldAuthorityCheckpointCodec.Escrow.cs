@@ -323,6 +323,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.RewindBaseline,
             writeItem: static (w, authority) => w.WriteString(value: authority)
         );
+        writer.WriteArray(
+            items: section.Guests,
+            writeItem: static (w, session) => w.WriteString(value: session)
+        );
 
         return writer.ToArray();
     }
@@ -445,6 +449,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             ),
             maximum: MaxCollectionCount
         );
+        var guests = reader.ReadArray(
+            field: "escrow guest sessions",
+            readItem: static (ref WireReader r) => r.ReadString(
+                field: "guest session",
+                maxBytes: MaxStringBytes
+            ),
+            maximum: MaxCollectionCount
+        );
 
         return new WorldTransferEscrowCheckpoint(
             BorderAdmissions: borderAdmissions,
@@ -452,6 +464,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             CrossingSequence: crossingSequence,
             Custody: custody,
             Floors: floors,
+            Guests: guests,
             LatestCommittedTransfer: latest,
             Leases: leases,
             MobilityAdmissions: mobilityAdmissions,

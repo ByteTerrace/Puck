@@ -1128,11 +1128,36 @@ open.
   - What a hosted world's rules write on a guest's identity copy ends with the
     guest's body. Player progress that outlives a visit needs a record the
     group owns and restores with itself.
-  - The law covers one entry row. A restore taken after a guest walked from one
-    world of the group to another rests on each row ending what it holds by
-    the traveler's origin, which no law runs. Check: the probe hops the guest
-    from `alpha` to `beta` before its capture and both restored rows hold no
-    guest and no forwarding route.
+  - The law walks a guest from `alpha` to `beta` and ends it there when its
+    grace runs out, but takes its capture before the walk. A restore taken
+    after a guest walked on rests on each row ending what it holds by the
+    traveler's origin, which no law runs. Check: the probe hops the guest
+    before its capture and both restored rows hold no guest and no forwarding
+    route.
+  - A world that retires a traveler's body tells its host, which drops the
+    routes and credentials of the worlds that forwarded to it on its next loop
+    (`IWorldTransferForwarder.RetireTraveler`). A process that dies between
+    the two leaves the forwarding world with a route to a traveler its
+    neighbour no longer holds, and the player's client is answered
+    `RouteUnknown` there until the next restore. Check: when a recovered route
+    binds its colocated destination (`WorldInstanceHost.ResolveForwardedRecoveries`),
+    retire it if the destination holds no credential for the traveler, and
+    show a crash between the retirement and the drain recovers to no route.
+  - The same word stops at a socket. A traveler retired by a world in another
+    process is retired upstream only when an accepted leave's answer comes
+    back, and a player's absence reaches a remote hop only as the streams to
+    it ending. Closed groups run in one process, so this is an open-world
+    gap. Check: a forwarding world retires its route when its next hop
+    answers that it holds no credential for the traveler.
+  - Two parts of the guest design are covered by their predicate and not by a
+    run. A federation handshake by a vouched identity that signed for no
+    session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),
+    and the law asks the predicate, since the engine's own client always signs
+    a session. A seat whose traveler ended while its departure is still in
+    doubt is returned by that departure alone (`WorldInstanceHost.ReturnSeatHome`),
+    and the law's restore finds the departure already settled. Check: a
+    session-less issued claim against a closed group's door, and a restore
+    taken between a client's commit and its settlement.
   - A crash recovery redoes arrivals from the crossing log and no retirement
     the tick made between them. Two arrivals in one journal tail, with the first
     traveler retired in between, redo as two bodies, and a second arrival that
@@ -5102,17 +5127,17 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] On a remote authority (`puck benchmark --route debug --remote local
-  --headless`, which now arrives in all seven chapters at `Presentation`
-  disclosure over `worlds/debug`'s authored `authorityNamespace` and
-  `visitorAdmissionRow`), an observer that falls eight records behind is
-  detached and reconnects (`WorldFederationProjectionSink.PendingDeliveryLimit`).
-  Each detach withdraws the mirror to `Undisclosed` until the projection
-  re-arrives and re-admits the traveller's input profile, dropping batches that
-  named the prior input epoch.
-- [medium] `--connect` resolves the expected remote `authorityNamespace` from
-  the booted document (`WorldInstanceHost`'s remote destination resolution)
-  rather than taking the remote subject as a CLI run input beside the endpoint.
+- [low] An observer whose wire falls a full queue behind is no longer detached:
+  it is sent nothing while its wire drains, and the next delivery cuts its
+  stream to a new generation and sends the whole projection and a primer behind
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
+  left. The catch-up rides a delivery, so on a paused authority, which makes
+  none, a drained observer keeps what it held until the world steps; and the
+  receiver's side of a catch-up has been read only as records on the wire.
+  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
+  jitter that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer is
+  primed when its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it

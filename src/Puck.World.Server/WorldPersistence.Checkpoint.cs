@@ -713,7 +713,6 @@ public sealed partial class WorldPersistence {
             runtime.RestoreCheckpoint(checkpoint: scope);
         }
         Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
-        EndRewoundGuests(baseline: checkpoint.Escrow.RewindBaseline);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }
@@ -735,7 +734,15 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
-        m_pendingAddonCheckpoint = ((Host.Addons is null) ? checkpoint.Addons : null);
+        // Guests end last among the authority's own state, through the door a refused arrival leaves by, once every
+        // table the checkpoint held is back as it was captured: the retained undo turns, the rule latches, the
+        // decisions and the search progress are each imported against the arena and population they were taken from,
+        // and the door's writes then invalidate what depends on them as they do in play (a write outside a scope ends
+        // the retained turns over the rows it touches). Ending them before the turns were imported would restore turns
+        // that still name a guest's cells, and a later undo would bring those back. Addons finish after, so a script
+        // resumes over a world that already holds no guest, as one attached after the restore does.
+        EndRewoundGuests(baseline: checkpoint.Escrow.RewindBaseline);
+        m_pendingAddonCheckpoint =((Host.Addons is null) ? checkpoint.Addons : null);
         if (addonPlan is not null) {
             WorldDocument.CommitAndFinish(host: Host.Addons!, plan: addonPlan);
         }

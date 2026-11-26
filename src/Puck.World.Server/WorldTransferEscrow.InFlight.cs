@@ -32,6 +32,7 @@ public sealed partial class WorldTransferEscrow {
         }
         ReleaseLease(key: key);
         LeaveRow(key: key);
+        ReclaimGuest(sourceAuthority: key.SourceAuthority);
     }
     // An arrival record settled. A durable one lands the arrival exactly as recorded, through the reland door recovery
     // uses, under a lease narrowed to what it landed: the speculative landing that built the record was undone in full,

@@ -457,24 +457,45 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             return new ContactResolution(Grounded: false, ObstructionNormal: default, Uncertainty: ContactUncertainty.Unknown);
         }
         var split = new FixedVector3RateAccumulator(ticksPerSecond: ((long)parts));
-        var count = ((int)Int128.Min(x: parts, y: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget));
+        var total = ((long)parts);
+        var budget = FixedFieldContactSolver.DefaultSweepBoundsQueryBudget;
         var resolved = previousPosition;
         var originalVelocity = velocity;
         var result = default(ContactResolution);
         var obstruction = FixedVector3.Zero;
         var stepHeight = FixedQ4816.Zero;
         var uncertain = default(ContactUncertainty);
+        var done = 0L;
+        var solved = 0;
+        // The colliders every proof below reads are the ones the whole move can reach.
+        var wholeMove = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
+        var indexed = (candidates.IsActive && candidates.Contains(box: in wholeMove));
 
-        for (var part = 0; (part < count); part++) {
-            var increment = split.Integrate(elapsedTicks: 1UL, ratePerSecond: movement);
+        // Conservative advancement by the boxes' own closing speed: a run of slices no collider can reach is crossed
+        // in one step, and only the slices that can meet a collider are solved, within the solve budget.
+        while ((done < total) && (solved < budget)) {
+            var clear = ClearSlices(candidates: in candidates, colliders: colliders, dynamicColliders: dynamicColliders, indexed: indexed,
+                movement: in movement, orientation: in orientation, remaining: (total - done), start: in resolved, total: total, volumes: volumes);
+            var advance = ((clear > 0L) ? clear : 1L);
+            var increment = split.Integrate(elapsedTicks: ((ulong)advance), ratePerSecond: movement);
 
             if (!FixedVector3.TryAdd(left: resolved, right: increment, sum: out position)) {
                 position = previousPosition;
                 velocity = originalVelocity;
                 return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
             }
+
+            done += advance;
+
+            if (clear > 0L) {
+                FixedStaticContactWork.Process.CountLeap();
+                resolved = position;
+                continue;
+            }
+
             result = ResolveEndpoint(candidates: candidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: resolved, up: up, velocity: ref velocity, volumes: volumes);
             resolved = position;
+            ++solved;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
             stepHeight = FixedQ4816.Max(x: stepHeight, y: result.RequiredStepHeight);
             uncertain = uncertain.Union(other: result.Uncertainty);
@@ -482,7 +503,100 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         // Match field-sweep budget exhaustion: keep only the proved prefix and report it as unproved,
         // without turning a work limit into a physical obstruction or integrating the unvisited suffix.
         return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight,
-            Uncertainty = ((parts > count) ? uncertain.Union(other: ContactUncertainty.Unknown) : uncertain) };
+            Uncertainty = ((done < total) ? uncertain.Union(other: ContactUncertainty.Unknown) : uncertain) };
+    }
+
+    // The fraction of the move a body stays beyond margin from one collider: the boxes' closing-speed bound
+    // (FixedAabb.ClearFraction) for a finite collider, and the exact plane distance and closing speed for a half-space,
+    // whose bounds are everywhere. Any other collider without bounds (an unbounded field) proves nothing.
+    private static FixedQ4816 ClearFractionOf(in FixedAabb body, in FixedAabb box, in FixedStaticCollider collider, FixedQ4816 margin, in FixedVector3 movement,
+        in FixedQuaternion orientation, in FixedVector3 start, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        if (!box.IsEverywhere) {
+            return FixedAabb.ClearFraction(displacement: movement, margin: margin, moving: in body, target: in box);
+        }
+
+        if (collider.Kind != FixedStaticColliderKind.HalfSpace) {
+            return FixedQ4816.Zero;
+        }
+
+        // Every volume's lowest point along the normal, over the plane: the least is the body's clearance. Each
+        // quantity rounds to a raw, so the proof lowers the clearance by one raw and raises the closing speed by four.
+        var clearance = long.MaxValue;
+
+        foreach (ref readonly var volume in volumes) {
+            clearance = Math.Min(
+                val1: clearance,
+                val2: (FixedColliderBounds.MinimumProjection(position: start, orientation: in orientation, volume: in volume, normal: collider.Extent) -
+                    FixedVector3.Dot(left: collider.Center, right: collider.Extent)).Value
+            );
+        }
+
+        var room = (((Int128)clearance) - margin.Value - 1L);
+
+        if (room <= Int128.Zero) {
+            return FixedQ4816.Zero;
+        }
+
+        var closing = (-((Int128)FixedVector3.Dot(left: movement, right: collider.Extent).Value));
+
+        if (closing <= Int128.Zero) {
+            return FixedQ4816.One;
+        }
+
+        return FixedQ4816.FromRawBits(value: ((long)Int128.Min(x: ((room << FixedQ4816.FractionBitCount) / (closing + 4L)), y: FixedQ4816.One.Value)));
+    }
+
+    // The most slices, at most remaining, that a body standing at start crosses with no collider within contact reach of
+    // it: the least over every collider of the fraction ClearFractionOf proves, taken over the whole move and floored to
+    // whole slices. Zero when any collider is within reach already or cannot be bounded, or a set carries no bounds.
+    private long ClearSlices(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, in FixedColliderCandidates candidates, bool indexed,
+        in FixedVector3 start, in FixedVector3 movement, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, long remaining, long total) {
+        if ((colliders.Boxes.Length != colliders.Colliders.Length) || (dynamicColliders.Boxes.Length != dynamicColliders.Colliders.Length)) {
+            return 0L;
+        }
+
+        var body = FixedAabb.Empty;
+
+        foreach (ref readonly var volume in volumes) {
+            body = body.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: start, volume: in volume));
+        }
+
+        var margin = ContactReach;
+        var least = FixedQ4816.One;
+
+        if (indexed) {
+            foreach (var index in candidates.Indices) {
+                least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in colliders.Boxes[index], collider: in colliders.Colliders[index], margin: margin,
+                    movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
+
+                if (least.Value <= 0L) {
+                    return 0L;
+                }
+            }
+        } else {
+            for (var index = 0; (index < colliders.Colliders.Length); index++) {
+                least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in colliders.Boxes[index], collider: in colliders.Colliders[index], margin: margin,
+                    movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
+
+                if (least.Value <= 0L) {
+                    return 0L;
+                }
+            }
+        }
+
+        for (var index = 0; (index < dynamicColliders.Colliders.Length); index++) {
+            least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in dynamicColliders.Boxes[index], collider: in dynamicColliders.Colliders[index], margin: margin,
+                movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
+
+            if (least.Value <= 0L) {
+                return 0L;
+            }
+        }
+
+        // floor(least · total) in Int128: the fraction is a Q16 raw and the slice count may be large.
+        var slices = ((((Int128)least.Value) * total) >> FixedQ4816.FractionBitCount);
+
+        return ((long)Int128.Min(x: slices, y: remaining));
     }
 
     /// <summary>Finds the support distance below a body (<see cref="IContactField.TrySupportDistance"/>) over the static
