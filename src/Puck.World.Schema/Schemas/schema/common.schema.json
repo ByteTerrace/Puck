@@ -10991,6 +10991,61 @@
         "$ref": "#/$defs/WorldBindingBarLayout"
       }
     },
+    "WorldPlacementResponseConditionStateConditionNullable": {
+      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandState": {
+          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandKey": {
+          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionStateConditionBare"
+    },
     "PaletteSurfaceDocument": {
       "description": "An authored surface tint and reflectance.",
       "type": [

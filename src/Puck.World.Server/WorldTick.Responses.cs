@@ -73,6 +73,30 @@ public sealed partial class WorldTick {
     // reaction's or the console's write the moment it installs, both within this same tick's sweep. Every row whose
     // holding moved this tick lands in one selection install (WorldDocument.InstallResponseSelection), so a switch
     // that flips several rows replaces the live rows once and delivers them once.
+    // The one place a machine's RunsWhen is decided: after the rule frame folds, so a rule's write starts or stops its
+    // machine on the tick it lands, and before the machines step (ResumeTick). The verdict is derived from the arena on
+    // every tick, so a replay or a restored checkpoint gates exactly as the recorded run did.
+    private IReadOnlyList<WorldMachine>? m_gatedMachines;
+    private bool m_gatesMachines;
+
+    private void GateMachines(ulong tick) {
+        var definition = Host.Document.Definition;
+        var machines = definition.Machines;
+
+        if (!m_gatesMachines && (m_gatedMachines == machines)) { return; }
+        m_gatedMachines = machines;
+        m_gatesMachines = false;
+        // Every declared machine is told its verdict, so a row that drops its condition, or a name declared again
+        // without one, is never left gated by an earlier tick.
+        for (var index = 0; (index < machines.Count); index++) {
+            if (machines[index] is not { } machine) { continue; }
+            m_gatesMachines |= (machine.RunsWhen is not null);
+            Host.Machines.GateRunning(
+                instance: machine.Name,
+                runs: (machine.RunsWhen?.Holds(arena: Host.Arena, definition: definition, tick: tick, engineTick: CompletedEngineTicks) ?? true)
+            );
+        }
+    }
     private void SweepPlacementResponses(ulong tick) {
         m_responseMoves.Clear();
 

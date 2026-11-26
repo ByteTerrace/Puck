@@ -4573,6 +4573,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].memory[].name` | MachineBinding | Declares |  | `WorldMachineMemory.Name` |
 | `machines[].memory[].row` | State | Names | Read | `WorldMachineMemory.Row` |
 | `machines[].memory[].key` | State | Key | Read | `WorldMachineMemory.Key` |
+| `machines[].runsWhen.state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `machines[].runsWhen.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `machines[].runsWhen.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `machines[].runsWhen.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `ruleGroups[].name` | RuleGroup | Declares |  | `RuleGroupDeclaration.Name` |
 | `ruleGroups[].steps[].rule` | Rule | Names | Read | `RuleGroupStep.Rule` |
 | `ruleGroups[].trigger[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |

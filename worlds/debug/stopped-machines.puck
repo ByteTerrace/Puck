@@ -1,13 +1,14 @@
 // A scenario fixture imports this when none of its claims reads a machine: every device of the debug world stays
 // mounted, engageable and swappable, but the host does not advance it, so a scenario does not pay for emulating
-// cartridges it never looks at. A machine added to the debug world (devices.puck, range.puck, gallery/toybox.puck) is
-// added here too.
-machines: map(
+// cartridges it never looks at. A machine added to the debug world (devices.puck, range.puck, gallery/toybox.puck,
+// gallery/rentals.puck) is added here too.
+let debugMachineNames = concat(
   [
     "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
     "range-deck-9", "range-deck-24", "range-deck-50",
     "toybox-tetromino", "toybox-tetromino-mono", "toybox-bounce", "toybox-bounce-north", "toybox-test-card",
     "toybox-test-card-mono"
   ],
-  name => { name: name, running: false }
+  flatMap(range(0, 12), b => [$"rental-hgb-{b}", $"rental-agb-{b}"])
 )
+machines: map(debugMachineNames, name => { name: name, running: false })

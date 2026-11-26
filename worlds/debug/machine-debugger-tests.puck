@@ -48,6 +48,10 @@ machines [
   { name: "toybox-bounce-north", running: false }
   { name: "toybox-test-card", running: false }
   { name: "toybox-test-card-mono", running: false }
+  for b in range(0, 12) {
+    { name: $"rental-hgb-{b}", running: false }
+    { name: $"rental-agb-{b}", running: false }
+  }
 ]
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {

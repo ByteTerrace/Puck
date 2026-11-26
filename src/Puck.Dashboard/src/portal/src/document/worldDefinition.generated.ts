@@ -6401,7 +6401,7 @@ export type WorldBindingOverlay = {
   /**
    * The condition this layer composes under; null always composes it (today's behavior). Reuses StateCondition's field convention rather than a second reading of "compare a state cell" — the same state/key/comparison/value shape a placement's own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.
    */
-  when?: WorldPlacementResponseConditionStateConditionBare | null;
+  when?: WorldPlacementResponseConditionStateConditionNullable | null;
 };
 
 /**
@@ -10085,6 +10085,10 @@ export type WorldMachine = {
    * Whether the device boots the default its ContentFolders name, when one names a file it can mount, in place of its configuration's authored content. A folder names its default in its own folder.json (SettingsFile), which the folder's owner writes (machine.default) and the boot and every world.reload read, so the default lives beside the content and no document names it. A device with no default set, or whose default is absent or unmountable, boots its authored content. Omitted from the wire when false.
    */
   preferFolderDefault?: boolean;
+  /**
+   * The state condition the host advances this instance under, or null to advance it on every tick Running allows. The tick evaluates it against the arena after the rule frame folds and before the machines step (Server.WorldTick.GateMachines), so a rule's write starts or stops the machine on the tick it lands, and a replay or a restored checkpoint derives the same gate from the same state: the gate is never stored. A gated-off instance keeps its hardware state, as a stopped one does, and costs no emulation while it waits. It reuses StateCondition, the reading placement responses, binding overlays and portals share. Omitted from the wire when null.
+   */
+  runsWhen?: WorldPlacementResponseConditionStateConditionNullable | null;
 };
 
 export type WorldMachineCable = {
@@ -11150,7 +11154,10 @@ export type WorldPlacementResponseConditionStateCondition = {
   comparandKey?: string | null;
 };
 
-export type WorldPlacementResponseConditionStateConditionBare = {
+/**
+ * A state-cell condition: compares State's cell (its slot cell when Key is absent, else the cell at Key) against Value, or — when ComparandState is authored instead — against another declared row's cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule's own gate — this facet reuses that field convention rather than inventing a second reading of "compare a state cell." Independent of the placement's position, and of whether the document declares a fields section at all.
+ */
+export type WorldPlacementResponseConditionStateConditionNullable = {
   /**
    * The state row compared — any declared state.world row of a numeric kind (never Text).
    */
