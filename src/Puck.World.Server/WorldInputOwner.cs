@@ -14,6 +14,9 @@ public sealed partial class WorldInputOwner {
     private readonly FixedQ4816 m_lateness;
     private readonly FixedQ4816 m_calibrationLimit;
     private readonly WorldInputSourceState[] m_sources;
+    // Every source's registration (handle, channel, kind, name, binding) is fixed for the owner's life: a batch writes
+    // a source's level, a restore refuses another registry. So the hash folds the registrations once, here.
+    private readonly ulong m_sourceRegistryDigest;
     private readonly WorldInputSourceState[] m_sourceScratch;
     private readonly bool[] m_seen;
     private readonly Dictionary<ushort, int> m_handles;
@@ -74,6 +77,7 @@ public sealed partial class WorldInputOwner {
         m_lateness = Parse(value: policy.MaximumLatenessSeconds);
         m_calibrationLimit = Parse(value: policy.CalibrationLimitSeconds);
         m_sources = catalog.CompileSources(sources: sources, handles: out m_handles);
+        m_sourceRegistryDigest = SourceRegistryDigest(sources: m_sources);
         m_sourceScratch = new WorldInputSourceState[sources.Count];
         m_seen = new bool[sources.Count];
         m_reboundActivations = new HashSet<ulong>(capacity: sources.Count);
@@ -260,7 +264,6 @@ public sealed partial class WorldInputOwner {
             m_stepEvents = stepEvents;
             return true;
         }
-        TouchRetained();
         Array.Clear(array: m_seen);
         // The fold reads only the live addresses, so only theirs start the batch at zero; a contribution to any other
         // address accumulates where nothing reads it.
@@ -463,6 +466,7 @@ public sealed partial class WorldInputOwner {
             }
         }
         if (hasEvents) {
+            TouchRetained();
             for (var written = holdsWritten; (written != 0); written &= (written - 1)) {
                 var address = (int)UInt128.TrailingZeroCount(value: written);
 
