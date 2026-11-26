@@ -1153,15 +1153,14 @@ open.
     seat home (`WorldInstanceHost.ReturnSeatHome`). Check: decide whether a
     traveler an open world holds no credential for ends the client's route the
     same way, and show the seat comes home.
-  - Two parts of the guest design are covered by their predicate and not by a
-    run. A federation handshake by a vouched identity that signed for no
-    session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),
-    and the law asks the predicate, since the engine's own client always signs
-    a session. A seat whose traveler ended while its departure is still in
-    doubt is returned by that departure alone (`WorldInstanceHost.ReturnSeatHome`),
-    and the law's restore finds the departure already settled. Check: a
-    session-less issued claim against a closed group's door, and a restore
-    taken between a client's commit and its settlement.
+  - A seat whose traveler ended while its departure is still in doubt comes
+    home once in the order a run can force: the observation's refusal first,
+    then the departure's resolution (the guest law's step 5). The other order,
+    in which a route's refusal is queued after the seat came home and joined
+    again, is closed by reading and by no run:
+    `WorldInstanceHost.ReturnEndedSeats` acts on a refusal only while the route
+    that heard it is the one the seat follows. Check: a law holds a route's
+    refusal until the seat follows a new traveler, and the seat stays there.
   - A crash recovery redoes arrivals from the crossing log and no retirement
     the tick made between them. Two arrivals in one journal tail, with the first
     traveler retired in between, redo as two bodies, and a second arrival that
