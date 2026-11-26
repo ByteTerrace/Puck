@@ -90,7 +90,21 @@ public sealed partial class WorldBody {
         m_asleepSinceTick = 0UL;
         IdleSleepGravity = null;
         m_sleepIdleTicks = 0UL;
+        m_producerRests = false;
     }
+    // Whether the body's producer was found at rest at its last run and nothing has woken the body since: the one
+    // condition under which a body whose source names a producer counts toward its idle floor. Continuation state,
+    // since a batched body's motion steps between two producer runs read the verdict of the run before them. Written
+    // by NoteProducerRest and withdrawn by WakeUp, the door every change to what a producer reads passes.
+    private bool m_producerRests;
+
+    /// <summary>Gets whether the body's producer was found at rest at its last run and nothing has woken the body
+    /// since.</summary>
+    internal bool ProducerRests => m_producerRests;
+    /// <summary>Records what the population found of the body's producer at the run that just finished
+    /// (<see cref="WorldPopulation"/>'s <c>ProducerRests</c>).</summary>
+    /// <param name="rests">Whether the producer is at rest.</param>
+    internal void NoteProducerRest(bool rests) => m_producerRests = rests;
     /// <summary>Gets how far past its broadphase radius, in metres, a contact-field change can still decide this idle
     /// body's next step: the farthest of its holds' reach, its ground snap and its step height, at its scale or at one,
     /// whichever is farther. The population grows a sleeper's bounds by this before testing a change against it, so a
@@ -141,14 +155,15 @@ public sealed partial class WorldBody {
 
     // Folds one ordinary Advance's outcome into the idle floor. Called at the end of Advance, after every effect the
     // program could have fired this tick, so "moved" reflects where the body actually ended up. A body driven by a
-    // producer never counts idle: its producer reads the world (a target, a sensor, a route) only while the body
-    // advances, so a producer resting at its goal would sleep through the goal moving away.
+    // producer counts idle only while its population found the producer at rest (m_producerRests, decided by
+    // WorldPopulation's ProducerRests): a producer reads the world (a target, a sensor, a route) only while the body
+    // advances, so one that could answer differently with nothing waking the body must keep it awake.
     private void UpdateSleepEligibility(ulong tick, ulong stepTicks, ulong sleepAfterTicks, ulong contactFieldVersion, bool hadIncomingIntent, bool moved) {
         m_lastContactFieldVersion = contactFieldVersion;
 
         if (
             (sleepAfterTicks == 0UL) ||
-            InputImages.Source.IsProducer ||
+            (InputImages.Source.IsProducer && !m_producerRests) ||
             m_timedMove.IsActive ||
             hadIncomingIntent ||
             moved

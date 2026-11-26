@@ -686,6 +686,9 @@ public sealed partial class WorldPopulation {
             state = next;
             // A rule's $producer: read is versioned by what it answers, so the slot is one the next derivation compares.
             m_factDirtySlots.Add(index: index);
+            // Whether the producer runs is an input of whether it rests (ProducerRests): the body wakes, which
+            // withdraws the rest its last run found, and its next producer step decides again.
+            m_entries[index].Body?.WakeUp();
         }
         return true;
     }
@@ -696,20 +699,29 @@ public sealed partial class WorldPopulation {
     /// <param name="possessed">The possessed body indices; duplicates are allowed.</param>
     internal void SyncPossession(List<int> possessed) {
         ThrowIfPartitioned();
-        // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
-        // application that set it.
+        m_possessedNow.Clear();
+        foreach (var index in possessed) {
+            if (((uint)index) < ((uint)Capacity)) { m_possessedNow.Add(index: index); }
+        }
+        // Compared whole against the grant table's list each tick, so a restored or scope-replayed flag can never
+        // outlive the application that set it; only a body whose possession changed passes the stand-down door, so a
+        // body possessed tick after tick is not woken or marked each time.
         for (var index = 0; (index < Capacity); index++) {
-            ref var state = ref m_entries[index].ProducerState.StandDown;
+            var entry = m_entries[index];
+            var held = ((entry.ProducerState.StandDown & BodyProducerStandDown.Possessed) != BodyProducerStandDown.None);
+            var now = m_possessedNow.Contains(index: index);
 
-            if ((state & BodyProducerStandDown.Possessed) != BodyProducerStandDown.None) {
-                state &= ~BodyProducerStandDown.Possessed;
+            if (held == now) { continue; }
+            if (entry.Active) {
+                _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: now);
+            } else if (held) {
+                entry.ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
                 m_factDirtySlots.Add(index: index);
             }
         }
-        foreach (var index in possessed) {
-            _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);
-        }
     }
+    // The bodies the tick's possession list names (SyncPossession), by slot.
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_possessedNow = new();
     // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
     // none does. It writes only this body's own entry, so a partition may stage it.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
@@ -737,10 +749,15 @@ public sealed partial class WorldPopulation {
                 entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
+            // A producer that stands down has no run to wait for, and the reason's change wakes the body
+            // (SetProducerStandDown). A source naming a producer the kit does not carry keeps the body awake: nothing
+            // wakes it when a retune brings the producer back.
+            body.NoteProducerRest(rests: (entry.ProducerState.StandDown != BodyProducerStandDown.None));
             body.StageProducerIntent(intent: default);
             return;
         }
 
+        var before = entry.ProducerState;
         // Selecting a producer starts it: a plain producer switch, or a same-name kit retune onto a different
         // curve row, rejoins the curve rather than resuming a foreign curve's station — see
         // BodyProducerState.ActiveProducerName's remarks.
@@ -815,6 +832,38 @@ public sealed partial class WorldPopulation {
             state: ref entry.ProducerState,
             stepTicks: stepTicks
         );
+        body.NoteProducerRest(rests: ProducerRests(before: in before, body: body, entry: entry, producer: producer, sensors: in sensors));
+    }
+    // PRODUCERS AT REST. A producer's run is a function of its program, its state, its sensors and the body's pose, so a
+    // run that answered the neutral intent and moved none of its state answers the same on every later run while its
+    // sensors and the pose stand. The body may then count toward its idle floor and sleep like any undriven body, and a
+    // town's citizens standing at their anchors cost a tick nothing.
+    //
+    // The invariant: a body asleep under a resting producer would, awake, stage the neutral intent and hold its state.
+    // What enforces it: this is the one place a rest is found, from the run that just finished, and every wake
+    // withdraws it (WorldBody.WakeUp), so it holds only where every input of the next run has a door that wakes the
+    // body. The pose wakes through WorldBody.WakeUp (a teleport, a transfer, a targeted effect) and the contact
+    // field's observation (WorldPopulation.Sleep.cs); the target register through SetDesignation; a stand-down through
+    // SetProducerStandDown; the medium an arrived body's cell reads through the field regions' changed cells; a
+    // rebuild of the kits and domains through RebuildCore, and a contact field install wakes every sleeper. A sensor
+    // that reads another body (a designated or sensed body, a flock) has no such door, and a route still walking,
+    // searching or refused may answer differently once its domain's medium moves somewhere the body does not stand,
+    // so neither rests. Where it stops: a new sensor source rests only once it is named here with its door.
+    private static bool ProducerRests(Entry entry, WorldBody body, CompiledBodyProducer producer, in BodyProducerState before, in BodyProducerSensors sensors) {
+        if (
+            (producer.Flock is not null) || (body.ProducerFault is not null) || (body.StagedProducerIntent != default) ||
+            (sensors.Candidate.Index >= 0) || (sensors.CurrentTarget.Index >= 0) || !entry.ProducerState.ProgressEquals(before: in before)
+        ) {
+            return false;
+        }
+        if (producer.Target is not { } target) {
+            return true;
+        }
+        return target.Source switch {
+            BodyTargetSource.Designated => !entry.Designations[target.RegisterIndex].HasBody,
+            BodyTargetSource.Navigated => (!entry.Designations[target.RegisterIndex].HasBody && (entry.NavigationState.Status is NavigationStatus.Arrived or NavigationStatus.NoTarget)),
+            _ => false,
+        };
     }
 
     /// <summary>Samples what each body that can advance this tick reads of the field regions, before
