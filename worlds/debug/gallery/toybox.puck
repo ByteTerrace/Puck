@@ -25,12 +25,6 @@ import "../../standard/machines"
 import "layout"
 import "look"
 
-// The screens' indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
-// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, one to a station.
-let toyboxScreen = 20
-
-// Where a station stands in the building's frame, on its tile.
-function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
 prototypes {
   for (c, i) in lookCabinets {
@@ -68,10 +62,48 @@ placements {
   }
 }
 
-// A deck for each station, booting its shipped program; it can swap to every program in the shipped deck folder and the
-// owner's local one (`roms/hgd`, absent in a clean checkout). A path resolves beside this file.
+// The deck library: the shipped deck programs, then the owner's local deck folder (`roms/hgd`, absent in a clean
+// checkout). A title's number is its place in this listing (`machine.content` prints each file's `title=`), so the
+// shipped programs are titles 1 and 2 whatever the local folder holds. A path resolves beside this file.
+let toyboxLibrary = ["../cartridges/deck", "../../../roms/hgd"]
+
+// The cartridge in each station's deck: `toyboxCartridge[<station>]` is the rented cartridge's loan ordinal
+// (rentals.puck) while one is inserted, 0 while the deck runs its own program, and `toyboxTitle[<station>]` the library
+// title the deck runs, which its machine's `contentBy` reads. `toyboxSwap` is the insert rule's scratch. The rentals'
+// console rule writes all three and shows the inserted cartridge from `toyboxCartridge`.
+exports {
+  reads [toyboxCartridge, toyboxTitle, toyboxSwap]
+  actions [toyboxCartridge, toyboxTitle, toyboxSwap]
+}
+state {
+  world {
+    row {
+      name: "toyboxCartridge"
+      kind: Int
+      capacity: length(toyboxStations)
+      cells: map(toyboxStations, s => { key: s.id, value: 0 })
+    }
+    row {
+      name: "toyboxTitle"
+      kind: Int
+      capacity: length(toyboxStations)
+      cells: map(toyboxStations, s => { key: s.id, value: 0 })
+    }
+    row {
+      name: "toyboxSwap"
+      kind: Int
+      capacity: length(toyboxStations)
+      cells: map(toyboxStations, s => { key: s.id, value: 0 })
+    }
+  }
+}
+
+// A deck for each station, booting its shipped program until a cartridge is inserted (`contentBy`); it can also swap to
+// any title of the library by hand (`machine.content toybox-cabinet-south-3`, `machine.swap …`, gallery.md's "The
+// toybox").
 machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
-  contentFolders ["../cartridges/deck", "../../../roms/hgd"]
+  contentFolders: toyboxLibrary
+  contentBy { state: toyboxTitle, key: s.id }
 }))
 
 // Each station's picture stands upright in its frame (a cabinet's bezel, a television's), its glass exactly the deck's

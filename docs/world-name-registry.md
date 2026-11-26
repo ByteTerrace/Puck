@@ -4694,6 +4694,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].runsWhen.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
 | `machines[].runsWhen.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
 | `machines[].runsWhen.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `machines[].contentBy.state` | State | Names | Read | `WorldMachineContentSelector.State` |
+| `machines[].contentBy.key` | State | Key | Read | `WorldMachineContentSelector.Key` |
 | `ruleGroups[].name` | RuleGroup | Declares |  | `RuleGroupDeclaration.Name` |
 | `ruleGroups[].steps[].rule` | Rule | Names | Read | `RuleGroupStep.Rule` |
 | `ruleGroups[].trigger[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |

@@ -21,7 +21,8 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
                     WorldMachineCheckpointKind.Running,
                     running.Generation,
                     running.CompletedSteps,
-                    runtime.CaptureCheckpoint()
+                    runtime.CaptureCheckpoint(),
+                    instance.ContentSelection
                 ),
                 MachineLease.Running => throw new InvalidOperationException(message: $"machine '{pair.Key}' ({instance.Declaration.Engine}) has no durable checkpoint capability"),
                 MachineLease.Refused refused => new(
@@ -70,6 +71,12 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
     public void RestoreCheckpoint(WorldMachineHostCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(checkpoint);
         RequireCheckpointInventory();
+        // A row's image belongs to the library title it ran, so each machine first mounts that title. The title is
+        // derived from the state the same restore installs (the machine's ContentBy cell), so mounting it ahead of the
+        // all-or-nothing check below only does what the next tick would.
+        foreach (var row in (checkpoint.Instances ?? [])) {
+            SelectContent(instance: row.Name, title: row.ContentSelection);
+        }
         CheckpointRestore.Validate(
             checkpoint: checkpoint,
             host: this,

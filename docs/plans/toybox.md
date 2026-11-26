@@ -59,6 +59,22 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   device rides its renter's hip, shows its pool machine's game and plays in its renter's hands. Open: creating a pool
   machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's
   `needs` does (worlds/standard/station.puck), so a small body cannot rent.
+- The cartridge library (the owner's request: a folder of curated ROMs per console, a nice diegetic way to switch
+  between them, renting known titles welcome). Built: a machine's `contentBy` cell selects a title of its
+  `contentFolders` library, the rack at bay 9 lends the deck library's titles through the rentals' loan row, and a
+  station's console swaps cartridges (worlds/debug/gallery.md, "The cartridge rack"). Open:
+  - A cartridge's label shows the title's file name: a slot past the shipped titles is labelled by its number, since
+    a creation's text is authored and no file name enters the document. It needs a presentation-side label the host
+    fills from the library (the machine host knows the names; the document and state never carry them).
+  - Brick and advanced-brick cartridges for the rented handhelds: a rack slot list per family over the
+    `cgb`/`dmg`/`agb` folders and the owner's `roms/hgb` and `roms/agb`, and inserting by engaging the held device
+    while holding a cartridge of its family (the pool machines take `contentBy` from a per-body cell).
+  - A picker on the television sets: the engaged player's Select (or a bound button) shows the library's titles on
+    the screen beside the inserted cartridge's, and ejects. Needs the same presentation-side title list.
+  - The rack's place and the console's spot are first guesses (bay 9 against the south wall; 0.9 m to the station's
+    +x side); judge them on a walk and captures and move them where they read.
+  - A deck runs its own program again when its cartridge's title is missing from this machine's folders; the
+    cartridge could say so (a blank label, a refusal tone).
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
 - The central tree's look: the tree has buttress fins, wandering bark shelves with shelf fungus and burls, branches

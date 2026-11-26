@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Waiting;
 using Puck.World.Machines;
@@ -378,6 +379,86 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             _ = m_gatedOff.Remove(item: instance);
         } else {
             _ = m_gatedOff.Add(item: instance);
+        }
+    }
+    /// <inheritdoc/>
+    public void SelectContent(string instance, int title) {
+        if (
+            !m_instances.TryGetValue(key: instance, value: out var live) ||
+            (live.ContentSelection == title)
+        ) {
+            return;
+        }
+
+        // The machine as it runs with no title selected: what it booted, kept while a title runs.
+        var stock = (live.Stock ?? new StockBoot(Declaration: live.Declaration, FolderBoot: live.FolderBoot));
+        var declaration = stock.Declaration;
+        var folderBoot = stock.FolderBoot;
+
+        if (title > 0) {
+            if (
+                WorldMachineContentFolder.TryList(
+                    catalog: Catalog,
+                    documentDirectory: m_documentDirectory,
+                    entries: out var entries,
+                    folders: out _,
+                    machine: stock.Declaration,
+                    reason: out _
+                ) &&
+                WorldMachineContentFolder.TryTitle(entries: entries, entry: out var entry, title: title)
+            ) {
+                var authored = Documented(declaration: stock.Declaration, folderBoot: stock.FolderBoot).Configuration;
+
+                declaration = (stock.Declaration with {
+                    Configuration = MachineOperationValidation.ReplaceContent(configuration: authored, path: entry.ContentPath),
+                });
+                folderBoot = new FolderDefaultBoot(Authored: authored, Configuration: declaration.Configuration);
+            } else {
+                NarrateMachine(text: $"[machine: '{instance}' library holds no title {title}; it runs its own content]");
+            }
+        }
+        if (TryGetLiveLinkForInstance(instance: instance, linkName: out var linkName)) {
+            NarrateMachine(text: $"[machine: '{instance}' keeps its content while it is in live link '{linkName}'; title {title} waits for screen.unlink]");
+            m_instances[instance] = (live with { ContentSelection = title });
+            return;
+        }
+
+        var selected = ((title == 0) ? null : stock);
+
+        if (JsonElement.DeepEquals(element1: declaration.Configuration, element2: live.Declaration.Configuration)) {
+            m_instances[instance] = (live with { ContentSelection = title, Stock = selected, FolderBoot = folderBoot });
+            return;
+        }
+
+        MachineLease.Running lease;
+
+        try {
+            lease = CreateRunning(
+                declaration: declaration,
+                documentDirectory: m_documentDirectory,
+                engine: Catalog.Engines[declaration.Engine],
+                generation: m_nextInstanceGeneration
+            );
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or MachineContentException) {
+            NarrateMachine(text: $"[machine: '{instance}' cannot mount title {title}: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+            m_instances[instance] = (live with { ContentSelection = title });
+            return;
+        }
+        m_instances[instance] = new MachineInstance(declaration, lease, ResolveBindings(declaration, lease)) {
+            ContentSelection = title,
+            FolderBoot = folderBoot,
+            Stock = selected,
+        };
+        m_nextInstanceGeneration++;
+        m_instanceRevision++;
+        if (live.Lease is MachineLease.Running retired) {
+            retired.Runtime.Dispose();
+        }
+        NotifyMachinesChanged();
+    }
+    private void NarrateMachine(string text) {
+        if (m_narrationHub is { HasNarrationSink: true }) {
+            m_narrationHub.Narrate(channel: "machine", text: text);
         }
     }
     // Whether the host advances an instance this tick: authored running, and its RunsWhen, if any, held.
