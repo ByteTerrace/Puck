@@ -2,11 +2,13 @@
 // growth is held to the room about it. `puck test worlds/debug/size-field-tests.puck`, and `--reproduce` to show two runs
 // agree.
 //
-//   the shrink field   x 0, from z 0 (full size) to z -12 (`shrinkEnd`), reaching 3 m either side
-//   the grow field     x 20, from z 0 to z -6, full size along its length: a body anywhere in it is asked to grow to one
-//   the canopy         a slab over the grow field's first two metres, its underside 1 m up: half the Moth's height
+//   the shrink zone    x 0, from z 0 (full size) to z -12 (`shrinkEnd`), reaching 3 m either side
+//   the grow zone      x 20, from z 0 to z -6, full size along its length: a body anywhere in it is asked to grow to one
+//   the canopy         a slab over the grow zone's first two metres, its underside 1 m up: half the Moth's height
+//   the small box      x -8 .. -4, z -4 .. 0: `shrinkEnd` throughout, unless the body holds the `pass` register
+//   the stand          a station at (-6, 0, -2), inside the small box, that needs a size of at least a half
 //
-// Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink field is the
+// Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink zone is the
 // geometric mean of its two ends, the square root of `shrinkEnd`, not their average.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -14,12 +16,79 @@ documentId: "size-field-tests"
 
 import "../standard/bounds"
 import "../standard/size-field"
+import "../standard/station"
 import "size"
+import "moth-controls"
 
 let shrinkEnd = 0.15
 
-sizeField(name: "shrink", from: [0, 0, 0], to: [0, 0, -12], start: 1, end: shrinkEnd, reach: 3)
-sizeField(name: "grow", from: [20, 0, 0], to: [20, 0, -6], start: 1, end: 1, reach: 3)
+sizeField(
+  name: "walk",
+  zones: [
+    { from [0, 0, 0], to [0, 0, -12], reach: 3, start: "full", end: "small" }
+    { from [20, 0, 0], to [20, 0, -6], reach: 3, start: "full" }
+    { box { x0: -8, x1: -4, y0: -1, y1: 3, z0: -4, z1: 0 }, start: "small" }
+  ],
+  sizes: [{ key: "full", value: 1 }, { key: "small", value: shrinkEnd }],
+  passes: ["pass"],
+  passSize: "full"
+)
+
+stationPlay(stations: [{ at [-6, 0, -2], camera: "moth-camera", spawn: "stand", needs [{ register: "size", atLeast: 0.5 }] }])
+
+spawnPoints [
+  { id: "stand", position [-6, 0, -2], yawDegrees: 0 }
+]
+
+state {
+  body [
+    {
+      name: "pass"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "range", minimum: 0, maximum: 1 }
+    }
+  ]
+  world {
+    // A mailbox a step writes to grant body 0 the pass, which the rule below writes into its register.
+    table passAsk {
+      grant = 0
+    }
+  }
+}
+
+rule "pass-grant" {
+  when passAsk.grant == 1
+  mode: Level
+  setBodyState(key: 0, state: "pass", value: 1)
+  passAsk.grant = 0
+}
+
+// Small in the box, the stand's needs keep her out of its reach; given the pass she grows to full size there and the
+// stand takes her.
+test "a body too small for a station stands in no station's reach" {
+  when {
+    seat1: body.pose -6 0 -2 0 0 0 0
+    ticks 10
+  }
+  expect {
+    bodyState(body, 0, size) == shrinkEnd
+    stationNear["0"] == 0
+  }
+}
+
+test "the pass gives her the pass size in the zone, and the station takes her" {
+  when {
+    seat1: body.pose -6 0 -2 0 0 0 0
+    ticks 10
+    seat1: world.state.cell.set passAsk grant 1
+    ticks 10
+  }
+  expect {
+    bodyState(body, 0, size) == 1
+    stationNear["0"] == 1
+  }
+}
 
 prototypes {
   prototype "floor" {
