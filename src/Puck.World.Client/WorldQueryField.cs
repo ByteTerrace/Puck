@@ -86,6 +86,19 @@ public sealed class WorldQueryField {
     /// <returns>Whether any part reports the sphere occupied.</returns>
     public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
         (Fixed.Overlap(center: center, radius: radius) || ((Responding is { } responding) && responding.Overlap(center: center, radius: radius)));
+    /// <summary>Reads the union's signed distance at a point: the lesser of the parts' distances.</summary>
+    /// <param name="position">The point.</param>
+    /// <param name="distance">The distance, metres, or default where no part answered.</param>
+    /// <returns>Whether any part answered: a part with no shape, or a point outside its frame, answers nothing.</returns>
+    public bool TryDistance(FixedPosition position, out FixedQ4816 distance) {
+        var found = Fixed.TryDistance(distance: out distance, material: out _, position: position);
+
+        if ((Responding is { } responding) && responding.TryDistance(distance: out var other, material: out _, position: position) && (!found || (other < distance))) {
+            distance = other;
+            found = true;
+        }
+        return found;
+    }
     /// <summary>Reads the surface normal at a point from the part whose surface is nearer it.</summary>
     /// <param name="position">The point.</param>
     /// <param name="normal">The unit normal, or default.</param>

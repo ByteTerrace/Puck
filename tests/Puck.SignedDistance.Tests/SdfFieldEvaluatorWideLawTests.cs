@@ -88,6 +88,25 @@ public sealed class SdfFieldEvaluatorWideLawTests {
 
         AssertNormalsAgree(points: Lattice(high: new Vector3(x: 5.37f, y: 2.41f, z: 3.63f), low: new Vector3(x: -5.21f, y: -0.87f, z: -3.79f), steps: 9), program: builder.Build());
     }
+    // The sweep's own wide search: a tube of one radius, a tapered root, a bulged limb, all blended smoothly onto a slab,
+    // as a tree's trunk and roots meet the ground.
+    [Fact]
+    public void SweepsReadAsTheFixedPointReaderDoes() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -1f, z: 0f)).Box(halfExtents: new Vector3(x: 5f, y: 1f, z: 5f), material: material, round: 0f);
+        _ = builder.ResetPoint().Sweep(a: new Vector3(x: 0f, y: -0.15f, z: 0f), b: new Vector3(x: 0.3f, y: 1.2f, z: 0.1f), c: new Vector3(x: 0.1f, y: 2.6f, z: 0f),
+            blend: SdfBlendOp.SmoothUnion, bulge: 0f, material: material, radiusEnd: 0.18f, radiusStart: 0.35f, smooth: 0.3f, strandOffset: 0f, strands: 1, twist: 0f);
+        _ = builder.ResetPoint().Sweep(a: new Vector3(x: 0f, y: 0.4f, z: 0f), b: new Vector3(x: -0.7f, y: 0.12f, z: 0.2f), c: new Vector3(x: -1.3f, y: -0.24f, z: 0.4f),
+            blend: SdfBlendOp.SmoothUnion, bulge: 0f, material: material, radiusEnd: 0.1f, radiusStart: 0.2f, smooth: 0.3f, strandOffset: 0f, strands: 1, twist: 0f);
+        _ = builder.ResetPoint().Sweep(a: new Vector3(x: 1.5f, y: 0f, z: -1f), b: new Vector3(x: 2.2f, y: 0.8f, z: -0.6f), c: new Vector3(x: 2.6f, y: 1.6f, z: -1.2f),
+            blend: SdfBlendOp.Union, bulge: 0f, material: material, radiusEnd: 0.25f, radiusStart: 0.25f, strandOffset: 0f, strands: 1, twist: 0f);
+        _ = builder.ResetPoint().Sweep(a: new Vector3(x: -2f, y: 0.5f, z: 1.5f), b: new Vector3(x: -1.4f, y: 1.4f, z: 2f), c: new Vector3(x: -0.6f, y: 1.2f, z: 2.4f),
+            blend: SdfBlendOp.SmoothUnion, bulge: 0.08f, material: material, radiusEnd: 0.15f, radiusStart: 0.2f, smooth: 0.2f, strandOffset: 0f, strands: 1, twist: 0f);
+
+        AssertNormalsAgree(points: Lattice(high: new Vector3(x: 3.13f, y: 2.83f, z: 2.71f), low: new Vector3(x: -2.57f, y: -0.33f, z: -1.91f), steps: 9), program: builder.Build());
+    }
     // A fold's copies, a relieved scope and a scope popped by a smooth union: the stream's own semantics.
     [Fact]
     public void FoldsReliefsAndScopesReadAsTheFixedPointReaderDoes() {
