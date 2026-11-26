@@ -85,7 +85,10 @@ public sealed class WorldProjectionWork : WorkLedger<WorkCounterSet> {
     public static WorkKind ManifestMembersFetched { get; } = Registry.Declare(name: "world.projection.manifest-members-fetched", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the bytes of the members <see cref="ManifestMembersFetched"/> counts.</summary>
     public static WorkKind ManifestFetchedBytes { get; } = Registry.Declare(name: "world.projection.manifest-fetched-bytes", unit: "bytes", workClass: WorkClass.Pacing);
-
+    /// <summary>Gets the kind counting the authored rows a value composition read: the rows the arena's journal named as
+    /// moved since the recipient's last composition and the rows whose policies read them, or every row when the
+    /// journal could not name them.</summary>
+    public static WorkKind RowsRead { get; } = Registry.Declare(name: "world.projection.rows-read", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds => Registry.Kinds;
 

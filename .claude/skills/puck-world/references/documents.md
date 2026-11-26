@@ -107,9 +107,21 @@ keyed clock the timeline does not carry.
 
 A presentation-tier recipient is fed by one `WorldProjectionFeed` (the session
 sink and the federation projection sink each hold one): a whole projection first,
-then member deltas (`WorldDocumentBasis.Diff`) only when a member changed, all as
-compact canonical JSON (`WorldProjection.SerializeCompact`), and a
-timeline delta at the authoritative ticks a held anchor's prediction misses.
+then deltas only when a member changed, all as compact canonical JSON
+(`WorldProjection.SerializeCompact`), and a timeline delta at the authoritative
+ticks a held anchor's prediction misses. A delivery whose frame identity, audience
+key and referenced rows stand is a value composition: it reads only the rows the
+arena's journal names as moved (`StateArena.TryReadMoves`, counted as
+`world.projection.rows-read`), compares each row's shared image digest with the
+one it last delivered, and writes the changed observation rows or cells as
+`$replace` rows directly; a policy move asks `WorldProjection.RefuseHidden` again.
+Anything else composes the projection whole (`world.projection.whole-compositions`)
+and sends the document delta (`WorldDocumentBasis.Diff`). The cursor records only
+the rows that moved since its stream's last delivery (`WorldDeliveryCursor.Delivered`'s
+row overload), and a delivery pins the recipient's admission once
+(`WorldRecipientView.Admit`) rather than asking it once a row. `WorldProjectionFeed.Verify`
+composes the view whole and compares; `DeliveryReviewLawTests` asks it after every
+delivery.
 A held anchor ahead of the authority's engine tick (a restore or a history seek
 moved the authority behind it) is stale: `WorldClockAnchorLedger.Carry` and
 `Step` drop it first, counted as a released anchor row, and carry what a fresh
