@@ -59,9 +59,11 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     origin: origin,
     twist: twist
   )
+  // The weathering block draws its reveal in the layer's axes on top of the shade's, and has no grain frame, so a
+  // grained surface keeps the block inert (no noise reveal, no deposit) and lets the shade draw both.
   weathering {
     floor: 1
-    noise: noise
+    noise: ((grain > 0) ? 0 : noise)
     softness: softness
     patternScale: patternScale
     octaves: octaves
@@ -71,7 +73,7 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     seed: seed
     scale: scale
     lines: lines
-    settle: settle
+    settle: ((grain > 0) ? 0 : settle)
     edge: edge
     reach: reach
     under [{ threshold: threshold, surface { color: under, roughness: 0.98, metal: 0 } }]

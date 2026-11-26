@@ -58,11 +58,13 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   `rentalCanRent` once it lands.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
-- The central tree's look: the tree stands, walkable (gallery.md, "The central tree"), but its sculpt is not yet at
-  the visual bar. The trunk is a plain cone, the treads read as a built stair rather than grown root and bark, the
-  branches are even-thickness limbs without knots or forks, and the canopy is a few broad leaf masses. A look pass
-  owes it a gnarled, fluted trunk, treads grown into the bark, branches that fork and taper, and a broken, layered
-  crown, judged live from every level.
+- The central tree's look: the tree now has buttress fins, wandering bark shelves with shelf fungus and burls,
+  branches with collars, forks and knots, grain that follows each limb, and a crown of separate clusters, and it
+  collides analytically (gallery.md, "The central tree"). Still owed before it meets the visual bar: a trunk that
+  is not a perfect cone (fluting or a lean, and a silhouette that is not radially even), judged on captures from all
+  three levels at noon and night; the captures of this pass are the judge of whether the shelves read as grown and the
+  crown as a tree's. A body hugging the bark does not step up the shelves (the step-up near the trunk core's wall),
+  which wants a look from the physics side.
 - The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
   field work above. Until then the bay-6 gate lets a full-size body into the toybox.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a

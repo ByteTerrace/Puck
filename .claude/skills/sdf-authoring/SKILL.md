@@ -341,6 +341,17 @@ or a union of admitted primitives keeps the shape. See
 [shapes](references/shapes.md#contact-admission). Every view still renders a
 shape contact omits.
 
+A creation whose smooth blends are its look rather than its footing (a tree a
+body walks up) sets `contact: Shapes` (`CreationContact`): its contact shapes
+then collide as their hard union, a smooth union as a hard one
+(`CreationStampEmitter.ContactBlend`), so shapes joined only by unions and
+smooth unions compile to analytic primitive colliders, which lie inside the
+fillets the blends draw. Relief, a deformation and any other blend still
+collide as drawn, so such a creation carries no `noise`; mark what a body never
+touches `detail: true`, and stand a conservative contact shape (a cylinder
+stack, `limbs.puck`'s `trunkCore`) inside a primitive whose analytic collider is
+a bounding box (a cone, a prism).
+
 CPU cull certificates live in `SdfFieldEvaluator.Cull.cs`. A scoped instance's
 lowering candidates include its finite `FarDistance` seed after slack and pop
 scaling, not just its shapes. Slack accumulation must fit independently of the

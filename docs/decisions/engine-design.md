@@ -479,6 +479,11 @@ bake's field reads. Contact must place a body on the rock that is drawn rather
 than on the smooth masses under it. The current gradient quotient is a local
 estimate; conservative distance, composed bounds and degenerate gradients
 remain [open work](../plans/open-items.md#certified-field-contact).
+A creation may instead collide as its contact shapes' hard union
+(`contact: Shapes`): a smooth union only adds to the drawn solid, so each
+primitive collider stays inside the fillet the blend draws, and a large organic
+creation a body walks (the gallery's tree) pays analytic contact instead of a
+field solve. Relief, deformations and other blends still collide as drawn.
 The chase camera clears against the drawn field, not the colliders, so an inset
 wall collider can't make the camera clip. A conservative approximation reports
 its computed bound. Within that bound it is a known approximation, not a red

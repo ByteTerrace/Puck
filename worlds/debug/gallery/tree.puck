@@ -126,14 +126,9 @@ prototypes {
         ],
         map(treeLimbs, (b, i) => treeBarkSurface(lookTree.branch, lookTree.branchUnder, (6120 + i), barkAlong((treeBranchC(b) - treeBranchA(b)))))
       )
-      // The bark's relief, one over the whole tree, so trunk, roots, shelves and branches read as one grown surface.
-      noise {
-        frequency: lookTree.grain
-        amplitude: lookTree.relief
-        octaves: 2
-        gain: 0.45
-        seed: 6113
-      }
+      // No creation relief: a relief can carry the surface inside the shapes, so it would collide as drawn, a field solve
+      // over the whole tree. The bark's texture is its grain (treeBarkSurface) and its form the burls, knots, forks and
+      // shelves below.
       // The drawn trunk: a cone whose taper would close far above the roof, cut off inside the crown and just under the
       // floor. The cut follows the cone at once, so it trims the cone alone.
       shape Cone "trunk" {
@@ -181,6 +176,7 @@ prototypes {
         base: treeTrunk.base,
         apex: treeTrunk.apex,
         material: treeShelf,
+        depth: 1.9,
         thickness: 0.7,
         inset: 0.5,
         exponent: 2.7,
