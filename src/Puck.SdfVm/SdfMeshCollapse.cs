@@ -671,7 +671,7 @@ public static class SdfMeshCollapse {
                     if (first < 0) { first = copy; continue; }
                     if ((copy != first) && Parts(a: m_normals[first], b: m_normals[copy], sharp: sharp)) {
                         distances[place] = 0.0;
-                        BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(NearestFirst));
+                        BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(ItemThenIndexOrder<double>));
                         break;
                     }
                 }
@@ -683,11 +683,11 @@ public static class SdfMeshCollapse {
                 foreach (var place in (ReadOnlySpan<int>)[m_cornerPlace[corner], m_cornerPlace[other]]) {
                     if (distances[place] == 0.0) { continue; }
                     distances[place] = 0.0;
-                    BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(NearestFirst));
+                    BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(ItemThenIndexOrder<double>));
                 }
             }
             while (count > 0) {
-                var (distance, place) = BinaryHeap.Pop(count: ref count, heap: heap, order: default(NearestFirst));
+                var (distance, place) = BinaryHeap.Pop(count: ref count, heap: heap, order: default(ItemThenIndexOrder<double>));
 
                 if (distance > distances[place]) { continue; }
                 foreach (var triangle in Alive(fan: m_from, place: place)) {
@@ -699,7 +699,7 @@ public static class SdfMeshCollapse {
 
                         if (through < distances[other]) {
                             distances[other] = through;
-                            BinaryHeap.Push(count: ref count, heap: heap, item: (through, other), order: default(NearestFirst));
+                            BinaryHeap.Push(count: ref count, heap: heap, item: (through, other), order: default(ItemThenIndexOrder<double>));
                         }
                     }
                 }
@@ -707,14 +707,6 @@ public static class SdfMeshCollapse {
         }
         // Whether two normals part by more than the angle whose cosine is sharp.
         private static bool Parts(Vector3 a, Vector3 b, double sharp) => (Vector3.Dot(vector1: a, vector2: b) < (sharp * a.Length() * b.Length()));
-        // The heap's order: nearest first, then the lower place, a total order.
-        private readonly struct NearestFirst : IComparer<(double Distance, int Place)> {
-            public int Compare((double Distance, int Place) x, (double Distance, int Place) y) {
-                var by = x.Distance.CompareTo(value: y.Distance);
-
-                return ((by != 0) ? by : x.Place.CompareTo(value: y.Place));
-            }
-        }
 
         // Collapses until no pass takes enough within the level's bounds, then returns the level the alive triangles make.
         // Levels run in order, each from the state the finer one left: the budget a refusal is keyed by is the level plus one.

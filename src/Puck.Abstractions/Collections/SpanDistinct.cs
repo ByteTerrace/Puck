@@ -37,7 +37,7 @@ public static class SpanDistinct {
         var sorted = order.AsSpan(start: 0, length: items.Length);
 
         for (var index = 0; (index < items.Length); index++) { sorted[index] = (items[index], index); }
-        sorted.Sort(comparer: new ByItemThenIndex<T>());
+        sorted.Sort(comparer: new ItemThenIndexOrder<T>());
         first.AsSpan(start: 0, length: items.Length).Clear();
         for (var index = 0; (index < sorted.Length); index++) {
             if ((index == 0) || (sorted[index].Item.CompareTo(other: sorted[(index - 1)].Item) != 0)) { first[sorted[index].Index] = true; }
@@ -50,10 +50,5 @@ public static class SpanDistinct {
         }
 
         return kept;
-    }
-
-    // Orders elements, then equal elements by where they occurred.
-    private readonly struct ByItemThenIndex<T> : IComparer<(T Item, int Index)> where T : unmanaged, IComparable<T> {
-        public int Compare((T Item, int Index) x, (T Item, int Index) y) => ((x.Item.CompareTo(other: y.Item) is var order and not 0) ? order : x.Index.CompareTo(value: y.Index));
     }
 }
