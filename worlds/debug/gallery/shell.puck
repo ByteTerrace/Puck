@@ -402,12 +402,6 @@ let shellTileRails = concat(
     { id: $"nave-south-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180 }
     { id: $"nave-north-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0 }
   ]),
-  // Level 2's length where each tree branch lands (layout.puck's treeLanding) keeps a tile at each end, and the branch
-  // walks onto the balcony through the gap between them.
-  flatMap([{ name: "west", sign: -1 }, { name: "east", sign: 1 }], side => [
-    { id: $"tree-south-{side.name}", x: (treeLanding(2, "south") + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveSouth - balconyInset), yaw: 180 }
-    { id: $"tree-north-{side.name}", x: (treeLanding(2, "north") + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveNorth + balconyInset), yaw: 0 }
-  ])
 )
 
 // The lift's tower, outside the south wall: four teal posts, a ring beam at each floor, glass between them on the three
@@ -531,14 +525,22 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 ]))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece. Level
 // 2's balcony edges take them; level 1's are its lattice (below).
+// Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a tree branch lands; there
+// the bay takes a doorway (below) with a short length either side of it.
+let shellBalconyBays = range(arcadeWestBays, (galleryBays - 1))
+function shellDoorSides(k, side, z, yaw) = map([-1, 1], s => {
+  id: $"rail-door-{side}-{k}-{s}", x: (treeLanding(k, side) + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2)))), y: galleryFloor[k], z: z, yaw: yaw, short: 2
+})
 let shellRails = concat(
-  flatMap([2], k => concat(
-    map(filter(range(0, floor(((galleryEast - naveWest) / 4))), i => ((14 + (4 * i)) != treeLanding(k, "south"))), i => {
-      id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0
+  flatMap([2, 3], k => concat(
+    map(filter(shellBalconyBays, b => (bayX(b) != treeLanding(k, "south"))), b => {
+      id: $"rail-south-{k}-{b}", x: bayX(b), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0
     }),
-    map(filter(range(0, floor(((galleryEast - naveWest) / 4))), i => ((14 + (4 * i)) != treeLanding(k, "north"))), i => {
-      id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0
+    map(filter(shellBalconyBays, b => (bayX(b) != treeLanding(k, "north"))), b => {
+      id: $"rail-north-{k}-{b}", x: bayX(b), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0
     }),
+    shellDoorSides(k, "south", (naveSouth - balconyInset), 180),
+    shellDoorSides(k, "north", (naveNorth + balconyInset), 0),
     map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - balconyInset), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
   [
@@ -878,6 +880,14 @@ template shellPrototypes() {
       balustrade(base: 0, length: galleryTile, posts: 1)
     }
   }
+  prototype "gallery-rail-door-side" {
+    document {
+      name: "gallery-rail-door-side"
+      schema: "puck.creation.v1"
+      palette: shellKit
+      balustrade(base: 0, length: treeDoorSide, posts: 1)
+    }
+  }
   prototype "gallery-rail-short" {
     document {
       name: "gallery-rail-short"
@@ -933,7 +943,7 @@ template shellPrototypes() {
       name: "gallery-branch-door"
       schema: "puck.creation.v1"
       palette: shellKit
-      edgeDoorway(base: 0)
+      edgeDoorway(base: 0, width: treeDoorWidth, post: treeDoorPost)
     }
   }
   prototype "gallery-planter" {
@@ -1135,7 +1145,7 @@ template shellPlacements() {
   }
   for rail in shellRails {
     placement $"gallery-{rail.id}" {
-      prototype: ((rail.short == 1) ? "gallery-rail-short" : "gallery-rail")
+      prototype: ((rail.short == 2) ? "gallery-rail-door-side" : ((rail.short == 1) ? "gallery-rail-short" : "gallery-rail"))
       parent: "gallery"
       position [rail.x, rail.y, rail.z]
       yawDegrees: rail.yaw

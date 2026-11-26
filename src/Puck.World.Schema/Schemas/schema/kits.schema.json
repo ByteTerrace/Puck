@@ -226,16 +226,17 @@
                 "default": null
               },
               "moveFrame": {
-                "description": "Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
+                "description": "Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation). Aim is World to the sim; while the body is held up by a free hold the seat composes its camera\u0027s pitch as well, so a flier travels along its view ray.",
                 "enum": [
                   "Heading",
-                  "World"
+                  "World",
+                  "Aim"
                 ],
                 "default": "World",
                 "title": "MotionMoveFrame"
               },
               "facingSnap": {
-                "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
+                "description": "Under a frame that submits world axes only (SubmitsWorldAxes): whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
                 "type": "boolean",
                 "default": true
               },

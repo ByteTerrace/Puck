@@ -752,7 +752,7 @@ public sealed partial class WorldBody {
     // The commanded planar direction in world space, before any surface bends it: a world-framed pair is the seat's own
     // world axes carried into the body's up frame, a heading-framed pair is the body's forward and right.
     private FixedVector3 PlanarCommand(FixedQ4816 forward, FixedQ4816 strafe, in FixedQuaternion orientation) {
-        var world = (m_tuning.MoveFrame == MotionMoveFrame.World);
+        var world = m_tuning.MoveFrame.SubmitsWorldAxes();
         var facing = (world
             ? m_frame.Rotate(vector: -FixedVector3.UnitZ)
             : orientation.Rotate(vector: -FixedVector3.UnitZ)
@@ -821,7 +821,7 @@ public sealed partial class WorldBody {
         var (forward, strafe) = PlanarIntent(intent: in intent);
 
         if (
-            (m_tuning.MoveFrame != MotionMoveFrame.World) ||
+            !m_tuning.MoveFrame.SubmitsWorldAxes() ||
             !TryFaceInto(
             into: out var into,
             normal: in normal,
@@ -871,7 +871,7 @@ public sealed partial class WorldBody {
             (!hold.Mantle.Exists && !hold.Corner.Exists) ||
             (hold.Kind != BodyHoldKind.Pull) ||
             (HoldTangentForward(normal: in m_holdNormal, up: in gravityUp) == FixedVector3.Zero) ||
-            ((m_tuning.MoveFrame == MotionMoveFrame.World) && (scratch.FaceInto == FixedVector3.Zero))
+            (m_tuning.MoveFrame.SubmitsWorldAxes() && (scratch.FaceInto == FixedVector3.Zero))
         ) {
             return;
         }
@@ -1330,7 +1330,7 @@ public sealed partial class WorldBody {
             var into = FixedVector3.Zero;
 
             if (
-                (m_tuning.MoveFrame == MotionMoveFrame.World) &&
+                m_tuning.MoveFrame.SubmitsWorldAxes() &&
                 !TryFaceInto(
                 into: out into,
                 normal: in m_holdNormal,
@@ -1453,7 +1453,7 @@ public sealed partial class WorldBody {
             unit: out var forward,
             unitAxis: normal
         ) &&
-            ((m_tuning.MoveFrame != MotionMoveFrame.World) || ((hold.Kind == BodyHoldKind.Pull) && TryFaceInto(
+            (!m_tuning.MoveFrame.SubmitsWorldAxes() || ((hold.Kind == BodyHoldKind.Pull) && TryFaceInto(
             into: out into,
             normal: in normal,
             up: in gravityUp

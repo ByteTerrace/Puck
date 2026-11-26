@@ -471,24 +471,22 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
     /// <remarks>Against a world document, a register the firing's commit derives from adds what that commit spends: an
     /// input-selection register (an input mode family's body-state selector, or the kit assignment's selector)
     /// revalidates and resynchronizes the written body's routing owner, one pass over the input families and the kit
-    /// selection each, and a register the population derives a body's scale, kit or look from resyncs every body.</remarks>
+    /// selection each, and a register the population derives a body's scale, kit or look from resyncs the written
+    /// body.</remarks>
     public override RuleWork Cost(IRuleCostContext context) => ((1L + Source.Cost(context: context)) + CommitCost(context: context));
     /// <inheritdoc/>
     public bool Writes(ICompiledFact fact) => (fact is WorldBodyFactOperand { Payload: BodyStateOperand state } && (state.Slot == Slot));
     /// <inheritdoc/>
-    /// <remarks>Exact for a counter written to the body bound to <c>$each</c> and read for that body, whose register
-    /// declares no envelope: <c>WorldBody.ApplyRuleState</c> stores a counter's value as written unless an envelope
-    /// clamps it, and a timer's presented value ages with time.</remarks>
+    /// <remarks>Exact for a counter written to the body bound to <c>$each</c> and read for that body, when every
+    /// value the source can answer lies inside what the register keeps (<see cref="WorldBodyStateReads.TryCounterBounds"/>,
+    /// against <see cref="RuleBounds"/> of the source): <c>WorldBody.ApplyRuleState</c> stores a counter's value as
+    /// written unless its envelope clamps or replaces it, and a timer's presented value ages with time.</remarks>
     public bool SetsExactly(ICompiledFact fact, RuleCompileContext context) {
         if ((fact is not WorldBodyFactOperand { Payload: BodyStateOperand state }) || (state.Slot != Slot) || (KeyFrom is not { IsEach: true }) || (context is not WorldFactsCompileContext { Definition: var definition })) { return false; }
         if ((state.Kind != ActionStateKind.Counter) || (state.Body.Kind != CompiledBodyRefKind.Binding) || (((BoundKey)state.Body.Index) != BoundKey.Each)) { return false; }
-        var bodyState = definition.BodyState;
-        var identityState = definition.IdentityState;
 
-        if ((Slot < 0) || (Slot >= (bodyState.Count + identityState.Count))) { return false; }
-        var declared = ((Slot < bodyState.Count) ? bodyState[Slot] : identityState[(Slot - bodyState.Count)]);
-
-        return ((declared.Kind == ActionStateKind.Counter) && (declared.Envelope is null));
+        return (WorldBodyStateReads.TryCounterBounds(definition: definition, keeps: out var keeps, reads: out _, slot: Slot) &&
+            (keeps.IsUnbounded || RuleBounds.Of(context: context, kind: CellKind.Fixed, source: Source).Within(envelope: in keeps)));
     }
 
     private long CommitCost(IRuleCostContext context) {
@@ -508,9 +506,13 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
         var cost = (selects ? (2L * (catalog.Selectors.Length + 1L)) : 0L);
 
         if (kit || (definition.Population.Scale == name) || (definition.LookAssignment.Select?.BodyState == name)) {
-            cost += definition.Population.Capacity;
+            // The commit resyncs the written body alone (WorldPopulation.SyncBodyCells): its size, and for each selector
+            // one walk of its cases and of the row table the matching case names.
+            cost += ((1L + SelectCost(rows: definition.Kits.Count, select: definition.Assignment.Select)) + SelectCost(rows: definition.Looks.Count, select: definition.LookAssignment.Select));
         }
         return cost;
+
+        static long SelectCost(WorldRowSelector? select, int rows) => ((select is null) ? 0L : (((long)select.Cases.Count) + rows));
     }
 }
 /// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the

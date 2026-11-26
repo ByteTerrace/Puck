@@ -127,6 +127,8 @@ public sealed partial class SdfProgramBuilder {
     // The indices m_screenSurfaces declares, so a declaration and a material's screen id are checked in constant time
     // however many screens a program declares.
     private readonly HashSet<int> m_screenIndices = [];
+    // The emitter faces (EmitterFace), each a screen surface carrying its material and its ordinal here.
+    private readonly List<SdfScreenSurface> m_emitterFaces = [];
     // Every ConvexPolygon shape instruction's authored vertex list, paired with that instruction's index — the host
     // mirror SdfProgram packs into a side table appended to its own word stream (see SdfShapeType.ConvexPolygon) and
     // patches the instruction's Data0.x offset lane against, and that SdfFieldEvaluator reads directly (no packed-word
@@ -185,6 +187,7 @@ public sealed partial class SdfProgramBuilder {
         m_materials.Clear();
         m_screenSurfaces.Clear();
         m_screenIndices.Clear();
+        m_emitterFaces.Clear();
         m_convexPolygonProfiles.Clear();
         m_paths.Clear();
         m_sampledBindings.Clear();
@@ -1229,7 +1232,7 @@ public sealed partial class SdfProgramBuilder {
         }
 
         return SdfProgram.Of(
-            appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces),
+            appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces, emitterFaces: m_emitterFaces),
             convexPolygonProfiles: m_convexPolygonProfiles,
             glyphAtlas: m_glyphAtlas.Value,
             glyphStroke: (float.IsFinite(f: m_glyphStroke) ? m_glyphStroke : 0f),

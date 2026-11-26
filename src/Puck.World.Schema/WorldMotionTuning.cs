@@ -26,8 +26,10 @@ namespace Puck.World;
 /// <see cref="MotionMoveFrame.Heading"/> explicitly rotates the commanded planar target by the body's own
 /// integrated heading. <see cref="MotionMoveFrame.World"/> (the default) takes the two channels as
 /// axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever
-/// reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).</param>
-/// <param name="FacingSnap">Under <see cref="MotionMoveFrame.World"/> only: whether the body's drawn ATTITUDE
+/// reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).
+/// <see cref="MotionMoveFrame.Aim"/> is <see cref="MotionMoveFrame.World"/> to the sim; while the body is held up
+/// by a free hold the seat composes its camera's pitch as well, so a flier travels along its view ray.</param>
+/// <param name="FacingSnap">Under a frame that submits world axes only (<see cref="MotionMoveFrames.SubmitsWorldAxes"/>): whether the body's drawn ATTITUDE
 /// snaps to <c>Atan2</c> of the commanded planar direction every tick that carries input (no turn-rate ramp, no
 /// skid) — the body angles toward its travel, a strafe included — while its HEADING (the Turn role's integral,
 /// <c>WorldBody.FixedYaw</c>, the frame a <see cref="ChannelFrame.Heading"/> pair moves in) holds, and the

@@ -15,7 +15,9 @@ public enum WorldMachineCheckpointKind : byte {
 /// <param name="Generation">The instance generation used to reject stale operations.</param>
 /// <param name="CompletedSteps">The host's synchronous step count; zero for a refused machine.</param>
 /// <param name="RuntimeState">The complete provider-owned checkpoint encoding; empty for a refused machine.</param>
-public sealed record WorldMachineCheckpoint(string Name, string Engine, WorldMachineCheckpointKind Kind, ulong Generation, long CompletedSteps, byte[] RuntimeState) {
+/// <param name="ContentSelection">The library title the machine ran (<see cref="WorldMachine.ContentBy"/>), 0 for its
+/// own content; a restore mounts it before the image, so the image restores onto the content it was taken from.</param>
+public sealed record WorldMachineCheckpoint(string Name, string Engine, WorldMachineCheckpointKind Kind, ulong Generation, long CompletedSteps, byte[] RuntimeState, int ContentSelection = 0) {
     /// <summary>Gets whether the row's image and step count fit its kind: a running row carries an image and a
     /// non-negative count, a refused row neither.</summary>
     public bool IsWellFormed => (Kind switch {

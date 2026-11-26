@@ -44,7 +44,9 @@ template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "f
   }
 
   // A camera has no volume to collide with and nothing to stand on: free flight, one hold cancelling gravity whole, so it
-  // hovers where it is left. The movement channels fly it along where it looks and the rise channel climbs and sinks.
+  // hovers where it is left. The lens is the seat's look: the seat steers the program above, so its facing look turns
+  // with the seat's live yaw and pitch, and the `Aim` frame flies the body along that view, climbing where it looks up
+  // and diving where it looks down. The rise channel climbs and sinks.
   kits [
     {
       bodyMotionProgram: "walk"
@@ -64,7 +66,7 @@ template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "f
             thrust: 1
           }
         ]
-        moveFrame: World
+        moveFrame: Aim
         shaping [{ along { engage: 40, release: 50 }, turnScale: 1 }]
         speed { value: flySpeed, held { channel: "run", multiplier: runMultiplier } }
         stepHeight: 0

@@ -29,9 +29,10 @@ import "shapes"
 // The wing's floor and the slab above it (gallery/layout.puck).
 let wingFloor = galleryFloor[0]
 let wingTop = galleryCeiling[0]
-// The faces paintings hang on: the south wall's inner face, each fin's east face and the east wall's inner face.
+// The faces paintings hang on: the south wall's inner face, the first two fins' east faces, the last fin's west face
+// (it screens the south-east stair, layout.puck's `courtStairFin`) and the east wall's inner face north of that stair.
 let courtWall = galleryWall
-let courtFins = [courtWest, courtFin]
+let courtFins = [courtWest, courtFin, courtStairFin]
 let courtEast = galleryEast
 
 // The canvas of a wall painting: a thin rim box 2.24 m wide and 2.84 m tall whose centre is carved away, so the glass,
@@ -118,7 +119,7 @@ let wallPaintings = [
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
   {
-    name: "link-east", x: courtEast, z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
+    name: "link-east", x: courtFins[2], z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
 ]
@@ -249,7 +250,7 @@ destinations [
 ]
 
 prototypes {
-  // The wing's two fins, each a wall standing out from the south wall to the slab above, and the board that names the
+  // The wing's three fins, each a wall standing out from the south wall to the slab above, and the board that names the
   // wing where the lobby meets it.
   prototype "wing-fins" {
     document {

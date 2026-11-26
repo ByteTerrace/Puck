@@ -39,7 +39,9 @@ function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
   (treeTreadAngle(b.tread) + treeAuthorTurn),
   (((treeBranchC(b)[1] - treeBranchA(b)[1]) / 2) + 0.35)
 ))
-function treeBranchB(b) = ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2)
+// A branch that meets a doorway (levels 2 and 3) puts its control point straight back from the landing, so its last run
+// crosses the doorway square, through the middle of the opening.
+function treeBranchB(b) = ((b.level >= 2) ? [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
 // Branch widths and depths, full, metres, at the trunk and at the balcony: broad enough at the tip to walk, narrow enough
 // to pass level 1's gate and level 2's balustrade gap, swelled by `treeBranchCollar` where each leaves the trunk.
 let treeBranchWidth = [1.9, 1.3]
@@ -77,6 +79,10 @@ let treeCoreCount = 28
 let treeFungusEvery = 5
 let treeShelfWander = 0.28
 let treeBurlCount = 7
+// The trunk's strands (limbs.puck's braidedTrunk): five stems winding a little under half a turn up the cone, standing
+// proud of its taper so its silhouette reads as grown strands, swelling between crossings, blended tightly so the
+// crevices between them stay deep.
+let treeStems = { count: 5, segments: 4, turn: 160, out [2.05, 1.15], radius [0.85, 0.42], bow: 0.22, smooth: 0.1 }
 
 // The crown: separate leaf clusters on a dome high in the void (foliage.puck's leafClusters), a broad mass closing it
 // over the trunk's top, and limbs from the trunk's top into every `treeCrownLimbEvery`-th cluster.
@@ -100,6 +106,9 @@ function treeBranchBark(i) = (3 + i)
 let treeLeaf = 0
 let treeTwig = 1
 let treeBlossom = 2
+// The lower tiers' leaves, a shade apart from the crown's so the canopy reads in depth: the first tier deeper, the second
+// warmer.
+function treeTierLeaf(k) = (3 + k)
 // Bark whose grain runs along `frame` (limbs.puck's barkAlong, barkUpright), twisting `twist` radians a metre about the
 // trunk's axis.
 function treeBarkSurface(color, under, seed, frame, twist = 0) = galleryCel(landscapeSurface(
@@ -153,6 +162,19 @@ prototypes {
         blend: Intersection
       }
       trunkCore(label: "core", base: treeTrunk.base, apex: treeTrunk.apex, top: treeTrunk.top, count: treeCoreCount, material: treeBark)
+      braidedTrunk(
+        label: "stem",
+        count: treeStems.count,
+        foot: (0 - treeBuried),
+        top: (treeTrunk.top + 0.6),
+        out: treeStems.out,
+        radius: treeStems.radius,
+        material: treeBark,
+        turn: treeStems.turn,
+        segments: treeStems.segments,
+        bow: treeStems.bow,
+        smooth: treeStems.smooth
+      )
       shape Superellipsoid "flare" {
         material: treeBark
         exponent: 2.2
@@ -274,14 +296,16 @@ prototypes {
       palette [
         galleryCel(canopySurface(lookTree.leaves, 6115))
         treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
-        galleryCel(canopySurface([lookTree.blossom, lookTree.blossom, "#FFE3EC"], 6117))
+        galleryCel(canopySurface(lookTree.blossom, 6117))
+        galleryCel(canopySurface(lookTree.leavesDeep, 6119))
+        galleryCel(canopySurface(lookTree.leavesWarm, 6121))
       ]
       // The leaf masses' breakup, one relief over the whole canopy.
       noise {
         frequency: lookTree.clumpGrain
         amplitude: lookTree.clump
-        octaves: 1
-        gain: 0.4
+        octaves: 3
+        gain: 0.45
         seed: 6115
       }
       leafClusters(
@@ -303,7 +327,7 @@ prototypes {
           height: tier.height,
           count: tier.count,
           size: tier.size,
-          material: treeLeaf,
+          material: treeTierLeaf(k),
           smooth: 0.25,
           turn: tier.turn
         )
@@ -327,16 +351,16 @@ prototypes {
             a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
             b: leanLocal([(into[0] * 0.35), (into[1] - 0.9), (into[2] * 0.35)], 0)
             c: leanLocal([(into[0] * 0.85), (into[1] - 0.2), (into[2] * 0.85)], 0)
-            radiusStart: 0.5
-            radiusEnd: 0.14
+            radiusStart: 0.36
+            radiusEnd: 0.08
           }
         }
       }
-      // Limbs from the trunk out into every other cluster of each lower tier, each leaving the trunk below its cluster
+      // Limbs from the trunk out into every cluster of each lower tier, each leaving the trunk below its cluster
       // and rising to it, so no clump floats.
       for (tier, k) in treeCrownTiers {
-        for n in range(0, floor((tier.count / 2))) {
-          let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, (2 * n), tier.turn)
+        for n in range(0, tier.count) {
+          let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
           shape Sweep $"tier-limb-{k}-{n}" {
             material: treeTwig
             blend: SmoothUnion
@@ -345,8 +369,8 @@ prototypes {
               a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
               b: leanLocal([(into[0] * 0.5), (into[1] - 1.1), (into[2] * 0.5)], 0)
               c: leanLocal([(into[0] * 0.92), (into[1] - 0.15), (into[2] * 0.92)], 0)
-              radiusStart: 0.32
-              radiusEnd: 0.08
+              radiusStart: 0.2
+              radiusEnd: 0.05
             }
           }
         }
@@ -364,6 +388,22 @@ prototypes {
           smooth: 0.22,
           turn: (31 * i)
         )
+        // A twig from the fork's tip into each of its clumps, so none floats.
+        for n in range(0, treeForkFoliage.count) {
+          let into = leafClusterAt((treeForkTip(b, i) + [0, 0.3, 0]), treeForkFoliage.radius, treeForkFoliage.height, treeForkFoliage.count, n, (31 * i))
+          shape Sweep $"fork-twig-{i}-{n}" {
+            material: treeTwig
+            blend: SmoothUnion
+            smooth: 0.1
+            curve {
+              a: (treeForkTip(b, i) - [0, 0.2, 0])
+              b: (((treeForkTip(b, i) + into) / 2) - [0, 0.15, 0])
+              c: into
+              radiusStart: 0.12
+              radiusEnd: 0.04
+            }
+          }
+        }
       }
     }
   }

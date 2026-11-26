@@ -11838,7 +11838,7 @@
         },
         "origin": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold.",
+          "description": "The point the lattice\u0027s cell walls are laid about, creation units (null = the creation origin): a wall at half a spacing either side of it and every spacing on. The fold centres on the cell of that lattice the shape\u0027s own position lies in (CentreOf), so the copies sit at whole spacings from the shape wherever the origin lies, in render as in contact.",
           "default": null
         },
         "isUnbounded": {
@@ -12570,6 +12570,16 @@
       "additionalProperties": false,
       "title": "ShapeMorphDocument"
     },
+    "ShapeLightForm": {
+      "enum": [
+        "Face",
+        null
+      ],
+      "title": "ShapeLightForm",
+      "x-enumDescriptions": {
+        "Face": "A box\u0027s front face (\u002BZ in the author frame, the face its half-extents along X and Y span) lights what stands before it as a screen\u0027s face does."
+      }
+    },
     "ShapeDocument": {
       "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table.",
       "type": [
@@ -12833,6 +12843,11 @@
         "morph": {
           "$ref": "#/$defs/ShapeMorphDocument",
           "description": "Only with a MorphBlend, and required by it: the lane and range the morph runs over \u2014 see ShapeMorphDocument.",
+          "default": null
+        },
+        "lightsAs": {
+          "$ref": "#/$defs/ShapeLightForm",
+          "description": "How the shape\u0027s surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box\u0027s front face (\u002BZ in the author frame). The light is the mean of the material\u0027s painted albedo times its emissive over the face, so a console\u0027s interface or a marquee\u0027s lettering lights the room in its own colours, and the shape keeps its material and paints.",
           "default": null
         }
       },

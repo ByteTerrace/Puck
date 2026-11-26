@@ -151,13 +151,71 @@ function rentalReturnReach(stall) = rentalReachBox(stall, (0 - rentalReachDepth)
 // Whether a body may rent or return: one of the seats' bodies. A size or pass condition joins here.
 function rentalCanRent() = (rentalHolder[$each] > 0)
 
+// The cartridge rack: the deck library's titles (toybox.puck's `toyboxLibrary`) as cartridges a body rents and inserts
+// into a toybox station's deck. A slot is a library title number and the copies of it the rack lends; the shipped titles
+// are 1 and 2, and the slots after them hold whatever the owner's local deck folder lists, in its listing order, so their
+// labels name the title's number rather than a file. A slot whose title the library does not hold still lends its
+// cartridge, and a deck it is inserted into runs its own program.
+let rentalCartridgeSlots = [
+  { title: 1, label: "COLOUR BARS", copies: 2 }
+  { title: 2, label: "MOVING SPRITE", copies: 2 }
+  { title: 3, label: "DECK TITLE 3", copies: 1 }
+  { title: 4, label: "DECK TITLE 4", copies: 1 }
+  { title: 5, label: "DECK TITLE 5", copies: 1 }
+  { title: 6, label: "DECK TITLE 6", copies: 1 }
+]
+// Every cartridge, each by its loan ordinal, which follows the devices' in the one loan row (`rentalLoan`), its slot and
+// its place on the rack.
+let rentalCartridges = flatMap(
+  range(0, length(rentalCartridgeSlots)),
+  s => map(range(0, rentalCartridgeSlots[s].copies), c => { slot: s, copy: c })
+)
+let rentalCartridgeItems = map(
+  range(0, length(rentalCartridges)),
+  n => (rentalCartridges[n] with { ordinal: (length(rentalDevices) + n + 1), place: n })
+)
+// A cartridge in a station's deck is on loan to the station: its loan reads `rentalStationLoan` plus the station's place
+// in toyboxStations.
+let rentalStationLoan = 1000
+// The rack stands on level 1's south gallery in bay 9, against the wall, facing the nave (+z); its cartridges stand on
+// its top 0.14 m apart, the first at its west end, and the returns tray is its east end.
+let rentalRackAt = [bayX(9), tileZ((wallRowSouth + 1))]
+let rentalRackTop = 0.9
+let rentalRackHalfWidth = (((length(rentalCartridgeItems) + 2) * 0.14) / 2)
+function rentalRackX(n) = ((rentalRackAt[0] - rentalRackHalfWidth) + (0.14 * (n + 1)))
+function rentalRackReach(x0, x1) = {
+  x0: galleryWorld(x0, 0, 0)[0]
+  x1: galleryWorld(x1, 0, 0)[0]
+  z0: galleryWorld(0, 0, (rentalRackAt[1] + 0.3))[2]
+  z1: galleryWorld(0, 0, (rentalRackAt[1] + 1.4))[2]
+  y0: (galleryFloor[toyboxLevel] - 0.5)
+  y1: (galleryFloor[toyboxLevel] + 1)
+}
+function rentalCartridgePrototype(slot) = $"rental-cartridge-{slot}"
+
 state {
   world {
+    // The one loan row: a device's or a cartridge's ordinal is 0 while it is on its stall or rack, N + 1 while body N
+    // holds it, and `rentalStationLoan` plus a station's place while a cartridge sits in that station's deck.
     row {
       name: "rentalLoan"
       kind: Int
-      capacity: length(rentalDevices)
-      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: 0 })
+      capacity: (length(rentalDevices) + length(rentalCartridgeItems))
+      cells: map(flatMap([rentalDevices, rentalCartridgeItems], items => items), d => { key: $"{d.ordinal}", value: 0 })
+    }
+    // The library title each cartridge carries.
+    row {
+      name: "rentalCartridgeTitle"
+      kind: Int
+      capacity: length(rentalCartridgeItems)
+      cells: map(rentalCartridgeItems, c => { key: $"{c.ordinal}", value: rentalCartridgeSlots[c.slot].title })
+    }
+    // The cartridge a seat's body holds (its loan ordinal), 0 for none; a body holds one cartridge beside a device.
+    row {
+      name: "rentalCartridgeHeld"
+      kind: Int
+      capacity: length(rentalBodies)
+      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
     }
     row {
       name: "rentalDevice"
@@ -291,6 +349,62 @@ prototypes {
       }
     }
   }
+  // The cartridge rack: a counter in the stalls' colours, its top at rentalRackTop, the returns tray inset at its east
+  // end. Its front faces +Z.
+  prototype "rental-cartridge-rack" {
+    document {
+      name: "rental-cartridge-rack"
+      schema: "puck.creation.v1"
+      palette: rentalCounterPalette
+      shape Box "body" {
+        material: 0
+        position [0, ((rentalRackTop - 0.04) / 2), 0]
+        scale [rentalRackHalfWidth, ((rentalRackTop - 0.04) / 2), 0.2]
+        rounding: 0.03
+      }
+      shape Box "top" {
+        material: 2
+        position [0, (rentalRackTop - 0.02), 0]
+        scale [(rentalRackHalfWidth + 0.02), 0.02, 0.22]
+        rounding: 0.015
+      }
+      shape Box "tray" {
+        material: 3
+        position [(rentalRackHalfWidth - 0.1), (rentalRackTop + 0.01), 0.02]
+        scale [0.08, 0.012, 0.12]
+        rounding: 0.01
+      }
+    }
+  }
+  // A deck cartridge for each rack slot, standing on its base with its label toward +Z: a graphite shell 120 by 135 by
+  // 20 mm, its label the slot's.
+  for (slot, s) in rentalCartridgeSlots {
+    prototype $"rental-cartridge-{s}" {
+      document {
+        name: slot.label
+        schema: "puck.creation.v1"
+        palette [
+          { color: "#2E2E33", roughness: 0.45, specular: 0.04 }
+          { color: "#EDE6D3", roughness: 0.6, specular: 0.03 }
+          { color: "#1C1C1E", roughness: 0.5, specular: 0.04 }
+        ]
+        shape Box "shell" { material: 0, position [0, 0.0675, 0], scale [0.06, 0.0675, 0.01], rounding: 0.003 }
+        shape Box "label" { material: 1, position [0, 0.08, 0.0098], scale [0.048, 0.04, 0.0006] }
+        textRuns [
+          {
+            text: slot.label
+            position [0, 0.08, 0.0106]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.011
+            depth: 0.0006
+            mode: "emboss"
+            material: 2
+            align: "center"
+          }
+        ]
+      }
+    }
+  }
   prototype "rental-device-empty" {
     document {
       name: "rental-device-empty"
@@ -340,6 +454,37 @@ placements {
       ]
     }
     reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
+  }
+  // The cartridge rack, each cartridge on it until it is on loan, the floor before each, and the returns tray's floor.
+  placement "rental-cartridge-rack" {
+    prototype: "rental-cartridge-rack"
+    parent: "gallery"
+    position [rentalRackAt[0], galleryFloor[toyboxLevel], rentalRackAt[1]]
+    solid
+  }
+  reach(id: "rental-cartridge-return", box: rentalRackReach((rentalRackAt[0] + rentalRackHalfWidth - 0.2), (rentalRackAt[0] + rentalRackHalfWidth)))
+  for c in rentalCartridgeItems {
+    placement $"rental-cartridge-{c.ordinal}" {
+      prototype: rentalCartridgePrototype(c.slot)
+      parent: "gallery"
+      position [rentalRackX(c.place), (galleryFloor[toyboxLevel] + rentalRackTop), (rentalRackAt[1] + 0.05)]
+      respond [
+        { when: state(state: rentalLoan, key: $"{c.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
+      ]
+    }
+    reach(id: $"rental-cartridge-reach-{c.ordinal}", box: rentalRackReach((rentalRackX(c.place) - 0.07), (rentalRackX(c.place) + 0.07)))
+  }
+  // The cartridge a seat's body holds rides its right hip, its label out.
+  for b in rentalBodies {
+    placement $"rental-cartridge-carried-{b}" {
+      prototype: "rental-device-empty"
+      position [0, 0, 0]
+      attach {
+        bodyIndex: b
+        localOffset [0.3, 0.92, -0.38]
+      }
+      respond: map(rentalCartridgeItems, c => { when: state(state: rentalCartridgeHeld, key: $"{b}", comparison: Equal, value: c.ordinal), prototypeId: rentalCartridgePrototype(c.slot) })
+    }
   }
   // The device a seat's body holds rides its left hip (a body faces -Z, so -X is its left), its face out, and while the
   // body plays it, its hands, its face toward the body. Each row shows the device while `rentalShown` names it there.
@@ -424,6 +569,76 @@ for stall in rentalStalls {
   }
 }
 
+// Renting a cartridge: a seat's body before a cartridge on the rack, holding none, presses the context button. It goes
+// on loan through the same row as a device.
+for c in rentalCartridgeItems {
+  rule $"rental-cartridge-rent-{c.ordinal}" {
+    when pressing() and rentalCanRent() and rentalLoan[$"{c.ordinal}"] == 0 and rentalCartridgeHeld[$each] == 0
+    mode: Edge
+    forEach: region($"rental-cartridge-reach-{c.ordinal}")
+    rentalLoan[$"{c.ordinal}"] = rentalHolder[$each]
+    rentalCartridgeHeld[$each] = c.ordinal
+  }
+}
+
+// Returning a cartridge at the rack's tray: it goes back to its place on the rack.
+rule "rental-cartridge-return" {
+  when pressing() and rentalCanRent() and rentalCartridgeHeld[$each] > 0
+  mode: Edge
+  forEach: region("rental-cartridge-return")
+  rentalLoan[rentalCartridgeHeld[$each]] = 0
+  rentalCartridgeHeld[$each] = 0
+}
+
+// A station's console: the floor beside the station on its +x side, where the deck's cartridge slot is in reach. Engaging
+// the station's screen from there (the context button) swaps the cartridge the body holds with the one in the deck: a
+// held cartridge goes in and the deck runs its title (toybox.puck's `toyboxTitle`, its machine's `contentBy`), and a
+// body with empty hands takes the deck's cartridge out, and the deck runs its own program again. The body plays the deck
+// either way, and engaging from before the screen (the pads, the panels) plays it without touching the cartridge.
+let toyboxConsoleOffset = 0.9
+function toyboxConsoleReach(s) = {
+  x0: galleryWorld((toyboxAt(s)[0] + toyboxConsoleOffset - 0.4), 0, 0)[0]
+  x1: galleryWorld((toyboxAt(s)[0] + toyboxConsoleOffset + 0.4), 0, 0)[0]
+  z0: galleryWorld(0, 0, minimum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing)))[2]
+  z1: galleryWorld(0, 0, maximum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing)))[2]
+  y0: (galleryFloor[toyboxLevel] - 0.5)
+  y1: (galleryFloor[toyboxLevel] + 1)
+}
+// Where an inserted cartridge stands out of its deck: the console's top beside the station.
+function toyboxSlotAt(s) = [(toyboxAt(s)[0] + (toyboxConsoleOffset / 2)), (galleryFloor[toyboxLevel] + ((s.kind == "cabinet") ? 0.95 : 0.68)), (toyboxAt(s)[2] + (0.15 * s.facing))]
+
+placements {
+  for s in toyboxStations {
+    reach(id: $"toybox-console-{s.id}", box: toyboxConsoleReach(s))
+    placement $"toybox-slot-{s.id}" {
+      prototype: "rental-device-empty"
+      parent: "gallery"
+      position: toyboxSlotAt(s)
+      yawDegrees: s.yaw
+      respond: map(rentalCartridgeItems, c => { when: state(state: toyboxCartridge, key: s.id, comparison: Equal, value: c.ordinal), prototypeId: rentalCartridgePrototype(c.slot) })
+    }
+  }
+}
+
+for (s, i) in toyboxStations {
+  rule $"toybox-cartridge-{s.id}" {
+    when engaged(each, $"{(toyboxScreen + i)}") == 1 and rentalCanRent()
+    mode: Edge
+    forEach: region($"toybox-console-{s.id}")
+    toyboxSwap[s.id] = toyboxCartridge[s.id]
+    toyboxCartridge[s.id] = rentalCartridgeHeld[$each]
+    rentalCartridgeHeld[$each] = toyboxSwap[s.id]
+    toyboxTitle[s.id] = 0
+    if toyboxCartridge[s.id] > 0 {
+      rentalLoan[toyboxCartridge[s.id]] = (rentalStationLoan + i)
+      toyboxTitle[s.id] = rentalCartridgeTitle[toyboxCartridge[s.id]]
+    }
+    if rentalCartridgeHeld[$each] > 0 {
+      rentalLoan[rentalCartridgeHeld[$each]] = rentalHolder[$each]
+    }
+  }
+}
+
 // Leaving level 1, or the world (an absent body stands at the origin), returns the device.
 rule "rental-leave" {
   when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (galleryFloor[toyboxLevel] + 3))
@@ -432,6 +647,13 @@ rule "rental-leave" {
   rentalLoan[rentalHeld[$each]] = 0
   rentalHeld[$each] = 0
   rentalModel[$each] = 0
+}
+rule "rental-cartridge-leave" {
+  when rentalCartridgeHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (galleryFloor[toyboxLevel] + 3))
+  mode: Level
+  forEach: rentalCartridgeHeld
+  rentalLoan[rentalCartridgeHeld[$each]] = 0
+  rentalCartridgeHeld[$each] = 0
 }
 
 // Playing: while a body is engaged on either of its screens (only one can be, the one its device's model shows) it plays

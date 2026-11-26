@@ -61,7 +61,7 @@ of headroom over every tread.
 |---|---|---|---|
 | 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
-| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
+| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | none (every display is on level 0) |
 | 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
@@ -113,7 +113,9 @@ screen, whose route names both ports (the standard's `deckRoute`); leaving frees
 the port for the next seat. The decks are the toybox's own
 (`toybox-cabinet-south-3` and so on, layout.puck's `toyboxMachines`), so the
 gallery booted alone hosts them, and the debug world runs them beside the
-Wonderland devices. Each can swap among the shipped deck programs and the
+Wonderland devices. A cartridge rented from the rack (below, "The cartridge
+rack") inserted at a station's console changes what its deck runs. Each can
+also swap by hand among the shipped deck programs and the
 owner's local `roms/hgd` folder: `machine.content <deck>`, then
 `machine.swap <deck> <name>`. The machine rows, pictures, pad and routes are the
 standard's [machines.puck](../standard/machines.puck).
@@ -137,17 +139,16 @@ below).
 So every edge level 1 shares with the nave's void stands behind a toy
 construction lattice (the standard's `lattice`,
 [architecture.puck](../standard/architecture.puck)): pastel frames stepping
-with the piers, thin uprights in the complementary pastel, and sunflower
-crossbars. A panel stands in each arcade bay along the south and north edges,
-a half-tile panel closes each to the east wall, and five panels run along the
-bridge's edge. Each stands on level 1's floor and reaches into the fascia under
-level 2's edge, and neighbouring posts overlap at every joint and corner. Its
-uprights stand a sixteenth of a tile apart (layout.puck's `toyLatticePitch` and
-`toyLatticeBar`), a gap of about 5 cm: narrower than the smallest body the
-world sizes (a tenth of the Moth's 0.7 m capsule, size.puck's envelope), so no
-body flies or jumps in from the void and none drops out, while most of each
-panel stays open to the eye. The panels are solid boxes, so a body meets each
-bar as drawn.
+with the piers, and inside each frame a diamond rope net, its two sets of
+strands in the complementary pastel and sunflower, knotted where they cross
+(layout.puck's `toyLatticeNet`: 3.5 cm rope, knot to knot every 30 cm). A
+panel stands in each arcade bay along the south and north edges, a half-tile
+panel closes each to the east wall, and five panels run along the bridge's
+edge. Each stands on level 1's floor and reaches into the fascia under level
+2's edge, and neighbouring posts overlap at every joint and corner. The net is
+drawn only; a clear pane threaded through it holds every body, so no body
+flies or jumps in from the void and none drops out, while the panel stays open
+to the eye.
 
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
@@ -193,6 +194,41 @@ button engages the renter's own device, anywhere (only its holder engages it,
 the engage radius measured from the device), and the device then moves from the
 hip row (`rental-carried-<body>`) to the hands row (`rental-played-<body>`)
 through `rentalShown`; the same press leaves and puts it back on the hip.
+
+**The cartridge rack.** The decks' library is a folder list
+(toybox.puck's `toyboxLibrary`: the shipped `cartridges/deck`, then the
+owner's local `roms/hgd`), and each title of it is a number: the mountable
+files in listing order, folder by folder, by file name within one
+(`WorldMachineContentFolder.TryTitle`), so the shipped programs are titles 1
+and 2 whatever the local folder holds; `machine.content <deck>` prints each
+file's `title=`. A rack on level 1's south gallery (bay 9, against the wall)
+lends the library as cartridges (rentals.puck's `rentalCartridgeSlots`: a
+title, a label and how many copies). Its cartridges go on loan through the
+devices' own `rentalLoan` row (ordinals 49 and up) and the same
+`rentalCanRent` hook; the cartridge a body holds is `rentalCartridgeHeld`, and
+it rides the body's right hip. The context button before a cartridge rents it,
+and before the rack's east end (the tray) returns it; leaving level 1 returns
+it too. Engaging a station's screen from its console (the floor on the
+station's +x side) swaps the held cartridge with the one in its deck: the
+cartridge stands in the console (`toybox-slot-<station>`), `toyboxTitle` takes
+its title, and the deck's machine, whose `contentBy` reads that cell, runs it
+from the next tick. Engaging from the console with empty hands takes it out and
+the deck runs its own program again; engaging from before the screen plays
+without touching the cartridge. A cartridge in a deck is on loan to the
+station (`rentalLoan` reads 1000 plus the station's place). The slots past the
+shipped titles carry numbered labels (`DECK TITLE 3`), since no file name
+enters the document; a slot whose title the folder does not hold lends a
+cartridge whose deck runs its own program. `cartridge-rentals-tests.puck`
+rents, inserts, ejects and returns one.
+
+**Adding your own titles.** Drop a Humble Gaming Deck image (an iNES `.nes`
+file the deck's header check accepts) into `roms/hgd/` at the repository root;
+the folder is git-ignored and may be absent. The next `machine.content
+toybox-television-south-2` lists it with its `title=` (3 for the first local
+file in name order), and the rack's slot of that number lends it. A file the
+deck cannot run is listed with `refused=` and takes no number. Brick and
+advanced-brick titles are not on the rack yet; their devices swap by hand
+(`machine.swap rental-hgb-0 <name>`) from the folders devices.puck lists.
 
 ## The central tree
 

@@ -191,10 +191,13 @@ let westBays = [
 ]
 let eastBays = [[northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid]]
 
-// The painting wing: level 0's south aisle east of the entrance lobby, x 30 .. 59.7. Two fins stand out from the south
-// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (52.5, 6.2), under a hole in level 1's floor.
+// The painting wing: level 0's south aisle east of the entrance lobby, x 30 to the east wall. Three fins stand out from
+// the south wall, each 4.2 m long: at x 30, at x 44.3, and against the west side of the south-east stair's well, which
+// fills the wing's last bay, so the east court ends at that fin; the fall's well is at (52.5, 6.2), under a hole in
+// level 1's floor.
 let courtWest = 30
 let courtFin = 44.3
+let courtStairFin = (galleryStair("south-east").well.x0 - galleryWall)
 let courtFinLength = 4.2
 let fallPlan = [52.5, 6.2]
 // The paintings that hang on the painting wing's south wall, as the centre of each along it (paintings.puck hangs them;
@@ -255,10 +258,8 @@ let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
 let flawCrossings = loopCrossings(flawRoute, flawCuts)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
-// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
-// gallery's displays stand along its middle, their consoles toward its balcony edge.
+// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
 let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
-let displayNorth = (northAisleMid + 0.6)
 let displaySouth = 4.4
 // A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, its cap's top 1.05 m up,
 // and the exhibit on its turntable stands at `displayExhibitScale`, set down so the plinth's cap of the exhibits' own
@@ -300,6 +301,11 @@ let toyboxStations = flatMap(toyboxSides, side => map(toyboxPlan, s => (s with {
   facing: side.facing
 })))
 let toyboxMachines = map(toyboxStations, s => s.machine)
+// The stations' screen indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
+// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, one to a station in toyboxStations' order.
+let toyboxScreen = 20
+// Where a station stands in the building's frame, on its tile.
+function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
 // Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0
 // to 11, shapes.puck's four local seats and eight visitors), each run only while its body holds a rented device of that
@@ -315,14 +321,14 @@ let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb
 // envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
 let toyLatticePitch = (galleryTile / 16)
 let toyLatticeBar = 0.025
-// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands over a clear pane that holds
-// every body (architecture.puck's `lattice` net): a diamond every 18 cm; the strands are off (`strand: 0`) until the bake
-// draws a rotated repeated strand along its whole length.
+// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands threaded through a clear pane
+// that holds every body (architecture.puck's `lattice` net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's
+// mesh rather than a fence's.
+let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 // Where a level-1 branch meets the lattice it dead-ends at a sieve: a bay of bars spaced so that a body small enough
 // (about a fifth of the Moth, Alice's size and smaller) slips between them and a larger one cannot, so the branches
 // tempt a full-size climber toward the toybox and only a shrunken one gets in.
 let toyLatticeSieveCells = 36
-let toyLatticeNet = { strand: 0, pitch: 0.18 }
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
@@ -356,16 +362,25 @@ let treeTreadRise = 0.225
 let treeLimbs = [
   { level: 1, side: "south", tread: 14, x: bayX(4) }
   { level: 1, side: "north", tread: 24, x: bayX(8) }
-  { level: 2, side: "south", tread: 36, x: 38 }
-  { level: 2, side: "north", tread: 46, x: 22 }
+  { level: 2, side: "south", tread: 36, x: bayX(8) }
+  { level: 2, side: "north", tread: 46, x: bayX(4) }
   { level: 3, side: "south", tread: 58, x: bayX(5) }
   { level: 3, side: "north", tread: 68, x: bayX(7) }
 ]
 // Where a level's branch lands on one side, and the arcade bay that x stands in.
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
 function bayOf(x) = floor(((x - pierX(0)) / arcadePitch))
+// Every branch lands at a bay's centre, midway between two piers, so it never meets a pier and its doorway (levels 2 and
+// 3) or sieve (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
+let treeDoorWidth = 2
+let treeDoorPost = 0.22
+let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)
 let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
 let treeOverhang = 0.7
+// Where a branch meets a doorway (levels 2 and 3) its walking line runs on through the opening and this far onto the
+// floor, so the tip rests inside the aisle rather than ending on the threshold.
+let treeDoorOverhang = 1.5
+function treeOverhangOf(b) = ((b.level >= 2) ? treeDoorOverhang : treeOverhang)
 let treeLandingLift = 0.08
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
 // middle line `out` metres from the bark.
@@ -378,4 +393,4 @@ function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
 ))
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
-function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhang) : (naveNorth + treeOverhang))]
+function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))]

@@ -90,6 +90,39 @@ public class RuleCompileContext : IRuleCostContext {
 
         return false;
     }
+    /// <summary>Returns the values a read can answer, from declarations: what <see cref="RuleBounds"/> carries through
+    /// a program. A read of one cell of a fixed row answers the row's declared range, every whole number of it when
+    /// the row is an Int row and the range is short; a derived context answers for its host's facts.</summary>
+    /// <param name="operand">The read.</param>
+    /// <param name="variable">A value equal for two reads exactly when both answer the same value within one
+    /// evaluation (the same cell under the same key), so a program that reads it twice is bounded with the two held
+    /// equal; or <see langword="null"/> when the read is its own variable.</param>
+    /// <returns>The bound, in the read's own raw encoding; unbounded when no declaration bounds it.</returns>
+    public virtual ValueBounds ReadBounds(IRuleOperand operand, out object? variable) {
+        variable = null;
+        if ((operand is not StateCellOperand { RowFrom: null } cell) || (FindRowAt(rowOrdinal: cell.RowOrdinal) is not { } row)) {
+            return ValueBounds.Unbounded;
+        }
+
+        variable = (cell.RowOrdinal, cell.Key, cell.KeyFrom);
+        if (row.Kind == CellKind.Bool) {
+            return ValueBounds.Exactly(values: [0L, 1L]);
+        }
+        if ((row.Min is not { } minimum) || (row.Max is not { } maximum) || (row.Kind is not (CellKind.Int or CellKind.Fixed))) {
+            return ValueBounds.Unbounded;
+        }
+        if ((row.Kind != CellKind.Int) || ((maximum - minimum) >= RuleBounds.MaxAssignments)) {
+            return ValueBounds.Between(lower: minimum, upper: maximum);
+        }
+
+        var values = new long[((maximum - minimum) + 1L)];
+
+        for (var index = 0; (index < values.Length); index++) {
+            values[index] = (minimum + index);
+        }
+
+        return ValueBounds.Exactly(values: values);
+    }
     /// <summary>Returns whether a row holds still on a tick in which no rule or host writes it: a document row with
     /// no value-over-time trait on it or its cells, stored by the arena. It is the test a schedule applies to a row
     /// it names (<see cref="RuleSchedule.Build"/>), read from declarations.</summary>

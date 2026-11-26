@@ -123,21 +123,24 @@ function lookTelevisionPalette(t) = [
 // masses. `streak` is the bark grain's frequency along and across it (fine across, long along), and `twist` how many
 // radians a metre the trunk's grain turns as it climbs.
 let lookTree = {
-  bark: "#76604B"
-  barkUnder: "#4A3A2C"
+  bark: "#8A6B4F"
+  barkUnder: "#3F2F24"
   tread: "#937A60"
   treadUnder: "#6A5440"
   moss: "#6E7D45"
   branch: "#7E664E"
   branchUnder: "#4F3E2F"
-  fungus ["#9C6B38", "#D9A866", "#F2DDB0"]
-  leaves ["#244B33", "#3F7A42", "#7DB052"]
-  blossom: "#FFB3C8"
+  fungus ["#6E3A1E", "#B8703A", "#EBC88E"]
+  leaves ["#1E3F33", "#3E7444", "#A8C25E"]
+  // The forks' accent clumps: a golden turn among the greens, echoing the hall's amber glass.
+  blossom ["#9A5A1E", "#D99A3A", "#F7D77E"]
+  leavesDeep ["#13302A", "#2C5E40", "#7FA552"]
+  leavesWarm ["#2B4A26", "#5E8A3A", "#C9CF6A"]
   relief: 0.035
   grain: 1.6
   clump: 0.24
   clumpGrain: 1.5
-  streak [0.7, 14, 14]
+  streak [0.22, 7, 7]
   twist: 0.09
 }
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth

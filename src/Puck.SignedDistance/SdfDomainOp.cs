@@ -23,11 +23,15 @@ public abstract record SdfDomainOp {
     /// <param name="Spacing">The per-axis cell spacing.</param>
     /// <param name="Limit">The per-axis repeat-cell limit; the lattice spans cell indices -limit..+limit.</param>
     /// <param name="Origin">The point the lattice folds around, in the frame this op evaluates in (zero = the
-    /// creation origin, the pre-existing fold centre). A nonzero origin sandwiches the fold between a translate to
-    /// and from the origin, so cell selection is centred on it instead of the creation root — the lattice of
-    /// physical copies itself (their spacing, count) is unchanged; only which point resolves to which copy moves.
-    /// Zero is byte-identical to the origin-free fold.</param>
-    public sealed record Repeat(Vector3 Spacing, Vector3 Limit, Vector3 Origin = default) : SdfDomainOp;
+    /// creation origin): it sets where the cell walls fall, at half a spacing either side of it and every spacing
+    /// on. Given a subject, the fold centres its middle cell on the cell of that lattice the subject lies in
+    /// (<see cref="SdfDomainOps.CentreOf"/>), so the copies are the subject's own, at whole spacings from it, as
+    /// <see cref="SdfDomainExpansion"/> expands them, wherever the origin lies.</param>
+    /// <param name="Subject">The point the folded content is centred on, in the same frame as
+    /// <paramref name="Origin"/>: the shape's own position, or <see langword="null"/> to centre the fold on the
+    /// origin itself. A fold about a cell the subject does not lie in reads only the slices of its copies that cross
+    /// that one cell, while contact holds them whole.</param>
+    public sealed record Repeat(Vector3 Spacing, Vector3 Limit, Vector3 Origin = default, Vector3? Subject = null) : SdfDomainOp;
     /// <summary>Angular domain repeat — <see cref="SdfProgramBuilder.RepeatPolar"/>.</summary>
     /// <param name="Count">The sector count around the axis.</param>
     /// <param name="Axis">The rotation axis; the fold acts in the plane perpendicular to it.</param>
@@ -133,18 +137,45 @@ public static class SdfDomainOps {
 
         return chain.Translate(offset: -polar.Origin);
     }
+    private static SdfProgramBuilder ApplyRepeat(SdfProgramBuilder chain, SdfDomainOp.Repeat repeat) {
+        var centre = CentreOf(repeat: repeat);
+
+        return chain.Translate(offset: centre)
+            .RepeatLimited(
+                limit: repeat.Limit,
+                spacing: repeat.Spacing
+            )
+            .Translate(offset: -centre);
+    }
+    /// <summary>Returns the point a repeat's fold centres its middle cell on: the centre of the cell, on the lattice of
+    /// cells about <see cref="SdfDomainOp.Repeat.Origin"/>, that holds <see cref="SdfDomainOp.Repeat.Subject"/>. It
+    /// moves the origin by whole spacings only, so the cell walls stay where the origin puts them, and a subject within
+    /// half a spacing of the origin leaves the origin as it is. Cell indices -limit..+limit then name the copies at
+    /// whole spacings from the subject, the copies <see cref="SdfDomainExpansion"/> gives contact; a fold about a cell
+    /// the subject does not lie in reads only the slices of its copies that cross that cell. An axis of limit zero or an
+    /// unbounded one folds alike about any whole-spacing move, so moving it changes nothing there.</summary>
+    /// <param name="repeat">The repeat op.</param>
+    /// <returns>The fold's centre, in the frame the op evaluates in; the origin when the op names no subject.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="repeat"/> is <see langword="null"/>.</exception>
+    public static Vector3 CentreOf(SdfDomainOp.Repeat repeat) {
+        ArgumentNullException.ThrowIfNull(repeat);
+
+        if (repeat.Subject is not { } subject) {
+            return repeat.Origin;
+        }
+        // The spacing the fold reads (SdfProgramBuilder.RepeatLimited's clamp), so the move is whole cells of it.
+        var spacing = SdfDerivedLanes.RepeatSpacing(spacing: repeat.Spacing);
+        var cells = ((subject - repeat.Origin) / spacing);
+
+        return (repeat.Origin + (spacing * Vector3.Round(vector: cells, mode: MidpointRounding.AwayFromZero)));
+    }
     private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
         return op switch {
             SdfDomainOp.Symmetry symmetry => chain.SymmetryPlane(
             normal: symmetry.Normal,
             offset: symmetry.Offset
         ),
-            SdfDomainOp.Repeat repeat => chain.Translate(offset: repeat.Origin)
-                .RepeatLimited(
-            limit: repeat.Limit,
-            spacing: repeat.Spacing
-        )
-                .Translate(offset: -repeat.Origin),
+            SdfDomainOp.Repeat repeat => ApplyRepeat(chain: chain, repeat: repeat),
             SdfDomainOp.Polar polar => ApplyPolar(chain: chain, polar: polar),
             SdfDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
             cell: wallpaper.Cell,

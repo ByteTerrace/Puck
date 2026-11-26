@@ -16,6 +16,24 @@ public enum MotionMoveFrame : byte {
     /// camera yaw into the submitted intent client-side, before submission — the sim itself never sees a camera pose,
     /// preserving determinism.</summary>
     World,
+
+    /// <summary>The camera's whole view direction: <see cref="World"/>, and while the body holds itself up with no
+    /// surface (a free hold, the published <c>Unsupported</c> fact) the seat also composes its camera's pitch, so
+    /// forward travels along the view ray. The part of the aimed direction along the body's up rides the
+    /// <c>MoveUp</c> role (the free hold's thrust); the rest rides the planar pair. On a surface it is
+    /// <see cref="World"/>. The sim reads it exactly as <see cref="World"/>: the pitch is composed client-side
+    /// into the submitted intent and never reaches the simulation.</summary>
+    Aim,
+}
+/// <summary>The one reading of a <see cref="MotionMoveFrame"/> the simulation makes.</summary>
+public static class MotionMoveFrames {
+    /// <summary>Whether a kit under <paramref name="frame"/> submits its move channels already resolved into world
+    /// axes by the seat — every frame but <see cref="MotionMoveFrame.Heading"/>. The sim asks only this, so a frame
+    /// the seat composes differently (<see cref="MotionMoveFrame.Aim"/>) is <see cref="MotionMoveFrame.World"/>
+    /// to it.</summary>
+    /// <param name="frame">The kit's move frame.</param>
+    /// <returns><see langword="true"/> unless <paramref name="frame"/> is <see cref="MotionMoveFrame.Heading"/>.</returns>
+    public static bool SubmitsWorldAxes(this MotionMoveFrame frame) => (frame != MotionMoveFrame.Heading);
 }
 /// <summary>The one-time fixed-point compilation of a world's motion defaults. Runtime simulation reads only this
 /// form.</summary>

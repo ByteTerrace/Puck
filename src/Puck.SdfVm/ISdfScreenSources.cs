@@ -13,6 +13,9 @@ public enum SdfScreenFace : byte {
     /// <summary>A display: its picture filling the face, at the display's luminance, drawn through its
     /// <see cref="SdfScreenTreatment"/>.</summary>
     Display = 1,
+    /// <summary>An emitter face (<see cref="Puck.SignedDistance.SdfScreenSurface.IsEmitter"/>): no picture, only light,
+    /// the mean of what its material shows over the face at the material's emissive luminance.</summary>
+    Emitter = 2,
 }
 /// <summary>The display treatment a screen's face draws its picture through: an authored screen material's model of
 /// the display's own pixel structure over the picture, which always fills the face. A view's screen fidelity scales every

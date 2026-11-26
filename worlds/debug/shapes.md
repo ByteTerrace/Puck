@@ -185,22 +185,25 @@ display's id names its placements (`display-<id>` the turntable,
 `display-<id>-plinth`, and `-screen`, which carries the console's pointer
 surface), its spawn point (`display-<id>`), its sign and its state cells.
 
-| Display | Level, where | Exhibits, in order |
-|---|---|---|
-| `primitives` | 0, the nave's south line, west | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
-| `stretched` | 0, the nave's south line, east | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3), a stretched capsule, cone and torus cut from a slab, the same three cut smoothly |
-| `extruded` | 0, the nave's north line, west | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
-| `revolved` | 0, the nave's north line, east | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
-| `facets` | 1, the south gallery | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
-| `blends` | 1, the north gallery, west | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
-| `folds` | 1, the north gallery, east | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, relief masks, creation noise |
-| `motion` | 2, the north gallery, west | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving smooth cut, moving mirror fold, moving polar fold, nodding blend, three moving owners |
-| `motion2` | 2, the north gallery, middle | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames, paint across a moving seam |
-| `warps` | 2, the north gallery, east | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
-| `forms` | 3, the north gallery, west | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
-| `surfaces` | 3, the north gallery, east | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
-| `styles` | 3, the south gallery, west | cel style, hard cel style, the grey card, repeated paint tiles |
-| `glass` | 3, the south gallery, east | glass: an orange acrylic box holding a sphere, a thin pane and a thick block of one window glass, a frosted pane, the rods behind them |
+All twelve displays stand on level 0, one on each side of each showcase bay; their ids, exhibit lists and places are
+`galleryDisplayRows` in shapes.puck. Each starts on a showpiece (its row's `default`) and a visitor browses on from
+there; the plain sphere is one of the twelve, the shape every other exhibit departs from. The stamp pool's motion
+exhibits list on the `blends` console (`motionRow`) and the `stretched` console (`motionRowB`).
+
+| Display | Shows at start |
+|---|---|
+| `primitives` | sphere |
+| `stretched` | twist (moving) |
+| `extruded` | tumbled jittered lattice |
+| `revolved` | morph |
+| `facets` | cells F2 − F1 |
+| `blends` | moving smooth blend |
+| `folds` | wallpaper P6M |
+| `warps` | log-spherical fold |
+| `forms` | four-strand braided sweep |
+| `surfaces` | volume cloud |
+| `styles` | volume flow |
+| `glass` | glass |
 
 A display's console works as [gallery.md](gallery.md#display-consoles) says.
 Its state is ordinary world state, so it replicates, journals, undoes and reads
@@ -444,15 +447,15 @@ world.wait bakes 60
 ```
 
 A placement moves the same way, whole, still or moving:
-`world.row.set placements display-motion position [20, 8.6, 33]`. `world.reload`
+`world.row.set placements display-blends position [x, y, z]`. `world.reload`
 discards every such edit.
 
 ## Inspection recipes
 
 Each recipe shows its exhibit with `gallery.go <exhibit>` and frames it with
 the operator camera line above; `gallery.show` swaps the next exhibit onto the
-same turntable without moving the camera. The motion displays stand on level 2
-(f = 9.05) along the north gallery.
+same turntable without moving the camera. The motion exhibits list on the
+`blends` and `stretched` displays, on level 0.
 
 - **Motion vectors.** `gallery.go motion-spin`, then `world.debug-view
   motion`, and `gallery.show motion-rock` and `motion-slide` in turn. Each

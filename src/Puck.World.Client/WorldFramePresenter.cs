@@ -1046,6 +1046,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             : chase
         );
 
+        if (!ReferenceEquals(objA: rig, objB: chase)) {
+            // The seat steers its camera application as it steers its chase: the live look turns the program's lens.
+            rig.Look = view.ApplicationLook(
+                bodyOrientation: bodyOrientation,
+                interpolationAlpha: interpolationAlpha,
+                views: views
+            );
+        }
+
         m_seatCameraRigs[slot] = rig;
         var fieldOfView = 0f;
 
@@ -1499,6 +1508,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
             domains: m_domains,
+            interactive: true,
             mirror: mirror,
             program: cameraRig
         );

@@ -101,6 +101,19 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
     /// <inheritdoc/>
     public override bool FactRests(ICompiledFact fact, out bool each) => Rests(each: out each, fact: fact);
+    /// <inheritdoc/>
+    /// <remarks>A body's counter register answers its declared envelope (<see cref="WorldBodyStateReads.TryCounterBounds"/>),
+    /// and two reads of one register for one body reference are one variable.</remarks>
+    public override Puck.State.Rules.ValueBounds ReadBounds(Puck.State.Rules.IRuleOperand operand, out object? variable) {
+        if ((operand is WorldBodyFactOperand { Payload: BodyStateOperand state }) &&
+            WorldBodyStateReads.TryCounterBounds(definition: Definition, keeps: out _, reads: out var reads, slot: state.Slot)) {
+            variable = (state.Slot, state.Body);
+
+            return reads;
+        }
+
+        return base.ReadBounds(operand: operand, variable: out variable);
+    }
     /// <summary>Returns whether a world fact rests (<see cref="Puck.State.Rules.RuleCompileContext.FactRests"/>): the
     /// facts the world host versions that answer a count, a flag or an event, so that they move when something
     /// happens rather than with time or motion. A region's occupants, the population and quiescence censuses, a

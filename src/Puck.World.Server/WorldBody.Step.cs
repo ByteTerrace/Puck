@@ -200,15 +200,15 @@ public sealed partial class WorldBody {
         // (the source of direction-dependent flight and apparent vertical loss after a handoff). World also makes
         // MoveUp literal world Y, keeping an upright hover body's ascent independent of its rendered facing. Heading
         // retains true 6DOF body-local flight.
-        var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+        var facing = (m_tuning.MoveFrame.SubmitsWorldAxes()
             ? -FixedVector3.UnitZ
             : scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ)
         );
-        var right = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+        var right = (m_tuning.MoveFrame.SubmitsWorldAxes()
             ? FixedVector3.UnitX
             : scratch.Orientation.Rotate(vector: FixedVector3.UnitX)
         );
-        var up = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+        var up = (m_tuning.MoveFrame.SubmitsWorldAxes()
             ? FixedVector3.UnitY
             : scratch.Orientation.Rotate(vector: FixedVector3.UnitY)
         );
@@ -927,7 +927,7 @@ public sealed partial class WorldBody {
             : FixedQ4816.Zero
         );
 
-        if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+        if (m_tuning.MoveFrame.SubmitsWorldAxes()) {
             // Under World, MoveAdvance/MoveStrafe are raw world axes (a seat rotates its stick through camera yaw
             // before submission); a producer must rotate its own body-relative approach/orbit pair the same way,
             // using the bearing TO the sensed target — the same atan2 convention FaceSensorTarget's Turn write
@@ -1032,7 +1032,7 @@ public sealed partial class WorldBody {
             var forward = producer.Scalar(parameter: BodyProducerParameter.Forward);
             var strafe = (wave * producer.Scalar(parameter: BodyProducerParameter.StrafeWave));
 
-            if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+            if (m_tuning.MoveFrame.SubmitsWorldAxes()) {
                 // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
                 // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
                 // the Turn channel is deliberately inert under World and every roamer can only march toward -Z.
@@ -1477,7 +1477,7 @@ public sealed partial class WorldBody {
             moveSpeed: scratch.MoveSpeed
         );
 
-        if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+        if (m_tuning.MoveFrame.SubmitsWorldAxes()) {
             // World-frame movement means the TRANSLATION axes are already resolved by the seat; it does not make
             // the authored Turn role inert. Integrate facing independently so an author can choose camera-facing
             // strafe (FacingSnap=false plus right-stick.x -> Turn) or movement-facing locomotion (FacingSnap=true,
@@ -1850,7 +1850,7 @@ public sealed partial class WorldBody {
         }
 
         if (
-            (m_tuning.MoveFrame != MotionMoveFrame.World) ||
+            !m_tuning.MoveFrame.SubmitsWorldAxes() ||
             !m_tuning.FacingSnap ||
             ((Role(
             intent: in scratch.Intent,

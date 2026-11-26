@@ -39,22 +39,22 @@ public sealed partial class WorldBody {
         FixedVector3 up;
 
         if (m_usesLocalTargetVelocity) {
-            facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            facing = (m_tuning.MoveFrame.SubmitsWorldAxes()
                 ? -FixedVector3.UnitZ
                 : m_orientation.Rotate(vector: -FixedVector3.UnitZ)
             );
-            right = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            right = (m_tuning.MoveFrame.SubmitsWorldAxes()
                 ? FixedVector3.UnitX
                 : m_orientation.Rotate(vector: FixedVector3.UnitX)
             );
-            up = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            up = (m_tuning.MoveFrame.SubmitsWorldAxes()
                 ? FixedVector3.UnitY
                 : m_orientation.Rotate(vector: FixedVector3.UnitY)
             );
         } else {
             // The same transported translation basis ResolveYawAttitudeAndPlanarFrame consumes. A producer's
             // preference is in world axes; a World-frame kit on a wall still consumes its transported tangent axes.
-            var basis = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            var basis = (m_tuning.MoveFrame.SubmitsWorldAxes()
                 ? m_frame
                 : m_orientation
             );

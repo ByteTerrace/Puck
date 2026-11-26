@@ -4,7 +4,7 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     /// <summary>A boundary between complete instance emissions in this builder.</summary>
-    public readonly record struct EmissionMark(int Instructions, int Instances, int Polygons, int Paths, int Curves, int Windows, int Shapes, int Materials, int Screens, int Scopes, int Samples);
+    public readonly record struct EmissionMark(int Instructions, int Instances, int Polygons, int Paths, int Curves, int Windows, int Shapes, int Materials, int Screens, int Scopes, int Samples, int EmitterFaces);
     /// <summary>A retained emission sharing its immutable profile tables. Scope membership is rebound on append,
     /// so retaining an emission holds no reference to the builder that emitted it.</summary>
     public sealed class Emission {
@@ -19,6 +19,8 @@ public sealed partial class SdfProgramBuilder {
         // The thinnest stroke of the emission's glyphs (SdfProgram.GlyphStroke), infinity when it holds no glyph.
         internal float GlyphStroke { get; init; } = float.PositiveInfinity;
         internal SdfInstanceRange[] Instances { get; init; } = [];
+        // The emitter faces the emission declared (SdfProgramBuilder.EmitterFace), renumbered as it is appended.
+        internal SdfScreenSurface[] EmitterFaces { get; init; } = [];
         internal SdfInstruction[] Instructions { get; init; } = [];
         internal int Materials { get; init; }
         internal SdfCompiledPath[] Paths { get; init; } = [];
@@ -33,7 +35,7 @@ public sealed partial class SdfProgramBuilder {
     /// this boundary; retained instances name those existing rows.</summary>
     public EmissionMark MarkEmission() {
         RequireEmissionBoundary();
-        return new(m_instructions.Count, m_instances.Count, m_convexPolygonProfiles.Count, m_paths.Count, m_sweepCurves.Count, m_materialRecolorWindows.Count, m_shapeCount, m_materials.Count, m_screenSurfaces.Count, m_materialScopes.Count, m_sampledBindings.Count);
+        return new(m_instructions.Count, m_instances.Count, m_convexPolygonProfiles.Count, m_paths.Count, m_sweepCurves.Count, m_materialRecolorWindows.Count, m_shapeCount, m_materials.Count, m_screenSurfaces.Count, m_materialScopes.Count, m_sampledBindings.Count, m_emitterFaces.Count);
     }
     /// <summary>Retains the completed instances since a mark. Materials remain registered by the caller.</summary>
     public Emission RetainEmission(EmissionMark mark) {
@@ -65,6 +67,7 @@ public sealed partial class SdfProgramBuilder {
             Paths = m_paths.GetRange(mark.Paths, (m_paths.Count - mark.Paths)).ToArray(),
             Curves = m_sweepCurves.GetRange(mark.Curves, (m_sweepCurves.Count - mark.Curves)).ToArray(),
             Samples = m_sampledBindings.GetRange(mark.Samples, (m_sampledBindings.Count - mark.Samples)).ToArray(),
+            EmitterFaces = m_emitterFaces.GetRange(mark.EmitterFaces, (m_emitterFaces.Count - mark.EmitterFaces)).ToArray(),
             Windows = windows,
             Materials = m_materials.Count,
             ScopeBase = scope?.MaterialBase,
@@ -104,6 +107,9 @@ public sealed partial class SdfProgramBuilder {
         }
         foreach (var sample in emission.Samples) {
             m_sampledBindings.Add(item: sample with { InstructionIndex = (sample.InstructionIndex + offset) });
+        }
+        foreach (var face in emission.EmitterFaces) {
+            m_emitterFaces.Add(item: face with { ScreenIndex = m_emitterFaces.Count });
         }
         foreach (var window in emission.Windows) {
             m_materialRecolorWindows.Add(item: (window.Op, window.Material, window.MaxDelta, (window.Scoped ? m_materialScopes[^1] : null)));

@@ -91,7 +91,10 @@ public abstract record SdfCameraOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, read only for
     /// <see cref="SdfCameraProgram.FacingSubject"/>.</param>
-    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance) : SdfCameraOp;
+    /// <param name="AppliesLook">Whether a <see cref="SdfCameraProgram.FacingSubject"/> look follows
+    /// <see cref="SdfCameraProgramFrame.Look"/>'s world yaw and pitch instead of the subject's own forward axis — an
+    /// interactive first-person rig sets this, so the lens turns as the seat looks.</param>
+    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance, bool AppliesLook = false) : SdfCameraOp;
     /// <summary>Reports how a chase eye keeps clear of the room and the body it frames, resolved as
     /// <see cref="SdfCameraPose.Clearance"/>. It never moves the resolved pose: placing the eye is the caller's, which
     /// alone holds the geometry and the body. Distances are full-size, before the caller's live scale.</summary>
@@ -473,7 +476,20 @@ public static class SdfCameraProgramEvaluator {
                 case SdfCameraOp.LookAt lookAt:
                     aimed = false;
                     if (lookAt.SubjectSlot == SdfCameraProgram.FacingSubject) {
-                        target = (eye + (Forward(orientation: subject.Orientation) * MathF.Max(
+                        // The look's pitch is the orbit's: positive is the eye above its target, looking down.
+                        var facing = (lookAt.AppliesLook
+                            ? VectorFunctions.Heading(
+                                pitch: Math.Clamp(
+                                    max: pitchMax,
+                                    min: pitchMin,
+                                    value: -frame.Look.Pitch
+                                ),
+                                yaw: frame.Look.Yaw
+                            )
+                            : Forward(orientation: subject.Orientation)
+                        );
+
+                        target = (eye + (facing * MathF.Max(
                             x: lookAt.FocusDistance.Resolve(scalars: scalars),
                             y: MinimumFocusDistance
                         )));

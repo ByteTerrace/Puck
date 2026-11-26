@@ -20,10 +20,24 @@ public sealed class WorldActionStateLane {
     /// <summary>Gets the compiled register file the lanes answer, in slot order.</summary>
     public IReadOnlyList<CompiledActionStateSlot> Definitions => m_definitions;
 
-    /// <summary>Gets a register's live storage generation, including open writes and rewinds.</summary>
-    /// <param name="slot">The register-file slot.</param>
-    public ulong Generation(int slot) => (((m_arena is { } arena) && (((uint)slot) < ((uint)m_rows.Length)) && (m_rows[slot] >= 0))
-        ? arena.RowGeneration(rowOrdinal: m_rows[slot]) : 0);
+    /// <summary>Registers a watch over the entity indices whose value in some registers is touched, including open
+    /// writes and rewinds (<see cref="StateArena.WatchLaneTouches"/>). The registration stands until the next
+    /// <see cref="Bind"/>, which moves <see cref="Binding"/>.</summary>
+    /// <param name="watch">The reader's watch.</param>
+    /// <param name="slots">The register-file slots; a slot out of range, or one the bound catalog declares no row
+    /// for, is ignored.</param>
+    /// <returns><see langword="true"/> when an arena is bound and holds the watch; <see langword="false"/> when no
+    /// arena is bound, so nothing can be written and the watch reports nothing.</returns>
+    public bool WatchTouches(ArenaLaneTouches watch, ReadOnlySpan<int> slots) {
+        if (m_arena is not { } arena) { return false; }
+
+        Span<int> rows = stackalloc int[slots.Length];
+
+        for (var index = 0; (index < slots.Length); index++) { rows[index] = RowOrdinal(slot: slots[index]); }
+        arena.WatchLaneTouches(rows: rows, watch: watch);
+
+        return true;
+    }
     /// <summary>Gets a count that moves on every <see cref="Bind"/>, so a cache over <see cref="RowOrdinal"/> knows
     /// when to resolve again.</summary>
     public int Binding { get; private set; }

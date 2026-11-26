@@ -834,6 +834,28 @@ candidate document shares by reference with the current one keeps what it
 runs, so a swap the document adopted survives a later machine-affecting
 mutation, while a reload, which re-reads every row, decides the folder default
 again.
+**A state cell selects a library title (`contentBy`).** A machine row's
+`contentBy { state: <row>, key: <key> }` names a numeric cell; its value picks
+a title of the machine's library, the mountable files of its `contentFolders`
+numbered from 1 in listing order (`WorldMachineContentFolder.TryTitle`;
+`machine.content` prints each file's `title=`), and 0 runs the machine's own
+content. `WorldTick.GateMachines` reads it beside `runsWhen` on every tick and
+calls `IWorldMachineHost.SelectContent`, which acts only when the title moved:
+it lists the folders, creates the runtime afresh on the title's file (or on the
+machine's stock declaration for 0 or a number the library lacks) and retires
+the old one, with no document mutation and no provider operation, so it is
+allowed while recording and a replay derives the same swaps from the same
+state. The host keeps the stock declaration (`MachineInstance.Stock`) while a
+title runs and reports the authored configuration to the document
+(`Documented`, through the same `FolderDefaultBoot` pairing a folder default
+uses), so no title's name reaches a document, capture or tape. A kept row keeps
+its title across a machine-affecting mutation; a reload re-prepares it on its
+stock content and the next tick mounts the title again. A checkpoint row
+carries the title (`WorldMachineCheckpoint.ContentSelection`), and
+`RestoreCheckpoint` mounts it before restoring the image. The toybox decks are
+the worked example (`worlds/debug/gallery/toybox.puck`, `rentals.puck`'s
+cartridge rack, `cartridge-rentals-tests.puck`).
+
 `machine.default <instance> <name>|none` (a local console or seat only) writes
 the named file's folder's `folder.json` and names none in the machine's other
 folders; `machine.content` echoes `preferDefault=`, `default=`,

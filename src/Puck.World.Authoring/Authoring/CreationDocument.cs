@@ -187,6 +187,10 @@ public sealed record PaletteEntryDocument(
 /// <see cref="Smooth"/>, in [1, <see cref="ShapeScope.MaxSteps"/>] (null = <see cref="ShapeScope.DefaultSteps"/>).</param>
 /// <param name="Morph">Only with a <see cref="SdfBlendOp.Morph"/> <see cref="Blend"/>, and required by it: the lane
 /// and range the morph runs over — see <see cref="ShapeMorphDocument"/>.</param>
+/// <param name="LightsAs">How the shape's surface lights its surroundings with what its material shows (null = it lights
+/// nothing): <see cref="ShapeLightForm.Face"/> lights from a box's front face (+Z in the author frame). The light is the
+/// mean of the material's painted albedo times its emissive over the face, so a console's interface or a marquee's
+/// lettering lights the room in its own colours, and the shape keeps its material and paints.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -226,7 +230,8 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeDisplaceDocument? Displace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Elongate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Steps = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeMorphDocument? Morph = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeMorphDocument? Morph = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeLightForm? LightsAs = null
 ) {
     /// <summary>Gets the document names of the members whose zero is the member omitted: a zero
     /// <see cref="Chamfer"/> or <see cref="Rounding"/> shapes nothing, so canonical form never writes one.</summary>
@@ -286,6 +291,13 @@ public sealed record CreationPartDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Shapes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Except = null
 );
+/// <summary>The form a shape's light takes (<see cref="ShapeDocument.LightsAs"/>).</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<ShapeLightForm>))]
+public enum ShapeLightForm {
+    /// <summary>A box's front face (+Z in the author frame, the face its half-extents along X and Y span) lights what
+    /// stands before it as a screen's face does.</summary>
+    Face,
+}
 /// <summary>What a solid placement of a creation collides as (<see cref="CreationDocument.Contact"/>). Either way the
 /// collider never lies outside the drawn solid (docs/decisions/engine-design.md, "A collider follows the drawn solid").</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<CreationContact>))]
