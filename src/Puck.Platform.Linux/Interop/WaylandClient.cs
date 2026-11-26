@@ -79,16 +79,17 @@ internal static unsafe partial class WaylandClient {
         __arglist
     );
 
-    public static nint GetRegistry(nint display) {
-        return wl_proxy_marshal_flags(
-            display,
-            WlDisplayGetRegistryOpcode,
-            RegistryInterface,
-            wl_proxy_get_version(proxy: display),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    // A request whose one argument is the new object it creates (get_registry, create_surface, get_toplevel,
+    // get_touch): the new proxy, at its parent's version.
+    private static nint Create(nint parent, uint opcode, nint @interface) => wl_proxy_marshal_flags(
+        parent,
+        opcode,
+        @interface,
+        wl_proxy_get_version(proxy: parent),
+        0,
+        __arglist(((nint)0))
+    );
+    public static nint GetRegistry(nint display) => Create(@interface: RegistryInterface, opcode: WlDisplayGetRegistryOpcode, parent: display);
     public static nint Bind(nint registry, uint name, nint interfacePointer, uint version) {
         var interfaceName = Marshal.ReadIntPtr(
             ofs: 0,
@@ -109,16 +110,7 @@ internal static unsafe partial class WaylandClient {
             )
         );
     }
-    public static nint CreateSurface(nint compositor) {
-        return wl_proxy_marshal_flags(
-            compositor,
-            WlCompositorCreateSurfaceOpcode,
-            SurfaceInterface,
-            wl_proxy_get_version(proxy: compositor),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    public static nint CreateSurface(nint compositor) => Create(@interface: SurfaceInterface, opcode: WlCompositorCreateSurfaceOpcode, parent: compositor);
     public static nint GetXdgSurface(nint wmBase, nint surface) {
         return wl_proxy_marshal_flags(
             wmBase,
@@ -132,16 +124,7 @@ internal static unsafe partial class WaylandClient {
             )
         );
     }
-    public static nint GetToplevel(nint xdgSurface) {
-        return wl_proxy_marshal_flags(
-            xdgSurface,
-            XdgSurfaceGetToplevelOpcode,
-            XdgToplevelInterface,
-            wl_proxy_get_version(proxy: xdgSurface),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    public static nint GetToplevel(nint xdgSurface) => Create(@interface: XdgToplevelInterface, opcode: XdgSurfaceGetToplevelOpcode, parent: xdgSurface);
     public static void SetToplevelTitle(nint toplevel, nint titleUtf8) {
         _ = wl_proxy_marshal_flags(
             toplevel,
@@ -259,36 +242,22 @@ internal static unsafe partial class WaylandClient {
         }
     }
     // wl_seat.get_touch: the seat's touch device, a new wl_touch proxy.
-    public static nint GetTouch(nint seat) {
-        return wl_proxy_marshal_flags(
-            seat,
-            WlSeatGetTouchOpcode,
-            TouchInterface,
-            wl_proxy_get_version(proxy: seat),
-            0,
-            __arglist(((nint)0))
-        );
-    }
-    // wl_touch.release (a destructor since version 3); an older touch proxy is only destroyed client-side.
-    public static void ReleaseTouch(nint touch) {
-        if (wl_proxy_get_version(proxy: touch) >= 3) {
+    public static nint GetTouch(nint seat) => Create(@interface: TouchInterface, opcode: WlSeatGetTouchOpcode, parent: seat);
+    // wl_touch.release, a destructor since version 3.
+    public static void ReleaseTouch(nint touch) => Release(opcode: WlTouchReleaseOpcode, proxy: touch, since: 3);
+    // wl_seat.release, a destructor since version 5.
+    public static void ReleaseSeat(nint seat) => Release(opcode: WlSeatReleaseOpcode, proxy: seat, since: 5);
+
+    // A release request that became a destructor at a protocol version: sent to a proxy bound at or above it, while an
+    // older proxy, whose interface has no such request, is only destroyed client-side.
+    private static void Release(nint proxy, uint opcode, uint since) {
+        if (wl_proxy_get_version(proxy: proxy) >= since) {
             Destroy(
-                opcode: WlTouchReleaseOpcode,
-                proxy: touch
+                opcode: opcode,
+                proxy: proxy
             );
         } else {
-            wl_proxy_destroy(proxy: touch);
-        }
-    }
-    // wl_seat.release (a destructor since version 5); an older seat proxy is only destroyed client-side.
-    public static void ReleaseSeat(nint seat) {
-        if (wl_proxy_get_version(proxy: seat) >= 5) {
-            Destroy(
-                opcode: WlSeatReleaseOpcode,
-                proxy: seat
-            );
-        } else {
-            wl_proxy_destroy(proxy: seat);
+            wl_proxy_destroy(proxy: proxy);
         }
     }
     public static nint XdgSurfaceInterface {
