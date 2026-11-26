@@ -103,8 +103,9 @@ float sdfGlassContact(SdfMaterialData material, float behind) {
     return (material.contactCoverage * (1.0 - smoothstep(0.0, material.contactReach, behind)));
 }
 // The light arriving at the glass's surface as a white surface there would show it, the radiance the medium scatters and
-// a revealed surface reflects, and in `highlights` the lights' highlights on the glass: every light through the one
-// interface (sdfLightResponse) at an unoccluded surface the cascades do not reach, so a shadowing light's visibility is
+// a revealed surface reflects, and in `highlights` the lights' highlights on the glass: every light that can reach the
+// points the wave's active lanes shade here (sdfWaveLightMasks, so every lane that shades an interface calls this) through
+// the one interface (sdfLightResponse) at an unoccluded surface the cascades do not reach, so a shadowing light's visibility is
 // the probes' (`probes`), the sky's ambient where the volume's sky source is disabled, and the volume's indirect light as
 // a surface receives it. `incoming` is that light's luminance before the indirect gains, what the local adaptation meters
 // (sdfLocalAdaptationGain).
@@ -126,7 +127,8 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
 
     bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
     radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
-    SdfLightWalk walk = sdfLightWalkStart();
+    // The view's lights that can reach a point some lane shading glass beside this one shades (sdfWaveLightMasks).
+    SdfLightWalk walk = sdfLightWalkStart(sdfWaveLightMasks(position));
     SdfLightSource light;
     SdfShadeCarry shadeCarry = sdfShadeLightPrologue(shadeBinding, shadeStamp);
 
@@ -553,4 +555,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfGlassPixel(id.xy);
     }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountLights(sdfWorkLights);
 }

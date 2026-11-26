@@ -852,14 +852,14 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             residency.BeginFrame(frameSeconds: m_context.FrameDeltaSeconds);
         }
     }
-    // The plan a binned view's bins pass writes its jobs' arguments for, made from the frame, the view and the passes'
-    // common extent, priced for the residency's shading selection, and committed as the instance's plan. It bins only while
-    // the view's residency shades in bins (SdfWorldResidency.ShadesInBins), and is unsplit otherwise.
-    internal SdfShadeDispatch CommitShadePlan(string instance, SdfFrame frame, uint width, uint height, uint screens) {
+    // The plan a binned view's bins pass writes its jobs' arguments for, made from the frame, the view's light mask and the
+    // passes' common extent, priced for the residency's shading selection, and committed as the instance's plan. It bins
+    // only while the view's residency shades in bins (SdfWorldResidency.ShadesInBins), and is unsplit otherwise.
+    internal SdfShadeDispatch CommitShadePlan(string instance, SdfFrame frame, uint width, uint height, uint screens, UInt128 lightMask) {
         var entry = Refresh(instance: instance);
         var residency = entry.View?.Residency;
         var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, glass: false, height: height, screens: screens,
-            width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (residency?.ShadesInBins ?? false));
+            lightMask: lightMask, width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (residency?.ShadesInBins ?? false));
 
         entry.ShadePlan = plan;
         return plan;
@@ -867,8 +867,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // The plan a binned view's views pass records with: the one whose arguments the bins pass last wrote, so views advances
     // by the widths the arguments hold even while the bins pass stands (a views pass re-records alone when only an input
     // the filter does not read changed, and a publication changes the selection's pricing without re-rendering either).
-    internal SdfShadeDispatch ShadePlanOf(string instance, SdfFrame frame, uint width, uint height, uint screens) =>
-        (Refresh(instance: instance).ShadePlan ?? CommitShadePlan(frame: frame, height: height, instance: instance, screens: screens, width: width));
+    internal SdfShadeDispatch ShadePlanOf(string instance, SdfFrame frame, uint width, uint height, uint screens, UInt128 lightMask) =>
+        (Refresh(instance: instance).ShadePlan ?? CommitShadePlan(frame: frame, height: height, instance: instance, lightMask: lightMask, screens: screens, width: width));
     /// <summary>Gets the shading submissions of the package's released recorders, which its next frame completes unless
     /// a device loss comes first.</summary>
     public SdfShadeReleases ShadeReleases { get; } = new();

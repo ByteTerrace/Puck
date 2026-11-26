@@ -100,7 +100,14 @@ against the same frame:
   traced lights' probe reads (`sdfViewsLightVisibility`) are a tenth of a
   millisecond of it, so the cost is the visit's own shading (the light phase
   and `sdfLightResponse`) at the kernel's occupancy, and a cut there is fewer
-  visits a pixel or a cheaper visit, never a cheaper visibility read.
+  visits a pixel or a cheaper visit, never a cheaper visibility read. The
+  view's light cutoff (`sdfLightCutoffFade`) took the visits from 7.3 to 3.9 a
+  pixel (`gpu.lights.visited`). The walk sets the specialized binned kernel's
+  registers: Vulkan's pipeline statistics read 168 with it and 128 with
+  `SDF_VIEWS_OMIT_LIGHTS`, twelve warps a multiprocessor against sixteen. A
+  reload whose walk iterated without shading read 2.7 ms against 4.4 ms, one
+  that ran the default response alone 3.75 ms, so of a visit's shading about
+  three fifths was the default response and two the authored light phase.
 - **`mesh`** in the forest: the selection marks count 15.7 million triangles
   drawn in the main view, four a pixel, about two in five of them at the
   collapse's coarsest levels. The pass is bound by its triangles more than its
@@ -464,8 +471,10 @@ pass's cost. Then the time:
     corners disagree on, and the pool holds one extra slot a cell. The lookup
     counts the lights rounded and the groups that kept no extra
     (`lights-rounded` and `groups-without-extras` on
-    `world.counters gpu pass sdf.world$views-probes`). Check: both read zero
-    over the route, or the list and the pool grow.
+    `world.counters gpu pass sdf.world$views-probes`). A slot lists only the
+    traced lights that can light a pixel reading it (`sdfViewsProbesStoreSlot`),
+    which took the hall's `lights-rounded` from 3.3 million a frame to 35. Check:
+    both read zero over the route, or the list and the pool grow.
 
 ## The invariant the slots rest on
 

@@ -1021,7 +1021,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   masks (`sdfViewLightMasks`); views walks each 8×8 tile's
   (`sdfViewsTileLights`, `passes/sdf-views-lights.hlsli`): the view's lights
   whose range sphere (and spot cone) meets the boxes about the tile's hit
-  points, the non-black screens the boxes reach in front of, and of the lights
+  points and whose bound there reaches the view's cutoff (`sdfLightReachesBox`,
+  `frame/sdf-lights.hlsli`, which the probe lookup's slots also judge their
+  lights by), the non-black screens the boxes reach in front of, and of the lights
   the volume traces (`sdfLightTraces`) only those the probes about some shaded
   pixel of the tile see (`sdfViewsLightsSeen`). A mask
   may leave out only a light that adds nothing at the points its lanes shade,
@@ -1029,8 +1031,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that lights behind its face) widens the tile test in the same change, or
   tiles cut its light off. The probes' half rests on one rule the light
   phase's door enforces: a traced light whose probe share is zero adds nothing,
-  whatever the program (`SdfLightInputs.unseen` in the generated
-  `sdfShadeLightPhase`), so a change that lets an unseen traced light add
+  whatever the program (`SdfLightInputs.none` in the generated
+  `sdfShadeLightPhase`, which also answers for a point, spot or screen light
+  whose reach is zero, the view's cutoff included: `sdfLightCutoffFade`, the
+  same rule `sdfLightReachesBox` bounds a tile's boxes by, so a change to one is
+  a change to both), so a change that lets an unseen traced light add
   anything (a new response term, a door that skips the test) widens
   `sdfViewsLightsSeen` in the same change. The unsplit kernels decide a tile in
   their own group; a binned view's filter pass decides it and writes the masks
@@ -1038,10 +1043,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   so they hold no barrier and shade a pixel from its records alone. The filter
   pass tests no screen's binding, since a source binds without moving the
   lighting it stands on; the walk asks. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the
-  tiles' saving. Light visits are counted by reloading a scratch tree that adds
-  to `sdfWorkGradients` in the walk and reading `shapes.gradients` on
-  `world.counters gpu pass sdf.world$views`. Index a vector at
-  run time only through `sdfComponent`.
+  tiles' saving. The walks count their visits (`gpu.lights.visited` on
+  `world.counters gpu pass sdf.world$views` and `$glass-shade`, through
+  `puckCountLights`). Glass, which has no tiles, walks the view's lights that
+  reach the box about its wave's active lanes' points (`sdfWaveLightMasks`,
+  joined across the wave with no barrier). Index a vector at run time only
+  through `sdfComponent`.
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/a4d22105b376f4395129734703307d1352a3613af582007c1968cb90be7c5d72). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/df321383675c92448f3658773f460f92b17567cdeebcdbd44554dd41f604a90e). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -85,8 +85,8 @@ struct SdfSkyEnvironmentPass {
     [[vk::offset(32)]] uint workCounterRow;
     [[vk::offset(36)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa2ECD80D6 : register(b0, space3);
-#define passGroup passGroupIsa2ECD80D6
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsaC469A961 : register(b0, space3);
+#define passGroup passGroupIsaC469A961
 [[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t1, space3);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t2, space3);
@@ -102,10 +102,10 @@ struct SdfSkyEnvironmentPass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, shape evaluations, shape gradients and rejected mesh hits, as a
+// sky texture loads, shape evaluations, shape gradients, rejected mesh hits and light visits, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 16u;
+static const uint PuckWorkRowWords = 18u;
 static const uint PuckWorkDisabledRow = 0xFFFFFFFFu;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
@@ -115,6 +115,7 @@ static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShapesWord = 10u;
 static const uint PuckWorkGradientsWord = 12u;
 static const uint PuckWorkRejectedHitsWord = 14u;
+static const uint PuckWorkLightsWord = 16u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -285,6 +286,18 @@ void puckCountRejectedHit() {
 void puckCountSky(uint evaluations, uint loads) {
     puckAddRowWork(PuckWorkSkyWord, evaluations);
     puckAddRowWork(PuckWorkSkyTextureLoadsWord, loads);
+}
+// Adds the lights a lane's shading walks visited to its pass's row: the wave sums its lanes and the first adds
+// the sum. Every lane of the wave must reach the call.
+void puckCountLights(uint visits) {
+    if (passGroup.workCounterRow == PuckWorkDisabledRow) {
+        return;
+    }
+    uint waveVisits = WaveActiveSum(visits);
+
+    if (WaveIsFirstLane()) {
+        puckAddRowWork(PuckWorkLightsWord, waveVisits);
+    }
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT

@@ -134,9 +134,10 @@ SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp
     bool authored = sdfShadeHas(binding, 1u);
     SdfLightInputs inputs = sdfLightInputs(light, surface, authored, authored && (sdfShadeReadsOf(binding) & SDF_SHADE_READ_PROBE_SHARE) != 0u);
     SdfLightResponse response = sdfLightResponse(light, surface, inputs, authored ? sdfShadeAssigned(binding, 1u) : 0u);
-    // A traced light no probe about the surface sees adds nothing, whatever the program (SdfLightInputs.unseen): the
-    // default response is already none there, and a views tile leaves such a light out on that guarantee.
-    if (!authored || inputs.unseen) return response;
+    // A light that reaches nothing here, and a traced light no probe about the surface sees, adds nothing, whatever the
+    // program (SdfLightInputs.none): the default response is already none there, and a views tile leaves such a light
+    // out on that guarantee.
+    if (!authored || inputs.none) return response;
     sdfShadeSet_light_direction(stamp, inputs.direction);
     sdfShadeSet_light_position(stamp, light.position);
     sdfShadeSet_light_color(stamp, light.color);

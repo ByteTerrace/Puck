@@ -818,15 +818,29 @@ one light at a time has already paid for the visit.
 **The rule.** A traced point or spot light adds nothing at a surface where
 its share of the probes about the surface is exactly zero. The default response
 already gave no light there (its visibility is the share times the ambient
-occlusion); the light phase's door now answers no light before it runs an
-authored program (`SdfLightInputs.unseen`, tested in the generated
+occlusion); the light phase's door answers no light before it runs an
+authored program (`SdfLightInputs.none`, tested in the generated
 `sdfShadeLightPhase`), so a program's light phase cannot rely on running for a
-traced light its surface's probes do not see, as it cannot for a light whose
-`reach` is zero. On that rule a tile leaves out every traced light the probes
-about none of its shaded pixels see (`sdfViewsTileLights`,
+traced light its surface's probes do not see, nor for a point, spot or screen
+light whose `reach` is zero there. On that rule a tile leaves out every traced
+light the probes about none of its shaded pixels see (`sdfViewsTileLights`,
 `sdfViewsCellLightsSeen`, `sdfViewsPixelLightsSeen`). A directional, an untraced light (one that rides an
 anchor) and a screen are never left out this way: a directional's visibility is
 its cascades' wherever they hold the point, and the others have no bits.
+
+**The cutoff.** A light's range is where its light falls to
+`SdfPhotometry.RangeThreshold` of display white at the world's darkest exposure,
+so at any brighter exposure most of the range lights nothing a view can show:
+in the gallery's hall at noon a 5,000 lm downlight's range ran past 60 m while
+its light fell under that share of the view's white within 14 m. A point, spot
+or screen light's reach therefore fades to zero where it gives a white surface
+less than that share of the view's own white, keeping its whole response from
+twice the share (`sdfLightCutoffFade`), and a tile leaves out a light whose bound
+over its boxes, window and cone included, stays under it (`sdfLightReachesBox`).
+The fade keeps the cut continuous, so no tile edge shows; the local adaptation
+can lift what it removed in the darkest pixels by at most its own gain. Hall,
+noon, Direct3D 12: the walk's visits fell from 7.3 to 3.9 a pixel
+(`gpu.lights.visited` on `sdf.world$views`).
 
 **Where a tile is decided.** One workgroup decides a tile's masks: the unsplit
 views kernels in their own group and, for a binned view, the filter pass, which

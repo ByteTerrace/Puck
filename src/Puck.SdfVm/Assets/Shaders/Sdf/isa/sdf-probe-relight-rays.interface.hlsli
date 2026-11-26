@@ -37,5 +37,7 @@ void puckCountRejectedHit() {
 }
 void puckCountSky(uint evaluations, uint loads) {
 }
+void puckCountLights(uint visits) {
+}
 
 #endif // PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT_RAYS
