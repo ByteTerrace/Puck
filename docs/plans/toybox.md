@@ -56,5 +56,5 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
 - The central tree: a hero-quality sculpt, climbable, with walkable branches; the level-1 branches shrink.
-- Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a
-  research round (the climb's states, stamina, ledge and mantle, the camera, animation and authored surfaces).
+- Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better; [the climbing
+  plan](climbing.md) holds its research round, what is built and what is open.
