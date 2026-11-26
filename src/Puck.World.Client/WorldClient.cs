@@ -1593,12 +1593,17 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 continue;
             }
 
-            if (seat.Input is not { Admitted: true } input) { continue; }
+            if (seat.Input is not { Admitted: true } input) {
+                // A seat no authority admitted carries no contact into a later tick: a stale touch is not a touch.
+                _ = seat.TakeContacts();
+                continue;
+            }
             if (
                 !endpoint.ClockOwnedHere &&
                 (m_lastSubmissionEpoch[slot] == routes[slot]!.Epoch) &&
                 (m_lastSubmissionTick[slot] >= tick) &&
                 !input.HoldsUnpublished &&
+                !seat.HoldsContacts &&
                 (intent == m_lastSubmittedIntent[slot])
             ) {
                 continue;

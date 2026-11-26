@@ -212,12 +212,16 @@ public sealed class WorldInputProducer {
         return true;
     }
     /// <summary>Freezes ordered events, active contributions and explicit neutral observations for one transport/tape submission.</summary>
-    public WorldInputBatch Publish(ulong tick, SourceRay? ray = null) => PublishCore(borrow: false, ray: ray, tick: tick);
+    /// <param name="tick">The processing tick.</param>
+    /// <param name="ray">The seat's pointer ray this tick, or <see langword="null"/> for none.</param>
+    /// <param name="contacts">The tick's pointing-contact events, in order; owned by the batch from here on.</param>
+    /// <returns>The batch.</returns>
+    public WorldInputBatch Publish(ulong tick, SourceRay? ray = null, ReadOnlyMemory<SurfaceContact> contacts = default) => PublishCore(borrow: false, contacts: contacts, ray: ray, tick: tick);
     /// <summary>Publishes reusable storage for immediate, synchronous authority admission. The batch must not be
     /// queued, taped or retained: its contributions and events expire on the next producer operation.</summary>
-    public WorldInputBatch PublishBorrowed(ulong tick, SourceRay? ray = null) => PublishCore(borrow: true, ray: ray, tick: tick);
+    public WorldInputBatch PublishBorrowed(ulong tick, SourceRay? ray = null) => PublishCore(borrow: true, contacts: default, ray: ray, tick: tick);
 
-    private WorldInputBatch PublishCore(ulong tick, SourceRay? ray, bool borrow) {
+    private WorldInputBatch PublishCore(ulong tick, SourceRay? ray, ReadOnlyMemory<SurfaceContact> contacts, bool borrow) {
         FlushNeutral(tick: tick);
         Drain(tick: tick);
         if (CaptureLost) { return new(Revision, Epoch, Mapping.Id, tick, default, default, default, Mapping.NumericCount, CaptureLost: true); }
@@ -257,7 +261,7 @@ public sealed class WorldInputProducer {
         }
         ReadOnlyMemory<WorldInputEvent> events = (borrow ? m_pending.AsMemory(length: m_eventCount, start: 0) :
             ((m_eventCount == 0) ? default : m_pending.AsSpan(length: m_eventCount, start: 0).ToArray()));
-        var batch = new WorldInputBatch(Revision, Epoch, Mapping.Id, tick, m_image with { SourceRay = ray }, published, events, Mapping.NumericCount);
+        var batch = new WorldInputBatch(Revision, Epoch, Mapping.Id, tick, m_image with { SourceRay = ray }, published, events, Mapping.NumericCount, Contacts: contacts);
 
         m_eventCount = 0;
         if (m_hasNeutral) {

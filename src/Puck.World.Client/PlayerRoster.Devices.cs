@@ -4,7 +4,7 @@ using Puck.Commands;
 namespace Puck.World.Client;
 
 /// <summary>The roster's device-kind bookkeeping: per-kind (<c>keyboard&lt;N&gt;</c>/<c>mouse&lt;N&gt;</c>/
-/// <c>gamepad&lt;N&gt;</c>/<c>camera&lt;N&gt;</c>) token minting and resolution, the camera default-seating policy,
+/// <c>gamepad&lt;N&gt;</c>/<c>camera&lt;N&gt;</c>/<c>touch&lt;N&gt;</c>) token minting and resolution, the camera default-seating policy,
 /// and the <c>world.devices</c>/<c>world.device-profiles</c> read-backs. Split from <see cref="PlayerRoster"/>'s
 /// main file purely for length; every member here shares that type's single-threaded, no-lock discipline
 /// and its fields.</summary>
@@ -14,6 +14,7 @@ public sealed partial class PlayerRoster {
         ("mouse", InputDeviceKind.Mouse),
         ("gamepad", InputDeviceKind.Gamepad),
         ("camera", InputDeviceKind.Camera),
+        ("touch", InputDeviceKind.Touch),
     ];
 
     // How many mapped devices a slot owns, for presence/activity bookkeeping. A camera never counts — it is a
@@ -289,7 +290,7 @@ public sealed partial class PlayerRoster {
         : null
     );
     /// <summary>The stable token for a device: <c>keyboard&lt;N&gt;</c>, <c>mouse&lt;N&gt;</c>,
-    /// <c>gamepad&lt;N&gt;</c>, or <c>camera&lt;N&gt;</c>, numbered independently by first-seen order within its own
+    /// <c>gamepad&lt;N&gt;</c>, <c>camera&lt;N&gt;</c> or <c>touch&lt;N&gt;</c>, numbered independently by first-seen order within its own
     /// kind. Public so a verb echo can name the device a gesture acted on (e.g. "gamepad1 seated with player 1").</summary>
     /// <param name="device">The device id.</param>
     public string DeviceToken(InputDeviceId device) {
@@ -298,6 +299,7 @@ public sealed partial class PlayerRoster {
             InputDeviceKind.Keyboard => "keyboard",
             InputDeviceKind.Mouse => "mouse",
             InputDeviceKind.Camera => "camera",
+            InputDeviceKind.Touch => "touch",
             _ => "gamepad",
         });
         var ordinal = 0;

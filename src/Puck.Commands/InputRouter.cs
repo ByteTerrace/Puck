@@ -1148,6 +1148,19 @@ public sealed partial class InputRouter : IDisposable {
             return InputDeviceKind.Mouse;
         }
 
+        if (
+            source.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "touch."
+            ) ||
+            source.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "pen."
+            )
+        ) {
+            return InputDeviceKind.Touch;
+        }
+
         return InputDeviceKind.Gamepad;
     }
     // The emission order for a stranded release: command id, then source — identical to the comparator the held

@@ -40,6 +40,7 @@ is corrected in the same change.
 | Read a controller, keyboard or mouse; rumble, lights, adaptive triggers | `Puck.Input` (`GamepadManager`, `InputArbiter`, `GamepadCaptureSource`, `WindowInputMapper`, `InputSources`, `IGamepadOutput`); OS transports in `Puck.Platform.Windows` | [device input](../../../docs/reference/input.md) |
 | A machine's buttons while a seat is engaged | the route's kit `pad` map (`WorldKit`, `WorldPadElement`) | [engagement](../puck-world/references/engagement.md) (`puck-world`) |
 | Light the keyboard's keys from the world: the next key to press, the keys a page binds, a flash on an event | `keyLights` (`WorldKeyLightSection`) → `WorldKeyLightDirector` → `LightLegendComposer` → `LampLegendDriver` → `ILampArrayDeviceSource`; read-back `lights.state` | [dynamic lighting](../../../docs/reference/input.md#dynamic-lighting) |
+| A finger, pen tip or mouse click on an in-world screen (the player's touchscreen used as the game's own) | `WindowInputQueue.EnqueueContact` numbers each OS contact; `touch.contact<n>` and `pen.tip` bind it; `WorldContacts` (written by `WorldPointerSink` and `world.view.touch`) → `WorldPointerRayCapture` casts it through the seat's view → `SeatController.AddContact` → `WorldInputBatch.Contacts` → `WorldInputOwner.ContactsAt` → `forEach: $contacts:<screen>` and `contact(each, …)` (`WorldContactIteration`); `source.contact` queues one as a world ray, headless (`worlds/debug/touch-tests.puck`) | [touch](../../../docs/decisions/input-channels.md#touch-is-diegetic), [device input](../../../docs/reference/input.md#touch-and-pen-contacts) |
 | A game played by typing words | the standard's `typingPlay` and `typingFamily` (`worlds/standard/typing.puck`): a `Text` channel judged a character at a time against words authored as strings (`scalars(text)`) | [the press](../../../worlds/debug/press.md) |
 
 ## Semantic channels and typed values
@@ -267,6 +268,8 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 | A binding names known sources and bindable commands | `BindingVocabularyCheck` |
 | Same input, same state | history, holds and claims in `WorldInputOwner.Checkpoint.cs`; `puck test --reproduce` |
 | World `haptics` rows | `WorldDefinitionValidator.Haptics.cs` (unique ids, unit intensities, positive duration within `WorldHapticCapacity.MaxDurationSeconds`, `mode`/`signal` agreement, seat tokens) and `WorldValueDomainGuard` |
+| A contact's lift follows its touch; a stale touch never reaches a later tick | `WindowInputQueue.EnqueueContact` (numbering), `WorldContacts.Record` (per-seat live set), `WorldPointerRayCapture.CaptureContacts` (sends moves and lift only after the touch; an uncastable lift becomes a cancel), `WorldInputOwner.ContactsAt` (one tick's contacts) |
+| A mouse message the system made from pen or touch is not a second click | `Win32NativeWindow.IsMouseFromContact` and the raw-mouse check in `HandleRawMouse` (`MI_WP_SIGNATURE`) |
 | Menu and Escape are reserved | nothing yet (H4) |
 
 ## Open gaps

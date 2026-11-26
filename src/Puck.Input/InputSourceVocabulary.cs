@@ -88,6 +88,13 @@ public static class InputSourceVocabulary {
             kinds: kinds,
             type: typeof(InputSources.Gamepad)
         );
+        ClassifyGroup(
+            declaredBy: declaredBy,
+            explicitlyUnaddressable: explicitlyUnaddressable,
+            relative: relative,
+            kinds: kinds,
+            type: typeof(InputSources.Pen)
+        );
 
         return (kinds, explicitlyUnaddressable, relative);
     }
@@ -189,6 +196,24 @@ public static class InputSourceVocabulary {
             if (TryParseCanonicalPositiveNumber(
                 digits: sourceId.AsSpan(start: MouseButtonPrefix.Length),
                 maximum: ushort.MaxValue,
+                number: out _
+            )) {
+                kind = CommandValueKind.Digital;
+                return true;
+            }
+
+            return false;
+        }
+
+        const string TouchContactPrefix = "touch.contact";
+
+        if (sourceId.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: TouchContactPrefix
+        )) {
+            if (TryParseCanonicalPositiveNumber(
+                digits: sourceId.AsSpan(start: TouchContactPrefix.Length),
+                maximum: SurfaceContact.MaximumContacts,
                 number: out _
             )) {
                 kind = CommandValueKind.Digital;

@@ -12,6 +12,16 @@ namespace Puck.World;
 public static partial class WorldFactsVocabulary {
     /// <summary>Resolves the same admitted owner spelling for event reads and sweeps.</summary>
     public static WorldInputOwnerReference CompileInputOwner(string text, WorldFactsCompileContext world, string ruleName) => WorldFactsOperandFamily.CompileInputOwner(ruleName: ruleName, text: text, world: world);
+    /// <summary>Returns the validated source-normalized mapping of a <c>Simulation</c> screen, which a pointer ray or a
+    /// contact maps through.</summary>
+    /// <param name="definition">The document.</param>
+    /// <param name="screenIndex">The screen's index.</param>
+    /// <param name="name">The spelling a refusal quotes.</param>
+    /// <param name="ruleName">The rule a refusal names.</param>
+    /// <returns>The mapping.</returns>
+    /// <exception cref="RuleException">The document declares no such screen, its route input is not
+    /// <c>Simulation</c>, or its row maps no ray.</exception>
+    public static SourceMapping SimulationScreenMapping(WorldDefinition definition, int screenIndex, string name, string ruleName) => WorldFactsOperandFamily.SimulationScreenMapping(definition: definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
 
     private sealed class WorldFactsOperandFamily : OperandFamily {
         private const string BoardCellOfPrefix = "$board:cellOf:";
@@ -56,6 +66,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>",
             $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
+            "$contact:each:seat|device|id|phase|x|y",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseErrorAt|beatAt|barAt|beatInBarAt:<owner>:<channel>:<kind>:<occurrence>",
@@ -158,6 +169,46 @@ public static partial class WorldFactsVocabulary {
                 rowOrdinal: rowOrdinal
             );
         }
+        // The declared screen's source-normalized mapping, when its route input is Simulation and the mapping validates,
+        // so the tick maps a ray without a refusal left to raise: $pointer: and the $contacts: sweep resolve it here.
+        public static SourceMapping SimulationScreenMapping(WorldDefinition definition, int screenIndex, string name, string ruleName) {
+            WorldScreen? screen = null;
+
+            foreach (var candidate in definition.Screens) {
+                if (candidate.Index == screenIndex) {
+                    screen = candidate;
+
+                    break;
+                }
+            }
+
+            if (screen is null) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, which the document does not declare",
+                    refusal: WorldRuleRefusal.ScreenUnknown,
+                    ruleName: ruleName
+                );
+            }
+            if (screen.Route.Input != SourceDestination.Simulation) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, whose route input is not Simulation, so no pointer ray maps through it",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            var mapping = WorldScreenMappings.Normalized(screen: screen);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, whose row maps no ray: {refusal}",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            return mapping;
+        }
         // $pointer:<seat>:<screenIndex>:x|y|on — the seat bounded like $channel's, the screen a declared Simulation row
         // whose source-normalized mapping validates, so the tick maps a ray without a refusal left to raise.
         private static WorldBodyFactOperand Pointer(string name, string ruleName, WorldFactsCompileContext world) {
@@ -220,41 +271,7 @@ public static partial class WorldFactsVocabulary {
                 }
             }
 
-            WorldScreen? screen = null;
-
-            foreach (var candidate in world.Definition.Screens) {
-                if (candidate.Index == screenIndex) {
-                    screen = candidate;
-
-                    break;
-                }
-            }
-
-            if (screen is null) {
-                throw new RuleException(
-                    detail: $"'{name}' names screen {screenIndex}, which the document does not declare",
-                    refusal: WorldRuleRefusal.ScreenUnknown,
-                    ruleName: ruleName
-                );
-            }
-            if (screen.Route.Input != SourceDestination.Simulation) {
-                throw new RuleException(
-                    detail: $"'{name}' names screen {screenIndex}, whose route input is not Simulation, so no pointer ray maps through it",
-                    refusal: WorldRuleRefusal.PointerMalformed,
-                    ruleName: ruleName
-                );
-            }
-
-            var mapping = WorldScreenMappings.Normalized(screen: screen);
-
-            if (!mapping.TryValidate(refusal: out var refusal)) {
-                throw new RuleException(
-                    detail: $"'{name}' names screen {screenIndex}, whose row maps no ray: {refusal}",
-                    refusal: WorldRuleRefusal.PointerMalformed,
-                    ruleName: ruleName
-                );
-            }
-
+            var mapping = SimulationScreenMapping(definition: world.Definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
             var operand = new PointerOperand(
                 facet: pointerFacet.Value,
                 mapping: mapping,
@@ -381,6 +398,28 @@ public static partial class WorldFactsVocabulary {
             var name = reference.Spelling;
 
             fact = null;
+            if (call is { Channel: "contact" }) {
+                RuleCompiler.RefuseKeyOnReservedChannel(cell, site.KeyFieldLabel, name, ruleName);
+
+                ContactFacet? facet = ((call.Count == 2) ? call.Text(index: 1) switch {
+                    "seat" => ContactFacet.Seat,
+                    "device" => ContactFacet.Device,
+                    "id" => ContactFacet.Id,
+                    "phase" => ContactFacet.Phase,
+                    "x" => ContactFacet.X,
+                    "y" => ContactFacet.Y,
+                    _ => null,
+                } : null);
+
+                if ((facet is null) || (call.Text(index: 0) is not ("each" or "$each")) || (world.Iteration is not WorldContactIteration sweep)) {
+                    throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'{name}' does not spell 'contact(each, seat|device|id|phase|x|y)' inside 'forEach: $contacts:<screen>'");
+                }
+
+                var contact = new ContactOperand(facet: facet.Value, sweep: sweep);
+
+                fact = BodyFact(contact.ValueKind, world, default, default, -1, 1L, read => read.Read(operand: contact), name, WorldDisclosureReach.Bodies, payload: contact);
+                return true;
+            }
             if (call is {
                 Channel: "inputEdge" or "inputTime" or "inputAge" or "inputValue" or "inputTick" or "inputHeldSince" or "inputHeldPress" or
                 "inputMatch" or "inputMatchFirst" or "inputMatchLast" or "inputMatchFirstTime" or "inputMatchLastTime" or "inputMatchFirstTick" or "inputMatchLastTick"

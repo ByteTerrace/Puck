@@ -408,9 +408,9 @@ public sealed class WindowHostPresentation {
                                 continue;
                             }
 
-                            if (windowInput.Kind is WindowInputKind.PointerPosition or WindowInputKind.PointerLeft) {
-                                // The absolute cursor position, and its leaving the window, reach only the observer
-                                // above. The other mouse shapes below have a command projection in addition.
+                            if (!WindowInputMapper.HasSignal(inputEvent: in windowInput)) {
+                                // The absolute cursor position, its leaving the window and a contact's motion reach
+                                // only the observer above. The other shapes below have a command projection in addition.
                                 continue;
                             }
 

@@ -761,6 +761,7 @@ internal sealed partial class PlayerCommandModule {
                 ? "ray cleared"
                 : "held no ray")}]")
         );
+        yield return SourceContactVerb();
         yield return CommandDefinition.Verb(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,

@@ -778,6 +778,67 @@ A tape reports names from its captured definition. Raw slots are optional
 diagnostic detail, never the primary label.
 Inactive bindings cannot dispatch even if a UI page still displays them.
 
+## Touch is diegetic
+
+The owner's ruling, in the owner's words: "A human using their touchscreen in the
+real world should use our touchscreen in game. Fully diegetic experience;
+immediately sells some of the magic of Puck." The intent is that a player's finger
+on their monitor lands on the in-world screen it covers, through the player's own
+view, with no menu or overlay in between. Player avatar interactions follow later:
+the Moth's hand will mirror the player's real touch, so a contact carries what that
+needs from the start: a stable number while it is down, its position, its phase
+(down, move, up, cancel) and a timestamp.
+
+**One door for every pointing device.** A finger, a pen tip and the mouse while its
+primary button is held are the same thing to a screen: a contact event with a
+device, a number, a phase and the ray its point casts through the seat's camera
+(`SurfaceContact`). The windowed host's capture (`WorldPointerRayCapture`) casts
+each one with the same `SourceRay.Through` the pointer ray takes, and the authority
+maps the ray through the screen row in fixed point (`SourceMapping.MapRay`), the
+mapping the `$pointer:` read and the tabletop's pointed cell already use. A
+screen's rules sweep the tick's contacts with `forEach: $contacts:<screen>` and
+read `contact(each, seat|device|id|phase|x|y)`, so a click and a tap reach the same
+rule and differ only in `device`.
+
+Options weighed:
+
+- **Resolve on the client by the GPU picker** (the hover path that names a
+  placement under a pixel). Rejected for rule input: it needs a rendered frame,
+  which a remote authority and a headless replay do not have, and its answer is
+  presentation float state. The picker stays the hover and inspection path.
+- **Bind contacts only as channels.** Kept for what channels are good at: each
+  contact number is a bindable source (`touch.contact<n>`, `pen.tip`), so input
+  patterns tell a tap from a hold with sub-tick timing. It is not enough alone:
+  a channel carries no surface point, and one channel per finger cannot say where
+  each finger is.
+- **Contact events beside the batch's channels** (chosen). The events ride the
+  seat's input batch (`WorldInputBatch.Contacts`), so the wire, the tape and the
+  checkpointed replay carry them with the rest of the seat's input, and the input
+  owner keeps them for the tick that admitted them alone (`WorldInputOwner.ContactsAt`),
+  so a tick no batch reaches carries no stale touch. The switch tick admits none, as
+  it admits no fresh event.
+
+**Invariant and its door.** A contact's lift is always delivered once its touch
+was: the window queue (`WindowInputQueue.EnqueueContact`) numbers each OS contact
+for its life and drops a move or lift no live contact explains; the contact store
+(`WorldContacts.Record`) refuses a transition that contradicts a seat's live
+contacts; and the capture sends a contact's moves and lift only after it sent its
+touch, turning a lift it cannot cast (the view gone) into a cancellation at the
+last ray. A rule never reads a cancellation as a tap.
+
+**Mouse promotion never doubles a touch.** Windows reads touch and pen over
+`WM_POINTER` and answers those messages itself, so `DefWindowProc` never promotes
+them to mouse input, and it drops the mouse messages and raw mouse packets that
+still carry the pen-or-touch signature. XInput 2.2 delivers a touch to a client that
+selected touch events instead of the emulated pointer event, and Wayland's
+`wl_touch` and `wl_pointer` are separate streams. The sources each backend
+consulted are cited beside its code (`Win32NativeWindow.Contacts`,
+`XcbNativeWindow.Touch`, `WaylandNativeWindow`).
+
+What it does not do yet: a passthrough pane forwards no touch to its window, and a
+session screen (a screen showing another world) forwards its pointer ray but not
+its contacts ([open items](../plans/open-items.md#input-channels)).
+
 ## Genre check
 
 These model checks run as the ordinary sweeps below; they do not introduce sample

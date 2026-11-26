@@ -1,6 +1,7 @@
 using Puck.Abstractions.Memory;
 using System.Globalization;
 using Puck.Abstractions.Collections;
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -274,9 +275,14 @@ public sealed partial class WorldInputOwner {
             return false;
         }
         if (batch.Contributions.Length > m_sources.Length) { reason = "input.sources: contribution count exceeds admitted profile"; return false; }
+        if (batch.Contacts.Length > SurfaceContact.MaximumPerTick) { reason = $"input.contacts: a batch carries at most {SurfaceContact.MaximumPerTick} contact events"; return false; }
+        foreach (var contact in batch.Contacts.Span) {
+            if (!contact.IsWellFormed()) { reason = "input.contacts: a contact names an unknown device or phase, or a number outside its device's range"; return false; }
+        }
         if (m_steadyImageVerified && batch.Events.IsEmpty && (batch.Image == Image) && ContributionsMatchAccepted(contributions: batch.Contributions.Span)) {
             m_step = admission.Tick;
             m_stepEvents = stepEvents;
+            AdmitContacts(batch: in batch, tick: admission.Tick);
             return true;
         }
         Array.Clear(array: m_seen);
@@ -503,8 +509,40 @@ public sealed partial class WorldInputOwner {
         if (hasEvents || imageChanged) {
             Array.Clear(array: m_matchCached);
         }
+        AdmitContacts(batch: in batch, tick: admission.Tick);
         return true;
     }
+    /// <summary>Returns the pointing-contact events admitted for one tick, in the order they happened, or none when no
+    /// batch for that tick carried any. A contact is the tick's alone: a later tick reads none of it.</summary>
+    /// <param name="tick">The simulation tick.</param>
+    /// <returns>The tick's contacts.</returns>
+    public ReadOnlySpan<SurfaceContact> ContactsAt(ulong tick) => ((m_contactTick == tick)
+        ? m_contacts.AsSpan(start: 0, length: m_contactCount)
+        : []);
+
+    // Keeps an admitted batch's contacts for its tick, after any the tick's earlier batches carried, up to the per-tick
+    // bound. The switch tick admits none, as it admits no fresh event: a new epoch's input starts on the following tick.
+    private void AdmitContacts(in WorldInputBatch batch, ulong tick) {
+        if (m_contactTick != tick) {
+            m_contactTick = tick;
+            m_contactCount = 0;
+        }
+        if (batch.Contacts.IsEmpty || ((Epoch > 1) && (LastSwitch.Tick == tick))) {
+            return;
+        }
+
+        foreach (var contact in batch.Contacts.Span) {
+            if (m_contactCount == m_contacts.Length) {
+                return;
+            }
+
+            m_contacts[m_contactCount++] = contact;
+        }
+    }
+
+    private readonly SurfaceContact[] m_contacts = new SurfaceContact[SurfaceContact.MaximumPerTick];
+    private int m_contactCount;
+    private ulong m_contactTick = ulong.MaxValue;
 
     private bool ContributionsMatchAccepted(ReadOnlySpan<WorldInputContribution> contributions) {
         var cursor = 0;

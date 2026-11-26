@@ -122,8 +122,9 @@ public static class WorldRuleDisclosure {
             into.Add(reach: WorldDisclosureReach.Bodies);
             into.AddPlacement(placementId: occupants.PlacementId);
         }
-        if (rule.Iteration is WorldPlayerIteration) {
-            // A sweep over the players fires for whichever bodies players hold, which is the population's to disclose.
+        if (rule.Iteration is WorldPlayerIteration or WorldContactIteration) {
+            // A sweep over the players, or over the contacts players make on a screen, fires for whichever bodies
+            // players hold, which is the population's to disclose.
             into.Add(reach: WorldDisclosureReach.Bodies);
         }
         if (rule is CompiledWorldFactsRule world) {

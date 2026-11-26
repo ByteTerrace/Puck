@@ -36,8 +36,13 @@ public readonly record struct WorldInputContribution(ushort Handle, ushort Chann
 /// <param name="Events">All transitions, in capture/sequence order.</param>
 /// <param name="NumericCount">Exactly the selected mapping's used numeric extent.</param>
 /// <param name="CaptureLost">The producer lost an atomic capture and requests an unconditional authority reset.</param>
+/// <param name="Contacts">The tick's pointing-contact events in the order they happened (a finger, a pen tip, or the
+/// mouse while its primary button is held), each with the ray its point cast through the seat's view; at most
+/// <see cref="Puck.Commands.SurfaceContact.MaximumPerTick"/>. They belong to this tick alone: the owner keeps no
+/// contact past the tick that admitted it, so a tick no batch reaches carries none.</param>
 public readonly record struct WorldInputBatch(uint Revision, ulong Epoch, ushort Mapping, ulong Tick,
-    PlayerIntent Image, ReadOnlyMemory<WorldInputContribution> Contributions, ReadOnlyMemory<WorldInputEvent> Events, byte NumericCount = 0, bool CaptureLost = false);
+    PlayerIntent Image, ReadOnlyMemory<WorldInputContribution> Contributions, ReadOnlyMemory<WorldInputEvent> Events, byte NumericCount = 0, bool CaptureLost = false,
+    ReadOnlyMemory<Puck.Commands.SurfaceContact> Contacts = default);
 /// <summary>A source's accepted state, persisted through replay and checkpoint.</summary>
 /// <param name="Source">Registered contract.</param>
 /// <param name="RawValue">Accepted level or latch.</param>

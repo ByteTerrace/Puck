@@ -9,14 +9,23 @@ namespace Puck.Input;
 /// window seam names a control, mirroring how <see cref="GamepadCaptureSource"/> owns the gamepad vocabulary. The
 /// event's <see cref="InputDeviceId"/> is preserved so device-aware backends route independently.
 /// </summary>
-/// <remarks>Absolute position is the one pointer shape that remains presentation-only. Relative motion, buttons,
-/// and wheel motion are projected into bindable mouse sources while the raw event independently reaches
-/// <see cref="IWindowInputObserver"/>.</remarks>
+/// <remarks>Absolute position is the one pointer shape that remains presentation-only, a contact's motion included
+/// (<see cref="HasSignal"/>). Relative motion, buttons, wheel motion and a contact's touch and lift are projected into
+/// bindable sources while the raw event independently reaches <see cref="IWindowInputObserver"/>.</remarks>
 public static class WindowInputMapper {
+    /// <summary>Returns whether an event projects into a bindable source: every kind but an absolute position, the
+    /// pointer leaving the window, focus loss and a contact's motion, which reach only the window input observer.</summary>
+    /// <param name="inputEvent">The neutral window event.</param>
+    /// <returns><see langword="true"/> when <see cref="ToInputSignal"/> maps it.</returns>
+    public static bool HasSignal(in WindowInputEvent inputEvent) => inputEvent.Kind switch {
+        WindowInputKind.PointerPosition or WindowInputKind.PointerLeft or WindowInputKind.FocusLost => false,
+        WindowInputKind.Contact => (inputEvent.Phase != CommandPhase.Active),
+        _ => true,
+    };
     /// <summary>Translates one neutral window event into its corresponding input signal.</summary>
     /// <param name="inputEvent">The neutral window event to translate.</param>
     /// <returns>The input signal carrying the event's vocabulary, value, and phase.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The event's <see cref="WindowInputEvent.Kind"/> or <see cref="WindowInputEvent.Key"/> is unrecognized.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The event's <see cref="WindowInputEvent.Kind"/> or <see cref="WindowInputEvent.Key"/> is unrecognized, or <see cref="HasSignal"/> is false for it.</exception>
     public static InputSignal ToInputSignal(in WindowInputEvent inputEvent) {
         switch (inputEvent.Kind) {
             case WindowInputKind.Key:
@@ -70,6 +79,21 @@ public static class WindowInputMapper {
                     value: inputEvent.Vector,
                     deviceId: inputEvent.DeviceId,
                     transient: true
+                );
+            case WindowInputKind.Contact when (inputEvent.Phase != CommandPhase.Active):
+                var contactSource = ((inputEvent.Contact == ContactDevice.Pen)
+                    ? InputSources.Pen.Tip
+                    : InputSources.Touch.Contact(number: inputEvent.ContactId));
+
+                return ((inputEvent.Phase is CommandPhase.Completed or CommandPhase.Canceled)
+                    ? InputSignal.Release(
+                        source: contactSource,
+                        deviceId: inputEvent.DeviceId
+                    )
+                    : InputSignal.Press(
+                        source: contactSource,
+                        deviceId: inputEvent.DeviceId
+                    )
                 );
             default:
                 throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent));

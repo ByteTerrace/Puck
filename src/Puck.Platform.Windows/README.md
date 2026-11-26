@@ -35,6 +35,15 @@ Button coordinates are queued before their transitions. Capture lasts until
 the last held button is released; losing capture or focus releases held buttons.
 Disposing a window releases capture only when that window owns it.
 
+Touch and pen arrive over `WM_POINTER` (`Win32NativeWindow.Contacts`): each
+contact enters `WindowInputQueue.EnqueueContact` with the digitizer's raw-input
+handle as its device and the pressure `GetPointerTouchInfo` or
+`GetPointerPenInfo` reports. The window answers those messages itself, so Windows
+never promotes them to mouse input, and it drops the mouse messages and raw mouse
+packets that still carry the pen-or-touch signature. Focus loss cancels every
+live contact. The [device input reference](../../docs/reference/input.md#touch-and-pen-contacts)
+describes the contact model.
+
 ## Camera capture
 
 `Win32MediaFoundationCameraService.EnumerateDevices` reports every attached

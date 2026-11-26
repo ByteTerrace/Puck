@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
@@ -16,12 +17,25 @@ namespace Puck.World;
 /// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares neither a <c>Simulation</c> screen nor an
 /// engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
 /// </summary>
-/// <remarks>The camera is presentation float state; the ray enters the command plane as the float values the tick's
-/// snapshot records and is quantized once into simulation at the seat verb, so a replay reproduces it exactly.
+/// <remarks>
+/// <para>The same capture casts every pointing contact (<see cref="WorldContacts"/>: a finger, a pen tip, or the mouse
+/// while its primary button is held) through its seat's view, the one cast the pointer ray takes, and queues it on the
+/// seat (<see cref="SeatController.AddContact"/>) for its next submission, so mouse and touch reach a screen through
+/// one door. A contact that touches outside its seat's view is not sent, and nor is anything after it; one that touched
+/// inside keeps sending until it lifts, wherever it moves, so a screen always sees its lift.</para>
+/// <para>The camera is presentation float state; the ray enters the command plane as the float values the tick's
+/// snapshot records and is quantized once into simulation at the seat verb, so a replay reproduces it exactly; a
+/// contact's ray is cast in fixed point (<see cref="SourceRay.Through"/>) and rides the submission as cast.
 /// Single-threaded: the host loop services every <see cref="ISnapshotInputCapture"/> on the window-pump thread, where
-/// the frame source also publishes the seat views.</remarks>
+/// the frame source also publishes the seat views.</para>
+/// </remarks>
 public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
+    private readonly WorldContacts? m_contacts;
+    private readonly List<WorldContactTransition> m_contactScratch = [];
     private readonly Func<WorldDefinition> m_definition;
+    // The contacts whose touch was sent, by seat, device and number, with the last ray each cast: only these send their
+    // moves and lift.
+    private readonly Dictionary<(int Slot, ContactDevice Device, byte Id), SourceRay> m_sentContacts = [];
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly InputRouter m_router;
@@ -36,8 +50,11 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
     /// <param name="roster">The roster that says which seat holds the mouse the position is attributed to.</param>
     /// <param name="definition">Reads the delivered definition whose screens the ray may map through.</param>
     /// <param name="router">The router whose seat lanes carry the ray.</param>
+    /// <param name="contacts">The contact store whose transitions the capture casts into the seats' submissions, or
+    /// <see langword="null"/> for a host that takes no contacts.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, PlayerRoster roster, Func<WorldDefinition> definition, InputRouter router) {
+    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, PlayerRoster roster, Func<WorldDefinition> definition, InputRouter router, WorldContacts? contacts = null) {
+        m_contacts = contacts;
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: roster);
@@ -88,26 +105,22 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
+        var declares = DeclaresPointerTarget();
+
+        CaptureContacts(declares: declares);
+
         // The seat and its device in one read, so they always name the same report.
         if (
             (m_pointer.Positioned is not (var slot, var device)) ||
             (m_roster.DeviceSlot(device: device) != slot) ||
             (m_roster.KindOf(device: device) != InputDeviceKind.Mouse) ||
-            !DeclaresPointerTarget()
+            !declares
         ) {
             End();
 
             return;
         }
-
-        var view = m_viewports.Seat(slot: slot);
-
-        if (m_viewports.Locate(
-            framePosition: out _,
-            local: out var local,
-            position: m_pointer.Position(slot: slot),
-            view: in view
-        ) != WorldSeatPointerPlace.Inside) {
+        if (!TryCast(position: m_pointer.Position(slot: slot), ray: out var ray, slot: slot, outside: false)) {
             End();
 
             return;
@@ -115,11 +128,6 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
         if (slot != m_sustainedSlot) {
             End();
         }
-
-        var ray = SourceRay.Through(
-            camera: view.Camera,
-            image: FixedVector2.FromVector2(value: local)
-        );
 
         _ = m_router.Sustain(
             command: SourcePointerCommands.Origin,
@@ -132,5 +140,84 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
             value: CommandValue.Axis(value: ray.Direction.ToVector3())
         );
         m_sustainedSlot = slot;
+    }
+
+    // Casts each queued contact transition through its seat's view onto the seat's next submission. With nothing in
+    // the world to read a contact, the transitions are taken and dropped, and so is every contact's sent mark.
+    private void CaptureContacts(bool declares) {
+        if (m_contacts is not { } contacts) {
+            return;
+        }
+
+        m_contactScratch.Clear();
+        contacts.TakePending(into: m_contactScratch);
+
+        if (!declares) {
+            m_sentContacts.Clear();
+
+            return;
+        }
+
+        foreach (var transition in m_contactScratch) {
+            var key = (transition.Slot, transition.Device, transition.Id);
+            var touching = (transition.Phase == ContactPhase.Down);
+            var sent = m_sentContacts.TryGetValue(key: key, value: out var lastRay);
+
+            // A second touch of a contact already sent, or a move or lift of one never sent, carries nothing new.
+            if (touching == sent) {
+                continue;
+            }
+            if (m_roster.Seat(slot: transition.Slot) is not { } seat) {
+                _ = m_sentContacts.Remove(key: key);
+
+                continue;
+            }
+
+            var phase = transition.Phase;
+
+            if (!TryCast(position: transition.Position, ray: out var ray, slot: transition.Slot, outside: !touching)) {
+                if (touching) {
+                    continue;
+                }
+
+                // The seat's view is gone: the contact ends where it was last seen, as a cancellation, never a tap.
+                phase = ContactPhase.Cancel;
+                ray = lastRay;
+            }
+
+            _ = seat.AddContact(contact: new SurfaceContact(Device: transition.Device, Id: transition.Id, Phase: phase, Ray: ray));
+
+            if (phase is ContactPhase.Up or ContactPhase.Cancel) {
+                _ = m_sentContacts.Remove(key: key);
+            } else {
+                m_sentContacts[key] = ray;
+            }
+        }
+
+        m_contactScratch.Clear();
+    }
+    // The ray a client point casts through a seat's published camera: the one cast every pointing input takes. A point
+    // outside the seat's view casts only when the caller allows it (a contact that touched inside keeps its lift).
+    private bool TryCast(int slot, Vector2 position, bool outside, out SourceRay ray) {
+        var view = m_viewports.Seat(slot: slot);
+        var place = m_viewports.Locate(
+            framePosition: out _,
+            local: out var local,
+            position: position,
+            view: in view
+        );
+
+        if ((place == WorldSeatPointerPlace.NoView) || ((place != WorldSeatPointerPlace.Inside) && !outside)) {
+            ray = default;
+
+            return false;
+        }
+
+        ray = SourceRay.Through(
+            camera: view.Camera,
+            image: FixedVector2.FromVector2(value: local)
+        );
+
+        return true;
     }
 }

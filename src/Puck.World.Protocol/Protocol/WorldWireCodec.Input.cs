@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
 
@@ -130,11 +131,17 @@ public static partial class WorldWireCodec {
 
     private const int ContributionBytes = 22;
     private const int InputEventBytes = 39;
-    private const int MaximumInputBytes = (((37 + 256) + 48) + (ushort.MaxValue * (ContributionBytes + InputEventBytes)));
+    // A surface contact: device, number and phase bytes, then the ray's origin and direction as six Q48.16 raws.
+    private const int ContactBytes = 51;
+    private const int MaximumInputBytes = ((((37 + 256) + 48) + (ushort.MaxValue * (ContributionBytes + InputEventBytes))) + (2 + (SurfaceContact.MaximumPerTick * ContactBytes)));
 
     /// <summary>Writes the one length-delimited semantic ingress leaf shared by transport, tape and checkpoint.</summary>
     public static bool TryWriteInputBatch(WireWriter writer, in WorldInputBatch batch) {
-        if ((batch.NumericCount > ChannelLimits.MaxAxes) || (batch.Contributions.Length > ushort.MaxValue) || (batch.Events.Length > ushort.MaxValue)) { return false; }
+        if ((batch.NumericCount > ChannelLimits.MaxAxes) || (batch.Contributions.Length > ushort.MaxValue) || (batch.Events.Length > ushort.MaxValue) ||
+            (batch.Contacts.Length > SurfaceContact.MaximumPerTick)) { return false; }
+        foreach (var contact in batch.Contacts.Span) {
+            if (!contact.IsWellFormed()) { return false; }
+        }
         for (var axis = ((int)batch.NumericCount); (axis < ChannelLimits.MaxAxes); axis++) {
             if (batch.Image.Channels.Axes[axis] != 0) { return false; }
         }
@@ -145,7 +152,7 @@ public static partial class WorldWireCodec {
             if ((input.Kind > WorldInputEventKind.Text) || (input.Channel >= WorldInputCatalog.MaximumLogicalChannels)) { return false; }
         }
         writer.WriteInt32(value: ((((37 + (batch.NumericCount * 8)) + (batch.Image.SourceRay.HasValue ? 48 : 0)) +
-            (batch.Contributions.Length * ContributionBytes)) + (batch.Events.Length * InputEventBytes)));
+            (batch.Contributions.Length * ContributionBytes)) + (batch.Events.Length * InputEventBytes) + (2 + (batch.Contacts.Length * ContactBytes))));
         writer.WriteUInt32(value: batch.Revision);
         writer.WriteUInt64(value: batch.Epoch);
         writer.WriteUInt16(value: batch.Mapping);
@@ -161,6 +168,11 @@ public static partial class WorldWireCodec {
         }
         writer.WriteUInt16(value: ((ushort)batch.Events.Length));
         foreach (var input in batch.Events.Span) { WriteInputEvent(input: input, writer: writer); }
+        writer.WriteUInt16(value: ((ushort)batch.Contacts.Length));
+        foreach (var contact in batch.Contacts.Span) {
+            writer.WriteByte(value: ((byte)contact.Device)); writer.WriteByte(value: contact.Id); writer.WriteByte(value: ((byte)contact.Phase));
+            writer.WriteFixedVector(value: contact.Ray.Origin); writer.WriteFixedVector(value: contact.Ray.Direction);
+        }
         return true;
     }
     /// <summary>Reads bounded ingress. Counts are checked against admitted limits and remaining bytes before allocation.</summary>
@@ -204,8 +216,22 @@ public static partial class WorldWireCodec {
             events[index] = ReadInputEvent(reader: ref leaf);
             if (events[index].Kind > WorldInputEventKind.Text) { leaf.Fail(detail: "derived input event cannot arrive over ingress", refusal: WireRefusal.EnumValueUnknown); }
         }
+        var contactCount = leaf.ReadUInt16();
+
+        if ((contactCount > SurfaceContact.MaximumPerTick) || ((contactCount * ContactBytes) > leaf.Remaining)) {
+            leaf.Fail(detail: "input contact count exceeds its bound or payload", refusal: WireRefusal.CountOutOfRange);
+        }
+        var contacts = ((leaf.Failed || (contactCount == 0)) ? [] : new SurfaceContact[contactCount]);
+
+        for (var index = 0; ((index < contacts.Length) && !leaf.Failed); index++) {
+            var device = ((ContactDevice)leaf.ReadByte()); var id = leaf.ReadByte(); var phase = ((ContactPhase)leaf.ReadByte());
+            var origin = leaf.ReadFixedVector();
+
+            contacts[index] = new SurfaceContact(Device: device, Id: id, Phase: phase, Ray: new SourceRay(Origin: origin, Direction: leaf.ReadFixedVector()));
+            if (!contacts[index].IsWellFormed()) { leaf.Fail(detail: "input contact device, number or phase is invalid", refusal: WireRefusal.EnumValueUnknown); }
+        }
         if (!leaf.TryFinish(failure: out var failure)) { reader.Fail(failure.Refusal, failure.Detail); return default; }
-        return new(CaptureLost: captureLost, Contributions: sources, Epoch: epoch, Events: events, Image: image, Mapping: mapping, NumericCount: numericCount, Revision: revision, Tick: tick);
+        return new(CaptureLost: captureLost, Contacts: contacts, Contributions: sources, Epoch: epoch, Events: events, Image: image, Mapping: mapping, NumericCount: numericCount, Revision: revision, Tick: tick);
     }
     /// <summary>Writes a semantic event, also used inside authority history records.</summary>
     public static void WriteInputEvent(WireWriter writer, WorldInputEvent input) {

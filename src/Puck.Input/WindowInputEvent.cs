@@ -37,6 +37,15 @@ public enum WindowInputKind {
     /// <see cref="PointerPosition"/> — carries no other data. A platform without an equivalent event never emits this
     /// kind. Never reaches <see cref="WindowInputMapper"/>: the pump intercepts it before mapping.</summary>
     PointerLeft,
+
+    /// <summary>A touch or pen contact (<see cref="WindowInputEvent.Contact"/>, numbered by
+    /// <see cref="WindowInputEvent.ContactId"/>) at an absolute client position (<see cref="WindowInputEvent.Vector"/>),
+    /// with its phase in <see cref="WindowInputEvent.Phase"/>: <see cref="CommandPhase.Started"/> when it touches,
+    /// <see cref="CommandPhase.Active"/> when it moves, <see cref="CommandPhase.Completed"/> when it lifts and
+    /// <see cref="CommandPhase.Canceled"/> when the platform takes it away. A window enqueues it only through
+    /// <c>WindowInputQueue.EnqueueContact</c>, which numbers each contact for its life and drops what no live contact
+    /// explains.</summary>
+    Contact,
 }
 /// <summary>
 /// Specifies the modifier keys held alongside a <see cref="WindowInputEvent"/> (bitwise-combinable).
@@ -75,6 +84,12 @@ public enum WindowInputModifiers {
 /// an aggregate source, including the shared Windows cursor; raw keyboard and relative mouse reports carry distinct ids.</param>
 /// <param name="ButtonIndex">The zero-based button index for <see cref="WindowInputKind.PointerButton"/>, or -1
 /// otherwise. The range is intentionally not capped at the conventional five buttons.</param>
+/// <param name="Contact">The device kind of a <see cref="WindowInputKind.Contact"/>; the default value otherwise.</param>
+/// <param name="ContactId">The contact's number for a <see cref="WindowInputKind.Contact"/>, from 1 to
+/// <see cref="SurfaceContact.MaximumContacts"/> and stable while the contact is down; 0 otherwise.</param>
+/// <param name="Pressure">The contact's pressure, 0 to 1, or <see cref="float.NaN"/> when the device reports none.</param>
+/// <param name="Timestamp">When the window decoded a <see cref="WindowInputKind.Contact"/>, in
+/// <see cref="System.Diagnostics.Stopwatch"/> ticks; 0 otherwise.</param>
 public readonly record struct WindowInputEvent(
     WindowInputKind Kind,
     KeyCode Key = KeyCode.None,
@@ -84,8 +99,33 @@ public readonly record struct WindowInputEvent(
     CommandPhase Phase = CommandPhase.Started,
     WindowInputModifiers Modifiers = WindowInputModifiers.None,
     InputDeviceId DeviceId = default,
-    int ButtonIndex = -1
+    int ButtonIndex = -1,
+    ContactDevice Contact = default,
+    byte ContactId = 0,
+    float Pressure = float.NaN,
+    long Timestamp = 0L
 ) {
+    /// <summary>A neutral touch or pen contact transition, numbered for its life.</summary>
+    /// <param name="device">The device kind; <see cref="ContactDevice.Touch"/> or <see cref="ContactDevice.Pen"/>.</param>
+    /// <param name="contactId">The contact's number, from 1 to <see cref="SurfaceContact.MaximumContacts"/>.</param>
+    /// <param name="phase">The phase, as <see cref="WindowInputKind.Contact"/> describes.</param>
+    /// <param name="position">The absolute client position, in pixels.</param>
+    /// <param name="pressure">The pressure, 0 to 1, or <see cref="float.NaN"/> for none.</param>
+    /// <param name="timestamp">The decode time, in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
+    /// <param name="deviceId">The digitizer's identity.</param>
+    /// <returns>The event.</returns>
+    public static WindowInputEvent ContactEvent(ContactDevice device, byte contactId, CommandPhase phase, Vector2 position, float pressure, long timestamp, InputDeviceId deviceId) {
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Contact,
+            Vector: position,
+            Phase: phase,
+            DeviceId: deviceId,
+            Contact: device,
+            ContactId: contactId,
+            Pressure: pressure,
+            Timestamp: timestamp
+        );
+    }
     /// <summary>A neutral OS-focus-lost notification.</summary>
     public static WindowInputEvent FocusLost() {
         return new WindowInputEvent(Kind: WindowInputKind.FocusLost);

@@ -21,6 +21,11 @@ internal static unsafe partial class WaylandClient {
     private const uint WlRegistryBindOpcode = 0;
     private const uint WlSurfaceCommitOpcode = 6;
     private const uint WlSurfaceDestroyOpcode = 0;
+    // wl_seat requests: get_pointer 0, get_keyboard 1, get_touch 2, release 3 (since 5); wl_touch requests: release 0
+    // (since 3). Order from the core protocol's wayland.xml.
+    private const uint WlSeatGetTouchOpcode = 2;
+    private const uint WlSeatReleaseOpcode = 3;
+    private const uint WlTouchReleaseOpcode = 0;
     // xdg-shell opcodes (stable v1).
     private const uint XdgWmBaseDestroyOpcode = 0;
     private const uint XdgSurfaceAckConfigureOpcode = 4;
@@ -38,6 +43,8 @@ internal static unsafe partial class WaylandClient {
     private static nint RegistryInterfaceHandle;
     private static nint CompositorInterfaceHandle;
     private static nint SurfaceInterfaceHandle;
+    private static nint SeatInterfaceHandle;
+    private static nint TouchInterfaceHandle;
     private static nint XdgWmBaseInterfaceHandle;
     private static nint XdgSurfaceInterfaceHandle;
     private static nint XdgToplevelInterfaceHandle;
@@ -72,16 +79,17 @@ internal static unsafe partial class WaylandClient {
         __arglist
     );
 
-    public static nint GetRegistry(nint display) {
-        return wl_proxy_marshal_flags(
-            display,
-            WlDisplayGetRegistryOpcode,
-            RegistryInterface,
-            wl_proxy_get_version(proxy: display),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    // A request whose one argument is the new object it creates (get_registry, create_surface, get_toplevel,
+    // get_touch): the new proxy, at its parent's version.
+    private static nint Create(nint parent, uint opcode, nint @interface) => wl_proxy_marshal_flags(
+        parent,
+        opcode,
+        @interface,
+        wl_proxy_get_version(proxy: parent),
+        0,
+        __arglist(((nint)0))
+    );
+    public static nint GetRegistry(nint display) => Create(@interface: RegistryInterface, opcode: WlDisplayGetRegistryOpcode, parent: display);
     public static nint Bind(nint registry, uint name, nint interfacePointer, uint version) {
         var interfaceName = Marshal.ReadIntPtr(
             ofs: 0,
@@ -102,16 +110,7 @@ internal static unsafe partial class WaylandClient {
             )
         );
     }
-    public static nint CreateSurface(nint compositor) {
-        return wl_proxy_marshal_flags(
-            compositor,
-            WlCompositorCreateSurfaceOpcode,
-            SurfaceInterface,
-            wl_proxy_get_version(proxy: compositor),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    public static nint CreateSurface(nint compositor) => Create(@interface: SurfaceInterface, opcode: WlCompositorCreateSurfaceOpcode, parent: compositor);
     public static nint GetXdgSurface(nint wmBase, nint surface) {
         return wl_proxy_marshal_flags(
             wmBase,
@@ -125,16 +124,7 @@ internal static unsafe partial class WaylandClient {
             )
         );
     }
-    public static nint GetToplevel(nint xdgSurface) {
-        return wl_proxy_marshal_flags(
-            xdgSurface,
-            XdgSurfaceGetToplevelOpcode,
-            XdgToplevelInterface,
-            wl_proxy_get_version(proxy: xdgSurface),
-            0,
-            __arglist(((nint)0))
-        );
-    }
+    public static nint GetToplevel(nint xdgSurface) => Create(@interface: XdgToplevelInterface, opcode: XdgSurfaceGetToplevelOpcode, parent: xdgSurface);
     public static void SetToplevelTitle(nint toplevel, nint titleUtf8) {
         _ = wl_proxy_marshal_flags(
             toplevel,
@@ -239,6 +229,37 @@ internal static unsafe partial class WaylandClient {
             return SurfaceInterfaceHandle;
         }
     }
+    public static nint SeatInterface {
+        get {
+            EnsureInitialized();
+            return SeatInterfaceHandle;
+        }
+    }
+    public static nint TouchInterface {
+        get {
+            EnsureInitialized();
+            return TouchInterfaceHandle;
+        }
+    }
+    // wl_seat.get_touch: the seat's touch device, a new wl_touch proxy.
+    public static nint GetTouch(nint seat) => Create(@interface: TouchInterface, opcode: WlSeatGetTouchOpcode, parent: seat);
+    // wl_touch.release, a destructor since version 3.
+    public static void ReleaseTouch(nint touch) => Release(opcode: WlTouchReleaseOpcode, proxy: touch, since: 3);
+    // wl_seat.release, a destructor since version 5.
+    public static void ReleaseSeat(nint seat) => Release(opcode: WlSeatReleaseOpcode, proxy: seat, since: 5);
+
+    // A release request that became a destructor at a protocol version: sent to a proxy bound at or above it, while an
+    // older proxy, whose interface has no such request, is only destroyed client-side.
+    private static void Release(nint proxy, uint opcode, uint since) {
+        if (wl_proxy_get_version(proxy: proxy) >= since) {
+            Destroy(
+                opcode: opcode,
+                proxy: proxy
+            );
+        } else {
+            wl_proxy_destroy(proxy: proxy);
+        }
+    }
     public static nint XdgSurfaceInterface {
         get {
             EnsureInitialized();
@@ -276,6 +297,14 @@ internal static unsafe partial class WaylandClient {
             SurfaceInterfaceHandle = NativeLibrary.GetExport(
                 handle: LibraryHandle,
                 name: "wl_surface_interface"
+            );
+            SeatInterfaceHandle = NativeLibrary.GetExport(
+                handle: LibraryHandle,
+                name: "wl_seat_interface"
+            );
+            TouchInterfaceHandle = NativeLibrary.GetExport(
+                handle: LibraryHandle,
+                name: "wl_touch_interface"
             );
 
             // Build order respects cross-references: toplevel <- surface <- wm_base.
