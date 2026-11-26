@@ -98,7 +98,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly string[] m_inputs;
     private readonly string[] m_outputs;
-    // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup).
+    // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup, the
+    // reflection pass), whose planes follow the output extent, which its pass block then carries in viewsRate.zw.
     private readonly bool m_readsRateHistory;
     // Whether the part reads the reflection pass's records (SdfWorldPackage.WithReflections's views pass), which its pass
     // block then tells the kernel to read (SdfWorldPackage.ScreenReflections).

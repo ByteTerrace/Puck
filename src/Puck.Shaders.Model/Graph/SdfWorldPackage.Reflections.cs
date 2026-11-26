@@ -50,13 +50,16 @@ public static partial class SdfWorldPackage {
                 passes.Add(item: pass);
                 continue;
             }
+            // The preceding frame's history surface names the receiver each history pixel shows, so a hit is read only
+            // where the history shows that surface.
             passes.Add(item: new RenderGraphFragmentPass(
                 CountsKernelWork: true,
-                InputAccesses: [RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+                InputAccesses: [.. Enumerable.Repeat(count: 4, element: RenderGraphPortAccess.ComputeRead)],
                 Inputs: [
                     new ResourceReference(Name: Parts.MeshTarget),
                     new ResourceReference(Name: Parts.Visibility),
                     new ResourceReference(Name: Parts.HistoryColor, PreviousFrame: true),
+                    new ResourceReference(Name: Parts.HistorySurface, PreviousFrame: true),
                 ],
                 Name: Parts.ViewsReflections,
                 OutputAccesses: [RenderGraphPortAccess.ComputeWrite],

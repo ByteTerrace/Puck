@@ -5284,6 +5284,11 @@ their lane order; this packet keeps the single duplicates and leads.
   `Puck.Abstractions` that a backend supplies with its place, bind, unbind and
   return calls. Do it in the window that first boots the Vulkan path, since
   the Direct3D 12 half is the one hardware has qualified.
+- Two tables name the member an `sdf.world` pass binds a fragment version at: `SdfWorldPassRecorder.ReadMemberOf` and
+  `WrittenMemberOf` for the scratch buffers, and `SdfHistoryPorts.ReadMemberOf`, `WrittenMemberOf` and `IsImage` for the
+  histories, each a switch over `SdfWorldPackage.Parts` that a new storage edits in two or three places. They become
+  one table beside the fragment declarations in `SdfWorldPackage` (a version's read member, written member, whether it
+  is history and whether it is an image), which both recorders and `SdfResolveRecorder`'s port lists read.
 - Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
   (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
   surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,

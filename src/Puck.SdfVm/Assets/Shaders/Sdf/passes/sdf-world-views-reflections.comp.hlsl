@@ -3,7 +3,8 @@
 // record's normal, is marched across the screen through the mesh target's forward depth: perspective-correct, the ray's
 // inverse depth interpolated along its projected segment, which is clipped to the screen and to the near plane, and a
 // crossing found between two samples is narrowed by bisection. What the ray reaches is read from the preceding frame's
-// history colour where the hit stood then (sdfPreviousPoint), widened by the specular lobe's footprint there; a ray that
+// history colour where the hit stood then (sdfPreviousPoint) and the history shows it (sdfReflectHistoryShows), widened by
+// the specular lobe's footprint there; a ray that
 // passes in front of everything it crosses and ends over a pixel no mesh covers answers the open sky. Views blends the
 // record over the irradiance volume's reflection (sdfViewsScreenReflection), which still answers whatever leaves the
 // screen, hides behind a nearer face, or belongs to a rough surface.
@@ -11,12 +12,15 @@
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-reflections.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
+#include "../frame/sdf-history-surface.hlsli"
 
 // The roughness up to which the screen answers a surface's whole reflection, and from which the volume answers it alone.
 static const float SdfReflectSharp = 0.3;
 static const float SdfReflectRough = 0.55;
-// The samples a ray takes along its projected segment at most, and the bisections that narrow a crossing.
-static const uint SdfReflectSteps = 32u;
+// The samples a ray takes along its projected segment at most, spaced by the square of their rank so the samples
+// crowd the ray's start, where a reflection meets the object standing on the surface, and the bisections that narrow a
+// crossing between two samples to a pixel or two.
+static const uint SdfReflectSteps = 20u;
 static const uint SdfReflectBisections = 5u;
 // The pixels from the ray's start of its first sample, past the pixel's own face.
 static const float SdfReflectFirstPixels = 1.5;
@@ -38,6 +42,24 @@ float sdfReflectDepth(float2 at, out bool covered) {
 
     covered = (texel.y > 0.0);
     return texel.w;
+}
+
+// Whether the preceding frame's history shows a hit's surface about a position in its pixels: any of the four history
+// pixels about it holds the hit's receiver at its previous distance (sdfHistoryReceiverMatches, the resolve's own test),
+// so a hit the preceding frame saw hidden behind another surface reads nothing, while one at a silhouette still reads.
+bool sdfReflectHistoryShows(float2 position, uint2 extent, uint identity, float previousT) {
+    int2 corner = (int2)floor(position - 0.5);
+    bool shows = false;
+
+    [unroll]
+    for (uint tap = 0u; tap < 4u; tap++) {
+        uint2 texel = (uint2)clamp((corner + int2((int)(tap & 1u), (int)(tap >> 1u))), int2(0, 0), (int2(extent) - 1));
+        uint pixel = ((texel.y * extent.x) + texel.x);
+
+        shows = (shows || sdfHistoryReceiverMatches(identity, historySurface[sdfHistoryWord(pixel, 0u, extent)], previousT,
+            f16tof32(historySurface[sdfHistoryWord(pixel, 1u, extent)] & 0xFFFFu)));
+    }
+    return shows;
 }
 
 // The reflection record of one pixel (passes/sdf-views-reflections.hlsli).
@@ -116,7 +138,8 @@ uint2 sdfReflectTrace(SdfPixel p) {
 
     [loop]
     for (uint index = 1u; index <= steps; index++) {
-        float share = max(first, ((float(index) - noise) / float(steps)));
+        float rank = ((float(index) - noise) / float(steps));
+        float share = (first + ((1.0 - first) * (rank * rank)));
         float rayDepth = (1.0 / lerp(startInverse, finishInverse, share));
         bool covered;
         float sceneDepth = sdfReflectDepth((start + (delta * share)), covered);
@@ -170,14 +193,13 @@ uint2 sdfReflectTrace(SdfPixel p) {
     }
 
     float2 uv = (previousPixel / passGroup.previousView[4].xy);
+    // The history's planes follow the output extent, which the recorder writes for a pass that reads them.
+    uint2 historyDims = passGroup.viewsRate.zw;
 
-    if (any(uv < 0.0) || any(uv > 1.0)) {
+    if (any(uv < 0.0) || any(uv > 1.0) || any(historyDims == 0u) ||
+        !sdfReflectHistoryShows((uv * float2(historyDims)), historyDims, hitVisibility.identity, length(previousPoint - passGroup.previousView[0].xyz))) {
         return uint2(0u, 0u);
     }
-
-    uint2 historyDims;
-
-    sdfReflectionHistory.GetDimensions(historyDims.x, historyDims.y);
 
     // The lobe's footprint where the ray lands, seen from the preceding camera: GGX's half-width about the mirror
     // direction is near twice its alpha (the roughness squared), and a history pixel spans the preceding view's pixel
@@ -187,7 +209,14 @@ uint2 sdfReflectTrace(SdfPixel p) {
     float pixelMetres = (((2.0 * passGroup.previousView[1].w) / float(historyDims.y)) * length(previousPoint - passGroup.previousView[0].xyz));
     float radius = min(((2.0 * alpha * travelled) / max(pixelMetres, 1.0e-6)), SdfReflectRadius);
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    // SDF_VIEWS_REFLECTIONS_ONE_TAP, defined for a reload, reads the footprint's centre alone, so the taps' share of the
+    // pass's time reads apart from the march's.
+#if defined(SDF_VIEWS_REFLECTIONS_ONE_TAP)
+    uint taps = 1u;
+    radius = 0.0;
+#else
     uint taps = ((radius < 0.5) ? 1u : SdfReflectTaps);
+#endif
     float turn = (SdfReflectGoldenAngle * float(passGroup.historyFrames % SDF_TEMPORAL_PERIOD));
 
     [loop]
