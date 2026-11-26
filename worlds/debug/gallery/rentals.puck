@@ -341,16 +341,16 @@ placements {
     }
     reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
   }
-  // The device a seat's body holds rides its right hip, its face out, and while the body plays it, its hands, its face
-  // toward the body. Each row shows the device while `rentalShown` names it there.
+  // The device a seat's body holds rides its left hip (a body faces -Z, so -X is its left), its face out, and while the
+  // body plays it, its hands, its face toward the body. Each row shows the device while `rentalShown` names it there.
   for b in rentalBodies {
     placement $"rental-carried-{b}" {
       prototype: "rental-device-empty"
       position [0, 0, 0]
       attach {
         bodyIndex: b
-        localOffset [-0.26, 0.92, 0]
-        localYawDegrees: 90
+        localOffset [-0.3, 0.92, -0.38]
+        localYawDegrees: 180
       }
       respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal), prototypeId: rentalPrototype(d) })
     }
@@ -359,7 +359,7 @@ placements {
       position [0, 0, 0]
       attach {
         bodyIndex: b
-        localOffset [0, 1.15, 0.32]
+        localOffset [0, 1.3, -0.5]
       }
       respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed)), prototypeId: rentalPrototype(d) })
     }
