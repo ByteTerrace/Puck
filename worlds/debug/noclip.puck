@@ -133,19 +133,15 @@ kits {
 }
 
 // Keeps every body's `form` the suit register plus two while noclip is on, 4 on a craft and 5 on a craft in space.
-// Rules run before the tick's kit selection, so a toggle moves her kit the tick it lands.
+// Rules run before the tick's kit selection, so a toggle moves her kit the tick it lands. The gate and the write read
+// one local, so the work sheet sees that a firing closes its own gate and prices the rule by the registers that move.
 rule "noclip-form" {
-  when bodyState(each, form) != (
-    (bodyState(each, craft) * (4 + bodyState(each, space))) +
+  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) +
     ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
-  )
+  when bodyState(each, form) != target
   mode: Level
   forEach: $bodies
-  setBodyState(
-    key: $each,
-    state: "form",
-    expression: (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
-  )
+  setBodyState(key: $each, state: "form", expression: target)
 }
 
 // In the suit, noclip holds flight mode on, so she wears her flight pose while she flies through things and hovers

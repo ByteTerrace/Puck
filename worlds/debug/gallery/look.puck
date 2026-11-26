@@ -131,12 +131,12 @@ let lookTree = {
   branch: "#7E664E"
   branchUnder: "#4F3E2F"
   fungus ["#9C6B38", "#D9A866", "#F2DDB0"]
-  leaves ["#2E5A3E", "#4F8A4A", "#8DBB5A"]
+  leaves ["#244B33", "#3F7A42", "#7DB052"]
   blossom: "#FFB3C8"
   relief: 0.035
   grain: 1.6
-  clump: 0.15
-  clumpGrain: 0.9
+  clump: 0.24
+  clumpGrain: 1.5
   streak [0.7, 14, 14]
   twist: 0.09
 }

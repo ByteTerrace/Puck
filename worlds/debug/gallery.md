@@ -43,7 +43,7 @@ aisles.
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
 | Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
-| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey, but for the two storeys either side of level 1, whose risers grow finer toward it (see "The size of level 1"). A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
+| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey, but for the two storeys either side of level 1, whose risers grow finer toward it (see "The size of level 1"). Both forms fill 4 by 4 tiles (5 by 5 m) and arrive on the aisle's tile row in front of the arcade, clear of its end pier. A switchback has two 2.4 m flights of eight 0.47 m treads either side of a spine and a 1.25 m half landing against the long wall. A spiral climbs one turn a storey round a 0.5 m newel, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
@@ -158,12 +158,12 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The tree's gate.** The lattice panel in bay 6, where the central tree's two
-level-1 branches arrive ([the central tree](#the-central-tree)), stands as two
-side panels and a head over a 1.875 m opening (layout.puck's `treeGateCells`
-and `treeGateHeight`), each branch's tip passing through it onto the floor. A
-body walking in along either branch shrinks as the size field's zone along it
-sizes it ("The size of level 1", below).
+**The tree's sieves.** Each level-1 branch ([the central tree](#the-central-tree))
+dead-ends at a sieve: the lattice bay where it lands is barred 36 to the bay
+(layout.puck's `toyLatticeSieveCells`), so only a body already about a fifth of
+full size slips through. A full-size climber sees the toybox from the branch's
+tip and has to shrink or take the stairs or lift to reach it. Levels 2 and 3
+meet their branches through doorways (architecture.puck's `edgeDoorway`).
 
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
@@ -243,13 +243,7 @@ level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
 step onto its open edge. Each branch's tip lies on the floor's edge, a few
 centimetres proud of it (`treeLandingLift`).
 
-**The hook for level 1's size.** The owner's ruling makes the level-1 branches
-shrink a body as the corner stairs do. `treeShrinkLimbs` names those two
-branches; each one's path runs from `treeBranchFrom` to `treeBranchTo`
-(layout.puck), and level 1's size field
-([gallery/wonder.puck](gallery/wonder.puck)) lays a zone along that path. The branches are walkable now, and real climbing (grab, climb,
-mantle) is a separate engine plan; every surface of the trunk and branches is
-solid for it.
+**Level 1's branches give no size.** The owner's design: a level-1 branch is a dead end at a sieve that only a small body passes, so the branches lure a full-size climber toward the toybox without letting them in.
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
@@ -500,15 +494,12 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **The central tree's two level-1 branches** (`treeShrinkLimbs`): a capsule
-  3 m about the straight line from each branch's `treeBranchFrom` to its
-  `treeBranchTo`, full at the trunk and Alice's at the tip, where the branch
-  passes the lattice's gate.
 - **Level 1's floor**: the two aisles and the bridge, never the nave's void.
   Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
-- **The trunk's column**, last: full size, so a body climbing the trunk's
-  treads past a branch's start, or walking back off a branch, stands at its
-  full size there.
+
+Outside these zones a body keeps the size it last took (the owner's design):
+only the stairs and the lift are the intended routes, so a small body that
+leaves level 1 another way, through a branch's sieve onto the tree, stays small.
 
 **The pass.** A body holding the `wonderPass` body register nonzero takes its
 full size in every zone, so level 1, its stairs and its lift keep its size. A
@@ -571,11 +562,6 @@ small that way.
 
 ## What is still open
 
-- **A pier stands at a switchback's head.** The arcade's end pier on every
-  level (`shellPiers`, tile row `arcadeRowSouth` and its north twin) stands in
-  the tile row in front of a switchback, across the outer half of its second
-  flight's head (the south-west stair's west half), so a body walking up that half stops against the pier's foot
-  a few centimetres short of the floor; the flight's other half arrives.
 - **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
   runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
   the first tick its `runsWhen` holds would make an unused pool free.

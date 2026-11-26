@@ -377,8 +377,8 @@ public static partial class RuleWorkBudget {
         return context.RowCapacity(rowOrdinal: rule.ForEachOrdinal);
     }
     /// <summary>Returns what one sweep of a rule costs before its first evaluation: one unit per key the sweep
-    /// snapshots, which is the iterated row's capacity, the zone table's entry count, the body capacity or the pool's capacity, and nothing for a rule
-    /// evaluated once.</summary>
+    /// snapshots, which is the iterated row's capacity, the zone table's entry count, the body capacity or the pool's capacity, one for a sweep
+    /// of this tick's events (<see cref="RuleIteration.BindsEvents"/>), and nothing for a rule evaluated once.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="context">The context the rule was resolved against.</param>
     /// <returns>The setup work units.</returns>
@@ -387,7 +387,8 @@ public static partial class RuleWorkBudget {
 
         return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.Iteration is null) && (rule.PoolForEach is null))
             ? RuleWork.Zero
-            : RuleWork.Known(units: ForEachCount(
+            // A sweep of this tick's events snapshots the events that arrived, one for the change the sheet prices.
+            : RuleWork.Known(units: (rule.Iteration is { BindsEvents: true }) ? Math.Min(val1: 1L, val2: ForEachCount(context: context, rule: rule)) : ForEachCount(
                 context: context,
                 rule: rule
             ))

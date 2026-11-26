@@ -46,7 +46,19 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var firings = RuleWorkBudget.Firings(multiplier: multiplier, rule: rule);
-        var latching = ((rule.Mode == ActionTriggerMode.Edge) ? RuleLatching.Edge : (ClosesItself(rule: rule) ? RuleLatching.ClosesItself : RuleLatching.None));
+        var closure = ((rule.Mode == ActionTriggerMode.Edge) ? Closure.None : Prove(context: context, rule: rule));
+        var latching = ((rule.Mode == ActionTriggerMode.Edge) ? RuleLatching.Edge : ((closure != Closure.None) ? RuleLatching.ClosesItself : RuleLatching.None));
+
+        // A sweep of this tick's events binds nothing at rest, and one event, the change the sheet prices, binds one
+        // binding whatever it reads. A maxFirings bound or a host that judges in place keeps the capacity price.
+        if (!inPlace && (rule.MaxFirings <= 0) && (rule.Iteration is { BindsEvents: true })) {
+            return new RuleResponse(
+                Fired: Math.Min(val1: firings, val2: 1L),
+                Judged: Math.Min(val1: multiplier, val2: 1L),
+                Latching: latching,
+                Why: "binds only this tick's events: none at rest, one binding per event"
+            );
+        }
 
         // The lines a due list visits every tick in full (RuleDueList.Classify): a sweep bounded by maxFirings, one
         // over a live row selection, and one whose key set no version names.
@@ -122,6 +134,12 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             opened = Math.Max(val1: opened, val2: 1L);
         }
 
+        // A mirrored closure holds only while the value the gate compares against stands still: one that moves with
+        // time reopens the gate every tick, so the line is priced as a Level gate nothing latches.
+        if ((closure == Closure.Mirror) && (moving is not null)) {
+            latching = RuleLatching.None;
+        }
+
         // At rest: a Level gate nothing latches fires every tick it holds, so every binding may be judged and fire;
         // an Edge over a moving input can cross again and again.
         var refires = ((latching == RuleLatching.None) || ((latching == RuleLatching.Edge) && (moving is not null)));
@@ -150,16 +168,26 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     /// that tests a cell the binding itself names (a literal key or the key bound to <c>$each</c>); the rule's one write to that cell's row
     /// is an unconditional set of that cell; and the value written fails the comparison. Either the comparison is
     /// against a literal the written literal fails, or it is <c>cell != source</c> and the write is
-    /// <c>cell = source</c>, the same read, of rows the firing does not write.</summary>
+    /// <c>cell = source</c>, the same read (one plain cell, or one local of the rule), of rows and facts the firing
+    /// does not write. With <paramref name="context"/>, the cell may also be a host fact an effect sets exactly
+    /// (<see cref="IFactSettingEffect"/>), such as a body's register.</summary>
     /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The context the rule compiled in, or <see langword="null"/> to prove over arena cells
+    /// alone.</param>
     /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
-    public static bool ClosesItself(CompiledRule rule) {
+    public static bool ClosesItself(CompiledRule rule, RuleCompileContext? context = null) => (Prove(context: context, rule: rule) != Closure.None);
+
+    // How a firing closes its own gate: against a literal, which holds whatever moves, or by writing the value the gate
+    // compares against, which holds only while that value stands.
+    private enum Closure : byte { None, Literal, Mirror }
+
+    private static Closure Prove(CompiledRule rule, RuleCompileContext? context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var gate = Array.FindAll(array: rule.Gate, match: static token => (token.Op != GateOp.ShortCircuit));
 
         if (gate.Length == 0) {
-            return false;
+            return Closure.None;
         }
 
         var writes = RuleDataflow.Writes(rule: rule);
@@ -169,26 +197,37 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // ends in. A term that is itself a disjunction or a negation proves nothing and is passed over; the gate
         // holds only while every term does, so one comparison the firing falsifies closes it.
         if (gate[last].Op == GateOp.Compare) {
-            return ((gate.Length == 1) && Falsified(token: gate[0]));
+            return ((gate.Length == 1) ? Falsified(token: gate[0]) : Closure.None);
         }
         if (gate[last].Op != GateOp.All) {
-            return false;
+            return Closure.None;
         }
+
+        var best = Closure.None;
+
         for (var (operand, end) = (0, (last - 1)); ((operand < gate[last].Arity) && (end >= 0)); operand++) {
             var start = TermStart(gate: gate, end: end);
 
-            if ((start == end) && (gate[end].Op == GateOp.Compare) && Falsified(token: gate[end])) {
-                return true;
+            if ((start == end) && (gate[end].Op == GateOp.Compare)) {
+                var term = Falsified(token: gate[end]);
+
+                if (term == Closure.Literal) {
+                    return term;
+                }
+                best = ((term == Closure.Mirror) ? term : best);
             }
             end = (start - 1);
         }
 
-        return false;
+        return best;
 
-        bool Falsified(GateToken token) => (
-            Closes(cell: token.LeftSource, comparison: token.Comparison, other: token.RightSource, rule: rule, writes: writes) ||
-            ((token.Comparison == ExpressionOp.NotEqual) && Closes(cell: token.RightSource, comparison: token.Comparison, other: token.LeftSource, rule: rule, writes: writes))
-        );
+        Closure Falsified(GateToken token) {
+            var closure = Closes(cell: token.LeftSource, comparison: token.Comparison, context: context, other: token.RightSource, rule: rule, writes: writes);
+
+            return (((closure == Closure.None) && (token.Comparison == ExpressionOp.NotEqual))
+                ? Closes(cell: token.RightSource, comparison: token.Comparison, context: context, other: token.LeftSource, rule: rule, writes: writes)
+                : closure);
+        }
     }
 
     // Where the postfix term ending at `end` starts: a comparison is one token, and a connective follows its operands.
@@ -207,54 +246,139 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         return start;
     }
 
-    // Whether the rule's one write to `cell`'s row is an unconditional set of that cell to a value `cell <comparison>
-    // other` rejects.
-    private static bool Closes(in CompiledValueSource cell, ExpressionOp comparison, in CompiledValueSource other, CompiledRule rule, List<CellAccess> writes) {
-        if (Cell(source: cell) is not { RowFrom: null } read || !Fixed(key: read.KeyFrom)) {
-            return false;
+    // Whether the rule's one write to what `cell` reads is an unconditional set of it to a value `cell <comparison>
+    // other` rejects: an arena cell the binding names, or a host fact an effect sets exactly.
+    private static Closure Closes(in CompiledValueSource cell, ExpressionOp comparison, RuleCompileContext? context, in CompiledValueSource other, CompiledRule rule, List<CellAccess> writes) {
+        CompiledValueSource written;
+        CellKind kind;
+
+        if (Cell(source: cell) is { RowFrom: null } read) {
+            if (!Fixed(key: read.KeyFrom) || !SetsCell(read: read, rule: rule, writes: writes, written: out written)) {
+                return Closure.None;
+            }
+            kind = read.ValueKind;
+        } else if ((context is not null) && (Operand(source: cell) is { } fact and not (StateCellOperand or LocalOperand)) && SetsFact(context: context, fact: fact, rule: rule, written: out written)) {
+            kind = fact.ValueKind;
+        } else {
+            return Closure.None;
+        }
+        if (other.IsLiteral && written.IsLiteral) {
+            // Raw values of one cell kind order as the fixed-point values of those bits do. An operation that is
+            // no ordering proves nothing.
+            return (((comparison is (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual)) && !comparison.Holds(expected: FixedQ4816.FromRawBits(value: other.RawValue), value: FixedQ4816.FromRawBits(value: written.RawValue)))
+                ? Closure.Literal
+                : Closure.None);
+        }
+        if (comparison != ExpressionOp.NotEqual) {
+            return Closure.None;
         }
 
-        var written = 0;
+        // The same read on both sides, of nothing the firing writes: once written, the cell equals it until another
+        // line moves one of them.
+        var reads = new List<CellAccess>();
+
+        if ((Cell(source: other) is { RowFrom: null } mirrored) && (Cell(source: written) is { RowFrom: null } source)) {
+            if (!((mirrored.RowOrdinal == source.RowOrdinal) && (mirrored.Key == source.Key) && Nullable.Equals(n1: mirrored.KeyFrom, n2: source.KeyFrom) &&
+                (mirrored.ValueKind == kind) && Plain(key: mirrored.KeyFrom))) {
+                return Closure.None;
+            }
+            mirrored.CollectReads(into: reads);
+        } else if ((Operand(source: other) is LocalOperand local) && (Operand(source: written) is LocalOperand same) && (local.Ordinal == same.Ordinal) && (local.ValueKind == kind)) {
+            // One local, bound once per judgement and read by both the gate and the write. Its program may read any
+            // local before it, so every local's facts are tested against what the firing writes.
+            local.CollectReads(into: reads);
+
+            var facts = new RuleNeedsBuilder();
+
+            foreach (var bound in (rule.Locals ?? [])) {
+                RuleDataflow.CollectExpressionSchedulingFacts(into: facts, tokens: bound.Expression);
+            }
+            foreach (var observed in facts.FacetFacts) {
+                if (WritesFact(effects: rule.Effects, fact: observed)) {
+                    return Closure.None;
+                }
+            }
+        } else {
+            return Closure.None;
+        }
+
+        return (reads.Exists(match: access => writes.Exists(match: write => (write.RowOrdinal == access.RowOrdinal))) ? Closure.None : Closure.Mirror);
+    }
+    // Whether the rule's one write to `read`'s row is an unconditional set of that cell.
+    private static bool SetsCell(StateCellOperand read, CompiledRule rule, List<CellAccess> writes, out CompiledValueSource written) {
+        written = default;
+
+        var count = 0;
 
         foreach (var write in writes) {
             if (write.RowOrdinal == read.RowOrdinal) {
-                written++;
+                count++;
             }
         }
-        if (written != 1) {
+        if (count != 1) {
             return false;
         }
         foreach (var effect in rule.Effects) {
-            if ((effect is not WriteEffect { Write: StateWriteKind.Set, RowFrom: null, Text: null } set) ||
-                (set.RowOrdinal != read.RowOrdinal) || (set.Key != read.Key) || !Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
-                continue;
-            }
-            if (other.IsLiteral && set.Source.IsLiteral) {
-                // Raw values of one cell kind order as the fixed-point values of those bits do. An operation that is
-                // no ordering proves nothing.
-                return (comparison is (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual)) && !comparison.Holds(expected: FixedQ4816.FromRawBits(value: other.RawValue), value: FixedQ4816.FromRawBits(value: set.Source.RawValue));
-            }
-            if ((comparison != ExpressionOp.NotEqual) || (Cell(source: other) is not { RowFrom: null } mirrored) || (Cell(source: set.Source) is not { RowFrom: null } source)) {
-                return false;
-            }
+            if ((effect is WriteEffect { Write: StateWriteKind.Set, RowFrom: null, Text: null } set) &&
+                (set.RowOrdinal == read.RowOrdinal) && (set.Key == read.Key) && Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
+                written = set.Source;
 
-            // The same read on both sides, of nothing the firing writes: once written, the cell equals it until
-            // another line moves one of them.
-            var reads = new List<CellAccess>();
-
-            mirrored.CollectReads(into: reads);
-
-            return (
-                (mirrored.RowOrdinal == source.RowOrdinal) && (mirrored.Key == source.Key) && Nullable.Equals(n1: mirrored.KeyFrom, n2: source.KeyFrom) &&
-                (mirrored.ValueKind == read.ValueKind) && Plain(key: mirrored.KeyFrom) &&
-                !reads.Exists(match: access => writes.Exists(match: write => (write.RowOrdinal == access.RowOrdinal)))
-            );
+                return true;
+            }
         }
 
         return false;
     }
+    // Whether the rule's one write to what a host fact reads is an unconditional, exact set of it. Every effect at any
+    // depth is an arena effect or a fact setter, so no host effect the proof cannot see moves the fact.
+    private static bool SetsFact(IRuleOperand fact, RuleCompileContext context, CompiledRule rule, out CompiledValueSource written) {
+        written = default;
+
+        if (!Transparent(effects: rule.Effects) || (CountWrites(effects: rule.Effects, fact: fact) != 1)) {
+            return false;
+        }
+        foreach (var effect in rule.Effects) {
+            if ((effect is IFactSettingEffect setter) && setter.Writes(fact: fact)) {
+                written = setter.Source;
+
+                return setter.SetsExactly(context: context, fact: fact);
+            }
+        }
+
+        return false;
+
+        static bool Transparent(IReadOnlyList<IRuleEffect> effects) {
+            foreach (var effect in effects) {
+                if (effect is not (RuleEffect or IFactSettingEffect)) {
+                    return false;
+                }
+                foreach (var arm in effect.Arms) {
+                    if (!Transparent(effects: arm)) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+    }
+    private static int CountWrites(IReadOnlyList<IRuleEffect> effects, ICompiledFact fact) {
+        var count = 0;
+
+        foreach (var effect in effects) {
+            count += (((effect is IFactSettingEffect setter) && setter.Writes(fact: fact)) ? 1 : 0);
+            foreach (var arm in effect.Arms) {
+                count += CountWrites(effects: arm, fact: fact);
+            }
+        }
+
+        return count;
+    }
+    private static bool WritesFact(IReadOnlyList<IRuleEffect> effects, ICompiledFact fact) => (CountWrites(effects: effects, fact: fact) > 0);
     // The cell a source reads when it is one plain cell read: the operand itself, or a program of that one read.
-    private static StateCellOperand? Cell(in CompiledValueSource source) => (source.Operand as StateCellOperand) ?? ((source.Expression is [{ Operand: StateCellOperand operand }]) ? operand : null);
+    private static StateCellOperand? Cell(in CompiledValueSource source) => (Operand(source: source) as StateCellOperand);
+    // The one operand a source reads: the operand itself, or a program of that one read.
+    private static IRuleOperand? Operand(in CompiledValueSource source) => (source.Operand ?? ((source.Expression is [{ Operand: { } operand }]) ? operand : null));
     // A key the binding itself fixes: a literal, or the key bound to $each.
     private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach);
     // A key no program or key fact computes, so two equal references name the same cell.

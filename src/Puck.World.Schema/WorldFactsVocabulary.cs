@@ -65,15 +65,21 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             return WorldPlayerIteration.For(definition: Definition);
         }
         if (reference.Call is { Channel: WorldContactIteration.Channel } contacts) {
-            if ((contacts.Count != 1) || !int.TryParse(s: contacts.Text(index: 0), style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var screenIndex)) {
-                throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'forEach' sweeps '{reference.Spelling}', which does not spell '$contacts:<screenIndex>'");
+            var surface = string.Join(':', contacts.Texts());
+
+            if (string.IsNullOrEmpty(value: surface)) {
+                throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'forEach' sweeps '{reference.Spelling}', which does not spell 'contacts(<screenIndex>|<placement>)'");
             }
+
+            var (mapping, subject, regions) = WorldFactsVocabulary.PointerSurfaceOf(definition: Definition, name: reference.Spelling, ruleName: ruleName, surface: surface);
 
             Needs.Add(facet: FacetRef.Of<IWorldSurfaceContacts>());
             return new WorldContactIteration(
-                Mapping: WorldFactsVocabulary.SimulationScreenMapping(definition: Definition, name: reference.Spelling, ruleName: ruleName, screenIndex: screenIndex),
+                Mapping: mapping,
                 Participants: Math.Max(val1: 1, val2: (Definition.Population.LocalSeats + Definition.Population.NetworkPlayers)),
-                ScreenIndex: screenIndex
+                Regions: regions,
+                Subject: subject,
+                Surface: surface
             );
         }
         if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
@@ -98,8 +104,8 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Returns whether a world fact rests (<see cref="Puck.State.Rules.RuleCompileContext.FactRests"/>): the
     /// facts the world host versions that answer a count, a flag or an event, so that they move when something
     /// happens rather than with time or motion. A region's occupants, the population and quiescence censuses, a
-    /// musical beat, an input event read for a literal owner, and a body's fact bits and producer stand-down for a
-    /// literal body or the one bound to <c>$each</c> rest; a pose, a distance, a pointer, a channel and every fact the
+    /// musical beat, an input event read for a literal owner, and a body's fact bits, counter registers and producer
+    /// stand-down for a literal body or the one bound to <c>$each</c> rest; a pose, a distance, a pointer, a channel and every fact the
     /// host versions no source for do not. The host refuses to leave unversioned a fact this answers for
     /// (<c>WorldRuleHost.TryScheduleFact</c>), so the work sheet never prices by change a fact judged every tick.</summary>
     /// <param name="fact">The compiled fact.</param>
@@ -119,6 +125,10 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
                 return BodyRests(body: producer.BodyA, each: out each);
             case WorldBodyFactOperand { Payload: BodyFactOperand bits }:
                 return BodyRests(body: bits.Body, each: out each);
+            // A counter register moves only when something writes its lane row, which the host names as the read's
+            // version (WorldRuleHost.TryScheduleFact); a timer's presented value ages with time.
+            case WorldBodyFactOperand { Payload: BodyStateOperand { Kind: Puck.Physics.Motion.ActionStateKind.Counter } state }:
+                return BodyRests(body: state.Body, each: out each);
             case WorldBodyFactOperand { Payload: WorldInputOperand input }:
                 return InputRests(input: input);
             case WorldBodyFactOperand { Payload: ClockOperand { Input: { } input } }:

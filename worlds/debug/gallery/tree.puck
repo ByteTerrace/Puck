@@ -81,6 +81,14 @@ let treeBurlCount = 7
 // The crown: separate leaf clusters on a dome high in the void (foliage.puck's leafClusters), a broad mass closing it
 // over the trunk's top, and limbs from the trunk's top into every `treeCrownLimbEvery`-th cluster.
 let treeCrown = { centre [0, 15.25, 0], radius: 6.4, height: 1.55, count: 34, size [1.2, 0.8, 1.15], turn: 20 }
+// The crown's lower tiers: wider, sparser rings of smaller clusters stepping down and out over the branches, so the
+// canopy reads as layered foliage with depth instead of one cap, and light falls through between the tiers.
+let treeCrownTiers = [
+  { centre [0, 13.2, 0], radius: 8.6, height: 1.2, count: 40, size [0.95, 0.62, 0.9], turn: 47 }
+  { centre [0, 11.0, 0], radius: 10.4, height: 0.9, count: 30, size [0.75, 0.5, 0.72], turn: 83 }
+]
+// Each fork's foliage: a loose cluster of small clumps round its tip rather than one spray.
+let treeForkFoliage = { radius: 1.5, height: 0.7, count: 9, size [0.62, 0.42, 0.58] }
 let treeCrownCore = { at [0, 16.35, 0], r [2.8, 1.05, 2.8] }
 let treeCrownLimbEvery = 4
 
@@ -287,6 +295,19 @@ prototypes {
         smooth: 0.35,
         turn: treeCrown.turn
       )
+      for (tier, k) in treeCrownTiers {
+        leafClusters(
+          label: $"crown-tier-{k}",
+          centre: tier.centre,
+          radius: tier.radius,
+          height: tier.height,
+          count: tier.count,
+          size: tier.size,
+          material: treeLeaf,
+          smooth: 0.25,
+          turn: tier.turn
+        )
+      }
       shape Superellipsoid "crown-core" {
         material: treeLeaf
         exponent: landscapeExponent
@@ -311,14 +332,37 @@ prototypes {
           }
         }
       }
-      // A spray of leaves at each branch's fork, every third in blossom.
+      // Limbs from the trunk out into every other cluster of each lower tier, each leaving the trunk below its cluster
+      // and rising to it, so no clump floats.
+      for (tier, k) in treeCrownTiers {
+        for n in range(0, floor((tier.count / 2))) {
+          let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, (2 * n), tier.turn)
+          shape Sweep $"tier-limb-{k}-{n}" {
+            material: treeTwig
+            blend: SmoothUnion
+            smooth: 0.2
+            curve {
+              a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
+              b: leanLocal([(into[0] * 0.5), (into[1] - 1.1), (into[2] * 0.5)], 0)
+              c: leanLocal([(into[0] * 0.92), (into[1] - 0.15), (into[2] * 0.92)], 0)
+              radiusStart: 0.32
+              radiusEnd: 0.08
+            }
+          }
+        }
+      }
+      // A cluster of leaves round each branch's fork, every third in blossom.
       for (b, i) in treeLimbs {
-        leafSpray(
-          label: $"spray-{i}",
-          tip: treeForkTip(b, i),
-          ahead: (limbLeft(treeBranchA(b), treeBranchB(b), treeBranchC(b), treeFork.at) * treeForkSide(i)),
-          size: treeFork.spray,
-          material: (((i % 3) == 2) ? treeBlossom : treeLeaf)
+        leafClusters(
+          label: $"fork-{i}",
+          centre: (treeForkTip(b, i) + [0, 0.3, 0]),
+          radius: treeForkFoliage.radius,
+          height: treeForkFoliage.height,
+          count: treeForkFoliage.count,
+          size: treeForkFoliage.size,
+          material: (((i % 3) == 2) ? treeBlossom : treeLeaf),
+          smooth: 0.22,
+          turn: (31 * i)
         )
       }
     }
