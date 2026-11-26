@@ -44,12 +44,13 @@ metadata {
   description: "The sun of the debug world's small system: a star that circles the double planet once a day, seen from an outpost on a rock it passes, and the light and mass the debug world and the moon follow after light's delay."
 }
 
-// The outpost's rock: a ball about the origin with a level pad cut on top, and the pull that holds a body to it.
+// The outpost's rock: a ball about the origin with a level pad standing on its top, and the pull that holds a body
+// to it.
 let rockRadius = 14
 let rockPull = 14
 let rockReach = 60
 let padHalf = 5
-let padTop = (rockRadius - 1.2)
+let padTop = (rockRadius + 0.3)
 
 // The star's body: the population body that rides the day's turn, and how near its centre a body may come.
 let sunBody = 8
@@ -181,8 +182,8 @@ looks [
 ]
 
 spawnPoints [
-  { id: "stage", position [0, (padTop + 0.05), 2], yawDegrees: 180 }
-  { id: "sun-arrival", position [0, (padTop + 0.05), 2], yawDegrees: 180 }
+  { id: "stage", position [0, (padTop + 0.05), 0], yawDegrees: 0 }
+  { id: "sun-arrival", position [0, (padTop + 0.05), 0], yawDegrees: 0 }
 ]
 
 placements {
@@ -223,7 +224,7 @@ placements {
   // The sun painting's counterpart, on the pad: walking into its glass arrives out of the painting.
   placement "arrival" {
     prototype: "frame"
-    position [0, padTop, 4]
+    position [0, padTop, 3]
     yawDegrees: 0
     faceSources [
       {
@@ -315,8 +316,8 @@ prototypes {
       }
       shape Cylinder "pad" {
         material: 1
-        position [0, (padTop - 0.6), 0]
-        scale [padHalf, 0.6, padHalf]
+        position [0, (padTop - 1), 0]
+        scale [padHalf, 1, padHalf]
       }
     }
   }
@@ -337,13 +338,21 @@ prototypes {
 }
 
 // Vacuum: the star, a black sky of stars, and no air between the eye and the fire. The light comes from where the
-// star stands, so the pad's shadows swing as it passes, and its strength rises as the square of its nearness.
+// star stands, and its strength rises as the square of its nearness. It casts no shadows here: the star's own ball
+// stands on the line from every surface toward its light, and a ball that cast would shadow all of them.
 render {
   farDistance: 8000
   lanes ["state.sunLight"]
   lighting {
     lights [
-      starLight(of: sunStar, turns: [sunTurn], focus: sunSystemCentre, illuminance: "state.sunLux", color: "#FFF4E2")
+      starLight(
+        of: sunStar,
+        turns: [sunTurn],
+        focus: sunSystemCentre,
+        illuminance: "state.sunLux",
+        color: "#FFF4E2",
+        shadow: never
+      )
     ]
   }
   sky {
@@ -371,7 +380,7 @@ render {
   exposure {
     mode: Auto
     minimum: 11
-    maximum: 20
+    maximum: 26
     adaptation: 0.75
     local: 0.5
     band: 0.75
