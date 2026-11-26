@@ -332,6 +332,18 @@ displacement. It shares the field solver's work budget: exhaustion keeps only
 the solved prefix and reports `Unproved`; an unrepresentable slice refuses the
 whole move.
 
+Slices are solved only where a collider can reach them. Before each slice the
+solver asks, for every collider the move can touch, how much of the move the body
+stays beyond the contact reach for (`FixedAabb.ClearFraction`: the distance
+between the body's enclosing box and the collider's box is convex along the move,
+so its tangent at the start, taken from one `FixedJet2` evaluation, is a lower
+bound, and the bound uses the boxes' own closing speed rather than the move's
+length; a half-space uses its exact plane distance). The least fraction, floored to
+whole slices, is crossed in one accumulator step with no solve and counted in
+`physics.contact.leaps`. A body already within reach of a collider, or of one
+without bounds, solves slice by slice as before. Only solved slices spend the
+work budget.
+
 `FixedFieldContactSolver.ResolveSweep` proves a moving body's travel before it
 solves contact at the endpoint, so a body never passes through geometry,
 however fast it moves, however thin the geometry, and however close to it the
