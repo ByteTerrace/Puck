@@ -16,7 +16,7 @@ only schedules ([pond.puck](pond.puck)):
 - **The crawl.** Driven into a wall or a ceiling, a spider takes the standard's
   crawl hold (`crawlHold` in [abilities.puck](../standard/abilities.puck),
   expanded for the spider kit in [pond-crawl.puck](pond-crawl.puck)): a `Pull`
-  hold that lays it on the face and spends its `stamina` Counter, three seconds
+  hold that lays it on the face and spends its `crawlStamina` Counter, three seconds
   of it, refilled the moment it stands on the ground. The den is two walls and
   a roof 2.6 m up, a ceiling it crosses upside down.
 - **The dragonflies** flock in the air over the pond (`reeds`, a volume

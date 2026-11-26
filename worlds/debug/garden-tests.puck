@@ -76,6 +76,6 @@ test "a spider driven into the den climbs its wall onto the ceiling on its stami
   }
   expect {
     bodyPosition(body, 8, y) >= 2
-    bodyState(body, 8, stamina) < 3
+    bodyState(body, 8, crawlStamina) < 3
   }
 }
