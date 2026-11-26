@@ -52,7 +52,7 @@ function ride(from, to, level, pace) = [
 ]
 
 // The seams (docs/plans/streaming-and-memory.md#the-seam-walk), each from its own spawn so a chapter fails alone. The
-// valley floor from 36 m out into the lobby and back out, then in again; the garden painting, eight metres into the
+// valley floor from 32 m out into the lobby and back out, then in again; the garden painting, eight metres into the
 // garden and back through its arrival frame; the lift from level 0 to level 3 and back.
 function valleySeam(name, pace) = {
   name: name

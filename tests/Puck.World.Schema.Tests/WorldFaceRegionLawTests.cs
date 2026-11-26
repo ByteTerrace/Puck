@@ -81,6 +81,16 @@ public sealed class WorldFaceRegionLawTests {
             from: from,
             to: to
         );
+    // A step from in front of the glass to just behind it, ending inside the slab: a body walking in.
+    private static WorldFaceCrossing Entering => Sweep(
+        from: At(x: 0, y: 0, z: 2),
+        to: At(x: 0, y: 0, z: -0.25)
+    );
+    // A body standing just behind the glass, inside the slab, whose segment is collapsed: one posed there.
+    private static WorldFaceCrossing Standing => Sweep(
+        from: At(x: 0, y: 0, z: -0.25),
+        to: At(x: 0, y: 0, z: -0.25)
+    );
 
     [Fact]
     public void ABackSideSweepEndingInsideTheBand_LatchesOccupancyButDoesNotFire() {
@@ -122,25 +132,13 @@ public sealed class WorldFaceRegionLawTests {
     [Fact]
     public void ACrossingFiresOnTheEdgeIn_AndOnceOnly() {
         var occupancy = new WorldPortalOccupancy();
-        var inside = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
 
         Assert.True(condition: Observe(
-            crossing: inside,
+            crossing: Entering,
             occupancy: occupancy
         ));
         Assert.False(condition: Observe(
-            crossing: inside,
+            crossing: Standing,
             occupancy: occupancy
         ));
     }
@@ -198,40 +196,23 @@ public sealed class WorldFaceRegionLawTests {
         ));
     }
     [Fact]
-    public void ArrivalSeedsOccupancy_SoAMappedPairCannotBounceTheTravelerBack() {
-        // A traveler SET DOWN inside a door's band did not walk in. Without the seed its first scan there reads as a
-        // fresh entry edge and fires the door it just came through; the control is the identical body with no seed.
-        var arrived = new WorldPortalOccupancy();
+    public void ABodySetDownInsideTheBand_DoesNotFire() {
+        // A traveler or a posed body SET DOWN inside a door's band did not walk in, so its first scan there fires
+        // nothing and latches it; the control is a body that walked in through the glass to the same point.
+        var setDown = new WorldPortalOccupancy();
         var walkedIn = new WorldPortalOccupancy();
-        var standing = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
-
-        arrived.SeedInside(
-            faceName: Face,
-            placementId: Placement,
-            seat: 0
-        );
 
         Assert.False(
             condition: Observe(
-                crossing: standing,
-                occupancy: arrived
+                crossing: Standing,
+                occupancy: setDown
             ),
-            userMessage: "a seeded arrival must not fire the door it arrived at"
+            userMessage: "a body set down behind the glass must not fire the door"
         );
+        Assert.True(condition: setDown.IsInside(placementId: Placement, faceName: Face, seat: 0));
         Assert.True(
             condition: Observe(
-                crossing: standing,
+                crossing: Entering,
                 occupancy: walkedIn
             ),
             userMessage: "the control body, which walked in, must still fire"
@@ -288,26 +269,37 @@ public sealed class WorldFaceRegionLawTests {
         );
     }
     [Fact]
-    public void DegenerateSegmentInsideTheBand_IsInsideAndCrossed() {
-        var crossing = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
+    public void DegenerateSegmentInsideTheBand_IsInsideButNotCrossed() {
+        var crossing = Standing;
 
         Assert.True(condition: crossing.Inside);
-        Assert.True(condition: crossing.Crossed);
+        Assert.False(condition: crossing.Crossed);
         Assert.Equal(
             expected: FixedQ4816.Zero,
             actual: crossing.Parameter
         );
+    }
+    [Fact]
+    public void AStepAwayFromTheGlassBehindIt_DoesNotFire() {
+        // A body behind the glass moving deeper into the slab never passed through the glass, however it moves.
+        var deeper = Sweep(
+            from: At(x: 0, y: 0, z: -0.1),
+            to: At(x: 0, y: 0, z: -0.4)
+        );
+
+        Assert.True(condition: deeper.Inside);
+        Assert.False(condition: deeper.Crossed);
+    }
+    [Fact]
+    public void ASegmentMeetingThePlaneBesideTheGlass_DoesNotFire() {
+        // The plane is met outside the rectangle and the end point is inside the slab: the body came round the glass.
+        var round = Sweep(
+            from: At(x: (HalfWidth + 0.5), y: 0, z: 0.1),
+            to: At(x: (HalfWidth - 0.5), y: 0, z: -0.4)
+        );
+
+        Assert.True(condition: round.Inside);
+        Assert.False(condition: round.Crossed);
     }
     [Fact]
     public void EqualParameters_TieBreakOnStablePlacementThenFaceIdentity() {
@@ -334,21 +326,13 @@ public sealed class WorldFaceRegionLawTests {
     [Fact]
     public void ForgettingASeatReArmsIt() {
         var occupancy = new WorldPortalOccupancy();
-        var standing = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
 
         Assert.True(condition: Observe(
-            crossing: standing,
+            crossing: Entering,
+            occupancy: occupancy
+        ));
+        Assert.False(condition: Observe(
+            crossing: Entering,
             occupancy: occupancy
         ));
 
@@ -359,25 +343,14 @@ public sealed class WorldFaceRegionLawTests {
         );
 
         Assert.True(condition: Observe(
-            crossing: standing,
+            crossing: Entering,
             occupancy: occupancy
         ));
     }
     [Fact]
     public void LeavingTheBandReArmsTheDoor() {
         var occupancy = new WorldPortalOccupancy();
-        var inside = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
+        var inside = Entering;
         var outside = Sweep(
             from: At(
                 x: 0,
@@ -425,18 +398,7 @@ public sealed class WorldFaceRegionLawTests {
     [Fact]
     public void SeedingOneSeatDoesNotSilenceAnother() {
         var occupancy = new WorldPortalOccupancy();
-        var standing = Sweep(
-            from: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            ),
-            to: At(
-                x: 0,
-                y: 0,
-                z: -0.25
-            )
-        );
+        var standing = Entering;
 
         occupancy.SeedInside(
             faceName: Face,
@@ -488,7 +450,7 @@ public sealed class WorldFaceRegionLawTests {
             from: At(
                 x: 0,
                 y: 0,
-                z: -0.25
+                z: 0.25
             ),
             to: At(
                 x: 0,
@@ -510,6 +472,7 @@ public sealed class WorldFaceRegionLawTests {
         );
 
         Assert.True(condition: through.Crossed);
+        Assert.True(condition: through.Inside);
         Assert.False(condition: before.Crossed);
         Assert.False(condition: before.Inside);
     }

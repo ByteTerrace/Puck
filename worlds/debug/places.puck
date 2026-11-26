@@ -85,7 +85,7 @@ let regionPlaces = [
   { id: "machines", at [4.8, 2, 30.5], half [4.1, 2.5, 3] }
   { id: "mouse-hole", at [8.9, 1, 30.5], half [0.5, 1.5, 1] }
   // The valley floor's places (valley.puck lists what stands where).
-  groundPlace("studio", 24, 72, -76, -20)
+  groundPlace("studio", 24, 72, -80, -24)
   groundPlace("camera-course", -26, -13, 16, 44)
   groundPlace("pool", -66, -46, -22, -2)
   groundPlace("meadow", 90, 140, -85, -35)
@@ -129,10 +129,11 @@ spawnPoints [
   // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
   // the screen's engage radius.
   { id: "desktop", position [12.4, 0.05, 23.7], yawDegrees: 90 }
-  // On the valley floor in line with the gallery's entrance, 36 m south of it, facing it: the seam walk's first crossing
-  // (walkthrough-tests.puck) starts here and walks into the lobby. The gallery's own places (`gallery`, outside its
-  // entrance; `lift`; `stairs`) are the module's (gallery/gallery.puck).
-  { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -36), yawDegrees: 180 }
+  // On the valley floor in line with the gallery's entrance, 32 m south of it and 4 m short of the avatar studio's north
+  // wall (studio.puck, world z -24), facing it: the benchmark's valley seam (benchmark-route.puck) starts here and walks
+  // into the lobby. The gallery's own places (`gallery`, outside its entrance; `lift`; `stairs`) are the module's
+  // (gallery/gallery.puck).
+  { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -32), yawDegrees: 180 }
 ]
 
 commands [
