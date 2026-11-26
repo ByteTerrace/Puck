@@ -69,9 +69,18 @@ public sealed partial class WorldTick {
             return false;
         }
 
+        if (!TryEngageCentre(centre: out var centre, holder: out var holder, screen: screen)) {
+            if (describe) { reason = $"screen {screen.Index}'s device is held by no body"; }
+            return false;
+        }
+        if ((holder >= 0) && (holder != entityIndex)) {
+            if (describe) { reason = $"screen {screen.Index}'s device is held by body {holder}, and only its holder engages it"; }
+            return false;
+        }
+
         var radius = body.EngageReach(radius: screen.Route.EngageRadius);
 
-        if ((PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) || !WithinStorey(body: body, height: FixedQ4816.FromDouble(value: screen.Origin.Y), radius: radius)) {
+        if ((PlanarDistanceSquared(body: body, centre: centre) > (radius * radius)) || !WithinStorey(body: body, height: centre.Y, radius: radius)) {
             if (describe) { reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)"; }
             return false;
         }
@@ -134,15 +143,29 @@ public sealed partial class WorldTick {
         return (hasMachine || (screen.Source is WorldScreenSource.Producer));
     }
 
-    // The squared distance on the ground plane from a body to a screen's origin, which the engage radius bounds.
-    private static FixedQ4816 PlanarDistanceSquared(WorldBody body, WorldScreen screen) => PlanarDistanceSquared(
-        body: body,
-        centre: new FixedVector3(
+    // Where a screen's engage radius is measured from this tick, and the body that alone may engage it: the authored
+    // origin of a screen that stays put (holder -1), or the device of a placement-carried screen and the body holding it
+    // (WorldScreenHolding). False for a placement-carried screen nobody holds, which engages no one.
+    private bool TryEngageCentre(WorldScreen screen, out FixedVector3 centre, out int holder) {
+        if (screen.Carry is { RidesPlacement: true } carry) {
+            return WorldScreenHolding.TryHolder(
+                at: out centre,
+                body: out holder,
+                carry: carry,
+                definition: Host.Document.Definition,
+                population: Host.Population
+            );
+        }
+
+        holder = -1;
+        centre = new FixedVector3(
             X: FixedQ4816.FromDouble(value: screen.Origin.X),
-            Y: FixedQ4816.Zero,
+            Y: FixedQ4816.FromDouble(value: screen.Origin.Y),
             Z: FixedQ4816.FromDouble(value: screen.Origin.Z)
-        )
-    );
+        );
+
+        return true;
+    }
     // Whether a body stands within an engage radius of a target's height, so a reach measured on the ground plane never
     // takes a screen or a table a floor above or below the body.
     private static bool WithinStorey(WorldBody body, FixedQ4816 height, FixedQ4816 radius) => (FixedQ4816.Abs(value: (body.FixedPosition.Y - height)) <= radius);
@@ -375,7 +398,11 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                var distance = PlanarDistanceSquared(body: body, screen: screen);
+                if (!TryEngageCentre(centre: out var centre, holder: out _, screen: screen)) {
+                    continue;
+                }
+
+                var distance = PlanarDistanceSquared(body: body, centre: centre);
 
                 if ((ordinals[slot] < 0) || (distance < nearest)) {
                     ordinals[slot] = ordinal;

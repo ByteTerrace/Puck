@@ -454,29 +454,90 @@ public sealed record WorldScreenDisplay(
 /// <param name="ScrollSpeed">The wheel's speed at full deflection of the scrolling stick, in wheel notches per second,
 /// its deflection raised to <paramref name="Curve"/> too. Non-negative; 0 scrolls nothing.</param>
 public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float Boost = 1f, float RampSeconds = 0f, float ScrollSpeed = 0f);
-/// <summary>A body that holds a screen's device carries its picture: while a body wearing <see cref="Look"/> holds that
-/// look's <see cref="Pose"/> frame, the screen's own slab is not drawn and its source shows on the face of the look's
-/// box <see cref="Shape"/>, riding the body's hands every frame, and a seat engaged on the screen frames the picture
-/// there. The box's face is its front (author <c>-Z</c>, the side a body holding it looks at) and its half-extents are
-/// the picture's. A seat engaged on a carried screen starts on <paramref name="Camera"/>, a view that shows the body
-/// holding the device, and a bound control toggles between that view and the framed picture (<c>player.frame</c>).
-/// Presentation only: the simulation's screen row, its engage radius and its pointer mapping keep the authored
-/// frame.</summary>
-/// <param name="Look">The look row whose wearer carries the picture; a creation look.</param>
-/// <param name="Pose">The look's <see cref="WorldLookMotion.Poses"/> frame that holds while the body carries it.</param>
-/// <param name="Shape">The name of the ungrouped box in the look's creation that shows the picture.</param>
+/// <summary>A screen whose picture rides a creation's box wherever that creation is drawn: the screen's source shows on
+/// the front face of the box <see cref="Shape"/> (author <c>-Z</c>, the side a body holding it looks at), whose
+/// half-extents are the picture's, every frame, and a seat engaged on the screen frames the picture there. The box rides
+/// one of two anchors, and the author names exactly one:
+/// <list type="bullet">
+/// <item><description>a body's look (<see cref="Look"/> and <see cref="Pose"/>): while a body wearing that creation look
+/// holds the look's pose frame, the look's box shows the picture, so a rig's hold pose puts the device in the body's
+/// hands;</description></item>
+/// <item><description>a placement that rides a body (<see cref="Placements"/>, each an attached placement row): the first
+/// listed row whose carrier is live and whose shown creation has the box shows the picture, so a device rides its
+/// holder's hip in one row and their hands in another, a response choosing which shows it.</description></item>
+/// </list>
+/// While the anchor holds the box, the screen's own slab is not drawn and the box draws in the screen's material; while
+/// it does not, a look-carried screen draws its slab where it is authored and a placement-carried one draws nothing (its
+/// device is the placement's creation). A seat engaged on a carried screen starts on <paramref name="Camera"/>, a view
+/// that shows the body holding the device, and a bound control toggles between that view and the framed picture
+/// (<c>player.frame</c>). The authority engages a placement-carried screen for its holder alone, wherever the holder
+/// stands, measuring the engage radius from the device; a look-carried screen engages from its authored frame, which the
+/// authority reads since a pose is presentation.</summary>
+/// <param name="Shape">The name of the ungrouped box in the anchor's creation that shows the picture.</param>
+/// <param name="Look">The look row whose wearer carries the picture; a creation look. <see langword="null"/> for a
+/// placement-carried screen. Omitted from the wire when null.</param>
+/// <param name="Pose">The look's <see cref="WorldLookMotion.Poses"/> frame that holds while the body carries it; authored
+/// with <see cref="Look"/> and only then. Omitted from the wire when null.</param>
+/// <param name="Placements">The attached placement rows that carry the picture, in order of precedence, or
+/// <see langword="null"/> for a look-carried screen. Omitted from the wire when null.</param>
 /// <param name="Camera">The name of a <see cref="WorldDefinition.Cameras"/> row whose rig frames the body holding the
 /// device, or <see langword="null"/> for none (a seat engaged on the carried screen then starts on the framed picture, as
 /// at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its
 /// right, +Y its up and +Z its normal, toward the body looking at it (<c>offset</c> and <c>lookAt</c> without
 /// <c>worldAxes</c> read in those axes).</param>
 public sealed record WorldScreenCarry(
-    [property: DocumentText("a look in the composed world")] string Look,
-    [property: DocumentText("a creation frame")] string Pose,
     [property: DocumentText("a creation shape")] string Shape,
+    [property: DocumentText("a look in the composed world")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Look = null,
+    [property: DocumentText("a creation frame")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Pose = null,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Placements = null,
     [property: DocumentName(WorldNameKind.Camera, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null
-);
+) {
+    /// <summary>Gets whether attached placements carry the picture rather than a body's look.</summary>
+    [JsonIgnore]
+    public bool RidesPlacement => (Placements is { Count: > 0 });
+
+    /// <summary>Returns whether any screen's carry lists a placement row.</summary>
+    /// <param name="screens">The screen rows.</param>
+    /// <param name="placementId">The placement's id.</param>
+    /// <returns><see langword="true"/> when a screen's picture can ride the row.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screens"/> or <paramref name="placementId"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool Lists(IReadOnlyList<WorldScreen> screens, string placementId) {
+        ArgumentNullException.ThrowIfNull(argument: screens);
+        ArgumentNullException.ThrowIfNull(argument: placementId);
+
+        for (var row = 0; (row < screens.Count); row++) {
+            if ((screens[row].Carry?.Placements is { } placements) && placements.Contains(value: placementId, comparer: StringComparer.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns the slot of the box that shows the picture among a creation's shapes: the first shape named
+    /// <see cref="Shape"/>. The presentation and the authority both find the box here, so they agree on whether a
+    /// creation carries the picture.</summary>
+    /// <param name="shapes">The creation's shapes.</param>
+    /// <returns>The shape's slot, or <see langword="null"/> when the creation has no shape by that name.</returns>
+    public int? ShapeSlotIn(IReadOnlyList<Puck.World.Authoring.ShapeDocument>? shapes) {
+        if (shapes is null) {
+            return null;
+        }
+
+        for (var slot = 0; (slot < shapes.Count); slot++) {
+            if (string.Equals(a: shapes[slot].Name?.Value, b: Shape, comparisonType: StringComparison.Ordinal)) {
+                return slot;
+            }
+        }
+
+        return null;
+    }
+}
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
@@ -515,8 +576,9 @@ public sealed record WorldScreenCarry(
 /// <c>SdfScreenEmission.DefaultLuminance</c>. A screen whose source is a window onto another world shows that world's
 /// own luminance whatever this says.</param>
 /// <param name="Carry">The body that carries the screen's picture while it holds the device (see
-/// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. Omitted from
-/// the wire when null.</param>
+/// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. A
+/// placement-carried screen's frame here is where its surface rests while nobody holds it; it draws no slab there.
+/// Omitted from the wire when null.</param>
 /// <param name="Material">The id of the screen material (<see cref="WorldScreenMaterial"/>, the document's
 /// <c>screenMaterials</c>) the face draws its picture through, or <see langword="null"/> for none: the picture as its
 /// source made it, filling the face. Refused on a window, which is an opening rather than a display. Omitted from the wire

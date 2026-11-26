@@ -452,24 +452,38 @@ aside while the picture is framed.
   `Win32DesktopPassthroughTests` and `WorldSeatContextSyncTabletopLawTests`
   hold it.
 
-**A carried screen.** A screen row's `carry` (`WorldScreenCarry`: `look`,
-`pose`, `shape`) hands its picture to a body: while a body wearing that
-creation look holds the look's `pose` frame, the screen's own slab is not drawn
-(`WorldStaticSceneEmit` declares the surface alone, `SdfProgramBuilder.ScreenSurface`),
-the look's named ungrouped box is emitted in the screen's material
-(`WorldCreationInstances.CarriedScreenMaterials`), the screen's surface rides the box's
-front face (author `-Z`) every frame through the residency's screen-surface
-transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, the pool's
+**A carried screen.** A screen row's `carry` (`WorldScreenCarry`: `shape` and
+one anchor) hands its picture to a creation's ungrouped box wherever that
+creation is drawn. The anchor is a body's look (`look` and `pose`: while a body
+wearing that creation look holds the look's `pose` frame) or attached placement
+rows (`placements`: the first listed row riding a live body whose shown creation
+has the box, so responses choose which row shows the device). While the anchor
+holds the box, the screen's own slab is not drawn (`WorldStaticSceneEmit`
+declares the surface alone, `SdfProgramBuilder.ScreenSurface`), the box is
+emitted in the screen's material (`WorldCreationInstances.CarriedScreenMaterials`;
+a listed row stays in the stamp pool rather than the rigid catalog,
+`WorldRigidAssets.Rides`, since its box's material is its screen's), the
+screen's surface rides the box's front face (author `-Z`) every frame through
+the residency's screen-surface transform seam, never a rebake
+(`WorldFramePresenter.ScreenSurfaceTransforms`, the pool's
 `ScreenSurfaceTransforms` over `TryCarriedScreen`; `WorldScreenCarryLawTests`
-runs it on the CPU), and the framed view frames the picture
-there (`EngagedScreenRow`). Picking it up or putting it down rebuilds the
-program (`WorldSceneEmitter`'s carried-screen revision component). Rules read an
-engagement through `engaged(each, <screen>)` (`$engaged:<bodyRef>:<screen>`,
-`WorldEngagement.Applies`). The debug world's Humble Gaming Brick is the worked
-example: `brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size
-Moth's `pilotHold` from it, the brick's placement responds to the same cell with
-an empty creation, and screen 0 carries onto her look's `brickPicture`. The
-server's screen row, engage radius and pointer mapping keep the authored frame.
+runs it on the CPU), and the framed view frames the picture there
+(`EngagedScreenRow`). A placement-carried screen nobody holds draws no slab at
+all. Picking it up or putting it down rebuilds the program (`WorldSceneEmitter`'s
+carried-screen revision component). The authority engages a placement-carried
+screen for its holder alone, wherever the holder stands, measuring the engage
+radius from the carrying row's attachment (`WorldScreenHolding.TryHolder`,
+read by `WorldTick.TryEngageCentre` in the policy and the context button's
+probe); a look-carried screen engages from its authored frame, since a pose is
+presentation. Rules read an engagement through `engaged(each, <screen>)`
+(`$engaged:<bodyRef>:<screen>`, `WorldEngagement.Applies`; a literal body is
+`body:<n>`). The debug world's Humble Gaming Brick is the look example:
+`brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size Moth's
+`pilotHold` from it, the brick's placement responds to the same cell with an
+empty creation, and screen 0 carries onto her look's `brickPicture`. The
+toybox rentals are the placement example (`gallery/rentals.puck`): each seat's
+two pool screens list its hands row, then its hip row. A `Simulation` screen's
+pointer mapping still reads the authored frame.
 
 The held view and the frame toggle: a carry that names a `camera` (a `cameras`
 row, `WorldScreenCarry.Camera`) starts the engagement on a camera that shows the

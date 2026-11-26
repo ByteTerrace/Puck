@@ -14106,7 +14106,7 @@ export type WorldScreen = {
    */
   luminance?: number | null;
   /**
-   * The body that carries the screen's picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.
+   * The body that carries the screen's picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. A placement-carried screen's frame here is where its surface rests while nobody holds it; it draws no slab there. Omitted from the wire when null.
    */
   carry?: WorldScreenCarry | null;
   /**
@@ -14117,17 +14117,21 @@ export type WorldScreen = {
 
 export type WorldScreenCarry = {
   /**
-   * The look row whose wearer carries the picture; a creation look.
-   */
-  look: string;
-  /**
-   * The look's Poses frame that holds while the body carries it.
-   */
-  pose: string;
-  /**
-   * The name of the ungrouped box in the look's creation that shows the picture.
+   * The name of the ungrouped box in the anchor's creation that shows the picture.
    */
   shape: string;
+  /**
+   * The look row whose wearer carries the picture; a creation look. null for a placement-carried screen. Omitted from the wire when null.
+   */
+  look?: string | null;
+  /**
+   * The look's Poses frame that holds while the body carries it; authored with Look and only then. Omitted from the wire when null.
+   */
+  pose?: string | null;
+  /**
+   * The attached placement rows that carry the picture, in order of precedence, or null for a look-carried screen. Omitted from the wire when null.
+   */
+  placements?: (string | null)[] | null;
   /**
    * The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its right, +Y its up and +Z its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).
    */

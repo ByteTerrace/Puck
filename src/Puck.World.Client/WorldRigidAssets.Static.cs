@@ -181,7 +181,7 @@ public sealed partial class WorldRigidAssets {
             // A deal template renders nothing itself; its dealt children are the rows.
             if (placement.Deal is not null) { continue; }
             if (WorldDefinitionRows.FindCreation(creations.Creations, placement.ShownPrototypeId) is not { } creation) { return $"placement '{placement.Id}' shows '{placement.ShownPrototypeId}', which the presentation's document does not hold"; }
-            var copies = (WorldPlacementStamper.IsStaticStamp(placement, creation) || (riding && Rides(placement: placement, creation: creation)));
+            var copies = (WorldPlacementStamper.IsStaticStamp(placement, creation) || (riding && Rides(placement: placement, creation: creation, screens: rows.Screens)));
             if (!copies) { return $"placement '{placement.Id}' is no rigid static copy (animated, inhabited or riding)"; }
             if (Refusal(creation: creation, placement: placement) is { } reason) { return $"placement '{placement.Id}' is no rigid copy ({reason})"; }
         }
@@ -212,11 +212,14 @@ public sealed partial class WorldRigidAssets {
     // whose every response is a rigid creation), which the stamp pool otherwise registers and composes again at every
     // response. A copy this catalog admits the stamp pool leaves alone (WorldCreationInstances.ReconcileSlots).
     private bool CopiesRow(WorldPlacement placement, WorldPrototype creation) =>
-        (WorldPlacementStamper.IsStaticStamp(placement, creation) || (m_staticRiding && Rides(placement: placement, creation: creation)));
+        (WorldPlacementStamper.IsStaticStamp(placement, creation) || (m_staticRiding && Rides(placement: placement, creation: creation, screens: (m_staticDefinition?.Screens ?? []))));
     // Whether the latest reconcile copies riding rows: only a catalog whose owner packs it (Pack) roots them on a body.
     private bool m_staticRiding;
-    private static bool Rides(WorldPlacement placement, WorldPrototype creation) =>
-        ((placement.Attach is not null) && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation));
+    // A row a screen's carry lists stays with the stamp pool: its box draws that screen's material, which a template the
+    // copies of other rows share cannot (WorldCreationInstances.CarriedScreenMaterials).
+    private static bool Rides(WorldPlacement placement, WorldPrototype creation, IReadOnlyList<WorldScreen> screens) =>
+        ((placement.Attach is not null) && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation) &&
+        !WorldScreenCarry.Lists(screens: screens, placementId: placement.Id));
     // Admits the template of one creation a responding row can show, when that creation would be a rigid copy there.
     private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, Dictionary<string, StaticAsset> variants) {
         if ((WorldDefinitionRows.FindCreation(definition.Creations, prototypeId) is not { } creation) || !CopiesRow(placement: placement, creation: creation) || (Refusal(creation: creation, placement: placement) is not null)) { return; }

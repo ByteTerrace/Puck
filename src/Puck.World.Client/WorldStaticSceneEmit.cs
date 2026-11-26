@@ -17,10 +17,12 @@ internal static class WorldStaticSceneEmit {
     /// placement a face belongs to.</param>
     /// <param name="carried">Where a body carries a screen this build (<see cref="WorldCreationInstances.TryCarriedScreen"/>),
     /// or <see langword="null"/> for a build in which every screen stays where it is authored. A carried screen draws no
-    /// slab: its surface is declared at the carried frame, and the carrying look's box shows it.</param>
+    /// slab: its surface is declared at the carried frame, and the carrying box shows it. A placement-carried screen
+    /// nobody carries draws no slab either, its surface declared at its authored frame: its device is the placement's
+    /// creation, which shows no picture then.</param>
     public static void Emit(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, Func<WorldScreen, WorldScreen?>? carried = null) {
         foreach (var screen in screens) {
-            if (carried?.Invoke(arg: screen) is { } held) {
+            if ((carried?.Invoke(arg: screen) ?? ((screen.Carry?.RidesPlacement ?? false) ? screen : null)) is { } held) {
                 _ = builder.ScreenSurface(
                     halfHeight: held.HalfHeight,
                     halfWidth: held.HalfWidth,

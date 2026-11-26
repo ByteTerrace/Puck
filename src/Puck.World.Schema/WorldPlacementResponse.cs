@@ -120,6 +120,20 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ? placement
             : (placement with { Holding = holding }));
     }
+    /// <summary>Returns every prototype a row can show: its authored <see cref="WorldPlacement.PrototypeId"/>, then each
+    /// response's, in authored order. A prototype two entries name is listed twice.</summary>
+    /// <param name="placement">The placement.</param>
+    /// <returns>The prototype ids.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="placement"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<string> Showable(WorldPlacement placement) {
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        yield return placement.PrototypeId;
+
+        foreach (var response in (placement.Respond ?? [])) {
+            yield return response.PrototypeId;
+        }
+    }
     /// <summary>Determines whether the creation a row shows derives a presentation facet: a face, a camera or a
     /// sound, which a presentation reconciles as part of the definition rather than as drawn geometry.</summary>
     /// <param name="definition">The definition whose creations the row resolves against.</param>

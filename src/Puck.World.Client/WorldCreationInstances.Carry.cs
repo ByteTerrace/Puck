@@ -19,9 +19,9 @@ public sealed partial class WorldCreationInstances {
         return ((screen.Carry is { } carry) && TryFindCarrier(carry: carry, client: client, live: out _, shapeSlot: out _));
     }
     /// <summary>Resolves where a carried screen's picture is this frame (<see cref="WorldScreen.Carry"/>): on the front
-    /// face of the carrying look's box, for the first live body wearing that look whose pose frame holding now is the
-    /// carry's pose, read off the latch the last <see cref="PackTransforms"/> left, so the picture rides the box the frame
-    /// draws.</summary>
+    /// face of its anchor's box (the first live body wearing the carry's look whose pose frame holding now is the carry's
+    /// pose, or the first listed attached row riding a live body whose shown creation has the box), read off the latch
+    /// the last <see cref="PackTransforms"/> left, so the picture rides the box the frame draws.</summary>
     /// <param name="screen">The screen row.</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="carried">The screen row at the box's face, its frame and half-extents the box's, or
@@ -66,23 +66,42 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+    // The registration whose box shows a carried screen's picture this frame, and the box's shape slot: for a look carry,
+    // the first live body wearing the look whose latched pose frame is the carry's; for a placement carry, the first
+    // listed attached row whose carrier is live and whose shown creation has the box.
     private bool TryFindCarrier(WorldScreenCarry carry, IWorldStampSource client, out Registration live, out int shapeSlot) {
-        foreach (var candidate in m_pool.AsSpan(0, m_poolCount)) {
-            if (
-                (candidate?.BodyIndex is not { } body) ||
-                !client.IsActive(index: body) ||
-                !string.Equals(a: candidate.Look?.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal) ||
-                (candidate.PoseFrame == 0) ||
-                (candidate.PoseFrame != FrameNumber(document: candidate.Creation.Document, name: carry.Pose)) ||
-                (CarriedShapeSlot(document: candidate.Creation.EngineDocument, carry: carry) is not { } slot)
-            ) {
-                continue;
+        if (carry.Placements is { Count: > 0 } placements) {
+            foreach (var placementId in placements) {
+                if (
+                    m_rowSlots.TryGetValue(key: placementId, value: out var poolIndex) &&
+                    (m_pool[poolIndex] is { Row.Attach: { } attach } candidate) &&
+                    WorldAttachedPose.IsRiding(attach: attach, source: client) &&
+                    (carry.ShapeSlotIn(shapes: candidate.Creation.EngineDocument.Shapes) is { } slot)
+                ) {
+                    live = candidate;
+                    shapeSlot = slot;
+
+                    return true;
+                }
             }
+        } else {
+            foreach (var candidate in m_pool.AsSpan(0, m_poolCount)) {
+                if (
+                    (candidate?.BodyIndex is not { } body) ||
+                    !client.IsActive(index: body) ||
+                    !string.Equals(a: candidate.Look?.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal) ||
+                    (candidate.PoseFrame == 0) ||
+                    (candidate.PoseFrame != FrameNumber(document: candidate.Creation.Document, name: carry.Pose)) ||
+                    (carry.ShapeSlotIn(shapes: candidate.Creation.EngineDocument.Shapes) is not { } slot)
+                ) {
+                    continue;
+                }
 
-            live = candidate;
-            shapeSlot = slot;
+                live = candidate;
+                shapeSlot = slot;
 
-            return true;
+                return true;
+            }
         }
 
         live = null!;
@@ -189,7 +208,7 @@ public sealed partial class WorldCreationInstances {
         return null;
     }
     // The 1-based timeline frame a frame name selects, or 0 for none — the numbering PoseFrame holds.
-    private static int FrameNumber(CreationDocument document, string name) {
+    private static int FrameNumber(CreationDocument document, string? name) {
         var frames = (document.Frames ?? []);
 
         for (var frame = 0; (frame < frames.Count); frame++) {
@@ -200,23 +219,12 @@ public sealed partial class WorldCreationInstances {
 
         return 0;
     }
-    // The shape slot of the box a carry names, or null when the creation has none by that name.
-    private static int? CarriedShapeSlot(CreationDocument document, WorldScreenCarry carry) {
-        var shapes = (document.Shapes ?? []);
-
-        for (var slot = 0; ((slot < shapes.Count)); slot++) {
-            if (string.Equals(a: shapes[slot].Name?.Value, b: carry.Shape, comparisonType: StringComparison.Ordinal)) {
-                return slot;
-            }
-        }
-
-        return null;
-    }
-    // The screen material each shape of a body's look shows instead of its palette's, by shape slot: a carried screen's
+    // The screen material each shape of a registration shows instead of its palette's, by shape slot: a carried screen's
     // box is drawn in that screen's material (SdfProgramBuilder.ScreenMaterialId + 1 + its index), so the picture the
-    // frame poses on it (TryCarriedScreen) shades there. Null when the look carries no screen.
+    // frame poses on it (TryCarriedScreen) shades there. A body's look carries the screens whose carry names the look, an
+    // attached row the screens whose carry lists the row. Null when the registration carries no screen.
     private static int[]? CarriedScreenMaterials(Registration live, IReadOnlyList<WorldScreen>? screens) {
-        if ((screens is null) || (live.Look is not { } look)) {
+        if ((screens is null) || ((live.Look is null) && (live.Row?.Attach is null))) {
             return null;
         }
 
@@ -225,8 +233,8 @@ public sealed partial class WorldCreationInstances {
         foreach (var screen in screens) {
             if (
                 (screen.Carry is not { } carry) ||
-                !string.Equals(a: carry.Look, b: look.Name.Value, comparisonType: StringComparison.Ordinal) ||
-                (CarriedShapeSlot(document: live.Creation.EngineDocument, carry: carry) is not { } slot)
+                !Carries(carry: carry, live: live) ||
+                (carry.ShapeSlotIn(shapes: live.Creation.EngineDocument.Shapes) is not { } slot)
             ) {
                 continue;
             }
@@ -237,4 +245,8 @@ public sealed partial class WorldCreationInstances {
 
         return materials;
     }
+    // Whether a carry's anchor is this registration: its look, or one of the carry's listed rows.
+    private static bool Carries(WorldScreenCarry carry, Registration live) => ((carry.Placements is { Count: > 0 } placements)
+        ? ((live.Row is { Attach: not null } row) && placements.Contains(value: row.Id, comparer: StringComparer.Ordinal))
+        : ((live.Look is { } look) && string.Equals(a: carry.Look, b: look.Name.Value, comparisonType: StringComparison.Ordinal)));
 }
