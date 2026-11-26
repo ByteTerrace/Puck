@@ -56,6 +56,7 @@ public sealed class WorldDeliveryCursor {
     // frame is diffed against when the stream takes its placement rows alone (TryDeliverPlacements).
     private ContentPin? m_rest;
     private IReadOnlyList<WorldPlacement>? m_placements;
+    private byte[]? m_placementsHeader;
     // The field regions of the stream's last document, whether that document kept every field cell of the one before
     // it, and whether it was the stream's first, which its attach primer completes.
     private IReadOnlyList<WorldFieldsSection>? m_fields;
@@ -104,7 +105,7 @@ public sealed class WorldDeliveryCursor {
         var identity = view.Images.DefinitionIdentity(view);
         (m_frame, m_rest) = view.Images.FramePins(view);
         // A stream that holds the identity holds its placements, whichever door brought them.
-        m_placements = view.Images.DisclosedPlacements(view);
+        (m_placements, m_placementsHeader) = view.Images.DisclosedPlacements(view);
         if (identity == m_definition) { if (m_operator != view.IsAuthority) { Seed(view); } return null; }
         m_definition = identity;
         Seed(view);
@@ -165,12 +166,13 @@ public sealed class WorldDeliveryCursor {
     public bool TryDeliverPlacements(WorldRecipientView view, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPresentationRows? rows) {
         rows = null;
         if (!view.Observes || (view.Ceiling != WorldDisclosureTier.Replica) || m_cutOwed || (m_definition is null) || (m_rest is not { } rest) ||
-            (m_placements is not { } held) || (m_operator != view.IsAuthority) ||
-            !view.Images.TryAdvancePlacements(view, rest, held, out rows, out var placements, out var frame, out var identity)) {
+            (m_placements is not { } held) || (m_placementsHeader is not { } heldHeader) || (m_operator != view.IsAuthority) ||
+            !view.Images.TryAdvancePlacements(view, rest, held, heldHeader, out rows, out var placements, out var header, out var frame, out var identity)) {
             return false;
         }
         m_frame = frame;
         m_placements = placements;
+        m_placementsHeader = header;
         m_definition = identity;
         if (rows.Count != 0) { Delivered(); }
         return true;
@@ -325,6 +327,6 @@ public sealed class WorldDeliveryCursor {
     /// sequence continues.</summary>
     public void Release() {
         if (m_seeded) { Cut(); }
-        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false; m_rest = null; m_placements = null;
+        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false; m_rest = null; m_placements = null; m_placementsHeader = null;
     }
 }

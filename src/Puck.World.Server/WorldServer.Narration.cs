@@ -4,6 +4,11 @@ public sealed partial class WorldServer {
     /// <summary>Gets the hub other Server-family components (a peer host, a replay tape, an instance host's row)
     /// narrate and attach client sinks through.</summary>
     internal WorldOutputHub Output => m_output;
+    /// <summary>Gets the disclosure classes of this world's replica session streams, whose binding changes travel this
+    /// world's outbox in order with its deliveries.</summary>
+    internal Puck.World.Client.WorldImageClasses ImageClasses => (m_imageClasses ??= new(route: action => m_output.Route(action: action)));
+
+    private Puck.World.Client.WorldImageClasses? m_imageClasses;
 
     /// <summary>Attaches a sink that receives this server's narration — the same lines it would otherwise write
     /// straight to <see cref="Console.Error"/> — until the process ends or the returned lease is disposed.</summary>

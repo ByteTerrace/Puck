@@ -577,7 +577,7 @@ world's source (`WorldInstanceHost.SourcePaths`) and queues an ordinary
 the binder renders through (the world's own, each view's, each routed and infinity
 scene's), and a scene shown later starts from the reloaded kernels. `world.counters world.boot`
 reports watch pump calls, stamp queries, content reads, and presentation
-deliveries (one per recipient) with the rows and bytes they carried. A value you only want to
+deliveries (one per recipient) with the rows they carried and the bytes a wire encoded them in. A value you only want to
 try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
 and survives a later reload that does not change the same row.
 [The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the

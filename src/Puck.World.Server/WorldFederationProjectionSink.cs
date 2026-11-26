@@ -297,12 +297,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if (!Current()) { return; }
         // A body policy that moved with the edit owes a cut, which the row path refuses so the document door primes it.
         _ = ObserveBodies();
-        if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+        // The wire carries creation and shade rows alone (WorldPresentationRows.TryDeserialize refuses placement rows),
+        // so rows that move placements travel as the whole document.
+        if (rows.MovesPlacements || tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
             DeliverDocument(replaced: true, rows: rows);
         } else if (moved) {
             m_manifestBasis = null;
-            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
+            var payload = rows.Payload;
+            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(payload.Span, tier, Version));
             WorldOutputHub.CountPresentationRows(rows);
+            WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, payload.Length);
         }
     }
 

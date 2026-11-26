@@ -96,13 +96,18 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs and input answers are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:508-511`
+`src/Puck.World.Server/WorldSessionSink.cs:539-540`
+
+```csharp
+            var inputs = WorldOwnedRecords.ForOwner(snapshot.Inputs, m_observation.Session, ref m_inputDisclosure);
+            var answers = WorldOwnedRecords.ForOwner(snapshot.InputAnswers, m_observation.Session, ref m_answerDisclosure);
+```
+
+`src/Puck.World.Server/WorldSessionSink.cs:570-571`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, m_observation.Session, ref m_inputDisclosure),
-                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, m_observation.Session, ref m_answerDisclosure),
 ```
 
 The scene the window joins is fed by the unfiltered attach

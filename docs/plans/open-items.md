@@ -931,29 +931,21 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **Every session mirror applies every snapshot.** The thread that also
-     runs the frame spends about half of its step taking the boot
-     authority's snapshots into the mirrors that observe it
-     (`WorldOutputHub.Collect`, beneath it `WorldSessionMirror.ApplySnapshot`
-     and `WorldDocumentStateView.ApplyFieldCells`): each mirror admits every
-     entry it is handed, about 8,000 entries and 5,000 cells a tick across
-     the sessions (`world.boot.session-entries-delivered` and
-     `session-cells-delivered`), most of them the same bodies for every
-     mirror of one authority. The structure is one image per authority and
-     disclosure that its mirrors share, as a world is resident once however
-     many views show it, and a stream that sends a mirror the bodies that
-     changed. Built: a replica whose frame moved with values alone takes the
-     placement rows that moved through the presentation door
-     (`WorldDeliveryCursor.TryDeliverPlacements`), though the debug world's
-     frame does not move in steady state
-     (`world.disclosure.definition-compositions` flat); a mirror fills and
-     copies its body images by its changed-body journal
-     (`WorldSessionMirror.FillImage`, `CaptureBodyImage`); the portal and
-     seam scans visit the bodies whose answer can move
-     (`WorldBoundaryScan`). Check: `host.frames`' frame thread allocation an
-     iteration (19,056 bytes at the median after these, 35,344 before), and
-     `WorldOutputHub.Collect`'s share of `FixedStepPump.Step`'s samples in a
-     quiet window.
+   - **A leader's stream still composes per tick, and every follower still
+     takes a record.** The sessions of one authority disclosed alike share
+     one image (`WorldImageClasses`): one leader's stream composes and its
+     mirror applies each snapshot, and each follower's stream delivers
+     nothing while its observer presents the leader's mirror
+     (`WorldSessionMirror.Presented`). Left on the host thread: the hub still
+     records the tick's snapshot for every session sink, followers included
+     (`WorldOutputHub.RecordSnapshot`, a loan each), since a session sink is
+     not inline and is judged only when the collect replays it; a sink judged
+     to follow at the fan-out would take no record. Left in presentation: the
+     binder builds one scene per session even where sessions present one
+     mirror. Check: `world.boot.session-entries-delivered` and
+     `session-cells-delivered` a tick fall to one stream per authority and
+     class, `session-snapshots-followed` counts the rest, and `outbox-records`
+     a tick for the followers once they take none.
 
    Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every
