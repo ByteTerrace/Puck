@@ -74,7 +74,8 @@ public sealed class ShaderWorkCountersLawTests {
     public void NamedRowsUseEveryKernelColumnAndTheSameAtomicCarryAsPlainRows() {
         var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
 
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 16u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 18u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkLightsWord = 16u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
         Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);");
