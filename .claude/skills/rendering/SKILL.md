@@ -432,10 +432,14 @@ draws takes that world's demand (`SdfFrameContent.DemandViews`) and its tiers (`
 type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshPathBake`) moves the bake
 identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
-destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
+destination that reserves the region's `GpuRegion.MostBytes` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan's
 `VulkanGpuMappedBuffer`, a sparse buffer whose chunks bind page runs from `VulkanMemoryArena.PlacePages` through
-`VulkanLogicalDevice.BindSparse`). A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
+`VulkanLogicalDevice.QueueSparse`). Every region holds at most `GpuRegion.MostBytes`: `MaxByteCount`, or less where the
+device's storage views span less (`IGpuBindings.MaxStorageBufferBytes`), since its destination binds whole as one view and
+the mesh words door bounds its reads by the view's length. Vulkan holds a view to 2^31 - 1 bytes
+(`VulkanLogicalDevice.StorageViewLengthBytes`): NVIDIA's driver reports 2^32 - 1 but answers `GetDimensions` with zero
+past 2 GiB, so a 4 GiB mesh region drew nothing. `VulkanGpuBindings.WriteBuffer` refuses a longer view. A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
 missing, or `--withhold-gpu mapped-buffers`, which is how the two paths are compared on one machine) answers none and
 keeps a contiguous destination. It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so
@@ -724,7 +728,7 @@ add the row you found.
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
 | Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, taken only while a reading asked (`SdfWorldTables.MarksSelections`), one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
-| Show a world from far away without holding it (a planet from its moon, a neighbour across a seam) | The world's far product (`SdfFarProduct`, built by `SdfMeshCluster` from a settled residency's static draws), drawn by a sky `view` layer with `farProduct: true` through `WorldFarProductEmitter`; products are published and judged by document version in `WorldScreenBinder.Device.Far.cs` | `src/Puck.SdfVm`, `src/Puck.World.Presentation`; [decision](../../../docs/decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product) |
+| Show a world from far away without holding it (a planet from its moon, a neighbour across a seam) | The world's far product (`SdfFarProduct`: read from the mesh store under a name of its static draws' shapes, placements and materials, and derived by `SdfMeshCluster` and `SdfMeshChunks.Bake` from a settled residency's static draws only where the store holds none; its log line says `stored` or `derived`), drawn by a sky `view` layer with `farProduct: true` through `WorldFarProductEmitter`; products are published and judged by document version in `WorldScreenBinder.Device.Far.cs` | `src/Puck.SdfVm`, `src/Puck.World.Presentation`; [decision](../../../docs/decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product) |
 | Let one residency serve viewers of several disclosures (a window whose session is withheld some placements), or keep a draw out of every view but one audience's | A draw's audience tag (`SdfMeshDraw.Audience`, from its rigid copy's `SdfMeshInstance.Audience`, staged at `SdfMeshRecord.AudienceShift`) and a view's audience (`SdfViewSnapshot.Audience`), filtered in the selection kernel from the controls `SdfMeshOcclusion.Stage` writes (its audience argument has no default; a window, mirror or portal seen through a home view takes that view's audience, and cascades select their own viewers' draws only while every view is theirs, `SdfMeshAudience.NeutralOnly` otherwise); a tagged draw is never static, so the far product, the irradiance volume and the distant map hold none. The World's side: `WorldSceneProof.SharesContent`, `WorldPlacementAudiences.Varies`, `WorldAudienceOverlay`, `WorldRigidAssets.AudienceRefusal` | `src/Puck.SdfVm.Model/SdfMeshAudience.cs`, `src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs`; [decision 10](../../../docs/plans/streaming-and-memory.md#decision-10-a-world-is-resident-once-and-an-instance-is-an-overlay-on-it) |
 | Show something where a group's detail has not landed or was refused | The group's floor: planned first on an arrival in view (`SdfMeshDemand.Sees`; one out of view bakes its detail directly, behind the groups in view), kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
@@ -1606,18 +1610,25 @@ paired arithmetic. Carry author-facing parameters through
   buffer kept at a whole region's size costs the process that much working set.
 - Vulkan enables `sparseBinding` and `sparseResidencyBuffer` together only
   with a nonempty sparse queue family, preferring graphics. The device owns
-  a separate binding queue when needed. `VulkanLogicalDevice.BindSparse`
-  checkpoints graphics, binds waiting that value and signaling the next,
-  then submits a graphics wait before returning. Both signals share the
+  a separate binding queue when needed. `VulkanLogicalDevice.QueueSparse`
+  takes a binding (or a checkpoint) from any thread and puts nothing on the
+  queue: the store maps chunks from a residency's pack, which runs beside the
+  frame thread. The queue's door (`GraphicsQueue`, `PresentQueue`, `WaitIdle`
+  and the batch's hand-over) issues every queued operation in order before it
+  hands anything else over (`IssueSparse`): one graphics checkpoint, each bind
+  waiting the value before it, one graphics wait on the last. A checkpoint
+  reads the door before it takes its value (`GpuQueueTimeline.BeforeCheckpoint`),
+  and the door issues nothing inside a checkpoint's signal (`Signaling`), so
+  the timeline's values reach the queue in order. Both signals share the
   device's retirement timeline; a failed bind or join prevents further
   retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
-  both queue arrangements and an open batch. `VulkanGpuMappedBuffer` is the
-  one caller: it returns a chunk's pages and destroys the buffer only through
-  the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the
-  timeline value the door answered, and a bind whose outcome is unknown strands
-  what it covered until the device is torn down. Its unbound chunks are read
-  by no kernel: a mesh word is read only through a record that names a placed
-  mesh.
+  both queue arrangements, an open batch and a binding queued from another
+  thread. `VulkanGpuMappedBuffer` is the one caller: it returns a chunk's pages
+  and destroys the buffer only through the arena's sparse retirement
+  (`VulkanMemoryArena.RetireSparse`), behind the timeline value the issue
+  answered, and a bind whose outcome is unknown strands what it covered until
+  the device is torn down. Its unbound chunks are read by no kernel: a mesh
+  word is read only through a record that names a placed mesh.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
   `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into

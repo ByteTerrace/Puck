@@ -212,6 +212,16 @@ public sealed class IssuedKeySigningOracle : ISigningOracle, IDisposable {
             ) {
                 throw new InvalidOperationException(message: "the issuer returned an identity that is not a current two-binding chain");
             }
+            // A session keeps the namespace it began under: its boot authority, its travelers and its routes all name
+            // it. An issuer that now vouches for the same key under another root or subject (its root was replaced, or
+            // the sign-in resolved to someone else) has ended this session, and no claim is signed under the new name.
+            if (
+                (m_current is { } began) &&
+                (!string.Equals(a: began.Identity.Domain, b: issued.Domain, comparisonType: StringComparison.Ordinal) ||
+                 !string.Equals(a: began.Identity.Subject, b: issued.Subject, comparisonType: StringComparison.Ordinal))
+            ) {
+                throw new InvalidOperationException(message: $"the issuer now vouches for this run as '{issued.Domain}/{issued.Subject}', and the session began as '{began.Identity.Domain}/{began.Identity.Subject}'; a session keeps the namespace it began under, so this one has ended and the client must be started again to join");
+            }
             m_current = (issued, now);
 
             return issued;

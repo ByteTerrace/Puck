@@ -29,6 +29,12 @@ public sealed partial class WorldInstanceHost {
     // monotonic without advancing the idle boot server's own simulation state.
     private ulong m_idleClientTicks;
     private ulong m_lastBootInputTick;
+    // Local seats whose traveler a remote authority answered had ended there, queued by the route's observer thread and
+    // returned home on the host loop.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<int> m_endedSeatRoutes = new();
+    // For each local seat that follows a traveler at a remote authority, the identity it travelled as, which it is
+    // seated as again when it returns as a new body.
+    private readonly string?[] m_routedSeatIdentities = new string?[WorldBodiesLimits.LocalSeatCount];
 
     /// <summary>How long, in seconds of the destination's time, a joining seat's reservation holds its slot. A host
     /// that joins at boot can take seconds to step its own first ticks, and a reservation that lapsed before its commit
@@ -136,6 +142,64 @@ public sealed partial class WorldInstanceHost {
         if (m_remoteJoin is null) { return; }
         foreach (var member in members) {
             if (((uint)member.SourceSlot) < ((uint)m_remoteJoinTried.Length)) { m_remoteJoinTried[member.SourceSlot] = 0; }
+        }
+    }
+
+    // Returns home every local seat whose remote authority answered that its traveler had ended. Runs on the host loop.
+    private void ReturnEndedSeats() {
+        while (m_endedSeatRoutes.TryDequeue(result: out var slot)) {
+            ReturnSeatHome(seat: true, slot: slot);
+        }
+    }
+
+    /// <summary>Brings a local seat back from a remote authority that no longer holds its traveler
+    /// (<see cref="Server.WorldTransferStatus.Ended"/>, <see cref="Server.WorldFederationRefusal.SessionEnded"/>): retires the route
+    /// the seat followed and points the seat at the boot world again. The seat's next join there is a first entry.
+    /// A seat that already stands in the boot world is left as it is. Call on the host loop's thread.</summary>
+    /// <param name="slot">The local seat.</param>
+    /// <param name="seat">Whether to seat the player in the boot world as a new body: <see langword="true"/> when the
+    /// seat's body had been handed over for good, <see langword="false"/> when the caller restored the body the seat
+    /// left with.</param>
+    public void ReturnSeatHome(int slot, bool seat) {
+        if (
+            (Boot is not { } boot) ||
+            (((uint)slot) >= ((uint)Math.Min(val1: m_seats.SeatCount, val2: m_routedSeatIdentities.Length))) ||
+            (m_seats.RoutedEndpoint(slot: slot) is not { } location) ||
+            string.Equals(a: location.Identity, b: BootInstanceName, comparisonType: StringComparison.Ordinal)
+        ) {
+            return;
+        }
+        m_seats.ClearHeld(slot: slot);
+
+        var seated = string.Empty;
+
+        if (seat) {
+            var reply = boot.Server.ApplySession(request: new Protocol.SessionRequest.Join(
+                IdentityName: m_routedSeatIdentities[slot],
+                Principal: Principal.Seat(slot: slot),
+                Slot: slot,
+                WireProtocolKey: Protocol.WorldProtocol.WireProtocolKey
+            ));
+
+            seated = (reply.Accepted ? ", seated again as a new body" : $", and its seat could not be taken again ({reply.Reason})");
+        }
+        m_seats.PublishRoute(
+            endpoint: EndpointFor(instance: boot),
+            entity: new Protocol.WorldEntityAddress(
+                Authority: boot.Server.AuthorityIdentity,
+                Generation: boot.Server.Population.Generation(index: slot),
+                Index: slot
+            ),
+            slot: slot
+        );
+        RetireTravelerRoute(location: location);
+        m_routedSeatIdentities[slot] = null;
+        m_remoteJoinTried[slot] = 0;
+        if (m_narration.HasNarrationSink) {
+            m_narration.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: seat {(slot + 1)} returned to '{BootInstanceName}': its traveler ended at '{location.Identity}'{seated}]"
+            );
         }
     }
 

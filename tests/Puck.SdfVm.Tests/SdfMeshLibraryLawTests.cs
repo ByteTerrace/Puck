@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.SignedDistance;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -393,7 +392,7 @@ public sealed class SdfMeshLibraryLawTests {
         // The baking group carries 10 at its one place; 7 is an id none of its shapes owns.
         Assert.True(condition: store.Write(geometry: geometry, identity: identity, materials: [10], mesh: Mesh(materials: [10u, 7u, 10u])));
 
-        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator(), store: store);
 
         Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [7], mesh: out var first, refusal: out _, declined: out _));
         Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [20], mesh: out var second));
@@ -419,7 +418,7 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True(condition: store.TryRead(geometry: geometry, identity: identity, materials: out _, mesh: out var arrays, refusal: out _));
         Assert.NotNull(@object: arrays);
 
-        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator(), store: store);
 
         Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var native, refusal: out _, declined: out _));
         Assert.NotNull(@object: native);
@@ -441,7 +440,7 @@ public sealed class SdfMeshLibraryLawTests {
         // The entry numbers materials by place, so a group whose ids are its places reads back the ids it stored.
         var source = (chunked ? SdfMeshChunks.Join(chunks: [Piece(first: 0u, offset: 0f, second: 1u, skinned: false), Piece(first: 0u, offset: 3f, second: 1u, skinned: false)]) : Piece(first: 0u, offset: 0f, second: 1u, skinned: true));
 
-        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator(), store: store);
 
         var stored = library.Store(geometry: geometry, identity: identity, materials: [0, 1], mesh: source);
 

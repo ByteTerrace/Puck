@@ -17,6 +17,11 @@ namespace Puck.World.Server;
 /// <param name="Floors">Each source namespace's highest settled floor.</param>
 /// <param name="Custody">Every custody record the authority folded, in fold order
 /// (<see cref="WorldCompanionCustody.History"/>); a restore folds them again through the same reducer.</param>
+/// <param name="RewindBaseline">The authority namespaces of the closed rewind group this image is a recovery point
+/// of, or empty for an ordinary image. Restoring an image that carries them ends every traveler minted outside them
+/// and every row of a source outside them, inside the restore, so each reader of the same bytes restores the same
+/// world. A live capture never sets it; only a recovery point's capture does
+/// (<see cref="WorldReleaseRewindBoundary.Baseline"/>).</param>
 public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
     IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
@@ -27,8 +32,12 @@ public sealed record WorldTransferEscrowCheckpoint(
     ulong CrossingSequence,
     IReadOnlyList<(WorldTransferKey Key, bool Committed, bool Durable)> SpentKeys,
     IReadOnlyList<(string SourceAuthority, ulong Floor)> Floors,
-    IReadOnlyList<WorldCrossingRecord>? Custody = null
+    IReadOnlyList<WorldCrossingRecord>? Custody = null,
+    IReadOnlyList<string>? RewindBaseline = null
 ) {
     /// <summary>Gets every custody record the authority folded, in fold order.</summary>
     public IReadOnlyList<WorldCrossingRecord> Custody { get; init; } = (Custody ?? []);
+    /// <summary>Gets the authority namespaces of the closed rewind group this image is a recovery point of, or empty
+    /// for an ordinary image.</summary>
+    public IReadOnlyList<string> RewindBaseline { get; init; } = (RewindBaseline ?? []);
 }

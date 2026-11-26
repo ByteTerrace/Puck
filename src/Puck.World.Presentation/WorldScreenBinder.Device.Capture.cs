@@ -15,11 +15,13 @@ namespace Puck.World;
 public sealed partial class WorldScreenBinder {
     // Samples only already-completed compositor frames. A miss holds the last frame. An ended compositor session is
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected
-    // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the D3D12 GPU
+    // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the GPU
     // transport the platform copies GPU-side into shared textures — the CPU surface is never converted, only its
-    // divided-cadence readback frames feed the room glow. An SDR display's B8G8R8A8 copies are sampled directly; an HDR
-    // display's half-float scRGB copies convert on the device into working values at the host's paper white
-    // (ConvertGpuFrame), so neither is read back. Elsewhere the CPU path converts the captured pixels.
+    // divided-cadence readback frames feed the room glow. An SDR display's B8G8R8A8 copies are sampled directly (on a
+    // Vulkan host through the imports of the same textures); an HDR display's half-float scRGB copies convert on the
+    // Direct3D 12 device into working values at the host's paper white (ConvertGpuFrame), so neither is read back. A
+    // Vulkan host's HDR display, and a render device that refuses the shared textures, take the CPU path, which converts
+    // the captured pixels.
     private void CaptureWindow(CaptureFeed feed, in FrameContext context) {
         feed.Ended = false;
 
@@ -42,41 +44,44 @@ public sealed partial class WorldScreenBinder {
             build: 10240
         )
         ) {
-            EnsureGpuTargets(
+            if (EnsureGpuTargets(
                 deviceContext: deviceContext,
                 feed: feed
-            );
+            )) {
+                var hdr = feed.Source!.Output.IsHdr;
 
-            var hdr = feed.Source!.Output.IsHdr;
+                // The divided-cadence CPU frames the platform still reads back keep the AverageColor glow alive with no
+                // full per-frame readback; never publish them (the sampled handle is the GPU slot, or its conversion,
+                // not this surface).
+                if (
+                    feed.Source!.TryCapture(surface: out var glowSurface) &&
+                    glowSurface.IsCpuPixels
+                ) {
+                    feed.Light = (hdr
+                        ? WorldImageLight.AverageScRgb(
+                            paperWhiteNits: m_paperWhiteNits,
+                            rgba: glowSurface.Pixels.Span
+                        )
+                        : WorldImageLight.Average(bgra: glowSurface.Pixels.Span));
+                }
+                if (hdr) {
+                    ConvertGpuFrame(
+                        context: in context,
+                        feed: feed
+                    );
+                }
 
-            // The divided-cadence CPU frames the platform still reads back keep the AverageColor glow alive with no
-            // full per-frame readback; never publish them (the sampled handle is the GPU slot, or its conversion, not
-            // this surface).
-            if (
-                feed.Source!.TryCapture(surface: out var glowSurface) &&
-                glowSurface.IsCpuPixels
-            ) {
-                feed.Light = (hdr
-                    ? WorldImageLight.AverageScRgb(
-                        paperWhiteNits: m_paperWhiteNits,
-                        rgba: glowSurface.Pixels.Span
-                    )
-                    : WorldImageLight.Average(bgra: glowSurface.Pixels.Span));
-            }
-            if (hdr) {
-                ConvertGpuFrame(
-                    context: in context,
-                    feed: feed
+                // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
+                feed.Fault = (feed.Live
+                    ? null
+                    : $"{feed.Label} awaiting a compositor frame"
                 );
+
+                return;
             }
-
-            // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
-            feed.Fault = (feed.Live
-                ? null
-                : $"{feed.Label} awaiting a compositor frame"
-            );
-
-            return;
+        } else if (feed.GpuTargets is not null) {
+            // The source now takes the CPU route (a Vulkan host's display turned HDR): the ring has no producer left.
+            feed.ReleaseGpuTargets();
         }
 
         var output = feed.Source!.Output;
@@ -106,18 +111,12 @@ public sealed partial class WorldScreenBinder {
         if (
             (revision == feed.ConvertedRevision) ||
             (feed.GpuTargets is not { } ring) ||
-            !ring.TryAcquire(
-                frame: out var frame,
-                image: out var image
-            )
+            !ring.TryAcquire(frame: out var frame)
         ) {
             return;
         }
-        if (image is null) {
-            frame.Retire();
 
-            return;
-        }
+        var image = frame.Image;
 
         if (feed.Pixels.Convert(
             color: ImageColorEncoding.Of(colorSpace: source.Output.ColorSpace),
@@ -142,9 +141,12 @@ public sealed partial class WorldScreenBinder {
     // for an SDR display, half-float RGBA for an HDR one. Reallocates on a resize
     // (GpuTargetsOutdated) or a reacquired source; AttachGpuTargets replaces first, then the superseded ring retires,
     // disposed with its fence once no submitted frame samples it. Cadence-gated by the caller, so it never runs per
-    // render frame.
+    // render frame. The ring is provisioned through the one door every platform producer's ring uses
+    // (TryProvisionSharedRing: the camera's, the probes' and this), so a Vulkan host imports it as it imports a camera's.
+    // Returns whether the feed rides the ring: false once the render device refuses it (the feed is then marked, and takes
+    // the CPU route), true otherwise, including while the source has not yet reported an extent.
     [SupportedOSPlatform("windows10.0.10240")]
-    private void EnsureGpuTargets(CaptureFeed feed, IGpuDeviceContext deviceContext) {
+    private bool EnsureGpuTargets(CaptureFeed feed, IGpuDeviceContext deviceContext) {
         var source = feed.Source!;
         var width = source.SourceWidth;
         var height = source.SourceHeight;
@@ -154,7 +156,7 @@ public sealed partial class WorldScreenBinder {
             (width <= 0) ||
             (height <= 0)
         ) {
-            return;
+            return true;
         }
 
         if (
@@ -165,55 +167,76 @@ public sealed partial class WorldScreenBinder {
             objB: source
         )
         ) {
-            return;
+            return true;
         }
 
-        var export = SurfaceExports.ExporterOn(device: deviceContext);
-        var images = new IGpuExportableImage[SharedTargetCount];
-        var handles = new nint[images.Length];
-
-        for (var i = 0; (i < images.Length); ++i) {
-            images[i] = export.CreateSimultaneousAccessImage(
-                format: source.Output.Format,
-                height: ((uint)height),
-                width: ((uint)width)
+        if (!TryProvisionSharedRing(
+            adapterLuid: (m_renderAdapterLuid ?? 0L),
+            deviceContext: deviceContext,
+            fault: out var fault,
+            fence: out var fence,
+            format: source.Output.Format,
+            height: height,
+            images: out var images,
+            importedSurfaces: out var surfaces,
+            imports: out var imports,
+            sharedFence: true,
+            width: width
+        )) {
+            return RefuseGpuTargets(
+                fault: fault,
+                feed: feed
             );
-            handles[i] = images[i].SharedHandle;
         }
 
-        // The fence the platform signals after each copy, whose value the frame that samples a slot waits for on the GPU,
-        // and the publication the platform reserves and publishes slots through and the frames acquire them from.
+        // The publication the platform reserves and publishes slots through and the frames acquire them from.
         var slots = new LatestSlotPublication();
 
-        slots.Configure(targetCount: images.Length);
+        slots.Configure(targetCount: images.Count);
 
         var ring = new SharedTargetRing(
-            fence: SharedRingFence.Create(
-                export: export,
-                hostsOnDirectX: true,
-                renderDevice: deviceContext
-            ),
+            fence: fence,
             images: images,
-            importedSurfaces: null,
-            imports: null,
+            importedSurfaces: surfaces,
+            imports: imports,
             ring: slots,
-            targetDevice: null
+            targetDevice: m_cameraTargetDevice
         );
         var superseded = feed.GpuTargets;
 
         // Attach first (the platform contract: attach swaps the targets in safely), then retire the old ring: its images
         // and fence go once the last submitted frame sampling them has retired its lease.
-        source.AttachGpuTargets(targets: new NativeImageGpuCaptureTargets(
-            Format: source.Output.Format,
-            SharedTargetHandles: handles,
-            Width: width,
-            Height: height,
-            Slots: slots,
-            SharedFenceHandle: ring.ProducerFenceHandle
-        ));
+        try {
+            source.AttachGpuTargets(targets: new NativeImageGpuCaptureTargets(
+                Format: source.Output.Format,
+                SharedTargetHandles: ring.SharedHandles,
+                Width: width,
+                Height: height,
+                Slots: slots,
+                SharedFenceHandle: ring.ProducerFenceHandle
+            ));
+        } catch (Exception exception) {
+            ring.Retire();
+
+            return RefuseGpuTargets(
+                fault: exception.Message,
+                feed: feed
+            );
+        }
+
         feed.GpuTargets = ring;
         feed.GpuAttachedSource = source;
         superseded?.Retire();
+
+        return true;
+    }
+    // Marks a feed's render device as unable to take its shared targets, so it keeps to the CPU route, and says why once.
+    private bool RefuseGpuTargets(CaptureFeed feed, string fault) {
+        Console.Error.WriteLine(value: $"[capture] GPU transport refused for {feed.Label} ({fault}); using the CPU route.");
+        feed.GpuRefused = true;
+        feed.ReleaseGpuTargets();
+
+        return false;
     }
     // Hands a capture source instance the capture a live verb parked for equal settings, if one is waiting.
     private bool TryClaimParkedCapture(WorldScreenSource.Producer source, [NotNullWhen(returnValue: true)] out CaptureFeed? capture) {
@@ -287,8 +310,9 @@ public sealed partial class WorldScreenBinder {
         public bool Live => (SamplesRing
             ? ((GpuTargets?.LatestHandle() ?? 0) != 0)
             : Pixels.Captured);
-        // Whether this feed rides the GPU transport: on that host, whatever display the source captures.
-        public bool RidesGpu => GpuRoute;
+        // Whether this feed rides the GPU transport: on a host that exports shared surfaces, unless the render device refused
+        // them or the source is an HDR display on a host that cannot convert its copies (HdrOnGpu).
+        public bool RidesGpu => (GpuRoute && !GpuRefused && (HdrOnGpu || !(Source?.Output.IsHdr ?? false)));
         // Whether a frame samples the platform's GPU copy directly: an SDR display's B8G8R8A8 copy. An HDR display's
         // half-float scRGB copy converts on the device into Pixels first.
         public bool SamplesRing => (RidesGpu && !(Source?.Output.IsHdr ?? false));
@@ -325,6 +349,7 @@ public sealed partial class WorldScreenBinder {
         }
         public void NotifyDeviceLost() {
             Pixels.OnDeviceLost();
+            GpuRefused = false;
             ReleaseGpuTargets();
             ConvertedRevision = -1L;
             Cadence.Rearm();
@@ -342,6 +367,7 @@ public sealed partial class WorldScreenBinder {
             Pixels.Forget();
             ConvertedRevision = -1L;
             Fault = null;
+            GpuRefused = false;
 
             INativeImageCaptureFeed? next;
             var reacquired = ((MonitorIndex is { } monitor)

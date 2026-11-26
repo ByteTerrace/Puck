@@ -8651,6 +8651,10 @@ export type WorldGravityOrbit = {
    * The speed, in world units per second, at which a body away from the orbit closes on it once it rides again, on top of the orbit's own motion: it catches the rails rather than jumping onto them. Zero, the default, puts the body on the orbit at once.
    */
   joinSpeed?: number;
+  /**
+   * A Fixed state row whose value's fractional part is the orbit's phase, in place of the engine tick: one whole unit of the row is one turn, and Phase is added to it. The row is the orbit's clock, so a row another world owns and this one follows places the orbit where that world's clock says, and writing or holding the row moves or holds the body. PeriodSeconds then states the period the row's own advance gives and places nothing. Absent reads the engine tick.
+   */
+  phaseBy?: string | null;
 };
 
 export type WorldGravityPoint = {
@@ -12193,6 +12197,10 @@ export type WorldRenderLightDirectional = {
    * The light's colour as a black body's at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.
    */
   temperature?: BindableScalar;
+  /**
+   * The body the light comes from, a place in the world's frame: the light's direction is then toward that place from where the viewer stands, its illuminance falls with the square of the distance, and its angular radius is the body's as seen from there. Absent is a light at infinity, which Direction alone places.
+   */
+  source?: WorldRenderLightSource | null;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -12230,6 +12238,40 @@ export type WorldRenderLightOccluder = {
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
+};
+
+/**
+ * A closed-form orbit a light's source rides: the conic a gravity.orbits row of the same elements places a body on (WorldGravityOrbit), read on a presentation clock, so a recipient that holds the render section and the clock places the source with no simulation state.
+ */
+export type WorldRenderLightOrbit = {
+  /**
+   * The clock, by name in the timeline section, whose phase is the orbit's: one turn of the clock is one period.
+   */
+  clock: string;
+  /**
+   * The positive semi-major axis, in metres.
+   */
+  semiMajorAxis: number;
+  /**
+   * The eccentricity, zero for a circle and below FixedConicOrbit.MaxEccentricity.
+   */
+  eccentricity?: number;
+  /**
+   * The tilt of the orbit's plane from the world's XZ plane, about its line of nodes.
+   */
+  inclinationDegrees?: number;
+  /**
+   * The heading of the line of nodes about +Y from +X.
+   */
+  ascendingNodeDegrees?: number;
+  /**
+   * The angle in the plane from the line of nodes to the periapsis.
+   */
+  periapsisDegrees?: number;
+  /**
+   * The fraction of a turn past the periapsis at the clock's phase zero.
+   */
+  phase?: number;
 };
 
 /**
@@ -12298,6 +12340,28 @@ export type WorldRenderLightRim = {
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
+};
+
+/**
+ * The body a directional light comes from (Source): a sphere standing at a place of the world's frame, or riding closed-form orbits about that place. Each frame the presentation reads where the body stands and where the frame's first view stands, and from the two derives the light's direction (toward the body), its illuminance (the authored illuminance at Distance, falling with the square of the distance) and, for a light that authors no angular radius, the angular radius the body shows. A sun disc drawn about the light that authors no radius shows the same angular radius, so the disc is the body's own outline wherever the body's geometry is too far to draw. While no view has been placed, or an orbit's clock reads no phase, the light keeps its authored direction and illuminance.
+ */
+export type WorldRenderLightSource = {
+  /**
+   * Where the body stands, or the focus of the first of its Orbits, in the world's coordinates. Absent is the origin.
+   */
+  position?: DocumentVector3;
+  /**
+   * The orbits the body rides, at most MaxOrbits: the first about Position, and each further one about the point the orbits before it reach, so a star of a pair rides the pair's orbit and then its own about their common centre. Absent stands still.
+   */
+  orbits?: (WorldRenderLightOrbit | null)[] | null;
+  /**
+   * The body's radius, in metres, zero or more. Zero is a point, which shows no size.
+   */
+  radius?: number;
+  /**
+   * The distance from the body, in metres, at which the light gives its authored illuminance. Absent is the first orbit's semi-major axis; absent with no orbit, the light gives its authored illuminance at every distance.
+   */
+  distance?: number | null;
 };
 
 /**
@@ -13135,7 +13199,7 @@ export type WorldRenderSkyLayerSunDisc = {
    */
   light?: number | null;
   /**
-   * The disc's angular half-radius, in (0, π/2] radians. Absent is the engine default.
+   * The disc's angular half-radius, in (0, π/2] radians. Absent is the angular radius of the body its light comes from (WorldRenderLightSource), or the engine default for a light that names no body with a size.
    */
   radius?: BindableAngle;
   /**
@@ -13154,6 +13218,10 @@ export type WorldRenderSkyLayerSunDisc = {
    * The texture body shape: the screen whose image the disc shows. Absent is the glow.
    */
   texture?: WorldRenderSkyTexture | null;
+  /**
+   * The name of the directional light the disc is drawn about, which outranks Light: a name stays true when another document's lights merge in ahead of it. A name no directional light carries draws nothing.
+   */
+  follows?: string | null;
   layerName?: string | null;
   /**
    * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.

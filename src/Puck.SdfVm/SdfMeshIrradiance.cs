@@ -145,18 +145,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_volumeOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(
         name: "sdf.mesh-gi.volume", memoryClass: MemoryClass.Elastic);
     // The allocator the volume's slot words, the batches' hit and light blocks and the hit words a batch passes through
-    // take their storage from, so none of them lives on the large object heap; null (offline callers) rents them from
-    // RentedArrays.
+    // take their storage from, so none of them lives on the large object heap; null (offline callers) takes the
+    // process's (ProcessAllocator).
     private readonly IAllocator? m_allocator;
 
     /// <summary>Registers the probe cache's sampled storage in the process account.</summary>
     /// <param name="allocator">The native allocator the volume's large storage comes from (the residency's mesh library's),
-    /// or null to rent it from the managed pool.</param>
+    /// or null for the process's.</param>
     public SdfMeshIrradiance(IAllocator? allocator = null) {
         m_allocator = allocator;
         m_levels = CreateLevels(blocks: m_blocks);
         m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.Managed, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
-        m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: ((allocator is null) ? MemoryBacking.Managed : MemoryBacking.NativeAllocator), memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
+        m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
     }
 
     // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
@@ -223,6 +223,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             foreach (var level in m_levels) { level.Cache.Clear(); }
             RetireVolume(next: VolumeWords.None);
             m_volumeOwner.Dispose();
+            m_gpuAnswer?.Dispose();
+            m_gpuAnswer = null;
         }
         ReclaimReleased(attempt: 0);
     }
@@ -2802,8 +2804,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Gives back the GPU answers' array the batch's selections, traces and relights reused.
     private void BatchEnded() {
-        if (m_gpuAnswer.Length > 0) { RentedArrays.Return(array: m_gpuAnswer); }
-        m_gpuAnswer = [];
+        m_gpuAnswer?.Free();
     }
     private void BatchTraced(BatchBlocks blocks, List<Candidate> candidates, int first, int count, Lighting lighting, ParallelOptions parallel, int pass, in Snapshot snapshot,
         ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, OwnedBuffer<uint>? rentedHits) {

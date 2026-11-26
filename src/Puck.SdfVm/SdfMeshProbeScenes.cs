@@ -197,7 +197,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
                     var need = ((long)m_arena.Words * sizeof(uint));
 
                     if (need > m_region.ByteCount) {
-                        var replaced = m_region.Grow(byteCount: (sizeof(uint) * GpuCapacity.Headroom(required: m_arena.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8)));
+                        var replaced = m_region.Grow(byteCount: (sizeof(uint) * GpuCapacity.Headroom(required: m_arena.Words, ceiling: (m_region.MostBytes / sizeof(uint)), divisor: 8)));
 
                         // The carry out of the replaced buffer is recorded below into an upload that is submitted only
                         // at its residency's CloseUpload, after other residencies' uploads have opened and polled this

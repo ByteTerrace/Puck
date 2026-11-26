@@ -208,20 +208,22 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
                 throw new InvalidDataException(message: $"'{row.Key}' rewind checkpoint tick differs from its inventory");
             }
             checkpoints.Add(item: checkpoint);
+            // The same inventory an activation and a capture hold: the row's name and its declared namespace.
             using var document = JsonDocument.Parse(checkpoint.Server.DefinitionJson);
-
-            if (
+            var declared = ((
                 document.RootElement.TryGetProperty(
                 propertyName: "host",
                 value: out var host
             ) &&
                 host.TryGetProperty(
-                propertyName: "authority",
+                propertyName: "authorityNamespace",
                 value: out var authority
             ) &&
-                (authority.ValueKind == JsonValueKind.String) &&
-                (authority.GetString() is { Length: > 0 } name)
-            ) { authorities.Add(item: name); }
+                (authority.ValueKind == JsonValueKind.String))
+                ? authority.GetString()
+                : null);
+
+            authorities.UnionWith(other: WorldReleaseRewindBoundary.Authorities(world: row.Key, authorityNamespace: declared));
             ticks.Add(
                 key: row.Key,
                 value: current.Root.DurableTick

@@ -191,6 +191,16 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator, IRemoteIdentity
         // above. What the connection rests on afterwards is the trust that vouched for the key: the chain's bindings
         // for a vouched key, the unchanged trust row for a pinned one. A session therefore lasts until a binding ends
         // or the trust rows change, never only until the claim would be too old to present again.
-        return new(new VerifiedPeerIdentity(authority, result.BindingValidThrough, TrustIsCurrent));
+        // The session is typed from what was verified: the signed suffix, and whether a root vouched for the signer.
+        var session = ((sessionSuffix is null)
+            ? null
+            : new VerifiedSession(
+                Domain: claim.Header.Domain,
+                Run: sessionSuffix,
+                Subject: subject,
+                Vouched: (result.TrustEntry?.Mode == AttestationTrustMode.Vouches)
+            ));
+
+        return new(new VerifiedPeerIdentity(authority, result.BindingValidThrough, TrustIsCurrent, Session: session));
     }
 }

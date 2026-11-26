@@ -139,7 +139,7 @@ demand and priority rather than creating executors.
   a miss ([machine budgets are bytes](rendering.md)), and a device that
   refuses a growth lowers the budget instead of ending the World. A mesh
   region's limit is what its grant reserved for it
-  (`SdfResidencyGrant.ReserveGrowth`), never past `GpuRegion.MaxByteCount`,
+  (`SdfResidencyGrant.ReserveGrowth`), never past the region's `GpuRegion.MostBytes`,
   and the residency's detail budget never passes the limit's share
   (`SdfResidencyGrant.Budget`): a list the region would refuse presses the
   budget, so the bake coarsens detail before it leaves a hole, on every

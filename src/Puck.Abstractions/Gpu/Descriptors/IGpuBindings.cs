@@ -22,6 +22,10 @@ public interface IGpuBindings {
 
     /// <summary>Gets the largest constant-buffer view in bytes on the current device.</summary>
     ulong MaxConstantBufferBytes { get; }
+    /// <summary>Gets the largest storage-buffer view in bytes on the current device whose length a kernel reads back
+    /// (<c>GetDimensions</c>): a buffer bound whole as storage, a region's destination and staging ring among them
+    /// (<see cref="GpuRegion.MostBytes"/>), spans at most this.</summary>
+    ulong MaxStorageBufferBytes { get; }
 
     /// <summary>The one check uniform regions and descriptor writes make: a view fits the device and is a non-zero
     /// multiple of <see cref="ConstantBufferAlignment"/>.</summary>
@@ -102,7 +106,8 @@ public interface IGpuBindings {
     /// <param name="descriptorSetHandle">The descriptor set to write into.</param>
     /// <param name="binding">The binding index within the set.</param>
     /// <param name="bufferHandle">The native buffer handle.</param>
-    /// <param name="bufferSize">The viewed size in bytes, a multiple of four and of <paramref name="elementStride"/>.</param>
+    /// <param name="bufferSize">The viewed size in bytes, a multiple of four and of <paramref name="elementStride"/>, at
+    /// most <see cref="MaxStorageBufferBytes"/>.</param>
     /// <param name="kind">The binding's kind, <see cref="GpuBindingKind.ReadOnlyBuffer"/> or
     /// <see cref="GpuBindingKind.ReadWriteBuffer"/>, as its shader declaration reads or writes the buffer.</param>
     /// <param name="elementStride">The size in bytes of the element the shader declares, or zero for a raw view.</param>
@@ -110,7 +115,8 @@ public interface IGpuBindings {
     /// <param name="offsetBytes">The byte offset into the buffer the view starts at: a multiple of
     /// <paramref name="elementStride"/> (four for a raw view) and, on Vulkan, of the device's
     /// <c>minStorageBufferOffsetAlignment</c> (<see cref="GpuDeviceCapabilities.StorageBufferOffsetAlignment"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a storage-buffer kind.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a storage-buffer kind, or
+    /// <paramref name="bufferSize"/> passes <see cref="MaxStorageBufferBytes"/>.</exception>
     void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement = 0, ulong offsetBytes = 0);
     /// <summary>Writes a constant buffer descriptor into a group's set: the buffer a <c>ConstantBuffer&lt;T&gt;</c>
     /// declaration of a <see cref="GpuBindingKind.ConstantBuffer"/> binding reads, from its first byte.</summary>

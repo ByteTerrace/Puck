@@ -34,7 +34,8 @@ namespace Puck.SdfVm;
 /// </summary>
 public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <summary>The most bytes the region can hold on any device, a whole number of words
-    /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of the limit its grant reserves for it.</summary>
+    /// (<see cref="GpuRegion.MaxByteCount"/>): the arena's address range. The limit the grant reserves for the region is
+    /// held to what the region holds on its own device (<see cref="GpuRegion.MostBytes"/>), which may be less.</summary>
     public const ulong MostBytes = ((ulong)GpuRegion.MaxByteCount);
     /// <summary>The unit a region that grows by replacement is rounded up to: 16 MiB. A mapped region rounds to its chunk
     /// instead.</summary>

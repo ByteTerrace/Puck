@@ -34,29 +34,62 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
         using var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi(), new VkQueue(familyIndex: 1, handle: bindingQueue));
         var queue = new VulkanGpuQueueSubmitter(new Context(logical: logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+        ulong? mapped = null;
 
+        // A binding queued from another thread puts nothing on the queue there: the native calls would land on that
+        // thread, whose call log is null.
         queue.BeginBatch();
         queue.Submit(commandBufferHandles: [42]);
-        var mapped = logical.BindSparse(77, [new VkSparseMemoryBind { Memory = 88, MemoryOffset = 131072, ResourceOffset = 65536, Size = 65536 }]);
+        var other = new Thread(start: () => logical.QueueSparse(77, [new VkSparseMemoryBind { Memory = 88, MemoryOffset = 131072, ResourceOffset = 65536, Size = 65536 }], settled: value => mapped = value));
 
-        Assert.Equal(actual: mapped, expected: 2UL);
+        other.Start();
+        other.Join();
         queue.Submit(commandBufferHandles: [43]);
+        Assert.Empty(collection: SparseCalls);
+        Assert.Null(mapped);
+
+        // The hand-over the door makes issues it first, so every deferred submission reaches the queue behind the bind.
+        _ = logical.GraphicsQueue;
+        Assert.Equal(actual: mapped, expected: 2UL);
         Assert.Equal(3UL, queue.Timeline.Checkpoint());
         Assert.Equal(actual: SparseCalls, expected: [
-            "submit 31 commands=1 wait=0 signal=0", "submit 31 commands=0 wait=0 signal=1",
+            "submit 31 commands=0 wait=0 signal=1",
             $"bind {bindingQueue} wait=1 signal=2 buffer=77 range=65536+65536 memory=88+131072",
-            "submit 31 commands=0 wait=2 signal=0", "submit 31 commands=1 wait=0 signal=0",
+            "submit 31 commands=0 wait=2 signal=0", "submit 31 commands=1 wait=0 signal=0", "submit 31 commands=1 wait=0 signal=0",
             "submit 31 commands=0 wait=0 signal=3",
         ]);
         SparseCalls.Clear();
-        var unmapped = logical.BindSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536 }]);
 
-        Assert.Equal(actual: unmapped, expected: 5UL);
-        Assert.Contains(collection: SparseCalls, expected: $"bind {bindingQueue} wait=4 signal=5 buffer=77 range=65536+65536 memory=0+0");
+        // Operations issue in the order queued, each binding waiting the one before it, and a checkpoint hears the last.
+        ulong? unmapped = null;
+        ulong? rebound = null;
+        ulong? checkpointed = null;
+
+        logical.QueueSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536 }], settled: value => unmapped = value);
+        logical.QueueSparse(0, null, settled: value => checkpointed = value);
+        logical.QueueSparse(77, [new VkSparseMemoryBind { Memory = 89, ResourceOffset = 65536, Size = 65536 }], settled: value => rebound = value);
+        _ = logical.GraphicsQueue;
+        Assert.Equal(actual: SparseCalls, expected: [
+            "submit 31 commands=0 wait=0 signal=4",
+            $"bind {bindingQueue} wait=4 signal=5 buffer=77 range=65536+65536 memory=0+0",
+            $"bind {bindingQueue} wait=5 signal=6 buffer=77 range=65536+65536 memory=89+0",
+            "submit 31 commands=0 wait=6 signal=0",
+        ]);
+        Assert.Equal(actual: (unmapped, checkpointed, rebound), expected: (6UL, 6UL, 6UL));
+
+        // A binding whose issue throws is settled with no value, and the timeline certifies nothing after it.
+        var heard = false;
+        ulong? failed = 0;
+
         FailSparse = true;
-        Assert.Throws<VulkanException>(testCode: () => logical.BindSparse(77, [new VkSparseMemoryBind { Size = 65536 }]));
+        logical.QueueSparse(77, [new VkSparseMemoryBind { Size = 65536 }], settled: value => failed = value);
+        Assert.Throws<VulkanException>(testCode: () => logical.GraphicsQueue);
+        Assert.Null(failed);
         Assert.Throws<InvalidOperationException>(testCode: () => queue.Timeline.Checkpoint());
         Assert.Throws<InvalidOperationException>(testCode: () => queue.Timeline.Completed);
+        logical.QueueSparse(77, [new VkSparseMemoryBind { Size = 65536 }], settled: value => heard = (value is null));
+        _ = logical.GraphicsQueue;
+        Assert.True(condition: heard);
         FailSparse = false;
         SparseCalls = null;
     }

@@ -24,6 +24,7 @@ import "moon-frame"
 import "moon-surface"
 import "../standard/agreement"
 import "../standard/skies"
+import "../standard/stars"
 import "../standard/visitors"
 // A ship that crosses the sky seam is a ship here: the craft register and the selectors that read it.
 import "craft-form"
@@ -157,8 +158,10 @@ gravity {
   tideOrigin: `moon-core`
   tides [
     { placementId: `planet-core`, surfaceGravity: planetGravity, referenceRadius: planetRadius }
-    { placementId: `sun-core`, surfaceGravity: sunGravity, referenceRadius: sunRadius, scale: sunMass }
+    starTide(of: sunStar, scale: sunMass)
   ]
+  // Where the sun stands: the day's turn about the valley floor, which the tide above reads.
+  orbits [starRail(of: sunStar, turn: sunTurn, around: "system-centre", periodSeconds: sharedDaySeconds)]
 }
 
 // Every surface of the moon is ground a hold can take, so a ship's touchdown hold settles it anywhere it is brought
@@ -195,7 +198,8 @@ placements {
     position [0, 0, 0]
   }
 
-  // Where the planet's centre and the sun stand in this world's coordinates: the sources of the tide.
+  // Where the planet's centre stands in this world's coordinates, a source of the tide, and the valley floor, which
+  // the sun circles.
   placement "planet-core" {
     prototype: "place"
     position [
@@ -204,9 +208,9 @@ placements {
       (debugOrigin[2] + planetCentre[2])
     ]
   }
-  placement "sun-core" {
+  placement "system-centre" {
     prototype: "place"
-    position [(debugOrigin[0] + sunCentre[0]), (debugOrigin[1] + sunCentre[1]), (debugOrigin[2] + sunCentre[2])]
+    position: debugOrigin
   }
 
   placement "place-moon-pole" {
@@ -470,12 +474,14 @@ render {
   farDistance: 6500
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: sunDirection(sharedDayStart, sharedSunHeading, sharedNoonElevation),
+      // The system's sun, from where the shared day puts it about the valley floor. Full strength while the sun's
+      // light arrives, and dark when the last of it has: the moon lights itself from the light it has received, never
+      // from the sun's world directly.
+      starLight(
+        of: sunStar,
+        turns: [sunTurn],
+        focus: debugOrigin,
         color: "#FFF4E2",
-        // Full strength while the sun's light arrives, and dark when the last of it has: the moon lights itself from
-        // the light it has received, never from the sun's world directly.
         illuminance: {
           clock: sun
           keys [
@@ -483,8 +489,7 @@ render {
             { at: 0.5, value: 100000 }
           ]
         },
-        shadow: always,
-        angularRadius: 0.0046
+        softness: 0.0046
       )
       point(
         name: "beacon",
@@ -493,13 +498,6 @@ render {
         power: "state.beaconPower"
       )
     ]
-    clock: day
-    keys: map(range(0, 24), h => {
-      at: h * 3600
-      lights {
-        key: directional(direction: sunDirection(h, sharedSunHeading, sharedNoonElevation))
-      }
-    })
   }
   sky {
     layers [
@@ -514,7 +512,7 @@ render {
         brightness: spaceStarBrightness,
         seed: spaceStarSeed
       )
-      sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+      starDisc(of: sunStar)
       // The planet below: the debug world, seen from where the viewer stands in the frame the two worlds share, so the
       // valley a ship climbed out of lies under the seam it crossed and shrinks as the ship nears the moon. It draws the
       // debug world's far product (its render.farProduct), never a residency of that world: the seam is the hand-over,

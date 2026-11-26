@@ -906,15 +906,17 @@ reads `world.counters pipeline-cache.vulkan` with no miss, and reaches its
 first world frame in about the time Direct3D 12 does.
 
 **A desktop capture's pixels reach the device without the frame thread
-comparing them.** Designed, not built. On Direct3D 12 the platform copies a
-captured window into shared textures on the device. Vulkan has no exporter
-(`IGpuSurfaceExportProvider` has one implementation), so the capture's CPU
-frames go through `WorldCapturePixels.Pull`, and the frame thread pays three
-passes over every frame: `GpuRegion.Write` compares the new pixels with the
-region's host copy, copies them into it, and the staging copies them again.
-The platform already captures and reads back on its own thread
-(`Win32GraphicsCaptureFeed` publishes into a triple buffer, and `TryCapture`
-swaps a buffer in), so what moves is the compare:
+comparing them.** Built for an SDR display. On Direct3D 12 the platform copies
+a captured window into shared textures on the device, and a Vulkan host rides
+the same transport as its cameras do: `TryProvisionSharedRing` allocates
+the textures on a headless Direct3D 12 device pinned to the render adapter and
+imports each one (`IGpuSurfaceTransferFactory.CreateImport`), so the capture's
+frames never pass through `WorldCapturePixels.Pull` and the frame thread's
+`GpuRegion.Write` compare and copies are gone. What still reads back is the
+divided-cadence frame that lights the room, on the platform's own callback
+thread. An HDR display on Vulkan, and a device that refuses the import, keep
+the CPU route, where the frame thread still pays the three passes; the lane
+design below stays for them:
 
 - A lane of the capture's own (`JobLane`) takes each frame, copies it into a
   buffer the capture owns and finds the runs of words that differ from the
@@ -927,10 +929,6 @@ swaps a buffer in), so what moves is the compare:
   last pixels handed to it (false before its first whole write and after a
   device loss), and the capture posts its next unit only once the frame it
   collected was written, so the lane's previous frame is always the region's.
-
-The device-side copy on Vulkan (an import of the capture's shared texture) is
-the step after: it removes the frame thread's part altogether and needs
-Vulkan's external-memory path.
 
 **Vulkan's record fork.** Not diagnosed. The window read Record at 8 to 9 ms
 in motion against Direct3D 12's 3 to 4, inside `RenderGraphRuntime.RecordWave`'s
