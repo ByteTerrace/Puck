@@ -410,7 +410,7 @@ test "a top she can stand on is a mantle" {
     ticks 15
     seat1: body.pose 11.2 0.05 -16 270 0 0 0
     seat1: player.signal keyboard.w press
-    ticks 75
+    ticks 45
     seat1: player.signal keyboard.w release
     ticks 40
   }
