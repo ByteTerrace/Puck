@@ -7,11 +7,12 @@
 // the motion exhibits' console controls) inside its `state.world` block. The displays stand inside the gallery
 // (gallery/gallery.puck), where its plan puts them (gallery/layout.puck, gallery.md):
 //
-//   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved, in the nave
-//   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
+//   level 0  shape, in the nave's four pairs: sweeps and facets with parameter forms, primitives at a uniform scale and
+//            extruded profiles, stretched primitives and revolved profiles, every shape blend and the domain folds
+//   level 1  open: its balconies hold no displays yet
 //   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
 //            board game room fills its south gallery (gallery.md)
-//   level 3  form and surface: parameter forms, palette channels and wear, cel styles, glass
+//   level 3  surface: palette channels and wear, cel styles, glass
 //
 // A sign hangs beside each display naming its group, a map board in the lobby by the entrance lists the levels and
 // groups, and a board over the lift door names each level. Each display has a spawn point before its console, named
@@ -102,10 +103,10 @@ let surfaceLevel = 3
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved, blends, folds" }
-  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets" }
+  { level: 0, title: "LEVEL 0  SHAPE", what: "facets, forms, primitives, profiles, blends, folds" }
+  { level: 1, title: "LEVEL 1  BALCONIES", what: "open galleries over the nave" }
   { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
-  { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
+  { level: 3, title: "LEVEL 3  SURFACE", what: "surfaces, styles, glass" }
 ]
 
 // The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
@@ -129,8 +130,8 @@ let galleryDisplayRows = [
     x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
-    id: "facets", title: "SWEEPS AND FACETS", level: 1, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
-    x: 32, z: displaySouth, yaw: 180
+    id: "facets", title: "SWEEPS AND FACETS", level: 0, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
+    x: (displayNaveXs[0] - (9 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
     id: "blends", title: "BLENDS", level: 0, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
@@ -153,8 +154,8 @@ let galleryDisplayRows = [
     x: 48, z: displayNorth, yaw: 0
   }
   {
-    id: "forms", title: "FORMS", level: surfaceLevel, names: formRow, what: "exponents, tapers, paths, a braid"
-    x: 24, z: displayNorth, yaw: 0
+    id: "forms", title: "FORMS", level: 0, names: formRow, what: "exponents, tapers, paths, a braid"
+    x: (displayNaveXs[0] - (9 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
     id: "surfaces", title: "SURFACES", level: surfaceLevel, names: surfaceRow, what: "palette channels, wear, panels, text"
