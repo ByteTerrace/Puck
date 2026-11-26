@@ -571,10 +571,9 @@ laws exercise that boundary.
   through a `RentedScope` or the contour lattice's `Allocator`, which is the
   group's native allocator (`SdfMeshLibrary.Allocator`) in a World: that scratch
   never reaches the managed heap, so a bake cannot set off the collections that
-  pause the frame thread. Offline (no allocator) the same buffers rent from
-  `RentedArrays`, whose arrays up to 1 MiB reuse the shared pool's buckets and
-  whose larger arrays of reference-free elements reuse a bounded large pool
-  (trimmed when a bake's last group finishes and on `MemoryAccount.TrimCaches`).
+  pause the frame thread. Offline (no allocator) the same buffers take the
+  process's allocator (`ProcessAllocator.Current`). `RentedArrays` keeps only the
+  shared pool's buckets, up to 1 MiB of payload; a larger rental is a fresh array.
   Tables a stage still leases as arrays (`RentedArrays.Rent(minimumLength, out
   array)`, `RentedScope.Rent`) take that managed path in a World too. Storage
   types are stop types of the bake's code identity (`SdfMeshBakeClosure`), so
@@ -592,9 +591,9 @@ laws exercise that boundary.
   store's entry encoder collects its payload in a `RentedMemoryStream` and writes
   each byte plane in chunks. A mesh the bake passes on keeps its welded sites
   (`SdfMesh.BakedSites`) through a record copy, so a later stage never hashes the
-  positions again. The stages' outputs are still allocated exactly, and a large
-  rental the pool cannot answer is a fresh array: read `rented-large-fresh` on the
-  done line beside `allocated`, which counts it.
+  positions again. The stages' outputs are still allocated exactly, and a rental
+  past the shared pool's 1 MiB is a fresh array, which the done line's
+  `allocated` counts.
 - **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug
