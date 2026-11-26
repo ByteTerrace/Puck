@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Documents;
 
@@ -43,11 +45,11 @@ public static class CanonicalJsonDocument {
     /// <param name="jsonTypeInfo">The member type's source-generated metadata.</param>
     /// <returns>The compact canonical UTF-8 bytes.</returns>
     public static byte[] SerializeCompact(object? value, JsonTypeInfo jsonTypeInfo) {
-        using var stream = new MemoryStream();
+        using var output = new OwnedBufferWriter<byte>();
 
         using (var writer = new Utf8JsonWriter(
             options: CompactWriterOptions,
-            utf8Json: stream
+            bufferWriter: output
         )) {
             JsonSerializer.Serialize(
                 jsonTypeInfo: jsonTypeInfo,
@@ -56,7 +58,7 @@ public static class CanonicalJsonDocument {
             );
         }
 
-        return stream.ToArray();
+        return output.ToArray();
     }
     /// <summary>Serializes a document to its canonical UTF-8 bytes.</summary>
     /// <param name="value">The document to serialize.</param>
@@ -66,11 +68,11 @@ public static class CanonicalJsonDocument {
     public static byte[] Serialize<T>(T value, JsonTypeInfo<T> jsonTypeInfo) where T : class {
         ArgumentNullException.ThrowIfNull(argument: value);
 
-        using var stream = new MemoryStream();
+        using var output = new OwnedBufferWriter<byte>();
 
         using (var writer = new Utf8JsonWriter(
             options: WriterOptions,
-            utf8Json: stream
+            bufferWriter: output
         )) {
             JsonSerializer.Serialize(
                 jsonTypeInfo: jsonTypeInfo,
@@ -79,9 +81,9 @@ public static class CanonicalJsonDocument {
             );
         }
 
-        stream.WriteByte(value: ((byte)'\n'));
+        output.Write(value: "\n"u8);
 
-        return stream.ToArray();
+        return output.ToArray();
     }
     /// <summary>Serializes a JSON node to its compact canonical UTF-8 bytes: the members, order, and escaping of
     /// <see cref="Serialize(JsonNode)"/>, with no indentation, newlines, or trailing newline.</summary>
@@ -91,16 +93,16 @@ public static class CanonicalJsonDocument {
     public static byte[] SerializeCompact(JsonNode node) {
         ArgumentNullException.ThrowIfNull(argument: node);
 
-        using var stream = new MemoryStream();
+        using var output = new OwnedBufferWriter<byte>();
 
         using (var writer = new Utf8JsonWriter(
             options: CompactWriterOptions,
-            utf8Json: stream
+            bufferWriter: output
         )) {
             node.WriteTo(writer: writer);
         }
 
-        return stream.ToArray();
+        return output.ToArray();
     }
     /// <summary>Serializes a JSON node (e.g. a hand-assembled basis delta) to its canonical UTF-8 bytes.</summary>
     /// <param name="node">The node to serialize.</param>
@@ -109,17 +111,17 @@ public static class CanonicalJsonDocument {
     public static byte[] Serialize(JsonNode node) {
         ArgumentNullException.ThrowIfNull(argument: node);
 
-        using var stream = new MemoryStream();
+        using var output = new OwnedBufferWriter<byte>();
 
         using (var writer = new Utf8JsonWriter(
             options: WriterOptions,
-            utf8Json: stream
+            bufferWriter: output
         )) {
             node.WriteTo(writer: writer);
         }
 
-        stream.WriteByte(value: ((byte)'\n'));
+        output.Write(value: "\n"u8);
 
-        return stream.ToArray();
+        return output.ToArray();
     }
 }

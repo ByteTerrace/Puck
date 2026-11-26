@@ -1458,8 +1458,8 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
     long-to-int map in `Puck.Abstractions` is its home), the stages' exact
     outputs listed above, and the mesh store's `RentedMemoryStream` payloads
     (the stream takes an allocator; `SdfMeshStoreCodec` does not pass one yet).
-    Read the `done` line's `allocated:` and `rented-large-fresh` on the next
-    cold bake to confirm what moved.
+    Read the `done` line's `allocated:` on the next cold bake to confirm what
+    moved.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
@@ -2268,28 +2268,36 @@ check; this packet holds the defects beside it.
   tables (`SdfMeshCollapse`, `SdfMeshPlanarMerge`, `SdfMeshChunks`); the far product, which a boot
   derived whole in managed arrays and now reads from the mesh store
   ([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)); the lighting
-  batch's answer words and saved hits and the probe service's part answers; and a goal field's
-  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`).
-  What still allocates large managed arrays, largest first as the 2060's allocation trace read
-  them:
-  - `SdfProgram` allocates fresh arrays on every build (its words, appearance sections, Lipschitz
-    factors, side tables and part-program offsets, and the field evaluator's `CompiledInstruction`
-    and `RotationBounds` tables beside them), about 320 MiB over a route. Rebuild only what
-    changed, into owned and reused storage; a program is read from several threads and held by
-    several holders, so its storage needs an owner whose last reader frees it.
-  - The trace scene's hierarchy (`SdfMeshIrradianceScene.Hierarchy.BuildPacked` and its
-    `MemoryAccount.Owner.AllocateArray` calls for nodes, frames, braids and triangles, about 350 MiB)
-    and the geometry build's rented boxes are arrays; its traversal reads them as arrays, so the
-    move is the hierarchy's storage type and every reader's.
-  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold a
-    reference in each slot, so they need block indices before they can be native.
-  - The bake's frustum watches keep two value arrays that regrow (`SdfMeshPathBake.FrustumWatches`,
-    about 100 MiB of growth), and the lattice refinement (`SdfSampledLattice`) still rents arrays.
+  batch's answer words and saved hits and the probe service's part answers; a goal field's
+  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`);
+  the trace scene's hierarchy, its top level and every build workspace
+  (`SdfMeshIrradianceScene.Hierarchy`, the change trees); the bake's frustum watches and chosen
+  readings (`SdfMeshPathBake.FrustumWatches`); the lattice's weld, crease split and refinement
+  masks (`SdfSampledLattice`), the triangle grid, the trace judge's joined mesh, the store codec's
+  planes, the volume's refill words, `DisjointSet` and `SpanDistinct`; and the canonical document
+  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`). `RentedArrays` keeps only
+  the shared pool's buckets; its large pool is gone. What still allocates large managed arrays:
+  - `SdfProgram` allocates fresh arrays on every field build (its words, the instruction copy, the
+    appearance section and the analysis passes' tables), about 320 MiB over a route: the debug
+    world's composed program is about 5.3 million words, so each field rebuild in
+    `SdfCompositionFrameSource` allocates tens of megabytes. Native storage needs an owner whose
+    last reader frees it, and the program is held across threads by the composition, every
+    `SdfFrame`, `SdfWorldTables`' live, background, shading and paint programs, the bake
+    (`SdfMeshPathBake` and its prepared frame), the dresser, the presenters and pick results, and
+    weakly by `SdfProgramDelta`. Give `SdfProgram` a claim count (`Acquire`/`Release`, the
+    composition holding the first) and move every holder to swap claims at one door, then move the
+    words and the instruction stream to owned storage freed at the last release; a rebuild then
+    reuses the replaced program's storage when it holds the last claim. A use after free here is a
+    crash in presentation, so the change needs a windowed run in the same batch.
+  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold
+    `ProbeBlock` and `LightBlock` references in each `ProbeData` slot, and each table's keys,
+    flags and entry indices are managed arrays. Give the blocks indices in a registry whose slots
+    are reused only after the reader epochs reclaim a block, keep `ProbeData.Hits` and `Shading` as
+    properties over those indices, then store an arena of unmanaged values natively; a table the
+    cache drops (the spare it replaces, the volume's end) frees its columns.
   - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
-    managed arrays before the library copies the result; only its tables are native.
-  - `RentedArrays`' pool of arrays past a mebibyte gives an idle array back after ten seconds, so
-    work that repeats more slowly allocates afresh each time. Retire the pool once the renters
-    above are moved, rather than tune it.
+    managed arrays before the library copies the result; only its tables are native. It runs once
+    per product per store.
   Check: the 2060's route ends under its host bar with the LOH flat across loops, and
   `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
