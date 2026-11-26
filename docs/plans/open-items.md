@@ -5864,6 +5864,22 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- [medium] **`debug.go overlook` frames a featureless slab.** The overlook
+  spawn (`valley.puck`, id `overlook`) sets the body 6 m in from the sector's
+  inner face (`overlookFace - deckReach + 4`) with `yawDegrees` equal to the
+  sector's compass bearing (body at yaw 225°, camera yaw -135). The chase
+  camera's clearance shortens the boom from 4.2 m to 0.35 m
+  (`world.view.camera`: `boom=0.35/4.2 clearance=shortened cutaway=false`,
+  eye 0.24 m behind and 1.8 m above the feet), and the near plane sits
+  inside the Moth. The frame shows the rim's tops over two flat taupe bands,
+  with no body and no deck. Seen on the RTX 2060 (0.1.198, Vulkan, 1920x1080).
+  Unconfirmed: whether the bands are the deck's own slab seen from inside the
+  body, or the parapet. Find what the clearance probe hits behind the body on
+  an open deck, and whether the spawn should face into the caldera as the
+  glacier's spawn does. In the same run
+  `world.view.pick <x> <y>` answered only `pending` for every point and never
+  logged an answer, which needs checking too. Check: the overlook capture
+  shows the Moth on the deck with the valley floor below.
 - [medium] Text paints, which draw state-bound lettering on a creation's
   surface with no bake, have gaps the press and the chess screens meet
   ([the press](../game/press.md#what-it-does-not-do-yet) lists its own): a
