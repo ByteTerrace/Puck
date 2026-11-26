@@ -51,7 +51,6 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 
 - The size field on the stairs, lift and branches; the full-size pass and its shortcuts; engagement that needs full
   size (lane in progress).
-- The twelve deck stations (lane in progress).
 - The rental stalls and their dormant-until-rented devices (lane in progress).
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
