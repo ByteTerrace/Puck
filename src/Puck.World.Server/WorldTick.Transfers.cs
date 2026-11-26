@@ -40,6 +40,10 @@ public sealed partial class WorldTick {
     // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
     // Every event of the owner's current epoch is applied or the owner's input is restarted, which the authority
     // publishes: a packet is never skipped while later ones are applied over it, since each rests on the one before.
+    // A link that delays and then bunches its delivery hands one tick the packets of many: a packet whose events the
+    // owner has no room for this tick (WorldInputOwner.Room) waits, with every packet behind it, for a later tick, so a
+    // burst is spread over the ticks after it rather than refused whole. Only a packet no tick could take (more events
+    // than StepCapacity) goes to the admission that refuses it.
     private void ApplyFederatedIntents() {
         for (var index = 0; (index < m_federatedIntents.Length); index++) {
             ref var state = ref m_federatedIntents[index];
@@ -60,10 +64,21 @@ public sealed partial class WorldTick {
 
             var admitted = false;
             var restarted = false;
+            var pending = state.Pending;
+            var waiting = ReadOnlyMemory<IntentSubmission>.Empty;
 
-            foreach (var packet in state.Pending.Span) {
+            for (var position = 0; (position < pending.Length); position++) {
+                var packet = pending.Span[position];
+                var left = LeftEpoch(principal: state.Principal, batch: packet.Input, held: out var owner);
+
+                if (!left && (owner is not null) && (packet.Input.Events.Length > owner.Room(tick: Host.Input.Interval.Tick)) &&
+                    (packet.Input.Events.Length <= owner.StepCapacity)) {
+                    WorldTickWork.Process.Add(WorldTickWork.FederatedCarried, (pending.Length - position));
+                    waiting = pending[position..];
+                    break;
+                }
                 WorldTickWork.Process.Add(WorldTickWork.FederatedBatches, 1);
-                if (LeftEpoch(principal: state.Principal, batch: packet.Input, held: out var owner)) {
+                if (left) {
                     // The ordinary state of a stream for a moment after any epoch change: its sender has not yet taken
                     // the epoch this authority published. Restarting for it would restart again for every packet in
                     // flight.
@@ -124,7 +139,7 @@ public sealed partial class WorldTick {
                     },
                 };
             }
-            state = state with { Pending = default };
+            state = state with { Pending = waiting };
             if (restarted) {
                 state = state with { Submission = null };
                 continue;
@@ -240,7 +255,7 @@ public sealed partial class WorldTick {
 
         foreach (var input in inputs) {
             if ((((uint)input.Index) >= ((uint)capacity)) || !indices.Add(item: input.Index) || (input.Principal.Kind != PrincipalKind.Peer) ||
-                (input.Principal.Index != input.Index) || !input.Principal.IsStamped || (input.Pending.Length > 1024)) {
+                (input.Principal.Index != input.Index) || !input.Principal.IsStamped || (input.Pending.Length > WorldFederatedIntentState.MaximumPending)) {
                 throw new ArgumentException(message: "federated input checkpoint has an invalid owner, target or queue");
             }
             if (input.Submission is { } held) { Validate(submission: held); }
@@ -348,9 +363,7 @@ public sealed partial class WorldTick {
                 if (state.Active) { Host.Input.Reset(state.Principal); }
                 state = new(leaseId, published.Principal, default, true);
             }
-            var maximum = Math.Min(val1: 1024, val2: ((Host.Definition.InputHistory?.MaximumEventsPerStep ?? 128) + 1));
-
-            if (state.Pending.Length >= maximum) {
+            if (state.Pending.Length >= WorldFederatedIntentState.MaximumPending) {
                 // Overflow cancels the episode; it never silently drops an unobserved edge.
                 published = published with {
                     Intent = default,
@@ -418,6 +431,37 @@ public sealed partial class WorldTick {
     /// <param name="incarnation">The traveler's incarnation.</param>
     internal void RetireTransferredIncarnation(WorldEntityAddress incarnation) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireIncarnation(incarnation: incarnation));
+    /// <summary>Retires a traveler here on the word of the authority that handed it on, which says the traveler is gone
+    /// for good: every credential this authority keeps for it goes, and its host is told so the authority's own
+    /// onward routes go too (<see cref="IWorldTransferForwarder.RetireTraveler"/>). A traveler whose body stands at
+    /// this authority, live or parked, is left as it is: the word retires what a forwarding authority keeps of a
+    /// traveler, never a body, whose own disconnect and reconnect grace end it.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace of the authority that handed the traveler on.</param>
+    /// <param name="mobility">The traveler's credential.</param>
+    /// <returns><see langword="true"/> when the traveler was retired here; <see langword="false"/> when its body
+    /// stands here.</returns>
+    internal bool TryRetireHandedOnTraveler(string sourceAuthority, in WorldMobilityIdentity mobility) {
+        var credential = mobility;
+
+        return Host.ExecuteAuthorityOperation(operation: () => {
+            if (
+                Host.TransferEscrow.TryMobilityPrincipal(mobility: in credential, principal: out var principal, sourceAuthority: sourceAuthority) &&
+                ((principal.Kind != PrincipalKind.Peer) || Host.Population.HoldsPeer(principal: principal))
+            ) {
+                return false;
+            }
+            Host.TransferEscrow.RetireIncarnation(incarnation: credential.Incarnation);
+            Host.TransferForwarder?.RetireTraveler(incarnation: credential.Incarnation);
+            return true;
+        });
+    }
+    /// <summary>Returns whether this authority keeps a credential for a traveler under a source namespace, at any
+    /// ownership epoch.</summary>
+    /// <param name="sourceAuthority">The source namespace.</param>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    /// <returns><see langword="true"/> when a credential stands.</returns>
+    internal bool HoldsTransferredTraveler(string sourceAuthority, WorldEntityAddress incarnation) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.HoldsTraveler(incarnation: incarnation, sourceAuthority: sourceAuthority));
     /// <summary>Returns the destination's view of a source-scoped transfer. A <see cref="WorldTransferStatus.Missing"/>
     /// answer is final: the key is tombstoned before it is given (<see cref="WorldTransferEscrow.Status"/>).</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>

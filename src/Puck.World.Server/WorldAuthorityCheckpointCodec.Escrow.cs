@@ -4,6 +4,13 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    /// <summary>Returns whether a crossing record and a checkpoint can carry a principal: the World principal, or one
+    /// whose kind has a live wire value. A door that keeps a principal it will later write checks it here first, since
+    /// the writer throws for any other.</summary>
+    /// <param name="principal">The principal to carry.</param>
+    /// <returns><see langword="true"/> when the principal can be written.</returns>
+    public static bool CarriesPrincipal(Puck.Commands.Principal principal) =>
+        ((principal == Puck.Commands.Principal.World) || WorldWireTags.TryToWire(value: principal.Kind, wire: out _));
     // An autonomous traveller's own World principal is durable authority state, never an actor admitted from a peer, so
     // the checkpoint spells it by a flag the wire's live principal leaf never carries.
     private static void WriteDurablePrincipal(WireWriter writer, Puck.Commands.Principal principal) {

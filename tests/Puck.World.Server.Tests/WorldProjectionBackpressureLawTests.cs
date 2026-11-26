@@ -301,6 +301,104 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
         Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: caughtUp.Body.Span[WorldFederationCodec.StreamStampBytes..], failure: out var resumedFailure, snapshot: out var current), userMessage: resumedFailure.ToString());
         Assert.Equal(expected: (last + 1UL), actual: current.Tick);
     }
+    // A catch-up rides a delivery, and a paused authority makes none. An observer that fell a whole queue behind a real
+    // authority, and whose wire then drained while the host held that authority paused, is sent nothing however many
+    // host steps pass over the paused world: it keeps what it held. The first tick after the authority resumes cuts the
+    // stream to a new generation and sends the whole document and a primer snapshot of that tick behind the cut.
+    [Fact]
+    public async Task ASlowObserverOfAPausedAuthorityCatchesUpWhenItResumes() {
+        const string Row = "row-a";
+        var ct = TestContext.Current.CancellationToken;
+        using var stateRoot = new Puck.Testing.TemporaryDirectory(prefix: "puck-paused-observer-tests-");
+        using var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            admitsSpawn: true,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: Guid.NewGuid(),
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: new WorldStateRoot(path: stateRoot.RootPath)
+        );
+        using var row = HostRow.Build(name: Row);
+        var sink = new WorldFederationProjectionSink(
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
+            server: row.Server,
+            tier: WorldDisclosureTier.Replica
+        );
+
+        host.Admit(row: row.Instance);
+        using var attached = row.Server.AttachSink(sink: sink);
+
+        // The observer's wire is not read, so it falls a whole queue behind while the world steps.
+        for (var tick = 0; (tick < (WorldFederationProjectionSink.PendingDeliveryLimit + 16)); tick++) {
+            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        }
+        Assert.Null(@object: sink.DetachReason);
+        Assert.Equal(expected: WorldFederationProjectionSink.PendingDeliveryLimit, actual: sink.PendingDeliveries);
+
+        // The authority pauses, and then the wire drains everything that was queued.
+        Assert.True(condition: host.TryPause(name: Row, reason: out var pauseReason), userMessage: pauseReason);
+        var pausedAt = row.Instance.CompletedTicks;
+        using var wire = new ProjectionWire();
+        using var streaming = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+        var stream = sink.StreamAsync(ct: streaming.Token, output: wire);
+
+        Puck.Testing.TestLiveness.Until(reason: static () => "the observer's wire did not drain what was queued", step: () => (wire.Flushes == WorldFederationProjectionSink.PendingDeliveryLimit));
+        for (var step = 0; (step < 32); step++) {
+            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        }
+        Assert.Equal(expected: pausedAt, actual: row.Instance.CompletedTicks);
+        Assert.Equal(expected: 0, actual: sink.PendingDeliveries);
+        Assert.Equal(expected: WorldFederationProjectionSink.PendingDeliveryLimit, actual: wire.Flushes);
+        Assert.Null(@object: sink.DetachReason);
+
+        // The authority resumes. Its next tick is the delivery the catch-up rides.
+        Assert.True(condition: host.TryResume(name: Row, reason: out var resumeReason, wasPaused: out var wasPaused), userMessage: resumeReason);
+        Assert.True(condition: wasPaused);
+        host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        Assert.Equal(expected: (pausedAt + 1UL), actual: row.Instance.CompletedTicks);
+        Puck.Testing.TestLiveness.Until(
+            reason: static () => "the observer's wire did not drain its catch-up",
+            step: () => ((wire.Flushes > WorldFederationProjectionSink.PendingDeliveryLimit) && (sink.PendingDeliveries == 0))
+        );
+        var records = wire.Flushes;
+
+        await streaming.CancelAsync();
+        try { await stream; } catch (OperationCanceledException) { }
+
+        using var decodedWire = new MemoryStream(buffer: wire.ToArray());
+        var generation = 0L;
+
+        for (var record = 0; (record < WorldFederationProjectionSink.PendingDeliveryLimit); record++) {
+            var frame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+            Assert.True(condition: WorldFederationCodec.TryReadStamped(frame.Body.Span, out var stamp, out _, out _));
+            generation = Math.Max(val1: generation, val2: stamp.Generation);
+        }
+        var cutFrame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Cut), actual: cutFrame.Kind);
+        Assert.True(condition: WorldFederationCodec.TryDecodeCut(body: cutFrame.Body.Span, stream: out var cut, terminal: out var terminal));
+        Assert.False(condition: terminal);
+        Assert.True(condition: (cut.Generation > generation));
+        var documents = 0;
+        var primers = new List<ulong>();
+
+        for (var record = (WorldFederationProjectionSink.PendingDeliveryLimit + 1); (record < records); record++) {
+            var frame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+            Assert.True(condition: WorldFederationCodec.TryReadStamped(frame.Body.Span, out var stamp, out _, out _));
+            Assert.Equal(expected: cut.Generation, actual: stamp.Generation);
+            if (frame.Kind == ((byte)WorldFederationResponse.Definition)) {
+                documents++;
+            } else if (frame.Kind == ((byte)WorldFederationResponse.Snapshot)) {
+                Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], failure: out var failure, snapshot: out var primer), userMessage: failure.ToString());
+                primers.Add(item: primer.Tick);
+            }
+        }
+        Assert.Equal(expected: 1, actual: documents);
+        Assert.Equal(expected: [(pausedAt + 1UL)], actual: primers);
+    }
 
     [Fact]
     public async Task SharedRadiusDeltasUseTheImageEachPeerAcknowledged() {

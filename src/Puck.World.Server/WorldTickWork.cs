@@ -85,6 +85,9 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the input streams this authority restarted after refusing a batch of the
     /// current epoch.</summary>
     public static WorkKind FederatedRestarts { get; } = new(name: "world.tick.federated-restarts", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting, tick by tick, the queued batches held for a later tick because their owner had no
+    /// room for the next one's events that tick (a delivery that arrived bunched).</summary>
+    public static WorkKind FederatedCarried { get; } = new(name: "world.tick.federated-carried", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the observations of a world's own producer that ran the whole admission:
     /// the route check, the owner lookup, the mode synchronization and the batch
     /// (<see cref="WorldInputRuntime"/>).</summary>
@@ -129,7 +132,7 @@ public static class WorldTickWork {
         kinds: [
             PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks, Lapses, LapsedTicks,
             InterestCandidates, InterestBodies, InterestBytes,
-            FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
+            FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts, FederatedCarried,
             InputAdmissions, InputAdmissionsStanding, InputAdmissionsSteady, InputRefreshes, InputRefreshesStanding,
             InputSynchronizations, InputSynchronizationsStanding,
             FactDerives, FactSlots, RegionSweepOverflow, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,

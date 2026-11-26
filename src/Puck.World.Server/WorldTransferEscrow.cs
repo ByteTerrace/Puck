@@ -2349,6 +2349,12 @@ public sealed partial class WorldTransferEscrow {
             if (request.Members[index].CatalogRig >= WorldLookSource.Catalog.RigCount) {
                 return $"traveler {(index + 1)} catalog rig {request.Members[index].CatalogRig} is outside 0..{(WorldLookSource.Catalog.RigCount - 1)}";
             }
+            // A member's principal is written into the cohort's arrival record and into every checkpoint that holds its
+            // lease or its commit. The federation codec cannot deliver one those writers refuse, but a colocated
+            // caller hands the request over as a value, so it is refused here, before anything is leased or landed.
+            if (!WorldAuthorityCheckpointCodec.CarriesPrincipal(principal: request.Members[index].Principal)) {
+                return $"traveler {(index + 1)} carries a principal of kind {request.Members[index].Principal.Kind}, which no crossing record or checkpoint can carry";
+            }
             if (request.Members[index].Mobility is not { } mobility) {
                 return $"traveler {(index + 1)} carries no stable mobility identity";
             }
@@ -2788,6 +2794,12 @@ public sealed partial class WorldTransferEscrow {
         principal = default;
         return false;
     }
+    /// <summary>Returns whether a credential stands for a traveler under a source namespace, at any ownership
+    /// epoch.</summary>
+    /// <param name="sourceAuthority">The source namespace.</param>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    /// <returns><see langword="true"/> when a credential stands.</returns>
+    public bool HoldsTraveler(string sourceAuthority, WorldEntityAddress incarnation) => m_mobilityAdmissions.ContainsKey(key: (sourceAuthority, incarnation));
     public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) {
         if (
             m_mobilityAdmissions.TryGetValue(

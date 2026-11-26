@@ -935,7 +935,12 @@ own session. The group admits it as a guest, on five terms.
   it drops its route and credential
   (`IWorldTransferForwarder.RetireTraveler`). The player's absence travels the
   same way, so the body parks and its reconnect grace runs wherever it stands
-  (`IWorldTransferForwarder.SetTravelerPresence`).
+  (`IWorldTransferForwarder.SetTravelerPresence`). Both words follow the
+  forwarding route in every host, closed group or not, and across a socket
+  (`WorldFederationRequest.Presence`, `WorldFederationRequest.Retire`). A route
+  stands only while its next hop holds a credential for its traveler: a next
+  hop that answers it holds none (`WorldFederationRefusal.TravelerUnknown`), or
+  a colocated one found holding none after a recovery, ends the route.
 - **At a restore.** A recovery point is a baseline
   (`WorldTransferEscrowCheckpoint.RewindBaseline`): restoring it ends every
   traveler minted outside the group and drops every row of an outside source,

@@ -113,7 +113,8 @@ public sealed partial class WorldInstanceHost {
         if (arrived) {
             foreach (var (member, ordinal) in pending.Landed.Select(selector: static (member, ordinal) => (member, ordinal))) {
                 if (((landed is null) || landed.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))) && m_forwardedBodies.TryGetValue(
-                    key: (source.Server, member.Mobility.Incarnation),
+                    left: source.Server,
+                    right: member.Mobility.Incarnation,
                     value: out var body
                 )) {
                     forwarded.Add(item: CaptureForwarded(
@@ -394,13 +395,9 @@ public sealed partial class WorldInstanceHost {
                 row,
                 settlement.Forwarded
             )) {
-                if (m_forwardedBodies.TryGetValue(
-                    key: (row.Server, incarnation),
-                    value: out var superseded
-                )) {
+                if (m_forwardedBodies.Set(left: row.Server, right: incarnation, value: body, replaced: out var superseded)) {
                     (superseded.Authority as IDisposable)?.Dispose();
                 }
-                m_forwardedBodies[(row.Server, incarnation)] = body;
             }
             ResolveForwardedRecoveries();
             return;

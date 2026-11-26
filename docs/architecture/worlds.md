@@ -1351,7 +1351,12 @@ the group a reservation. A guest's question about a key that holds no row answer
 a row or a tombstone: that promise is one a world makes to a source it rewinds with. A traveler that
 walked on to another world of the group keeps its session live at the world it left until its body is
 retired where it stands; the retiring world tells the host, and each world that forwarded to it drops
-its route and credential (`IWorldTransferForwarder.RetireTraveler`).
+its route and credential (`IWorldTransferForwarder.RetireTraveler`). The same holds for any forwarded
+traveler, in or out of a closed group: a forwarding route stands only while its next hop holds a
+credential for the traveler. Across a socket the forwarding world tells its next hop of the source's
+absence and of a retirement (`WorldFederationRequest.Presence`, `WorldFederationRequest.Retire`), and a
+next hop that retired the traveler says so the next time it is asked
+(`WorldFederationRefusal.TravelerUnknown`), which ends the asking world's route.
 
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:

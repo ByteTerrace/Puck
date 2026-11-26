@@ -583,6 +583,15 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+    /// <summary>Returns whether the body a peer principal names stands here as that peer's, live or parked.</summary>
+    /// <param name="principal">The peer principal.</param>
+    /// <returns><see langword="true"/> when the principal is a peer whose body index holds a remote human of the same
+    /// generation.</returns>
+    public bool HoldsPeer(Principal principal) => (
+        (principal.Kind == PrincipalKind.Peer) &&
+        IsAdmittedPeer(bodyIndex: principal.Index) &&
+        (PeerPrincipal(index: principal.Index) == principal)
+    );
 
     // Mirrors what a full Capacity scan would find, as of the last m_revision it was rebuilt from. Every site that
     // touches Entry.Parked or Entry.ParkedUntilTick (including Rebuild, on a document reload) bumps m_revision, so

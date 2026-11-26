@@ -27,8 +27,7 @@ public sealed partial class WorldServer {
     internal void ClosePeerTransport(Principal principal) => PeerDisconnected?.Invoke(principal);
 
     /// <summary>Whether a peer generation is still connected and may submit commands.</summary>
-    public bool IsLivePeer(Principal principal) => ((principal.Kind == PrincipalKind.Peer) && Population.IsAdmittedPeer(bodyIndex: principal.Index) &&
-        !Population.IsParked(index: principal.Index) && (Population.PeerPrincipal(index: principal.Index) == principal));
+    public bool IsLivePeer(Principal principal) => (Population.HoldsPeer(principal: principal) && !Population.IsParked(index: principal.Index));
     /// <summary>Disconnects one live peer through the ordered lifecycle, including its transports.</summary>
     public bool DisconnectPeer(Principal peer, Principal actor) {
         lock (AuthorityGate) {

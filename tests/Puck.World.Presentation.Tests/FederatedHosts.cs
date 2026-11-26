@@ -29,7 +29,7 @@ internal sealed class FederatedHosts : IDisposable {
     private readonly WorldPeerNetwork m_sourceNetwork;
     private readonly WorldPeerNetwork m_destinationNetwork;
 
-    private FederatedHosts(Action<WorldRemoteAuthority>? travelerRouteStarted) {
+    private FederatedHosts(Action<WorldRemoteAuthority>? travelerRouteStarted, WorldDefinition? sourceDefinition) {
         m_scratch = new TemporaryDirectory(prefix: "puck-federated-hosts-");
         Clock = new VirtualClock(start: AdmissionWireFixture.ClaimInstant);
         Seats = new RoutedSeats();
@@ -50,7 +50,7 @@ internal sealed class FederatedHosts : IDisposable {
             seats: WorldEmbodiedSeats.None,
             stateRoot: new WorldStateRoot(path: Directory.CreateDirectory(path: m_scratch.PathOf(name: "destination-state")).FullName)
         );
-        SourceRow = HostRow.Build(name: WorldInstanceHost.BootInstanceName);
+        SourceRow = HostRow.Build(definition: sourceDefinition, name: WorldInstanceHost.BootInstanceName);
         var destinationDefinition = Fixtures.PeerPopulationDocument(networkPlayers: 2);
         DestinationRow = HostRow.Build(
             definition: destinationDefinition with { HostRaw = destinationDefinition.Host with { AuthorityNamespace = DestinationName } },
@@ -137,8 +137,9 @@ internal sealed class FederatedHosts : IDisposable {
 
     /// <summary>Builds the two hosts.</summary>
     /// <param name="travelerRouteStarted">The source host's traveler-route callback, or <see langword="null"/>.</param>
+    /// <param name="sourceDefinition">The source boot row's document, or <see langword="null"/> for the fixtures' default.</param>
     /// <returns>The hosts, which the caller disposes.</returns>
-    public static FederatedHosts Build(Action<WorldRemoteAuthority>? travelerRouteStarted = null) => new(travelerRouteStarted: travelerRouteStarted);
+    public static FederatedHosts Build(Action<WorldRemoteAuthority>? travelerRouteStarted = null, WorldDefinition? sourceDefinition = null) => new(sourceDefinition: sourceDefinition, travelerRouteStarted: travelerRouteStarted);
     /// <summary>Hands a traveler the destination row holds on to the onward row, then asks the destination for the
     /// traveler's route through <paramref name="traveler"/>. The destination's occupant takes
     /// <paramref name="travelTurn"/> before it leaves, and a spawned arrival carries it, so the onward route describes
