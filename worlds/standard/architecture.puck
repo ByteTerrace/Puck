@@ -1159,12 +1159,18 @@ template lounge(base) {
 let latticeFrame = 0
 let latticeBar = 1
 let latticeRail = 2
+let latticeGlass = 3
 function latticePalette(frame, bar, rail) = [
   { color: frame, roughness: 0.4, specular: 0.05 }
   { color: bar, roughness: 0.4, specular: 0.05 }
   { color: rail, roughness: 0.4, specular: 0.05 }
+  { color: "#EEF6F8", roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
 ]
-template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1) {
+// `net`, when set, fills the frame with a net instead of bars and rails: a thin panel `net.thickness` thick whose
+// Worley F2-minus-F1 cell relief (`net.frequency` cells a metre, `net.depth` deep, `net.randomness`, `net.seed`)
+// hollows each cell's centre through the panel and leaves its walls as the strands, so it reads as an organic net while
+// its contact stays the flat panel (a cell relief keeps the base shape for contact), blocking every body.
+template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1, net = null) {
   let length = (cells * pitch)
   for side in [-1, 1] {
     shape Box $"lattice-post-{side}" {
@@ -1188,7 +1194,35 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
       rounding: (frame / 6)
     }
   }
-  if upright == 1 {
+  if (net != null) and (upright == 1) {
+    // A clear pane holds every body; the net's strands in front of it are drawn only.
+    shape Box "lattice-pane" {
+      material: (base + latticeGlass)
+      position [0, (height / 2), 0]
+      scale [(length / 2), (height / 2), 0.004]
+    }
+    for (turn, i) in ((net.strand > 0) ? [45, -45] : []) {
+      shape Box $"lattice-strands-{i}" {
+        material: (base + ((i == 0) ? latticeBar : latticeRail))
+        position [0, (height / 2), ((i == 0) ? 0.02 : 0.035)]
+        rotation: rotate([0, 0, 1], (turn * 1deg))
+        scale [((length + height) / 1.4), (net.strand / 2), (net.strand / 2)]
+        rounding: (net.strand / 2.5)
+        domain [repeat(spacing: [(4 * (length + height)), (net.pitch * 1.4142), (4 * (length + height))], limit: [0, ceiling((((length + height) / net.pitch) / 2.8)), 0])]
+        detail: true
+      }
+    }
+    if net.strand > 0 {
+    shape Box "lattice-net-clip" {
+      blend: Intersection
+      material: (base + latticeBar)
+      position [0, (height / 2), 0]
+      scale [((length / 2) + frame), (height / 2), frame]
+      detail: true
+    }
+    }
+  }
+  if (net == null) and (upright == 1) {
     shape Box "lattice-upright" {
       material: (base + latticeBar)
       position [0, (height / 2), 0]
@@ -1196,13 +1230,16 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
       domain [repeat(spacing: [pitch, 1, 1], limit: [((cells / 2) - 1), 0, 0])]
     }
   }
-  shape Box "lattice-rail" {
-    material: (base + latticeRail)
-    position [0, (height / 2), 0]
-    scale [(length / 2), (rail / 2), (rail / 2)]
-    rounding: (rail / 4)
-    domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
+  if net == null {
+    shape Box "lattice-rail" {
+      material: (base + latticeRail)
+      position [0, (height / 2), 0]
+      scale [(length / 2), (rail / 2), (rail / 2)]
+      rounding: (rail / 4)
+      domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
+    }
   }
+
 }
 
 // A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
