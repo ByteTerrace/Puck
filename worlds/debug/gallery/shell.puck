@@ -571,8 +571,13 @@ let shellRails = concat(
   map(range(0, 3), i => { id: $"rail-terrace-south-{i}", x: (2.2 + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: 0.15, y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
+// The piers of the nave's end wall stand between its tall bays and either side of them.
+let naveEndSpan = ((tallBayZs[1] - tallBayZs[0]) / 2)
+let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * naveEndSpan) * i)))
 let shellPlanters = [
-  { x: 58.9, y: 0, z: 9.9, yaw: 90 }, { x: 58.9, y: 0, z: 18.1, yaw: 90 }
+  { x: 58.75, y: 0, z: 12.45, yaw: 90 }, { x: 58.75, y: 0, z: 15.55, yaw: 90 }
+  { x: 57.4, y: 0, z: 9.75, yaw: 0 }, { x: 57.4, y: 0, z: 18.25, yaw: 0 }
+  { x: 44, y: 0, z: 9.6, yaw: 0 }, { x: 44, y: 0, z: 18.4, yaw: 0 }
   { x: 22.2, y: 0, z: 7.4, yaw: 0 }, { x: 29, y: 0, z: 7.4, yaw: 0 }
   { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: 1.2, y: 0, z: 26.6, yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
   { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: 13.9, yaw: 90 }, { x: 24.5, y: 1, z: 7.9, yaw: 0 }, { x: 58.9, y: 1, z: 1.4, yaw: 90 }
@@ -726,6 +731,15 @@ template shellPrototypes() {
       schema: "puck.creation.v1"
       palette: shellStructure
       branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: 2)
+    }
+  }
+  // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.
+  prototype "gallery-nave-pier" {
+    document {
+      name: "gallery-nave-pier"
+      schema: "puck.creation.v1"
+      palette: shellStructure
+      branchedPier(base: 0, height: (tallBayHeight + 1.1), span: naveEndSpan, depth: 0.26, shaft: 0.22)
     }
   }
   prototype "gallery-arch" {
@@ -893,6 +907,16 @@ template shellPlacements() {
       position [pier.x, pier.y, pier.z]
       yawDegrees: pier.yaw
       solid
+    }
+  }
+  for tier in [0, 2] {
+    for (z, n) in naveEndPiers {
+      placement $"gallery-nave-pier-{tier}-{n}" {
+        prototype: "gallery-nave-pier"
+        parent: "gallery"
+        position [(galleryEast - 0.24), galleryFloor[tier], z]
+        yawDegrees: 90
+      }
     }
   }
   for x in archXs {

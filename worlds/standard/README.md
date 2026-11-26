@@ -105,6 +105,12 @@ it is.
 read, through which a seat hands a game a value no other seat may read (a sealed bid, a vote, a whisper, an order),
 and which a game's own rule collects. The games in [`../games/`](../games/README.md) use it.
 
+`architecture.puck` is a library of building pieces in the canyon-workshop language, each a template a creation
+expands with the palette slot its materials start at: the display plinth, the branched pier, the window bay, the fan
+shade (leaves on one driver that follows a state cell), the balustrade, the planter, the bench and the banner. The
+debug world's gallery is built from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each for
+`puck mesh preview`.
+
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.

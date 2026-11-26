@@ -929,7 +929,7 @@ state {
     // Each level's fan shades, apart from its lights: Down spreads them over the south and east windows, Up gathers
     // each over its hub. The shades' leaves follow these cells (shell.puck's `gallery-fan-<level>`).
     table hallBlinds: HallBlind {
-      level0 = Up
+      level0 = Down
       level1 = Up
       level2 = Down
       level3 = Down

@@ -62,7 +62,7 @@ to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator when on, a
 green locator glow when off, so it shows in the dark.
 
 Each level's fan shades stand apart from its lights. `hallBlinds` holds each
-level's (`Up` or `Down`); levels 0 and 1 start `Up` and levels 2 and 3 `Down`.
+level's (`Up` or `Down`); level 1 starts `Up` and the others `Down`.
 `gallery.blinds <level> up|down` gathers or spreads the shades over that
 level's south and east windows, and each leaf eases to its place over a few
 seconds, since the shades are moving parts on a driver that follows the cell

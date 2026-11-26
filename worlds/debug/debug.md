@@ -1,6 +1,6 @@
 # Debug world portals
 
-The debug world's portals are six paintings in the gallery hall's east wing
+The debug world's portals are paintings in the gallery's painting wing
 ([paintings.puck](paintings.puck), notes in [paintings.md](paintings.md)), each a
 framed canvas that is a door: walk or jump into it. Three lead to other lands:
 the garden ([garden.puck](garden.puck)), a small plot under a sunset sky with a
@@ -163,9 +163,8 @@ It uses the same platform pose and hidden-overlay commands.
 
 ## Painting wing
 
-[paintings.puck](paintings.puck) hangs the six paintings in the east end of the
-gallery hall's level 0 (x 51 to 69.7, z 12.3 to 39.7), behind a doorway in a
-partition wall. [paintings.md](paintings.md) lists them, says how to get in, what
+[paintings.puck](paintings.puck) hangs the paintings in the gallery's level 0,
+east of the entrance lobby. [paintings.md](paintings.md) lists them, says how to get in, what
 to watch, how to get out of the endless fall and what the ripple does.
 
 ## Rate range
@@ -258,25 +257,25 @@ case, `stage` when omitted:
 |---|---|---|
 | `stage` | The spawn, (0, 0, 0) | -Z |
 | `devices` | (4, 0.05, 30.5), in Wonderland 2.3 m before the deck's television, at whatever size she is ([`devices.md`](devices.md)) | -X, toward the television |
-| `wonderland` | (13.3, 0.05, 30.5), in the gallery lobby 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
+| `wonderland` | (13.3, 0.05, 30.5), in the gallery's west hall 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
-| `boardroom` | (53, 9.05, 26), inside the board game room's doorway on the gallery's level 2 | +X, into the room |
-| `cards` | (60.8, 9.05, 34.4), at the -Z edge of the card table in the board game room ([`cardtable.md`](cardtable.md)), its chair, close enough to sit | +Z, across the board |
-| `auction`, `shedding` | (56.5, 9.05, 14) and (60.8, 9.05, 14), south of the sealed-bid auction and shedding card tables in the board game room ([`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck)) | +Z, across the table |
-| `deduction`, `skirmish` | (55, 9.05, 38.1) and (67, 9.05, 38.1), north of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
-| `chess`, `go`, `reversi`, `alchemy`, `granaries` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21), (65, 9.05, 29) and (65, 9.05, 13), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md)), close enough to sit | +Z, across the board |
-| `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
-| `press` | (13, 0.05, 18.8), a step south of the typesetter's bench against the lobby's west wall ([`press.md`](press.md)), close enough to sit | -X, the bench ahead and left of her |
-| `painting-room` | (55, 0.05, 26), just inside the painting wing's doorway | East-north-east, across the room: the garden and night paintings left of her, the linked pair's east painting right |
-| `portals` | (57.5, 0.05, 31), before the painting wing's north wall | A little east of +Z: the garden painting left of her, the night painting right |
-| `portal-garden`, `portal-night` | (57, 0.05, 36.3) and (64, 0.05, 36.3), before the garden and night paintings | +Z; walk ahead to cross |
-| `portal-link` | (54.5, 0.05, 34.5), before the west painting of the linked pair | -X; walk ahead to come out of the east one |
-| `portal-fall` | (66, 0.05, 18.6), south of the floor painting | +Z; walk ahead to drop in |
-| `gallery` | (16, 0, 9), outside the gallery hall's entrance | +Z, through the door |
-| `lift`, `stairs` | (16, 0.1, 38) in the lift car (call it with `gallery.lift 0`) and (12.2, 2.3, 38.7) on the stairwell's half landing | -Z |
+| `boardroom` | In the board game room on the gallery's level 2, where the lift's landing meets it ([gallery.md](gallery.md)) | +X, into the room |
+| `cards` | At the -Z edge of the card table in the board game room ([`cardtable.md`](cardtable.md)), its chair, close enough to sit | +Z, across the board |
+| `auction`, `shedding` | South of the sealed-bid auction and shedding card tables in the board game room ([`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck)) | +Z, across the table |
+| `deduction`, `skirmish` | North of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
+| `chess`, `go`, `reversi`, `alchemy`, `granaries` | At White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables, along the projecting wing's windows; each close enough to sit | +Z, across the board |
+| `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer against the gallery's west wall | -X, toward the monitor |
+| `press` | (13, 0.05, 18.8), a step south of the typesetter's bench against the gallery's west wall ([`press.md`](press.md)), close enough to sit | -X, the bench ahead and left of her |
+| `painting-room` | Where the gallery's lobby meets the painting wing | East, along the wing's south wall and its paintings |
+| `portals` | Before the west court's south wall | A little east of -Z: the garden, night and city paintings ahead of her |
+| `portal-garden`, `portal-night` | Before the garden and night paintings | -Z; walk ahead to cross |
+| `portal-link` | Before the west painting of the linked pair, on the east fin | -X; walk ahead to come out of the east one |
+| `portal-fall` | North of the floor painting | -Z; walk ahead to drop in |
+| `gallery` | On the forecourt, outside the gallery's entrance | +Z, through the door |
+| `lift`, `stairs` | In the lift car (call it with `gallery.lift 0`) and on the stairwell's first half landing | +Z out of the car; +X across the landing |
 | `camera-course`, `camera-tunnel`, `camera-colonnade` | (-28, 0, 18.8), (-28, 0, 30.2) and (-27.5, 0, 33.8), before the course's L-corridor, tunnel and colonnade | +X, into the structure |
 | `camera-bays` | (-23.5, 0, 36.8), before the two bays and their partition | +Z |
-| `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
+| `gallery-level-0` .. `gallery-level-3` | Each level's landing in the gallery, before the lift's door | -Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
 | `meadow` | (119.5, 0.04, -55.3), in the wind meadow east of the studio ([`meadow.md`](meadow.md)) | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |
@@ -349,9 +348,10 @@ window renders at the power-of-two share of the screen its glass covers, as clea
 glass sampled linearly (the paintings author `filter: linear`), without shadows.
 The axis lines meet two metres to the spawn's +X side and run along +X and +Z,
 and the reference cubes and the test room stand behind the spawn on +Z and -X.
-The gallery hall ([gallery/gallery.puck](gallery/gallery.puck), four storeys holding the shape gallery)
+The gallery ([gallery/gallery.puck](gallery/gallery.puck), four storeys holding the shape gallery)
 stands on the open ground at x 10 to 70, z 12 to 40, its entrance in the south
-wall facing the spawn; [shapes.md](shapes.md) says how to get round it.
+wall facing the spawn; [gallery.md](gallery.md) draws its plan and
+[shapes.md](shapes.md) says how to get round it.
 
 ## Where a crossing lands
 
