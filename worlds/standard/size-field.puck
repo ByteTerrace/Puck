@@ -41,6 +41,7 @@ template sizeField(name, from, to, start, end, reach, register = "size") {
       {
         name: $"sizeField-{name}"
         kind: "Fixed"
+        capacity: 2
         cells [
           { key: "start", value: $"{start}" }
           { key: "end", value: $"{end}" }
@@ -66,7 +67,7 @@ template sizeField(name, from, to, start, end, reach, register = "size") {
     local target = $"sizeField-{name}".start * power($"sizeField-{name}".end / $"sizeField-{name}".start, along)
     when ((qx * qx) + (qy * qy) + (qz * qz)) <= (reach * reach) and bodyState(each, register) != target
     mode: Level
-    forEach: $bodies
+    forEach: $players
     setBodyState(key: $each, state: register, expression: target)
   }
 }
