@@ -36,6 +36,11 @@ public sealed partial class SdfWorldTables {
 
     private sealed record SelectionSummary(string Part, long[] Levels, long[] Tiers, long Draws);
 
+    // The levels a mark names apart: its value less one, the field's largest value naming every level past it.
+    private const int MarkedLevels = ((1 << SdfKernelInterfaces.MeshMarkBits) - 1);
+    private const uint MarkMask = ((1u << SdfKernelInterfaces.MeshMarkBits) - 1u);
+    private const int DrawsPerMarkWord = (32 / SdfKernelInterfaces.MeshMarkBits);
+
     /// <summary>Gets whether the raster passes mark what they select (<see cref="SelectionMarkFrames"/>): only while a
     /// reading asked for the selection (<see cref="DescribeSelection"/>) within <see cref="SelectionWindowUploads"/>
     /// uploads, so a frame nobody reads the selection for marks nothing, reads no marks back and walks none on the frame
@@ -52,13 +57,13 @@ public sealed partial class SdfWorldTables {
         if (row < m_rowSelectedAt.Length) { m_rowSelectedAt[row] = 0UL; }
     }
 
-    /// <summary>Reads one raster pass's selection marks, on the frame thread once its submission completed: each draw's two
-    /// bits hold the level it drew plus one, or zero where no phase drew it. Marks staged under another row epoch are
-    /// counted stale and read nothing.</summary>
+    /// <summary>Reads one raster pass's selection marks, on the frame thread once its submission completed: each draw's
+    /// <see cref="SdfKernelInterfaces.MeshMarkBits"/> bits hold the level it drew plus one, or zero where no phase drew it.
+    /// Marks staged under another row epoch are counted stale and read nothing.</summary>
     /// <param name="source">The selection that read the marks, which <see cref="ForgetSelectionMarks"/> forgets.</param>
     /// <param name="epoch">The row epoch the marks were staged under (<see cref="MeshRowEpoch"/>).</param>
     /// <param name="draws">The draws the pass selected among.</param>
-    /// <param name="marks">The mark words, sixteen draws a word, the lowest draw in the lowest bits.</param>
+    /// <param name="marks">The mark words, the lowest draw in the lowest bits.</param>
     internal void ObserveSelectionMarks(SdfMeshOcclusion source, long epoch, uint draws, ReadOnlySpan<uint> marks) {
         if (m_disposed) { return; }
         if ((epoch != m_meshRowEpoch) || (draws != ((uint)m_stagedCount))) {
@@ -71,7 +76,7 @@ public sealed partial class SdfWorldTables {
         // The triangle sums are the report's alone: kept only while a reading asked within the window, as the byte sums
         // are (CountUnselected). The selection stamps always are, so the window is whole when a reading asks.
         var summarized = ((m_uploads - Volatile.Read(location: ref m_selectionAskedAt)) <= SelectionWindowUploads);
-        var levels = (summarized ? new long[3] : null);
+        var levels = (summarized ? new long[MarkedLevels] : null);
         var tiers = (summarized ? new long[(SdfMeshTier.Last + 2)] : null);
         var selected = 0L;
         var stamp = (m_uploads + 1UL);
@@ -79,15 +84,15 @@ public sealed partial class SdfWorldTables {
         for (var word = 0; (word < marks.Length); word++) {
             var bits = marks[word];
 
-            for (var draw = (word * 16); ((bits != 0u) && (draw < draws)); draw++, bits >>= 2) {
-                var level = ((int)(bits & 3u) - 1);
+            for (var draw = (word * DrawsPerMarkWord); ((bits != 0u) && (draw < draws)); draw++, bits >>= SdfKernelInterfaces.MeshMarkBits) {
+                var level = ((int)(bits & MarkMask) - 1);
 
                 if ((level < 0) || (m_stagedDraws[draw].Mesh is not { } mesh)) { continue; }
                 m_rowSelectedAt[draw] = stamp;
                 selected++;
                 if ((levels is null) || (tiers is null)) { continue; }
 
-                var triangles = ((level == 0) ? mesh.TriangleCount : ((level <= mesh.Levels.Count) ? mesh.Levels[(level - 1)].TriangleCount : 0));
+                var triangles = mesh.LevelOf(level: level).TriangleCount;
 
                 levels[level] += triangles;
                 tiers[Math.Clamp(value: (m_stagedDraws[draw].Tier + 1), min: 0, max: (tiers.Length - 1))] += triangles;
@@ -150,14 +155,18 @@ public sealed partial class SdfWorldTables {
         var parts = new SortedDictionary<string, (long[] Levels, long[] Tiers, long Draws)>(comparer: StringComparer.Ordinal);
 
         foreach (var summary in m_selections.Values) {
-            if (!parts.TryGetValue(key: summary.Part, value: out var sum)) { sum = (new long[3], new long[summary.Tiers.Length], 0L); }
-            for (var level = 0; (level < 3); level++) { sum.Levels[level] += summary.Levels[level]; }
+            if (!parts.TryGetValue(key: summary.Part, value: out var sum)) { sum = (new long[MarkedLevels], new long[summary.Tiers.Length], 0L); }
+            for (var level = 0; (level < MarkedLevels); level++) { sum.Levels[level] += summary.Levels[level]; }
             for (var tier = 0; (tier < summary.Tiers.Length); tier++) { sum.Tiers[tier] += summary.Tiers[tier]; }
             parts[summary.Part] = (sum.Levels, sum.Tiers, (sum.Draws + summary.Draws));
         }
         _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"selection-marks={Volatile.Read(location: ref m_marksRead)} marks-stale={Volatile.Read(location: ref m_marksStale)} selected-bytes={Volatile.Read(location: ref m_selectedBytes)}B unselected-bytes={Volatile.Read(location: ref m_unselectedBytes)}B unselected-meshes={Volatile.Read(location: ref m_unselectedMeshes)}");
         foreach (var (part, (levels, tiers, draws)) in parts) {
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" drawn.{part}.draws={draws} drawn.{part}.level0={levels[0]}tri drawn.{part}.level1={levels[1]}tri drawn.{part}.level2={levels[2]}tri");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" drawn.{part}.draws={draws} drawn.{part}.triangles={levels.Sum()}tri drawn.{part}.level0={levels[0]}tri");
+            for (var level = 1; (level < levels.Length); level++) {
+                if (levels[level] == 0) { continue; }
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" drawn.{part}.level{level}={levels[level]}tri");
+            }
             for (var tier = 0; (tier < tiers.Length); tier++) {
                 if (tiers[tier] == 0) { continue; }
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" drawn.{part}.tier{((tier == 0) ? "-none" : (tier - 1).ToString(provider: CultureInfo.InvariantCulture))}={tiers[tier]}tri");

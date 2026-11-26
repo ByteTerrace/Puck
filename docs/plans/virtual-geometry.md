@@ -105,10 +105,10 @@ be baked on demand and cached where a triangle asset cannot.
   walks `while (chosen < count && error * scale <= 1.0) { chosen++; }` and
   back `while (chosen > 0u && error * scale > direction.w) { chosen--; }`
   (`sdfSelectionLevel`), so a draw past the distance where its
-  last level fits stays at that level. `SdfMeshCollapse.CellShares` is
-  `[0.25f, 2f]` and `NormalDegrees` is `[2f, 6f]`: two coarser
-  levels whose error budgets are a quarter and two of the group's contour
-  cell, and `KeptShare = 0.75f` drops a level that saves less than a quarter.
+  last level fits stays at that level. `SdfMeshCollapse.CellShares` holds a
+  level for each doubling of the error budget from a quarter of the group's
+  contour cell to 32 cells, `NormalDegrees` widens with it from 2 to 30
+  degrees, and `KeptShare = 0.75f` drops a level that saves less than a quarter.
   The collapse never moves or makes a vertex; a corner where three faces meet,
   an open edge and a place whose triangles do not close a ring never move
   (`SdfMeshCollapse` summary).
@@ -983,6 +983,19 @@ a ruling and not a neutral value) in five steps:
 4. **Build one chain of rungs per shape.** Hold the requested tier's levels,
    the streaming floor, and tiers other copies ask for so each copy and cascade
    selects the coarsest qualified rung for its budget.
+   - *Built within one tier.* The collapse keeps a level each doubling of its
+     error (`SdfMeshCollapse.CellShares`), so each copy draws the level its own
+     distance needs whatever tier its nearest sibling asked for. Baked offline
+     per tier (`puck mesh audit --cpu --tier`, its `levels:` line), a tree's
+     coarser tiers hold no fewer triangles at a level error than the fine
+     tier's chain does (the oak's tier 7 keeps 6,100 at 27 mm, its tier 2 5,800
+     at 33 mm), and they pay only for thin foliage, whose collapse stalls:
+     leaf litter's tier 5 keeps a third of tier 2's triangles at the same level
+     error, the fern's tier 4 about three quarters. The half-pixel rule admits those tiers
+     only where their cell is under half a pixel, past about 100 m for the
+     litter's, so what the rungs still owe is far views and the bytes a far
+     copy's tier holds, with the recorded deviation below to admit a rung by
+     its error rather than its nominal cell.
    - *Recorded deviation over authored bounds.* Every rung records its
      bidirectional deviation from the authored field via
      `SdfMeshFieldLevels.Measure` (covering lost parts, materials and normals)
@@ -1034,7 +1047,7 @@ Still to find out: how many triangles each level and tier draws, whether
 recording a rung's deviation costs too much bake time, and whether switching
 tiers per copy pops on thin parts in motion
 ([what would change the answer](rendering-research/step-designs.md#what-would-change-the-answer)).
-Options not taken: keeping both rules; more collapse levels, already measured
+Options not taken: keeping both rules; collapse levels past 32 cells, already measured
 and rejected (four levels down to 128 cells took an oak only from 3,052
 triangles to 1,440, and three field-built experiments are [D1](#d1-the-unit-of-detail)'s),
 so the far shadow map gets a coarser tier instead; one mesh over many copies

@@ -465,6 +465,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADOW_CULLED_ENTRY_PHASE", value: SdfKernelInterfaces.MeshShadowCulledEntryPhase);
         declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);
         declarations.Count(name: "SDF_MESH_MARK_BASE", value: SdfKernelInterfaces.MeshMarkBase);
+        declarations.Count(name: "SDF_MESH_MARK_BITS", value: SdfKernelInterfaces.MeshMarkBits);
         declarations.Count(name: "SDF_MESH_VERTEX_COUNT_BASE", value: SdfKernelInterfaces.MeshVertexCountBase);
         declarations.Real(name: "SDF_MESH_SHADOW_FILTER_TEXELS", value: SdfKernelInterfaces.MeshShadowFilterTexels);
         declarations.Count(name: "SDF_SHADOW_BLOCK_EDGE", value: SdfWorldPackage.ShadowBlockEdge);

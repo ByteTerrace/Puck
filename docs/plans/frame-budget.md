@@ -133,11 +133,20 @@ against the same frame:
   10.2 million of them culled (facing away or covering no sample), and indexed
   draws, which halved the vertex invocations (33.5 to 15.9 million), took an
   eighth off the pass. Copies of a creation share one mesh at the tier its nearest copy
-  demands, the collapse levels coarsen to 32 cells at most, and a group's floor
-  draws only where its cell projects under half a pixel, so a tree tens to
-  hundreds of metres off draws a fine tier's coarse level. The cut is a level or
-  tier a far copy can take: more collapse levels past 32 cells, a coarser tier
-  a copy selects by its own distance, or an impostor.
+  demands, and each copy draws the level its own pixels allow. The chain's steps
+  of eight cells (a quarter cell, then two) held every tree between about 9 and
+  75 m at the quarter-cell level, 50,000 to 130,000 triangles a tree, so the
+  chain now takes a level each doubling of the error, and a draw's error projects
+  at the sharpest its own box can show rather than the frustum corner's
+  (`sdfSelectionViewPixels`). Counted offline over the forest's 4,583 copies
+  from the stop's camera, with each species' CPU bake and no occlusion, the
+  copies in view select 26 million triangles where they selected 41 million.
+  What remains is the copies whose box reaches within a few metres of the eye,
+  which draw their merged mesh whole (a draw takes one level; about 4 million),
+  and thin foliage whose collapse stalls (a fern's coarsest level keeps 17,000
+  triangles at 26 mm; its coarser tiers lose the fronds past its floor). Both
+  are the [virtual geometry plan](virtual-geometry.md)'s: clusters inside a draw
+  (D4) and a coarse tier that keeps thin parts (D1's option 1d).
 - **`resolve`**: standing, every pixel sums its window; `world.temporal off`
   removes the pass and a third of the probe lookup with it.
 - **`main`**: the root places every view and pane in one pass

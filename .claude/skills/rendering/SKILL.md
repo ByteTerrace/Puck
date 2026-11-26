@@ -226,10 +226,12 @@ group's row instead (`SdfMeshDraw.Trace`). A shape names its materials by place,
 floor kept across a replan or a renumbering can match the group's shape while carrying
 another program's material ids. A kept floor changes only through `Group.SetFloor`, which `KeepFloorOf` and
 `Renumber` hand the library's copy in the group's own ids (`Group.FloorIn`), or no
-floor where the library holds none. Below the floor, the collapse's last two
-levels (`SdfMeshCollapse.CellShares`) serve views far smaller than the tier was
-demanded for. The selection marks clamp a level past the second to it, so
-`drawn.*.level2` counts the second level's triangles for those draws.
+floor where the library holds none. Copies share their group's tier, but each copy
+draws the level of the collapse chain its own pixels allow (a level each doubling of
+the error, `SdfMeshCollapse.CellShares`), so a far copy is not drawn at its nearest
+sibling's detail; the chain's coarse levels also serve views far smaller than the tier
+was demanded for. A selection mark holds a draw's level in `SdfKernelInterfaces.MeshMarkBits`
+bits, so `drawn.*.level<n>` counts every level of the chain apart.
 
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's
@@ -1765,9 +1767,10 @@ wrong. The contracts that bite most often:
   `SdfMeshPathBake.Land`): a flat face's interior vertices go and every outline
   vertex stays, so no pixel changes. A change that moves or renormals a vertex
   there, or drops an outline vertex, does change pixels.
-- **A landed mesh carries two coarser levels** (`SdfMeshCollapse`, after the
+- **A landed mesh carries a chain of coarser levels** (`SdfMeshCollapse`, after the
   merge in `Land`; `SdfMesh.Levels`): half-edge collapses over the mesh's own
-  vertices, each with its measured error. The region lays a level's indices and
+  vertices, one each doubling of the error from a quarter cell to 32 cells, each
+  with its measured error. The region lays a level's indices and
   materials after the merged ones', so its triangles are numbered after them. A
   draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
   in a counted indirect draw's identity too), its record points at the mesh's
@@ -1795,7 +1798,7 @@ wrong. The contracts that bite most often:
   diagnostics' nearest query adds the level's error to its budget. A scene built
   with no `traceError` (the offline field-level audit) traces level zero. Each pass's choice runs beside the box cull in
   `frame/sdf-mesh-selection.hlsli`, from `SdfMeshDetail`'s packed controls;
-  `world.detail 0|1|2` forces one level
+  `world.detail <level>` forces one level
   everywhere, and `world.detail auto` restores the choice.
 - **Large static unions have independently drawn chunks** (`SdfMeshChunks`, before the merge). Their contour edges
   partition the surface, and every seam edge stays fixed at every level. The store holds the pieces; only those pieces

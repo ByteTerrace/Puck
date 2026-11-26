@@ -160,13 +160,60 @@ public sealed class CredentialEvictionLawTests {
         clock.Advance(WorldPeerHost.CredentialSweepInterval);
         Assert.True(condition: await closed.WaitAsync(cancellationToken: TestToken));
     }
+    // THE LAW: a federation session proved by a directly pinned (SignsDirectly) key never expires by time. The
+    // authenticator gives it the binding's end, which no binding limits (long.MaxValue), so the session rests on the
+    // trust row alone: it stands past the longest window any claim may carry, and ends only when the trust rows change.
+    [Fact]
+    public async Task APinnedFederationSessionNeverExpiresByTimeAndEndsOnlyWhenItsTrustRowChanges() {
+        var identity = GenerateIdentity(subject: "pinned-authority");
+        using var key = identity.Key;
+        var signingEntry = BuildEntry(grants: [], identity: identity);
+        var document = BuildAdmissionDocument(entry: signingEntry) with {
+            Admission = [signingEntry, new WorldAdmissionEntry(
+                Domain: identity.Subject, Mode: WorldAdmissionTrustMode.FederatedAuthority, Grants: [], Disclosure: WorldDisclosureTier.Replica
+            )],
+        };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var clock = new VirtualClock(start: ClaimInstant);
+        var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: WorldAttestedAuthenticator.MaximumClaimAge, now: clock.GetUtcNow);
+
+        // The verified identity: its trust lasts until the binding's end, which no binding limits for a pinned key.
+        var challenge = verifier.NewChallenge();
+        var verified = await verifier.VerifyAsync(challenge, new WorldAttestedAuthenticator(oracle: oracle).Prove(challenge: challenge), TestToken);
+
+        Assert.NotNull(@object: verified);
+        Assert.Equal(expected: long.MaxValue, actual: verified.ValidThrough);
+        Assert.True(condition: verified.TrustIsCurrent?.Invoke());
+
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+
+        PeerTestClient.StartOrSkip(host: host);
+        var authenticated = await AuthenticateFederationAsync(host: host, oracle: oracle);
+        using var client = authenticated.Client;
+
+        Assert.Equal(actual: authenticated.Kind, expected: ((byte)WorldFederationResponse.Authenticated));
+        await OpenIntentStreamAsync(client: client);
+        var closed = WaitForCloseAsync(stream: client.GetStream(), ct: TestToken);
+
+        // Twice the longest window a claim may carry, swept every second: the session stands throughout.
+        clock.Advance(by: (2 * WorldAttestedAuthenticator.MaximumClaimAge));
+        Assert.NotSame(expected: closed, actual: await Task.WhenAny(closed, Task.Delay(delay: TimeSpan.FromMilliseconds(value: 500), cancellationToken: TestToken)));
+        Assert.True(condition: verified.TrustIsCurrent?.Invoke());
+
+        // The trust row changes: the pinned key is no longer trusted, and the session ends at the next sweep.
+        InstallDefinition(fixture: fixture, candidate: fixture.Server.Definition with { Admission = [] });
+        Assert.False(condition: verified.TrustIsCurrent?.Invoke());
+        clock.Advance(by: WorldPeerHost.CredentialSweepInterval);
+        Assert.True(condition: await closed.WaitAsync(cancellationToken: TestToken));
+    }
     [Fact]
     public async Task AuthenticatedFederationConnectionLimitRefusesOverflowAndReleasesCapacityOnDisconnect() {
         var identity = GenerateIdentity(subject: "federation-capacity");
         using var fixture = Fixtures.FreshServer(definition: BuildAdmissionDocument(entry: BuildEntry(grants: [], identity: identity)));
         var clock = new VirtualClock(start: ClaimInstant);
         var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
-        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromMinutes(value: 1), now: clock.GetUtcNow);
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: WorldAttestedAuthenticator.MaximumClaimAge, now: clock.GetUtcNow);
         using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
@@ -261,7 +308,7 @@ public sealed class CredentialEvictionLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
         var clock = new VirtualClock(start: ClaimInstant);
         var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
-        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromMinutes(value: 1), now: clock.GetUtcNow);
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: WorldAttestedAuthenticator.MaximumClaimAge, now: clock.GetUtcNow);
         using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
@@ -425,7 +472,7 @@ public sealed class CredentialEvictionLawTests {
 
             var clock = new VirtualClock(start: ClaimInstant);
             var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
-            var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromMinutes(value: 1), now: clock.GetUtcNow);
+            var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: WorldAttestedAuthenticator.MaximumClaimAge, now: clock.GetUtcNow);
             var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
             PeerTestClient.StartOrSkip(host: host);

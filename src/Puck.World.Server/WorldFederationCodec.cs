@@ -122,7 +122,8 @@ public enum WorldFederationResponse : byte {
     /// <summary>Whether home recorded a hop's settlement and acknowledges the notice.</summary>
     HopSettledAck = 18,
     /// <summary>A stream's cut or end: its stamp and whether the stream ends, with no content
-    /// (<see cref="WorldFederationCodec.EncodeCut"/>).</summary>
+    /// (<see cref="WorldFederationCodec.EncodeCut"/>). A generation that opens with its whole document is cut by that
+    /// <see cref="Definition"/> record itself; this record opens only a generation no document carries.</summary>
     Cut = 19,
     /// <summary>Body changes relative to an acknowledged snapshot in this stream generation.</summary>
     SnapshotDelta = 20,

@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
 
@@ -25,19 +26,24 @@ namespace Puck.SdfVm;
 /// </summary>
 public static class SdfMeshCollapse {
     /// <summary>The share of a mesh's contour cell (<see cref="SdfMesh.BakeCell"/>, its largest side) each coarser level's
-    /// vertices stay within, finest first. The first two serve the views that resolve the mesh's own tier; the last two
-    /// serve the views far smaller than the one its tier was demanded for (a screen a few dozen pixels high, a shadow
-    /// texel metres across), which take a level only where its error projects under a pixel or a texel
-    /// (<see cref="SdfMeshDetail"/>), so a tiny view draws a tiny mesh.</summary>
-    public static ReadOnlySpan<float> CellShares => [0.25f, 2f, 8f, 32f];
+    /// vertices stay within, finest first: one level each doubling of the error from a quarter of the cell to 32 cells. A
+    /// draw takes the coarsest level whose error projects under a pixel or a texel (<see cref="SdfMeshDetail"/>), so each
+    /// copy of a shared mesh draws the level its own distance needs: a level every doubling leaves a draw at most twice
+    /// as fine as its pixel asks, where a chain with wider steps draws a copy several times the distance of the one its
+    /// level was made for at that level's triangles. The levels to two cells serve the views that resolve the mesh's own
+    /// tier; the coarser ones serve views far smaller than the one its tier was demanded for (a far copy, a screen a few
+    /// dozen pixels high, a shadow texel metres across).</summary>
+    public static ReadOnlySpan<float> CellShares => [0.25f, 0.5f, 1f, 2f, 4f, 8f, 16f, 32f];
     /// <summary>The angle, in degrees, each level's interpolated normal at a vertex's nearest point stays within of the
-    /// vertex's own normal, finest first.</summary>
-    public static ReadOnlySpan<float> NormalDegrees => [2f, 6f, 15f, 30f];
+    /// vertex's own normal, finest first, one for each of <see cref="CellShares"/>: 2 degrees at a quarter cell, 6 at two
+    /// cells, 15 at eight and 30 at 32, and between those geometric in the error.</summary>
+    public static ReadOnlySpan<float> NormalDegrees => [2f, 2.88f, 4.16f, 6f, 9.49f, 15f, 21.2f, 30f];
     /// <summary>The normal angle, in degrees, the levels a view resolving the mesh's own tier takes stay within: the
-    /// second level's, which the field levels' witnesses hold too (<see cref="SdfMeshFieldLevels"/>).</summary>
+    /// two-cell level's, which the field levels' witnesses hold too (<see cref="SdfMeshFieldLevels"/>).</summary>
     public static float ResolvedDegrees => NormalDegrees[(ResolvedLevels - 1)];
-    /// <summary>The levels a view resolving the mesh's own tier takes, finest first (<see cref="CellShares"/>).</summary>
-    public const int ResolvedLevels = 2;
+    /// <summary>The levels a view resolving the mesh's own tier takes, finest first (<see cref="CellShares"/>): those to two
+    /// cells.</summary>
+    public const int ResolvedLevels = 4;
 
     /// <summary>The most of the next finer level's triangles a level keeps and still is made: one that saves less is not
     /// worth its region words.</summary>
@@ -51,6 +57,21 @@ public static class SdfMeshCollapse {
     // The most passes a level takes, and the least share of its places a pass must collapse for another to follow.
     private const int MaxPasses = 48;
     private const int TailShare = 512;
+
+    /// <summary>Counts the levels the collapse ran, one an error budget a mesh was collapsed to.</summary>
+    public static readonly WorkKind Runs = new(name: "sdf.collapse.runs", unit: "levels", workClass: WorkClass.Pacing);
+    /// <summary>Counts the levels a mesh kept (<see cref="KeptShare"/>), a part of <see cref="Runs"/>.</summary>
+    public static readonly WorkKind Kept = new(name: "sdf.collapse.kept", unit: "levels", workClass: WorkClass.Pacing);
+    /// <summary>Counts the collapse's passes, each of which prices every place that may move.</summary>
+    public static readonly WorkKind Passes = new(name: "sdf.collapse.passes", unit: "passes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the places those passes priced.</summary>
+    public static readonly WorkKind Priced = new(name: "sdf.collapse.priced", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the collapses tried: an edge measured against every bound a level holds, refused or taken.</summary>
+    public static readonly WorkKind Tried = new(name: "sdf.collapse.tried", unit: "edges", workClass: WorkClass.Pacing);
+    /// <summary>Counts the collapses taken, a part of <see cref="Tried"/>.</summary>
+    public static readonly WorkKind Taken = new(name: "sdf.collapse.taken", unit: "edges", workClass: WorkClass.Pacing);
+    /// <summary>Gets the collapse's work, process-wide: what building every baked mesh's levels costs, counted, never timed.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Tried, Taken]);
 
     /// <summary>Returns a mesh with its coarser levels of detail.</summary>
     /// <param name="mesh">The merged mesh.</param>
@@ -71,23 +92,32 @@ public static class SdfMeshCollapse {
             return mesh;
         }
 
+        // A mesh whose features are preserved (lettering) makes only the levels a view resolving its tier takes: its
+        // strokes are what it shows, which the coarser levels' wider normal bounds would let merge.
+        var levelCount = (preserveFeatures ? ResolvedLevels : CellShares.Length);
+        var errors = new double[levelCount];
+        var cosines = new double[levelCount];
+
+        for (var level = 0; (level < levelCount); level++) {
+            errors[level] = (CellShares[level] * cell);
+            cosines[level] = Math.Cos(d: ((NormalDegrees[level] * Math.PI) / 180.0));
+        }
+
         using var scope = new RentedScope(allocator: allocator, owner: owner);
-        var collapser = new Collapser(mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
+        var collapser = new Collapser(cosines: cosines, errors: errors, mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
 
         if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
 
-        // A mesh whose features are preserved (lettering) makes only the levels a view resolving its tier takes: its
-        // strokes are what it shows, which the coarser levels' wider normal bounds would let merge.
-        var levelCount = (preserveFeatures ? ResolvedLevels : CellShares.Length);
-
         for (var level = 0; (level < levelCount); level++) {
-            var made = collapser.Run(cosine: Math.Cos(d: ((NormalDegrees[level] * Math.PI) / 180.0)), error: (CellShares[level] * cell));
+            var made = collapser.Run(level: level);
 
+            ProcessWork.Count(kind: Runs);
             if (made.TriangleCount > (KeptShare * kept)) {
                 continue;
             }
+            ProcessWork.Count(kind: Kept);
 
             // A sample later tracked to a nearer triangle can measure a coarser level nearer than a finer one; each bound
             // holds, and the larger holds for both.
@@ -164,6 +194,12 @@ public static class SdfMeshCollapse {
 
         private int m_revision;
         private int m_budget;
+        // Each level's distance budget and least normal cosine, finest first: both loosen level by level, so a sample
+        // the level's bounds refuse names the first level whose bounds could hold it (NeededLevel). The budget that
+        // the latest measured refusal stands through (Pass records it).
+        private readonly double[] m_errors;
+        private readonly double[] m_cosines;
+        private int m_refusedThrough;
 
         // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
@@ -227,7 +263,9 @@ public static class SdfMeshCollapse {
 
         // Every table is rented through the scope, which the caller disposes: a rented array can be longer than asked for, so
         // each read is bounded by the place, triangle or sample count, never the array's length.
-        public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope) {
+        public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope, double[] errors, double[] cosines) {
+            m_errors = errors;
+            m_cosines = cosines;
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
             using var held = mesh.Hold();
             var positions = held.Positions.Span;
@@ -349,11 +387,15 @@ public static class SdfMeshCollapse {
             }
         }
 
-        // Collapses until no pass takes enough within the bounds, then returns the level the alive triangles make.
-        public SdfMeshLevel Run(double error, double cosine) {
+        // Collapses until no pass takes enough within the level's bounds, then returns the level the alive triangles make.
+        // Levels run in order, each from the state the finer one left: the budget a refusal is keyed by is the level plus one.
+        public SdfMeshLevel Run(int level) {
+            var error = m_errors[level];
+            var cosine = m_cosines[level];
+
             // A refusal of the shape or the link reads no budget and stands into the next level while its revisions do;
-            // a measured refusal is keyed by the level that measured it.
-            m_budget++;
+            // a measured refusal stands through the budgets its measure showed cannot take it.
+            m_budget = (level + 1);
             for (var pass = 0; (pass < MaxPasses); pass++) {
                 // The constructor's lists and kinds stand for the first pass; later, a place no collapse changed keeps its
                 // triangles and its kind.
@@ -416,6 +458,7 @@ public static class SdfMeshCollapse {
             m_candidateCosts.GetSpan().Slice(start: 0, length: count).Sort(items: m_candidatePlaces.GetSpan().Slice(start: 0, length: count));
 
             var taken = 0;
+            var tried = 0L;
 
             for (var at = 0; (at < count); at++) {
                 var place = m_candidatePlaces[at];
@@ -427,6 +470,7 @@ public static class SdfMeshCollapse {
                 foreach (var (_, target) in Prices(place)) {
                     if (m_touched[target] == m_pass || Refused(place, target)) { continue; }
                     if (!prepared) { PrepareFrom(place); prepared = true; }
+                    tried++;
                     var outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
 
                     if (outcome == Outcome.Taken) {
@@ -437,12 +481,16 @@ public static class SdfMeshCollapse {
                     // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
                     m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
                         Outcome.RefusedLinks => m_revisions[target],
-                        Outcome.RefusedMeasure => MeasuredAt(budget: m_budget),
+                        Outcome.RefusedMeasure => MeasuredAt(budget: m_refusedThrough),
                         _ => AnyRevision,
                     });
                 }
             }
 
+            ProcessWork.Count(kind: Passes);
+            ProcessWork.Add(amount: count, kind: Priced);
+            ProcessWork.Add(amount: tried, kind: Tried);
+            ProcessWork.Add(amount: taken, kind: Taken);
             return taken;
         }
         private ReadOnlySpan<(double Cost, int Place)> Prices(int place) {
@@ -472,9 +520,11 @@ public static class SdfMeshCollapse {
 
             var low = PackedIntPair.Low(value: rejected);
 
-            return ((low == AnyRevision) || (low == m_revisions[to]) || (low == MeasuredAt(budget: m_budget)));
+            // A measured refusal's word falls as its budget rises, so it stands while this level's budget is no higher.
+            return ((low < AnyRevision) ? (MeasuredAt(budget: m_budget) >= low) : ((low == AnyRevision) || (low == m_revisions[to])));
         }
-        // The neighbour word of a refusal the level's distance and normal budgets decided: below every other word.
+        // The neighbour word of a refusal the level's distance and normal budgets decided, standing through a budget:
+        // below every other word.
         private static int MeasuredAt(int budget) => (AnyRevision - budget);
 
         // The neighbour revision a refusal that never read the neighbour's fan records; no revision is negative.
@@ -740,6 +790,7 @@ public static class SdfMeshCollapse {
                 if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Outcome.Refused; }
             }
 
+            // Each measure that refuses names the budget its refusal stands through (m_refusedThrough).
             if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.RefusedMeasure; }
             // The line check is the cheaper of the two, and neither changes what the other measures.
             if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.RefusedMeasure; }
@@ -888,8 +939,12 @@ public static class SdfMeshCollapse {
 
                     if (point != 0) { m_reverseEdges[key] = (nearest, next); }
                     bound = Math.Max(val1: bound, val2: nearest);
-                    // The bound only grows. A later point cannot rescue a refused triangle.
-                    if (!(bound <= error)) { return false; }
+                    // The bound only grows. A later point cannot rescue a refused triangle. A point that refuses ran its
+                    // search to the end, since each witness it met lay past the bound, so its nearest is exact.
+                    if (!(bound <= error)) {
+                        m_refusedThrough = NeededLevel(distance: nearest, limit: double.PositiveInfinity);
+                        return false;
+                    }
                 }
 
                 m_strays.Add(item: bound);
@@ -990,7 +1045,10 @@ public static class SdfMeshCollapse {
                             bestDistance = distance;
                         }
                     }
-                    if (!(bestDistance <= error)) { return false; }
+                    if (!(bestDistance <= error)) {
+                        m_refusedThrough = NeededLevel(distance: bestDistance, limit: m_lineLimit);
+                        return false;
+                    }
 
                     m_lineChoices.Add(item: (sample, bestOther, bestDistance));
                 }
@@ -1076,7 +1134,10 @@ public static class SdfMeshCollapse {
                         Offer(at: at, best: ref best, bestCosine: ref bestCosine, bestDistance: ref bestDistance, cosine: cosine, error: error, source: in source);
                     }
                 }
-                if (best < 0) { return false; }
+                if (best < 0) {
+                    m_refusedThrough = NeededLevel(candidates: candidates, source: in source);
+                    return false;
+                }
 
                 m_samples.Add(item: source.Sample);
                 m_choices.Add(item: (m_measured[best].Triangle, bestDistance));
@@ -1085,6 +1146,34 @@ public static class SdfMeshCollapse {
             return true;
         }
 
+        // The budget a refusal stands through: the first later level whose bounds a refused measure's exact answer meets, so
+        // every level before it refuses the collapse on that witness alone, whatever the others measure; the chain's last
+        // budget where none does. Every input a measure reads is the place's own fan, its samples and lines and the
+        // neighbour's fixed position, which the refusal's place revision guards; only the level's bounds vary, and they
+        // loosen level by level. A level's budget is its index plus one, so a refusal standing through budget k stands at
+        // every level before level k.
+        private int NeededLevel(double distance, double limit, double cosine = 1.0) {
+            for (var level = m_budget; (level < m_errors.Length); level++) {
+                if ((distance <= Math.Min(val1: m_errors[level], val2: limit)) && (cosine >= m_cosines[level])) { return level; }
+            }
+            return m_errors.Length;
+        }
+        // NeededLevel of a surface sample no laid-out triangle took: the earliest level any triangle of its material meets,
+        // each measured to the whole triangle (Offer's test with no bound to stop at).
+        private int NeededLevel(int candidates, in Source source) {
+            var needed = m_errors.Length;
+
+            for (var at = 0; ((at < candidates) && (needed > m_budget)); at++) {
+                ref readonly var candidate = ref m_measured[at];
+
+                if (candidate.Material != source.Material) { continue; }
+
+                var (distance, cos) = Nearest(candidate: in candidate, limit: double.PositiveInfinity, own: source.Own, ownLength: source.OwnLength, px: source.Px, py: source.Py, pz: source.Pz);
+
+                needed = Math.Min(val1: needed, val2: NeededLevel(cosine: cos, distance: distance, limit: double.PositiveInfinity));
+            }
+            return needed;
+        }
         // A sample tracked to a triangle of the source fan, laid out for Measure: the fan index of its triangle, its vertex
         // and place's position, its normal and that normal's length, and its material.
         private struct Source {

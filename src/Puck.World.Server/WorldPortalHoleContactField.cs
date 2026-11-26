@@ -39,13 +39,20 @@ public sealed class WorldPortalHoleContactField : IContactField {
     /// treats every door as open.</param>
     /// <returns>The field bodies resolve against.</returns>
     public static IContactField Wrap(IContactField inner, WorldDefinition definition, WorldPortalClosures? closures = null) {
-        var openings = WorldFacePortalPolicy.PortalApertures(definition: definition);
+        var doors = WorldFaceCatalog.For(definition: definition).PortalDoors(definition: definition);
+        var openings = new List<(string PlacementId, string Face, WorldFaceAperture.Box Box)>(capacity: doors.Count);
 
-        return ((openings.Length > 0)
+        for (var index = 0; (index < doors.Count); index++) {
+            if (doors[index].Aperture is WorldFaceAperture.Box box) {
+                openings.Add(item: (definition.Placements[doors[index].Row].Id, doors[index].Face.Face, box));
+            }
+        }
+
+        return ((openings.Count > 0)
             ? new WorldPortalHoleContactField(
                 closures: closures,
                 inner: inner,
-                openings: openings
+                openings: [.. openings]
             )
             : inner
         );

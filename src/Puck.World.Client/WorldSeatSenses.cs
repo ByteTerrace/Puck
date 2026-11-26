@@ -153,7 +153,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     public Reading Predict(in Reading reading, int slot) {
         if ((prediction is not { } predictor) || !predictor.TryPredict(body: out var body, slot: slot) ||
             !ReferenceEquals(objA: body.Endpoint, objB: reading.Endpoint) || (body.Index != reading.Index) ||
-            (body.Error > FixedQ4816.FromDouble(value: ConfirmedMetres))) {
+            (body.Error is not { } missed) || (missed > FixedQ4816.FromDouble(value: ConfirmedMetres))) {
             return reading;
         }
 

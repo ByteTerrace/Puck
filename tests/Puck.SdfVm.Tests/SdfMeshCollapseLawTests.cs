@@ -162,14 +162,13 @@ public sealed class SdfMeshCollapseLawTests {
         Assert.Equal(merged.Positions.ToArray(), retained.Positions.ToArray());
         Assert.Equal(merged.Indices.ToArray(), retained.Indices.ToArray());
 
-        Assert.Equal(expected: 2, actual: levelled.Levels.Count);
+        Assert.True(condition: (levelled.Levels.Count >= 2));
         Assert.True(condition: (levelled.Levels[0].TriangleCount < (sphere.TriangleCount / 4)));
-        Assert.True(condition: (levelled.Levels[1].TriangleCount <= (SdfMeshCollapse.KeptShare * levelled.Levels[0].TriangleCount)));
-        for (var level = 0; (level < levelled.Levels.Count); level++) {
-            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], number: (level + 1), levelled: levelled, mesh: sphere, share: SdfMeshCollapse.CellShares[level]);
+        for (var level = 1; (level < levelled.Levels.Count); level++) {
+            Assert.True(condition: (levelled.Levels[level].TriangleCount <= (SdfMeshCollapse.KeptShare * levelled.Levels[(level - 1)].TriangleCount)));
+            Assert.True(condition: (levelled.Levels[level].Error >= levelled.Levels[(level - 1)].Error));
         }
-
-        Assert.True(condition: (levelled.Levels[1].Error >= levelled.Levels[0].Error));
+        HoldsChain(levelled: levelled, mesh: sphere);
     }
     [Fact]
     public void ACubesCreasesSlideAndItsCornersStay() {
@@ -195,9 +194,7 @@ public sealed class SdfMeshCollapseLawTests {
         var levelled = SdfMeshCollapse.Levels(mesh: plane);
 
         Assert.NotEmpty(collection: levelled.Levels);
-        for (var level = 0; (level < levelled.Levels.Count); level++) {
-            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], number: (level + 1), levelled: levelled, mesh: plane, share: SdfMeshCollapse.CellShares[level]);
-        }
+        HoldsChain(levelled: levelled, mesh: plane);
 
         // The open edge's vertices never move: every one is still a vertex of each level.
         var planePositions = plane.Positions;
@@ -290,10 +287,30 @@ public sealed class SdfMeshCollapseLawTests {
         from y in new[] { -1f, 1f }
         from z in new[] { -1f, 1f }
         select new Vector3(x: x, y: y, z: z);
+    // Each level of a chain holds the contract of one run of the collapse, the runs in order: a run that saves too little
+    // keeps no level (SdfMeshCollapse.KeptShare), so the n-th level is the n-th run's or a later one's.
+    private static void HoldsChain(SdfMesh mesh, SdfMesh levelled) {
+        var run = 0;
+
+        for (var number = 1; (number <= levelled.Levels.Count); number++) {
+            string? violation = null;
+
+            for (; (run < SdfMeshCollapse.CellShares.Length); run++) {
+                violation = Violation(degrees: SdfMeshCollapse.NormalDegrees[run], levelled: levelled, mesh: mesh, number: number, share: SdfMeshCollapse.CellShares[run]);
+                if (violation is null) { break; }
+            }
+
+            Assert.True(condition: (run < SdfMeshCollapse.CellShares.Length), userMessage: $"level {number} holds no run's bounds after the finer level's: {violation}");
+            run++;
+        }
+    }
     // A level's whole contract against its mesh, measured by brute force: its error within the level's bound and at least
     // every vertex's distance to the level's nearest triangle of its material, some such triangle within the error and the
-    // angle, no edge opened, and no triangle turned against its normals.
-    private static void Holds(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) {
+    // angle, no edge opened, and no triangle turned against its normals. Fails the test at the first breach.
+    private static void Holds(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) =>
+        Assert.Null(@object: Violation(degrees: degrees, levelled: levelled, mesh: mesh, number: number, share: share));
+    // The first breach of a level's contract (Holds), or null where it holds.
+    private static string? Violation(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) {
         var level = levelled.Levels[(number - 1)];
         var cell = mesh.BakeCell.X;
         var positions = mesh.Positions.Span;
@@ -301,12 +318,12 @@ public sealed class SdfMeshCollapseLawTests {
         var indices = levelled.LevelIndices(level: number).Span;
         var cosine = Math.Cos(d: ((degrees * Math.PI) / 180.0));
 
-        Assert.True(condition: (level.Error <= (share * cell)));
-        Assert.Equal(expected: OpenEdges(positions: positions, indices: mesh.Indices.Span), actual: OpenEdges(indices: indices, positions: positions));
+        if (level.Error > (share * cell)) { return $"error {level.Error} past the bound {share * cell}"; }
+        if (OpenEdges(positions: positions, indices: mesh.Indices.Span) != OpenEdges(indices: indices, positions: positions)) { return "an edge opened"; }
         for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
             var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
-            Assert.True(condition: (Vector3.Dot(vector1: Vector3.Cross(vector1: (positions[b] - positions[a]), vector2: (positions[c] - positions[a])), vector2: ((normals[a] + normals[b]) + normals[c])) > 0f));
+            if (!(Vector3.Dot(vector1: Vector3.Cross(vector1: (positions[b] - positions[a]), vector2: (positions[c] - positions[a])), vector2: ((normals[a] + normals[b]) + normals[c])) > 0f)) { return $"triangle {triangle} turned against its normals"; }
         }
 
         var materials = mesh.TriangleMaterials.Span;
@@ -330,8 +347,8 @@ public sealed class SdfMeshCollapseLawTests {
                 within |= ((distance <= (level.Error + 1e-6)) && (Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: normals[vertex])) >= (cosine - 1e-6)));
             }
 
-            Assert.True(condition: (nearest <= (level.Error + 1e-6)), userMessage: $"vertex {vertex} lies {nearest} from the level, past its error {level.Error}");
-            Assert.True(condition: within, userMessage: $"vertex {vertex} has no triangle of its material within the error and the angle");
+            if (!(nearest <= (level.Error + 1e-6))) { return $"vertex {vertex} lies {nearest} from the level, past its error {level.Error}"; }
+            if (!within) { return $"vertex {vertex} has no triangle of its material within the error and the angle"; }
         }
 
         // The other way: each level triangle's centroid and edge midpoints lie within the error of the mesh's own
@@ -349,9 +366,10 @@ public sealed class SdfMeshCollapseLawTests {
                     }
                 }
 
-                Assert.True(condition: (nearest <= (level.Error + 1e-6)), userMessage: $"triangle {triangle} strays {nearest} from the mesh, past its error {level.Error}");
+                if (!(nearest <= (level.Error + 1e-6))) { return $"triangle {triangle} strays {nearest} from the mesh, past its error {level.Error}"; }
             }
         }
+        return null;
     }
     private static int OpenEdges(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices) {
         var edges = new Dictionary<(Vector3, Vector3), int>();

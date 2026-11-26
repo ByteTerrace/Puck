@@ -908,8 +908,8 @@ into a per-subscription queue bounded at several seconds of deliveries (`WorldFe
 When that queue fills, the subscriber is behind: it is sent nothing more, and nothing is composed for it, while
 its wire drains. A snapshot alone cannot repair a missed definition revision or authority route, so the stream does
 not skip ahead record by record. Once the queue has drained to `ResumeDeliveryLimit`, the next delivery cuts the
-stream to a new generation and sends the whole disclosed document, the route if one was missed and a primer
-snapshot behind the cut record, so a slow observer catches up on the stream it holds at the rate its link carries.
+stream to a new generation and sends the whole disclosed document, whose record carries the cut, then the route
+if one was missed and a primer snapshot, so a slow observer catches up on the stream it holds at the rate its link carries.
 The queued records keep their order ahead of the cut. A subscriber whose wire has not drained within
 `StalledDeliveryLimit` deliveries is stalled: it detaches with `world.observation.backpressure`, the stream ends
 with a projection invalidation, and the peer reopens for a fresh primer. A retired authority route detaches with
@@ -917,8 +917,8 @@ with a projection invalidation, and the peer reopens for a fresh primer. A retir
 with `world.observation.moved`: the authority that holds the recipient's connection keeps the stream open and
 opens its next segment where the traveler stands, its own view or the other authority's relayed along the
 committed route (`WorldTravelerProjection`). Every segment stamps from the stream's one lineage
-(`WorldStreamLineage`), so the handoff reaches the recipient as a cut record of the stream it is bound to, then
-the route, the whole document and a primer, and its ingress orders both authorities' records as one stream. A
+(`WorldStreamLineage`), so the handoff reaches the recipient as one record of the stream it is bound to, the whole
+document of the world the traveler now stands in, which carries the cut, then the route and a primer, and its ingress orders both authorities' records as one stream. A
 composition its recipient's disclosure refuses
 (`WorldDisclosureException`) with `world.observation.disclosure`. A record the receiver's cap for its kind
 (`WorldFederationCodec.MaxResponseBytes`) would refuse detaches with `world.observation.oversize` instead of
