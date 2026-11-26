@@ -25,7 +25,8 @@ internal enum SdfFormulaOp {
     Name, Literal, Constant, Add, Subtract, Multiply, Divide, Negate, X, Y, Z,
     Vector2, Vector3, Abs, Min, Max, Clamp, Lerp, Length, Dot, SegmentParameter, MinLength,
     ScaledRatio, Power, FiniteOr, Ellipse2D, Equal, Less, LessEqual, Greater, GreaterEqual, And, Select, Call,
-    Round, Floor, MultiplyComponents, DivideComponents, RotateInverse, Smoothstep, Fbm3, CellDistance,
+    Round, Floor, MultiplyComponents, DivideComponents, RotateInverse, Smoothstep, Fbm3, CellDistance, Sqrt, Detach,
+    SweepSearch,
 }
 
 // An operand a catalogue formula reads from its instruction: the C# argument (a CompiledInstruction lane) and the
@@ -321,7 +322,8 @@ internal class SdfFormula {
 
     private static bool Active(SdfFormulaNode node, Dictionary<string, bool> names) => node.Op switch {
         SdfFormulaOp.Name => names.TryGetValue(node.Text, out var active) && active,
-        SdfFormulaOp.Literal or SdfFormulaOp.Constant or SdfFormulaOp.Round or SdfFormulaOp.Floor => false,
+        // A detached value is read as a constant: its derivative is taken as zero (SdfFieldFormulas.Detach).
+        SdfFormulaOp.Literal or SdfFormulaOp.Constant or SdfFormulaOp.Round or SdfFormulaOp.Floor or SdfFormulaOp.Detach => false,
         SdfFormulaOp.Equal or SdfFormulaOp.Less or SdfFormulaOp.LessEqual or SdfFormulaOp.Greater or SdfFormulaOp.GreaterEqual or SdfFormulaOp.And => false,
         // The call's arguments are named by the callee's parameters, which are the same on both targets.
         SdfFormulaOp.Call => node.Function!.ResultActive(mask: node.Inputs.Select(input => Active(input, names)).ToArray(), shader: true),
@@ -360,8 +362,14 @@ internal class SdfFormula {
     }
 
     // The plain value of a node: an active node's dual value, else the plain reader's text over its inputs' values.
+    // A detached value is its operand's plain reading over the plain values of what that reads, so nothing under it is
+    // carried as a dual.
     private static string DualValue(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output, bool shader) =>
-        Active(node, names)
+        node.Op == SdfFormulaOp.Detach
+            ? (node.Inputs[0].Op == SdfFormulaOp.Name
+                ? DualValue(node.Inputs[0], names, written, output, shader)
+                : Render(node.Inputs[0], shader, input => DualValue(input, names, written, output, shader)))
+        : Active(node, names)
             ? Dual(node, names, written, output, shader) + (shader ? ".v" : ".Value")
             : Render(node, shader, input => DualValue(input, names, written, output, shader));
 
@@ -426,6 +434,9 @@ internal class SdfFormula {
                 ? "sdfFbm3(" + Lifted(0) + Constants(1) + ")"
                 : (ActiveAt(1) || ActiveAt(2) || ActiveAt(3) || ActiveAt(4)) ? throw new DualUncovered(node.Op) : $"Pcg3dLatticeNoise.Fbm3(q: {Lifted(0)}, seed: {Value(1)}, octaves: ((int){Value(2)}), gain: {Value(3)}, lacunarity: {Value(4)})",
             SdfFormulaOp.CellDistance => KernelOnly("sdfCellDistance(" + Lifted(0) + Constants(1) + ")"),
+            // The kernels take the search's gradient by its own taps (field/sdf-shapes.hlsli); the fixed-point gradient
+            // walk meets it as uncovered at run time and takes the stencil there alone.
+            SdfFormulaOp.SweepSearch => shader ? "sdfSweepSearch(" + Lifted(0) + Constants(1) + ")" : "DualUncovered()",
             SdfFormulaOp.Call => DualCall(node, names, written, output, shader),
             _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no dual lowering."),
         };
@@ -535,6 +546,11 @@ internal class SdfFormula {
             SdfFormulaOp.CellDistance => shader
                 ? $"sdfCellDistance({Arguments()})"
                 : $"SampleCells({At(0)}, {At(1)}, ((SdfCellMode){At(2)}), {At(3)})",
+            SdfFormulaOp.Sqrt => Math("Sqrt"),
+            SdfFormulaOp.Detach => At(0),
+            // A swept strand's least gap is searched by a loop the expression language does not carry, so the search is
+            // a primitive of each reader: SdfFieldEvaluator.SdfSweepSearch and sdfSweepSearch (field/sdf-shapes.hlsli).
+            SdfFormulaOp.SweepSearch => shader ? $"sdfSweepSearch({Arguments()})" : $"SdfSweepSearch({Arguments()})",
             SdfFormulaOp.Equal => Binary("=="),
             SdfFormulaOp.Less => Binary("<"),
             SdfFormulaOp.LessEqual => Binary("<="),

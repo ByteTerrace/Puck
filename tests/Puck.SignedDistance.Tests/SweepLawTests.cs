@@ -52,9 +52,8 @@ public sealed class SweepLawTests {
         )
             .Build();
     }
-    // A C# mirror of the CLOSED-FORM closest-point-on-quadratic-bezier the shader implements (sdfSweepClosestT,
-    // field/sdf-shapes.hlsli) — an INDEPENDENT re-derivation from iq's construction, not a call into production code, so this
-    // law tests the algorithm the render path actually runs.
+    // The closed-form closest point on a quadratic Bézier (iq's depressed-cubic construction): an independent reference
+    // for a tube of one radius, which the production formula (SdfFieldFormulas.Sweep) reaches by bracketed Newton steps.
     private static float ClosestT(Vector3 p, Vector3 a, Vector3 b, Vector3 c) {
         var coefA = (b - a);
         var coefB = ((a - (2f * b)) + c);
@@ -413,18 +412,11 @@ public sealed class SweepLawTests {
             z: 0.3f
         );
 
-        var expected = (FieldDistance(
-            a: a,
-            b: b,
-            bulge: 0f,
-            c: c,
-            p: p,
-            radiusEnd: Radius,
-            radiusStart: Radius,
-            strandOffset: 0f,
-            strands: 1,
-            twist: 0f
-        ));
+        var evaluator = new SdfFieldEvaluator(program: BuildSweep(a: a, b: b, bulge: 0f, c: c, radiusEnd: Radius, radiusStart: Radius, strandOffset: 0f, strands: 1, twist: 0f));
+
+        Assert.True(condition: evaluator.TryDistance(distance: out var fixedDistance, material: out _, position: FixedPositionOf(value: p)));
+
+        var expected = ((float)fixedDistance);
         var t = ClosestT(
             a: a,
             b: b,
@@ -444,7 +436,7 @@ public sealed class SweepLawTests {
         Assert.Equal(
             actual: expected,
             expected: directTube,
-            precision: 5
+            precision: 4
         );
     }
     [Fact]
@@ -759,10 +751,12 @@ public sealed class SweepLawTests {
             expected: "radiusEnd"
         );
     }
-    [Fact]
-    public void TheFieldIsTheSweptSpheresDistanceOnAGridForATaperedBulgingStrand() {
-        // The gallery's tapered sweep: its arch bends tighter than its radius at the apex, past the centreline's medial
-        // axis.
+    [InlineData(0.06f)]
+    [InlineData(0f)]
+    [Theory]
+    public void TheFieldIsTheSweptSpheresDistanceOnAGridForATaperedStrand(float bulge) {
+        // The gallery's tapered sweep, with and without its bulge: its arch bends tighter than its radius at the apex,
+        // past the centreline's medial axis.
         var a = new Vector3(
             x: -0.4f,
             y: 0f,
@@ -780,12 +774,11 @@ public sealed class SweepLawTests {
         );
         const float RadiusStart = 0.14f;
         const float RadiusEnd = 0.04f;
-        const float Bulge = 0.06f;
         const int Strands = 1;
         const float Twist = 0f;
         const float StrandOffset = 0f;
         var random = new Random(Seed: 1);
-        var evaluator = new SdfFieldEvaluator(program: BuildSweep(a: a, b: b, bulge: Bulge, c: c, radiusEnd: RadiusEnd, radiusStart: RadiusStart, strandOffset: StrandOffset, strands: Strands, twist: Twist));
+        var evaluator = new SdfFieldEvaluator(program: BuildSweep(a: a, b: b, bulge: bulge, c: c, radiusEnd: RadiusEnd, radiusStart: RadiusStart, strandOffset: StrandOffset, strands: Strands, twist: Twist));
 
         for (var trial = 0; (trial < 400); trial++) {
             var t = ((float)random.NextDouble());
@@ -796,7 +789,7 @@ public sealed class SweepLawTests {
                 t: t
             );
             var radius = RadiusAt(
-                bulge: Bulge,
+                bulge: bulge,
                 radiusEnd: RadiusEnd,
                 radiusStart: RadiusStart,
                 t: t
@@ -815,7 +808,7 @@ public sealed class SweepLawTests {
             var fieldDistance = FieldDistance(
                 a: a,
                 b: b,
-                bulge: Bulge,
+                bulge: bulge,
                 c: c,
                 p: p,
                 radiusEnd: RadiusEnd,
@@ -831,7 +824,7 @@ public sealed class SweepLawTests {
                 c: c,
                 radiusStart: RadiusStart,
                 radiusEnd: RadiusEnd,
-                bulge: Bulge,
+                bulge: bulge,
                 strands: Strands,
                 twist: Twist,
                 strandOffset: StrandOffset
@@ -841,9 +834,11 @@ public sealed class SweepLawTests {
                 condition: ((fieldDistance <= (trueDistance + 1e-4f)) && (fieldDistance >= (trueDistance - 1e-3f))),
                 userMessage: $"trial {trial}: field {fieldDistance} differs from the swept spheres' distance {trueDistance} at p={p}"
             );
-            // The fixed-point evaluator answers the same field to its search's resolution.
+            // The fixed-point evaluator answers the same field to the search's resolution, and never reads more than a few
+            // raws above the swept spheres' distance.
             Assert.True(condition: evaluator.TryDistance(distance: out var fixedDistance, material: out _, position: FixedPositionOf(value: p)));
             Assert.True(condition: (MathF.Abs(x: (((float)fixedDistance) - fieldDistance)) < 0.0005f), userMessage: $"trial {trial}: fixed {(float)fixedDistance} against float {fieldDistance} at p={p}");
+            Assert.True(condition: (((float)fixedDistance) <= (trueDistance + 2e-4f)), userMessage: $"trial {trial}: fixed {(float)fixedDistance} above the swept spheres' distance {trueDistance} at p={p}");
         }
     }
     [Fact]

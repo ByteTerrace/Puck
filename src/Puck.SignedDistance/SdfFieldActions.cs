@@ -143,7 +143,6 @@ internal enum SdfCertificateAction {
 internal enum SdfShapePointAction : byte {
     Formula,
     ConvexPolygon,
-    Sweep,
     Path,
     Unsupported,
 }

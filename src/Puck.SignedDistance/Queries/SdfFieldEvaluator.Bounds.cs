@@ -1164,12 +1164,12 @@ public sealed partial class SdfFieldEvaluator {
 
         return new(X: Axis(magnitude: absolute.X, radius: radii.X), Y: Axis(magnitude: absolute.Y, radius: radii.Y), Z: Axis(magnitude: absolute.Z, radius: radii.Z));
     }
-    // SdfSweep over a box, whatever parameter the point search picks: the centreline over the whole parameter range is
-    // the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset the
-    // interval its rotated frame reaches. The lower bound is the box's least distance to that hull, less the largest
-    // radius. The upper bound is the lesser of the far side of that hull and, because either search measures the curve's
-    // start and only ever keeps a point it measures nearer, the distance to that start. The search compares full-width
-    // sums of raw squares; only the coordinate differences and final lengths need to fit the Q48.16 carrier.
+    // The sweep (SdfSweep) over a box, whatever parameter the point side picks: the centreline over the whole parameter
+    // range is the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset
+    // the interval its rotated frame reaches. The lower bound is the box's least distance to that hull, less the largest
+    // radius. The upper bound is the lesser of the far side of that hull and, because the tube's parameter
+    // (SdfSweepParameter) and the search (SdfSweepSearch) each measure the gap at the curve's start and only ever keep a
+    // gap they measure lower, the gap at that start.
     private static FixedInterval SweepBounds(IntervalVector3 p, SweepCurveFixed curve, FixedQ4816 strandOffset) {
         var t = SweepParameter;
         var centre = BezierBounds(a: curve.A, b: curve.B, c: curve.C, t: t);
@@ -1186,9 +1186,8 @@ public sealed partial class SdfFieldEvaluator {
             return FixedInterval.Entire;
         }
 
-        // From the start: the search's first best is the start a itself and it only ever moves to a centreline point whose
-        // exact squared distance is strictly lower. The monotone, nearest-rounded length cannot increase. The strand's
-        // reach and one raw for its rounded coordinates and final root bound the answer.
+        // From the start: the answer is at most the gap at t = 0, |p - a| less the start radius, which is at least the
+        // least radius. The strand's reach and one raw for its rounded coordinates and final root bound that gap.
         var startDistance = new IntervalVector3(X: (p.X - Point(value: curve.A.X)), Y: (p.Y - Point(value: curve.A.Y)), Z: (p.Z - Point(value: curve.A.Z))).Length;
         var fromStart = (((startDistance + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius);
 

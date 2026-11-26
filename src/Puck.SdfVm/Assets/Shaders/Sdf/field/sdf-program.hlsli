@@ -266,7 +266,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // A quadratic Bezier curve (SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
 // as helical strands. data0 = (asfloat(uint table offset), strands, twist, strandOffset); data1 = (smooth
 // [ISA-wide], reserved, reserved, reserved). The control points (A, B, C) and radius endpoints
-// (radiusStart, radiusEnd, bulge) live in sdfWords, 3 fixed uvec4 words at the table offset (see sdfSweepCurve).
+// (radiusStart, radiusEnd, bulge) live in sdfWords, 3 fixed uvec4 words at the table offset (see sdfSweepA).
 
 // --- bound records (Puck.SignedDistance.SdfProgram's PackBounds) ---
 // Segment metadata overlays SDF_SEGMENT_RIGID_PLAN on the high bit of its bound mode. The low byte remains
