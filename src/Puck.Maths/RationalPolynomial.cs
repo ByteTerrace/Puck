@@ -213,6 +213,16 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
         return text.Append(value: ']').ToString();
     }
 
+    /// <summary>Tests two polynomials for equality by their coefficients.</summary>
+    /// <param name="left">The first polynomial, or <see langword="null"/>.</param>
+    /// <param name="right">The second polynomial, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when both are <see langword="null"/> or hold the same coefficients.</returns>
+    public static bool operator ==(RationalPolynomial? left, RationalPolynomial? right) => (left?.Equals(other: right) ?? (right is null));
+    /// <summary>Tests two polynomials for inequality by their coefficients.</summary>
+    /// <param name="left">The first polynomial, or <see langword="null"/>.</param>
+    /// <param name="right">The second polynomial, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when exactly one is <see langword="null"/> or their coefficients differ.</returns>
+    public static bool operator !=(RationalPolynomial? left, RationalPolynomial? right) => !(left == right);
     /// <summary>Adds two polynomials.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>

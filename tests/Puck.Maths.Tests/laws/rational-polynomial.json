@@ -1,0 +1,126 @@
+[
+  {
+    "Id": "rational-polynomial.rational-text-floor-and-truncation",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Rational", "Name": "TryParse" },
+      { "Type": "Puck.Maths.Rational", "Name": "Parse" },
+      { "Type": "Puck.Maths.Rational", "Name": "Fraction" },
+      { "Type": "Puck.Maths.Rational", "Name": "Truncate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Rational.TryParse and Parse over integers, signed decimals, quotients with either sign on either side, and the round trip of every value through its own ToString text",
+        "Against": "the value each spelling denotes, written out by hand as a reduced numerator over a positive denominator (-12.5 is -25/2, 7/-3 is -7/3, 0.0001 is 1/10000), and the refusal of an empty text, a zero denominator, a bare point on either side, an exponent, whitespace, a second slash, a doubled sign, a sign after the point, hexadecimal and a comma",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Rational.Fraction and Rational.Truncate at four hundred seeded quotients of both signs",
+        "Against": "Oracles.ExactFraction.Floor, a BigInteger DivRem corrected downward for a negative remainder, which calls no Puck.Maths kernel: the fraction is the value less that floor, in [0, 1), and the truncation is the floor of the magnitude with the sign put back",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rational-polynomial.exact-calculus-and-composition",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": ".ctor" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Zero" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "One" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Identity" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Coefficients" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Degree" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "IsZero" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Item" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Constant" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "DegreeOf" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "DerivativeOf" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "RemainderOf" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Antiderivative" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Compose" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Derivative" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "Shift" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "op_Addition" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "op_Subtraction" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "op_UnaryNegation" },
+      { "Type": "Puck.Maths.RationalPolynomial", "Name": "op_Multiply" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RationalPolynomial evaluation, sum, difference, negation, product, scaling, composition and Taylor shift over sixty seeded pairs of polynomials up to degree four with small rational coefficients, each read at six rational points",
+        "Against": "Oracles.PolynomialAt, an explicit sum of coefficient times power over unreduced BigInteger fractions (never Horner's rule, and no Puck.Maths kernel): a composition is checked as the outer polynomial at the inner one's oracle value, a shift as the polynomial at the moved point",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RationalPolynomial.Antiderivative between two rational points, and the derivative of the antiderivative",
+        "Against": "Oracles.PolynomialIntegral, each monomial's integral formed as the coefficient times the difference of the next power at the two ends over that power; the derivative of the antiderivative is the polynomial itself, and the antiderivative is zero at zero",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "RationalPolynomial.RemainderOf by (x - a)(x - b), the span kernels against the instance members, the zero polynomial's degree, the indexer past the degree, and the refusals of a negative power and of division by the zero polynomial",
+        "Against": "the remainder theorem: the remainder has degree below two and agrees with the dividend at a and at b",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "rational-polynomial.periodic-piecewise-integral",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": ".ctor" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "PieceCount" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "TurnIntegral" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "IsConstant" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "Constant" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "Integral" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "IntegralOn" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "PieceAt" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "Piece" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "PieceEnd" },
+      { "Type": "Puck.Maths.PeriodicPiecewisePolynomial", "Name": "PieceStart" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PeriodicPiecewisePolynomial.Integral, TurnIntegral and IntegralOn over forty seeded shapes of one to four pieces starting on twenty-fourths of a turn, read at rational phases from minus one hundred and fifty to one hundred and fifty turns",
+        "Against": "Oracles.PeriodicIntegral, which walks every whole turn between zero and the phase and integrates every piece of each turn one at a time from its monomials, clipped to the span: the brute-force sum the closed form replaces",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "periodicity, piece selection and continuity: a turn added to any phase adds TurnIntegral exactly, Evaluate reads the piece PieceAt names at the phase's fraction, that piece's PieceStart and PieceEnd bracket the fraction, and at each piece boundary the polynomial of the piece before reaches the integral",
+        "Against": "the definitions, and the refusals of an empty shape, a first piece away from zero, a start that does not rise, a start at one turn, mismatched lengths and a fraction of one turn",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

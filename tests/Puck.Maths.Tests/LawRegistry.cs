@@ -864,6 +864,7 @@ internal static partial class LawRegistry {
         .. SignedByteVectorCases(),
         .. VectorFunctionsCases(),
         .. OrderStatisticsCases(),
+        .. RationalPolynomialCases(),
         .. SharedKernelCases(),
     ];
     /// <summary>Builds a declared case: looks up the id's authored declaration in <see cref="LawDeclarations.All"/>

@@ -239,7 +239,7 @@ public sealed partial class ProjectionAnchorLawTests {
         // the new definition at the old snapshot tick observably different from reading its stamped phase.
         for (var tick = 1UL; (tick <= 2UL); tick++) {
             var anchored = initial! with {
-                TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: Clock, Anchor: new WorldClockAnchor(Phase: (tick << 56), Rate: (1L << 56), Step: 1UL, Tick: tick))]),
+                TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: Clock, Anchor: new WorldClockAnchor(Base: ((long)(tick << 8)), Curve: ["0", "256"], Phase: (tick << 56), Tick: tick))]),
             };
 
             mirror.DeliverState(definition: anchored, stamp: new WorldStateStamp(EngineTick: tick, Everything: false, MovedRows: default, Tick: tick), version: version, stream: default);
@@ -440,7 +440,13 @@ public sealed partial class ProjectionAnchorLawTests {
             var presentedThen = HostPhase(definition: history, engineTick: step, tick: 1UL);
 
             Assert.Equal(expected: 0.25d, actual: WorldClockAnchor.ToTurn(phase: presentedThen));
-            Assert.NotEqual(expected: presentedThen, actual: unchecked((anchor.Phase - ((ulong)anchor.Rate))));
+            var extended = ((anchor.Curve is { } curve)
+                ? WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: ((long)(anchor.Base + new RationalPolynomial(coefficients: curve.Select(selector: static text => Rational.Parse(text: text)).ToArray())
+                    .Evaluate(x: new Rational(Numerator: -((long)step), Denominator: 1)).Truncate())))
+                : anchor.Phase);
+
+            Assert.NotEqual(expected: presentedThen, actual: anchor.Phase);
+            Assert.NotEqual(expected: presentedThen, actual: extended);
 
             // An authority restored to before the anchor it sent re-anchors rather than predicting backward.
             Assert.Equal(expected: WorldProjectionDeliveryKind.Delta, actual: feed.Step(definition: history, engineTick: step, tick: 1UL).Kind);
