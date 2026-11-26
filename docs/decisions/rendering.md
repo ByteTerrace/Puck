@@ -1539,16 +1539,26 @@ sky `view` layer that asks for it (`farProduct: true`, `InfinityViewSpec.FarProd
 product (`SdfFarProduct`): the world's settled static scene (`SdfMeshDraw.InStaticScene`), each mesh at the coarsest
 level it carries, placed in the world, its vertices gathered into cells (`SdfMeshCluster`, vertex clustering binned by
 facing so thin walls keep both faces), then chunked and levelled (`SdfMeshChunks.Bake`) so the view's draws pick a level
-by the pixels they cover. Its materials are the source program's, renumbered into the product's own. Dynamic content
-(bodies, skinned or displaced meshes, glass, screens) is absent: a far viewer sees ground and standing masses, never
-motion.
+by the pixels they cover. Its materials are the ones its source groups' triangles carry, in ascending order of the
+source program's ids. Dynamic content (bodies, skinned or displaced meshes, glass, screens) is absent: a far viewer
+sees ground and standing masses, never motion.
 
-**It is a cache derived from what a residency already drew.** A product is taken on the frame thread from a settled
-residency's frame (claims hold its meshes) and built on a worker, named by a digest of its inputs, never recorded, and
-built once per document version of the world (`WorldDocumentVersion`). The boot world's comes from the presentation's
-own residency; a view of a world no residency here holds draws that world whole once and builds the product from that
-residency, then swaps to it (the derive on a miss). The publishing world authors what it shows (`render.farProduct`:
-the cell, and the smallest part kept), since a far look is the author's choice.
+**It is a cache kept in the mesh store, derived from what a residency already drew.** A product is taken on the
+frame thread from a settled residency's frame (claims hold its meshes) and answered on a worker, once per document
+version of the world (`WorldDocumentVersion`): read from the mesh library's store when the store holds one under the
+product's name, and otherwise derived and written there (`SdfFarProduct.Build`). The name is a digest of each static
+draw's source, placement and material ids and of the options, under the bake's identity, whose closure the
+derivation's code is part of (`SdfMeshBakeClosure.BakeRoots`). A draw of a bake group is named by the group's shape
+(`SdfMeshBakeGroup.Shape`), which no tier changes, so a product derived while the residency stood at one set of
+tiers is the product at every other: the tiers differ by less than the product's cell, and a name that read the
+tiers would miss on every boot that settled differently. A product is therefore derived once per store, a shipped
+cache set carries it as it carries any mesh, and the log line of each product says `stored` or `derived`. The stored
+product is a library mesh: native storage under the account, whose planes are let go while no view draws it. The
+derivation's tables are native and charged to one workspace owner, and a refusal makes the product wait and ask
+again rather than fail. The boot world's product comes from the presentation's own residency; a view of a world no
+residency here holds draws that world whole once and builds the product from that residency, then swaps to it (the
+derive on a miss). The publishing world authors what it shows (`render.farProduct`: the cell, and the smallest part
+kept), since a far look is the author's choice.
 
 **Its residency composes the product alone.** The view's scene is one emitter that emits the product's materials and
 one static draw per piece (`WorldFarProductEmitter`), so the residency plans no bake group and bakes nothing; the
@@ -1565,8 +1575,10 @@ group per placement and bakes whatever the board does not lead; reusing the worl
 keeps the whole world resident and unparked; per-group far tiers in the mesh store cost a draw and a bake per group
 for every far world. The merged product holds one mesh a world, bakes nothing, and its triangle count is bounded by
 the surface area over the cell squared. Invariant: a far entry draws only a product built from the document version
-its source residency's world holds now, enforced at `WorldScreenBinder.FarProductOf`; where it stops, a product is not
-yet persisted in the mesh store, so each process derives it once.
+its source residency's world holds now, enforced at `WorldScreenBinder.FarProductOf`. Where it stops: a product is
+found only after a residency of its world has settled, since its name is read from that residency's draws, so a far
+view of a world nothing here holds still draws it whole once before the store answers; and the boot world's product
+is answered at boot whether or not a view will ask for it.
 
 ## The frame graph and nesting
 

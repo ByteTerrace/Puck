@@ -1057,6 +1057,28 @@ check missed is baked by that boot and listed under the record's
   pace, several times slower than a paused, tick-locked bake. Let the fill
   end when its ladders are whole. Under the ladder policy `world.wait ready`
   also times out.
+- [high · unconfirmed] The RTX 2060's player build drew the glacier's ice
+  edges and the rim slope as large flat facets up close: a floor, the
+  coarsest tier, drawn where a finer one was asked. Two causes fit, and the
+  code alone cannot tell them apart. A group that arrives in view draws its
+  stored floor at once and then owes its first detail; if the store holds
+  that tier it loads outside the budget, and if the store lacks it and holds
+  no tier between, nothing starts (`SdfMeshPathBake.StartReplacement`): the
+  tier waits its hold as an ordinary owed tier and bakes only when the detail
+  budget has room, so on a card whose budget is full the floor keeps drawing.
+  Or every tier is stored and the budget's bias has coarsened the demand to
+  the floor. Read, on the 2060 at the glacier: the log's `[sdf.mesh-bake]
+  rung-missed` lines (each names its group, the tier asked, the tier drawn
+  and the ladder), `world.counters sdf.mesh-cache` (`rungs-missed` less
+  `rungs-missed-live`, `groups-baked`, `dispatches`) and `world.residency`'s
+  tier line (`tiers-held-back`, `detail-bias`, `region-budget`,
+  `region-named`). Missed tiers with `tiers-held-back` above zero is a cache
+  gap the budget then holds: complete the fill (the item on a tick-locked
+  fill above; a ladder fills coarsest first, so a fill cut short lacks its
+  finest tiers), and decide whether a player's missed first detail is the
+  arrival's own bake again. No missed tier with a bias above zero is the
+  device budget: the card's fixed storage leaves detail too little room,
+  which is the device-memory items' work.
 - [medium] A residency no authored spawn point shows gets no ladder, so a
   player who opens one counts `rungs-missed`. Give such a place a spawn
   point, or give the fill a door that draws every residency a world can open.
@@ -2215,16 +2237,40 @@ check; this packet holds the defects beside it.
   passed its budget, and never recovered. Size these owners from the device's quality table and
   stream what is far or unseen, rather than holding them whole. Check: the same route on the 2060
   holds device memory under its cap, and the second loop matches the first.
-- [high] **Host memory: rebuilt programs and presentation fields churn the large object heap.**
-  On the 2060's player build the managed heap held 4.26 GB, 3.12 GB of it on the LOH. Each
-  presentation-field and program rebuild churns about 150–280 MB through it, and `SdfProgram`
-  allocates fresh managed arrays on every build (appearance sections, Lipschitz factors, side
-  tables, part-program offsets). Rebuild only what changed, into owned and reused storage. The
-  other managed holders: program words (about 22 MB, no owner), the probe-cache tables (93 MB,
-  held by reference; they need block indices), the trace hierarchy's pack and top-level content,
-  the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
-  about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
-  its host bar with the LOH flat across loops.
+- [high] **Host memory: the large object heap is mostly gaps, held open by a few long-lived arrays.**
+  On the 2060's player build the managed heap held 4.4 GB, 2.8 GB of it on the LOH, while a heap
+  dump found about 0.2 GB of live objects of a megabyte or more: large rentals of differing sizes
+  come and go between a few long-lived arrays, and their gaps are never reused. The rule is in
+  [data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md): scratch
+  and tables of reference-free elements are native (`OwnedBuffer<T>`, which no longer has a managed
+  mode), never rented arrays. Moved so far: every owned buffer, list and map; the simplifier's
+  tables (`SdfMeshCollapse`, `SdfMeshPlanarMerge`, `SdfMeshChunks`); the far product, which a boot
+  derived whole in managed arrays and now reads from the mesh store
+  ([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)); the lighting
+  batch's answer words and saved hits and the probe service's part answers; and a goal field's
+  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`).
+  What still allocates large managed arrays, largest first as the 2060's allocation trace read
+  them:
+  - `SdfProgram` allocates fresh arrays on every build (its words, appearance sections, Lipschitz
+    factors, side tables and part-program offsets, and the field evaluator's `CompiledInstruction`
+    and `RotationBounds` tables beside them), about 320 MiB over a route. Rebuild only what
+    changed, into owned and reused storage; a program is read from several threads and held by
+    several holders, so its storage needs an owner whose last reader frees it.
+  - The trace scene's hierarchy (`SdfMeshIrradianceScene.Hierarchy.BuildPacked` and its
+    `MemoryAccount.Owner.AllocateArray` calls for nodes, frames, braids and triangles, about 350 MiB)
+    and the geometry build's rented boxes are arrays; its traversal reads them as arrays, so the
+    move is the hierarchy's storage type and every reader's.
+  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold a
+    reference in each slot, so they need block indices before they can be native.
+  - The bake's frustum watches keep two value arrays that regrow (`SdfMeshPathBake.FrustumWatches`,
+    about 100 MiB of growth), and the lattice refinement (`SdfSampledLattice`) still rents arrays.
+  - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
+    managed arrays before the library copies the result; only its tables are native.
+  - `RentedArrays`' pool of arrays past a mebibyte gives an idle array back after ten seconds, so
+    work that repeats more slowly allocates afresh each time. Retire the pool once the renters
+    above are moved, rather than tune it.
+  Check: the 2060's route ends under its host bar with the LOH flat across loops, and
+  `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
   committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
   a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
