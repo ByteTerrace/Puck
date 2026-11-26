@@ -99,22 +99,40 @@ public sealed class TravelerObservationHandoffLawTests {
             Thread.Sleep(millisecondsTimeout: 1);
         }
     }
-    // The body index the destination host's row holds its one remote traveler at.
-    private static int TravelerSlot(WorldServer server) => server.ExecuteAuthorityOperation(operation: () => {
+    // The body indices a row of the destination host holds remote travelers at, lowest first.
+    private static int[] TravelerSlots(WorldServer server) => server.ExecuteAuthorityOperation(operation: () => {
+        var slots = new List<int>();
+
         for (var index = server.Population.LocalSeatCount; (index < server.Population.Capacity); index++) {
             if (server.Population.IsActive(index: index) && server.Population.IsAdmittedPeer(bodyIndex: index)) {
-                return index;
+                slots.Add(item: index);
             }
         }
-        return -1;
+        return slots.ToArray();
     });
-    // Walks the traveler from one row of the destination host to another, under its own admitted principal, as a
-    // crossing the row's own scan mints does.
+    // The body index a row of the destination host holds its lowest remote traveler at, or -1 for none.
+    private static int TravelerSlot(WorldServer server) => ((TravelerSlots(server: server) is [var lowest, ..]) ? lowest : -1);
+    // Hands local seat `slot` of the source host to the destination behind its door.
+    private static void Enter(FederatedHosts hosts, int slot) {
+        hosts.JoinSeat(slot: slot, travelTurn: default);
+        _ = hosts.Source.EnqueueTransfer(
+            actingPrincipal: Principal.Console,
+            destination: hosts.RemoteDestination,
+            scope: WorldInstanceHost.TransferScope.Body,
+            sourceInstance: WorldInstanceHost.BootInstanceName,
+            sourceSlot: slot
+        );
+        hosts.DrainCrossing(slot: slot);
+    }
+    // Walks the source row's lowest traveler to another row of the destination host, under its own admitted principal,
+    // as a crossing the row's own scan mints does.
     private static void Walk(FederatedHosts hosts, string from, WorldServer source, string to, WorldServer target) {
         var slot = TravelerSlot(server: source);
 
         Assert.True(condition: (slot >= 0), userMessage: $"'{from}' holds no remote traveler to walk to '{to}'");
         var traveling = source.ExecuteAuthorityOperation(operation: () => source.Population.PeerPrincipal(index: slot));
+        var leaving = TravelerSlots(server: source).Length;
+        var landing = TravelerSlots(server: target).Length;
 
         _ = hosts.Destination.EnqueueTransfer(
             actingPrincipal: traveling,
@@ -123,8 +141,37 @@ public sealed class TravelerObservationHandoffLawTests {
             sourceInstance: from,
             sourceSlot: slot
         );
-        StepUntil(condition: () => (TravelerSlot(server: target) >= 0), hosts: hosts, what: $"the traveler landed at '{to}'");
-        Assert.Equal(expected: -1, actual: TravelerSlot(server: source));
+        StepUntil(
+            condition: () => ((TravelerSlots(server: source).Length == (leaving - 1)) && (TravelerSlots(server: target).Length == (landing + 1))),
+            hosts: hosts,
+            what: $"the traveler landed at '{to}'"
+        );
+    }
+
+    // THE LAW: the body index a traveler left an authority from is kept for its return while another index is free.
+    // A second player arriving while the first is away takes the next index, where the lowest free index is the one
+    // the first left; the first then comes back to its own index as the peer it left as. Red leg: without the kept
+    // index the second arrival lands on the first's index and advances its generation, so the first returns elsewhere
+    // as a new peer.
+    [Fact]
+    public void AnArrivalLeavesAnAbsentTravelersIndexForItsReturn() {
+        using var hosts = FederatedHosts.Build();
+        var entry = hosts.DestinationRow.Server;
+        var onward = hosts.OnwardRow.Server;
+
+        Enter(hosts: hosts, slot: 0);
+        var body = TravelerSlot(server: entry);
+        var admitted = entry.ExecuteAuthorityOperation(operation: () => entry.Population.PeerPrincipal(index: body));
+
+        Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
+        Assert.Empty(collection: TravelerSlots(server: entry));
+        Enter(hosts: hosts, slot: 1);
+        Assert.Equal(expected: [(body + 1)], actual: TravelerSlots(server: entry));
+
+        Walk(from: FederatedHosts.OnwardName, hosts: hosts, source: onward, target: entry, to: FederatedHosts.DestinationName);
+        Assert.Equal(expected: [body, (body + 1)], actual: TravelerSlots(server: entry));
+        Assert.Equal(expected: admitted, actual: entry.ExecuteAuthorityOperation(operation: () => entry.Population.PeerPrincipal(index: body)));
+        Assert.True(condition: entry.ExecuteAuthorityOperation(operation: () => entry.IsLivePeer(principal: admitted)));
     }
 
     // What a relaying authority wrote to its recipient's connection, read back record by record.
@@ -171,15 +218,7 @@ public sealed class TravelerObservationHandoffLawTests {
         var entry = hosts.DestinationRow.Server;
         var onward = hosts.OnwardRow.Server;
 
-        hosts.JoinSeat(slot: 0, travelTurn: default);
-        _ = hosts.Source.EnqueueTransfer(
-            actingPrincipal: Principal.Console,
-            destination: hosts.RemoteDestination,
-            scope: WorldInstanceHost.TransferScope.Body,
-            sourceInstance: WorldInstanceHost.BootInstanceName,
-            sourceSlot: 0
-        );
-        hosts.DrainCrossing(slot: 0);
+        Enter(hosts: hosts, slot: 0);
         Assert.NotNull(@object: traveler);
         Assert.True(condition: traveler.TryRouteCredential(bodyIndex: -1, credential: out var credential));
 
@@ -238,15 +277,7 @@ public sealed class TravelerObservationHandoffLawTests {
         var entry = hosts.DestinationRow.Server;
         var onward = hosts.OnwardRow.Server;
 
-        hosts.JoinSeat(slot: 0, travelTurn: default);
-        _ = hosts.Source.EnqueueTransfer(
-            actingPrincipal: Principal.Console,
-            destination: hosts.RemoteDestination,
-            scope: WorldInstanceHost.TransferScope.Body,
-            sourceInstance: WorldInstanceHost.BootInstanceName,
-            sourceSlot: 0
-        );
-        hosts.DrainCrossing(slot: 0);
+        Enter(hosts: hosts, slot: 0);
         Assert.NotNull(@object: traveler);
 
         var body = TravelerSlot(server: entry);
