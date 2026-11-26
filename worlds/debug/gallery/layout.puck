@@ -88,7 +88,10 @@ let baySill = 0.6
 // The nave's end wall holds one tier of three wide, tall bays through levels 0 and 1, a pier between each pair.
 let tallBayWidth = 5
 let tallBayHeight = 7.3
-let tallBayZs = [(naveMid - 6), naveMid, (naveMid + 6)]
+// The end wall is an arcade of its own: three bays of six tiles span it exactly from the south arcade's row to the
+// north's, the centre one on the nave's axis, so its corner piers are the side arcades' last.
+let tallBayPitch = ((arcadeNorth - arcadeSouth) / 3)
+let tallBayZs = [(naveMid - tallBayPitch), naveMid, (naveMid + tallBayPitch)]
 
 // The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
 // terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on

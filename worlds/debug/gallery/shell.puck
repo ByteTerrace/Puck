@@ -339,12 +339,12 @@ let shellRoofPieces = concat(
 function shellStrips(wing) = concat(
   [
     { id: "south-west", x0: 1, x1: (stairWest - 0.6), z0: 4.4, z1: 4.8 }
-    { id: "south-east", x0: (wingWest + 0.6), x1: 58.5, z0: 4.4, z1: 4.8 }
-    { id: "north", x0: 1, x1: 58.5, z0: (northAisleMid - 0.2), z1: (northAisleMid + 0.2) }
+    { id: "south-east", x0: (wingWest + 0.6), x1: (galleryEast - 1.2), z0: 4.4, z1: 4.8 }
+    { id: "north", x0: 1, x1: (galleryEast - 1.2), z0: (northAisleMid - 0.2), z1: (northAisleMid + 0.2) }
     { id: "bridge", x0: 5.8, x1: 6.2, z0: (naveSouth + 1), z1: (naveNorth - 1) }
     { id: "landing", x0: 17, x1: 20.6, z0: 3, z1: 3.4 }
   ],
-  ((wing == 1) ? [{ id: "wing", x0: (wingWest + 0.6), x1: 58.5, z0: -2.2, z1: -1.8 }] : [])
+  ((wing == 1) ? [{ id: "wing", x0: (wingWest + 0.6), x1: (galleryEast - 1.2), z0: -2.2, z1: -1.8 }] : [])
 )
 template shellStripBoxes(top, wing) {
   for strip in shellStrips(wing) {
@@ -588,7 +588,7 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(arcadeXs, x => [
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece.
 let shellRails = concat(
   flatMap(range(1, 3), k => concat(
-    flatMap(range(0, 12), i => [
+    flatMap(range(0, floor(((galleryEast - naveWest) / 4))), i => [
       { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180, short: 0 }
       { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0, short: 0 }
     ]),
@@ -609,16 +609,16 @@ let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * n
 // The planters: either side of each pier between the end wall's bays and at the nave's corners, along its edges, and
 // about the aisles, the bridge and the galleries.
 let shellPlanters = concat(
-  map(range(0, 2), i => { x: 58.75, y: 0, z: ((tallBayZs[i] + tallBayZs[(i + 1)]) / 2), yaw: 90 }),
+  map(range(0, 2), i => { x: (galleryEast - 1.45), y: 0, z: ((tallBayZs[i] + tallBayZs[(i + 1)]) / 2), yaw: 90 }),
   [
-    { x: 57.4, y: 0, z: (naveSouth + 0.75), yaw: 0 }, { x: 57.4, y: 0, z: (naveNorth - 0.75), yaw: 0 }
+    { x: (galleryEast - 2.8), y: 0, z: (naveSouth + 0.75), yaw: 0 }, { x: (galleryEast - 2.8), y: 0, z: (naveNorth - 0.75), yaw: 0 }
     { x: 42, y: 0, z: (naveSouth + 0.6), yaw: 0 }, { x: 42, y: 0, z: (naveNorth - 0.6), yaw: 0 }
     { x: 22.2, y: 0, z: 7.4, yaw: 0 }, { x: 29, y: 0, z: 7.4, yaw: 0 }
     { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: 1.2, y: 0, z: (galleryNorth - 1.1), yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
-    { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: (naveMid - 0.1), yaw: 90 }, { x: 24.5, y: 1, z: 7.9, yaw: 0 }, { x: 58.9, y: 1, z: 1.4, yaw: 90 }
-    { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: (naveMid - 0.1), yaw: 90 }, { x: 22, y: 2, z: 7.9, yaw: 0 }, { x: 40, y: 2, z: 7.9, yaw: 0 }, { x: 58, y: 2, z: 7.9, yaw: 0 }
+    { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: (naveMid - 0.1), yaw: 90 }, { x: 24.5, y: 1, z: 7.9, yaw: 0 }, { x: (galleryEast - 1.3), y: 1, z: 1.4, yaw: 90 }
+    { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: (naveMid - 0.1), yaw: 90 }, { x: 22, y: 2, z: 7.9, yaw: 0 }, { x: 40, y: 2, z: 7.9, yaw: 0 }, { x: (galleryEast - 2.2), y: 2, z: 7.9, yaw: 0 }
     { x: 2, y: 3, z: 1, yaw: 0 }, { x: 6, y: 3, z: 1, yaw: 0 }, { x: 10, y: 3, z: 1, yaw: 0 }, { x: 0.9, y: 3, z: 4.6, yaw: 90 }
-    { x: 10.5, y: 3, z: (naveMid - 0.1), yaw: 90 }, { x: 24, y: 3, z: 7.9, yaw: 0 }, { x: 56, y: 3, z: 7.9, yaw: 0 }
+    { x: 10.5, y: 3, z: (naveMid - 0.1), yaw: 90 }, { x: 24, y: 3, z: 7.9, yaw: 0 }, { x: (galleryEast - 4.2), y: 3, z: 7.9, yaw: 0 }
   ]
 )
 let shellBenches = [
@@ -696,7 +696,7 @@ template shellPrototypes() {
           shellStripBoxes(top: ((galleryStorey * k) - 0.25), wing: ((k > wingLevel) ? 1 : 0))
           // The underside of the wing's first floor is the forecourt's soffit, and carries its own strip.
           for soffit in ((k == wingLevel) ? [1] : []) {
-            boundsBox(label: "strip-soffit", x0: (wingWest + 0.6), x1: 58.5, y0: ((galleryStorey * k) - 0.31), y1: ((galleryStorey * k) - 0.24), z0: -2.2, z1: -1.8, slot: shellLight)
+            boundsBox(label: "strip-soffit", x0: (wingWest + 0.6), x1: (galleryEast - 1.2), y0: ((galleryStorey * k) - 0.31), y1: ((galleryStorey * k) - 0.24), z0: -2.2, z1: -1.8, slot: shellLight)
           }
         }
       }
