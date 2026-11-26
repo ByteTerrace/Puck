@@ -509,6 +509,88 @@ public sealed class InPlacePortalCrossingLawTests {
         );
         Assert.True(condition: (scenario.Server.Body(index: 0)!.FixedPosition.Y < FixedQ4816.Zero));
     }
+    // A remote player's traveler that crosses a mapped pair in place stays the peer it was admitted as. The crossing
+    // moves the body and nothing else: its principal keeps its generation and still holds the Drive and Observe grants
+    // its admission minted, so a projection authorized by that principal stays authorized across the door. A crossing
+    // that re-admitted the traveler would mint a new generation and revoke the stale one's grants.
+    [Fact]
+    public void ARemotePlayerCrossingInPlaceKeepsItsGenerationAndGrants() {
+        const int Peer = WorldBodiesLimits.LocalSeatCount;
+        using var scenario = new Scenario(counterpart: Counterpart.Ceiling);
+        var server = scenario.Server;
+
+        // The traveler arrives as a remote player's does: leased and landed through the escrow, which admits it as a
+        // peer and mints the grants its admission entry gives an arrival.
+        const string Home = "machine-a/boot";
+        var minted = new WorldEntityAddress(Authority: Home, Generation: 1, Index: 0);
+        var reserved = server.ReserveTransfer(request: new WorldTransferReservationRequest(
+            Border: string.Empty,
+            BorderCapacity: null,
+            DeadlineSourceTick: 600,
+            Members: [new WorldTransferReservationMember(
+                BodyColor: default,
+                CatalogRig: 0,
+                Identity: null,
+                Mobility: new WorldMobilityIdentity(DepartedFrom: minted, Epoch: 0, Incarnation: minted),
+                PreferredSlot: Peer,
+                Principal: Principal.Seat(slot: 0),
+                Source: IntentSource.Live
+            )],
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            SourceAuthority: Home,
+            SourceRateHz: server.Configuration.SimulationRateHz,
+            SourceTick: 0,
+            TransferId: 1
+        ));
+
+        Assert.True(condition: reserved.Accepted, userMessage: reserved.Reason);
+        Assert.Equal(expected: Peer, actual: reserved.BodyIndices[0]);
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: server.CommitTransfer(
+                members: [new WorldTransferCommitMember(
+                    Arrival: WorldTransferArrival.Spawn,
+                    BodyMotionProgramName: string.Empty,
+                    PlanarVelocity: default,
+                    Position: default,
+                    Profile: null,
+                    VerticalVelocity: default,
+                    YawRadians: default
+                )],
+                reason: out var commitReason,
+                sourceAuthority: Home,
+                transferId: 1
+            )
+        );
+        Assert.Equal(expected: string.Empty, actual: commitReason);
+        scenario.Step();
+        var admitted = server.Population.PeerPrincipal(index: Peer);
+        var body = GrantSubject.Body(index: Peer);
+        bool Holds(WorldCapability capability) => server.Grants.Allows(capability: capability, principal: admitted, subject: body).IsAllowed;
+
+        Assert.True(condition: Holds(capability: WorldCapability.Drive));
+        Assert.True(condition: Holds(capability: WorldCapability.Observe));
+        scenario.Link.SubmitCommand(command: new WorldCommand.SnapPose(
+            EntityIndex: Peer,
+            Mode: SnapPoseMode.Pose,
+            PitchRadians: 0f,
+            Position: new Vector3(x: 0f, y: 3f, z: DoorZ),
+            Principal: admitted,
+            RollRadians: 0f,
+            YawRadians: 0f
+        ));
+        var crossing = $"body:{Peer} crossed";
+
+        for (var tick = 0; ((tick < LoopBound) && (scenario.Count(text: crossing) < CrossingsWanted)); tick++) {
+            scenario.Step();
+        }
+        Assert.Equal(expected: CrossingsWanted, actual: scenario.Count(text: crossing));
+        Assert.True(condition: server.IsLivePeer(principal: admitted));
+        Assert.Equal(expected: admitted, actual: server.Population.PeerPrincipal(index: Peer));
+        Assert.True(condition: Holds(capability: WorldCapability.Drive));
+        Assert.True(condition: Holds(capability: WorldCapability.Observe));
+    }
     [Fact]
     public void AnIndexHoldingNoBodyCrossesNothing() {
         using var fixture = Fixtures.FreshServer();
