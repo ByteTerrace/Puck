@@ -824,6 +824,13 @@ public static class SdfSolidGeometry {
             _ => null,
         };
     }
+    /// <summary>Whether a primitive's zero set extends without bound, whatever its dimensions: true only for
+    /// <see cref="SdfSolidPrimitive.Plane"/>. A <see cref="SdfSolidPrimitive.Sweep"/> is bounded, though its extent
+    /// lives in its curve rather than the canonical table, so ask this rather than <see cref="GetLocalBounds"/> when
+    /// only boundedness matters.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <returns>True when the primitive is unbounded.</returns>
+    public static bool IsUnbounded(SdfSolidPrimitive type) => (type is SdfSolidPrimitive.Plane);
     /// <summary>Reads a primitive's local extent from the canonical dimension table.</summary>
     /// <param name="type">The primitive.</param>
     /// <returns>The finite local bounds, or the unbounded marker for <see cref="SdfSolidPrimitive.Plane"/>.</returns>

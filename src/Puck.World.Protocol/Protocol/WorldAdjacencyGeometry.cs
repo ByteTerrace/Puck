@@ -25,7 +25,7 @@ public static class WorldAdjacencyGeometry {
     // run in fixed point.
     private static bool TryMeasureReach(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, FixedQ4816 overlapDepth, out FixedQ4816 seamDistance) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
-            if (SdfSolidGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
+            if (SdfSolidGeometry.IsUnbounded(type: shape.Type)) {
                 seamDistance = FixedQ4816.MinValue;
 
                 return true;
