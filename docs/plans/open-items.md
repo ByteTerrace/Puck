@@ -5906,13 +5906,16 @@ screen and see the change hot reload.
 
 ### Media and capture
 
-Owner: media lane · ordinary · Next: let an unread capture feed idle.
+Owner: media lane · ordinary · Next: shrink the glow readback.
 
-- [medium] The desktop capture feed scales frames nobody reads: its thread
-  spends about a core in `Win32GraphicsCaptureDevice.ScaleMapped` in a World
-  started with `--devices none`, and a visible share of a cold bake's
-  processor samples. Find what subscribes it, let an unread feed idle, and
-  downscale on the GPU ahead of the readback.
+- [medium] The desktop capture feed's glow readback still box-scales the whole
+  source on the platform's callback thread (`Win32GraphicsCaptureDevice.ScaleMapped`),
+  once every `NativeImageGpuCaptureTargets.CpuReadbackDivisor` ticks, to produce
+  frames `WorldImageLight.Average` then samples one pixel in sixteen of. Read
+  the average on the GPU, or sample the mapped pixels in place, and the
+  scaler serves only the CPU route. That route is a Vulkan host's HDR display
+  and a render device that refuses the shared targets; the HDR conversion on
+  Vulkan waits on its external-image layout being proven.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
 - [medium] The score is the listener's alone, and the authority keeps only

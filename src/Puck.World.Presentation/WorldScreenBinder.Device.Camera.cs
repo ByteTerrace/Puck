@@ -626,9 +626,10 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
     // Provisions one shared ring a platform producer (a camera stream, a probe kernel) writes into. Ownership transfers
     // to the caller only on success; every partial D3D12 allocation or Vulkan import is released here on failure. The
     // producer declares its format: the source-reader tier uses BGRA, the coordinated compute tier and every probe
-    // output RGBA. All are sampled directly, so no renderer-wide convention leaks. A ring whose producer can order its
-    // writes on the GPU (a camera stream) gets a shared fence beside its targets; a probe output, whose kernel waits on
-    // the CPU for its readings, gets none.
+    // output RGBA, and a desktop capture the format of the display it reads (BGRA, or half-float RGBA for an HDR display,
+    // which the Direct3D 12 host converts). All are sampled directly, so no renderer-wide convention leaks. A ring whose
+    // producer can order its writes on the GPU (a camera stream, a capture) gets a shared fence beside its targets; a probe
+    // output, whose kernel waits on the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
     private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out GpuImportedSurface[]? importedSurfaces, out SharedRingFence? fence, out string fault) {
         var allocated = new IGpuExportableImage[SharedTargetCount];
@@ -638,7 +639,7 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
         SharedRingFence? createdFence = null;
 
         try {
-            if (!Surface.IsSurfaceFormat(format: format)) {
+            if (!Surface.IsImageFormat(format: format)) {
                 throw new NotSupportedException(message: $"shared-target format {format} is unsupported");
             }
 
@@ -1446,16 +1447,9 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 DisposeResources();
             }
         }
-        public bool TryAcquire(out GpuImageLease frame) => TryAcquire(
-            frame: out frame,
-            image: out _
-        );
-        // Acquires the latest published slot as TryAcquire(out GpuImageLease) does, with the slot's image when the render
-        // device made it (the Direct3D 12 host's ring, whose images it owns), so a pass on that device can read it, or null
-        // for an imported ring's slot, which has no image of the render device's own.
-        public bool TryAcquire(out GpuImageLease frame, out IGpuImage? image) {
-            image = null;
-
+        // Acquires the latest published slot: the lease's Image names the slot's image on the render device, the ring's own
+        // texture on the Direct3D 12 host and the import of it on a Vulkan host.
+        public bool TryAcquire(out GpuImageLease frame) {
             if (
                 m_retired ||
                 !m_stream.TryAcquireLatest(
@@ -1482,10 +1476,6 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ++m_outstanding;
 
             var handle = Handle(slot: slot);
-
-            image = ((m_imports is null)
-                ? m_images[slot]
-                : null);
 
             // The producer published the value its write signals; the submission that samples this lease waits for it
             // on the GPU. Zero means the write finished before publication.
