@@ -1,12 +1,13 @@
 // The toybox's handheld rentals (gallery/rentals.puck), booted in the whole debug world: `puck test
-// worlds/debug/rentals-tests.puck --reproduce`. Seat 1's body (body 0) rents the south-east stall's first brick
-// (`se-hgb-01`, ordinal 1), which puts the device on loan to it and starts its pool brick (`rental-hgb-0`, through the
+// worlds/debug/rentals-tests.puck --reproduce`. Seat 1's body (body 0) rents the brick before it on the south-east
+// stall's west arm, which puts the device on loan to it and starts its pool brick (`rental-hgb-0`, through the
 // machine's `runsWhen`), then returns it at the stall's tray, which clears the loan and stops the brick where it stood.
+// Which brick it rents is whichever reach the body settles in, so the claims read the device it holds.
 // The brick's divider register (DIV, 0xFF04) counts while it runs and holds still while it does not, read through a
 // screen this fixture gives the pool brick.
 //
 // Positions are world coordinates with the building at layout.puck's `gallerySite`: the south-east stall's corner
-// stands at (66.725, 18.775); the floor before `se-hgb-01` at (66.125, 18.425) and the tray's at (66.125, 19.375), on
+// stands at (66.725, 18.775), the west arm's bricks run south of it, and the tray's floor is at (65.975, 19.525), on
 // level 1's floor (4.55).
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -45,9 +46,7 @@ state {
       loan = 0
       held = 0
       model = 0
-    }
-    table rentalProbeAt {
-      z = 0.0
+      returned = -1
     }
   }
 }
@@ -56,9 +55,8 @@ rule "probe-running-0" {
   when $tick == 50
   mode: Edge
   rentalProbe.running0 = machine(90, 65284)
-  rentalProbe.loan = rentalLoan["1"]
+  rentalProbe.loan = rentalLoan[rentalHeld["0"]]
   rentalProbe.held = rentalHeld["0"]
-  rentalProbeAt.z = bodyPosition(body, 0, z)
   rentalProbe.model = rentalModel["0"]
 }
 rule "probe-running-1" {
@@ -70,6 +68,7 @@ rule "probe-stopped-0" {
   when $tick == 100
   mode: Edge
   rentalProbe.stopped0 = machine(90, 65284)
+  rentalProbe.returned = rentalLoan[rentalProbe.held]
 }
 rule "probe-stopped-1" {
   when $tick == 110
@@ -79,22 +78,22 @@ rule "probe-stopped-1" {
 
 test "a rented brick runs while held and stops back in its cubby" {
   when {
-    seat1: body.pose 66.125 4.6 18.425 0 0 0 0
+    seat1: body.pose 65.975 4.6 17.45 0 0 0 0
     ticks 30
     seat1: body.press interact 1 0.2 0
     ticks 40
-    seat1: body.pose 66.125 4.6 19.375 0 0 0 0
+    seat1: body.pose 65.975 4.6 19.525 0 0 0 0
     ticks 10
     seat1: body.press interact 1 0.2 0
     ticks 50
   }
   expect {
     rentalProbe.loan == 1
-    rentalProbe.held == 1
+    rentalProbe.held > 0
     rentalProbe.model == 1
     rentalProbe.running0 != rentalProbe.running1
     rentalProbe.stopped0 == rentalProbe.stopped1
-    rentalLoan["1"] == 0
+    rentalProbe.returned == 0
     rentalHeld["0"] == 0
     rentalModel["0"] == 0
   }
