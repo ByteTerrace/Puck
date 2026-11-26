@@ -136,7 +136,11 @@ mounted and engageable but the host does not advance it, so the scenario does
 not pay for emulating cartridges it never reads. Emulation and continuation
 hashing are most of a debug scenario's tick cost. A fixture that reads some
 machines stops the rest by name (`machine-debugger-tests.puck`), and a machine
-added to the debug world is added to that fragment.
+added to the debug world is added to that fragment. A machine that runs only
+while some state holds (a rented handheld) authors `runsWhen`, a state condition
+the tick decides before the machines step (`WorldTick.GateMachines`), rather than
+a rule toggling `running` through a document edit; `rentals-tests.puck` reads one
+start and stop.
 
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
