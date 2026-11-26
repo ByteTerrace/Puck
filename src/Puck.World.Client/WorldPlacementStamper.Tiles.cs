@@ -107,7 +107,7 @@ public static partial class WorldPlacementStamper {
             var shape = shapes[index];
             var box = parts[part++];
             var blend = (shape.Blend ?? SdfBlendOp.Union);
-            var reaches = Overlaps(low: low, high: high, otherLow: box.Low, otherHigh: box.High);
+            var reaches = SdfBoundAlgebra.BoxesMeet(low: low, high: high, otherLow: box.Low, otherHigh: box.High);
 
             if (!reaches && !SdfBoundAlgebra.IsIntersection(blend: blend)) {
                 tileHidden[index] = true;
@@ -125,7 +125,7 @@ public static partial class WorldPlacementStamper {
 
         var relief = parts[shown];
 
-        if (Overlaps(low: low, high: high, otherLow: relief.Low, otherHigh: relief.High)) {
+        if (SdfBoundAlgebra.BoxesMeet(low: low, high: high, otherLow: relief.Low, otherHigh: relief.High)) {
             tileParts.Add(item: relief with { Low = Vector3.Max(value1: low, value2: relief.Low), High = Vector3.Min(value1: high, value2: relief.High) });
         }
 
@@ -133,6 +133,4 @@ public static partial class WorldPlacementStamper {
     }
     private static (int First, int Last) CellsAlong(float low, float high, float edge) =>
         (((int)MathF.Floor(x: (low / edge))), (((int)MathF.Ceiling(x: (high / edge))) - 1));
-    private static bool Overlaps(Vector3 low, Vector3 high, Vector3 otherLow, Vector3 otherHigh) =>
-        ((low.X <= otherHigh.X) && (otherLow.X <= high.X) && (low.Y <= otherHigh.Y) && (otherLow.Y <= high.Y) && (low.Z <= otherHigh.Z) && (otherLow.Z <= high.Z));
 }
