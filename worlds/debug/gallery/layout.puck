@@ -340,11 +340,6 @@ let toyLatticeLooseBay = 8
 let treeBay = 6
 let treeX = bayX(treeBay)
 let treeZ = naveMid
-// Level 1's gate: the lattice panel in the tree's bay stands as two side panels and a head over an opening
-// `treeGateCells` of the lattice's pitch wide (1.875 m) and `treeGateHeight` metres tall, so the branch passes through
-// it and nothing passes beside it.
-let treeGateCells = 24
-let treeGateHeight = 2.6
 // The trunk: a cone `base` metres in radius at the floor whose taper would close `apex` metres up, cut off at `top`
 // inside the canopy. Its treads climb from `treeTreadStart` degrees round it (from +x toward +z in the plan, so the first
 // stands just south of east, facing the hall's long axis), one every `treeTreadStep` degrees and `treeTreadRise` metres,
@@ -384,6 +379,3 @@ function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
 function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhang) : (naveNorth + treeOverhang))]
-// The hook for level 1's size: the two branches into the toybox, each a path from treeBranchFrom to treeBranchTo that a
-// size field (standard/size-field.puck) lays along so the branch shrinks a body as the corner stairs do.
-let treeShrinkLimbs = filter(treeLimbs, b => (b.level == toyboxLevel))

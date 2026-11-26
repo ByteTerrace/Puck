@@ -158,12 +158,12 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The tree's gate.** The lattice panel in bay 6, where the central tree's two
-level-1 branches arrive ([the central tree](#the-central-tree)), stands as two
-side panels and a head over a 1.875 m opening (layout.puck's `treeGateCells`
-and `treeGateHeight`), each branch's tip passing through it onto the floor. A
-body walking in along either branch shrinks as the size field's zone along it
-sizes it ("The size of level 1", below).
+**The tree's sieves.** Each level-1 branch ([the central tree](#the-central-tree))
+dead-ends at a sieve: the lattice bay where it lands is barred 36 to the bay
+(layout.puck's `toyLatticeSieveCells`), so only a body already about a fifth of
+full size slips through. A full-size climber sees the toybox from the branch's
+tip and has to shrink or take the stairs or lift to reach it. Levels 2 and 3
+meet their branches through doorways (architecture.puck's `edgeDoorway`).
 
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
@@ -243,13 +243,7 @@ level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
 step onto its open edge. Each branch's tip lies on the floor's edge, a few
 centimetres proud of it (`treeLandingLift`).
 
-**The hook for level 1's size.** The owner's ruling makes the level-1 branches
-shrink a body as the corner stairs do. `treeShrinkLimbs` names those two
-branches; each one's path runs from `treeBranchFrom` to `treeBranchTo`
-(layout.puck), and level 1's size field
-([gallery/wonder.puck](gallery/wonder.puck)) lays a zone along that path. The branches are walkable now, and real climbing (grab, climb,
-mantle) is a separate engine plan; every surface of the trunk and branches is
-solid for it.
+**Level 1's branches give no size.** The owner's design: a level-1 branch is a dead end at a sieve that only a small body passes, so the branches lure a full-size climber toward the toybox without letting them in.
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
@@ -500,15 +494,12 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **The central tree's two level-1 branches** (`treeShrinkLimbs`): a capsule
-  3 m about the straight line from each branch's `treeBranchFrom` to its
-  `treeBranchTo`, full at the trunk and Alice's at the tip, where the branch
-  passes the lattice's gate.
 - **Level 1's floor**: the two aisles and the bridge, never the nave's void.
   Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
-- **The trunk's column**, last: full size, so a body climbing the trunk's
-  treads past a branch's start, or walking back off a branch, stands at its
-  full size there.
+
+Outside these zones a body keeps the size it last took (the owner's design):
+only the stairs and the lift are the intended routes, so a small body that
+leaves level 1 another way, through a branch's sieve onto the tree, stays small.
 
 **The pass.** A body holding the `wonderPass` body register nonzero takes its
 full size in every zone, so level 1, its stairs and its lift keep its size. A

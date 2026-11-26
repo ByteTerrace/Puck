@@ -564,13 +564,10 @@ function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
-// The tree's bay (layout.puck's treeBay) stands as a gate instead: a side panel either side of an opening the tree's
-// level-1 branch passes through, and a head over it from `treeGateHeight` up to the fascia, each rising in its own
+// Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands as a sieve instead
+// (layout.puck's toyLatticeSieveCells): a dead end only a small body passes. Each panel rises in its own
 // `shellLatticeRails` crossbars so the bars keep one spacing.
-let shellGateSideCells = ((shellLatticeBayCells - treeGateCells) / 2)
-let shellGateHeadHeight = (shellLatticeHeight - treeGateHeight)
 function shellLatticeRails(height) = (2 * maximum(1, round((height / (shellLatticeHeight / 3)))))
-let shellGateSide = (((treeGateCells + shellGateSideCells) / 2) * toyLatticePitch)
 let shellGateEdges = [
   { edge: "south", z: (naveSouth - balconyInset), bay: bayOf(treeLanding(toyboxLevel, "south")) }
   { edge: "north", z: (naveNorth + balconyInset), bay: bayOf(treeLanding(toyboxLevel, "north")) }
@@ -906,8 +903,6 @@ template shellPrototypes() {
       { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
-      { id: "gallery-lattice-gate-side", n: (treeBay % 6), cells: shellGateSideCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
-      { id: "gallery-lattice-gate-head", n: (treeBay % 6), cells: treeGateCells, pitch: toyLatticePitch, height: shellGateHeadHeight, upright: 1 }
     ]
   )
   for kind in latticeKinds {

@@ -68,7 +68,8 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   on the balconies end blunt. Judge it on captures from all three levels at noon and night.
 - The tree's shelves: a body pressed against the bark does not step up them (the step-up beside the trunk core's
   cylinders), so the walking line runs a little out from the bark; a look from the physics side.
-- The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
-  field work above. Until then the bay-6 gate lets a full-size body into the toybox.
+- Leaving small is the player's puzzle (the owner's ruling): only the stairs and the lift change size; a small body
+  that leaves level 1 another way (through a branch's sieve onto the tree) stays small until a route changes it. More
+  gameplay builds on this later. An author stuck small resets with `gallery.wonder size 1`.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better; [the climbing
   plan](climbing.md) holds its research round, what is built and what is open.
