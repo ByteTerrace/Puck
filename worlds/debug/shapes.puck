@@ -118,7 +118,7 @@ let galleryDisplayRows = [
   }
   {
     id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
-    x: displayNaveXs[1], z: displayNaveSouth, yaw: 180
+    x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
     id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
