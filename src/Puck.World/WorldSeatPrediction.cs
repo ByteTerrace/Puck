@@ -60,6 +60,8 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public readonly WindowedExtremes Leads = new(length: 16);
         public uint LeadSequence;
         public ulong LeadEpoch;
+        // The owner incarnation (WorldSeatSentInput.Incarnation) the leads were timed under.
+        public long Incarnation;
         public double PredictedAt = double.NaN;
         public bool Predicted;
         public string Reason = "no prediction asked";
@@ -145,9 +147,24 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             return "no input is sent to the seat's authority yet";
         }
 
-        if (mirror.TryInputAnswer(answer: out var answer, owner: owner) && ((answer.Sequence != seat.LeadSequence) || (answer.Epoch != seat.LeadEpoch)) &&
-            sent.TryFindSent(epoch: answer.Epoch, sequence: answer.Sequence, tick: out var sentAt)) {
-            seat.Leads.Add(value: ((long)answer.Tick - sentAt));
+        var answered = mirror.TryInputAnswer(answer: out var answer, owner: owner);
+
+        // Every owner incarnation numbers its input epochs and sequences afresh (a crossing rebuilds the seat's input,
+        // even at the same authority), so its batches are timed only against answers given after it began: the leads
+        // of the incarnation before are forgotten, and the answer standing when it began, which answers that one's
+        // input, is taken as already seen.
+        if (seat.Incarnation != sent.Incarnation) {
+            seat.Incarnation = sent.Incarnation;
+            seat.Leads.Clear();
+            (seat.LeadSequence, seat.LeadEpoch) = (answered ? (answer.Sequence, answer.Epoch) : (0U, 0UL));
+        }
+        var answeredBatch = -1;
+
+        if (answered && sent.TryFindSent(answeredAt: answer.Tick, epoch: answer.Epoch, sequence: answer.Sequence, position: out var answeredPosition)) {
+            answeredBatch = answeredPosition;
+        }
+        if ((answeredBatch >= 0) && ((answer.Sequence != seat.LeadSequence) || (answer.Epoch != seat.LeadEpoch))) {
+            seat.Leads.Add(value: ((long)answer.Tick - sent.At(position: answeredBatch).Tick));
             seat.LeadSequence = answer.Sequence;
             seat.LeadEpoch = answer.Epoch;
         }
@@ -166,7 +183,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var steps = (target - (long)own.Tick);
 
         if ((steps < 0L) || (steps > MaxSteps)) {
-            return $"the continuation is {steps} tick(s) from the tick an input sent now lands at";
+            return $"the continuation is {steps} tick(s) from the tick an input sent now lands at, {lead} tick(s) after it is sent";
         }
         // The step's code (kits, motion programs, field programs) is content the client ships: the client's own copy of a document
         // the authority runs is whole, where the delivered one is what the authority disclosed.
@@ -206,15 +223,24 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var previous = position;
         var orientation = predicted.FixedOrientation;
         // The last batch the body has taken, by its position in the sent history: the authority takes a held batch again
-        // on every tick no newer one arrives, its relative movement spent, so the prediction does too.
+        // on every tick no newer one arrives, its relative movement spent, so the prediction does too. The authority's
+        // answer names the batch it last took and the tick it took it in, so a continuation at or after that tick holds
+        // that batch and none sent after it that carries events: a batch a stalled link still holds is replayed from the
+        // continuation (on the first step, where its sent tick and the lead are already past, as the burst that delivers
+        // it is taken at once) rather than counted as taken because the least lead has passed. Without an answer for the
+        // continuation's tick, the lead decides.
         var applied = -1;
         var taken = 0L;
 
-        for (var held = 0; (held < sent.Count); held++) {
-            if ((sent.At(position: held).Tick + lead) > ((long)own.Tick)) {
-                break;
+        if ((answeredBatch >= 0) && (answer.Tick <= own.Tick)) {
+            applied = answeredBatch;
+        } else {
+            for (var held = 0; (held < sent.Count); held++) {
+                if ((sent.At(position: held).Tick + lead) > ((long)own.Tick)) {
+                    break;
+                }
+                applied = held;
             }
-            applied = held;
         }
         for (var step = 1L; (step <= steps); step++) {
             var tick = (own.Tick + ((ulong)step));
