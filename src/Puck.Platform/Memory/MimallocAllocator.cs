@@ -72,12 +72,16 @@ public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics
         [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
         private static partial void mi_option_set(int option, CLong value);
 
+        // page_commit_on_demand's value for "on demand, except where the system overcommits": Linux hands out pages as
+        // they are touched whatever is committed, so only a system that charges commit (Windows) pays for the calls.
+        private const int CommitOnDemandUnlessOvercommitted = 2;
+
         // Sets the options the process runs under, on the owner thread before any other thread allocates. A page for
         // objects past a slice is committed as its blocks are first used: mimalloc's default commits a size class's
         // whole page for its first block, on every thread that allocates the class.
         internal static void Configure() {
             if ((mi_version() / 100) != OptionsVersion) { return; }
-            mi_option_set(option: OptionPageCommitOnDemand, value: new CLong(value: 1));
+            mi_option_set(option: OptionPageCommitOnDemand, value: new CLong(value: CommitOnDemandUnlessOvercommitted));
         }
     }
 
