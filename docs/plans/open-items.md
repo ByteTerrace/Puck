@@ -203,7 +203,14 @@ defects, not looks.
    frame thread's half is untouched and needs a windowed leg to choose and to
    check each step: [the frame-production plan](frame-production.md#what-is-left-of-the-architecture)
    orders it, and `world.counters sdf.captures` over a route chapter says
-   which of capture, pack, pump and record a step moves. Success line: the
+   which of capture, pack, pump and record a step moves. It leads the
+   authority's half: on the RTX 2060's player build the frame thread binds
+   the frame, Record and Capture first, and stepping the worlds is a small
+   share. Its first step is a frame-thread trace of a settled route on each
+   backend (`puck host samples --pid <World> --focus RecordWave --depth 5`,
+   the same with `--leaves 3`, and both again for `CaptureFrame`), which any
+   session that holds a windowed World can take.
+   Success line: the
    frame thread under 3 ms on the route at 2560 by 1440 and in the city
    through its painting; the city's headless authority at 30 Hz on the quiet
    RTX 2060 with the step thread under 60% busy.
@@ -835,7 +842,12 @@ camera latch, and Vulkan's capture copy and record fork.
      reads every value fact again each time; the debug world's companion asks
      `nearest` over a row that tags every slot, a walk of every body per
      derivation (`WorldRuleHost.ResolveNearestBody`, which wants a spatial
-     query). The region pass tests every changed body against every place,
+     query), and the walk repeats on every fact derivation, thirteen a tick
+     in the debug world, since a derivation that finds the bodies stale reads
+     every watched value again (`WorldRuleHost.DeriveValues`): a value that
+     reads bodies only by position needs reading again only when a
+     candidate's pose or liveness moved, which the walk of the candidates
+     beneath it already learns. The region pass tests every changed body against every place,
      and a region that moves tests every slot (`WorldEventFeed.CollectRegions`).
      A world a painting observes delivers every body to that session each
      tick (`WorldSessionSink.DeliverSnapshot`). Check: `world.tick.fact-slots`,
@@ -865,6 +877,21 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
+   - **The host thread still composes every instance's wave from scratch.**
+     Before each step the thread that also runs the frame scans every body
+     slot of every instance against every seam face
+     (`WorldAdjacencyOwnership.Sweep`, which makes its answer's array on
+     every call), builds each mirrored session's body image whole
+     (`WorldSessionMirror.CaptureBodyImage`) and makes the observation
+     tables and the seam projections again
+     (`WorldPresentationCopy.Observations`,
+     `WorldAdjacencyFields.BuildProjections`). Built: the seam scan's
+     selection makes no closure for a slot that crossed nothing, a
+     reference's document path is resolved once, and the site attention
+     reads its faces by index, which halved what that thread allocates an
+     iteration in the headless debug world. Check: `host.frames`' frame
+     thread allocation an iteration, and `puck host allocations` naming no
+     site beneath `WorldInstanceHost.TryStepInstances`.
 
    Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every
