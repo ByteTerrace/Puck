@@ -163,6 +163,12 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
         // boot instance name, so the image proven here is the document the neighbour boots as.
         WorldBootWork.Count(kind: WorldBootWork.Parses);
 
+        var laneReason = string.Empty;
+
+        WorldRenderLaneNames.Resolve(document: tree!, refuse: (_, message, pointer) => laneReason = ((laneReason.Length == 0) ? $"{message} (at {pointer})" : laneReason), rewrite: true, whole: true);
+        if (laneReason.Length > 0) {
+            return WorldNeighbourResolution.Unavailable(reason: $"'{path}' does not parse as {WorldDefinition.SchemaVersion} — {laneReason}");
+        }
         if (!WorldJsonPayload.TryParse(
             json: tree!.ToJsonString(),
             info: WorldJsonContext.Authored.WorldDefinition,

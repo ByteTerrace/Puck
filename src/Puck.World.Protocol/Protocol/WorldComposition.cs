@@ -20,5 +20,8 @@ public abstract record WorldComposition {
     public sealed record SelectCamera(string? Name) : WorldComposition;
     /// <summary>Sets or clears the operator's free camera, which replaces every window slot's view while set.</summary>
     /// <param name="Pose">The absolute pose, or <see langword="null"/> to restore the normal view.</param>
-    public sealed record SetOperatorCamera(WorldOperatorCamera? Pose) : WorldComposition;
+    /// <param name="Continues">Whether the pose moves on from the operator camera already set, as a turn, swing, move or
+    /// field of view does: the views keep their temporal history and exposure across it, as they do while a seat's camera
+    /// moves. A pose that does not continue (pose, look, orbit) is a new shot, which cuts them like a teleport.</param>
+    public sealed record SetOperatorCamera(WorldOperatorCamera? Pose, bool Continues = false) : WorldComposition;
 }

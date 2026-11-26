@@ -59,6 +59,24 @@ public static class ExpressionVocabulary {
         comparer: StringComparer.Ordinal
     );
 
+    /// <summary>The common mathematical abbreviations either language accepts for a named function, each read as its
+    /// one canonical spelling before anything else sees the call, so the two spellings compile alike and a document
+    /// prints the canonical one. <c>min</c> and <c>max</c> are absent: the rule language spells its reductions with
+    /// them.</summary>
+    public static IReadOnlyDictionary<string, string> Aliases { get; } = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+        ["abs"] = "absolute",
+        ["ceil"] = "ceiling",
+        ["cos"] = "cosine",
+        ["pow"] = "power",
+        ["sin"] = "sine",
+        ["sqrt"] = "squareRoot",
+    };
+
+    /// <summary>Returns the canonical spelling of a function name: the name an alias stands for, or the name
+    /// itself.</summary>
+    /// <param name="name">The name as written.</param>
+    /// <returns>The canonical spelling.</returns>
+    public static string Canonical(string name) => (Aliases.TryGetValue(key: name, value: out var canonical) ? canonical : name);
     /// <summary>Returns how many values an operation consumes from the stack.</summary>
     /// <param name="operation">The operation.</param>
     /// <returns>The count; zero for a payload operation.</returns>

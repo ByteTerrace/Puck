@@ -110,8 +110,8 @@ public static partial class SdfWorldPackage {
     /// place (<see cref="RenderGraphPortAccess.ComputeReadWrite"/>), zeroed once. The resolve reads the
     /// visibility records to reproject each pixel through <c>sdfReprojection</c>, and writes the lit
     /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
-    /// evaluated and composited after the resolve. The preceding frame's history color is also what the reflection pass
-    /// reads its mirror rays' hits from (<see cref="WithReflections"/>).</summary>
+    /// evaluated and composited after the resolve. The preceding frame's history color is also what a reflecting view's
+    /// reflection pass reads its mirror rays' hits from (<see cref="WithReflections"/>).</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
     /// <summary>Returns whether a fragment reconstructs over time: it is <see cref="TemporalFragment"/> or one derived
     /// from it (<see cref="RateFragment"/>, or either with glass, bins or a display stage added), the fragments that
@@ -199,8 +199,7 @@ public static partial class SdfWorldPackage {
             ((name == Parts.Lit) || (name == Color) || SkyRuns.Contains(value: name));
     }
     private static class TemporalDeclaration {
-        // The history colour gives a temporal view a picture of the preceding frame for its reflections to read.
-        internal static readonly RenderGraphPackageFragment Value = WithReflections(fragment: new(
+        internal static readonly RenderGraphPackageFragment Value = new(
             InputVersions: [],
             OutputVersions: [Color],
             Resources: [
@@ -250,7 +249,7 @@ public static partial class SdfWorldPackage {
                     _ => pass,
                 }),
             ]
-        ));
+        );
 
         // One float a render-extent pixel.
         private static IReadOnlyList<ShaderPipelineCountTerm> ReactivityCount => [Term(1, ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports)];

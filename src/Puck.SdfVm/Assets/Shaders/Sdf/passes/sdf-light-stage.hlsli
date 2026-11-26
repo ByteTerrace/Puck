@@ -270,7 +270,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 reflectDirection = reflect(p.rayDirection, normal);
                 float3 sky = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
-                float3 environment = sdfViewsScreenReflection(p, sky, sdfViewsReflectionSeen(probes, reflectDirection, sky));
+                float3 environment = sdfViewsScreenReflection(p, surfacePoint, s.normal, s.t, sky, sdfViewsReflectionSeen(probes, reflectDirection, sky));
 
                 reflectionTerm = environment;
                 environmentTerm = ((environment * specularAlbedo) * ambientOcclusion);

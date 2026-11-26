@@ -76,7 +76,7 @@ case SDF_SHAPE_CONVEX_POLYGON:
 }
 case SDF_SHAPE_SWEEP:
 {
-    result = sdfSweep(p, data0, data1); break;
+    result = sdfSweep(p, sdfSweepA(data0), sdfSweepB(data0), sdfSweepC(data0), sdfSweepRadiusStart(data0), sdfSweepRadiusEnd(data0), sdfSweepBulge(data0), data0.y, data0.z, data0.w); break;
 }
 case SDF_SHAPE_PATH:
 {

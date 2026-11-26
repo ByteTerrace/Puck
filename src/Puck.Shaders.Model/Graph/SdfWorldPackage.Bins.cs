@@ -67,16 +67,8 @@ public static partial class SdfWorldPackage {
         // Every storage follows the visibility record's extent basis, the render extent's in a reduced or temporal view.
         var visibility = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.Visibility));
         var pixels = visibility.Count!;
-        ShaderPipelineCountTerm[] PerTile(ulong elements) => [.. pixels.Select(selector: term => term with {
-            Elements = elements,
-            Per = [.. term.Per.Select(selector: static basis => basis switch {
-                ShaderPipelineCountBasis.Extent => ShaderPipelineCountBasis.ExtentTiles,
-                ShaderPipelineCountBasis.RenderExtent => ShaderPipelineCountBasis.RenderExtentTiles,
-                _ => basis,
-            })],
-        })];
         // Each tile's bin, its entry in the tile list and its light masks.
-        var tiles = PerTile(elements: (2 + ShadeTileLightWords));
+        var tiles = PerTile(pixels: pixels, elements: (2 + ShadeTileLightWords));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 2));
 
         foreach (var pass in fragment.Passes) {
@@ -109,7 +101,7 @@ public static partial class SdfWorldPackage {
                     StrideBytes: sizeof(uint)
                 ),
                 Buffer(
-                    count: PerTile(elements: (ShadeBins * 3)),
+                    count: PerTile(pixels: pixels, elements: (ShadeBins * 3)),
                     name: Parts.ShadeArguments,
                     sizeBytes: null,
                     strideBytes: sizeof(uint)

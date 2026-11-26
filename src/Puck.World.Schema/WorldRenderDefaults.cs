@@ -93,6 +93,9 @@ public static class WorldApplicationDefaults {
 /// <param name="FarShadows">How often the device refreshes the far shadow cascade and the light turn a held cascade
 /// tolerates (<see cref="WorldFarShadows"/>). Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="Reflections">The screen-space reflections the device traces in its temporal views
+/// (<see cref="SdfScreenReflections"/>): the square of pixels one mirror ray serves and the steps it may march. Absent,
+/// every view reflects the irradiance volume alone, where reflections do not pay on the device.</param>
 /// <param name="Nested">The nested-view table the preset runs (<see cref="WorldNestedViewQuality"/>), in place of the
 /// world's <c>render.nested</c>, so each device chooses what its windows, portals and filmed screens give up at each size.
 /// Absent runs the world's table.</param>
@@ -124,7 +127,8 @@ public readonly record struct WorldQualityPreset(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? IndirectBudget = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShadowTexels = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShadowTexels = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfScreenReflections? Reflections = null
 ) {
     /// <summary>The fewest texels a side <see cref="ShadowTexels"/> takes.</summary>
     public const int MinShadowTexels = 256;
@@ -140,6 +144,18 @@ public readonly record struct WorldQualityPreset(
             ? null
             : $"{path} must be a power of two from {MinShadowTexels} through {MaxShadowTexels}.");
 }
+/// <summary>One of the world's render lanes: a name a creation's lane member may write in place of the lane's index,
+/// and the value the lane reads.</summary>
+/// <param name="Name">The lane's name, unique among the composed document's lanes. A creation's render-lane member
+/// (<see cref="DocumentRenderLaneAttribute"/>) that writes it reads this lane; the load resolves it to the lane's index
+/// (<see cref="WorldRenderLaneNames"/>).</param>
+/// <param name="Value">The bindable scalar the lane reads: a literal, a <c>state.&lt;row&gt;</c> binding, or keys on a
+/// clock.</param>
+public sealed record WorldRenderLane(
+    [property: DocumentText("a render lane's name, which a creation's lane members write")] string Name,
+    BindableScalar Value
+);
+
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
 /// scale), the graphics-menu defaults a server-pulled world would carry.</summary>
@@ -198,10 +214,11 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Devices">The world's device profiles (<see cref="WorldDeviceProfile"/>): for each graphics device, the
 /// quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name
 /// (<c>world.device-profile</c>). Absent authors none, and no cap applies.</param>
-/// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
-/// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
-/// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
-/// slot. Absent or a missing entry reads zero; <c>world.lighting</c> echoes them as authored.</param>
+/// <param name="Lanes">The world's render lanes (<see cref="WorldRenderLane"/>): up to four named bindable scalars,
+/// resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7
+/// (<c>SdfLanes</c>) in the order the composed document holds them, so a static placement sharing one baked mesh
+/// follows world state without a slot. Rows merge across imports by name. Absent or a missing entry reads zero;
+/// <c>world.lighting</c> echoes them as authored.</param>
 /// <param name="Nested">What a nested view gives up at each presented size (<see cref="WorldNestedViewQuality"/>). Absent
 /// gives up nothing.</param>
 /// <param name="RayQueries">Whether the indirect volume's background rays (its probe trace, the relight's shadow rays
@@ -213,6 +230,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="FarShadows">How often the world boots refreshing the far shadow cascade (<see cref="WorldFarShadows"/>);
 /// a quality preset's row replaces it. Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="Reflections">The screen-space reflections the world boots tracing in its temporal views
+/// (<see cref="SdfScreenReflections"/>): the square of pixels one mirror ray serves and the steps it may march; a quality
+/// preset's row replaces it. Absent, every view reflects the irradiance volume alone.</param>
 /// <param name="FarProduct">What the world shows of itself to a far viewer (<see cref="WorldFarProduct"/>): the product a
 /// sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the
 /// defaults only once a sky view asks for it, and a world nothing views from afar builds none.</param>
@@ -243,7 +263,7 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLane>? Lanes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.World.Authoring.ShadeReference? Shade = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
@@ -251,7 +271,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarProduct? FarProduct = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarProduct? FarProduct = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfScreenReflections? Reflections = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;

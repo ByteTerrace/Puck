@@ -23,9 +23,9 @@ namespace Puck.World;
 /// <para>Where it stops: the step also reads what lies outside the body. The static ground, gravity, kits and motion
 /// programs come from the delivered document and the moving solids' poses from the continuation, so they are exact at
 /// its tick; other bodies, a moving solid's motion after that tick and rule writes to the body's registers are not
-/// predicted, and show as a correction at the next delivery. A seat riding another body is not predicted, and a
-/// prediction ends before a step through a portal door (<see cref="WorldFaceCatalog.PortalDoors"/>), where the authority
-/// hands the body to a world this population does not hold.</para>
+/// predicted, and show as a correction at the next delivery. A seat riding another body is not predicted, and neither is
+/// one whose predicted steps pass through a portal's glass (<see cref="WorldFaceRegion.Sweep"/>): the crossing is the
+/// authority's, so the seat steers from what was delivered until the crossing is delivered.</para>
 /// <para>Timing is on the authority's clock alone: each sent batch carries the authority tick it was sent at, as the
 /// seat's clock maps it from the deliveries seen (<see cref="WorldAuthorityClock"/>), and the lead from that tick to the
 /// tick that took it is a difference of two authority ticks, the link's delay. The client's own steps never stand in for
@@ -60,13 +60,14 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public readonly WindowedExtremes Leads = new(length: 16);
         public uint LeadSequence;
         public ulong LeadEpoch;
-        // The portal doors of Definition, through which the authority hands the body to another world.
-        public IReadOnlyList<WorldPortalDoor> Doors = [];
         public double PredictedAt = double.NaN;
         public bool Predicted;
         public string Reason = "no prediction asked";
         public string? PopulationRefusal;
         public WorldPredictedBody Body;
+        // The portal openings of the document the prediction steps in, and that document.
+        public (string PlacementId, string Face, WorldFaceAperture.Box Box)[] Doors = [];
+        public WorldDefinition? DoorsFrom;
     }
 
     private readonly Seat[] m_seats = [.. Enumerable.Range(start: 0, count: PlayerRoster.MaxSlots).Select(selector: static _ => new Seat())];
@@ -170,6 +171,10 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         if (!TryDecode(own: in own, seat: seat)) {
             return "the continuation does not decode";
         }
+        if (!ReferenceEquals(objA: seat.DoorsFrom, objB: source)) {
+            seat.Doors = WorldFacePortalPolicy.PortalApertures(definition: source);
+            seat.DoorsFrom = source;
+        }
 
         // The authority's answer to an earlier prediction: what was predicted for the continuation's tick against where the
         // body stood after it. A prediction is relied on only while the authority keeps confirming it.
@@ -222,10 +227,14 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             population.AdvanceSeats(engageEdges: m_edges, engageProbeOrdinals: [], stepStartEngineTick: engineTick, stepTicks: stepTicks, tick: tick);
             population.CompleteStep(tick: tick);
             engineTick += stepTicks;
-            // A step through a portal door is where the authority hands the body to the world behind it, which this
-            // population does not hold: the prediction ends before it rather than walk the body on through this world.
-            if (CrossesDoor(doors: seat.Doors, from: position, to: predicted.FixedPosition)) {
-                break;
+
+            // A step through a door's glass is a crossing only the authority makes (it carries the body to the door's
+            // counterpart, perhaps resized or into another world), so a prediction past one would steer the seat from a
+            // body standing in the wall behind the glass: the seat steers from what was delivered until the crossing is.
+            foreach (var door in seat.Doors) {
+                if (WorldFaceRegion.Sweep(aperture: door.Box, from: position, to: predicted.FixedPosition).Crossed) {
+                    return $"the prediction reaches {door.PlacementId}/{door.Face}, whose crossing the authority makes";
+                }
             }
             previous = position;
             position = predicted.FixedPosition;
@@ -255,23 +264,6 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         );
         return null;
     }
-    // Whether the segment one predicted step moved the body along enters a portal door from its front, as the
-    // authority's portal scan tests it (WorldFaceRegion.Sweep), whether or not the door stands open: a closed door holds
-    // the body at its frame, which this population does not model either.
-    private static bool CrossesDoor(IReadOnlyList<WorldPortalDoor> doors, FixedVector3 from, FixedVector3 to) {
-        var segment = FixedAabb.Empty.Enclose(point: from).Enclose(point: to);
-
-        for (var index = 0; (index < doors.Count); index++) {
-            var aperture = doors[index].Aperture;
-
-            if (((aperture is not WorldFaceAperture.Box box) || box.Bounds.Intersects(other: segment)) &&
-                WorldFaceRegion.Sweep(aperture: aperture, from: from, to: to).Crossed) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // Takes one sent batch as the authority takes an admitted batch of the body's owner: folded onto the body's channels
     // and written through the body's one owner-input door. A held batch, taken again on a tick no newer one arrived,
     // carries no relative movement.
@@ -295,7 +287,6 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             return ((seat.Population is not null) ? null : seat.PopulationRefusal);
         }
 
-        seat.Doors = WorldFaceCatalog.For(definition: definition).PortalDoors(definition: definition);
         if ((seat.Population is { } built) && (seat.Definition is { } before) &&
             WorldDocumentInputs.Changed(after: definition, before: before).Intersect(other: built.BuiltFrom).IsEmpty) {
             seat.Definition = definition;

@@ -6,7 +6,7 @@ import "../standard/shading"
 
 render {
   shade: plain()
-  lanes ["state.shadeLane"]
+  lanes [{ name: "shadeLane", value: "state.shadeLane" }]
 }
 state {
   world {

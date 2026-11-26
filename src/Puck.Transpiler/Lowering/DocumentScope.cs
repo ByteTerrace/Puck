@@ -579,6 +579,10 @@ public sealed partial class DocumentScope {
                 case StateGridDeclarationNode row: rows.Add(item: row.Name); break;
                 case BlockNode block: IndexStructuralNames(block.Statements, rows, pools, gates); break;
                 case ForStatementNode loop: IndexStructuralNames(loop.Body, rows, pools, gates); break;
+                case ConditionalStatementNode branch:
+                    IndexStructuralNames(branch.Then, rows, pools, gates);
+                    IndexStructuralNames(branch.Else ?? [], rows, pools, gates);
+                    break;
             }
         }
 

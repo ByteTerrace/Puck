@@ -17,6 +17,7 @@ public static partial class WorldDefinitionValidator {
         ValidateSkyFieldScale(preset.SkyFieldScale, $"{path}.skyFieldScale", errors);
         if (preset.DistantShadows?.Refusal(path: $"{path}.distantShadows") is { } distant) { errors.Add(item: distant); }
         if (preset.ViewsRate?.Refusal(path: $"{path}.viewsRate") is { } rate) { errors.Add(item: rate); }
+        if (preset.Reflections?.Refusal(path: $"{path}.reflections") is { } reflections) { errors.Add(item: reflections); }
         if (preset.FarShadows?.Refusal(path: $"{path}.farShadows") is { } far) { errors.Add(item: far); }
         if (preset.IndirectBudget?.Refusal(path: $"{path}.indirectBudget") is { } budget) { errors.Add(item: budget); }
         if ((preset.ShadowTexels is { } texels) && (WorldQualityPreset.ShadowTexelsRefusal(path: $"{path}.shadowTexels", texels: texels) is { } shadowTexels)) { errors.Add(item: shadowTexels); }

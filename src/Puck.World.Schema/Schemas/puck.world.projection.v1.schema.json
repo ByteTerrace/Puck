@@ -809,15 +809,35 @@
           "title": "WorldRenderShadowCoverage"
         },
         "lanes": {
-          "description": "The world\u0027s render lanes: up to four bindable scalars (a literal, a state.\u003Crow\u003E binding, or keys on a clock), resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
+          "description": "The world\u0027s render lanes (WorldRenderLane): up to four named bindable scalars, resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes) in the order the composed document holds them, so a static placement sharing one baked mesh follows world state without a slot. Rows merge across imports by name. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
           "type": [
             "array",
             "null"
           ],
-          "default": null,
           "items": {
-            "$ref": "#/$defs/BindableScalar"
-          }
+            "description": "One of the world\u0027s render lanes: a name a creation\u0027s lane member may write in place of the lane\u0027s index, and the value the lane reads.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The lane\u0027s name, unique among the composed document\u0027s lanes. A creation\u0027s render-lane member (DocumentRenderLaneAttribute) that writes it reads this lane; the load resolves it to the lane\u0027s index (WorldRenderLaneNames).",
+                "type": "string"
+              },
+              "value": {
+                "$ref": "#/$defs/BindableScalar",
+                "description": "The bindable scalar the lane reads: a literal, a state.\u003Crow\u003E binding, or keys on a clock."
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "additionalProperties": false,
+            "title": "WorldRenderLane"
+          },
+          "default": null
         },
         "shade": {
           "$ref": "#/$defs/ShadeReference",
@@ -968,6 +988,11 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldFarProduct"
+        },
+        "reflections": {
+          "$ref": "#/$defs/SdfScreenReflections",
+          "description": "The screen-space reflections the world boots tracing in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march; a quality preset\u0027s row replaces it. Absent, every view reflects the irradiance volume alone.",
+          "default": null
         }
       },
       "additionalProperties": false,
@@ -5321,7 +5346,10 @@
                           "default": 0
                         },
                         "lane": {
-                          "type": "integer",
+                          "type": [
+                            "integer",
+                            "string"
+                          ],
                           "default": 0
                         },
                         "deposit": {
@@ -5534,7 +5562,8 @@
                       "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
                       "type": [
                         "integer",
-                        "null"
+                        "null",
+                        "string"
                       ],
                       "default": null
                     },
@@ -5740,7 +5769,8 @@
                           "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
                           "type": [
                             "integer",
-                            "null"
+                            "null",
+                            "string"
                           ],
                           "default": null
                         },
@@ -5762,7 +5792,8 @@
                           "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
                           "type": [
                             "integer",
-                            "null"
+                            "null",
+                            "string"
                           ],
                           "default": null
                         },
@@ -9324,6 +9355,27 @@
       "additionalProperties": false,
       "title": "WorldRenderIndirectBudget"
     },
+    "SdfScreenReflections": {
+      "description": "A device\u0027s screen-space reflections: how finely a temporal view traces its glossy surfaces\u0027 mirror rays through its own picture and how far each may march. A view without them reflects the irradiance volume alone.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "cell": {
+          "description": "The edge, in render pixels, of the square one mirror ray serves: 1 traces every glossy pixel, 2 one pixel of each 2 by 2 block a frame, the block\u0027s pixels taking turns and each pixel blending the rays of the blocks about it that stand on its surface.",
+          "type": "integer",
+          "default": 2
+        },
+        "steps": {
+          "description": "The most reads of the reflection\u0027s depth pyramid one ray\u0027s march takes, from 1 through MaxSteps: a ray past its budget answers with the irradiance volume.",
+          "type": "integer",
+          "default": 32
+        }
+      },
+      "additionalProperties": false,
+      "title": "SdfScreenReflections"
+    },
     "WorldQualityPreset": {
       "type": [
         "object",
@@ -9447,6 +9499,11 @@
             "integer",
             "null"
           ],
+          "default": null
+        },
+        "reflections": {
+          "$ref": "#/$defs/SdfScreenReflections",
+          "description": "The screen-space reflections the device traces in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march. Absent, every view reflects the irradiance volume alone, where reflections do not pay on the device.",
           "default": null
         }
       },

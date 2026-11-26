@@ -21,7 +21,11 @@ state {
 }
 render {
   shadows: High
-  lanes ["state.shadeWrap", "state.shadeTilt"]
+  // `shadowProbe` reads these by index (lanes.world0 and lanes.world1), so they lead the basis's `shadeLane`.
+  lanes [
+    { name: "shadeWrap", value: "state.shadeWrap", $before: "shadeLane" }
+    { name: "shadeTilt", value: "state.shadeTilt", $before: "shadeLane" }
+  ]
   lighting {
     lights [
       sunlight(direction: [1, 1, 1], color: "#FFFFFF")

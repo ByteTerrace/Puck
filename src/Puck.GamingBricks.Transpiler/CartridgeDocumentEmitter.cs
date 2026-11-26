@@ -310,7 +310,13 @@ public static class CartridgeDocumentEmitter {
         scope.CurrentPointer = pointer;
 
         if (name is null) {
-            target[block.Identifier] = obj;
+            DocumentLowering.AssignMember(
+                key: block.Identifier,
+                scope: scope,
+                span: block.Span,
+                target: target,
+                value: obj
+            );
 
             return;
         }
@@ -555,10 +561,12 @@ public static class CartridgeDocumentEmitter {
                         jsonPointer: DocumentJsonPointer.Child(name: property.Name, pointer: scope.CurrentPointer),
                         span: property.Span
                     );
-                    DocumentLowering.AssignOrExtend(
-                        target,
-                        property.Name,
-                        lowered
+                    DocumentLowering.AssignMember(
+                        key: property.Name,
+                        scope: scope,
+                        span: property.Span,
+                        target: target,
+                        value: lowered
                     );
 
                     break;
@@ -608,6 +616,11 @@ public static class CartridgeDocumentEmitter {
                     sink: ProcessStatement,
                     target: target
                 );
+
+                break;
+
+            case ConditionalStatementNode branch:
+                DocumentLowering.ExpandConditional(branch: branch, scope: scope, sink: ProcessStatement, target: target);
 
                 break;
 

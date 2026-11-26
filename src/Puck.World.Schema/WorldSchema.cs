@@ -1338,6 +1338,18 @@ public static partial class WorldSchema {
     // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
     // ApplyConverterVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
     // reserved-prefix carve-out.
+    // A render-lane member reads an index, and an authored document may write a world lane's name in its place, which the
+    // load numbers (WorldRenderLaneNames).
+    private static void AdmitRenderLaneName(JsonSchemaExporterContext context, JsonObject obj) {
+        if (context.PropertyInfo?.AttributeProvider?.IsDefined(attributeType: typeof(DocumentRenderLaneAttribute), inherit: false) != true) { return; }
+        var types = new JsonArray();
+
+        foreach (var type in ((obj["type"] as JsonArray)?.Select(selector: static entry => entry?.ToString()) ?? [obj["type"]?.ToString()])) {
+            if (type is not null) { types.Add(item: type); }
+        }
+        types.Add(item: "string");
+        obj["type"] = types;
+    }
     private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode node, ExportRun run) {
         if (
             (node is JsonObject alreadyRef) &&
@@ -1364,6 +1376,7 @@ public static partial class WorldSchema {
 
         run.TypesByNode[obj] = context.TypeInfo.Type;
         ApplyNumericDomains(context.TypeInfo, obj);
+        AdmitRenderLaneName(context: context, obj: obj);
 
         // The document root carries its own hand-written title ("Puck world definition (puck.world.definition.v1)" and
         // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.

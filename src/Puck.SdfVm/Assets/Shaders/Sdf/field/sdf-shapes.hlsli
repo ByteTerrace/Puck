@@ -1,14 +1,26 @@
-// The target-escape primitives (the star polygon, the convex polygon, the path, the glyph, the sampled region and the
-// sweep) and evaluateShape. Every other primitive, and the 2D lift every profile shares, is a shared formula generated
-// with its fixed-point twin (Puck.SignedDistance's SdfFieldFormulas, isa/sdf-field-shape-formulas.hlsli).
+// The target-escape primitives (the star polygon, the convex polygon, the path, the glyph and the sampled region), the
+// sweep's search primitive, and evaluateShape. Every other primitive, the sweep's formula, and the 2D lift every profile
+// shares, is a shared formula generated with its fixed-point twin (Puck.SignedDistance's SdfFieldFormulas,
+// isa/sdf-field-shape-formulas.hlsli).
 #ifndef FIELD_SDF_SHAPES_HLSLI
 #define FIELD_SDF_SHAPES_HLSLI
 // The glyph median decode (puckMsdfReconstruct) is the overlays' too.
 #include "Shared/msdf.hlsli"
 // The ellipse's projection core, a primitive of each reader that the ellipse formula calls.
 #include "sdf-ellipse.hlsli"
+// A sweep's operands (SdfShapeType.Sweep): its table's 3 fixed uvec4 words at the offset data0.x carries, (A.xyz,
+// radiusStart), (B.xyz, radiusEnd), (C.xyz, bulge). KEEP IN SYNC with SdfProgram.PackSweepCurves.
+float3 sdfSweepA(float4 data0) { return asfloat(sdfProgramWord(asuint(data0.x)).xyz); }
+float3 sdfSweepB(float4 data0) { return asfloat(sdfProgramWord((asuint(data0.x) + 1u)).xyz); }
+float3 sdfSweepC(float4 data0) { return asfloat(sdfProgramWord((asuint(data0.x) + 2u)).xyz); }
+float sdfSweepRadiusStart(float4 data0) { return asfloat(sdfProgramWord(asuint(data0.x)).w); }
+float sdfSweepRadiusEnd(float4 data0) { return asfloat(sdfProgramWord((asuint(data0.x) + 1u)).w); }
+float sdfSweepBulge(float4 data0) { return asfloat(sdfProgramWord((asuint(data0.x) + 2u)).w); }
+// The search the sweep formula takes for a bulging or orbiting strand, defined below beside its helpers.
+precise float sdfSweepSearch(float3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset);
 #include "../isa/sdf-field-shape-formulas.hlsli"
 #ifdef SDF_FIELD_DUAL
+SdfDual sdfSweepSearch(SdfDual3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset);
 #include "../isa/sdf-field-shape-dual.hlsli"
 #endif
 // The gauge-envelope device probe distinguishes the clamped endpoints.
@@ -374,80 +386,11 @@ precise float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 }
 // === end SDF_SHAPE_SAMPLED_REGION ====================================================================================
 
-// === SDF_SHAPE_SWEEP: a quadratic Bezier curve swept with a tapering, bulging radius, optionally as helical strands
-// (KEEP IN SYNC with Puck.SignedDistance.SdfProgramBuilder.Sweep / Puck.SignedDistance.Queries.SdfFieldEvaluator).
-// One curve's table entry: 3 fixed uvec4 words at tableOffset in sdfWords — (A.xyz, radiusStart), (B.xyz,
-// radiusEnd), (C.xyz, bulge). KEEP IN SYNC with SdfProgram.PackSweepCurves.
-void sdfSweepCurve(uint tableOffset, out float3 a, out float3 b, out float3 c, out float radiusStart, out float radiusEnd, out float bulge) {
-    uint4 wordsA = sdfProgramWord(tableOffset);
-    uint4 wordsB = sdfProgramWord((tableOffset + 1u));
-    uint4 wordsC = sdfProgramWord((tableOffset + 2u));
-
-    a = asfloat(wordsA.xyz);
-    radiusStart = asfloat(wordsA.w);
-    b = asfloat(wordsB.xyz);
-    radiusEnd = asfloat(wordsB.w);
-    c = asfloat(wordsC.xyz);
-    bulge = asfloat(wordsC.w);
-}
-precise float3 sdfBezierPoint(float3 a, float3 b, float3 c, float t) {
-    float3 ab = lerp(a, b, t);
-    float3 bc = lerp(b, c, t);
-
-    return lerp(ab, bc, t);
-}
+// === SDF_SHAPE_SWEEP's search: the shared formula (sdfSweep, isa/sdf-field-shape-formulas.hlsli) answers a linearly
+// tapering tube itself and takes this search for a bulging radius or a strand orbiting the centreline. KEEP IN SYNC with
+// SdfFieldEvaluator.SdfSweepSearch.
 precise float3 sdfBezierDerivative(float3 a, float3 b, float3 c, float t) {
     return (2.0 * (lerp((b - a), (c - b), t)));
-}
-// The closest parameter t in [0, 1] on the quadratic Bezier (a, b, c) to p — the standard closed-form
-// closest-point-on-quadratic-bezier (a depressed-cubic solve, iq's construction), degenerating to the A-C line
-// segment's own closest point when b is (numerically) the exact midpoint of a and c — the quadratic coefficient
-// vanishes there and the cubic solve's 1/dot(coefficient, coefficient) would divide by zero.
-precise float sdfSweepClosestT(float3 p, float3 a, float3 b, float3 c) {
-    float3 coefA = (b - a);
-    float3 coefB = ((a - (2.0 * b)) + c);
-    float3 coefC = (coefA * 2.0);
-    float3 d = (a - p);
-    float bb = dot(coefB, coefB);
-
-    if (bb < 1e-10) {
-        float3 ac = (c - a);
-
-        return saturate(dot((p - a), ac) / max(dot(ac, ac), 1e-20));
-    }
-
-    float kk = (1.0 / bb);
-    float kx = (kk * dot(coefA, coefB));
-    float ky = ((kk * ((2.0 * dot(coefA, coefA)) + dot(d, coefB))) / 3.0);
-    float kz = (kk * dot(d, coefA));
-    float p1 = (ky - (kx * kx));
-    float p3 = ((p1 * p1) * p1);
-    float q = ((kx * ((2.0 * kx * kx) - (3.0 * ky))) + kz);
-    float h = ((q * q) + (4.0 * p3));
-
-    if (h >= 0.0) {
-        h = sqrt(h);
-
-        float2 x = ((float2(h, -h) - q) * 0.5);
-        float2 uv = (sign(x) * pow(abs(x), float2(1.0 / 3.0, 1.0 / 3.0)));
-
-        return saturate((uv.x + uv.y) - kx);
-    }
-
-    float z = sqrt(-p1);
-    float v = (acos(clamp((q / ((p1 * z) * 2.0)), -1.0, 1.0)) / 3.0);
-    float m = cos(v);
-    float n = (sin(v) * 1.7320508);
-    float3 ts = saturate(((float3((m + m), (-n - m), (n - m)) * z) - kx));
-    float3 qa = (d + ((coefC + (coefB * ts.x)) * ts.x));
-    float3 qb = (d + ((coefC + (coefB * ts.y)) * ts.y));
-    float3 qc = (d + ((coefC + (coefB * ts.z)) * ts.z));
-    float da = dot(qa, qa);
-    float db = dot(qb, qb);
-    float dc = dot(qc, qc);
-    float best = min(da, min(db, dc));
-
-    return ((best == da) ? ts.x : ((best == db) ? ts.y : ts.z));
 }
 // The sweep's radius profile: a linear taper plus a mid-span bulge that vanishes at both ends (the exponent softens
 // the bulge's rise off zero — KEEP IN SYNC with SdfProgramBuilder.Sweep's remarks).
@@ -457,10 +400,8 @@ precise float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, floa
 
     return (taper + (bulge * pow(s, 0.65)));
 }
-// The general path's samples along t (SDF_SWEEP_SAMPLES, a power of two, so every sample's parameter is exact) and its
-// golden-section rounds about the nearest sample (SDF_SWEEP_ROUNDS) are SdfFieldEvaluator's, generated into sdf-isa.hlsli.
-// A strand's centre at t: the centreline point, orbited by strandOffset across the tangent at the phase the twist
-// reaches there from the strand's own phase.
+// A strand's centre at t: the centreline point, orbited by strandOffset across the tangent at the phase the twist reaches
+// there from the strand's own phase.
 precise float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase) {
     float3 base = sdfBezierPoint(a, b, c, t);
 
@@ -478,33 +419,17 @@ precise float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float 
 
     return (base + (strandOffset * ((u * cosP) + (v * sinP))));
 }
-// The gap from p to the sphere a strand sweeps at t. Each gap is 1-Lipschitz in p, so their least over t is the swept
-// solid's field: exact outside it, a bound inside.
+// The gap from p to the sphere a strand sweeps at t.
 precise float sdfSweepGap(float3 p, float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase, float radiusStart, float radiusEnd, float bulge) {
     return (length(p - sdfSweepStrandPoint(a, b, c, t, twist, strandOffset, phase)) - sdfSweepRadiusAt(t, radiusStart, radiusEnd, bulge));
 }
-// The sweep is the union of the spheres of radius r(t) about each strand's centre. A tube of one radius about the
-// centreline takes the closed-form nearest parameter (sdfSweepClosestT), exact for it. Any other sweep takes the least
-// gap over t: the nearest of SDF_SWEEP_SAMPLES + 1 samples, then golden-section rounds within a sample either side of it,
-// keeping the least gap any probe measured. The centreline's own nearest parameter is not the nearest sphere's once the
-// radius or the strand varies along t: the radius read there overestimates the distance and jumps where that parameter
-// crosses the centreline's medial axis.
-precise float sdfSweep(float3 p, float4 data0, float4 data1) {
-    uint tableOffset = asuint(data0.x);
-    float strandsFloat = data0.y;
-    float twist = data0.z;
-    float strandOffset = data0.w;
-    float3 a, b, c;
-    float radiusStart, radiusEnd, bulge;
+// The least gap over t of each strand: the nearest of SDF_SWEEP_SAMPLES + 1 samples (a power of two, so every sample's
+// parameter is exact), then SDF_SWEEP_ROUNDS golden-section rounds within a sample either side of it, keeping the least
+// gap any probe measured. Both counts are SdfFieldEvaluator's, generated into sdf-isa.hlsli.
+precise float sdfSweepSearch(float3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset) {
+    if (!isfinite(strands) || strands < 1.0 || strands > (float)SDF_MAX_SWEEP_STRANDS) { return SDF_FAR_DISTANCE; }
 
-    sdfSweepCurve(tableOffset, a, b, c, radiusStart, radiusEnd, bulge);
-
-    if (!isfinite(strandsFloat) || strandsFloat < 1.0 || strandsFloat > (float)SDF_MAX_SWEEP_STRANDS) { return SDF_FAR_DISTANCE; }
-    if ((radiusStart == radiusEnd) && (bulge == 0.0) && (strandOffset == 0.0)) {
-        return (length(p - sdfBezierPoint(a, b, c, sdfSweepClosestT(p, a, b, c))) - radiusStart);
-    }
-
-    uint strandCount = (uint)(strandsFloat + 0.5);
+    uint strandCount = (uint)(strands + 0.5);
     float best = SDF_FAR_DISTANCE;
     float spacing = (1.0 / float(SDF_SWEEP_SAMPLES));
 
@@ -555,6 +480,17 @@ precise float sdfSweep(float3 p, float4 data0, float4 data1) {
 
     return best;
 }
+#ifdef SDF_FIELD_DUAL
+// The search's gradient by the four tetrahedral taps SDF_DUAL_LOCAL_TAPS takes, over the search's own operands.
+SdfDual sdfSweepSearch(SdfDual3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset) {
+    float h = sdfDualLocalSpacing;
+    float3 g = (float3(1.0, -1.0, -1.0) * sdfSweepSearch(p.v + (float3(1.0, -1.0, -1.0) * h), a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset))
+        + (float3(-1.0, -1.0, 1.0) * sdfSweepSearch(p.v + (float3(-1.0, -1.0, 1.0) * h), a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset))
+        + (float3(-1.0, 1.0, -1.0) * sdfSweepSearch(p.v + (float3(-1.0, 1.0, -1.0) * h), a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset))
+        + (float3(1.0, 1.0, 1.0) * sdfSweepSearch(p.v + (float3(1.0, 1.0, 1.0) * h), a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset));
+    return sdfdMake(sdfSweepSearch(p.v, a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset), mul(g * (0.25 / h), p.d));
+}
+#endif
 // === end SDF_SHAPE_SWEEP =============================================================================================
 
 // The ONE shape dispatch. Single-return (a result variable rather than returning inside the switch) so the compiler's
@@ -583,7 +519,6 @@ SDF_DUAL_LOCAL_TAPS(sdfGlyphQuad)
 SDF_DUAL_LOCAL_TAPS(sdfGlyph)
 #endif
 SDF_DUAL_LOCAL_TAPS(sdfSampledRegion)
-SDF_DUAL_LOCAL_TAPS(sdfSweep)
 // The shape dispatch over a dual point: the same arms, each resolving to its formula's dual overload (or an escape's
 // local taps above).
 SdfDual evaluateShape(uint shapeType, SdfDual3 p, float4 data0, float4 data1) {

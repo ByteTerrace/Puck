@@ -1229,22 +1229,40 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Local adaptation consumes this same gather, so an irradiance error also
   changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,
   boundary behavior and the fixed-camera checks on both backends.
-- **A glossy surface reflects the screen first, then the volume.** In a temporal
-  view the reflection pass (`passes/sdf-world-views-reflections.comp.hlsl`,
-  `SdfWorldPackage.WithReflections`) marches each glossy pixel's mirror ray
-  through the mesh target's forward depth and reads what it reaches from the
-  preceding frame's history colour (a `PreviousFrame` port, bound through
-  `SdfHistoryPorts` like the other histories) at the hit's previous position
-  (`sdfPreviousPoint`); views blends its record over `sdfViewsReflectionSeen` in
-  `sdfViewsScreenReflection`, so the volume still answers what leaves the screen,
-  hides behind a nearer face or lies on a rough surface, and every view without the
-  pass (`passGroup.screenReflections` zero) reflects the volume alone. The history
-  holds light at the epoch's stored scale, which a scale step restarts, so the pass
-  reads nothing while `historyFrames` is zero; a new reader of the history colour
-  keeps that rule. The record is the colour at the stored scale and two shares
-  (screen and open sky); views divides the scale out (`sdfStoredLightScale`).
-  `world.counters gpu pass sdf.world$views-reflections` counts the pixels it marched
-  (texels) and the depths it read (steps).
+- **A glossy surface reflects the screen first, then the volume.** A temporal
+  view whose frame carries reflections (`SdfFrameSettings.Reflections`, a device
+  table's `reflections { cell, steps }`, `world.reflections`) runs the reflection
+  pass (`passes/sdf-world-views-reflections.comp.hlsl`,
+  `SdfWorldPackage.WithReflections`, chosen per view in `SdfWorldPasses.Entry.Fragment`):
+  one mirror ray a cell of 1 or 2 pixels a side, from the cell's representative,
+  which turns through a 2x2 cell's pixels frame by frame (`sdfViewsReflectionPhase`).
+  The ray is marched through the reflection pyramid (`frame/sdf-reflection-depth.hlsli`:
+  each texel the nearest surface's inverse forward depth over its block, linear along
+  a ray's projection, so a cell the ray passes in front of is skipped whole), which
+  the pyramid pass writes beside the occlusion's pyramid in a reflecting fragment;
+  level zero is the mesh target itself. Levels above a group's own are gathered with
+  atomics into words the recorder clears (`SdfWorldPackage.ReflectionDepthWordsBelow`,
+  the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
+  occluders before it gives up, and at most `passGroup.reflectionSteps` reads. What it
+  reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
+  bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
+  plus the air's in-scatter the composite added there, which the history does not hold
+  (the history surface's transport words, `sdfAirFogColor`, `sdfAirHazeColor`). A
+  record is one cell's: colour at the stored scale, the screen and open-sky shares,
+  and the representative's normal and tangent plane; views reads the cells whose
+  representatives lie nearest its pixel and keeps those on its own surface by the probe
+  lookup's tolerances (`sdfViewsScreenReflection`), so the volume
+  (`sdfViewsReflectionSeen`) still answers what no kept ray reaches, and a view whose
+  fragment holds no pass (`passGroup.screenReflections` zero) reflects the volume
+  alone. The records' cell is read back from their allocation
+  (`SdfWorldPackage.ReflectionCellOf`), never from the frame, since a graph built for one
+  cell records until its replacement installs. The history holds light at the epoch's
+  stored scale, which a scale step restarts, so the pass reads nothing while
+  `historyFrames` is zero; a new reader of the history colour keeps that rule. An
+  operator camera's delta moves (`view.override camera turn|swing|move|fov`) continue its
+  shot (`WorldCompositionState.OperatorShot`) and keep the history; a pose, look or orbit
+  is a new shot and cuts it. `world.counters gpu pass sdf.world$views-reflections`
+  counts the rays it traced (texels) and the pyramid reads (steps).
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

@@ -203,11 +203,8 @@ function canopySurface(leaves, seed) = {
 
 // An author-frame point tipped by `lean` (radians about author Z, through the foot) and carried into a sweep's local
 // frame, which rides the shape's converted pose: author +X and +Z are local -X and -Z.
-function leanLocal(p, lean) = [
-  0 - (p[0] * cosine(lean) - p[1] * sine(lean)),
-  p[0] * sine(lean) + p[1] * cosine(lean),
-  0 - p[2],
-]
+function leanTurn(lean) = rotate([0, 0, 1], lean * 1rad)
+function leanLocal(p, lean) = rotatePoint(leanTurn(lean), p) * [-1, 1, -1]
 
 // One grouped-shape tree: a tapered, gently bowed trunk flaring into a few buttress roots, tapering limbs whose ends are
 // buried inside the canopy, and overlapping crown masses blended wide into one canopy and coloured as one mass. Rows
@@ -267,8 +264,8 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
           smooth: 0.3
           curve {
             a [0, root.reach * 0.5, 0]
-            b [0 - 0.55 * root.reach * cosine(root.yaw), 0.12, 0 - 0.55 * root.reach * sine(root.yaw)]
-            c [0 - root.reach * cosine(root.yaw), -0.24, 0 - root.reach * sine(root.yaw)]
+            b: polarPoint(-0.55 * root.reach, root.yaw * 1rad, 0.12)
+            c: polarPoint(0 - root.reach, root.yaw * 1rad, -0.24)
             radiusStart: root.r
             radiusEnd: root.r * 0.5
           }
@@ -282,11 +279,7 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
           smooth: 0.2
           curve {
             a: leanLocal(branch.a, lean)
-            b: leanLocal([
-                (branch.a[0] + branch.c[0]) / 2,
-                (branch.a[1] + branch.c[1]) / 2 + 0.25 * (branch.c[1] - branch.a[1]),
-                (branch.a[2] + branch.c[2]) / 2,
-              ], lean)
+            b: leanLocal((branch.a + branch.c) / 2 + [0, 0.25 * (branch.c[1] - branch.a[1]), 0], lean)
             c: leanLocal(branch.c, lean)
             radiusStart: branch.r
             radiusEnd: branch.r * 0.45
@@ -296,11 +289,7 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       for (crown, i) in crowns {
         shape Superellipsoid $"crown-{i}" {
           exponent: landscapeExponent
-          position [
-            crown.position[0] * cosine(lean) - crown.position[1] * sine(lean),
-            crown.position[0] * sine(lean) + crown.position[1] * cosine(lean),
-            crown.position[2],
-          ]
+          position: rotatePoint(leanTurn(lean), crown.position)
           scale: crown.r
           material: 2
           blend: SmoothUnion
@@ -321,13 +310,13 @@ let weepingLeaves = ["#4E6B36", "#7A984D", "#A6BD6C"]
 
 // Scale an upright row's points by `height` (vertical) and `spread` (reach).
 function treeBranches(rows, height, spread) = map(rows, b => {
-  a [b.a[0] * spread, b.a[1] * height, b.a[2] * spread]
-  c [b.c[0] * spread, b.c[1] * height, b.c[2] * spread]
+  a: b.a * [spread, height, spread]
+  c: b.c * [spread, height, spread]
   r: b.r
 })
 function treeCrowns(rows, height, spread) = map(rows, c => {
-  position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
-  r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
+  position: c.position * [spread, height, spread]
+  r: c.r * [spread, height, spread]
 })
 function treeRoots(count, reach, r, turn = 0) = map(range(0, count), i => {
   yaw: i * 6.2831853 / count + turn
@@ -604,7 +593,9 @@ let meadowWind = {
 // patch toward its rim: a blade at ellipse value e stands only where e < 1 - feather * h, h its well-spread hash in
 // [0, 1), so density falls linearly over the outer band instead of stopping at a line or the tile's square edge.
 function fringeHash(n) = n * 0.61803398875 - floor(n * 0.61803398875)
-template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3.2], feather = 0.6, clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true, wind = meadowWind) {
+template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3.2], feather = 0.6, clearing = [
+  6.5, 9.8, 2.1
+], reducedRateAtDistance = true, wind = meadowWind) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -655,7 +646,7 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3
         shape Prism $"""stem-{blade["id"]}""" {
           position [-blade["x"], -0.1 + blade["h"] * 0.3, -blade["z"]]
           scale [meadowWidth, blade["h"] * 0.3, 0.002]
-          rotation [0, sine(blade["yaw"] / 2), 0, cosine(blade["yaw"] / 2)]
+          rotation: rotate([0, 1, 0], blade["yaw"] * 1rad)
           taper: 0.55
           material: blade["id"] % 3
           swings [
@@ -673,7 +664,7 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3
           parent: $"""stem-{blade["id"]}"""
           position [-blade["x"], -0.1 + blade["h"] * 0.8, -blade["z"]]
           scale [meadowWidth * 0.55, blade["h"] * 0.2, 0.0015]
-          rotation [0, sine(blade["yaw"] / 2), 0, cosine(blade["yaw"] / 2)]
+          rotation: rotate([0, 1, 0], blade["yaw"] * 1rad)
           taper: 0
           material: 3 + blade["id"] % 3
           swings [
@@ -811,12 +802,7 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
 
 // The turn that lays a flat Prism leaf (long along local +Y, thin along local Z) out along yaw `phi` at `a` radians off
 // vertical, its face looking up and its width horizontal: yaw(-phi) * roll about Z(-a) * yaw(pi/2).
-function leafTurn(phi, a) = [
-  0.70710678 * sine(a / 2) * (cosine(phi / 2) + sine(phi / 2)),
-  0.70710678 * cosine(a / 2) * (cosine(phi / 2) - sine(phi / 2)),
-  0.70710678 * sine(a / 2) * (sine(phi / 2) - cosine(phi / 2)),
-  0.70710678 * cosine(a / 2) * (cosine(phi / 2) + sine(phi / 2)),
-]
+function leafTurn(phi, a) = compose(rotate([0, 1, 0], -phi * 1rad), rotate([0, 0, 1], -a * 1rad), rotate([0, 1, 0], 90))
 // The direction such a leaf runs.
 function leafRun(phi, a) = [sine(a) * cosine(phi), cosine(a), sine(a) * sine(phi)]
 
@@ -844,7 +830,9 @@ template fernClump(id, size = 1, colors = ["#365C43", "#547647", "#779153"]) {
         outer: (0.21 + 0.03 * (i % 3)) * size
       }) {
         shape Prism $"frond-{f.i}" {
-          profile { kind: "Ellipse" }
+          profile {
+            kind: "Ellipse"
+          }
           position [
             leafRun(f.phi, f.rise)[0] * f.inner,
             0.03 * size + leafRun(f.phi, f.rise)[1] * f.inner,
@@ -855,7 +843,9 @@ template fernClump(id, size = 1, colors = ["#365C43", "#547647", "#779153"]) {
           material: f.i % 3
         }
         shape Prism $"frond-tip-{f.i}" {
-          profile { kind: "Ellipse" }
+          profile {
+            kind: "Ellipse"
+          }
           position [
             leafRun(f.phi, f.rise)[0] * f.inner * 1.8 + leafRun(f.phi, f.arch)[0] * f.outer * 0.95,
             0.03 * size + leafRun(f.phi, f.rise)[1] * f.inner * 1.8 + leafRun(f.phi, f.arch)[1] * f.outer * 0.95,

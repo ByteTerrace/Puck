@@ -388,6 +388,7 @@ public static partial class SdfWorldPackage {
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenReflections, type: ShaderValueType.Uint),
+        Value(name: ReflectionSteps, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: ScreenSourceCount, name: ScreenWindows, type: ShaderValueType.Float4),
         Value(name: StampFade, type: ShaderValueType.Float3),
@@ -519,9 +520,11 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: HistorySurface),
         Read(element: ShaderValueType.Uint, name: ViewsProbeHistory),
         Written(element: ShaderValueType.Uint, name: ViewsProbeHistoryWritten),
-        Read(element: ShaderValueType.Uint2, name: ViewsReflections),
-        Written(element: ShaderValueType.Uint2, name: ViewsReflectionsWritten),
+        Read(element: ShaderValueType.Uint4, name: ViewsReflections),
+        Written(element: ShaderValueType.Uint4, name: ViewsReflectionsWritten),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ReflectionHistory, type: ShaderValueType.Float4),
+        Read(element: ShaderValueType.Uint, name: ReflectionDepth),
+        Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
@@ -605,6 +608,17 @@ public static partial class SdfWorldPackage {
         Elements: elements,
         Per: per
     );
+    // The count terms of a storage of `elements` a tile of the extent a pixel storage counts `pixels` over: each basis of
+    // pixels as the basis of the tiles that hold them, and without the viewports basis where one storage serves every
+    // viewport of the view.
+    private static ShaderPipelineCountTerm[] PerTile(IReadOnlyList<ShaderPipelineCountTerm> pixels, ulong elements, bool perViewport = true) => [.. pixels.Select(selector: term => term with {
+        Elements = elements,
+        Per = [.. term.Per.Where(predicate: basis => (perViewport || (basis != ShaderPipelineCountBasis.Viewports))).Select(selector: static basis => basis switch {
+            ShaderPipelineCountBasis.Extent => ShaderPipelineCountBasis.ExtentTiles,
+            ShaderPipelineCountBasis.RenderExtent => ShaderPipelineCountBasis.RenderExtentTiles,
+            _ => basis,
+        })],
+    })];
     private static ShaderPipelineResource Image(string name, GpuPixelFormat format, string? from, bool retained) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: format.ToString(),

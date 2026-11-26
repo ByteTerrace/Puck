@@ -521,7 +521,7 @@ public static class WorldLightingText {
 
         echo = echo.Field(key: "count", value: lanes.Count.ToString(provider: CultureInfo.InvariantCulture));
         for (var index = 0; (index < lanes.Count); index++) {
-            echo = echo.Field(key: $"lane{(SdfLanes.FirstWorld + index).ToString(provider: CultureInfo.InvariantCulture)}", value: Describe(value: lanes[index]));
+            echo = echo.Field(key: $"lane{(SdfLanes.FirstWorld + index).ToString(provider: CultureInfo.InvariantCulture)}", value: $"{lanes[index].Name}={Describe(value: lanes[index].Value)}");
         }
         echo = echo
             .Segment()

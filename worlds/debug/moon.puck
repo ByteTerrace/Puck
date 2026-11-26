@@ -445,7 +445,7 @@ state {
     }
     // The pair's turn, adopted from the sun's world, which owns it.
     {
-      name: "pair"
+      name: pair
       kind: "Fixed"
       value: "0"
       advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }

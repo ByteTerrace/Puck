@@ -198,7 +198,7 @@ only some pixels need lies in a pool, not in every pixel's record.
 | Indirect light and traced-light visibility | `views-probes` | A slot: blended cubes, the lights' agreement, the lights the corners disagree on (`sdf-views-probes.hlsli`) |
 | Lights that reach a sample | `views-filter`, by cluster | A list of light indices a cluster, any count |
 | Shadow visibility | `surface`, after a classification by each layer's block bounds, which the shadow upload reduces (`sdfMeshShadowClass`) | The record's shadow word |
-| The reflected scene on screen | `views-reflections`, in a temporal view | Two words a render pixel: the colour a glossy pixel's mirror ray reached in the preceding frame's history colour, and the shares the screen and the open sky answer (`passes/sdf-views-reflections.hlsli`) |
+| The reflected scene on screen | `views-reflections`, in a reflecting temporal view | Four words a cell of one ray: the colour its mirror ray reached in the preceding frame's history colour with the air the composite added there, the shares the screen and the open sky answer, and the representative's tangent plane, by which views blends the cells about a pixel (`passes/sdf-views-reflections.hlsli`) |
 | The reflected environment | The environment node | A prefiltered map, one lookup a roughness |
 | Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel; the air is built (`SdfWorldPackage.SampleAir`), motion and identity are step 6 |
 
@@ -389,15 +389,18 @@ pass's cost. Then the time:
    edge is then as sharp as a map texel, about three degrees, where views
    evaluates it exactly today, so a sky that authors panels keeps the loop
    for a mirror. Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
-5. **The reflection pass's time.** `views-reflections` marches every glossy
-   pixel at the render extent; in the gallery hall at 2560 by 1440 that is about
-   a third of the pixels. If its share stays above half a millisecond once the
-   march's samples are spaced by rank, it traces one pixel of each 2 by 2 block
-   and views blends the block's records by the probe lookup's receiver test
-   (`sdfProbeBlend`), as the probe lookup does for its cells. Read first what
-   `SDF_VIEWS_REFLECTIONS_ONE_TAP` removes, since the footprint's taps are the
-   other part. Check, in the quiet window: `views-reflections` under 0.5 ms in
-   the hall, and its `texels.written` and `march.steps` counts.
+5. **The reflection pass's time.** `views-reflections` traces one mirror ray a
+   2 by 2 block of the render extent where the device table asks for half
+   (`reflections { cell: 2 }`), its representative turning through the block's
+   pixels, marched through the pyramid pass's nearest-depth chain
+   (`frame/sdf-reflection-depth.hlsli`) and blended by views over each pixel on
+   the representative's surface. What is left: the pyramid's coarse levels rarely
+   skip on a floor, whose own nearer pixels fill the cells beside a ray's path,
+   so a ray takes some 28 reads; a march that reads its first levels against the
+   ray's own receiver, or a pyramid of the farthest depth beside the nearest for a
+   bounded thickness, would skip more. Check, in the quiet window:
+   `views-reflections` under 0.5 ms in the hall, and its `texels.written` and
+   `march.steps` counts.
 6. **A sample record for the resolve.** The air is built: views stores each
    render sample's air (`SdfWorldPackage.SampleAir`, two words) from the
    atmosphere it evaluates once a pixel for the transmittance, and the resolve

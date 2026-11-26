@@ -474,28 +474,25 @@ public static partial class SdfFieldShapes {
     // no count needs packing alongside the offset.
     //
     // Distance: the solid is the union of the spheres of radius r(t) about each strand's centre, and the field is the
-    // least gap from the point to those spheres over t, each gap 1-Lipschitz: exact outside, a bound inside. A tube of
-    // one radius about the centreline reads the closed-form nearest parameter (the standard depressed-cubic solve);
-    // any other sweep searches t (samples, then golden-section rounds about the nearest), since the centreline's own
-    // nearest parameter is not the nearest sphere's once the radius or the strand varies. KEEP IN SYNC with sdfSweep
-    // (field/sdf-shapes.hlsli) and the fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator;
-    // SdfProgramBuilder.Sweep refuses (by name) a declaration whose bulge/taper/strand-offset ratios leave the envelope
-    // SweepLawTests verifies the field over.
+    // least gap from the point to those spheres over t, each gap 1-Lipschitz: exact outside, a bound inside. The shared
+    // formula (SdfFieldFormulas.Sweep) reads its curve from the table through its operands: a linearly tapering tube
+    // takes the least gap's parameter from bracketed Newton steps over the centreline's monotone ranges; a bulging radius
+    // or an orbiting strand takes the search primitive (samples, then golden-section rounds about the nearest), a
+    // hand-written loop of each reader. SdfProgramBuilder.Sweep refuses (by name) a declaration whose
+    // bulge/taper/strand-offset ratios leave the envelope SweepLawTests verifies the field over.
     //
-    // Fixed-point mirror (Puck.SignedDistance.Queries.SdfFieldEvaluator): supported ONLY for strands == 1 — a single
-    // strand's search is fine in fixed point (FixedQ4816.Pow/Sin/Cos are available), but the
-    // multi-strand orbit and its per-strand min are RENDER-ONLY and refused for deterministic field contact by name,
-    // exactly like Glyph/SampledRegion are refused for reasons of their own.
+    // The contact reading admits one strand only: the multi-strand orbit and its per-strand min are render-only and
+    // refused for deterministic field contact by name, as Glyph and SampledRegion are refused for reasons of their own.
     [SdfFieldEntry(19)]
     private sealed class Sweep : Entry {
-        public override SdfFormula? Formula => null;
+        public override SdfFormula? Formula => SdfFieldFormulas.Sweep;
         public override SdfPartShapeAction PartShape => SdfPartShapeAction.Unshared;
         public override SdfOperandLanes Reinterpreted => SdfOperandLanes.Data0X;
-        public override SdfShaderAction Shader => new(Code: "result = sdfSweep(p, data0, data1); break;", Operands: SdfShaderOperands.None);
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
-        public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
-        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Sweep;
+        public override SdfCertificateAction Certificate => SdfCertificateAction.Sweep;
+        public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Sweep;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;
         public override SdfShapeAdmissionAction ShapeAdmission => SdfShapeAdmissionAction.Sweep;

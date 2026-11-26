@@ -255,6 +255,37 @@ loop and never collide with a `let` constant of the same name declared outside i
 known at compile time or the `for` is refused (PUCK044). This is distinct from a cartridge rule's `repeat`, which is
 a loop the machine runs at play time with a compile-time count in 1..255.
 
+A `for` body may bind `let`s, which hold for the rest of one iteration:
+
+```puck
+for k in range(0, bulbCount) {
+  let t = firTier(k, tiers)
+  shape Superellipsoid $"bulb-{k}" {
+    position: polarPoint(firRim(t, tiers) * spread, 360 * firSpreadU(k), firBase(t, tiers) * height)
+  }
+}
+```
+
+## `if`, a conditional row
+
+`if cond { … }`, with an optional `else { … }` or `else if …`, stands wherever a `for` does in document or section
+position. The rows of the branch the condition selects are emitted in place, and the other branch is never lowered,
+so a row written or left out is one `if`, never `for k in range(0, cond ? 1 : 0)`. Zero and absence are false. A
+branch may bind `let`s, and since it is written once, unlike a `for` body it may hold field assignments, so one
+member of a row can be conditional:
+
+```puck
+shape Prism $"{half}-{row[0]}" {
+  profile: row[7]
+  if row[8] != 0 {
+    rounding: courtRowRound(row)
+  }
+}
+```
+
+`DocumentLowering.ExpandConditionalStatements` is the one expansion every section uses. A rule body's `if` is a
+different construct: the rule evaluates it when it runs.
+
 A `for` also stands inside a rule body, a workflow step's body, and any effect list (an `if` branch, a
 `transaction` or its `onFailure`, a pool `claim` or `for each`), in both document vocabularies. There it repeats
 locals and effects, and a local names each iteration's value with an interpolated name:
@@ -436,6 +467,25 @@ order, each value the array of items that produced it.
 `map` and `filter` pass the item and, optionally, its index; `reduce` takes the running value and the item.
 A lambda parameter shadows a constant of the same name for the length of one application.
 
+### Rotations, points and element-wise arithmetic
+
+A rotation is a quaternion array `[x, y, z, w]`, the spelling a shape's `rotation` holds; a point or axis is
+`[x, y, z]`. Angles are read in degrees, so `45`, `45deg` and `0.785rad` are one angle, and a value held in radians is
+written `angle * 1rad`.
+
+| Call | Yields |
+|---|---|
+| `rotate(axis, degrees)` | the rotation turning `degrees` about `axis`, right-handed; the axis need not be unit length |
+| `compose(outer, inner, ...)` | the product of rotations: the last argument turns a point first, the first argument last |
+| `rotatePoint(rotation, point)` | the point turned about the origin |
+| `polarPoint(radius, degrees, y)` | `[radius * cos, y, radius * sin]`, measured from +X toward +Z; `y` defaults to 0 |
+| `fraction(x)` | `x - floor(x)` |
+
+`+`, `-`, `*` and `/` on numeric arrays work element by element: two arrays of one length pair their elements
+(`a + b`, `p * [spread, height, spread]`), and a number scales every element of an array (`2 * p`, `p * 2`,
+`p / 2`). Nested arrays recurse. Arrays of different lengths, a number added to an array, and a number divided by
+an array are refused (PUCK048 names the operator).
+
 The builtin names apply in compile-time value positions. A call constructing a declared document arm uses that
 arm instead: `sort([3, 1, 2])` computes an array, while `transform sort(row: scores, by: [{ row: scores }])`
 constructs a state transform. Nested document calls use the same expected-type rule. A statement-position call belongs to its
@@ -489,9 +539,14 @@ when non-empty, a present container is true, and an absent value is false.
 
 `absolute`, `squareRoot`, `ceiling`, `minimum`, `maximum`, `floorModulo`, `floorDivideModulo`, `greatestCommonDivisor`,
 `extendedGreatestCommonDivisor`, `leastCommonMultiple`, `modularInverse`, `setBitCount`, `binomialCoefficient`, `primeAt`, `sine`, `cosine`, `hexIndex`, `mortonIndex`,
-`hilbertIndex`, `pairMinimum`, `pairMaximum`—every name in the shared vocabulary is spelled out in full, never
-abbreviated. Puck prefers function syntax and a verbose, explanatory name over an operator glyph or an
-abbreviation wherever the two would otherwise compete.
+`hilbertIndex`, `pairMinimum`, `pairMaximum`—every name in the shared vocabulary is spelled out in full. Puck prefers
+function syntax and a verbose, explanatory name over an operator glyph wherever the two would otherwise compete.
+
+The common mathematical abbreviations are accepted spellings of their canonical names, in both languages:
+`sqrt` (`squareRoot`), `abs` (`absolute`), `sin` (`sine`), `cos` (`cosine`), `ceil` (`ceiling`) and `pow` (`power`),
+from `ExpressionVocabulary.Aliases`, and in a document value `fract` and `frac` (`fraction`). Each lowers to the
+canonical name before anything reads the call, so the two spellings compile alike. `min` and `max` are not
+aliases: the rule language spells its reductions with them.
 
 This is why there is no `//` integer-division operator: `//` opens a line comment (`PuckWhiteSpaceParser` skips it
 everywhere, not only at statement starts), so `a // b` can only ever read as `a` followed by a comment. `floorDivide(a, b)` is the spelling of
@@ -532,6 +587,39 @@ Each input is a `timeline.clocks` row (a tick clock, a state row, or the viewer'
 axis), so a new axis is an authored row. A rate and an ordered value (a gradient's stop elevations) take one clock,
 and a member that keys a field itself keeps its keys over a section's keys on that field
 ([decision](../decisions/state-and-language.md#a-value-follows-its-clocks-by-nesting-keys)).
+
+## Render lanes are named
+
+A world's render lanes are named rows, and a creation names the lane it reads:
+
+```text
+render {
+  lanes [{ name: "fallsFlow", value: "state.fallsFlow" }]
+}
+palette [{ color: "#E8F0F4", emissive: 40, emissiveLane: "fallsFlow" }]
+```
+
+Imports compose at load, so no single file knows the whole lane list. Each document declares the lanes it uses, the
+rows merge across imports by name, and the load (`WorldRenderLaneNames`) numbers the composed list from render lane 4
+in its order and replaces every name a creation's lane member writes with that index before the document is read. A
+lane member is a creation member marked `DocumentRenderLane` (`emissiveLane`, a flow's `lane` and `coverageLane`, a
+weathering's `lane`, a volume's `intensityLane`, an erode's or morph's `lane`). It still takes a number, and lanes 0
+to 3, a body's own, are only numbers. `puck compile` reports a name a document declares twice, or a fifth lane, as
+PUCK139, and a name no lane declares as PUCK138 when the document composes nothing; a composed document is refused
+for the same reasons when it loads. A shade program reads a world lane by index (`lanes.world0`), so a lane it reads
+keeps its place in the composed order
+([surface reference](../../.claude/skills/sdf-authoring/references/surface.md#render-lanes)).
+
+A render-lane member written with a quote offers the composed document's lane names in the language server
+(`WorldRenderLaneLanguageServices`), and hovering a name shows its lane and index.
+
+## A section written twice composes
+
+A section or block written twice in one source (`render { }` and later `render { }`) composes
+member by member under one rule (`DocumentLowering.AssignMember`): two arrays append, two objects merge
+under the same rule, and a member both set is **PUCK140** at the later writing, since the earlier one would
+otherwise vanish without a trace. Every spelling of a member (a property, a block, a section block, a rule's
+property) goes through that one door, so none replaces silently.
 
 ## Units and dimensions
 

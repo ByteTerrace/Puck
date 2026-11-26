@@ -109,16 +109,16 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
         // The sky and the bodies light the air only as far as the air about the camera sees them open (airLight): a
         // closed room's air is not lit by the sky outside it.
         float airLight = saturate(passGroup.airLight);
-        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
+        float3 ambient = (sdfAirInScatterReadsSky(kinds) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);
 
         if (kinds.x > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            surface += ((sdfAirFogReadsSky() ? ambient : sdfSky[0].FogColor) * weights.x);
+            surface += (sdfAirFogColor(ambient) * weights.x);
         }
         if (kinds.y > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            hazeColor = (ambient + (sdfAirBodies(direction, sdfSky[0].HazeAnisotropy) * airLight));
+            hazeColor = sdfAirHazeColor(ambient, direction, airLight);
             surface += (hazeColor * weights.y);
         }
         if (kinds.z > 0.0) {

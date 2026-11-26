@@ -24,6 +24,7 @@ public static partial class WorldDefinitionValidator {
         if (definition.Render.DistantShadows?.Refusal(path: "render.distantShadows") is { } distant) { errors.Add(item: distant); }
         if (definition.Render.FarProduct?.Refusal(path: "render.farProduct") is { } farProduct) { errors.Add(item: farProduct); }
         if (definition.Render.ViewsRate?.Refusal(path: "render.viewsRate") is { } rate) { errors.Add(item: rate); }
+        if (definition.Render.Reflections?.Refusal(path: "render.reflections") is { } reflections) { errors.Add(item: reflections); }
         if (definition.Render.FarShadows?.Refusal(path: "render.farShadows") is { } far) { errors.Add(item: far); }
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -112,7 +113,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"render.lanes holds at most {WorldRenderDefaults.MaxLanes} lanes (render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}); got {lanes.Count}.");
         }
         for (var index = 0; (index < lanes.Count); index++) {
-            JudgeScalar(WorldValueFields.RenderLane, lanes[index], definition, $"render.lanes[{index}]", errors);
+            JudgeScalar(WorldValueFields.RenderLane, lanes[index].Value, definition, $"render.lanes[{index}].value", errors);
         }
     }
     private static void ValidateShadowCoverage(WorldRenderShadowCoverage? coverage, List<string> errors) {

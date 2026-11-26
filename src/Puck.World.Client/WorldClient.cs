@@ -1149,13 +1149,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
                 break;
             case WorldComposition.SetOperatorCamera free:
-                m_composition.OperatorCamera = free.Pose;
+                m_composition.SetOperatorCamera(pose: free.Pose, continues: free.Continues);
 
                 break;
             case WorldComposition.SelectCamera camera:
                 m_composition.SelectedCamera = camera.Name;
                 // Naming a camera, or auto, snaps back to the document's views, so the free camera yields.
-                m_composition.OperatorCamera = null;
+                m_composition.SetOperatorCamera(pose: null, continues: false);
 
                 break;
         }

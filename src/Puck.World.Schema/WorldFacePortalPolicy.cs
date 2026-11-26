@@ -13,13 +13,13 @@ namespace Puck.World;
 /// moves and resizes with the drawn face. While a body stands in the opening, contact with geometry behind the glass
 /// is ignored (<c>Puck.World.Server.WorldPortalHoleContactField</c>), so a door laid on solid ground lets a body drop
 /// through it.</para>
-/// <para>Depth is <c>max(frame half-depth, crossing floor)</c>. The floor exists because a frame can be authored
-/// thinner than one step of travel, which would leave a walk-through detectable only by the swept clip; it is a
-/// sampling term, not a soundness one. Soundness is the swept clip's
-/// (<see cref="WorldFaceRegion.Sweep"/>): it tests the whole previous-to-current segment and cannot be tunnelled at
-/// any speed, rate, or motion program. That matters because <see cref="SpeedCeiling"/> reads only what the document
-/// declares, and a seated player's live profile speed can exceed an unenveloped kit's authored speed — an
-/// underestimate here costs nothing but a thinner band.</para>
+/// <para>Depth is <c>max(frame half-depth, crossing floor)</c>: one step of the fastest declared travel behind the
+/// glass, so a body that passed through it is found in the slab on the next scan and the opening's band
+/// (<c>Puck.World.Server.WorldPortalHoleContactField</c>) covers a step. It decides no crossing: whether a door fires
+/// is the glass test (<see cref="WorldFaceRegion.Sweep"/>), which tests the whole previous-to-current segment and
+/// cannot be tunnelled at any speed, rate, or motion program. That matters because <see cref="SpeedCeiling"/> reads
+/// only what the document declares, and a seated player's live profile speed can exceed an unenveloped kit's
+/// authored speed — an underestimate here costs nothing but a thinner band.</para>
 /// </remarks>
 public static class WorldFacePortalPolicy {
     private static FixedQ4816 Magnitude(float value) => FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: value));

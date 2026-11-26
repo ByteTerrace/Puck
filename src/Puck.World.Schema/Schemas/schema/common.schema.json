@@ -250,6 +250,27 @@
       "additionalProperties": false,
       "title": "WorldRenderIndirectBudget"
     },
+    "SdfScreenReflections": {
+      "description": "A device\u0027s screen-space reflections: how finely a temporal view traces its glossy surfaces\u0027 mirror rays through its own picture and how far each may march. A view without them reflects the irradiance volume alone.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "cell": {
+          "description": "The edge, in render pixels, of the square one mirror ray serves: 1 traces every glossy pixel, 2 one pixel of each 2 by 2 block a frame, the block\u0027s pixels taking turns and each pixel blending the rays of the blocks about it that stand on its surface.",
+          "type": "integer",
+          "default": 2
+        },
+        "steps": {
+          "description": "The most reads of the reflection\u0027s depth pyramid one ray\u0027s march takes, from 1 through MaxSteps: a ray past its budget answers with the irradiance volume.",
+          "type": "integer",
+          "default": 32
+        }
+      },
+      "additionalProperties": false,
+      "title": "SdfScreenReflections"
+    },
     "WorldQualityPreset": {
       "type": [
         "object",
@@ -373,6 +394,11 @@
             "integer",
             "null"
           ],
+          "default": null
+        },
+        "reflections": {
+          "$ref": "#/$defs/SdfScreenReflections",
+          "description": "The screen-space reflections the device traces in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march. Absent, every view reflects the irradiance volume alone, where reflections do not pay on the device.",
           "default": null
         }
       },
@@ -11102,7 +11128,8 @@
           "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
           "type": [
             "integer",
-            "null"
+            "null",
+            "string"
           ],
           "default": null
         },
@@ -11115,7 +11142,8 @@
           "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
           "type": [
             "integer",
-            "null"
+            "null",
+            "string"
           ],
           "default": null
         },
@@ -12153,7 +12181,10 @@
       "properties": {
         "lane": {
           "description": "Which dynamic-slot lane drives the erosion.",
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "from": {
           "description": "The lane value where erosion begins (t = 0).",
@@ -12280,7 +12311,10 @@
       "properties": {
         "lane": {
           "description": "Which dynamic-slot lane drives the morph, in [0, 3].",
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "from": {
           "description": "The lane value where the field before the shape shows alone (t = 0).",
