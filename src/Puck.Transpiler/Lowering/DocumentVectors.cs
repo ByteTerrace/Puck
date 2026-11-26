@@ -120,6 +120,42 @@ public static class DocumentVectors {
         return Vector(span: call.Span, values: [(radius * cosine), height, (radius * sine)]);
     }
 
+    /// <summary>Folds <c>overlaps(a, b)</c>: 1 when the open spans <c>[low, high]</c> share a point, so spans that only
+    /// touch at an end do not overlap, else 0.</summary>
+    /// <param name="call">The call as written.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>1 or 0, or <see langword="null"/> after reporting a refusal.</returns>
+    public static JsonNode? Overlaps(CallExpressionNode call, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(call);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (call.Arguments.Count != 2) {
+            return Refuse(call: call, message: "overlaps(a, b) takes two spans", scope: scope);
+        }
+        if (!TryVector(call: call, index: 0, length: 2, scope: scope, vector: out var a) || !TryVector(call: call, index: 1, length: 2, scope: scope, vector: out var b)) {
+            return null;
+        }
+
+        return JsonValue.Create(value: (((a[0] < b[1]) && (b[0] < a[1])) ? 1L : 0L));
+    }
+    /// <summary>Folds <c>within(x, span)</c>: 1 when <c>low &lt;= x &lt;= high</c> for the span <c>[low, high]</c>, else 0.</summary>
+    /// <param name="call">The call as written.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>1 or 0, or <see langword="null"/> after reporting a refusal.</returns>
+    public static JsonNode? Within(CallExpressionNode call, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(call);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (call.Arguments.Count != 2) {
+            return Refuse(call: call, message: "within(x, span) takes a number and a span", scope: scope);
+        }
+        if (!TryScalar(call: call, index: 0, scope: scope, value: out var x) || !TryVector(call: call, index: 1, length: 2, scope: scope, vector: out var span)) {
+            return null;
+        }
+
+        return JsonValue.Create(value: (((span[0] <= x) && (x <= span[1])) ? 1L : 0L));
+    }
+
     /// <summary>Folds <c>fraction(x)</c>: <c>x - floor(x)</c>, the part of a number above its floor.</summary>
     /// <param name="call">The call as written.</param>
     /// <param name="scope">The lowering scope.</param>
@@ -192,7 +228,13 @@ public static class DocumentVectors {
             }
         }
 
-        Refuse(call: call, message: $"{call.Name}'s argument {index + 1} is {((length == 4) ? "a rotation [x, y, z, w]" : "a point [x, y, z]")} of numbers", scope: scope);
+        var shape = length switch {
+            2 => "a span [low, high]",
+            4 => "a rotation [x, y, z, w]",
+            _ => "a point [x, y, z]",
+        };
+
+        Refuse(call: call, message: $"{call.Name}'s argument {index + 1} is {shape} of numbers", scope: scope);
 
         return false;
     }

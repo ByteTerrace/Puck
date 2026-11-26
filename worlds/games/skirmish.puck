@@ -67,7 +67,7 @@ template skirmishState(origin, cellSize) {
     name: "skirmishUnits"
     kind: "Int"
     capacity: 6
-    cells: map(range(1, 6), u => { key: $"{u}", value: u <= 3 ? 1 : 2 })
+    cells: map(range(1, 7), u => { key: $"{u}", value: u <= 3 ? 1 : 2 })
   }
 
   row {
@@ -77,7 +77,7 @@ template skirmishState(origin, cellSize) {
     capacity: 6
     min: -1
     max: skirmishCells - 1
-    cells: map(range(1, 6), u => {
+    cells: map(range(1, 7), u => {
       key: $"{u}"
       value: skirmishStart[u - 1]
       visibility {
@@ -94,7 +94,7 @@ template skirmishState(origin, cellSize) {
     capacity: 6
     min: -1
     max: skirmishCells - 1
-    cells: map(range(1, 6), u => { key: $"{u}", value: skirmishStart[u - 1] })
+    cells: map(range(1, 7), u => { key: $"{u}", value: skirmishStart[u - 1] })
     visibility {
       readers []
     }
@@ -118,11 +118,11 @@ template skirmishState(origin, cellSize) {
     name: "skirmishView"
     kind: "Int"
     capacity: 2
-    cells: map(range(1, 2), s => { key: $"{s}", value: 0, visibility { readers [$"seat{s}"] } })
+    cells: map(range(1, 3), s => { key: $"{s}", value: 0, visibility { readers [$"seat{s}"] } })
     cellVisibility: true
   }
 
-  for s in range(1, 2) {
+  for s in range(1, 3) {
     row {
       name: $"skirmishSeen{s}"
       kind: "Bool"
@@ -139,7 +139,7 @@ template skirmishState(origin, cellSize) {
       capacity: 6
       min: -1
       max: skirmishCells - 1
-      cells: map(range(1, 6), u => { key: $"{u}", value: -1, observation { tick: 0, visible: false } })
+      cells: map(range(1, 7), u => { key: $"{u}", value: -1, observation { tick: 0, visible: false } })
       knowledge {
         source: "skirmishPos"
         mask: $"skirmishSeen{s}"
@@ -192,7 +192,7 @@ template skirmishState(origin, cellSize) {
       capacity: 6
       min: -1
       max: skirmishCells - 1
-      cells: map(range(1, 6), u => { key: $"{u}", value: -1 })
+      cells: map(range(1, 7), u => { key: $"{u}", value: -1 })
       visibility {
         readers ["seat2"]
       }
@@ -233,8 +233,8 @@ function skirmishStepLegal(from, to, mate1, mate2, turn, side, winner) = (turn =
   winner == 0)
 template skirmishRules() {
   // A seat's order puts its unit on the cell it names; the judge below accepts the step or puts the unit back.
-  for s in range(1, 2) {
-    for i in range(1, 3) {
+  for s in range(1, 3) {
+    for i in range(1, 4) {
       rule $"skirmish-order-{s}-{i}" {
         when (search(ply) == 0 and
           skirmish.winner == 0 and
@@ -249,7 +249,7 @@ template skirmishRules() {
   }
 
   // A unit the search displaced onto -1 is off the board.
-  for u in range(1, 6) {
+  for u in range(1, 7) {
     rule $"skirmish-taken-{u}" {
       when skirmishPos[$"{u}"] < 0 and skirmishLast[$"{u}"] >= 0
       skirmishLast[$"{u}"] = -1
@@ -258,7 +258,7 @@ template skirmishRules() {
 
   // The judge: a moved unit's step from its last legal cell, one cell any way, onto no wall and no unit of its own;
   // an enemy standing there is taken.
-  for u in range(1, 6) {
+  for u in range(1, 7) {
     rule $"skirmish-judge-{u}" {
       local from = skirmishLast[$"{u}"]
       local to = skirmishPos[$"{u}"]
@@ -289,7 +289,7 @@ template skirmishRules() {
     }
   }
 
-  for s in range(1, 2) {
+  for s in range(1, 3) {
     rule $"skirmish-receipt-{s}" {
       local moved = skirmish.ordered == s and skirmishTurn != s
       when search(ply) == 0 and $"skirmishOrder{s}".unit >= 0
@@ -304,7 +304,7 @@ template skirmishRules() {
   // What each side sees: the union of its live units' sight, as a mask and a board, and what it remembers, refreshed
   // once after each move. Refreshing every tick would restamp the knowledge rows, and a search job restarts whenever a
   // row it reads changes, so a job reading them would never finish.
-  for s in range(1, 2) {
+  for s in range(1, 3) {
     rule $"skirmish-sight-{s}" {
       local first = skirmishPos[$"{(s - 1) * 3 + 1}"]
       local second = skirmishPos[$"{(s - 1) * 3 + 2}"]
@@ -327,7 +327,7 @@ template skirmishRules() {
     skirmish.sighted = skirmish.moves + 1
   }
 
-  for s in range(1, 2) {
+  for s in range(1, 3) {
     rule $"skirmish-lost-{s}" {
       when (search(ply) == 0 and
         skirmish.winner == 0 and
@@ -346,13 +346,13 @@ template skirmishRules() {
 template skirmishSearch() {
   rule "skirmish-fair-memory" {
     when search(ply) == 0
-    for u in range(1, 6) {
+    for u in range(1, 7) {
       skirmishFairPos[$"{u}"] = skirmishKnows2[$"{u}"]
       skirmishFairLast[$"{u}"] = skirmishKnows2[$"{u}"]
     }
     skirmishFairTurn = 2
   }
-  for u in range(4, 3) {
+  for u in range(4, 7) {
     rule $"skirmish-fair-judge-{u}" {
       local from = skirmishFairLast[$"{u}"]
       local to = skirmishFairPos[$"{u}"]

@@ -51,7 +51,7 @@ function star(radius = 250, distance = 15000, illuminance = 100000, color = "#FF
   light: light
   surface: surface
   spots: spots
-  glow: (glow ?? (((illuminance * distance) * distance) / ((3.141592653589793 * radius) * radius)))
+  glow: (glow ?? (((illuminance * distance) * distance) / ((pi * radius) * radius)))
   pull: pull
 }
 

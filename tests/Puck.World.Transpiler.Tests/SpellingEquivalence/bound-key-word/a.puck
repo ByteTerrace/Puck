@@ -1,0 +1,34 @@
+// A bare word in a key argument is the value of the let, parameter or loop variable it names, and a text read through
+// a compile-time record is that text written, never a row read.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let slotKey = "alpha"
+let look = { lit: "#FFC46A" }
+
+state {
+  world {
+    table counts {
+      alpha = 0
+      beta = 0
+    }
+    table inks {
+      alpha = "#000000"
+    }
+  }
+}
+
+template counter(key) {
+  rule $"count-{key}" {
+    when counts[key] < 3
+    setState(state: counts, key: key, expression: counts[key] + 1)
+  }
+}
+
+counter(key: "beta")
+
+rule "tick" {
+  when counts[slotKey] < 3
+  setState(state: counts, key: slotKey, expression: 2)
+  inks[slotKey] = look.lit
+}

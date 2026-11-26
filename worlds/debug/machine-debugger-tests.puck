@@ -6,7 +6,7 @@ documentId: "machine-debugger-tests"
 import "gallery/layout"
 
 // Schedules act as seat1. Positioning another body requires the same explicit Drive grant as live play.
-grants: map(range(14, 3), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
+grants: map(range(14, 17), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
 
 machines: concat([
   {

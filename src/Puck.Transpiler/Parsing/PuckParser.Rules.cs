@@ -1937,7 +1937,6 @@ public static partial class PuckParser {
         if (TryParsePropertyTail(
             col: col,
             context: context,
-            diagnostics: diagnostics,
             line: line,
             name: name,
             startOffset: startOffset
@@ -1962,27 +1961,21 @@ public static partial class PuckParser {
         return null;
     }
     /// <summary>Reads the tail of a property whose name has been consumed: <c>: value</c>, <c>= value</c> or an
-    /// inline <c>[ ... ]</c> array. Returns <see langword="null"/>, consuming nothing, when the cursor is at
-    /// neither form.</summary>
-    private static PropertyNode? TryParsePropertyTail(int col, ParseContext context, DiagnosticBag? diagnostics, int line, string name, int startOffset) {
+    /// inline <c>[ ... ]</c> array. A separator in front of a container reads as the container alone, so
+    /// <c>name: [ ]</c> is <c>name [ ]</c>, and <c>name: { }</c> consumes the separator and returns
+    /// <see langword="null"/>, leaving the caller at the block it reads for <c>name { }</c>. Returns
+    /// <see langword="null"/>, consuming nothing, when the cursor is at no form.</summary>
+    private static PropertyNode? TryParsePropertyTail(int col, ParseContext context, int line, string name, int startOffset) {
         var cursor = context.Scanner.Cursor;
         ExpressionNode value;
 
         if (cursor.Current is ':' or '=') {
-            var separator = cursor.Current;
-
             cursor.Advance();
             SkipWhiteSpace(context: context);
-            RefuseColonBeforeContainer(
-                col: col,
-                context: context,
-                diagnostics: diagnostics,
-                identifier: name,
-                line: line,
-                separator: separator,
-                startOffset: startOffset
-            );
-            value = ParseMemberValue(context: context);
+            if (cursor.Current == '{') {
+                return null;
+            }
+            value = ((cursor.Current == '[') ? ParseArrayExpression(context: context) : ParseMemberValue(context: context));
         } else if (cursor.Current == '[') {
             value = ParseArrayExpression(context: context);
         } else {

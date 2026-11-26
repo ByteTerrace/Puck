@@ -29,7 +29,7 @@ state {
     // world follows.
     { name: "globeTurn", kind: "Int", value: 0, min: 0, max: 3 }
     { name: "globePullX", kind: "Fixed", value: "0" }
-    { name: "globePullY", kind: "Fixed", value: $"{0 - globePull}" }
+    { name: "globePullY", kind: "Fixed", value: (0 - globePull) }
     { name: "globePullZ", kind: "Fixed", value: "0" }
   ]
 }
@@ -79,7 +79,7 @@ placements {
   placement "globe-lever" {
     prototype: "globe-lever-0"
     position [0, 0.05, 0]
-    respond: map(range(1, 3), i => {
+    respond: map(range(1, 4), i => {
       when: state(state: globeTurn, comparison: Equal, value: i)
       prototypeId: $"globe-lever-{i}"
     })

@@ -439,7 +439,7 @@ state {
     {
       name: "day"
       kind: "Fixed"
-      value: $"{sharedDayStart / 24}"
+      value: (sharedDayStart / 24)
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
       follows { destination: "debug" }
     }

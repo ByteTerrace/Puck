@@ -894,7 +894,7 @@ public sealed partial class PuckLanguageServer {
                 label: "export"
             );
 
-            // The array spelling of a row construct. A container takes no `:` — `materials: [` is PUCK040.
+            // The array spelling of a row construct.
             LspJson.AddCompletion(
                 detail: "Section: Surface materials",
                 insertText: "materials [\n    $0\n]",
@@ -1439,11 +1439,6 @@ public sealed partial class PuckLanguageServer {
                 continue;
             }
 
-            if (code == PuckDiagnosticCodes.ColonBeforeContainer) {
-                TryAddDropColonAction(actions: actions, diagnostic: diagnostic, range: range, text: text, uri: uri);
-                continue;
-            }
-
             if (code is PuckDiagnosticCodes.UnknownTemplate
                 or PuckDiagnosticCodes.TemplateArgument
                 or PuckDiagnosticCodes.UnknownMember
@@ -1457,38 +1452,6 @@ public sealed partial class PuckLanguageServer {
         }
 
         SendResponse(id: id, result: actions);
-    }
-    private static void TryAddDropColonAction(JsonArray actions, JsonObject diagnostic, JsonObject range, string text, string uri) {
-        if (!TryRangeOffsets(range: range, source: text, endOffset: out var endOffset, startOffset: out var startOffset)) {
-            return;
-        }
-
-        var searchEnd = Math.Min(val1: text.Length, val2: (endOffset + 1));
-        var sepIndex = -1;
-
-        for (var index = Math.Max(val1: 0, val2: startOffset); (index < searchEnd); index++) {
-            if (text[index] is ':' or '=') {
-                sepIndex = index;
-            }
-        }
-
-        if (sepIndex < 0) {
-            return;
-        }
-
-        var sep = text[sepIndex];
-
-        actions.Add(item: BuildQuickFix(
-            diagnostic: diagnostic,
-            editRange: LspJson.Range(
-                end: LspJson.PositionOf(offset: (sepIndex + 1), source: text),
-                start: LspJson.PositionOf(offset: sepIndex, source: text)
-            ),
-            isPreferred: true,
-            newText: "",
-            title: $"Drop the '{sep}' before container",
-            uri: uri
-        ));
     }
     private static void TryAddNearestNameActions(JsonArray actions, string code, JsonObject diagnostic, string message, JsonObject range, string text, string uri) {
         const string Marker = "; nearest: ";

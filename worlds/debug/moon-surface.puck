@@ -12,7 +12,7 @@ import "../standard/terrain"
 import "../standard/styles"
 import "moon-frame"
 
-let moonDegree = 3.141592653589793 / 180
+let moonDegree = pi / 180
 
 // The unit direction out from the centre at a latitude and longitude, in degrees: latitude 90 is the north pole (+Y),
 // longitude 0 on the equator is +Z and 90 is +X.

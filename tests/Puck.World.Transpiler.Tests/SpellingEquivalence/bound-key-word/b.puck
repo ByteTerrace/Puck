@@ -1,0 +1,25 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table counts {
+      alpha = 0
+      beta = 0
+    }
+    table inks {
+      alpha = "#000000"
+    }
+  }
+}
+
+rule "count-beta" {
+  when counts["beta"] < 3
+  setState(state: counts, key: beta, expression: counts["beta"] + 1)
+}
+
+rule "tick" {
+  when counts["alpha"] < 3
+  setState(state: counts, key: alpha, expression: 2)
+  inks["alpha"] = "#FFC46A"
+}

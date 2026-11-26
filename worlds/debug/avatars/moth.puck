@@ -218,7 +218,7 @@ template mothLimbs(side, isRight) {
     swings [
       swing("swim", [1, 0, 0], 0.55, mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "sine"
-        phase: bySide(isRight, 0, 3.14159265358979)
+        phase: bySide(isRight, 0, pi)
       }
       swing("swim", [0, 0, 1], flip(isRight, -0.85), mirrorX(isRight, [0.295, 1.4515, 0])) with { wave: "constant" }
       swing("run", [0, 0, 1], flip(isRight, -0.15), mirrorX(isRight, [0.295, 1.4515, 0])) with {
@@ -227,7 +227,7 @@ template mothLimbs(side, isRight) {
       }
       swing("gait", signed(isRight, [0.987688, -0.156434, 0], [1, -1, 1]), 0.42, mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "sine"
-        phase: bySide(isRight, 3.1415927, 6.2831853)
+        phase: bySide(isRight, pi, 2 * pi)
       }
       swing("flight", [0, 0, 1], flip(isRight, -0.1), mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "linear"
@@ -521,7 +521,7 @@ template mothLimbs(side, isRight) {
       swing("heading", [0, 1, 0], -0.5, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear" }
       swing("gait", [1, 0, 0], 0.7, mirrorX(isRight, [0.145, 1.0265, 0])) with {
         wave: "sine"
-        phase: bySide(isRight, 0, 3.1415927)
+        phase: bySide(isRight, 0, pi)
       }
       swing("heading", [0, 1, 0], 0.5, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear" }
       swing("heading", [0, 1, 0], -0.7, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "sine" }
@@ -618,7 +618,7 @@ template mothLimbs(side, isRight) {
     swings [
       swing("swim", [1, 0, 0], 0.45, mirrorX(isRight, [0.19, 0.7465, 0])) with {
         wave: "sine"
-        phase: bySide(isRight, 0, 3.14159265358979)
+        phase: bySide(isRight, 0, pi)
       }
       swing("gait", [1, 0, 0], 1.25, mirrorX(isRight, [0.19, 0.7465, 0])) with {
         wave: "halfSine"

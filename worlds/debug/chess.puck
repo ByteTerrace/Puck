@@ -19,7 +19,7 @@ bodies {
 // (debug.puck), and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
 grants: concat(
-  map(range(18, 32), body => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
+  map(range(18, 50), body => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
   [{ capability: Edit, grantee: "seat1", subject: "state:chessInput" }]
 )
 
@@ -761,7 +761,7 @@ replays [
       shapeLegal, castleLegal, castleRights, castleTransitAttacked,
       boardMismatch, boardChanged, boardCollisions, chessInput
     ]
-    bodies: range(18, 33)
+    bodies: range(18, 51)
     seats ["seat1"]
     durationTicks: 37 * chessDemoPlyTicks
     inputs: map(

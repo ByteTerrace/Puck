@@ -16,7 +16,7 @@
 // row it cannot read whole, so its write has no outcome that depends on a cell it may not read.
 
 template sealedInbox(name, seats, fields, empty = 0, texts = []) {
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     row {
       name: $"{name}{s}"
       kind: "Int"
@@ -27,7 +27,7 @@ template sealedInbox(name, seats, fields, empty = 0, texts = []) {
       }
     }
 
-    for text in filter([0], k => length(texts) > 0) {
+    if length(texts) > 0 {
       row {
         name: $"{name}Text{s}"
         kind: "Text"

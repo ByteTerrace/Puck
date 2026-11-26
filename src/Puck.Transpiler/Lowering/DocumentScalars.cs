@@ -23,8 +23,12 @@ public static class DocumentScalars {
     /// <see cref="ExpressionDomain.Integer"/> name is folded too, by delegation — see <see cref="Delegated"/> — so
     /// the refused set is what is left: the fixed-point-only and specialized-lowering entries, refused BY NAME.</summary>
     private static readonly HashSet<string> InDouble = new(comparer: StringComparer.Ordinal) {
-        "absolute", "ceiling", "clamp", "cosine", "floor", "maximum", "minimum", "round", "sign", "sine",
-        "squareRoot",
+        "absolute", "arcCosine", "arcSine", "arcTangent", "arcTangent2", "ceiling", "clamp", "cosine", "floor",
+        "hypotenuse", "maximum", "minimum", "power", "round", "sign", "sine", "squareRoot",
+    };
+    // The functions whose result is irrational for whole arguments, so it is always folded in double.
+    private static readonly HashSet<string> Irrational = new(comparer: StringComparer.Ordinal) {
+        "arcCosine", "arcSine", "arcTangent", "arcTangent2", "cosine", "hypotenuse", "sine", "squareRoot",
     };
 
     // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
@@ -119,8 +123,13 @@ public static class DocumentScalars {
         var integers = new long[function.Arity];
         var allIntegers = true;
 
-        // A trigonometric function's argument is an angle in radians, whatever field the call's value fills.
-        var argumentKey = ((call.Name is "sine" or "cosine") ? DocumentDimensions.AngleArgument : fieldKey);
+        // A trigonometric function's argument is an angle in radians, and an inverse one's a ratio or a point, whatever
+        // field the call's value fills.
+        var argumentKey = call.Name switch {
+            "sine" or "cosine" => DocumentDimensions.AngleArgument,
+            "arcCosine" or "arcSine" or "arcTangent" or "arcTangent2" => null,
+            _ => fieldKey,
+        };
 
         for (var index = 0; (index < function.Arity); ++index) {
             var lowered = DocumentLowering.EvaluateValue(
@@ -170,8 +179,19 @@ public static class DocumentScalars {
         }
 
         if (
+            (call.Name is "arcSine" or "arcCosine") &&
+            ((numbers[0] < -1) || (numbers[0] > 1))
+        ) {
+            return Refuse(
+                call: call,
+                message: $"{call.Name} takes a number from -1 to 1",
+                scope: scope
+            );
+        }
+
+        if (
             allIntegers &&
-            (call.Name is not ("cosine" or "sine" or "squareRoot"))
+            !Irrational.Contains(item: call.Name)
         ) {
             long value;
             var evaluated = function.Operation switch {
@@ -186,6 +206,10 @@ public static class DocumentScalars {
         return DocumentLowering.NumberNode(
             value: call.Name switch {
                 "absolute" => Math.Abs(value: numbers[0]),
+                "arcCosine" => Math.Acos(d: numbers[0]),
+                "arcSine" => Math.Asin(d: numbers[0]),
+                "arcTangent" => Math.Atan(d: numbers[0]),
+                "arcTangent2" => Math.Atan2(y: numbers[0], x: numbers[1]),
                 "ceiling" => Math.Ceiling(a: numbers[0]),
                 "clamp" => Math.Clamp(
                     value: numbers[0],
@@ -194,6 +218,8 @@ public static class DocumentScalars {
                 ),
                 "cosine" => Math.Cos(d: numbers[0]),
                 "floor" => Math.Floor(d: numbers[0]),
+                "hypotenuse" => double.Hypot(x: numbers[0], y: numbers[1]),
+                "power" => Math.Pow(x: numbers[0], y: numbers[1]),
                 "maximum" => Math.Max(
                     val1: numbers[0],
                     val2: numbers[1]

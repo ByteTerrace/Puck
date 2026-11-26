@@ -75,13 +75,13 @@ if (!fs.existsSync(path.join(bundle, 'main.mjs'))) {
     assert.equal(score.cells[0].value.value, 1n, 'the rule ran once on the first tick');
     assert.ok(ticked.context.preview.snapshots[1].trace.rules.some((rule) => rule.name === 'score-up'));
 
-    // A container never takes a colon: the source tier reports it at the version it diagnosed, and the preview stops.
-    const broken = text.replace('state {', 'state: {');
+    // An import that spells a file is refused: the source tier reports it at the version it diagnosed, and the preview stops.
+    const broken = text.replace('state {', 'import "other.puck"\nstate {');
     actor.send({ type: 'SOURCE_CHANGED', path: 'counter.puck', version: 1, text: broken });
     assert.equal(actor.getSnapshot().context.preview.status, 'idle');
     channel.send(JSON.stringify({ jsonrpc: '2.0', method: 'textDocument/didChange', params: { textDocument: { uri, version: 1 }, contentChanges: [{ text: broken }] } }));
     const diagnosed = await waitFor(actor, (s) => s.context.workspace.diagnostics['counter.puck']?.version === 1, { timeout: 60_000 });
-    const error = selectProblems(diagnosed).find((problem) => problem.code === 'PUCK040');
+    const error = selectProblems(diagnosed).find((problem) => problem.code === 'PUCK121');
     assert.ok(error, JSON.stringify(selectProblems(diagnosed)));
     assert.equal(error.line, 5);
     actor.send({ type: 'PREVIEW_START' });

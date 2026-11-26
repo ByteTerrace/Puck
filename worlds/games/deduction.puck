@@ -101,7 +101,7 @@ template deductionState(seats, moles) {
     name: "deductionReveal"
     kind: "Text"
     capacity: seats
-    cells: map(range(1, seats), s => { key: $"{s}", value: "" })
+    cells: map(range(1, seats + 1), s => { key: $"{s}", value: "" })
   }
 
   // Each seat's own: its role, its fellow moles, and how many den and whispered lines it has been handed.
@@ -110,7 +110,7 @@ template deductionState(seats, moles) {
       name: table
       kind: "Int"
       capacity: seats
-      cells: map(range(1, seats), s => {
+      cells: map(range(1, seats + 1), s => {
         key: $"{s}"
         value: 0
         visibility {
@@ -137,7 +137,7 @@ template deductionState(seats, moles) {
     cells: map(range(0, 8), i => { key: $"{i}", value: 0 })
   }
 
-  for t in range(1, seats) {
+  for t in range(1, seats + 1) {
     for channel in ["Heard", "Den"] {
       row {
         name: $"deduction{channel}{t}"
@@ -165,7 +165,7 @@ template deductionState(seats, moles) {
     name: "deductionVotes"
     kind: "Int"
     capacity: seats
-    cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+    cells: map(range(1, seats + 1), s => { key: $"{s}", value: 0 })
     visibility {
       readers []
       readersFrom: "deductionReveal"
@@ -176,7 +176,7 @@ template deductionState(seats, moles) {
     name: "deductionTally"
     kind: "Int"
     capacity: seats
-    cells: map(range(1, seats), t => { key: $"{t}", value: 0 })
+    cells: map(range(1, seats + 1), t => { key: $"{t}", value: 0 })
   }
 }
 
@@ -184,7 +184,7 @@ template deductionRules(seats, moles) {
   // A new game: clear the last one's roles, votes and reveal, then draw.
   rule "deduction-clear" {
     when deduction.phase == 1 and deduction.drawn == 0
-    for s in range(1, seats) {
+    for s in range(1, seats + 1) {
       deductionReveal[$"{s}"] = ""
       deductionVotes[$"{s}"] = 0
       deductionRole[$"{s}"] = 0
@@ -210,7 +210,7 @@ template deductionRules(seats, moles) {
     deduction.drawn = 2
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"deduction-role-{s}" {
       local mole = deductionSecret.mole1 == s or deductionSecret.mole2 == s
       when deduction.phase == 1 and deduction.drawn == 2
@@ -226,7 +226,7 @@ template deductionRules(seats, moles) {
     schedule deduction.closeAt in 30s
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     // Talk at the table: the line and its speaker into the next of the eight public slots.
     rule $"deduction-say-{s}" {
       when deduction.phase == 2 and $"deductionMail{s}".to == 0
@@ -239,7 +239,7 @@ template deductionRules(seats, moles) {
     }
 
     // A whisper to seat `t`: into seat `t`'s own rows alone, so nothing another seat reads moves.
-    for t in filter(range(1, seats), t => t != s) {
+    for t in filter(range(1, seats + 1), t => t != s) {
       rule $"deduction-whisper-{s}-{t}" {
         when deduction.phase == 2 and $"deductionMail{s}".to == t
         setState(
@@ -258,7 +258,7 @@ template deductionRules(seats, moles) {
 
     // The den: a mole's line into every mole's own den rows, the speaker's included; then its receipt, refused for
     // crew.
-    for t in range(1, seats) {
+    for t in range(1, seats + 1) {
       rule $"deduction-den-{s}-{t}" {
         when (deduction.phase == 2 and
           $"deductionMail{s}".to == deductionDenSeat and
@@ -314,7 +314,7 @@ template deductionRules(seats, moles) {
     deduction.most = 0
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"deduction-count-{s}" {
       local vote = deductionVotes[$"{s}"]
       when deduction.counting == 1 and vote > 0
@@ -322,7 +322,7 @@ template deductionRules(seats, moles) {
     }
   }
 
-  for t in range(1, seats) {
+  for t in range(1, seats + 1) {
     rule $"deduction-most-{t}" {
       when deduction.counting == 1 and deductionTally[$"{t}"] > deduction.most
       deduction.most = deductionTally[$"{t}"]
@@ -336,7 +336,7 @@ template deductionRules(seats, moles) {
     deduction.phase = 4
     deduction.outRole = deduction.out > 0 ? deductionRole[deduction.out] : 0
     deduction.winner = deduction.outRole == 2 ? 1 : 2
-    for s in range(1, seats) {
+    for s in range(1, seats + 1) {
       deductionReveal[$"{s}"] = $"seat{s}"
     }
   }

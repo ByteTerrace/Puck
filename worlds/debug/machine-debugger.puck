@@ -4,6 +4,8 @@
 import "shapes"
 
 let machineDebuggerFirstBody = (seatPopulation + visitorPopulation + 2)
+// The three bodies the debugger drives, from its first.
+let machineDebuggerBodies = range(machineDebuggerFirstBody, machineDebuggerFirstBody + 3)
 
 state {
   world {
@@ -136,7 +138,7 @@ addon "machine-debugger" {
     map(range(0, 3), i => { capability: Edit, subject: $"state:machineDebugger{i}" }),
     map(range(0, 3), i => { capability: Observe, subject: $"screen:{i}" }),
     map(range(0, 3), i => { capability: Control, subject: $"screen:{i}" }),
-    map(range(machineDebuggerFirstBody, 3), i => { capability: Drive, subject: $"body:{i}" }),
+    map(machineDebuggerBodies, i => { capability: Drive, subject: $"body:{i}" }),
     map(
       ["humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck"],
       name => { capability: Control, subject: $"machine:{name}" }
@@ -171,7 +173,7 @@ grants: concat(
     i => { grantee: "addon:machine-debugger", capability: Observe, subject: $"screen:{i}", budget: 8, eventBudget: 1 }
   ),
   map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Control, subject: $"screen:{i}" }),
-  map(range(machineDebuggerFirstBody, 3), i => { grantee: "addon:machine-debugger", capability: Drive, subject: $"body:{i}", budget: 8 }),
+  map(machineDebuggerBodies, i => { grantee: "addon:machine-debugger", capability: Drive, subject: $"body:{i}", budget: 8 }),
   map(
     ["humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck"],
     name => { grantee: "addon:machine-debugger", capability: Control, subject: $"machine:{name}" }

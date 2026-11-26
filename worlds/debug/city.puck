@@ -169,8 +169,8 @@ let stallCount = 12
 let stallRing = map(range(0, stallCount), i => {
   id: $"stall-{i}"
   index: i
-  x: 18 * sine(i * 6.283185307179586 / stallCount)
-  z: -50 + 18 * cosine(i * 6.283185307179586 / stallCount)
+  x: 18 * sine(i * 2 * pi / stallCount)
+  z: -50 + 18 * cosine(i * 2 * pi / stallCount)
   yaw: i * 360 / stallCount
   awning: (i % 2 == 0) ? "teal" : "ochre"
 })
@@ -268,8 +268,8 @@ vehicleLooks(colors: vehicleColors)
 marketStalls(
   stalls: map(stallRing, stall => {
     key: stall.id
-    x: round(15.8 * sine(stall.yaw * 3.141592653589793 / 180) * 1024) / 1024
-    z: round((-50 + 15.8 * cosine(stall.yaw * 3.141592653589793 / 180)) * 1024) / 1024
+    x: round(15.8 * sine(stall.yaw * pi / 180) * 1024) / 1024
+    z: round((-50 + 15.8 * cosine(stall.yaw * pi / 180)) * 1024) / 1024
     price: 3 + stall.index % 4
   }),
   clock: cityDay
@@ -340,9 +340,9 @@ let citizenWorks = concat(
   map(shedLots, lot => [lot.x, ((lot.yaw == 180) ? (lot.z + 10) : (lot.z - 10))]),
   map(warehouseLots, lot => [lot.x, (lot.z - 7.5)]),
   map(hallLots, lot => [lot.x, (lot.z - 11.5)]),
-  map(stallRing, stall => [(20.5 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 20.5 * cosine(stall.yaw * 3.141592653589793 / 180))])
+  map(stallRing, stall => [(20.5 * sine(stall.yaw * pi / 180)), (-50 + 20.5 * cosine(stall.yaw * pi / 180))])
 )
-let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 14 * cosine(stall.yaw * 3.141592653589793 / 180))])
+let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * pi / 180)), (-50 + 14 * cosine(stall.yaw * pi / 180))])
 let citizenPeople = map(range(0, citizenCount), i => {
   key: citizenTop - i
   home: citizenHomes[i % length(citizenHomes)]
@@ -658,7 +658,7 @@ prototypes {
             position [0, 1.1, 4]
             scale [0.6, 1.1, 0.06]
           }
-          for storey in range(1, floor(height / 3.3)) {
+          for storey in range(1, floor(height / 3.3) + 1) {
             for side in [-1, 1] {
               shape Box $"window-{storey}-{side}" {
                 material: windowGlow

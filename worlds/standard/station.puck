@@ -225,7 +225,7 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
       document {
         version: "puck.input.bindings.v1"
         modifiers []
-        contexts: map(range(1, count), number => { family: "state:stationAt", state: $"{number}", group: "station" })
+        contexts: map(range(1, count + 1), number => { family: "state:stationAt", state: $"{number}", group: "station" })
         chords [
           {
             chord []

@@ -55,7 +55,7 @@ public class CartridgeRoundTripTests {
         .Where(predicate: static path => (Path.GetFileName(path: Path.GetDirectoryName(path: path)) != "shared"))
         .Order(comparer: StringComparer.Ordinal).Select(selector: path => new object[] { path });
     [Fact]
-    public void TestACartridgeRuleBodyRefusesAColonBeforeAContainer() {
+    public void TestACartridgeRuleBodyReadsAColonBeforeAContainerAsTheContainer() {
         const string Source = """
             schema: "puck.cartridge.v1"
             target: "cgb"
@@ -74,15 +74,9 @@ public class CartridgeRoundTripTests {
             diagnostics: diagnostics
         );
 
-        var refusal = Assert.Single(
+        Assert.DoesNotContain(
             collection: diagnostics,
-            predicate: d => (d.Code == PuckDiagnosticCodes.ColonBeforeContainer)
-        );
-
-        Assert.Contains(
-            "'tags: [' - a list is written without the ':': use 'tags ['",
-            refusal.Message,
-            StringComparison.Ordinal
+            filter: static d => (d.Severity == DiagnosticSeverity.Error)
         );
     }
     [Fact]

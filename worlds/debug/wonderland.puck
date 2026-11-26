@@ -272,7 +272,7 @@ prototypes {
         { color: "#2FA84A", roughness: 0.45, specular: 0.2 }
       ]
       schema: "puck.creation.v1"
-      for i in range(1, 10) {
+      for i in range(1, 11) {
         boundsBox(
           label: $"cases-{i}",
           x0: 1.15,

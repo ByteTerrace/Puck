@@ -921,11 +921,11 @@ public static partial class DocumentLowering {
         if ((row.Operation is ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply or ExpressionOp.Divide) && ((leftNode is JsonArray) || (rightNode is JsonArray))) {
             return EvaluateArrayBinary(bin: bin, leftNode: leftNode, rightNode: rightNode, row: row, scope: scope);
         }
-        // Two strings are equal when their UTF-16 code units are, the unit length(value) and indexing count; a
-        // string has no order, so only equality reads one.
-        if ((row.Operation is ExpressionOp.Equal or ExpressionOp.NotEqual) && (leftNode is JsonValue leftText) && leftText.TryGetValue<string>(value: out var leftString) &&
-            (rightNode is JsonValue rightText) && rightText.TryGetValue<string>(value: out var rightString)) {
-            var equal = string.Equals(a: leftString, b: rightString, comparisonType: StringComparison.Ordinal);
+        // Equality reads any two values; only two numbers compare as numbers (`1 == 1.0`). Anything else is equal when it
+        // is the same value: two strings by their UTF-16 code units, the unit length(value) and indexing count, arrays
+        // and objects member by member, and `null` (an absent optional, `foot = null`) only to `null`.
+        if ((row.Operation is ExpressionOp.Equal or ExpressionOp.NotEqual) && !(TryReadNumber(node: leftNode, number: out _) && TryReadNumber(node: rightNode, number: out _))) {
+            var equal = JsonNode.DeepEquals(node1: leftNode, node2: rightNode);
 
             return JsonValue.Create(value: (((row.Operation == ExpressionOp.Equal) == equal) ? 1L : 0L));
         }

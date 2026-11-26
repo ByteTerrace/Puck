@@ -99,6 +99,31 @@ public static partial class ExpressionArithmetic {
                 case ExpressionOp.Cosine:
                     value = FixedQ4816.Cos(angle: FixedQ4816.FromRawBits(value: arguments[0])).Value;
                     return true;
+                case ExpressionOp.ArcSine:
+                case ExpressionOp.ArcCosine: {
+                        // The angle of the point (cathetus, x) or (x, cathetus) on the unit circle, the cathetus
+                        // √((1 − x)(1 + x)) taken from the factored form so it keeps its precision near ±1.
+                        if ((arguments[0] < -FixedQ4816.One.Value) || (arguments[0] > FixedQ4816.One.Value)) { return false; }
+                        var x = FixedQ4816.FromRawBits(value: arguments[0]);
+                        var cathetus = FixedQ4816.Sqrt(value: ((FixedQ4816.One - x) * (FixedQ4816.One + x)));
+
+                        value = ((operation == ExpressionOp.ArcSine)
+                            ? FixedQ4816.Atan2(x: cathetus, y: x)
+                            : FixedQ4816.Atan2(x: x, y: cathetus)
+                        ).Value;
+                        return true;
+                    }
+                case ExpressionOp.ArcTangent:
+                    value = FixedQ4816.Atan2(x: FixedQ4816.One, y: FixedQ4816.FromRawBits(value: arguments[0])).Value;
+                    return true;
+                case ExpressionOp.ArcTangent2:
+                    value = FixedQ4816.Atan2(x: FixedQ4816.FromRawBits(value: arguments[1]), y: FixedQ4816.FromRawBits(value: arguments[0])).Value;
+                    return true;
+                case ExpressionOp.Hypotenuse: {
+                        if (!new FixedVector2(X: FixedQ4816.FromRawBits(value: arguments[0]), Y: FixedQ4816.FromRawBits(value: arguments[1])).TryLength(length: out var length)) { return false; }
+                        value = length.Value;
+                        return true;
+                    }
                 case ExpressionOp.Pair:
                     return TryPair(
                         pair: out value,
