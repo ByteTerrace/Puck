@@ -39,6 +39,7 @@ import "layout"
 import "shell"
 import "look"
 import "toybox"
+import "wonder"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
@@ -980,8 +981,6 @@ state {
     slot liftArrow = 0 bounds(0..2)
     slot liftOpenReq = 0 bounds(0..1)
     slot liftCloseReq = 0 bounds(0..1)
-    // Whether the lift serves level 1, the toybox: 0 (it passes level 1 and opens no door there) until a rule sets it.
-    slot toyboxLift = 0 bounds(0..1)
     // Level 1's loose lattice panels (shell.puck's `gallery-lattice-loose-<edge>`): 1 swaps a panel to its open
     // form, which keeps its frame and crossbars and drops its uprights and sill.
     table toyboxSlats {
@@ -1100,23 +1099,6 @@ for pad in filter(carPads, p => p.slot == 5) {
   }
 }
 
-// Level 1 is the toybox, reached shrunk by its corner stairs: while `toyboxLift` is 0 the lift drops every call to level
-// 1 (a landing's plate, a car button, the mailbox) as it arrives, before any rule below reads one, so the car neither
-// stops nor turns there; and a car already standing at level 1 keeps its doors shut and refuses its door-open button.
-// A rule that sets `toyboxLift` to 1 (a puzzle solved) serves level 1 as any other.
-rule "lift-toybox-calls" {
-  when toyboxLift == 0 and (liftHall.level1 + liftCarCall.level1) > 0
-  mode: Level
-  liftHall.level1 = 0
-  liftCarCall.level1 = 0
-}
-rule "lift-toybox-doors" {
-  when toyboxLift == 0 and liftAt == liftCells and liftTarget == liftAt and (liftOpenReq + liftDoors.car + liftDoors.level1) > 0
-  mode: Level
-  liftOpenReq = 0
-  liftDoors.car = 0
-  liftDoors.level1 = 0
-}
 
 // A stopped car at a level with a call pending there serves it: the call clears and the doors are asked to open.
 for k in range(0, 4) {
@@ -1596,9 +1578,10 @@ for entry in galleryCatalog {
   }
 }
 rule "gallery-pick-entrance" {
-  when galleryPick.gallery == 1
+  when (galleryPick.gallery + galleryPick.toybox) > 0
   mode: Level
   galleryPick.gallery = 0
+  galleryPick.toybox = 0
 }
 
 commands [

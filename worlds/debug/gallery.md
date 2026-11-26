@@ -111,8 +111,9 @@ ones.
 
 The owner's ruling: every floor can be reached by jetpack except the
 Wonderland floor, which is walled off, so its puzzles can turn on size without
-a way to cheat. A body enters level 1 shrunk, by its corner stairs, and no
-other way.
+a way to cheat. A body enters level 1 by its corner stairs or the lift, and
+shrinks on the way unless it holds the full-size pass ("The size of level 1",
+below).
 
 So every edge level 1 shares with the nave's void stands behind a toy
 construction lattice (the standard's `lattice`,
@@ -129,10 +130,6 @@ body flies or jumps in from the void and none drops out, while most of each
 panel stays open to the eye. The panels are solid boxes, so a body meets each
 bar as drawn.
 
-Two more panels stand either side of the core stairs' head on level 1, between
-the stair well's glass and the void's lattice, so a body climbing the core
-stairs turns there between flights without stepping onto level 1.
-
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
 and `gallery-lattice-loose-bridge` (the bridge's middle tile, on the nave's
@@ -142,17 +139,11 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The lift.** `toyboxLift` (0) decides whether the lift serves level 1. At 0
-the rule `lift-toybox-calls` drops every call to level 1 as it arrives (a
-landing's plate, a car button, `gallery.lift 1`), so the car passes level 1
-without stopping, and `lift-toybox-doors` keeps a car standing there shut. A
-rule that sets `toyboxLift` to 1 serves level 1 as any other level.
-
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
 ceiling painting, a portal back to the floor painting, so a body flying up the
 well crosses to the floor rather than into level 1; the bridge is level 1's
-own floor, inside the lattice. The corner stairs are the way in.
+own floor, inside the lattice. The corner stairs and the lift are the ways in.
 
 ## The displays
 
@@ -359,41 +350,70 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.
 
-## The size walk
+## The size of level 1
 
-Level 1 is the level a body shrinks into: the level stays its normal size, so
-it is giant to her. The corner staircases will carry the change, and until they
-do, [`size-walk.puck`](size-walk.puck) lays the same mechanism along level 1's
-north gallery. Walking east from plan x 40 to x 52, she shrinks from her full
-size to Alice's; walking back west, she grows again.
+The owner's ruling: a body reaches level 1 by the stairs or the lift, but too
+small to use its devices or rental stalls; a puzzle grants the pass that lets
+it in at full size. The level stays its normal size, so it is giant to her.
+[`gallery/wonder.puck`](gallery/wonder.puck) holds it, one size field (the
+standard's [`size-field.puck`](../standard/size-field.puck)) whose zones are,
+first match winning:
 
-The mechanism is the standard's size field
-([`size-field.puck`](../standard/size-field.puck)). A world rule reads her
-position every tick, takes her progress `t` along the walk (0 at the west end, 1
-at the east) and writes her `size` register (`size.puck`) to
-`start * power(end / start, t)`. Each equal step along the walk multiplies her
-size by the same factor, so on a stair each tread costs her the same share of
-her stride all the way up. The size is fixed-point state on the authority, so
-her collider, pace, step height, jump and camera follow it, and a window,
-another player or a spectator sees her the size she is. A body asked to grow
-where it does not fit (under a low ceiling) stays the largest size that fits,
-and grows on once it is clear.
+- **Each corner stair's well**, two storeys of it: from level 0's floor up to
+  level 1's, and from level 2's floor down to it. Her size follows her height
+  over the flight, `full * power(small / full, t)` with `t` the fraction of
+  the storey she has climbed or descended, so she shrinks smoothly as she goes
+  into level 1 and grows as she leaves, and each tread costs her the same share
+  of her stride. The zones come from layout.puck's `galleryStairs`, so a stair
+  moved there moves its zone, and height serves a switchback and a spiral
+  alike.
+- **The lift's shaft**, the same two storeys: the car's ride between level 0
+  (or 2) and level 1 is the transition, so she shrinks or grows with the car,
+  and an observer outside sees it through the car's glass. The lift serves
+  level 1 like any other level.
+- **Level 1's floor**: the two aisles and the bridge, never the nave's void.
+  Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
 
-To try it, `debug.go size-walk` poses her two metres short of the west end,
-facing east along the walk; in the gallery root, `body.pose 47.825 4.55 45.375
-270 0 0 0` stands her there. `body.state 0` reads her `size` as she walks.
+**The pass.** A body holding the `wonderPass` identity fact nonzero takes its
+full size in every zone, so level 1, its stairs and its lift keep its size. An
+identity fact persists with the player's owned identity when the seat holds
+one (`setIdentityFact` writes both); for a seat holding none it is the body's
+own lane cell in the `identity` row, which the lane zeroes when the seat
+unbinds. A puzzle sets it with `setIdentityFact(key: $each, fact:
+"wonderPass", value: 1)`. No puzzle sets it yet.
 
-The size at the east end is a look and feel, chosen for how small the
-gallery's displays and benches read beside her. Two ways to tune it live:
+**Out of reach while small.** A screen's engage reach is its route's radius
+times the body's size, measured on the ground plane and within that reach of
+the screen's height (`WorldTick.CheckScreenEngagePolicy`). At Alice's size a
+cabinet's picture, 1.62 m over the floor, is far above her 0.45 m reach; at
+full size it is within 3 m. A station ([`station.puck`](../standard/station.puck))
+names what it needs in `needs`, such as `[{ register: "size", atLeast: 0.5 }]`:
+a body that falls short stands in no station's reach, so the context button
+does nothing there.
+
+The size is fixed-point state on the authority, so her collider, pace, step
+height, jump, reach and camera follow it, and a window, another player or a
+spectator sees her the size she is. A body asked to grow where it does not fit
+(under a low ceiling) stays the largest size that fits, and grows on once it is
+clear. The register's envelope (`size.puck`) allows a tenth to one.
+
+The author's shortcuts:
 
 | Console line | What it does |
 |---|---|
-| `world.state sizeField-gallery-walk` | Reads the walk's `start` and `end` sizes |
-| `world.state.cell.set sizeField-gallery-walk end 0.12` | Sets Alice's size at the east end; the next tick she is sized by it |
+| `gallery.go toybox [body]` | Stands a body on level 1's south aisle; it takes the size its pass gives it |
+| `gallery.wonder pass on [body]`, `gallery.wonder pass off [body]` | Grants or takes back a body's pass |
+| `gallery.wonder size <s> [body]` | Sets a body's size directly; it holds wherever no zone stands, and level 1, its stairs and its lift size it again |
+| `gallery.wonder small <s>` | Retunes the size level 1 gives a body without the pass, from the next tick |
+| `world.state sizeField-toybox` | Reads the field's `full` and `small` sizes |
+| `body.state 0` | Reads body 0's `size` |
 
-To keep a value, edit `sizeWalkAlice` in `size-walk.puck` and let the watch
-reload it. The register's envelope (`size.puck`) allows a tenth to one, so a
-size below a tenth needs the envelope widened with it.
+To keep a retuned size, edit `lookWonderSize` in `gallery/look.puck` and let
+the watch reload it.
+
+Other ways off level 1, checked: a body falling into the endless fall's well
+leaves through its floor painting at the size it had, so it can leave level 1
+small that way.
 
 ## What is still open
 

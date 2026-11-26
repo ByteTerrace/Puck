@@ -134,11 +134,14 @@ debug world's gallery is built from it (`../debug/gallery.md`), and `../debug/ga
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
 
-`size-field.puck` is a library of one template, `sizeField`: a stretch of the world, a capsule about a path, where a
-body's size register is a function of its progress along the path, `start * power(end / start, t)`, so each equal step
-multiplies its size by the same factor. A world rule writes it from the body's live position each tick it moves, so
-every observer sees the true size; `start` and `end` live in a world table the console retunes live. The debug world's
-size walk (`../debug/gallery.md`, "The size walk") is the worked example.
+`size-field.puck` is a library of one template, `sizeField`: a list of zones (a capsule about a path, a box, or both)
+where a body's size register is a function of its progress along the zone's path, `start * power(end / start, t)`, so
+each equal step multiplies its size by the same factor; a vertical path in a box sizes a body by its height over a
+stair's well or a lift's shaft. The first zone holding the body decides, so a well listed before the floor round it
+wins there. A body holding a named identity fact (a pass a puzzle grants) takes a pass size in every zone instead. One
+world rule writes the size from the body's live position, so every observer sees the true size; the named sizes live in
+a world table the console retunes live. The gallery's level 1 (`../debug/gallery.md`, "The size of level 1") is the
+worked example.
 
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
 `fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk

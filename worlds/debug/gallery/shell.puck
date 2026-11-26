@@ -569,9 +569,8 @@ let shellRails = concat(
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
 // Level 1's lattice (layout.puck's toyLattice values): a four-tile panel in each arcade bay along the void's south and
-// north edges, from pier to pier, and a half-tile one from the last pier to the east wall; the bridge's edge in four-tile
-// panels about one tile on the nave's axis; and a panel either side of the stairs' head, between the stair well's glass
-// and the void's lattice, so a body climbing the core stairs turns at level 1 without stepping onto it. Each panel stands
+// north edges, from pier to pier, and a half-tile one from the last pier to the east wall; and the bridge's edge in
+// four-tile panels about one tile on the nave's axis. Each panel stands
 // on level 1's floor and reaches into the fascia hanging under level 2's balcony edge, and neighbouring panels' posts overlap at every joint and corner. A loose panel (`slat`, its
 // `toyboxSlats` cell) shows its `open` prototype while its cell is 1.
 let shellLatticeHeight = ((((galleryStorey * 2) - shellFascia) - galleryFloor[1]) + 0.05)

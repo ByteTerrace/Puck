@@ -1,0 +1,166 @@
+// Level 1, the toybox, makes you small. A body comes onto the Wonderland floor Alice's size (look.puck's
+// `lookWonderSize`) and too small to reach its cabinets' and stalls' controls, unless it holds the full-size pass, the
+// `wonderPass` identity fact a puzzle sets; then the floor keeps it its full size and the games are in its reach. The
+// gallery module imports this, so the gallery booted alone and the debug world both size their visitors by it.
+//
+// The sizing is one standard size field (standard/size-field.puck), its zones in the order the first that holds a body
+// decides:
+//
+//   each stair's well, two storeys: from level 0's floor up to level 1's, and from level 2's floor down to it, a body's
+//     size follows its height over the flight, full at the outer floor and Alice's at level 1, so a body shrinks as it
+//     climbs or descends into the toybox and grows as it leaves; the zones are generated from layout.puck's
+//     `galleryStairs`, so a stair moved there moves its zone, and the same height curve serves a switchback's flights
+//     and a spiral's helix
+//   the lift's shaft, the same two storeys: the car's ride between level 0 (or 2) and level 1 is the transition, so a
+//     body riding it shrinks or grows with the car's height, and an observer outside sees it through the car's glass
+//   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
+//     throughout
+//
+// A body holding the pass takes its full size in every zone. The pass is an identity fact, so it persists with the
+// player's owned identity when its seat holds one (WorldRuleHost.IdentityFacts), and is the body's own lane cell for a
+// seat holding none, which the lane zeroes when the seat unbinds.
+//
+// The toybox's devices keep out of a small body's reach by the engine's own rule: a screen's and a tabletop's engage
+// reach is its radius times the body's size, measured on the ground plane and within that reach of the screen's height
+// (WorldTick.CheckScreenEngagePolicy), so at Alice's size a cabinet's picture, 1.62 m up, stands far above her 0.45 m
+// reach. A station (standard/station.puck) names the size it needs in its `needs`.
+//
+// The author's shortcuts are `gallery.wonder` and `gallery.go toybox` (gallery.md, "The size of level 1").
+import "../../standard/size-field"
+import "layout"
+import "look"
+import "../shapes"
+
+// A zone's box and path, from plan positions (the building's frame) to the world's, where the field reads a body.
+function wonderBox(x0, x1, y0, y1, z0, z1) = {
+  x0: (gallerySite[0] + x0)
+  x1: (gallerySite[0] + x1)
+  y0: (gallerySite[1] + y0)
+  y1: (gallerySite[1] + y1)
+  z0: (gallerySite[2] + z0)
+  z1: (gallerySite[2] + z1)
+}
+// How far past a storey's outer floor a shaft's zone reaches, so a body standing at the flight's foot or head, a little
+// above or below the floor's top, is held at its full size there rather than left at the size it last took.
+let wonderShaftMargin = 0.25
+// The two zones of a vertical shaft over a plan rectangle: level 0 up to level 1, and level 2 down to it.
+function wonderShaft(x0, x1, z0, z1) = [
+  {
+    box: wonderBox(x0, x1, (galleryFloor[0] - wonderShaftMargin), galleryFloor[toyboxLevel], z0, z1)
+    from: galleryWorld(((x0 + x1) / 2), galleryFloor[0], ((z0 + z1) / 2))
+    to: galleryWorld(((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2))
+    start: "full"
+    end: "small"
+  }
+  {
+    box: wonderBox(x0, x1, galleryFloor[toyboxLevel], (galleryFloor[2] + wonderShaftMargin), z0, z1)
+    from: galleryWorld(((x0 + x1) / 2), galleryFloor[2], ((z0 + z1) / 2))
+    to: galleryWorld(((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2))
+    start: "full"
+    end: "small"
+  }
+]
+// Level 1's floor zone: from just under its floor's top to well short of level 2's slab.
+let wonderFloorLow = (galleryFloor[toyboxLevel] - wonderShaftMargin)
+let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
+let wonderZones = concat(
+  flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
+  wonderShaft(towerWest, towerEast, towerSouth, 0),
+  [
+    // The south aisle, from the south wall's outer face (its lift door) to the lattice on the nave's edge; the north
+    // aisle, from the lattice to the north wall; and the bridge across the nave's west end.
+    { box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, 0, naveSouth), start: "small" }
+    { box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, naveNorth, galleryDepth), start: "small" }
+    { box: wonderBox(galleryWestOut, naveWest, wonderFloorLow, wonderFloorHigh, naveSouth, naveNorth), start: "small" }
+  ]
+)
+
+sizeField(
+  name: "toybox",
+  zones: wonderZones,
+  sizes: [{ key: "full", value: 1 }, { key: "small", value: lookWonderSize }],
+  passes: ["wonderPass"],
+  passSize: "full"
+)
+
+// The shortcuts' mailboxes, keyed by body index: `gallery.wonder` writes its value to the row named for its setting
+// (`wonder` and the setting's name) under the body it acts on, and the rules below apply it and empty the cell. The
+// seats' and visitors' bodies hold a cell each.
+let wonderAskBodies = map(range(0, (seatPopulation + visitorPopulation)), body => $"{body}")
+enum WonderSwitch {
+  idle
+  off
+  on
+}
+
+state {
+  world {
+    // The reserved identity fact lane (WorldIdentityFactLane): one cell per body and fact, keyed `<body>-<fact>`.
+    row {
+      name: "identity"
+      kind: Int
+      capacity: 64
+    }
+    row {
+      name: "wonderpass"
+      kind: Int
+      enum: "WonderSwitch"
+      capacity: length(wonderAskBodies)
+      cells: map(wonderAskBodies, body => { key: body, value: 0 })
+    }
+    row {
+      name: "wondersize"
+      kind: Fixed
+      capacity: length(wonderAskBodies)
+      cells: map(wonderAskBodies, body => { key: body, value: "0" })
+    }
+    row {
+      name: "wondersmall"
+      kind: Fixed
+      capacity: length(wonderAskBodies)
+      cells: map(wonderAskBodies, body => { key: body, value: "0" })
+    }
+  }
+}
+
+rule "wonder-pass-ask" {
+  forEach: $players
+  when wonderpass[$each] != 0
+  mode: Level
+  setIdentityFact(key: $each, fact: "wonderPass", expression: wonderpass[$each] - 1)
+  wonderpass[$each] = 0
+}
+rule "wonder-size-ask" {
+  forEach: $players
+  when wondersize[$each] > 0
+  mode: Level
+  setBodyState(key: $each, state: "size", expression: wondersize[$each])
+  wondersize[$each] = 0
+}
+rule "wonder-small-ask" {
+  forEach: $players
+  when wondersmall[$each] > 0
+  mode: Level
+  $"sizeField-toybox".small = wondersmall[$each]
+  wondersmall[$each] = 0
+}
+
+commands [
+  {
+    name: "gallery.wonder"
+    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lift re-size it); small <s> retunes the size level 1 gives a body without the pass."
+    parameters [
+      { name: "setting", kind: Choice, values ["pass", "size", "small"] }
+      { name: "value", kind: Text }
+      { name: "body", kind: Body, default: "0" }
+    ]
+    lines [
+      "world.state.cell.set wonder{setting} {body} {value}"
+    ]
+  }
+]
+
+// In the south aisle's middle rest bay, two tiles in from the wall, facing the void across the toybox.
+spawnPoints [
+  { id: "toybox", parent: gallery, position [bayX(6), galleryFloor[toyboxLevel], tileZ(2)], yawDegrees: 180 }
+]
