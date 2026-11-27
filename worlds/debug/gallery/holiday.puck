@@ -5,9 +5,9 @@ import "../../standard/conifer"
 import "../fir-fiber"
 import "layout"
 
-// A holiday bulb's glow in nits: the standard's default is a meadow's at dusk, too dim to read as lit under the
-// gallery's lamps.
-let holidayBulbGlow = 450
+// A holiday bulb's glow in nits: the standard's default is a meadow's at dusk, and the gallery is exposed for daylight,
+// so its lights must outshine the station screens (3000) to read as lit.
+let holidayBulbGlow = 4000
 
 // Where each tree stands on the nave's centre line, by bay, and which fir it is.
 let holidayTrees = [

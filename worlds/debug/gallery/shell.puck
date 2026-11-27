@@ -330,7 +330,7 @@ function shellFloorPieces(level) = boundsCutAll(
     ],
     ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : [])
   ),
-  concat(galleryStairWells, ((level == 1) ? [fallWell] : []), flawOpenings(level))
+  concat(galleryStairWells, (((level == 1) and fallOpen) ? [fallWell] : []), flawOpenings(level))
 )
 // The roof: the same plan without the wells and the terrace, the nave closed over between three skylights, each
 // 2.5 m in from the balcony edges.
@@ -554,12 +554,12 @@ let shellRails = concat(
     shellDoorSides(k, "north", (naveNorth + balconyInset), 0),
     map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - balconyInset), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
-  [
+  (fallOpen ? [
     { id: "rail-fall-south", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] - fallHole) - 0.08), yaw: 180, short: 1 }
     { id: "rail-fall-north", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] + fallHole) + 0.08), yaw: 0, short: 1 }
     { id: "rail-fall-west", x: ((fallPlan[0] - fallHole) - 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 270, short: 1 }
     { id: "rail-fall-east", x: ((fallPlan[0] + fallHole) + 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 90, short: 1 }
-  ],
+  ] : []),
   map(range(0, 4), i => { id: $"rail-terrace-south-{i}", x: ((galleryWestOut + 2.2) + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
