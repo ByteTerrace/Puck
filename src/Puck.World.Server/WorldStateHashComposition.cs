@@ -55,7 +55,8 @@ public enum WorldStateHashComponent : byte {
     /// <summary>Every active body's simulation continuation, through its population checkpoint field codecs: velocities,
     /// integration remainders, channel timers, the input and tape it carries, its producer, autonomy and navigation
     /// runtime, excluding rendered color and rig, beside the pose <see cref="PopulationPose"/> also folds. Two bodies at one pose but different
-    /// continuations diverge at the next tick, so the hash tells them apart now.</summary>
+    /// continuations diverge at the next tick, so the hash tells them apart now. The nets' nodes, which the bodies push
+    /// and ride, fold here too (<see cref="WorldNets.AppendStateHash"/>).</summary>
     BodyContinuation,
     /// <summary>Cached navigation: the shared domains and every active route.</summary>
     Navigation,

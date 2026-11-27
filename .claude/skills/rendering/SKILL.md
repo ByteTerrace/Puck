@@ -2025,13 +2025,22 @@ wrong. The contracts that bite most often:
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
   put sampled values back into program words or a shared GPU buffer the bake reads
   ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).
-- **A height field moves as it is drawn.** `SdfHeightField` bakes a reference (every raised
-  column at `ReferenceCells` above the origin) and names its heights as the instance's
-  displacement; the frame's sampled table (`sdfFrameSampled`) carries the heights, and every
-  vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
-  displaces through `sdfMeshDisplaced`. A new reader of mesh vertices goes through that
-  resolver, or it draws the reference; a draw's box spans `SdfMeshDisplacement.Low`/`High`,
-  and a displaced draw is `IsDynamic`, out of the irradiance volume's static scene.
+- **A displaced draw moves as it is drawn.** An instance's `SdfInstanceRange.Displacement`
+  (`SdfDisplacement`) moves its draws' vertices with no rebake: a height field
+  (`SdfHeightField`) bakes a reference (every raised column at `ReferenceCells` above the
+  origin) and displaces it by its heights; a sheet (`SdfSheetDisplacement`, a placed net,
+  emitted inside `SdfProgramBuilder.BeginDisplaced`) bakes its creation at rest and moves each
+  vertex by the bilinear blend of its cell's node offsets. Instances carrying one
+  displacement share its handle (`SdfProgram.Displacements`). The frame's sampled table
+  (`sdfFrameSampled`) carries each entry's header (`SdfDisplacement.WriteHeader`, its kind
+  first) and values, and every vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`,
+  `sdfMeshPreviousPosition`) displaces through `sdfMeshDisplaced`, which switches on the
+  kind. A new reader of mesh vertices goes through that resolver, or it draws the rest
+  mesh; a draw's box is `SdfDisplacement.Bound` of its mesh's (a sheet grows by its
+  reach, to which every published offset is clamped), and a displaced draw is
+  `IsDynamic`, out of the irradiance volume's static scene. A pack that moved displacement
+  values notes every static displaced row as moved where it stands (`NoteDisplacedRows`,
+  `conceals`), so the world's shadows redraw its rectangle though its box stood.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes

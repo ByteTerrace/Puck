@@ -1114,14 +1114,15 @@ public sealed partial class WorldPopulation {
         var stepBodies = PrepareBodyStep();
 
         if (MovingSolids is { } colliders) {
-            // Every body standing on a moving attached solid rides it before any body advances, seats included.
+            // Every body standing on a moving attached solid, or holding a net that moved, rides it before any body
+            // advances, seats included.
             foreach (var index in stepBodies) {
                 if (
                     m_entries[index].Active &&
                     (m_entries[index].Body is { } rider)
                 ) {
                     using (HoldPasses(index: index)) {
-                        rider.RideAttachedSupport(field: colliders);
+                        rider.RideAttachedSupport(field: colliders, stepTicks: stepTicks);
                     }
                 }
             }

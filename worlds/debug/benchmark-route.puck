@@ -1,5 +1,5 @@
 // The debug world's benchmark routes: `world.benchmark run debug` (or `puck benchmark --route debug`) plays the walk,
-// `seams` the three crossings at each pace, `tree-walk` the gallery tree's walkway and `climbing-wall` the gallery's
+// `seams` the three crossings at each pace, `tree-walk` the gallery tree's walkway, `net-climb` the rope net panel and `climbing-wall` the gallery's
 // climbing wall. Each chapter is a list of places to go to and how, played by the standard's
 // `walker` seat program (standard/benchmark.puck) through seat 1's own controls: the left stick toward the next corner of
 // the navigation path, the right stick turning the camera onto the way ahead, Left Shift held to run and the dash tapped on
@@ -31,6 +31,8 @@ let liftPadX = (liftX + 1)
 let liftPadZ = (galleryWall + 0.6)
 let liftPanelZ = (liftZ - 0.95)
 function liftButton(level) = (liftX - (0.95 - ((1.9 / 6) * (level + 0.5))))
+// Where the net climb starts: on level 1's north aisle, 1.5 m behind the rope net panel, facing it (-Z).
+let netClimbStart = galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5))
 // The line through the middle of the hall's entrance, in the building's frame.
 let entranceMid = ((entranceWest + entranceEast) / 2)
 // A point on Wonderland's floor on the line through its big painting and its mouse hole, `x` as authored against the
@@ -253,6 +255,29 @@ routes [
             direct: true
             within: 0.4
           }
+        ]
+      }
+    ]
+  }
+  // The rope net panel on level 1's north edge (gallery/shell.puck, layout.puck's toyLatticeNetBay), climbed as a player
+  // climbs it: posed 1.5 m back on the aisle at full size (the toybox's full-size pass), she walks straight at the net,
+  // takes it after pushing into it, climbs until she is a metre up (`place-net-high`, places.puck), hangs a moment, then
+  // runs back, which lets go, drops her to the floor and walks her to where she started. `seat1: route.play net-climb`
+  // plays the same route headless in net-tests.puck.
+  {
+    name: "net-climb"
+    program: "walker"
+    chapters [
+      {
+        name: "the rope net"
+        steps [
+          { $type: "pose", point: netClimbStart, yawDegrees: 0 }
+          { $type: "line", text: "gallery.wonder pass on" }
+          stand(1)
+          { $type: "cross", headingDegrees: 0, until: "place-net-high", pace: "walk", metres: 3 }
+          stand(1.5)
+          { $type: "go", point: netClimbStart, pace: "run", direct: true, within: 0.4 }
+          stand(2)
         ]
       }
     ]

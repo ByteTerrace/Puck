@@ -96,7 +96,7 @@ public sealed class SdfSampledField {
 /// (<see cref="Capture"/>).
 /// <para>Invariant: <see cref="Baked"/> is the identity of what the mesh bake reads, the snapshots at the handles some
 /// instruction samples (<see cref="SdfProgram.BakedSampledFields"/>). It is one object across captures whose baked handles
-/// stand, whatever a height field's heights handle does, so a consumer that reads only baked handles compares it by
+/// stand, whatever a displacement's values handle does, so a consumer that reads only baked handles compares it by
 /// reference and a heights-only move costs it nothing. <see cref="Capture(SdfProgram, SdfSampledSet?)"/> is the one door
 /// that makes a set from live fields, and it reuses the previous baked identity exactly when every baked snapshot
 /// stands.</para></summary>
@@ -127,7 +127,7 @@ public sealed class SdfSampledSet {
     /// <summary>Captures each of a program's fields' current snapshot. When every one is the snapshot
     /// <paramref name="previous"/> holds at its handle, answers <paramref name="previous"/> itself, so a frame whose fields
     /// stood still carries the set the frame before carried and a consumer compares sets by reference; when only handles no
-    /// instruction samples moved (a height field's heights), the new set keeps <paramref name="previous"/>'s
+    /// instruction samples moved (a displacement's values), the new set keeps <paramref name="previous"/>'s
     /// <see cref="Baked"/>.</summary>
     /// <param name="program">The program whose fields are captured (<see cref="SdfProgram.SampledFields"/>).</param>
     /// <param name="previous">The set captured before, or <see langword="null"/>.</param>
@@ -168,13 +168,14 @@ public sealed class SdfSampledSet {
 /// <param name="Field">The field.</param>
 public sealed record SdfSampledBinding(int InstructionIndex, SdfSampledField Field);
 
-/// <summary>A height field a program's instance draws (<see cref="SdfInstanceRange.HeightField"/>): the instance, and the
-/// handle of the field's heights (<see cref="SdfHeightField.Heights"/>) in <see cref="SdfProgram.SampledFields"/>, which a
-/// draw of the instance's baked reference names to be displaced by as it is drawn.</summary>
+/// <summary>A displacement a program's instance is drawn through (<see cref="SdfInstanceRange.Displacement"/>): the
+/// instance, and the handle of the displacement's values (<see cref="SdfDisplacement.Values"/>) in
+/// <see cref="SdfProgram.SampledFields"/>, which a draw of the instance's mesh names to be displaced by as it is drawn.
+/// Instances that carry one displacement share its handle.</summary>
 /// <param name="Instance">The instance's place in <see cref="SdfProgram.Instances"/>.</param>
-/// <param name="Handle">The heights' handle.</param>
-/// <param name="Field">The height field.</param>
-public sealed record SdfHeightFieldBinding(int Instance, int Handle, SdfHeightField Field);
+/// <param name="Handle">The values' handle.</param>
+/// <param name="Displacement">The displacement.</param>
+public sealed record SdfDisplacementBinding(int Instance, int Handle, SdfDisplacement Displacement);
 
 public sealed partial class SdfProgram {
     // Invariant: no sampled value enters the packed words. A sampled instruction's Data1.z holds its field's handle, an
@@ -187,20 +188,20 @@ public sealed partial class SdfProgram {
     /// as uint bits.</summary>
     public IReadOnlyList<SdfSampledField> SampledFields => m_sampledFields;
     /// <summary>Gets how many of <see cref="SampledFields"/>' leading handles some instruction samples: what the mesh bake
-    /// reads and keys (<see cref="SdfSampledSet.Baked"/>). The handles after them are height fields' heights, which only a
+    /// reads and keys (<see cref="SdfSampledSet.Baked"/>). The handles after them are displacements' values, which only a
     /// draw reads.</summary>
     public int BakedSampledFields { get; private set; }
-    /// <summary>Gets the height fields the program's instances draw, in instance order: a field's reference is the
-    /// instance's sampled instruction and its heights hold a handle of their own, which no instruction samples and the
-    /// mesh identity never hashes.</summary>
-    public IReadOnlyList<SdfHeightFieldBinding> HeightFields { get; private set; } = [];
+    /// <summary>Gets the displacements the program's instances are drawn through, in instance order: each displacement's
+    /// values hold a handle of their own, shared by every instance carrying it, which no instruction samples and the mesh
+    /// identity never hashes.</summary>
+    public IReadOnlyList<SdfDisplacementBinding> Displacements { get; private set; } = [];
     /// <summary>Gets the snapshots the program's fields held when it was built, by handle: the set a frame of the program
     /// carries unless its producer captured a newer one (<see cref="SdfSampledSet.Capture"/>).</summary>
     public SdfSampledSet Sampled { get; private set; } = SdfSampledSet.Empty;
 
     // Validates the bindings and writes each sampled instruction's handle: one binding per sampled instruction, each
-    // naming a field of the instruction's own dimensions, handles in first-binding order; then gives each height field's
-    // heights a handle after them.
+    // naming a field of the instruction's own dimensions, handles in first-binding order; then gives each displacement's
+    // values one handle after them, shared by every instance carrying it.
     private void BindSampledFields() {
         var bound = new HashSet<int>();
         var handles = new Dictionary<SdfSampledField, int>(comparer: ReferenceEqualityComparer.Instance);
@@ -233,19 +234,25 @@ public sealed partial class SdfProgram {
                 throw new ArgumentException(message: "A sampled instruction requires its field.");
             }
         }
-        var heightFields = new List<SdfHeightFieldBinding>();
+        var displacements = new List<SdfDisplacementBinding>();
+        var drawn = new Dictionary<SdfSampledField, SdfDisplacement>(comparer: ReferenceEqualityComparer.Instance);
 
         BakedSampledFields = fields.Count;
         for (var index = 0; (index < m_instances.Length); index++) {
-            if (m_instances[index].HeightField is not { } heightField) { continue; }
-            if (m_instances[index].IsDynamic) { throw new ArgumentException(message: "A height field is drawn by a static instance."); }
-            if (handles.ContainsKey(key: heightField.Heights)) { throw new ArgumentException(message: "A height field's heights are drawn by one instance, and sampled by no instruction."); }
-            handles.Add(key: heightField.Heights, value: fields.Count);
-            heightFields.Add(item: new SdfHeightFieldBinding(Field: heightField, Handle: fields.Count, Instance: index));
-            fields.Add(item: heightField.Heights);
+            if (m_instances[index].Displacement is not { } displacement) { continue; }
+            if (m_instances[index].IsDynamic) { throw new ArgumentException(message: "A displacement is drawn by a static instance."); }
+            if (!handles.TryGetValue(key: displacement.Values, value: out var handle)) {
+                handle = fields.Count;
+                handles.Add(key: displacement.Values, value: handle);
+                drawn.Add(key: displacement.Values, value: displacement);
+                fields.Add(item: displacement.Values);
+            } else if (!drawn.TryGetValue(key: displacement.Values, value: out var owner) || !ReferenceEquals(objA: owner, objB: displacement)) {
+                throw new ArgumentException(message: "A displacement's values are drawn by its own instances, and sampled by no instruction.");
+            }
+            displacements.Add(item: new SdfDisplacementBinding(Displacement: displacement, Handle: handle, Instance: index));
         }
         m_sampledFields = [.. fields];
-        HeightFields = [.. heightFields];
+        Displacements = [.. displacements];
         Sampled = SdfSampledSet.CaptureFields(fields: m_sampledFields, baked: BakedSampledFields, previous: null);
     }
 }

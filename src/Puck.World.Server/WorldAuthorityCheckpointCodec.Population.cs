@@ -1,6 +1,7 @@
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Commands;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -342,6 +343,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
         });
         WriteAttachedSolids(rows: (section.AttachedSolids ?? []), writer: writer);
+        writer.WriteArray(items: (section.Nets ?? []), writeItem: static (w, net) => {
+            w.WriteString(value: net.Placement);
+            w.WriteBoolean(value: net.State.Awake);
+            w.WriteUInt64(value: net.State.StillTicks);
+            w.WriteArray(items: net.State.Offsets, writeItem: static (v, offset) => v.WriteFixedVector(value: offset));
+            w.WriteArray(items: net.State.Velocities, writeItem: static (v, velocity) => v.WriteFixedVector(value: velocity));
+        });
 
         return writer.ToArray();
     }
@@ -371,9 +379,21 @@ public static partial class WorldAuthorityCheckpointCodec {
         var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = ReadAttachedSolids(reader: ref reader);
+        var nets = reader.ReadArray(field: "population nets", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => {
+            var placement = r.ReadRequiredString(field: "net placement");
+            var awake = r.ReadBoolean();
+            var still = r.ReadUInt64();
+            var offsets = r.ReadArray(field: "net offsets", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
+                readItem: static (ref WireReader v) => v.ReadFixedVector());
+            var velocities = r.ReadArray(field: "net velocities", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
+                readItem: static (ref WireReader v) => v.ReadFixedVector());
+
+            return new WorldNetCheckpoint(Placement: placement, State: new FixedNetState(Offsets: offsets, Velocities: velocities, Awake: awake, StillTicks: still));
+        });
 
         return new WorldPopulationCheckpoint(
             AttachedSolids: attached,
+            Nets: nets,
             Entries: entries,
             EventBodies: eventBodies,
             Generations: generations,

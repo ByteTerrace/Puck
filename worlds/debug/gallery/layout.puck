@@ -477,6 +477,10 @@ let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
 let toyLatticeLooseBay = 8
+// The rope net panel: the north edge's bay whose frame holds a net that gives and climbs (architecture.puck's `latticeNet`
+// facet, gallery.md "The lattice") rather than a net drawn over a pane. Its frame and its net still close the edge to
+// every body. Kept clear of the toybox's stairs, lift and tree landings.
+let toyLatticeNetBay = 10
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
 // centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two

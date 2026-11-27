@@ -91,7 +91,7 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// <returns><see langword="false"/> for a draw whose mesh has members (<see cref="SdfMesh.Members"/>): those vertices
     /// ride dynamic-transform slots, so the record's box is the one a residency's tables derive from the slots
     /// (<see cref="TryOfSkin"/>) whenever they move, not the draw's. A displaced
-    /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
+    /// draw's box spans every point its displacement can move a vertex to (<see cref="SdfMeshDraw.Displacement"/>) as well as its
     /// mesh's.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="draw"/> is placed by its slot.</exception>
     public static bool TryOfFixed(in SdfMeshDraw draw, out SdfMeshBox box) => TryAt(draw: in draw, matrix: (draw.Mesh.Members.IsEmpty ? draw.FixedPlacement : default), box: out box);
@@ -136,10 +136,7 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
 
         var (low, high) = (mesh.PositionLow, mesh.PositionHigh);
 
-        if (draw.Displacement is { } displacement) {
-            low.Y = MathF.Min(x: low.Y, y: displacement.Low);
-            high.Y = MathF.Max(x: high.Y, y: displacement.High);
-        }
+        if (draw.Displacement is { } displacement) { (low, high) = displacement.Source.Bound(high: high, low: low); }
         (center, half) = (((low + high) * 0.5f), ((high - low) * 0.5f));
 
         return true;

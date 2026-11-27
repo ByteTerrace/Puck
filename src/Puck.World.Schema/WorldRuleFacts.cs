@@ -93,6 +93,12 @@ public static class WorldRuleFacts {
     /// reads <c>0</c>. A name the vocabulary does not declare is refused by name
     /// (<see cref="WorldRuleRefusal.KinematicsMalformed"/>).</summary>
     public const string KinematicsPrefix = "$kinematics:";
+    /// <summary>The prefix; <c>$net:&lt;placementId&gt;:&lt;reading&gt;</c> reads one reading of the net a placement's
+    /// net facet carries (<see cref="WorldPlacementNet"/>), as its latest step left it (<see cref="WorldNetReading"/>,
+    /// spelled as <see cref="WorldNetVocabulary"/> names them): its deepest deflection from rest in metres as a
+    /// fixed-point value, or whether it is awake, how many bodies hold it and how many body volumes lean on it, as
+    /// integers. A placement carrying no net is refused by name (<see cref="WorldRuleRefusal.NetMalformed"/>).</summary>
+    public const string NetPrefix = "$net:";
     /// <summary>The reserved channel reading one fact on the identity a body drives under:
     /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
     public const string IdentityPrefix = "$identity:";

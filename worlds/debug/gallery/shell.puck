@@ -583,8 +583,11 @@ let shellLatticeBays = range(arcadeWestBays, galleryBays)
 let shellBridgeMid = ((galleryNaveTiles - 1) / 2)
 function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((tiles * galleryTile) / 2))
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
-  id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
-} : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
+  id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}", net: 0
+} : {
+  id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: ""
+  net: (((b == toyLatticeNetBay) and (edge == "north")) ? 1 : 0)
+})
 // Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
 // it (architecture.puck's filmArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
 // every body, small or full size, except one holding a wonder pass (layout.puck's `wonderPasses`: the wonder key
@@ -603,16 +606,16 @@ let shellLattices = concat(
   map(filter(shellLatticeBays, b => (b != shellGateEdges[0].bay)), b => shellLatticeBay(b, "south", (naveSouth - balconyInset))),
   map(filter(shellLatticeBays, b => (b != shellGateEdges[1].bay)), b => shellLatticeBay(b, "north", (naveNorth + balconyInset))),
   [
-    { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
-    { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
+    { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "", net: 0 }
+    { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "", net: 0 }
   ],
   map([0, 4, (shellBridgeMid + 1), (shellBridgeMid + 5)], tile => {
-    id: $"bridge-{tile}", x: (naveWest - balconyInset), z: shellBridgeZ(tile, 4), yaw: 90, prototype: $"gallery-lattice-{(tile % 6)}", slat: "", open: ""
+    id: $"bridge-{tile}", x: (naveWest - balconyInset), z: shellBridgeZ(tile, 4), yaw: 90, prototype: $"gallery-lattice-{(tile % 6)}", slat: "", open: "", net: 0
   }),
   [
     {
       id: "loose-bridge", x: (naveWest - balconyInset), z: shellBridgeZ(shellBridgeMid, 1), yaw: 90, prototype: "gallery-lattice-tile", slat: "bridge"
-      open: "gallery-lattice-tile-open"
+      open: "gallery-lattice-tile-open", net: 0
     }
   ]
 )
@@ -927,15 +930,17 @@ template shellPrototypes() {
   // half tile at each east end, the bridge's middle tile, the stairs' head, and the open panels a loose one swaps to.
   let latticeKinds = concat(
     map(range(0, length(lookToyPiers)), n => {
-      id: $"gallery-lattice-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1
+      id: $"gallery-lattice-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1
     }),
     map(distinct([(toyLatticeLooseBay % 6)]), n => {
-      id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0
+      id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0, pane: 1
     }),
     [
-      { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
-      { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
-      { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
+      { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1 }
+      { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1 }
+      { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0, pane: 1 }
+      // The rope net panel's frame: its net gives and collides through the placement's net facet, so it holds no pane.
+      { id: "gallery-lattice-net", n: (toyLatticeNetBay % 6), cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 0 }
     ]
   )
   prototype "gallery-barrier" {
@@ -964,7 +969,8 @@ template shellPrototypes() {
           rails: shellLatticeRails(kind.height),
           upright: kind.upright,
           sill: kind.upright,
-          net: toyLatticeNet
+          net: toyLatticeNet,
+          pane: kind.pane
         )
       }
     }
@@ -1170,13 +1176,28 @@ template shellPlacements() {
       solid
     }
   }
-  for panel in filter(shellLattices, p => (p.slat == "")) {
+  for panel in filter(shellLattices, p => ((p.slat == "") and (p.net == 0))) {
     placement $"gallery-lattice-{panel.id}" {
       prototype: panel.prototype
       parent: "gallery"
       position [panel.x, galleryFloor[1], panel.z]
       yawDegrees: panel.yaw
       solid
+    }
+  }
+  // The rope net panel (layout.puck's toyLatticeNetBay): a lattice frame whose net is the standard's rope net over its
+  // opening, holdable, so a body climbs it and its weight pulls it in, and one leaning on it bulges it.
+  for panel in filter(shellLattices, p => (p.net == 1)) {
+    placement $"gallery-lattice-{panel.id}" {
+      prototype: "gallery-lattice-net"
+      parent: "gallery"
+      position [panel.x, galleryFloor[1], panel.z]
+      yawDegrees: panel.yaw
+      solid
+      grip {
+        holdable: true
+      }
+      net: latticeNet(cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight)
     }
   }
   for panel in shellLatticeGates {

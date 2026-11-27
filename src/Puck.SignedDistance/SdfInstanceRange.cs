@@ -76,8 +76,9 @@ public readonly record struct SdfInstanceRange(
     /// planned again when an operand moves a step; no vertex rides an operand's slot. A slot several entries name is one
     /// operand. Empty for an instance with no moving cutter.</summary>
     public IReadOnlyList<SdfInstancePart> Operands { get; init; } = [];
-    /// <summary>Gets the height field a static instance draws (<see cref="SdfProgramBuilder.HeightField"/>), whose
-    /// heights displace its baked reference as it is drawn (<see cref="SdfProgram.HeightFields"/>); <see langword="null"/>
-    /// for an instance drawn as it was baked.</summary>
-    public SdfHeightField? HeightField { get; init; }
+    /// <summary>Gets the displacement a static instance's draws are moved by as they are drawn: a height field's heights
+    /// over its baked reference (<see cref="SdfProgramBuilder.HeightField"/>), or a sheet's node offsets over a mesh baked
+    /// at rest (<see cref="SdfProgramBuilder.BeginDisplaced"/>), bound by <see cref="SdfProgram.Displacements"/>;
+    /// <see langword="null"/> for an instance drawn as it was baked.</summary>
+    public SdfDisplacement? Displacement { get; init; }
 }
