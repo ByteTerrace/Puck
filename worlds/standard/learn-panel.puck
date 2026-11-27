@@ -265,7 +265,8 @@ template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
   }
   // The value and the scrub bar follow the subject's size, whoever wrote it (a drag, a state write, a reset): the value is
   // the term's value at full size times the size, also written as the subject's amount, and the bar lights its ticks up to
-  // the share the size stands at between the subject's least share and its whole size. The gate and the write share every number, so a firing closes its own.
+  // the share the size stands at between the subject's least share and its whole size. The gate and the write share every
+  // number, so a firing closes its own.
   rule $"learn-value-{key}" {
     local value = learnSize[learnSubject[key]] * learnSubjectValues[learnSubject[key]]
     local fill = (learnSize[learnSubject[key]] - learnSubjectLeast[learnSubject[key]]) / maximum(1 - learnSubjectLeast[learnSubject[key]], 0.01)
