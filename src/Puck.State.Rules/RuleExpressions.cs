@@ -419,6 +419,15 @@ public static partial class RuleExpressions {
                     );
 
                     continue;
+                case ExpressionStep.BoardSlide:
+                    top--;
+                    values[(top - 1)] = BoardQueries.SlideMask(
+                        ((BoardNeighbourQuery)token.Board!),
+                        values[(top - 1)],
+                        values[top]
+                    );
+
+                    continue;
                 case ExpressionStep.BoardImage: {
                         var image = ((BoardNeighbourQuery)token.Board!);
 

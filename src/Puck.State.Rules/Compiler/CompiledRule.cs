@@ -73,6 +73,8 @@ public enum ExpressionStep : byte {
     BoardRay,
     /// <summary>Maps a board mask through the token's symmetry image.</summary>
     BoardImage,
+    /// <summary>Reads the cells a slider mask attacks over an occupancy mask in the token's direction.</summary>
+    BoardSlide,
     /// <summary>A shared arithmetic function over the values below it.</summary>
     Function,
     /// <summary>A unary arithmetic operator over the value below it.</summary>
@@ -182,6 +184,7 @@ public readonly record struct CompiledExpressionToken {
             ExpressionOp.BoardShift => ExpressionStep.BoardShift,
             ExpressionOp.BoardRay => ExpressionStep.BoardRay,
             ExpressionOp.BoardImage => ExpressionStep.BoardImage,
+            ExpressionOp.BoardSlide => ExpressionStep.BoardSlide,
             _ when (ExpressionArithmetic.FunctionArity(operation: operation) > 0) => ExpressionStep.Function,
             _ when ExpressionArithmetic.IsUnary(operation: operation) => ExpressionStep.Unary,
             _ => ExpressionStep.Binary,

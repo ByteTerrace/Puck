@@ -403,7 +403,7 @@ A **board mask** is a set of cells packed into one Int: bit `c` is cell ordinal
 `c`. `board(mask, row, min, max)` builds one from a row's values, and ordinary
 Int operators combine masks: `&`, `|`, `^`, `~`, `setBitCount`,
 `lowestSetBit`, and the rest of the bit functions in
-[Reads and expressions](expressions.md). Three expression functions move a
+[Reads and expressions](expressions.md). Four expression functions move a
 mask across the topology:
 
 | Function | Result |
@@ -411,6 +411,7 @@ mask across the topology:
 | `boardShift(mask, topology, direction)` | Each member moved one step in the direction; a member with no neighbour that way drops. |
 | `boardRay(mask, topology, direction)` | The mask united with every repeated shift of it until nothing new appears. On a wrapped topology, each seed's whole cycle. |
 | `boardImage(mask, topology, element)` | Each member carried through a point-group element. |
+| `boardSlide(sliders, occupied, topology, direction)` | The cells each slider reaches in the direction through cells `occupied` leaves free, and the occupied cell that ends each run: a rook's, bishop's or queen's attacks read off an occupancy mask, with no board copied. A direction whose every neighbour lies at one bit distance takes a Kogge-Stone fill (`OccludedFill.Slide`); any other repeats the shift. |
 
 The `writeSet` transform paints a value onto the cells a mask selects, which
 closes the loop from a mask back to a board row. A canonical element name that
@@ -420,7 +421,7 @@ isn't a bare identifier is written in backquotes, as in
 A mask holds at most 64 cells because an expression value is one 64-bit word,
 and a cell set is one expression value. `BoardMask.MaxCells` records that
 ceiling; it's a consequence of the representation, and there's no multi-word
-set type in the expression language. `board(mask, …)`, the three mask functions,
+set type in the expression language. `board(mask, …)`, the four mask functions,
 and `writeSet` from a mask all refuse a topology of more than 64 cells.
 
 A board of at most 64 cells whose declared values (its `min` and `max`, its enum,
@@ -442,7 +443,7 @@ Masks and whole board rows do the same set algebra at different scales.
 | Size | At most 64 cells | Any topology, up to 4,096 cells |
 | Lives in | An expression value, for one evaluation | The arena, as persistent state |
 | Holds | Membership only | A value per cell |
-| Combine with | Int operators and `boardShift`/`boardRay`/`boardImage` | The `boardCombine` transform |
+| Combine with | Int operators and `boardShift`/`boardRay`/`boardImage`/`boardSlide` | The `boardCombine` transform |
 | Writes back through | `writeSet` | `boardCombine`'s own target row |
 
 `boardCombine` treats a cell as a member of a source board when its value
@@ -519,7 +520,7 @@ C# code can evaluate a set against an arena itself with
   named physical regions. Each physical region owns its lattice and reactions;
   aggregate primer and sampled-surface byte budgets bound their combined allocation.
 - A hex radius is at most 36, derived from the cell ceiling.
-- Masks, `boardShift`, `boardRay`, `boardImage`, and `writeSet` from a mask
+- Masks, `boardShift`, `boardRay`, `boardImage`, `boardSlide`, and `writeSet` from a mask
   work only on topologies of at most 64 cells. Use `boardCombine` or a declared
   set beyond that.
 - Graphs and tilings have no axes. `offset` reads `-1` on them, and their

@@ -48,6 +48,7 @@ test "the station materializes its 32 pieces and reads the starting position off
     ticks 240
   }
   expect {
+    station.holodeckShown.pieces == 1
     sum(station.holodeckLive) == 32
     station.gameStarted == 1
     station.boardCollisions == 0
@@ -119,9 +120,9 @@ test "a game switch releases the pieces and stands the cards" {
     ticks 60
   }
   expect {
-    sum(station.holodeckLive) == 0
+    station.holodeckShown.pieces == 0
     station.chessHold == 1
     station.pieceCell.piece12 == 11
-    sum(holodeckLive) == 52
+    holodeckShown["0"] == 1
   }
 }

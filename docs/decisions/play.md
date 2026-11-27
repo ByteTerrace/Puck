@@ -540,7 +540,10 @@ holodeck under a game of their own.
 body is an inhabited placement whose count is a cell over a one-sample disc,
 so the population admits and retires it as the cell moves and `placement:<id>`
 names it (`WorldPlacementInhabit.StandsOneBody`); no new engine body lifecycle
-was built. A materialized body takes the population's highest free slot, so a
+was built. A pool's bodies share one admitting cell (`WorldPlacementInhabit.Pool`),
+so a game switch is one write however many tokens it stands, and a body's own
+count serves the token that leaves alone (a capture, a look change). A
+materialized body takes the population's highest free slot, so a
 pool never renumbers a fixed-count inhabitant, and a world sizes its population
 for the largest token game each station hosts. Options weighed: a respond swap
 on an inhabited placement (refused by the engine, and a body's look is its

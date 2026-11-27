@@ -40,6 +40,47 @@ public static partial class WorldDocumentEmitter {
             : PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value), .. binder.InlinedAtoms], original: operand, syntax: folded));
     }
 
+    // A rule template's parameter stands for its argument's expression (DocumentScope.BindArgument), which the document
+    // evaluator reads as a value: a name it does not bind is text, so an argument naming the calling rule's local
+    // (`holodeckSet(live: want)`) or a reserved binding (`holodeckShow(pool: $each, …)`) would read as the text `want`
+    // or `$each`. Such a parameter is answered here instead: the argument
+    // bound where it is written, in the caller's scope, where its names mean what they meant there (a local the
+    // template hides under a parameter of the same name included), as the rule program text it lowers to, with the
+    // syntax that text reads back as. Null when `name` is no such parameter.
+    private static (string Text, Syntax.SyntaxNode? Syntax)? BoundLocalArgument(string name, DocumentScope scope) {
+        if (!IsLocalParameter(name: name, scope: scope) || (ArgumentOf(name: name, scope: scope) is not var (argument, lexical))) {
+            return null;
+        }
+        var text = new OperandBinder(scope: lexical).Bind(operand: argument);
+
+        return (text, (Syntax.TryParseSyntax(atoms: [], error: out _, syntax: out var bound, text: text) ? bound : null));
+    }
+    // Whether rule syntax written in `scope` reads what only the rule knows as it runs: one of its locals or a reserved
+    // binding (`$each`, `$member`, `$tick`), itself or through a parameter whose argument does.
+    private static bool ReadsLocal(Syntax.SyntaxNode node, DocumentScope scope) =>
+        (((node is Syntax.SourceName { Quoted: false } name) &&
+            (name.Name.StartsWith(value: '$') || ((Syntax.CurrentLocals?.Contains(item: name.Name) == true) && !scope.RuleBinders.Contains(item: name.Name)) || IsLocalParameter(name: name.Name, scope: scope))) ||
+        Syntax.SourceChildren(node: node).Any(predicate: child => ReadsLocal(node: child, scope: scope)));
+    // An argument is written in the scope that calls the template, so the walk climbs one call per step and ends at
+    // the rule; the scope's evaluation budget refuses an expansion that refers to itself.
+    private static bool IsLocalParameter(string name, DocumentScope scope) {
+        if (ArgumentOf(name: name, scope: scope) is not var (argument, lexical)) {
+            return false;
+        }
+        using var step = scope.Budget.Enter(span: argument.Span);
+
+        return ReadsLocal(node: argument.Syntax!, scope: lexical);
+    }
+    // A rule template parameter's argument as rule syntax, with the scope it was written in.
+    private static (OperandExpressionNode Argument, DocumentScope Lexical)? ArgumentOf(string name, DocumentScope scope) {
+        if (!scope.RuleBinders.Contains(item: name) || scope.Locals.ContainsKey(key: name) || !scope.TryGetExpression(name, out var expression, out var lexical) || (expression is null)) {
+            return null;
+        }
+        var argument = PuckParser.CreateOperand(expression: expression, form: DocumentValueForm.Expression);
+
+        return ((argument.Syntax is null) ? null : (argument, lexical));
+    }
+
     private sealed partial class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
         private readonly List<InterpolatedStringNode> m_inlinedAtoms = [];
@@ -97,12 +138,18 @@ public static partial class WorldDocumentEmitter {
         // A parameter's every bare reading becomes its argument, grouped unless the argument is a primary, so an
         // argument's operators keep their own precedence; a lambda binder or a let of the same name shadows it.
         private static Syntax.SyntaxNode Substitute(Syntax.SyntaxNode node, IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments) => node switch {
-            Syntax.SourceName { Quoted: false } name when arguments.TryGetValue(key: name.Name, value: out var argument) =>
-                ((argument is Syntax.Literal or Syntax.SourceName or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : new Syntax.SourceGroup(Value: argument)),
+            Syntax.SourceName { Quoted: false } name when arguments.TryGetValue(key: name.Name, value: out var argument) => Grouped(argument: argument),
+            // Brackets already delimit a key, so an argument standing for one is written bare, as the call's own
+            // `row[expression]` would be, never as the retired `row[(expression)]`.
+            Syntax.SourceIndex { Index: Syntax.SourceName { Quoted: false } key } index when arguments.TryGetValue(key: key.Name, value: out var keyArgument) =>
+                index with { Target = Substitute(arguments: arguments, node: index.Target), Index = ((keyArgument is Syntax.SourceGroup group) ? group.Value : keyArgument) },
             Syntax.SourceLambda lambda when arguments.ContainsKey(key: lambda.Binder) => lambda with { Body = Substitute(arguments: Without(arguments: arguments, name: lambda.Binder), node: lambda.Body) },
             Syntax.SourceLet let when arguments.ContainsKey(key: let.Name) => let with { Value = Substitute(arguments: arguments, node: let.Value), Body = Substitute(arguments: Without(arguments: arguments, name: let.Name), node: let.Body) },
             _ => Syntax.MapSourceChildren(map: child => Substitute(arguments: arguments, node: child), node: node),
         };
+        // An argument in a parameter's place, grouped unless it is a primary, so its operators keep their own precedence.
+        private static Syntax.SyntaxNode Grouped(Syntax.SyntaxNode argument) =>
+            ((argument is Syntax.Literal or Syntax.SourceName or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : new Syntax.SourceGroup(Value: argument));
         private static Dictionary<string, Syntax.SyntaxNode> Without(IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments, string name) =>
             arguments.Where(predicate: pair => (pair.Key != name)).ToDictionary(comparer: StringComparer.Ordinal);
         private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : Syntax.MapSourceAtoms(map: index => (index + offset), node: node));
@@ -224,7 +271,7 @@ public static partial class WorldDocumentEmitter {
         // pool binding or derived state is never a constant, and a let or loop binding is one when it holds a number.
         private decimal? Constant(Syntax.SourceName name, OperandExpressionNode operand) {
             if (name.Quoted || name.Name.StartsWith(value: '$') || IsRuntimeName(name: name.Name) ||
-                GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name)) {
+                GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name) || IsLocalParameter(name: name.Name, scope: scope)) {
                 return null;
             }
             if (name.Name is "true" or "false") { return ((name.Name == "true") ? 1m : 0m); }
@@ -381,6 +428,11 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: name.Name);
                 return;
             }
+            if ((form != DocumentValueForm.Name) && (BoundLocalArgument(name: name.Name, scope: scope) is var (argument, argumentSyntax))) {
+                // Grouped unless it is one read, so its operators keep their own precedence where the parameter stood.
+                m_text.Append(value: ((argumentSyntax is Syntax.Literal or Syntax.SourceName or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : $"({argument})"));
+                return;
+            }
             // A bare word in a key position (`key: slot`, `fromKey: lit`) is that literal key unless a compile-time
             // binding of the name is in scope (a let, a template parameter, a loop variable): then the key is the
             // binding's value, as it is inside brackets (WriteIndex).
@@ -496,7 +548,10 @@ public static partial class WorldDocumentEmitter {
             m_keyDepth++;
             // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
             // all other values go through the expression binder, including bare lexical names.
-            if ((key is Syntax.SourceName { Quoted: false } boundName) && !IsRuntimeName(name: boundName.Name) && scope.TryReadBinding(boundName.Name, out var boundKey)) {
+            if ((key is Syntax.SourceName { Quoted: false } parameter) && !IsRuntimeName(name: parameter.Name) && (BoundLocalArgument(name: parameter.Name, scope: scope) is var (argument, bound))) {
+                // A reserved binding keys the cell it names (`row[$each]`); anything else is the key it computes.
+                m_text.Append(value: ((bound is Syntax.SourceName { Quoted: false, Name: ['$', ..] }) ? argument : $"({argument})"));
+            } else if ((key is Syntax.SourceName { Quoted: false } boundName) && !IsRuntimeName(name: boundName.Name) && scope.TryReadBinding(boundName.Name, out var boundKey)) {
                 WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
             } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
                 Write(form: DocumentValueForm.Expression, node: key, operand: operand);
@@ -534,7 +589,7 @@ public static partial class WorldDocumentEmitter {
 
                 if (argument.Name is { } name) { m_text.Append(value: name).Append(value: ": "); }
                 var form = ((((index == 0) && (call.Name is "all" or "any" or "count" or "sum" or "argmin" or "argmax")) ||
-                    ((index > 0) && (call.Name is "boardShift" or "boardRay" or "boardImage")) ||
+                    ((index >= ((call.Name == "boardSlide") ? 2 : 1)) && (call.Name is "boardShift" or "boardRay" or "boardImage" or "boardSlide")) ||
                     (argument.Name is "where" or "space")) ? DocumentValueForm.Name : DocumentValueForm.Expression);
 
                 Write(argument.Value, form, operand);

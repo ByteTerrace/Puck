@@ -91,6 +91,9 @@ let chessStationKinds = flatMap(
 // The slots a pawn starts in: the only pieces whose code, and so whose look, changes while their body stands.
 let chessStationPawnSlots = filter(range(0, 32), i => absolute(initialPieceCodes[i]) == 1)
 
+// The key of a station's one holodeck pool, its 32 pieces, in its instance's pool rows.
+let chessStationPool = "pieces"
+
 // The holodeck's bodies for one station: piece `n` is `piece<n>`, as chess.puck's rows key it, spawning over its
 // starting square in the board's frame. A pawn wears a look of its station's own (`<station>-pawn<n>`), which its rules
 // change when it is queened; every other piece wears its kind's look.
@@ -224,7 +227,12 @@ template chessStationBoard(station) {
     }
     position: station.at
   }
-  holodeckPool(bodies: chessStationBodies(station), kit: "chessStationPiece", parent: "chess-board")
+  holodeckPool(
+    bodies: chessStationBodies(station),
+    kit: "chessStationPiece",
+    pool: chessStationPool,
+    parent: "chess-board"
+  )
 }
 
 // The board's grid, inside the instance's `state` block: 15 cm squares on the glass, in the board placement's frame. A
@@ -289,7 +297,7 @@ template chessStationState(station) {
     turn = 0
     due = 0
   }
-  holodeckState(bodies: chessStationBodies(station))
+  holodeckState(bodies: chessStationBodies(station), pools: [chessStationPool])
   slot chessStationPlies = 0
   slot chessStationGames = 0
 }
@@ -482,21 +490,27 @@ template chessStationPlay(station, game, settleTicks, autoplay = null) {
 }
 
 // The holodeck, inside the instance after every writer of a piece's cell (the judge, the doors, the put-down's revert
-// and the fresh game) and ahead of chess.puck's `chessPutSettled`. Each piece's body stands while the station shows chess
-// and the piece is on the board wearing its code's look; a queened pawn's look is rewritten and its body asked for
-// afresh. A standing body is posed over its square whenever its cell is not the square it was last posed at; a lifted
-// one hovers over its chair's cursor; a put-back arrangement and a fresh game stand every body again.
+// and the fresh game) and ahead of chess.puck's `chessPutSettled`. The pool stands while the station shows chess, one
+// write whatever the pieces; within it each piece's body stands while the piece is on the board wearing its code's look,
+// and a queened pawn's look is rewritten and its body asked for afresh. A standing body is posed over its square
+// whenever its cell is not the square it was last posed at in this showing; a lifted one hovers over its chair's cursor;
+// a put-back arrangement and a fresh game stand every body again.
 template chessStationHolodeck(station, game) {
   let key = station.id
 
+  rule $"chess-station-{key}-shown" {
+    local shown = gameStationGame[key] == game
+    when search(ply) == 0 and holodeckShown[chessStationPool] != shown
+    mode: Level
+    holodeckShow(pool: chessStationPool, shown: shown)
+  }
+
   rule $"chess-station-{key}-holodeck" {
-    local want = (
-      (gameStationGame[key] == game) and (pieceCell[$each] >= 0) and (chessStationLookCode[$each] == pieceCode[$each])
-    )
+    local want = (pieceCell[$each] >= 0) and (chessStationLookCode[$each] == pieceCode[$each])
     when search(ply) == 0 and holodeckLive[$each] != want
     forEach: pieceCode
     mode: Level
-    holodeckSet()
+    holodeckSet(live: want)
   }
 
   for i in chessStationPawnSlots {
@@ -514,7 +528,8 @@ template chessStationHolodeck(station, game) {
   }
 
   // A put-back arrangement and a fresh game stand every body again in one write: the place rule poses a body
-  // whenever its last pose (`holodeckAt`, its square plus 64 for this parity) is not its square under the parity now.
+  // whenever its last pose (`holodeckAt`, the mark of its square plus 64 for this parity) is not its square's mark under
+  // the parity now.
   rule $"chess-station-{key}-stand" {
     when search(ply) == 0 and (putDown.revert == 1 or chessStationSaved.fresh == 1)
     mode: Level
@@ -527,7 +542,7 @@ template chessStationHolodeck(station, game) {
       when (search(ply) == 0 and
         chessStationPicked[chair.name] >= 0 and
         pieceCell[$each] == chessStationPicked[chair.name] and
-        holodeckStands())
+        holodeckStands(chessStationPool))
       forEach: pieceCode
       mode: Level
       // The lifted square holds one piece.
@@ -544,9 +559,11 @@ template chessStationHolodeck(station, game) {
 
   rule $"chess-station-{key}-place" {
     local square = pieceCell[$each]
-    local posed = square + 64 * chessStationSaved.stood
+    local posed = holodeckMark(chessStationPool, square + 64 * chessStationSaved.stood)
     local lifted = (square == chessStationPicked.near) or (square == chessStationPicked.far)
-    when search(ply) == 0 and square >= 0 and holodeckAt[$each] != posed and lifted == 0 and holodeckStands()
+    when search(ply) == 0 and square >= 0 and holodeckAt[$each] != posed and lifted == 0 and holodeckStands(
+        chessStationPool
+      )
     forEach: pieceCode
     mode: Level
     poseCell(key: `placement:$each`, topology: chessBoard, expression: square, offset: [0, chessStationDrop, 0])

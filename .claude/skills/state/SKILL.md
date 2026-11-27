@@ -209,7 +209,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   binds `$each` to a member's key and `$member` to its family index; its own
   member is `$member`'s (`LiveRow.SelectsOwnMember`, `RuleReads.BoundOwnIndex`),
   a cell under `$member` is `RowReach.MemberKey`, and the due list's
-  `FamilySnapshot` maps a move to (member, key) positions.
+  `FamilySnapshot` maps a move to (member, key) positions. A host fact read for
+  `$each` normally moves by body index, which the due list maps to the key that
+  spells the index; a source whose `$each` reads address what the key names
+  (a body fact read through `placement:$each`, `WorldRuleHost`'s placement facts
+  source) answers the key itself (`IStateReader.TryFactKey`), and a source that
+  answers no key there wakes the wrong binding, which the replay catches.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content

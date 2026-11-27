@@ -91,6 +91,19 @@ public interface IStateReader {
 
         return false;
     }
+    /// <summary>Returns the key a keyed sweep binds to <c>$each</c> for one move of a source whose reads for
+    /// <c>$each</c> address what the key names rather than a body index, such as a body fact read through
+    /// <c>placement:$each</c>: the binding a move of that source reaches is the one whose key this answers.</summary>
+    /// <param name="source">The host's source number.</param>
+    /// <param name="body">The <see cref="FactRead.Body"/> the move names.</param>
+    /// <param name="key">The key, when the host answers; a key no row interns reaches no binding.</param>
+    /// <returns><see langword="true"/> when the source names its moves by key, so <paramref name="key"/> decides
+    /// which binding the move reaches; <see langword="false"/> when the move's body is a body index, the default.</returns>
+    bool TryFactKey(int source, int body, out CellKey key) {
+        key = default;
+
+        return false;
+    }
     /// <summary>Returns a host source's name for a read-back.</summary>
     /// <param name="source">The host's source number.</param>
     /// <returns>The name.</returns>

@@ -98,6 +98,9 @@ public enum ExpressionOp : byte {
     BoardRay,
     /// <summary>A mask carried through one point-group element of the compiled topology (Int, unary).</summary>
     BoardImage,
+    /// <summary>Topology-aware slider attacks: sliders, then occupied cells; the cells each slider reaches in the compiled
+    /// direction through unoccupied cells, and the occupied cell ending each run (Int, binary).</summary>
+    BoardSlide,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>
     Sign,
     /// <summary>Two signed integers paired into one non-negative value: each component folded onto the naturals (0, −1, 1, −2, … to 0, 1, 2, 3, …) and the two folded values paired by the alternating square-shell walk; <c>pairX</c>/<c>pairY</c> invert it.</summary>

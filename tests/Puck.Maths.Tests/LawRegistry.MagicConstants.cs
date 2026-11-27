@@ -101,5 +101,9 @@ internal static partial class LawRegistry {
             claim: Subjects.BitWordsSetAndRefusals,
             id: "bit-words.set-and-refusals"
         ),
+        ClaimCase(
+            claim: Subjects.OccludedFillSlideVsRayWalk,
+            id: "occluded-fill.slide-vs-ray-walk"
+        ),
     ];
 }
