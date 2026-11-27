@@ -251,9 +251,7 @@ public static partial class WorldDocumentEmitter {
             }
         }
         // The scope with one more compile-time binding, as a collection builtin binds its lambda's parameter.
-        private DocumentScope Bound(string name, JsonNode? value) => scope.WithLocals(lambdaLocals: new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-            [name] = value,
-        });
+        private DocumentScope Bound(string name, JsonNode? value) => scope.WithLocal(name: name, value: value);
         // A compile-time value as the syntax a binding holding it is written as: a number (or a truth) as its literal,
         // a name or text as an atom holding it, which WriteValue writes as WriteName writes a bound name, and a list
         // as the list of its elements, which only a fold or a compile-time index may read.

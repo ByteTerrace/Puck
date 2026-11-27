@@ -260,22 +260,13 @@ public static partial class DocumentBuiltins {
                 PuckDiagnosticCodes.InvalidValue
             );
         }
-        var locals = new Dictionary<string, JsonNode?>(
-            dictionary: scope.Locals,
-            comparer: StringComparer.Ordinal
-        ) {
-            [lambda.Parameters[0]] = first,
-        };
-
-        if (lambda.Parameters.Count > 1) {
-            locals[lambda.Parameters[1]] = second;
-        }
-
         return DocumentLowering.Evaluate(
             expr: lambda.Body,
             fieldKey: fieldKey,
             owned: out owned,
-            scope: scope.WithLocals(lambdaLocals: locals)
+            scope: ((lambda.Parameters.Count > 1)
+                ? scope.WithLocals(first: lambda.Parameters[0], firstValue: first, second: lambda.Parameters[1], secondValue: second)
+                : scope.WithLocal(name: lambda.Parameters[0], value: first))
         );
     }
     // Appends `lowered` to `arr`: an array splices its items in, anything else is one item. The one rule concat and

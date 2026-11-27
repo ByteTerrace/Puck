@@ -68,7 +68,7 @@ public static partial class WorldDocumentEmitter {
         }
         var root = new JsonObject();
         var annotations = CreateModuleAnnotations(expanded: root, scope: scope);
-        var child = scope.WithConstants(new(scope.Constants, StringComparer.Ordinal), annotations).WithLocals(lambdaLocals: scope.Locals);
+        var child = scope.WithConstants(scope.Constants.Derive(), annotations).WithLocals(lambdaLocals: scope.Locals);
         var map = new SourceMap();
 
         using (scope.SourceMap?.PushOrigin(moduleInstance: name))
