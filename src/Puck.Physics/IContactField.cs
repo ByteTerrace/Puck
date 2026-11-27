@@ -2,6 +2,12 @@ using Puck.Maths;
 
 namespace Puck.Physics;
 
+/// <summary>A stamp of the colliders a contact field's holdable answers come from
+/// (<see cref="IContactField.TryHoldableStamp"/>): equal stamps from one field mean equal answers.</summary>
+/// <param name="Revision">The field's count of changes to the colliders a holdable probe can meet.</param>
+/// <param name="Mask">The pass bits of the body whose queries are in progress, whose rows a probe leaves out.</param>
+public readonly record struct ContactHoldableStamp(ulong Revision, ulong Mask);
+
 /// <summary>
 /// The seam a grounded body solves its swept position against. An analytic provider derives convex colliders; a field
 /// provider evaluates a scalar field. Neither changes the integrator.
@@ -111,6 +117,16 @@ public interface IContactField {
     bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         candidate = default;
         grantedByOverride = false;
+
+        return false;
+    }
+    /// <summary>Reports a stamp of everything <see cref="TryHoldableSurfaceAlongDirection"/> answers from: while two
+    /// reads of this field return equal stamps, the same probe gets the same answer, so a caller may keep an answer and
+    /// give it again. The default declines, and a caller asks every probe afresh.</summary>
+    /// <param name="stamp">The stamp, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the field can stamp its holdable answers now.</returns>
+    bool TryHoldableStamp(out ContactHoldableStamp stamp) {
+        stamp = default;
 
         return false;
     }

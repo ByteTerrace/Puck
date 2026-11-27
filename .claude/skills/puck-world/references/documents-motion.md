@@ -620,8 +620,11 @@ holdable placement answers with the floor a body is standing on.
 `IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
 answer it with a ray cast, the field by ray march (`RayHit.Normal` is documented ZERO — the
 surface orientation is a separate `TryFieldGradient` read one step back along
-the ray) and the analytic set by sphere-tracing the holdable colliders near the
-ray, found through the holdable subset's own grid (`FixedStaticContactField.TryCast`). Which surfaces admit a hold at all is the collision row's
+the ray) and the analytic set by casting at the holdable colliders near the
+ray, found through the holdable subset's own grid (`FixedStaticContactField.TryCast`):
+a field collider by its own crossing search, the rest by sphere tracing. A body
+keeps each probe's answer while its contact field's holdable stamp
+(`IContactField.TryHoldableStamp`) holds, so a settled body repeats no cast. Which surfaces admit a hold at all is the collision row's
 `defaultHold` (world-level) composed with a placement's own
 `grip: { holdable: … }` override — the placement's own surface-holdability
 facet, a distinct concept from a hold row's `Pull` kind despite the shared

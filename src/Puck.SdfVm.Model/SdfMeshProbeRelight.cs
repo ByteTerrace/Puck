@@ -42,6 +42,9 @@ public static class SdfMeshProbeRelight {
     /// -Z), RGB in nits (the radiance and sky-light cubes summed, as a probe's indirect light), then its sky visibility,
     /// then its source and trace flags.</summary>
     public const int CameraSampleOutputWords = 20;
+    /// <summary>The header row whose third lane carries the lighting's epoch (<see cref="SdfMeshIrradianceProbe.EpochMask"/>),
+    /// beside the last two axis totals.</summary>
+    public const int EpochRow = 10;
     /// <summary>The first of the float4 rows holding the sky's radiance about each hit texel's ray, gain applied, zero when
     /// the sky source is off: one row a texel.</summary>
     public const int SkyRow = 11;

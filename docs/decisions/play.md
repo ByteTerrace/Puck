@@ -201,6 +201,27 @@ layers and event stings, Hi-Fi Rush's generous judged windows.
 durable artifact declares its own falsifier, never write a status column,
 security claims default the other way, and verify by running and by content.
 
+## In-world consoles
+
+**Secrets and in-world consoles are diegetic (the owner's rulings).** A console
+a player finds in the world, such as the hidden command line at a gallery
+display, draws on the object's own screen in that screen's look, never as a
+HUD panel or overlay in a seat's view, and nothing on screen hints that it is
+there. The owner's words: the console "was supposed to be diegetic, part of the
+station screen with the same look/feel. We really want to sell to players that
+they are finding secrets that are literally baked into the game world."
+
+**Observation is a designed way to learn (the owner's ruling).** The owner's
+words: "'screen looking' at other players will be highly encouraged as a way
+for others to learn simply by observing." So an in-world screen shows its state
+to every onlooker. What a console shows (its open mode, the line as it is
+typed, its replies) is authority state of the object, keyed by the object
+rather than by the player using it, and every observer's view of that screen
+draws it; its type is sized to read from a step or two behind the one typing.
+The standard's terminal console (`worlds/standard/contexts/terminal-console.puck`)
+and the gallery displays' terminal mode (`worlds/debug/shapes.puck`'s
+`terminalScreenPaints`) are the worked example.
+
 ## Creatures and scale
 
 **Creature collectives are authorable local laws**, not a prescribed group

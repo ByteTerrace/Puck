@@ -573,9 +573,7 @@ public static partial class PuckPrinter {
             );
             if (parenthesize) { m_builder.Append(value: ')'); }
         }
-        // An interpolated string's holes are read out of the string's DECODED text, so the whole body — hole
-        // expressions included — is composed first and escaped once. Escaping a hole's own string arguments is what
-        // keeps `$"{row["key"]}"` one string rather than three.
+        // Literal runs follow the outer string's escape grammar; holes retain their own expression grammar.
         private void Interpolated(InterpolatedStringNode interpolated, int level) {
             var body = new StringBuilder();
 
@@ -615,10 +613,13 @@ public static partial class PuckPrinter {
                 return;
             }
             m_builder.Append(value: "$\"");
-            PuckStrings.Escape(
-                into: m_builder,
-                text: text
-            );
+            foreach (var segment in interpolated.Segments) {
+                if (segment is InterpolationSegment.Literal literal) {
+                    PuckStrings.Escape(m_builder, literal.Text.Replace("{", "{{", StringComparison.Ordinal).Replace("}", "}}", StringComparison.Ordinal));
+                } else if (segment is InterpolationSegment.Hole hole) {
+                    m_builder.Append('{').Append(Capture(hole.Expression, level)).Append('}');
+                }
+            }
             m_builder.Append(value: '"');
         }
         private bool ContinuesPreviousElement(ExpressionNode element, int level) {

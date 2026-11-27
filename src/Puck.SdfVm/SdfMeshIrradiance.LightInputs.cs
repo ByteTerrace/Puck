@@ -57,6 +57,8 @@ public sealed partial class SdfMeshIrradiance {
     private static InputChange ChangeOf(in ProbeData probe, Lighting lighting, Vector3 spacing, Vector3 center, SdfMeshIrradianceScene scene, Dictionary<LightInputs, LightDelta> changes) {
         if (probe.Shading is not { } block) { return InputChange.Due; }
         if (probe.Invalid || probe.Lighting == lighting.Version) { return InputChange.None; }
+        // A jump since its relight: no relight's bounce reads it until it is relit (Current).
+        if (probe.Epoch != lighting.Epoch) { return InputChange.Due; }
         var before = block.Inputs;
         var after = lighting.Inputs;
         if (probe.LocalVersion != lighting.LocalVersion || before.Roles != after.Roles || before.Grid != after.Grid) { return InputChange.Due; }

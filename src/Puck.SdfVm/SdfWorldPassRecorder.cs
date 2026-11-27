@@ -66,6 +66,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.ViewsReflectionsWritten,
         SdfWorldPackage.ReflectionDepth,
         SdfWorldPackage.ReflectionDepthWritten,
+        SdfWorldPackage.ReflectionColorWritten,
         SdfWorldPackage.OverlapSpans,
     ];
     // Each layer of the world's shared shadows (SdfWorldShadows) a compute pass samples: its entry, whether it is the exit
@@ -847,6 +848,33 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     m_shadePlan!.Record(pipeline: pipeline, recording: in recording);
                     return;
                 }
+            case SdfWorldPackage.Parts.ViewsReflections: {
+                    // Step zero (a group a 32 by 32 block of the history colour, which follows the output extent)
+                    // prefilters the preceding frame's history colour into every level of the reflection colour; step one
+                    // (an invocation a cell of the records) traces one mirror ray a cell once every level is written
+                    // (sdf-world-views-reflections.comp.hlsl).
+                    var colour = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ReflectionColorWritten)].Buffer!;
+                    var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsReflections);
+                    var block = (1u << (int)SdfWorldPackage.ReflectionColorLevels);
+                    Span<byte> step = stackalloc byte[sizeof(uint)];
+
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 0u);
+                    BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                        pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+                    recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: recording.FrameWidth.CeilingDivide(divisor: block),
+                        groupCountY: recording.FrameHeight.CeilingDivide(divisor: block), groupCountZ: 1);
+                    recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: colour.BufferHandle,
+                        sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                        destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 1u);
+                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                        pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+                    recorder.Dispatch(commandBufferHandle: commandBuffer,
+                        groupCountX: recording.Width.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels),
+                        groupCountY: recording.Height.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), groupCountZ: 1);
+                    return;
+                }
             case SdfWorldPackage.Parts.ViewsBins: {
                     // Step zero (one group) turns the counts into offsets and writes every job's arguments at the plan's
                     // widths (the pass block the decision wrote); step one (an invocation a tile) scatters the tiles once
@@ -874,7 +902,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     var pipeline = tables.Pipeline(kernel: m_part switch {
                         SdfWorldPackage.Parts.Pyramid => SdfKernel.MeshPyramid,
                         SdfWorldPackage.Parts.ViewsProbes => SdfKernel.ViewsProbes,
-                        SdfWorldPackage.Parts.ViewsReflections => SdfKernel.ViewsReflections,
                         _ => SdfKernel.Surface,
                     });
 
@@ -883,8 +910,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                         SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
                         // One invocation a cell of the probe lookup, the extent over its rate rounded up.
                         SdfWorldPackage.Parts.ViewsProbes => (recording.Width.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
-                        // One invocation a cell of the reflection records, one mirror ray each.
-                        SdfWorldPackage.Parts.ViewsReflections => (recording.Width.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                         _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                     };
 
@@ -1243,6 +1268,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflectionsWritten,
         SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepthWritten,
+        SdfWorldPackage.Parts.ReflectionColor => SdfWorldPackage.ReflectionColorWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
         _ => null,

@@ -189,6 +189,12 @@ A document's `schema:` field selects its vocabulary, never the filename.
   interpolated `$"""..."""`. An interpolated string computes a name, key,
   number or text, never an expression (**PUCK112**). Backquote a name the bare
   form cannot carry (`` `seat-1` ``).
+  Holes carry ordinary expressions, including nested interpolations and object braces; their quotes need no outer
+  escaping. `SourceLexemes.HoleEnd` owns their boundaries for readers and editor services; the printer escapes only literal runs.
+- **Int widens to Fixed at typed boundaries.** `RuleCompiler.ImplicitConversion` checks expression slots, direct
+  row and field copies and host arguments. It lowers promotion to `ExpressionOp.ToFixed`, evaluated by
+  `ExpressionArithmetic.TryUnary` with an exact checked shift. Fixed needs explicit `toInt(value)` to truncate
+  toward zero; it never narrows implicitly.
 - **Hashes have one authored spelling.** Write `hash: auto` for automatic
   hashing, or `hash: "sha256/<64 lowercase hex>"` for a digest. Quoted `"auto"`,
   bare digests and `sha256-64/` pins are refused by name during compilation.
@@ -246,8 +252,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
   agrees on: a name bound to a number, an enum member, a negated literal, an
   operator over whole literals (`RuleCompiler.FoldKindFree` folds it in an Int
   and a Fixed carrier and keeps it only when both agree), and a choice on a
-  whole constant condition whose other arm is a number. A fraction (`0.5 + 0.5`
-  is 0 in an Int row), an Int quotient and anything that faults stay as
+  whole constant condition whose other arm is a number. A fractional expression (which needs explicit `toInt`
+  at an Int destination), an Int quotient and anything that faults stay as
   written, and the rule compiler folds them at the destination's kind,
   keeping a refusal even in a choice's unselected arm (a choice evaluates both
   arms; `and`, `or` and `if` short-circuit). An `if` or `when` constants decide

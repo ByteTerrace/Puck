@@ -158,20 +158,6 @@ reading; `auto` follows a playing run. Its predicate is generic
 present nonzero value or nonempty text. `world.hud` echoes visibility, reading
 state, sample index, plot window and reference through the render resolver.
 
-**A panel each seat sees its own of.** A `state.<row>.$body` token (a
-binding, a template placeholder or a `state` visibility predicate) reads the
-cell keyed by the body of the seat the panel is drawn for
-(`StateBinding.BodyKey`). A world panel that reads one (`WorldHudPanel.ReadTokens`)
-is drawn once for every joined seat it is visible to, its rect placed in that
-seat's viewport as a seat's own panel is, and its tokens read the world that
-seat stands in (`WorldSeatStateReads`, over the reads each seat registers in
-`WorldPresentationManifest.SeatBindings`); the document's own manifest records
-no body-keyed read. Those draws share the world panels' reservation
-(`WorldHudCapacity.MaxWorldPanels` a frame, after the panels drawn once; a draw
-past it is dropped). The validator admits `$body` only on a keyed row. The
-standard's terminal console panel (`worlds/standard/contexts/terminal-console.puck`)
-is the worked use.
-
 Either `state.*` form may carry a trailing `.$target` facet —
 `state.<row>.$target` or `state.<row>.<key>.$target` — reading the addressed
 cell's stored TRUTH instead of its live eased value when the cell carries a

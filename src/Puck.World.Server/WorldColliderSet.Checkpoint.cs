@@ -52,6 +52,7 @@ public sealed partial class WorldColliderSet {
             if (image.Resolved) { RestoreAttachedRow(row, image.Origin, image.Rotation, image.Scale); m_refreshHash.Add(value: image.Scale.Value); }
         }
         m_attachedHash = m_refreshHash.Value;
+        m_holdableRevision++;
         m_attachedMoves = default;
         m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
         m_movingHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable));

@@ -67,25 +67,10 @@ public static class OverlayStateComparison {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: state);
 
-        return Holds(
-            mirror: mirror,
-            slot: mirror.SlotOf(
-                conversion: WorldStateConversion.Number,
-                token: state.Binding
-            ),
-            state: state
+        var slot = mirror.SlotOf(
+            conversion: WorldStateConversion.Number,
+            token: state.Binding
         );
-    }
-    /// <summary>Returns whether the predicate holds for the cell a slot the caller found reads: the slot of a
-    /// body-keyed binding resolved for one seat, which <see cref="Holds(WorldStateMirror, OverlayPredicate.State)"/>
-    /// cannot find from the binding's own text.</summary>
-    /// <param name="mirror">The state mirror the slot belongs to.</param>
-    /// <param name="slot">The slot, or -1 for none, which reads false.</param>
-    /// <param name="state">The predicate.</param>
-    /// <returns><see langword="true"/> when the predicate holds.</returns>
-    public static bool Holds(WorldStateMirror mirror, int slot, OverlayPredicate.State state) {
-        ArgumentNullException.ThrowIfNull(argument: mirror);
-        ArgumentNullException.ThrowIfNull(argument: state);
 
         if (slot < 0) {
             return false;
