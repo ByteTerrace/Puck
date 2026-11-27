@@ -96,25 +96,6 @@ geometry, rebase and unwritten cells bypass the phase. The GPU validates each
 selected hit allocation and decides whether its rays need tracing.
 The worker lists again whenever the lighting version moves (`Work`'s
 `m_listLighting`), rather than resuming a list made under the old lighting.
-A capture that replaces the one before it past steady motion (a clock
-scrubbed, a lamp switched, a light edited: `Lighting.Jumps`) starts a new
-lighting epoch (`Lighting.Epoch`). Every probe relit under an earlier epoch is
-due (`ChangeOf`), and its key word's low bits
-(`SdfMeshIrradianceProbe.EpochMask`) say so: the relight's bounce and the camera
-sample read only probes of the current epoch (`sdfMeshIrradianceHolds` under
-`SDF_MESH_IRRADIANCE_EPOCH`, the CPU's `Current`), so light from before a jump
-never reaches a probe relit after it, while the views read every written probe.
-A probe relit at night that read the probes about its hits as they stood
-would carry the day's bounce indoors for as long as the age budget takes to
-reach them, minutes on an overloaded volume (`[sdf.mesh-gi] behind`). A probe whose support, grown by its level's surface
-reach, meets a view's frustum (`OwedAfterJump`, `InAnyView`) owes the views
-`JumpRelights` relights under the new epoch, ordered first and run on the owed
-allowance (`OwesSeenRelight`), so what a view reads takes its first post-jump
-light and the bounce of the light around it within those relights, not on the
-age budget. A visibility test takes a probe's whole trilinear support, never its
-centre alone: the probes about the eye and along the frustum's sides are read by
-the view. The volume's `[sdf.mesh-gi]` line, which `world.probe` prints,
-carries `lighting-epoch` and `seen-relights-owed`.
 The bound is the authored age target times that level's interleave and is
 reported in `world.budget`. A sweep beginning under the same lighting version
 as its predecessor visits every phase so bounce propagation cannot stop on an
@@ -122,6 +103,29 @@ unvisited phase. The
 CPU reference uses the same eligibility rule. A drain requests exact inputs for every cell and resets every bounce receiver.
 Partial interleaved sweeps neither certify convergence nor consume the
 full-window `MaxSweeps` limit.
+
+A capture that replaces the one before it past steady motion (a clock
+scrubbed, a lamp switched, a light or a material edited) is a jump
+(`Lighting.Jump`). A jump of the light itself (the directionals,
+`DirectionalsJump`, or the lights' key, which leaves the scene's materials out
+so that groups landing with new materials move nothing) starts a new lighting
+epoch (`Lighting.Epoch`). Every probe relit under an earlier epoch is due
+(`ChangeOf`), and its key word's low bits (`SdfMeshIrradianceProbe.EpochMask`)
+say so: the relight's bounce and the camera sample read only probes of the
+current epoch (`sdfMeshIrradianceHolds` under `SDF_MESH_IRRADIANCE_EPOCH`, the
+CPU's `Current`), so light from before a jump never reaches a probe relit after
+it, while the views read every written probe. A probe relit at night that read
+the probes about its hits as they stood would carry the day's bounce indoors
+for as long as the age budget takes to reach them, minutes on an overloaded
+volume (`[sdf.mesh-gi] behind`). A probe whose support, grown by its level's
+surface reach, meets a view's frustum (`OwedAfterJump`, `InAnyView`) owes the
+views `JumpRelights` relights after any jump, ordered first and run on the owed
+allowance (`OwesSeenRelight`), so what a view reads takes its first light after
+the jump and the bounce of the light around it within those relights, not on
+the age budget. A visibility test takes a probe's whole trilinear support, never
+its centre alone: the view reads the probes about the eye and along the
+frustum's sides. The volume's `[sdf.mesh-gi]` line, which `world.probe` prints,
+carries `lighting-epoch` and `seen-relights-owed`.
 The combined ages remain diagnostic totals; `behind` compares each level to
 its own bound and reports the worst relative overrun. Its needed relight rate
 is the sum of each level's probe count divided by that level's bound.

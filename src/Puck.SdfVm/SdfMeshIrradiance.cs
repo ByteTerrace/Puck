@@ -641,6 +641,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     private ulong m_localKey;
     private int m_localVersion;
+    private ulong m_lightsKey;
+    private int m_lightsVersion;
     private long m_lightingCheckedAt;
     private int m_lightingVersion;
     private SdfAppearance? m_materialsAppearance;
@@ -1728,20 +1730,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         return false;
     }
-    // The relights a probe owes the views after a lighting jump, the first under the new epoch included: each reads the
+    // The relights a probe owes the views after a lighting jump, the first after it included: each reads the
     // bounce the probes about its hits hold by then, so the light the views read converges past the jump on the owed
     // allowance (OwesSeenRelight) rather than on the age budget, which an overloaded volume stretches to minutes. Three
     // relights leave a surface of albedo one half short of its converged bounce by about an eighth.
     private const int JumpRelights = 3;
     // Whether a probe owes the views a relight after a lighting jump (Candidate.Seen): a view may read it or the probes
     // about the surfaces near what it shows (its support within its level's surface reach of a frustum, InAnyView), and it
-    // has not been relit under the current epoch, or has, with the bounce on, fewer than JumpRelights times. A volume that
-    // never jumped owes none.
+    // has not been relit since the latest jump (Lighting.Jump), or has, with the bounce on, fewer than JumpRelights times.
+    // A volume that never jumped owes none.
     private static bool OwedAfterJump(in ProbeData probe, bool present, Vector3 center, Vector3 spacing, in Snapshot snapshot) {
         var lighting = snapshot.Lighting;
 
-        if (!present || probe.Invalid || (lighting.Epoch == 0)) { return false; }
-        var owed = ((probe.Epoch != lighting.Epoch) || (lighting.Feedback && snapshot.Layout.Bounce && probe.ReceivesSurface && (probe.JumpRelights < JumpRelights)));
+        if (!present || probe.Invalid || (lighting.Jump == 0)) { return false; }
+        var owed = ((probe.Lighting < lighting.Jump) || (lighting.Feedback && snapshot.Layout.Bounce && probe.ReceivesSurface && (probe.JumpRelights < JumpRelights)));
 
         return (owed && InAnyView(center: center, reach: SurfaceReachOf(spacing: spacing), snapshot: in snapshot, spacing: spacing));
     }
@@ -2025,15 +2027,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var index = 0; (index < frame.Lights.Count); index++) { m_captureLights.Set(index: index, light: grid.Snap(light: frame.Lights[index])); }
             captureLights = m_captureLights;
         }
-        // Both keys are 64-bit digests of every input bit they name: equal keys stand for unchanged lighting.
-        var local = Fnv1aHash.Create();
+        // Every key is a 64-bit digest of every input bit it names: equal keys stand for unchanged lighting. The lights'
+        // key leaves the scene's materials out, so it moves only for a light switched, dimmed or edited, a gain or a
+        // source, which starts a lighting epoch (Lighting.Epoch); the local key adds the materials, so a recolour or a
+        // group bringing new materials moves it, and the jump it makes (Lighting.Jump), but not the epoch.
+        var lit = Fnv1aHash.Create();
         var gains = frame.IndirectGains;
 
-        local.AddBits(value: gains.Lights); local.AddBits(value: gains.Emission); local.AddBits(value: gains.Screens);
-        local.AddBits(value: gains.Sky); local.AddBits(value: gains.Feedback);
-        local.Add(value: (uint)frame.IndirectSources);
-        local.Add(value: layout.Bounce ? 1U : 0U);
-        local.Add(value: MaterialsKey(program: frame.Program));
+        lit.AddBits(value: gains.Lights); lit.AddBits(value: gains.Emission); lit.AddBits(value: gains.Screens);
+        lit.AddBits(value: gains.Sky); lit.AddBits(value: gains.Feedback);
+        lit.Add(value: (uint)frame.IndirectSources);
+        lit.Add(value: layout.Bounce ? 1U : 0U);
 
         var sameSky = true;
         var skyBlock = default(SdfSkyBlock);
@@ -2046,11 +2050,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (light.Kind == SdfLightKind.Directional && light.Weight > 0f) {
                 roles = roles.Add(((ulong)index << 1) | (light.CastsShadow ? 1UL : 0UL));
             }
-            if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { AddLight(hash: ref local, index: index, light: in light); }
+            if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { AddLight(hash: ref lit, index: index, light: in light); }
         }
 
         // Local cube reuse also copies visibility bits. A directional leaving its slot must clear its old bit.
-        local.Add(value: roles.Value);
+        lit.Add(value: roles.Value);
+        var lightsKey = lit.Value;
+        var local = Fnv1aHash.Create();
+
+        local.Add(value: lightsKey);
+        local.Add(value: MaterialsKey(program: frame.Program));
         var localKey = local.Value;
         var whole = Fnv1aHash.Create();
 
@@ -2082,8 +2091,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_localKey = localKey;
             m_localVersion++;
         }
+        if ((lightsKey != m_lightsKey) || (m_lighting is null)) {
+            m_lightsKey = lightsKey;
+            m_lightsVersion++;
+        }
 
-        var captured = Lighting.Capture(roles: roles, captureLights: captureLights, frame: frame, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, capturedAt: Time.GetTimestamp(), version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(roles: roles, captureLights: captureLights, frame: frame, lightsVersion: m_lightsVersion, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, capturedAt: Time.GetTimestamp(), version: (m_lightingVersion + 1));
 
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(kind: SkyCaptures); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
@@ -2970,7 +2983,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         var passes = ((probe.Lighting == lighting.Version) ? (probe.Passes + 1) : 1);
         // A probe never relit before (a fresh trace) owes no jump anything: it read no light from before one.
-        var jumpRelights = ((probe.Epoch == lighting.Epoch) ? Math.Min(val1: (probe.JumpRelights + 1), val2: JumpRelights) : ((probe.Lighting == 0) ? JumpRelights : 1));
+        var jumpRelights = ((probe.Lighting == 0) ? JumpRelights : ((probe.Lighting >= lighting.Jump) ? Math.Min(val1: (probe.JumpRelights + 1), val2: JumpRelights) : 1));
         var previous = probe;
 
         // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
@@ -3617,7 +3630,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // in a trace batch's ProbeBlock, and the farthest its rays travelled, which every hit lies within), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
     // version, the sweep it was last relit in and whether that relight moved it past the convergence bound, and the
-    // lighting epoch it was relit under with how many relights it holds under that epoch, at most JumpRelights). A batch
+    // lighting epoch it was relit under and how many relights it holds since the latest jump, at most JumpRelights). A batch
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
     // readers outside the gate read it whole. The blocks are named by their registry indices (ProbeStorage.Index), so a
     // probe holds no reference and the probe cache keeps its entries natively.
@@ -4164,10 +4177,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
         // that part changes, so a relight reuses each probe's local cube across a moving sun.
         public required int LocalVersion { get; init; }
-        // How many captures replaced the one before them in a jump (Jumps), this one included; zero for none. A probe relit
-        // under another epoch holds light from before the latest jump: it is due (ChangeOf), the views are owed it where
-        // they may read it (OwedAfterJump, OwesSeenRelight), and no relight's bounce or camera sample reads it
-        // (SdfMeshIrradianceProbe.EpochMask, Current).
+        // The version of the lights' part of the local lighting: the local part without the scene's materials.
+        public required int LightsVersion { get; init; }
+        // The version of the latest capture, this one or an earlier, that replaced the one before it in a jump (its
+        // directionals jumped, DirectionalsJump, or its local version moved, a recolour included); zero for none. A probe
+        // relit before it owes the views relights where they may read it (OwedAfterJump, OwesSeenRelight).
+        public int Jump { get; init; }
+        // How many captures jumped in the light itself (their directionals jumped or their lights' version moved), this one
+        // included; zero for none. A probe relit under another epoch holds light from before such a jump: it is due
+        // (ChangeOf), and no relight's bounce or camera sample reads it (SdfMeshIrradianceProbe.EpochMask, Current).
         public int Epoch { get; init; }
         public required long CapturedAt { get; init; }
         public bool Direct { get; init; }
@@ -4213,15 +4231,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // A directional's relative change of light between two captures that is a jump.
         private const float JumpShare = 0.25f;
 
-        // Whether a capture replaces the one before it in one step past what steady motion brings between two captures: its
-        // point and spot lights, emission or materials changed (a lamp a rule switches, a dimmer, an edit), a directional
-        // came, went or changed its shadow role, the grid changed, or a directional turned past JumpChordSquared or changed
-        // its light by more than JumpShare (a clock scrubbed or jumped). A sun the clock turns moves a fraction of that
-        // between captures, so its relight stays on the age budget.
-        private static bool Jumps(Lighting previous, LightInputs after, int localVersion) {
-            var before = previous.Inputs;
-
-            if ((localVersion != previous.LocalVersion) || (before.Roles != after.Roles) || (before.Grid != after.Grid)) { return true; }
+        // Whether a capture's directional lights replace the previous capture's in one step past what steady motion brings
+        // between two captures: one came, went or changed its shadow role, the grid changed, or one turned past
+        // JumpChordSquared or changed its light by more than JumpShare (a clock scrubbed or jumped). A sun the clock turns
+        // moves a fraction of that between captures, so its relight stays on the age budget. A capture jumps when its
+        // directionals do or its local lighting changed (a lamp a rule switches, a dimmer, an edit).
+        private static bool DirectionalsJump(LightInputs before, LightInputs after) {
+            if ((before.Roles != after.Roles) || (before.Grid != after.Grid)) { return true; }
 
             var delta = LightDelta.Between(after: after, before: before);
 
@@ -4229,7 +4245,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
-        public static Lighting Capture(MultisetDigest roles, SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch, long capturedAt) {
+        public static Lighting Capture(MultisetDigest roles, SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, int lightsVersion, CaptureScratch scratch, long capturedAt) {
             var lights = scratch.Lights;
             var indices = scratch.Indices;
             var points = scratch.Points;
@@ -4276,12 +4292,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid);
-            var jumps = ((previous is not null) && Jumps(after: inputs, localVersion: localVersion, previous: previous));
+            var directionals = ((previous is not null) && DirectionalsJump(after: inputs, before: previous.Inputs));
+            var jumps = ((previous is not null) && (directionals || (localVersion != previous.LocalVersion)));
+            var lightJumps = ((previous is not null) && (directionals || (lightsVersion != previous.LightsVersion)));
 
             return new Lighting {
                 Version = version,
                 LocalVersion = localVersion,
-                Epoch = (jumps ? (previous!.Epoch + 1) : (previous?.Epoch ?? 0)),
+                LightsVersion = lightsVersion,
+                Jump = (jumps ? version : (previous?.Jump ?? 0)),
+                Epoch = (lightJumps ? (previous!.Epoch + 1) : (previous?.Epoch ?? 0)),
                 CapturedAt = capturedAt,
                 SkyPeak = skyPeak,
                 Direct = ((sources & SdfIndirectSources.Direct) != 0),
