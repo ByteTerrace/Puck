@@ -56,11 +56,14 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         ArgumentNullException.ThrowIfNull(argument: rule);
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        var firings = RuleWorkBudget.Firings(multiplier: multiplier, rule: rule);
+        // A gate the host proves can never hold is judged where it is visited and fires nothing there.
+        var holdsNever = NeverHolds(context: context, rule: rule);
+        var firings = (holdsNever ? 0L : RuleWorkBudget.Firings(multiplier: multiplier, rule: rule));
         var closure = ((rule.Mode == ActionTriggerMode.Edge) ? Closure.None : Prove(context: context, rule: rule));
         var latching = ((rule.Mode == ActionTriggerMode.Edge)
             ? RuleLatching.Edge
             : ((closure != Closure.None) ? RuleLatching.ClosesItself : (Settles(rule: rule) ? RuleLatching.Settles : RuleLatching.None)));
+        var never = (holdsNever ? "; its gate never holds on this host" : string.Empty);
 
         // A sweep of this tick's events binds nothing at rest, and one event, the change the sheet prices, binds one
         // binding whatever it reads. A maxFirings bound or a host that judges in place keeps the capacity price.
@@ -69,7 +72,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
                 Fired: Math.Min(val1: firings, val2: 1L),
                 Judged: Math.Min(val1: multiplier, val2: 1L),
                 Latching: latching,
-                Why: "binds only this tick's events: none at rest, one binding per event"
+                Why: $"binds only this tick's events: none at rest, one binding per event{never}"
             );
         }
 
@@ -84,7 +87,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             (rule.ForEachBodies && !context.LiveBodiesVersioned) ||
             ((rule.Iteration is { } iteration) && !iteration.Versioned)
         ) {
-            return new RuleResponse(Fired: firings, Judged: multiplier, Latching: latching, Why: "judged in place every tick");
+            return new RuleResponse(Fired: firings, Judged: multiplier, Latching: latching, Why: $"judged in place every tick{never}");
         }
 
         var reads = new List<CellAccess>();
@@ -96,10 +99,11 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var built = needs.Build();
         string? moving = null;
         // The most bindings one move of something at rest can open, and whether it reaches every binding's judgement.
-        // A deadline coming due judges every binding (a due list wakes the rule whole), and opens the bindings whose
-        // own due tick it is: one when each binding reads its due tick under its own key.
+        // A deadline coming due opens the bindings whose own due tick it is: one when each binding reads its due tick
+        // under its own key. A keyed sweep's due list wakes those bindings alone (RuleDueList.Wake); any other rule
+        // is woken whole, so the deadline judges every binding.
         var opened = 0L;
-        var shared = (deadline is not null);
+        var shared = false;
         // A sweep over a row family binds a member's keys: a move a member's bindings read whole (a family selection or
         // a cell under $member) opens that member's bindings, and a move of the cell under one $each key opens that
         // key's binding in every member. Any other sweep's own reads open one binding.
@@ -114,7 +118,11 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             var token = rule.Gate[deadline.Token];
 
             (deadline.TickOnLeft ? token.RightSource : token.LeftSource).CollectReads(into: due);
-            opened = (((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember || access.MemberKey))) ? due.Max(selector: Own) : multiplier);
+
+            var ownDue = ((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember || access.MemberKey)));
+
+            opened = (ownDue ? due.Max(selector: Own) : multiplier);
+            shared = (!ownDue || (RuleDueList.SweepKind(rule: rule) == RuleDueList.Visit.Whole));
         }
 
         if (built.ReadsTick) {
@@ -170,7 +178,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
         // At rest: a Level gate nothing latches fires every tick it holds, so every binding may be judged and fire;
         // an Edge over a moving input can cross again and again.
-        var refires = ((latching == RuleLatching.None) || ((latching == RuleLatching.Edge) && (moving is not null)));
+        // A gate that never holds neither holds again nor crosses again, so only a moving read revisits it at rest.
+        var refires = (!holdsNever && ((latching == RuleLatching.None) || ((latching == RuleLatching.Edge) && (moving is not null))));
         var judgedAtRest = (((moving is not null) || refires) ? multiplier : 0L);
         var firedAtRest = (refires ? firings : 0L);
         // A settling binding fires twice for a change: once with it, and once more on the next tick, which proves the
@@ -181,12 +190,12 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var rest = ((judgedAtRest == 0L)
             ? "not visited at rest"
             : ((moving is not null) ? $"judged every tick ({moving})" : "judged every tick (a Level gate that holds fires again)"));
-        var fire = latching switch {
+        var fire = (holdsNever ? "its gate never holds on this host" : latching switch {
             RuleLatching.ClosesItself => "its firing closes its own gate",
             RuleLatching.Settles => "its firing settles after one more",
             RuleLatching.Edge => ((moving is null) ? "an Edge fires on the crossing" : "an Edge over a moving input can cross every tick"),
             _ => "a Level gate that holds fires every tick",
-        };
+        });
 
         return new RuleResponse(
             Fired: fired,
@@ -194,6 +203,45 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Latching: latching,
             Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s)"
         ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && !eachRead && (judgedAtRest == 0L) && (firedAtRest == 0L)) };
+    }
+    /// <summary>Returns whether a rule's gate provably never holds on the host its context describes: a host that
+    /// answers one search ply (<see cref="RuleCompileContext.SearchPlyIsFixed"/>) answers the live ply, zero
+    /// (<see cref="IStateReader.SearchPly"/>), so a gate a comparison of the ply against a literal closes at zero,
+    /// whatever its other comparisons answer, never holds there. Such a line is judged where it is visited and
+    /// fires nothing; its firings are a search judge's, which prices them apart.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The context the rule compiled in.</param>
+    /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
+    public static bool NeverHolds(CompiledRule rule, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (!context.SearchPlyIsFixed || (rule.Gate.Length == 0)) {
+            return false;
+        }
+
+        var gate = rule.Gate;
+
+        return (GateTruth.Fold(gate: gate, leaf: index => AtLivePly(token: gate[index])) == GateTruth.False);
+
+        // A comparison of the ply against a literal, answered at the live ply's raw value, zero in either numeric
+        // kind; any other comparison is unknown.
+        static byte AtLivePly(in GateToken token) {
+            var live = FixedQ4816.FromRawBits(value: 0L);
+
+            if ((token.Op != GateOp.Compare) ||
+                (token.Comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual))) {
+                return GateTruth.Unknown;
+            }
+            if ((Operand(source: token.LeftSource) is SearchPlyOperand) && token.RightSource.IsLiteral) {
+                return (token.Comparison.Holds(expected: FixedQ4816.FromRawBits(value: token.RightSource.RawValue), value: live) ? GateTruth.True : GateTruth.False);
+            }
+            if ((Operand(source: token.RightSource) is SearchPlyOperand) && token.LeftSource.IsLiteral) {
+                return (token.Comparison.Holds(expected: live, value: FixedQ4816.FromRawBits(value: token.LeftSource.RawValue)) ? GateTruth.True : GateTruth.False);
+            }
+
+            return GateTruth.Unknown;
+        }
     }
     // A swept family's member count and its widest member's capacity, read from declarations.
     private static (long Count, long Capacity) MemberShape(RuleCompileContext context, RowFamily family) {
@@ -297,7 +345,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static Closure Prove(CompiledRule rule, RuleCompileContext? context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        var gate = Array.FindAll(array: rule.Gate, match: static token => (token.Op != GateOp.ShortCircuit));
+        var gate = Array.FindAll(array: rule.Gate.Tokens, match: static token => (token.Op != GateOp.ShortCircuit));
 
         if (gate.Length == 0) {
             return Closure.None;

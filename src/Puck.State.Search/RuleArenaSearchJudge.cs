@@ -16,7 +16,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     private readonly int[] m_keyRows;
     private readonly RuleLatch m_latch = new(fresh: true);
     private readonly CompiledRule[] m_rules;
-    private readonly CompiledExpressionToken[]? m_score;
+    private readonly CompiledProgram? m_score;
     private readonly bool m_readsTick;
 
     /// <summary>Initializes a judge over the rules one search job judges its candidates with.</summary>
@@ -28,7 +28,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two of <paramref name="rules"/> share a name, so they would share latch
     /// state and one could read the other's crossing within a candidate.</exception>
-    public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledExpressionToken[]? score = null) {
+    public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledProgram? score = null) {
         ArgumentNullException.ThrowIfNull(argument: host);
         ArgumentNullException.ThrowIfNull(argument: rules);
 

@@ -1214,7 +1214,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="ruleName">The rule the gate belongs to, for the refusal ledger.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
     /// <returns>What the gate decided.</returns>
-    public Verdict Decide(GateToken[] gate, string ruleName, List<string>? trace = null) {
+    public Verdict Decide(CompiledGate gate, string ruleName, List<string>? trace = null) {
         var frame = new EvaluationFrame(reader: m_host);
         var verdict = RuleEvaluation.Decide(
             frame: ref frame,

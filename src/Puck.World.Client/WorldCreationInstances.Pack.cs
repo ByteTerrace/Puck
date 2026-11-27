@@ -425,7 +425,7 @@ public sealed partial class WorldCreationInstances {
     // the table, and reads the client, the definition and the state mirror, which nothing writes during the fork but a
     // lease's first acquisition of a slot, which the mirror serializes (WorldStateMirror.Acquire). A rig that reads
     // another body is never in the fork, so no partition reads another registration's pose.
-    private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Hosting.Jobs.IJobPartitions {
+    private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Abstractions.Jobs.IJobPartitions {
         private IWorldStampSource? m_client;
         private DynamicTransform[] m_transforms = [];
         private float m_deltaSeconds;

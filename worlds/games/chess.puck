@@ -81,6 +81,27 @@ let chessMoves = concat(
   map([1, -1], sign => { codes [6 * sign], turn: (1 - sign) / 2, offsets: kingSteps })
 )
 
+// Whether the pawn of the side to move on `source` can take en passant: it stands on the victim's rank, and no rook,
+// bishop or queen of the other side reaches the king along a ray over `occupied`, the occupancy once it has taken. Read
+// inside `tabletop-history-en-passant`, over its locals (`victim`, `sign`, `kingMask`, `rooks`, `bishops`); a source off
+// the board reads no square.
+function chessEnPassantFrom(source, occupied) = ((source >= 0) and
+  (source < 64) and
+  ((source / 8) == (victim / 8)) and
+  (board[source] == sign) and
+  (rooks &
+    (boardSlide(kingMask, occupied, chessBoard, N) |
+      boardSlide(kingMask, occupied, chessBoard, S) |
+      boardSlide(kingMask, occupied, chessBoard, E) |
+      boardSlide(kingMask, occupied, chessBoard, W)) ==
+    0) and
+  (bishops &
+    (boardSlide(kingMask, occupied, chessBoard, NE) |
+      boardSlide(kingMask, occupied, chessBoard, SE) |
+      boardSlide(kingMask, occupied, chessBoard, SW) |
+      boardSlide(kingMask, occupied, chessBoard, NW)) ==
+    0))
+
 // The board's grid, expanded inside a table's `state` block: `cellSize` is one square in metres, `origin` the
 // grid's corner in the table's frame and `band` how far above a square a piece still counts as standing on it.
 template chessBoardGrid(cellSize, origin, band) {
@@ -274,16 +295,6 @@ template chessGameState(settleTicks, placed = false) {
     domain: tally(capacity: 151)
   }
 
-  row {
-    name: "enPassantProbe"
-    kind: "Int"
-    capacity: 64
-    min: -6
-    max: 6
-    domain: cellsOf(topology: chessBoard)
-  }
-
-  slot enPassantProbeCheck = 0 bounds(0..1)
   slot repetitionEnPassant = -1 bounds(-1..63)
   slot historyPending = 0 bounds(0..1)
   slot historyReset = 0 bounds(0..1)
@@ -433,14 +444,16 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     settleHold = 0
   }
 
+  // Each piece is read as its body comes to rest: the square under an upright body, or none for a body knocked over. The
+  // gate is the body's own rest, so a settle reads only the pieces disturbed since they last rested, never a body that
+  // did not move, and never one absent (released, which never rests) or held (a held game's bodies stand for none).
+  // Every disturbed body rests by the tick the board does, so each cell is read before the settled board is judged.
   if digital {} else {
-    rules "" when settleHold == settleTicks {
-      mode: "Edge"
-      // Each piece is read once as the board comes to rest: the square under an upright body, or none for a body knocked
-      // over or absent. The gate is the group's alone, so the read is judged on the settle's crossing, not every tick a
-      // body's attitude moves.
-      rule "tabletop-derive-cell" {
-        forEach: pieceCode
+    rule "tabletop-derive-cell" {
+      when fact(placement, $each, Resting)
+      mode: Edge
+      forEach: pieceCode
+      if chessHold == 0 {
         if upright(placement, $each) >= 0.5 {
           pieceCell[$each] = board(cellOf, board, placement, $each)
         } else {
@@ -836,147 +849,50 @@ template chessJudge(settleTicks, scope = "", digital = false) {
       }
     }
 
-    rule "tabletop-history-en-passant-west" {
+    // An en-passant target joins a position's identity only while some capture of it is legal: a pawn of the side to move
+    // beside the victim on its rank, its king not attacked once the pawn leaves its square, the victim is taken and the
+    // target is filled. No attacker but a slider moves with the capture (the victim is a pawn, read out of the pawns), so
+    // only the sliders' rays are read again, over the occupancy after it (`boardSlide`), and the board is never copied.
+    rule "tabletop-history-en-passant" {
       local sign = 1 - 2 * turn
-      local source = enPassantTarget - 8 * sign + -1
       local victim = enPassantTarget - 8 * sign
       local kingMask = turn == TurnColor.White ? board(mask, board, 6, 6) : board(mask, board, -6, -6)
-      local kingSquare = trailingZeroCount(kingMask)
       local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
       local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~(kingMask)
       local kingBand = kingMask | nearFiles
+      local pawnFront = (
+        turn == TurnColor.White ? boardShift(nearFiles, chessBoard, S) : boardShift(nearFiles, chessBoard, N)
+      )
+      local pawns = turn == TurnColor.White ? board(mask, board, -1, -1) : board(mask, board, 1, 1)
+      local knights = turn == TurnColor.White ? board(mask, board, -2, -2) : board(mask, board, 2, 2)
+      local kings = turn == TurnColor.White ? board(mask, board, -6, -6) : board(mask, board, 6, 6)
+      local rooks = turn == TurnColor.White ? board(mask, board, -5, -4) : board(mask, board, 4, 5)
+      local bishops = (
+        turn == TurnColor.White ? board(mask, board, -5, -5) | board(mask, board, -3, -3) :
+        board(mask, board, 5, 5) | board(mask, board, 3, 3)
+      )
+      local steadyCheck = (
+        pawnFront & pawns & ~(1 << (victim & 63)) |
+          (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & kings |
+          (
+            boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+            boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+            boardShift(farFiles, chessBoard, S) |
+            boardShift(farFiles, chessBoard, N)
+          ) & knights !=
+        0
+      )
+      local after = ~(board(mask, board, 0, 0)) & ~(1 << (victim & 63)) | 1 << enPassantTarget
+      local afterWest = after & ~(1 << ((victim - 1) & 63))
+      local afterEast = after & ~(1 << ((victim + 1) & 63))
       when historyPending == 1 and enPassantTarget >= 0
-      if source >= 0 and source < 64 and (source / 8) == (victim / 8) and (enPassantTarget / 8) == (
-          turn == TurnColor.White ? 5 : 2
-        ) and board[source] == sign and board[victim] == -(((sign))) and board[enPassantTarget] == 0 and setBitCount(
-          kingMask
-        ) == 1 {
-        transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
-        enPassantProbe[source] = 0
-        enPassantProbe[victim] = 0
-        enPassantProbe[enPassantTarget] = sign
-        if turn == TurnColor.White {
-          enPassantProbeCheck = (
-            boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1) |
-              (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-                board(mask, enPassantProbe, -6, -6) !=
-            0
-          )
-          enPassantProbeCheck |= (
-            (
-              boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-              boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-              boardShift(farFiles, chessBoard, S) |
-              boardShift(farFiles, chessBoard, N)
-            ) &
-              board(mask, enPassantProbe, -2, -2) !=
-            0
-          )
-          enPassantProbeCheck = (
-            enPassantProbeCheck |
-            board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[kingSquare] |
-            board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[kingSquare] |
-            board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[kingSquare]
-          )
-        } else {
-          enPassantProbeCheck = (
-            boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1) |
-              (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-                board(mask, enPassantProbe, 6, 6) !=
-            0
-          )
-          enPassantProbeCheck |= (
-            (
-              boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-              boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-              boardShift(farFiles, chessBoard, S) |
-              boardShift(farFiles, chessBoard, N)
-            ) &
-              board(mask, enPassantProbe, 2, 2) !=
-            0
-          )
-          enPassantProbeCheck = (
-            enPassantProbeCheck |
-            board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[kingSquare] |
-            board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[kingSquare] |
-            board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[kingSquare]
-          )
-        }
-        if enPassantProbeCheck == 0 {
-          repetitionEnPassant = enPassantTarget
-        }
-      }
-    }
-
-    rule "tabletop-history-en-passant-east" {
-      local sign = 1 - 2 * turn
-      local source = enPassantTarget - 8 * sign + 1
-      local victim = enPassantTarget - 8 * sign
-      local kingMask = turn == TurnColor.White ? board(mask, board, 6, 6) : board(mask, board, -6, -6)
-      local kingSquare = trailingZeroCount(kingMask)
-      local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
-      local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~(kingMask)
-      local kingBand = kingMask | nearFiles
-      when historyPending == 1 and enPassantTarget >= 0
-      if source >= 0 and source < 64 and (source / 8) == (victim / 8) and (enPassantTarget / 8) == (
-          turn == TurnColor.White ? 5 : 2
-        ) and board[source] == sign and board[victim] == -(((sign))) and board[enPassantTarget] == 0 and setBitCount(
-          kingMask
-        ) == 1 {
-        transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
-        enPassantProbe[source] = 0
-        enPassantProbe[victim] = 0
-        enPassantProbe[enPassantTarget] = sign
-        if turn == TurnColor.White {
-          enPassantProbeCheck = (
-            boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1) |
-              (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-                board(mask, enPassantProbe, -6, -6) !=
-            0
-          )
-          enPassantProbeCheck |= (
-            (
-              boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-              boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-              boardShift(farFiles, chessBoard, S) |
-              boardShift(farFiles, chessBoard, N)
-            ) &
-              board(mask, enPassantProbe, -2, -2) !=
-            0
-          )
-          enPassantProbeCheck = (
-            enPassantProbeCheck |
-            board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[kingSquare] |
-            board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[kingSquare] |
-            board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[kingSquare]
-          )
-        } else {
-          enPassantProbeCheck = (
-            boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1) |
-              (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-                board(mask, enPassantProbe, 6, 6) !=
-            0
-          )
-          enPassantProbeCheck |= (
-            (
-              boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-              boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-              boardShift(farFiles, chessBoard, S) |
-              boardShift(farFiles, chessBoard, N)
-            ) &
-              board(mask, enPassantProbe, 2, 2) !=
-            0
-          )
-          enPassantProbeCheck = (
-            enPassantProbeCheck |
-            board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[kingSquare] |
-            board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[kingSquare] |
-            board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[kingSquare]
-          )
-        }
-        if enPassantProbeCheck == 0 {
-          repetitionEnPassant = enPassantTarget
-        }
+      if ((enPassantTarget / 8) == (turn == TurnColor.White ? 5 : 2) and
+        board[victim] == -(sign) and
+        board[enPassantTarget] == 0 and
+        setBitCount(kingMask) == 1 and
+        steadyCheck == 0 and
+        (chessEnPassantFrom(victim - 1, afterWest) or chessEnPassantFrom(victim + 1, afterEast))) {
+        repetitionEnPassant = enPassantTarget
       }
     }
 
@@ -1249,52 +1165,38 @@ template chessPutSettled() {
 }
 
 // The fresh-game door of a drawn board: a request sets every piece on its starting square with its starting code and
-// the game's turn, rights, clocks, history and doors as they stood at the start, then the judge reads the board again
-// as at boot (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a
-// live door, never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces
-// back instead.
+// the game's turn, rights, clocks and doors as they stood at the start, then the judge reads the board again as at boot
+// (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a live door,
+// never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces back instead.
+//
+// It writes only what something reads before the judge's first settled pass recomputes it: the status line and the
+// rings (the turn, a check, a draw limit, the last move), the doors and the computer (their requests, a relocation or
+// put-down in flight, the enable bit), and the cells the next game carries forward (rights, the en-passant target, the
+// clocks). The settled pass writes every other cell of the judge before anything reads it: the collision and
+// mismatch counts, the candidate move's kind, mover and capture, the history's flags and length, the previous checks
+// and the pending promotions; and a search answer belongs to the revision the moved pieces bump.
 template chessFreshGame() {
-  rule "chess-fresh-pieces" {
+  rule "chess-fresh" {
     when search(ply) == 0 and chessFresh.request == 1
     mode: Level
     transform copyRow(row: pieceCode, from: pieceStartCode)
     transform copyRow(row: pieceCell, from: pieceStartCell)
-  }
-
-  rule "chess-fresh" {
-    when search(ply) == 0 and chessFresh.request == 1
-    mode: Level
     turn = 0
     verdict = 1
     castleRights = 0
     enPassantTarget = -1
     halfmoveClock = 0
     repetitionCount = 0
-    historyLength = 0
-    historyPending = 0
-    historyReset = 0
     gameStarted = 0
     settleHold = 0
     illegalCount = 0
-    boardMismatch = 0
-    boardChanged = 0
-    boardCollisions = 0
     inCheck[0] = 0
     inCheck[1] = 0
-    previousInCheck[0] = 0
-    previousInCheck[1] = 0
-    promotionPending[0] = -1
-    promotionPending[1] = -1
     move.from = -1
     move.to = -1
-    move.kind = 0
-    move.mover = 0
-    move.captured = 0
     ai.pending = 0
     aiEnabled = 0
-    aiBest.token = -1
     putDown.judging = 0
-    putDown.revert = 0
     chessPut.request = 0
     chessInput.request = 0
     chessFresh.request = 0

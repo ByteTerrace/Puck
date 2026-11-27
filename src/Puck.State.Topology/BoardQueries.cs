@@ -396,6 +396,32 @@ public static class BoardQueries {
         }
         return filled;
     }
+    /// <summary>Returns the cells sliders attack in the query's direction: each slider's run through unoccupied cells
+    /// and the first occupied cell ending it, the attack set of a rook, bishop or queen read off an occupancy mask. A
+    /// direction whose neighbours all lie at one bit distance takes a Kogge-Stone fill
+    /// (<see cref="Puck.Maths.OccludedFill.Slide"/>); any other repeats the shift once per step of the longest run.</summary>
+    /// <param name="query">The compiled topology and direction.</param>
+    /// <param name="sliders">The cells the runs start from, one bit per cell ordinal.</param>
+    /// <param name="occupied">The occupied cells, one bit per cell ordinal.</param>
+    /// <returns>The attacked cells.</returns>
+    public static long SlideMask(BoardNeighbourQuery query, long sliders, long occupied) {
+        ArgumentNullException.ThrowIfNull(query);
+        if (sliders == 0L) {
+            return 0L;
+        }
+        if (query.Topology.TryUniformStep(direction: query.Direction, landing: out var landing, step: out var step)) {
+            return ((long)Puck.Maths.OccludedFill.Slide(empty: ~((ulong)occupied), landing: landing, sliders: ((ulong)sliders), step: step));
+        }
+        var attacked = 0L;
+        var frontier = ShiftMask(mask: sliders, query: query);
+
+        // Every step adds at least one new cell or stops, so a run ends within one step per cell, a wrapped one included.
+        while ((frontier &= ~attacked) != 0L) {
+            attacked |= frontier;
+            frontier = ShiftMask(mask: (frontier & ~occupied), query: query);
+        }
+        return attacked;
+    }
     /// <summary>Carries every set bit of a cell mask through a point-group element.</summary>
     /// <param name="topology">The compiled topology.</param>
     /// <param name="element">The element ordinal.</param>

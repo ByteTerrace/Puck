@@ -138,9 +138,12 @@ template wallPainting(label, frame, title, note) {
   name: label
   schema: "puck.creation.v2"
   palette: paintingPalette
+  // A box's face is its local +Z, so the rim's half turn faces the glass to the creation's front (-Z), away from the
+  // wall: a door fires only for a body passing through its glass from the side it faces.
   shape Box "rim" {
     material: paintBlack
     position [0, canvasCenter, -canvasProud]
+    rotation [0, 1, 0, 0]
     scale [canvasHalfWidth, canvasHalfHeight, 0.04]
   }
   shape Box "opening" {
@@ -308,7 +311,7 @@ prototypes {
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceUp
+        rotation: compose(faceUp, rotate([0, 1, 0], 180))
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {
@@ -362,7 +365,7 @@ prototypes {
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceDown
+        rotation: compose(faceDown, rotate([0, 1, 0], 180))
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {

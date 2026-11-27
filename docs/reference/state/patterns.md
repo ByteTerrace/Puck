@@ -110,7 +110,7 @@ names both:
   [Rules and firing](rules.md#follow-one-evaluation).
 
 `IWordFoldOperand.WordProgram` declares that per-token expression.
-`RuleExpressions.FoldWord` spells the word through the one interpreter before
+`RuleExpressions.FoldWord` spells the word through the one evaluator before
 `PatternOperand.MatchWord` matches it; the operand never evaluates its own
 letters or substitutes zero for a failed letter. `PatternOperand.ReadWord`
 uses the same fold for host read-back. W6 in

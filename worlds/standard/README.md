@@ -234,8 +234,9 @@ which a world expands in the module instance it makes per station. A game draws 
 state: `../games/chess-station.puck` and `../games/patience-station.puck`. `chess-pieces.puck` is a chess set in
 miniature, the six Staunton pieces turned from primitives (`chessPiecePrototypes`, in the order of the chess
 vocabulary's piece codes, `chessPieceKinds`). `holodeck.puck` is a pool of bodies a board materializes for the game it
-shows and releases when the game changes or ends: each body an inhabited placement whose count is a cell
-(`holodeckLive`), asked for and released through one door (`holodeckSet`) and posed once it exists (`holodeckStands`),
+shows and releases when the game changes or ends: each body an inhabited placement admitted by its pool's one cell
+(`holodeckShown`, written through `holodeckShow`, so a game switch is one write) and counted by its own (`holodeckLive`,
+written through `holodeckSet`), and posed once it exists (`holodeckStands`, `holodeckMark`),
 with looks a game can change while a body stands (`holodeckLooks`). It knows no game; a station's chess pieces and cards
 are its worked pools. The debug world's station (`../debug/game-station.md`) is the worked example.
 

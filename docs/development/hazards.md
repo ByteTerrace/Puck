@@ -142,7 +142,7 @@ failure.
 
 - The retired gate protocol allowed `GateOpen(faulted: out _)` to discard a
   fault on the strength of an enclosing scope.
-- The retired `RuleExpressions.Run` protocol handed a nested call its caller's
+- The retired token interpreter's protocol handed a nested call its caller's
   fault variable, so a nested success could clear an outer fault
   ([Rule faults](../decisions/state-and-language.md#rule-faults)).
 - `out _` on a key's `Resolved<T>` or `TryNamed` drops whether an address named anything.

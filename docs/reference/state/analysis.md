@@ -210,7 +210,14 @@ same judgement the due list's schedule is built from and charges the line
   everything at rest is read under the binding's own key (`row[$each]`, a fact
   of the body bound to `$each`), one move reaches one binding: one check and
   one firing. When something is shared (a literal cell, a region's occupancy,
-  a deadline), one move reaches every binding: every check, and every firing.
+  a deadline read from a shared cell), one move reaches every binding: every
+  check, and every firing. A deadline each binding reads under its own key
+  (`$tick >= due[$each]`) reaches only the bindings it is due for, since a
+  keyed sweep's due list wakes those bindings alone.
+- **A gate that never holds** on the host fires nothing there
+  (`RuleResponse.NeverHolds`): a host whose search ply is fixed answers the live
+  ply, zero, so a gate that `search(ply) > 0` closes is a search judge's line,
+  priced with the search, and the tick charges only its checks.
   A row read through a per-binding index, `goal[group[$each]]`, is shared too,
   but one of its cells is read only by the bindings that index it, so the line
   is charged every check and an even share of the firings: the multiplier
@@ -279,7 +286,7 @@ There are two forms, tried in this order:
 
 - **Exact.** When every read's declared values are a finite set and their
   product is at most `RuleBounds.MaxAssignments`, the program is evaluated once
-  per assignment by the one interpreter, with each read replaced by its value.
+  per assignment by the one evaluator, with each read replaced by its value.
   Two reads of the same thing (the same cell under the same key, the same
   register of the same body) are one variable, and a local's program is
   evaluated under the same assignment, so correlated terms stay correlated:
@@ -551,7 +558,10 @@ schedule names:
   is judged again then. An equality is how a rule names the tick an event
   landed (`inputTick(seat, channel, Press, 0) == $tick`): closed, it wakes at
   X if X is ahead and never once X has passed; held open by an `Edge`, it wakes
-  the next tick, when the equality stops holding.
+  the next tick, when the equality stops holding. A keyed sweep keeps each
+  binding's wake (`RuleDueList.RecordBindingWake`), so a deadline coming due
+  wakes the bindings whose deadline it is, and the whole sweep only once the
+  positions they were recorded at no longer stand.
 
 A judgement's dependencies are its gate's and the gate's locals' reads; a local
 only the effects read is computed when the rule fires, after the verdict, and

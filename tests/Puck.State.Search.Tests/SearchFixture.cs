@@ -199,7 +199,7 @@ internal static class SearchFixture {
         ),
         score: ((score is null)
             ? null
-            : CompileRules(
+            : (Puck.State.Rules.CompiledProgram)CompileRules(
                 context: position.RulesContext,
                 text: score
             ))

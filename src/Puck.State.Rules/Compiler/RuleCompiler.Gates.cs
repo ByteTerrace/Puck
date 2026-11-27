@@ -9,7 +9,7 @@ public static partial class RuleCompiler {
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     /// <returns>The compiled gate.</returns>
-    public static GateToken[] CompileGate(ActionPredicate? predicate, string ruleName, RuleCompileContext context) {
+    public static CompiledGate CompileGate(ActionPredicate? predicate, string ruleName, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var gate = new List<GateToken>();
@@ -121,7 +121,7 @@ public static partial class RuleCompiler {
             )
             : new CompiledCellRef(
                 Key: default,
-                Program: program,
+                Program: new CompiledProgram(tokens: program),
                 RowOrdinal: -1
             )
         );

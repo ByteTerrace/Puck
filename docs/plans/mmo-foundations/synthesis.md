@@ -193,7 +193,7 @@ whole-population defect (Old School RuneScape's item-definition merge,
 [persistence, section 1](persistence.md#1-storing-characters)) **[record]**.
 
 **What exists.** An identity copies its template at seed **[opened]**
-(`src/Puck.World.Server/WorldOwnedWorlds.cs:827`):
+(`src/Puck.World.Server/WorldOwnedWorlds.cs:835`):
 
 ```csharp
     private WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
@@ -562,7 +562,7 @@ receipt ([F1](synthesis-attacks.md#f1-favoured-4f-misstates-lane-b),
 through also needs a commit `Decide` does not have: it persists and answers
 `Accepted: true` even when the save failed and was only narrated, and the
 receipt's contract is "whether it applied", not whether it is recoverable
-**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:620-622`):
+**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:628-630`):
 
 ```csharp
         Persist(identity: owner);

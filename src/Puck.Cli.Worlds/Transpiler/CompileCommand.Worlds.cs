@@ -61,6 +61,12 @@ public static partial class CompileCommand {
                 if (WorldSemanticValidator.IsRootDocument(loweredJson: output.Json)) {
                     var validated = WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
 
+                    // A test world's expectations compile at its install; compiling them here refuses offline what
+                    // that install would.
+                    if (validate && (validated is not null) && !diagnostics.HasErrors) {
+                        WorldSemanticValidator.ValidateTestRules(composedRoot: validated, diagnostics: diagnostics, loweredRoot: output.Json, tests: output.TestWorlds);
+                    }
+
                     // A world refused for its work alone is the one whose sheet matters most, so a composed world is priced
                     // whatever its validation found.
                     if ((budgetLines > 0) && (validated is not null)) {

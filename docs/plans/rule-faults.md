@@ -25,7 +25,7 @@ This plan holds only unresolved work.
 preflight loop, after every reversible effect and the continuation have run.
 The original design read each source immediately before its arm's authored
 position. Consequently `emitCue(key: x); x = 5` reads 5 in the current code.
-Choose the intended author contract and make the interpreter, reference and
+Choose the intended author contract and make the evaluator, reference and
 spelling-equivalence examples agree. The reference describes the current late
 read. Both timings retain one source read and reuse its outcome at delivery.
 `WorldRuleHost.ProposedPairLive` does not read these sources: its queued

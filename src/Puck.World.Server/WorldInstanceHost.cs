@@ -1507,7 +1507,16 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see langword="null"/> for serial servers.</param>
     /// <param name="scenario">Whether neighbour starts run in a deterministic scenario with no live entropy.</param>
     /// <param name="linkBoundary">The local pump window shared by links to the worlds it steps.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false, WorldLinkBoundary? linkBoundary = null) {
+    /// <param name="narrationSink">The sink the host's own narration reaches from construction on, or
+    /// <see langword="null"/> for one attached later through <see cref="AttachNarrationSink"/>. A composition that
+    /// admits its boot row as it builds the host passes it here: admitting that row settles its screen sessions, which
+    /// start the worlds its paintings and screens show, and a refused start narrates its reason then, before any later
+    /// attachment could hear it.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false, WorldLinkBoundary? linkBoundary = null, IWorldNarrationSink? narrationSink = null) {
+        if (narrationSink is not null) {
+            _ = m_narration.AttachNarrationSink(sink: narrationSink);
+        }
+
         m_presents = presents;
         m_scenario = scenario;
         m_linkBoundary = (linkBoundary ?? new WorldLinkBoundary());
@@ -1603,8 +1612,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             );
         }
 
-        Admit(row: row);
+        // The account is taken before the row is admitted: admission settles the boot row's screen sessions, which start
+        // the worlds its paintings and screens show, and every row started there shares this account.
         m_account = row.Server.Account;
+        Admit(row: row);
         var bootEndpoint = EndpointFor(instance: row);
         // A world declaring fewer local seats than the host's seat ceiling (m_seats.SeatCount) has no entity-table
         // row for the seats it did not declare — Population.Capacity is the entity table's real size.

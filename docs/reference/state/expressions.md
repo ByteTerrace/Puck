@@ -169,16 +169,20 @@ value expression, uses the same intermediate representation (IR): an
 | `ExpressionSpellingJsonConverter` | Puck.State | Reads and writes a program as infix text, the shape a cartridge document holds. |
 | `ExpressionVocabulary` | Puck.State | The named functions, projected from the operator table, which the `.puck` document language also reads. |
 | `ExpressionArithmetic` | Puck.State | Evaluates Int and Q48.16 operations without per-operation allocation. |
-| `RuleExpressions` | Puck.State.Rules | The operator dispatch that gates, locals, effect sources, and the constant folder all evaluate through. |
+| `RuleExpressions` | Puck.State.Rules | The evaluator that gates, locals, effect sources, and the constant folder all evaluate through, over each program's closure tree (`CompiledProgram`, `ProgramClosures`). |
 
 Each operation has a single row in `ExpressionOperators`, so its spelling,
 arity, and cost live in one place. Domain checks, such as division by zero,
-remain in the evaluator. Evaluation allocates nothing: the value stack and
-its absence marks are one block of machine stack per evaluation, and a call,
-a fold's member body and a short-circuit body run on that block above the
-values beneath them. Each compiled token carries the arm of the one dispatch
-it runs and how many values it consumes (`CompiledExpressionToken.Step`,
-`Consumes`), derived from its operation and payload when the token is built.
+remain in the evaluator. Evaluation allocates nothing once a program's tree is
+built: values pass between nodes as return values, a call's arguments sit in
+the calling node's frame, and an absence travels beside the value until a
+consumer answers it. Each compiled token carries the step it lowers to and how
+many values it consumes (`CompiledExpressionToken.Step`, `Consumes`), derived
+from its operation and payload when the token is built; the tree builder reads
+both, and a chain of binary operations becomes one node. A tree that would
+recurse deeper than `ProgramClosures.MaxDepth` nodes, through every body it
+reaches, faults (`Domain`) wherever it is evaluated, so no program's
+evaluation outgrows a thread's stack.
 
 An operand reads through the evaluation's `EvaluationFrame`, which asks the
 host for its arena and clocks once per evaluation. A literal key of a fixed,
@@ -440,21 +444,28 @@ faults.
 | `Faulted` | `ExpressionFault.Domain` for overflow, division by zero, an argument outside its domain, or an invalid stack result; `ExpressionFault.Forever` for numeric use of infinity. Faulting key, live-row-index, and ring-age arithmetic faults the read rather than producing absence. |
 
 `ExpressionFault.Domain` and `ExpressionFault.Forever` describe faults, and a fault is a case of the answer: the
-interpreter returns an `Outcome` (`RuleExpressions.Evaluate`), a nested call or
+evaluator returns an `Outcome` (`RuleExpressions.Evaluate`), a nested call or
 fold member's outcome is a value its caller combines, and a gate's verdict
 (`RuleEvaluation.Decide`) is `Faulted` when any conjunct faulted. A rule's
 judgement, a decision, a group trigger and a search step each read the outcome
 or verdict in hand and decide nothing when it faulted. `Absent` is a value, not
 a fault: each consumer answers it where it sits.
 
-### One interpreter and resolved addresses
+### One evaluator and resolved addresses
 
-`RuleExpressions.Run` is the single token interpreter. Its framed entry is
-`RuleExpressions.Evaluate`; `EvaluationFrame` names the reader and refuses a
-default frame at runtime. Nested calls and folds return their own outcomes,
-so a successful child cannot clear an outer fault. A fault ends the program
-before negation or disjunction can recover it. Skipped short-circuit operands
-do not run. W8 in [the examples](../../../worlds/debug/rule-faults-tests.puck)
+A program and a gate are never interpreted token by token. `CompiledProgram`
+and `CompiledGate` hold the tokens every analysis reads, and lower them once,
+at their first evaluation, to a tree of closures (`ProgramClosures`): each
+token becomes the node that does its work, its operands become child nodes, an
+operand's addresses and a comparison's kernel are resolved when the node is
+built, and a gate's comparisons are leaves of the same tree. A program's tree
+is kept per kind it is evaluated in; a call's body and a fold's member body
+are the body program's own kept tree, shared by every site that reaches it.
+`RuleExpressions.Evaluate` is the framed entry and `RuleEvaluation.Decide` the
+gate's; `EvaluationFrame` names the reader and refuses a default frame at
+runtime. Nested calls and folds return their own outcomes, so a successful
+child cannot clear an outer fault. A fault ends the program before negation or
+disjunction can recover it. Skipped short-circuit operands do not run. W8 in [the examples](../../../worlds/debug/rule-faults-tests.puck)
 shows a nested success followed by a fault.
 
 `IRuleOperand.Addresses` declares every address an operand reads.
@@ -465,11 +476,12 @@ that faults ends the read before the operand runs; one naming nothing reaches
 the operand as unnamed. Operands evaluate no programs themselves. Computed
 address tokens are priced once by `RuleWorkBudget.ExpressionCost`, including
 the work a complex key actually runs. W2 and W3 exercise these read paths.
-A pattern's per-token program uses the same interpreter through
+A pattern's per-token program uses the same evaluator through
 `RuleExpressions.FoldWord`; see [Patterns](patterns.md#where-a-patterns-values-come-from).
 
-`RuleExpressions.EvaluateDetached` is an entry to that same loop for consumers
-outside a firing. `OutcomeDetachedAllowlist` names the permitted files and
+`RuleExpressions.EvaluateDetached` is an entry to that same evaluator for
+consumers outside a firing; its span form builds a tree for one evaluation of
+tokens its caller rewrites (the constant folder, the bounds lowering). `OutcomeDetachedAllowlist` names the permitted files and
 their fault handling: the constant folder leaves a non-finite subtree
 unfolded, the bounds lowering (`RuleBounds`) answers unbounded for a program
 with a non-finite assignment, a flock affinity counts failure and contributes
@@ -496,7 +508,7 @@ are the exact spellings the parser accepts.
 | Absence | `isAbsent(operand)`, `operand ?? fallback` | See [Answer an absent read](#answer-an-absent-read) |
 | Bits | `&`, `\|`, `^`, `~`, `<<`, `>>`, `>>>` (logical), `setBitCount`, `leadingZeroCount`, `trailingZeroCount`, `lowestSetBit`, `clearLowestSetBit`, `byteSwap`, `reverseBits`, `rotateLeft(value, count)`, `rotateRight(value, count)`, `parallelBitExtract(value, mask)`, `parallelBitDeposit(value, mask)`, `bitField(value, offset, width)`, `bitInsert(value, field, offset, width)` | Int |
 | Periodic masks | `replicationMask(width)`, `repeatBits(pattern, width)` | Int |
-| Board masks | `boardShift(mask, topology, direction)`, `boardRay(mask, topology, direction)`, `boardImage(mask, topology, element)` | Int; topologies of at most 64 cells |
+| Board masks | `boardShift(mask, topology, direction)`, `boardRay(mask, topology, direction)`, `boardImage(mask, topology, element)`, `boardSlide(sliders, occupied, topology, direction)` | Int; topologies of at most 64 cells |
 | Pairing | `pair(x, y)`, `pairX`, `pairY`, `pairSwap`, `pairMaximum`, `pairMinimum`, `pairSum`, `pairDifference`, `pairTranslate(p, delta)`, `pairScale(p, factor)` | Int |
 | Morton order | `mortonIndex(x, y)`, `mortonX`, `mortonY` | Int |
 | Hilbert order | `hilbertIndex(order, x, y)`, `hilbertX(order, index)`, `hilbertY(order, index)` | Int |

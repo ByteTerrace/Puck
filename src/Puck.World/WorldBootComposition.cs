@@ -971,7 +971,10 @@ public static class WorldBootComposition {
                 presents: (sp.GetService<WorldHostSettings>() is not { Headless: true }),
                 jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>(),
                 scenario: scenario,
-                linkBoundary: sp.GetRequiredService<WorldLinkBoundary>()
+                linkBoundary: sp.GetRequiredService<WorldLinkBoundary>(),
+                // Bound to stderr from construction: AdmitBoot below settles the boot row's screen sessions, which start
+                // the worlds its paintings and screens show, and a refused start narrates its reason there.
+                narrationSink: sp.GetRequiredService<IWorldNarrationSink>()
             ) {
                 ConsoleRows = sp.GetRequiredService<WorldDeferredVerbEchoes>().ForRow,
             };

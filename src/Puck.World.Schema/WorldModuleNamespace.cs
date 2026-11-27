@@ -771,6 +771,33 @@ public static class WorldModuleNamespace {
             return;
         }
 
+        // An inhabit count's cell reference is converter-backed too (an integer, or `{ row, key }`): its row names a state
+        // row and its key a cell, which a module's own pool keys by its own inhabited placements, so both follow the
+        // module's declarations as every other row and key read does.
+        if (type == typeof(WorldPlacementInhabitCount)) {
+            if (node is JsonObject count) {
+                var properties = WorldModelShape.Of(type)!.Properties;
+
+                foreach (var (member, json) in (ReadOnlySpan<(string, string)>)[(nameof(WorldPlacementInhabitCount.Row), "row"), (nameof(WorldPlacementInhabitCount.Key), "key")]) {
+                    if (
+                        count.TryGetPropertyValue(jsonNode: out var value, propertyName: json) &&
+                        (value is not null) &&
+                        properties.First(property => property.Member == member).NameField is { } countField
+                    ) {
+                        visitor(
+                            count,
+                            json,
+                            value,
+                            countField,
+                            typeof(string)
+                        );
+                    }
+                }
+            }
+
+            return;
+        }
+
         if (
             type.IsPrimitive ||
             type.IsEnum ||

@@ -125,7 +125,8 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   A tighter later target resumes that search; only a completed search may raise
   the maximum. Shared edge midpoints precede the unshared centroid.
   Forward checks measure the removed vertex's samples first, then every other
-  tracked sample. An original vertex retained by its tracked triangle witnesses
+  tracked sample; `ListSources` lists the second phase only once a measure has
+  passed the first, since the removed vertex's own samples decide most refusals. An original vertex retained by its tracked triangle witnesses
   its own position, normal and material exactly; the other samples choose their
   nearest admissible witness. Ordering avoids later work when an early sample
   refuses the collapse. A nearest point already beyond the current distance
@@ -143,9 +144,35 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   `Commit` is the one mutation door for topology, surface and line samples, and
   inherited bounds; it stamps every endpoint of the old fan, including deleted
   triangles. The cache only skips failed attempts; every accepted collapse still
-  passes all checks. `PrepareFrom` lays out each source fan's corners, link
-  stamps and geometry once for every neighbour tried; its tracked samples and
-  lines are listed by the first neighbour that needs them. A `Dictionary<long, …>`
+  passes all checks. `PrepareFrom` lays out each source fan's corners, its
+  neighbour list and geometry once for every neighbour tried; its tracked samples and
+  lines are listed by the first neighbour that needs them. The link test runs after
+  the turn and facing tests, which refuse most attempts and read only the place's fan.
+- **A pass leaves quiet places out and takes woken ones at their turn.** A pass
+  takes its candidates in one total order (cost, then place). A place whose last
+  turn kept only refusals standing on its own revision and the budget (no link,
+  unkept or touched-target skip) is quiet (`Collapser.TryPlace`); `Pass` leaves it
+  out while its revision and budget hold, and `Commit`, the one revision writer,
+  calls `Wake`, which queues a left-out place for the turn its key would have had
+  if that turn is still to come (`TakeWoken`). A new input a kept refusal reads
+  must wake or disqualify a quiet place, or it stays out on a stale refusal.
+  `sdf.collapse.quiet` counts the places left out beside `priced`.
+- **A large pass measures its candidates side by side, and takes exactly the serial
+  pass's collapses.** `Collapser.Speculate` measures a block of a pass's candidates
+  on workers (`Collapser(Collapser shared)`: the tables shared, read only; every
+  scratch list its own) through `PoolFork`, recording each refusal and where a
+  collapse would be taken; `TryPlace` then takes the block in order, using a record
+  only while `Clean` finds no place of the candidate's fan stamped by a commit of
+  the block (`m_blockStamp`, written in `Commit` for both fans), and measuring
+  everything else, the taken collapse included, again. A measure therefore writes
+  nothing shared, and a commit that writes outside its two fans, or a measure that
+  reads outside the place's fan, must stamp or check those places in the same change,
+  or a stale record stands. A block speculates only while the runtime's pool has no
+  queued work (`PoolFork.Saturated`), since a fork no thread helps costs its caller
+  the repeated measures for nothing. The audit's group and level lines, and the
+  `sdf.collapse` counters but the load-dependent `speculated` and `redone`, match a
+  serial bake's.
+  A `Dictionary<long, …>`
   keyed by two packed places takes `PackedIntPairComparer.Instance`: long's own hash folds the halves,
   and neighbouring places collided until the refusal lookups dominated a mesh.
   A faster query or a different witness assignment still needs the field audit:

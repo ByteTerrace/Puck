@@ -10,10 +10,10 @@ namespace Puck.Analyzers;
 /// <summary>
 /// Holds the fences a rule evaluation's answer cannot hold by its type: an <c>Outcome</c> is a case of the value, so a
 /// caller that drops it, reads a number from it without looking at the answer, reads a verdict as one case,
-/// evaluates tokens outside the interpreter, or lets an operand resolve an address of its own has turned a fault back
+/// evaluates tokens outside the evaluator, or lets an operand resolve an address of its own has turned a fault back
 /// into a quiet value. Each rule reads the compiler's symbols, so an alias, a <c>using static</c> or a method group is
 /// seen exactly as the compiler sees it. A test assembly (one that references xUnit v3) is held to none of them: its
-/// evaluations are the oracle the interpreter is measured against, and a test that watches state rather than an answer
+/// evaluations are the oracle the evaluator is measured against, and a test that watches state rather than an answer
 /// owes the answer no handling.
 /// <list type="bullet">
 /// <item><see cref="Outcome001DiscardedOutcome"/>: an expression statement, a discard assignment or a discard
@@ -31,7 +31,7 @@ namespace Puck.Analyzers;
 /// <item><see cref="Outcome004OperandResolvesAnAddress"/>: a member of a type implementing <c>IRuleOperand</c> that
 /// resolves an address against the reader through a <c>CompiledCellRef</c>, a <c>LiveRow</c> or an <c>IRuleKey</c>. An
 /// operand declares its addresses through <c>Addresses</c> and receives them resolved, so one it resolves itself reads
-/// through a fault the interpreter would have ended the read at. An operand may hold the declaration (the read set,
+/// through a fault the evaluator would have ended the read at. An operand may hold the declaration (the read set,
 /// the price and the address list are built from it); it may not call it.</item>
 /// </list>
 /// The rules stop where the syntax does: a bool held in a local and never read, and a hand-written arena read with a
@@ -65,17 +65,17 @@ public sealed class OutcomeAnalyzer : DiagnosticAnalyzer {
     public static readonly DiagnosticDescriptor Outcome003DetachedCaller = new(
         id: "OUTCOME003",
         title: "A detached evaluation outside the listed consumers",
-        messageFormat: "'{0}' is called from {1}, which OutcomeDetachedAllowlist does not name; only a consumer that is not a firing and states its Faulted arm evaluates detached, and the interpreter's own entry takes a frame",
+        messageFormat: "'{0}' is called from {1}, which OutcomeDetachedAllowlist does not name; only a consumer that is not a firing and states its Faulted arm evaluates detached, and the evaluator's own entry takes a frame",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "RuleExpressions.EvaluateDetached is the second entry to the interpreter for a caller that is not a firing. The list of such callers is closed, and each entry names what its Faulted arm does."
+        description: "RuleExpressions.EvaluateDetached is the second entry to the evaluator for a caller that is not a firing. The list of such callers is closed, and each entry names what its Faulted arm does."
     );
     /// <summary>OUTCOME004: an operand resolves an address against the reader itself.</summary>
     public static readonly DiagnosticDescriptor Outcome004OperandResolvesAnAddress = new(
         id: "OUTCOME004",
         title: "An operand resolves an address of its own",
-        messageFormat: "'{0}' is an IRuleOperand and calls '{1}', which resolves an address against the reader; an operand reads only the addresses it declares through Addresses, which the interpreter resolves first and ends the read at when one faults",
+        messageFormat: "'{0}' is an IRuleOperand and calls '{1}', which resolves an address against the reader; an operand reads only the addresses it declares through Addresses, which the evaluator resolves first and ends the read at when one faults",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
