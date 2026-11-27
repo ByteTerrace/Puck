@@ -48,11 +48,12 @@ uint4 sdfViewsReflectionPack(float3 color, float hit, float open, uint normalWor
 // The environment a views pixel reflects: the volume's reflection (`fallback`, sdfViewsReflectionSeen) where no ray answers
 // it, the colour the rays reached on screen and the open sky (`sky`, worldEnvironmentReflection) by the shares their
 // records hold, and the volume's alone in a view whose fragment holds no reflection pass (passGroup.screenReflections).
-// A pixel reads the cells whose representatives lie nearest it this frame, one to four, each a pixel or none away along
-// each axis and so equally weighted, and keeps those whose representative lies on its own surface: on its tangent plane
-// and facing as it does, by the probe lookup's tolerances (sdfViewsProbeTolerance, SdfViewsProbeFacing), so a reflection
-// never crosses a depth or crease edge the records show. `surfacePoint` is the pixel's, `normal` its geometric normal
-// (the visibility record's) and `t` its ray distance.
+// A pixel weighs the 2x2 cells about it by a tent of one cell's width about each cell's representative this frame, so
+// along each axis its own representative counts whole and two a pixel either side count alike, and by how nearly each
+// representative lies on its own surface: on its tangent plane and facing as it does, falling smoothly to nothing at the
+// probe lookup's tolerances (sdfViewsProbeTolerance, SdfViewsProbeFacing). A reflection so never crosses a depth or
+// crease edge the records show, and a cell's ray never switches whole between counting and not. `surfacePoint` is the
+// pixel's, `normal` its geometric normal (the visibility record's) and `t` its ray distance.
 float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, float t, float3 sky, float3 fallback) {
     uint cellEdge = passGroup.screenReflections;
 
@@ -60,14 +61,16 @@ float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, 
         return fallback;
     }
 
-    int2 shifted = (int2(p.pixel) - int2(sdfViewsReflectionPhase(passGroup.historyFrames, cellEdge)));
-    int2 base = ((cellEdge > 1u) ? (shifted >> 1) : shifted);
-    uint2 odd = ((cellEdge > 1u) ? uint2(shifted & 1) : uint2(0u, 0u));
+    int2 phase = int2(sdfViewsReflectionPhase(passGroup.historyFrames, cellEdge));
+    // The cell whose representative lies at or before the pixel along each axis: the shift floors a negative offset.
+    int2 base = ((cellEdge > 1u) ? ((int2(p.pixel) - phase) >> 1) : int2(p.pixel));
     int2 cells = int2(sdfViewsReflectionCells(cellEdge));
     float3 relative = (surfacePoint - passGroup.viewPosition);
     float footprint = (p.pixelFootprint * t);
     float planeTolerance = sdfViewsProbeTolerance(footprint, abs(dot(normal, p.rayDirection))).y;
     float scale = sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale);
+    float edge = float(cellEdge);
+    int2 last = (int2(passGroup.imageExtent) - 1);
     float kept = 0.0;
     float hit = 0.0;
     float open = 0.0;
@@ -75,10 +78,17 @@ float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, 
 
     [unroll]
     for (uint corner = 0u; (corner < 4u); corner++) {
-        uint2 step = uint2((corner & 1u), (corner >> 1u));
-        int2 cell = (base + int2(step));
+        int2 cell = (base + int2((int)(corner & 1u), (int)(corner >> 1u)));
 
-        if (any(step > odd) || any(cell < 0) || any(cell >= cells)) {
+        if (any(cell < 0) || any(cell >= cells)) {
+            continue;
+        }
+
+        // The cell's representative this frame, clamped into the extent as the reflection pass clamps it.
+        float2 tent = saturate(1.0 - (abs(float2(min(((cell * (int)cellEdge) + phase), last) - int2(p.pixel))) / edge));
+        float weight = (tent.x * tent.y);
+
+        if (weight <= 0.0) {
             continue;
         }
 
@@ -89,25 +99,29 @@ float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, 
         }
 
         float3 representative = sdfVisibilityUnpackNormal(record.z);
+        float gap = abs(dot(relative, representative) - asfloat(record.w));
 
-        if ((abs(dot(relative, representative) - asfloat(record.w)) > planeTolerance) || (dot(normal, representative) < SdfViewsProbeFacing)) {
-            continue;
-        }
+        // Whole within half of each tolerance, nothing past it.
+        weight *= (saturate(2.0 * (1.0 - (gap / planeTolerance))) *
+            saturate((dot(normal, representative) - SdfViewsProbeFacing) / (0.5 * (1.0 - SdfViewsProbeFacing))));
 
-        float cellHit = (float((record.y >> 16u) & 0xFFu) / 255.0);
+        float cellHit = (weight * (float((record.y >> 16u) & 0xFFu) / 255.0));
 
-        kept += 1.0;
+        kept += weight;
         hit += cellHit;
-        open += (float(record.y >> 24u) / 255.0);
+        open += (weight * (float(record.y >> 24u) / 255.0));
         color += (cellHit * float3(f16tof32(record.x), f16tof32(record.x >> 16u), f16tof32(record.y)));
     }
     if (kept <= 0.0) {
         return fallback;
     }
 
-    hit /= kept;
-    open /= kept;
-    color /= (kept * scale);
+    // The shares the kept cells answer, easing to the volume's alone as the weight kept falls below half the tent's.
+    float answered = (saturate(2.0 * kept) / kept);
+
+    hit *= answered;
+    open *= answered;
+    color *= (answered / scale);
     return (((fallback * saturate(1.0 - (hit + open))) + color) + (sky * open));
 }
 #endif

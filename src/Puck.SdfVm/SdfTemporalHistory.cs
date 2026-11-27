@@ -181,8 +181,9 @@ public sealed class SdfTemporalHistory {
     /// <summary>Returns whether a render taken now would feed the instance's passes the temporal inputs its latest
     /// completed render fed them, so that render's output may stand: the same jitter, and, where the pass reads motion
     /// (<see cref="ReadsMotion"/>), the same previous view and previous poses. A temporally resolved view instead stands
-    /// once its history holds one <see cref="SdfWorldPackage.TemporalPeriod"/> of samples and it has rendered a period since its inputs last
-    /// changed (<see cref="Changed"/>): its converged output stands, whatever jitter would come next.</summary>
+    /// once its history holds <see cref="SdfWorldPackage.ConvergedRenders"/> samples and it has rendered a
+    /// <see cref="SdfWorldPackage.TemporalPeriod"/> since its inputs last changed (<see cref="Changed"/>): its converged
+    /// output stands, whatever jitter would come next.</summary>
     /// <param name="epoch">The epoch a render taken now would be prepared in.</param>
     /// <param name="previousPoses">The pose revision the residency's previous transform tables would hold for that
     /// render: its current tables' revision before the frame's upload.</param>
@@ -195,7 +196,7 @@ public sealed class SdfTemporalHistory {
         var continues = Continues(epoch: epoch, previousPoses: previousPoses);
 
         if (epoch.Temporal && Sampling(epoch: epoch)) {
-            return (continues && (Frames >= SdfWorldPackage.TemporalPeriod) && (m_settled >= SdfWorldPackage.TemporalPeriod));
+            return (continues && (Frames >= SdfWorldPackage.ConvergedRenders) && (m_settled >= SdfWorldPackage.TemporalPeriod));
         }
         if (JitterAt(epoch: epoch, frames: (continues ? Frames : 0U)) != m_standing.Jitter) {
             return false;

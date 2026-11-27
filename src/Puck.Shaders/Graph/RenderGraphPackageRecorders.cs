@@ -398,8 +398,9 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Discards retained state that holds unfilled external pixels (<see cref="TaintOf"/>) and that the capture
     /// gate's fills cannot replace on their own, such as a history every render blends into the next, so the instance's
     /// next render over filled sources is clean. The runtime calls it on the frame thread, before any instance renders, on
-    /// every frame a capture is pending and still to be served, for each instance the capture reads; a settled capture
-    /// then serves the first clean frame, and a presented one skips the renders this returns. State the next render
+    /// every frame a capture is pending and still to be served, for each instance the capture reads; a presented capture
+    /// skips the renders this returns, and a settled one converges over them (<c>FrameCaptureRequest.ConvergeOver</c>)
+    /// unless it converges already or its instance cannot. State the next render
     /// derives again from its now-filled sources is left to that render. A factory whose state is clean does nothing.</summary>
     /// <param name="instance">The instance whose tainted state is discarded.</param>
     /// <returns>The renders the instance needs after the discard before its output is the steady image it would have

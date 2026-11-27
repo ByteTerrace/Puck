@@ -54,6 +54,11 @@ public static partial class SdfWorldPackage {
     public const string HistoryWindowWritten = "historyWindowRW";
     /// <summary>The number of jitter phases in a complete temporal sample window.</summary>
     public const uint TemporalPeriod = 8;
+    /// <summary>The renders a temporal view takes from a restarted history until every phase of its window holds a render
+    /// that read a preceding one: a period and one more. An epoch's first render has no preceding frame, so it reflects
+    /// nothing on screen (the reflection pass reads the preceding frame's history colour); the render a period later
+    /// takes its phase. A view stands, and a capture that restarts a history converges, only after this many.</summary>
+    public const uint ConvergedRenders = (TemporalPeriod + 1);
     /// <summary>The first word of a pixel's stationary samples in the window, following its first word: the phase mask
     /// in the low <see cref="TemporalPeriod"/> bits and, above it, the sum of the present phases' packed weights, which a
     /// complete window's mean is divided by when one phase's term is replaced.</summary>
