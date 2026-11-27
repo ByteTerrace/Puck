@@ -309,6 +309,8 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     public Fact Read(WorldInputOperand operand) => Unserved();
     public Fact Read(PointerOperand operand) => Unserved();
     /// <inheritdoc/>
+    public Fact Read(ContactOperand operand) => Unserved();
+    /// <inheritdoc/>
     public Fact Read(NearestOperand operand) => Unserved();
     /// <inheritdoc/>
     public Fact Read(NavigationOperand operand) => Unserved();

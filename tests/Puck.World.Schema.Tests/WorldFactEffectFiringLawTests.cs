@@ -132,6 +132,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public Fact Read(ChannelOperand operand) => throw Unserved();
         public Fact Read(WorldInputOperand operand) => throw Unserved();
         public Fact Read(PointerOperand operand) => throw Unserved();
+        public Fact Read(ContactOperand operand) => throw Unserved();
         public Fact Read(NearestOperand operand) => throw Unserved();
         public Fact Read(NavigationOperand operand) => throw Unserved();
         public Fact Read(ProducerOperand operand) => throw Unserved();

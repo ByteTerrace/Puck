@@ -70,11 +70,13 @@ public sealed class WorldPointerRayCaptureLawTests {
             Sink = (withSink
                 ? new WorldPointerSink(
                     consumers: [],
+                    contacts: Contacts,
                     pointer: Pointer,
                     roster: Roster
                 )
                 : null);
             Capture = new WorldPointerRayCapture(
+                contacts: Contacts,
                 definition: () => (pointed?.Invoke(arg: definition) ?? definition),
                 pointer: Pointer,
                 roster: Roster,
@@ -96,6 +98,8 @@ public sealed class WorldPointerRayCaptureLawTests {
         }
 
         public WorldPointerRayCapture Capture { get; }
+
+        public WorldContacts Contacts { get; } = new();
 
         public WorldPointer Pointer { get; } = new();
 

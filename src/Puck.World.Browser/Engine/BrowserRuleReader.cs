@@ -214,6 +214,11 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             kind: operand.ValueKind
         )
     );
+    // No host means no contact events, so no `$contacts:` sweep ever binds one.
+    Fact IWorldFacts.Read(ContactOperand operand) => Record(
+        operand: nameof(ContactOperand),
+        fact: Fact.Absent(kind: operand.ValueKind)
+    );
     Fact IWorldFacts.Read(NearestOperand operand) => Record(
         operand: nameof(NearestOperand),
         fact: Fact.Finite(
