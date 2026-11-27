@@ -175,7 +175,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_width = width;
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
-        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
+        // An emitting group traces what it draws (SdfMeshPathBake.Emitting), by the test the volume samples emitters with.
+        MeshPathBake = new SdfMeshPathBake {
+            Demand = MeshDemand,
+            Emitting = static (program, material) => SdfMeshIrradianceScene.Emits(appearance: program.Appearance, material: material),
+            Identity = SdfMeshStore.IdentityOf(kernels: kernels),
+            Library = (meshLibrary ?? m_ownedLibrary!),
+            Residency = name,
+        };
         m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
         MeshIrradiance = new SdfMeshIrradiance(allocator: MeshPathBake.Library.Allocator);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the

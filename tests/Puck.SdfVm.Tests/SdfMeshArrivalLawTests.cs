@@ -42,7 +42,9 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
         rig.Engine.Pack(frame: frame);
         rig.Engine.SubmitUpload();
         var held = rig.Engine.MeshRegionBytes;
-        var relocations = rig.Engine.DescribeLanding().Split(' ').Single(predicate: value => value.StartsWith(comparisonType: StringComparison.Ordinal, value: "relocations="));
+        // The arena's relocations of standing meshes are its compactions (the mesh store's line), which forgetting only
+        // the tail leaves as they were.
+        var relocations = rig.Engine.DescribeLanding().Split(' ').Single(predicate: value => value.StartsWith(comparisonType: StringComparison.Ordinal, value: "compactions="));
 
         frame = frame with { MeshDraws = new[] { small }, MeshDrawsRevision = 2 };
         rig.Engine.Pack(frame: frame);
@@ -65,8 +67,12 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
 
         rig.Engine.Pack(frame: frame);
         rig.Engine.SubmitUpload();
-        rig.Engine.GpuWork.Pump(tables: rig.Engine);
-        Assert.True(condition: (rig.Engine.GpuWork.InFlight > 0));
+        // A landing's words are packed on a worker ahead of the take (SdfMeshRegionStore.TryTakePackedLanding), so the pump
+        // that starts the packing takes nothing: the job is in flight from the pump after the packing ends.
+        Puck.Testing.TestLiveness.Until(reason: rig.Engine.DescribeLanding, step: () => {
+            rig.Engine.GpuWork.Pump(tables: rig.Engine);
+            return (rig.Engine.GpuWork.InFlight > 0);
+        });
         Assert.False(condition: rig.Engine.MeshStands(mesh: draw.Mesh));
         pages.SetWritable(count: 4096, firstPage: 0, writable: false);
         pages.SetWritable(count: 4096, firstPage: 0, writable: true);

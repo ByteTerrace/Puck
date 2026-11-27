@@ -50,12 +50,11 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.Equal(new Vector3(x: 9, y: -1, z: -1), groups[1].Low);
         Assert.Equal(new Vector3(x: 11, y: 1, z: 1), groups[1].High);
         using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake());
-        var bake = bakeRun.Bake;
-        var dresser = bakeRun.Dresser;
 
-        dresser.Dress(frame: new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
-        Assert.True(condition: bake.TryTake(bake.Program, out var batch));
-        Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
+        // A grid lattice is bounded on the pool before it samples, so the batch read is the take once both groups offer one.
+        var batch = bakeRun.TakeOffered(frame: new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
+
+        Assert.All(batch.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
     // A body drawn at another size keys the geometry and the skin poses of its own size, since its slots carry the scale
     // and the bake reads another slot in the group's own units.
@@ -119,15 +118,25 @@ public sealed class SdfMeshLibraryLawTests {
         }
         var first = Key(x: 0); var recent = Key(x: 1); var incoming = Key(x: 2);
 
+        // Each store and take answers an owned claim, released here. A managed mesh has no claims that tell whether it
+        // lives, so the cache keeps nothing of one it let go of and a take of it misses (SdfMeshLibrary.Revived counts
+        // only native meshes taken back).
+        static bool Takes(SdfMeshLibrary library, SdfMeshGeometry geometry) {
+            if (!library.TryTake(geometry: geometry, materials: [], mesh: out var taken)) { return false; }
+            taken.Release();
+            return true;
+        }
+
         // The budget counts each mesh's storage bytes: two meshes fit, and a third evicts the oldest alone.
-        _ = library.Store(geometry: first, materials: [], mesh: mesh); _ = library.Store(geometry: recent, materials: [], mesh: mesh);
-        _ = library.Store(geometry: incoming, materials: [], mesh: mesh);
-        Assert.False(condition: library.TryTake(geometry: first, materials: [], mesh: out _));
-        Assert.True(condition: library.TryTake(geometry: recent, materials: [], mesh: out _));
-        Assert.True(condition: library.TryTake(geometry: incoming, materials: [], mesh: out _));
+        library.Store(geometry: first, materials: [], mesh: mesh).Release();
+        library.Store(geometry: recent, materials: [], mesh: mesh).Release();
+        library.Store(geometry: incoming, materials: [], mesh: mesh).Release();
+        Assert.False(condition: Takes(library: library, geometry: first));
+        Assert.True(condition: Takes(library: library, geometry: recent));
+        Assert.True(condition: Takes(library: library, geometry: incoming));
         Assert.Equal((2 * mesh.StorageBytes), library.RetainedBytes);
-        _ = library.Store(geometry: first, materials: [], mesh: mesh);
-        Assert.True(condition: library.TryTake(geometry: first, materials: [], mesh: out _));
+        library.Store(geometry: first, materials: [], mesh: mesh).Release();
+        Assert.True(condition: Takes(library: library, geometry: first));
         Assert.Equal(2, library.Count);
     }
     [Fact]
