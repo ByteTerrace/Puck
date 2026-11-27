@@ -48,6 +48,16 @@ public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradien
     /// when the field has no such structure, and every query reads the field.</summary>
     public FixedFieldPartition? Partition { get; init; }
 }
+/// <summary>How one ray cast at a field collider ended (<see cref="FixedFieldColliderContact.Cast"/>).</summary>
+public enum FixedFieldCastOutcome {
+    /// <summary>The ray meets no surface within its length: the box bounds prove it clear, the search brackets no
+    /// crossing, or the field gives no answer at the origin.</summary>
+    Clear = 0,
+    /// <summary>The ray crosses into the solid within its length.</summary>
+    Hit = 1,
+    /// <summary>The ray's origin reads inside the solid.</summary>
+    Inside = 2,
+}
 /// <summary>How one certified field contact solve ended.</summary>
 public enum FixedFieldContactOutcome {
     /// <summary>The field's certified box bounds prove every point within the body's reach of its core outside the
@@ -759,6 +769,55 @@ public static class FixedFieldColliderContact {
         normal = (measured ? collider.Rotation.Rotate(vector: local) : FixedVector3.Zero);
         FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: !measured);
         return measured;
+    }
+
+    /// <summary>Casts a ray at a field collider: the first point along it at which the field turns from outside to
+    /// inside. The field's certified box bounds first try to prove the whole segment outside the solid, which costs no
+    /// field read; otherwise the collider's own crossing search walks the ray, each step at least the reading scaled
+    /// by the field's Lipschitz step scale (a secant when that reaches farther), and narrows the crossing to the
+    /// contact tolerance. The normal is the field's direction at the crossing.</summary>
+    /// <param name="collider">The field collider.</param>
+    /// <param name="origin">The world-space ray origin.</param>
+    /// <param name="unitDirection">The unit ray direction, in world space.</param>
+    /// <param name="maxDistance">The non-negative length of the ray, in metres.</param>
+    /// <param name="distance">The distance along the ray to the crossing, in metres, for <see cref="FixedFieldCastOutcome.Hit"/>.</param>
+    /// <param name="normal">The unit outward normal at the crossing, in world space, for
+    /// <see cref="FixedFieldCastOutcome.Hit"/>: the field's direction there, or the reversed ray where the field measures
+    /// none.</param>
+    /// <returns>How the cast ended.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
+    public static FixedFieldCastOutcome Cast(in FixedStaticCollider collider, FixedVector3 origin, FixedVector3 unitDirection, FixedQ4816 maxDistance,
+        out FixedQ4816 distance, out FixedVector3 normal) {
+        var sampler = new Sampler(field: Field(collider: in collider), width: Tolerance);
+        var outcome = CastLocal(sampler: ref sampler, start: ToLocal(collider: in collider, world: origin), direction: collider.Rotation.RotateInverse(vector: unitDirection),
+            maxDistance: maxDistance, distance: out distance, normal: out var local);
+
+        normal = ((outcome != FixedFieldCastOutcome.Hit)
+            ? FixedVector3.Zero
+            : ((local != FixedVector3.Zero) ? collider.Rotation.Rotate(vector: local) : -unitDirection));
+        FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: false);
+        return outcome;
+    }
+    private static FixedFieldCastOutcome CastLocal(ref Sampler sampler, FixedVector3 start, FixedVector3 direction, FixedQ4816 maxDistance, out FixedQ4816 distance, out FixedVector3 normal) {
+        distance = FixedQ4816.Zero;
+        normal = FixedVector3.Zero;
+
+        if (
+            sampler.Clears(from: start, reach: FixedQ4816.Zero, to: (start + (direction * maxDistance))) ||
+            !sampler.TryValue(local: start, value: out var value)
+        ) {
+            return FixedFieldCastOutcome.Clear;
+        }
+        if (value <= FixedQ4816.Zero) {
+            return FixedFieldCastOutcome.Inside;
+        }
+        if (!sampler.TryCrossing(crossing: out distance, direction: direction, guess: (value * sampler.Field.BoundScale), limit: maxDistance, start: start, value: value)) {
+            return FixedFieldCastOutcome.Clear;
+        }
+        if (!sampler.TryDirection(direction: out normal, length: out _, local: (start + (direction * distance)))) {
+            normal = FixedVector3.Zero;
+        }
+        return FixedFieldCastOutcome.Hit;
     }
 
     // A point's signed measured distance, outward normal and surface point, in the collider's frame.
