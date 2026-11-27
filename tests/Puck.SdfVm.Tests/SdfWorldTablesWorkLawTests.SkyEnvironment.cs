@@ -52,7 +52,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         Assert.Equal(expected: 2L, actual: rig.Engine.SkyEnvironmentRenders);
 
-        // A stop extending the gradient moves it; one past the stops in use does not.
+        // A stop extending the gradient moves it; one past the stops in use does not. Each edit keeps the lit layers'
+        // kinds, so it waits out the drift hold to project at once.
+        rig.PassDrift();
         gradient.SetStop(color: new Vector3(x: 0.2f, y: 0.4f, z: 0.9f), elevation: 0f, index: 1);
         gradient.Count = 3u;
         gradient.SetStop(color: Vector3.One, elevation: 1f, index: 2);
@@ -65,6 +67,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         _ = sky.Add(label: "haze", parameters: new SdfSkyNoise { ColorHigh = Vector3.One, ColorLow = Vector3.Zero, Coverage = 1f, Gain = 0.5f, Octaves = 4u, Scale = 4f }, visibility: SdfSkyVisibility.Lighting);
         rig.Render();
         Assert.Equal(expected: 4L, actual: rig.Engine.SkyEnvironmentRenders);
+        rig.PassDrift();
         sky.FrameUp = new Vector3(x: 0.2f, y: 1f, z: 0f);
         rig.Render();
         rig.Render();
@@ -148,6 +151,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         };
 
         for (var projection = 1; (projection <= 7); projection++) {
+            // Still frames record nothing in the environment's node, so they move none of its slots.
+            rig.PassDrift();
             var slot = ((int)(rig.Node.FrameCounter % 3));
 
             rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
@@ -194,6 +199,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         };
         // Visit every recording slot; each new pair's actual bytes enter the graph's account.
         for (var index = 1; (index <= 3); index++) {
+            rig.PassDrift();
             rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
             rig.Render();
             rig.Complete();

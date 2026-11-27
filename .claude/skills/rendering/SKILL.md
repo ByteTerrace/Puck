@@ -664,6 +664,15 @@ records the options weighed.
   compiles the classes out for a reload, which must leave a paused still unchanged.
 - **Memory.** Every layer, block-bounds and extinction buffer is held under one fixed `MemoryAccount` reservation
   (`Hold`, `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
+- **Descriptors.** The tables reserve the descriptor pools of the distant entry and the first anchor at construction
+  (`SdfWorldShadows.ReservedEntries`, listed in `SdfWorldTables.DescriptorPools` beside the mesh store's own,
+  `SdfMeshRegionStore.DescriptorPools`), so the first shadow takes no descriptor range a later frame could be refused;
+  a later anchor is made only where the heaps admit its pools then (`IGpuBindings.CanAdmit`), else its view reads the
+  nearest anchor.
+- **Standing.** `SdfWorldTables.ShadowsStand` says every entry a view reads has drawn and owes nothing, so a still
+  frame's upload draws no shadow. Only under the rates lever (`SdfUpdateRates.ShadowDistant`, on in a World) does a
+  layer hold; with the levers off, as a bare `SdfFrame` has them, every static layer is drawn again on every upload, so
+  a device-free law that pins a still upload sets `UpdateRates` and settles to `ShadowsStand` first.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
   (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
   and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's

@@ -48,6 +48,14 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public void Dispose() => m_view.Dispose();
         public void Render() => TestLiveness.Until(step: () => m_view.Produce(context: m_context),
             reason: () => m_view.NotReadyReason, wait: m_view.Residency.WaitPipelineBuilds);
+        // Renders still frames past a drifting sky's hold (SdfSkyEnvironmentRefresh.DriftFrames): an edit that keeps the
+        // lit layers' kinds within those frames of the last projection joins the drift the next projection gathers, so a
+        // law that wants an edit projected at once passes them first.
+        public void PassDrift() {
+            for (var frame = 0; (frame < SdfSkyEnvironmentRefresh.DriftFrames); frame++) {
+                Render();
+            }
+        }
         public void AssertStanding() {
             var frame = Node.FrameCounter;
 

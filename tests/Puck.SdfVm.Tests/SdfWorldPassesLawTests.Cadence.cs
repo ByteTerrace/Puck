@@ -64,9 +64,10 @@ public sealed partial class SdfWorldPassesLawTests {
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { SkyFieldScale = .5f } }] };
                 break;
             case "geometry-only":
+                // A sky layer's geometry is published unexposed (its expose share is zero, a lighting value), so the
+                // shading passes run again beside the composite, which reads the flag.
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { GeometryOnly = true } }] };
-                executed = [SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display];
-                break;
+                goto case "lighting";
             case "drift": frame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
             case "twinkle": frame.Sky.First<SdfSkyStars>().TwinklePhase = 0.37f; break;
             case "fog-color": frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(x: 0.2f, y: 0.1f, z: 0.3f), elevation: -1f, index: 0); break;
