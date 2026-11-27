@@ -93,18 +93,24 @@ function faceText(at, rotation, half, template, ink, em, align = "center", wrap 
 }
 // A text paint's lettering; `anchor` names the line of the block that stands on the box's middle (`capMiddle` centres
 // a line of capitals), and null centres the whole block.
-function faceLettering(template, em, align, wrap, markup, spacing, anchor) = ((anchor == null)
-  ? { template: template, emHeight: em, align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
-  : {
-    template: template
-    emHeight: em
-    align: align
-    fit: true
-    wrap: wrap
-    markup: markup
-    lineSpacing: spacing
-    anchor: anchor
-  })
+function faceLettering(template, em, align, wrap, markup, spacing, anchor) = ((anchor == null) ? {
+  template: template
+  emHeight: em
+  align: align
+  fit: true
+  wrap: wrap
+  markup: markup
+  lineSpacing: spacing
+} : {
+  template: template
+  emHeight: em
+  align: align
+  fit: true
+  wrap: wrap
+  markup: markup
+  lineSpacing: spacing
+  anchor: anchor
+})
 
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
 // clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing
@@ -1877,15 +1883,16 @@ template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
 // A doorway where a walkway meets a balcony's edge (the kit's palette): two teal posts `width` apart in X with brass
 // caps and a brass inlay down each face, a lintel over the opening with a shallow arched soffit, and a brass threshold
 // plate across the floor, all standing on y 0 and facing ±Z. Posts and lintel collide; the inlays, caps and the plate's
-// bevel are drawn only. `height` is the opening's clear height under the lintel's crown.
+// bevel are drawn only. `height` is the opening's clear height under the lintel's crown, and `trim` scales the brass
+// (the inlays, caps and plate) and the lintel's rounding with a doorway drawn smaller than a person's.
 // The radius of an arch spanning `width` that rises `rise` at its middle.
 function doorArchRadius(width, rise) = ((((width / 2) * (width / 2)) + (rise * rise)) / (2 * rise))
-template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32, depth = 0.3) {
+template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32, depth = 0.3, trim = 1) {
   shape Box "door-lintel" {
     material: (base + kitTeal)
     position [0, (height + (lintel / 2)), 0]
     scale [((width / 2) + post), (lintel / 2), (depth / 2)]
-    rounding: 0.03
+    rounding: (0.03 * trim)
   }
   // The soffit's arch: a wide cylinder across the opening cut out of the lintel's underside, rising four tenths
   // of the lintel's depth at the middle. It comes before the posts, so it cuts the lintel alone.
@@ -1907,20 +1914,42 @@ template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32
       detail: true
       material: (base + kitBrass)
       position [(0 - (side * ((width / 2) + (post / 2)))), (height * 0.55), 0]
-      scale [0.018, (height * 0.38), ((depth / 2) + 0.006)]
+      scale [(0.018 * trim), (height * 0.38), ((depth / 2) + (0.006 * trim))]
     }
     shape Box $"door-cap-{side}" {
       detail: true
       material: (base + kitBrass)
-      position [(0 - (side * ((width / 2) + (post / 2)))), ((height + lintel) + 0.04), 0]
-      scale [((post / 2) + 0.03), 0.04, ((depth / 2) + 0.03)]
-      rounding: 0.02
+      position [(0 - (side * ((width / 2) + (post / 2)))), ((height + lintel) + (0.04 * trim)), 0]
+      scale [((post / 2) + (0.03 * trim)), (0.04 * trim), ((depth / 2) + (0.03 * trim))]
+      rounding: (0.02 * trim)
     }
   }
   shape Box "door-threshold" {
     material: (base + kitBrass)
-    position [0, 0.012, 0]
-    scale [((width / 2) + post), 0.012, ((depth / 2) + 0.05)]
-    rounding: 0.008
+    position [0, (0.012 * trim), 0]
+    scale [((width / 2) + post), (0.012 * trim), ((depth / 2) + (0.05 * trim))]
+    rounding: (0.008 * trim)
   }
+}
+
+// A doorway only a small enough body passes: edgeDoorway's frame round an opening just large enough for a body whose
+// collider is `radius` metres round and `tall` metres high at its full size, once it stands at `admits` of that size or
+// less, with `room` to spare each way. A body any larger meets the frame or the wall round it and stays outside, so a
+// door sized at a size field's small end (a mouse door) is a passage being small opens. The frame, posts and lintel
+// scale with the opening; the wall the doorway stands in is the caller's, leaving the opening `sizedDoorwayWidth` across
+// and `sizedDoorwayHeight` high, framed `sizedDoorwayPost` either side and `sizedDoorwayLintel` above.
+function sizedDoorwayWidth(radius, admits, room = 1.4) = (2 * radius * admits * room)
+function sizedDoorwayHeight(tall, admits, room = 1.4) = (tall * admits * room)
+function sizedDoorwayPost(tall, admits) = (0.11 * tall * admits)
+function sizedDoorwayLintel(tall, admits) = (0.15 * tall * admits)
+template sizedDoorway(base, radius, tall, admits, room = 1.4, depth = 0.08) {
+  edgeDoorway(
+    base: base,
+    width: sizedDoorwayWidth(radius, admits, room),
+    height: sizedDoorwayHeight(tall, admits, room),
+    post: sizedDoorwayPost(tall, admits),
+    lintel: sizedDoorwayLintel(tall, admits),
+    depth: depth,
+    trim: admits
+  )
 }

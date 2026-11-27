@@ -73,7 +73,7 @@ float sdfMaskProduct(uint firstRow, uint rowCount, float3 q, uint dataOffset) {
 }
 float sdfFieldLane(int slot, uint lane) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
-    if (slot >= 0) { return sdfComponent(sdfDynamicTransformRow(3u * (uint)slot + 2u), lane); }
+    if (slot != SDF_TRANSFORM_SLOT_NONE) { return sdfComponent(sdfDynamicTransformRow(3u * (uint)slot + 2u), lane); }
 #endif
     return 0.0;
 }
