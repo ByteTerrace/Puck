@@ -37,7 +37,7 @@ How the file stays usable:
 
 ## Hand-off
 
-The lead session orchestrates on the integration branch `lead/rendering`, and
+The lead session orchestrates on the integration branch `lead/creature`, and
 every lane lands there. The next lead rewrites this section when it hands off.
 A new lead can act from this section alone: where things stand, the first
 lanes, [the release](#the-release), the
@@ -140,7 +140,7 @@ the two milestones folded into them rather than queued behind them (the
 owner's ruling). How they run:
 
 - **Integration.** Each principal merges the integration tip into its branch
-  often, and the lead merges a campaign's branch into `lead/rendering`
+  often, and the lead merges a campaign's branch into `lead/creature`
   whenever it builds and boots, so the four branches stay close, no work is
   lost and a regression names one campaign.
 - **Measurement is the lead's instrument** (the owner's ruling: observations
@@ -253,7 +253,7 @@ changed under a version already published. The next push's deploy then refused
 because that release's admitted operation still held the group's pending slot,
 and the pipeline never finalizes.
 
-Fixed on `lead/rendering` since, and not yet deployed:
+Fixed on `lead/creature` since, and not yet deployed:
 
 - A deploy follows whatever its predecessor left
   ([CI](../development/ci.md#world-maintenance-and-recovery)): it accepts an
@@ -287,18 +287,18 @@ What to do next:
    run it yet. The bake identity has moved since the last set, so without new
    sets the `player` job holds its publish and names what to run.
 2. Read the validation run the last lead started (`gh run list --workflow
-   azure.yml --branch lead/rendering -L 1`; it ran with `-f deploy=false`
+   azure.yml --branch lead/creature -L 1`; it ran with `-f deploy=false`
    on the code the head carries, since only documents landed after it). If
    it is red, or the head has gained code, start another:
-   `gh workflow run azure.yml --ref lead/rendering -f deploy=false`. The
+   `gh workflow run azure.yml --ref lead/creature -f deploy=false`. The
    owner asked for this deploy directly, so a green validation run is enough
    to push; the bulk window may run beside the release rather than before
    it, and step 1's cache sets only hold the `player` job, never the deploy.
-3. When that run is green, push `lead/rendering` to `main` and
+3. When that run is green, push `lead/creature` to `main` and
    watch the release to its end. It should deploy, pass the public probe
    (`puck azure test-production` reads the worker's `/healthz` first, so a
    withheld readiness names its reason) and publish the player channel. A red
-   step is fixed on `lead/rendering` as ordinary work. The hosted dev store is
+   step is fixed on `lead/creature` as ordinary work. The hosted dev store is
    scratch and resets at this deploy.
 4. Tell the RTX 2060 session to install the release through the launcher from
    the player channel and to run its two legs at 1920 by 1080 on both
