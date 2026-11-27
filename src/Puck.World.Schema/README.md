@@ -445,7 +445,7 @@ bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell—see the
-debug world's [`chess.puck`](../../worlds/debug/chess.puck) tabletop rules for the worked pattern (retain the accepted
+chess library's [`chess.puck`](../../worlds/games/chess.puck) judge (`chessJudge`) for the worked pattern (retain the accepted
 board while clearing and deriving fresh occupancy, detect which single piece
 moved between two occupied board cells—a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
