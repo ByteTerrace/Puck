@@ -63,6 +63,10 @@ internal struct ProgramContext {
 /// does once its operands are nodes of their own. Each kind of token is its own sealed node, chosen when the tree is
 /// built, so evaluation dispatches on nothing a token carries.</summary>
 internal abstract class ProgramNode {
+    // How many nodes deep one evaluation of this node recurses at most, through every body it runs: the builder sets
+    // it before the tree is published, and the machine stack an evaluation takes is proportional to it.
+    internal int Depth { get; set; } = 1;
+
     // Answers the node's value, or stops the program through `context.Halt` and answers zero.
     internal abstract long Run(ref EvaluationFrame frame, ref ProgramContext context);
 
@@ -108,10 +112,40 @@ internal static class ProgramClosures {
     /// <returns>The root node, answering one for open and zero for closed, and stopping on a faulted conjunct.</returns>
     internal static ProgramNode BuildGate(ReadOnlySpan<GateToken> gate) => new Builder(persistent: true).Gate(gate: gate);
 
+    /// <summary>The deepest a program's tree may recurse, through every call and fold body it reaches: a node is one
+    /// frame of machine stack (a call's frame carries its arguments), so this bounds an evaluation's stack well inside
+    /// any thread's. A chain of binary operations is one node, so only an expression nested as deep as its token
+    /// ceiling inside calls nested as deep as theirs comes near it; a program deeper than this faults
+    /// (<see cref="ExpressionFault.Domain"/>) wherever and on whichever thread it is evaluated.</summary>
+    internal const int MaxDepth = 2048;
+
     private sealed class Builder(bool persistent) {
         private readonly Dictionary<(CompiledExpressionToken[], CellKind), ProgramNode>? m_bodies = (persistent ? null : []);
 
+        // Pushes a node built over its operands (and the body it runs), recording how deep it recurses.
+        private static void Add(List<ProgramNode> stack, ProgramNode node, ReadOnlySpan<ProgramNode> operands = default, ProgramNode? body = null) {
+            var deepest = (body?.Depth ?? 0);
+
+            if (node is ChainNode chain) {
+                operands = chain.Operands;
+            }
+            foreach (var operand in operands) {
+                deepest = Math.Max(val1: deepest, val2: operand.Depth);
+            }
+
+            node.Depth = (deepest + 1);
+            stack.Add(item: node);
+        }
+
         public ProgramNode Program(ReadOnlySpan<CompiledExpressionToken> tokens, CellKind kind) {
+            var root = Unbounded(kind: kind, tokens: tokens);
+
+            return ((root.Depth > MaxDepth)
+                ? new FaultNode(children: [])
+                : root);
+        }
+
+        private ProgramNode Unbounded(ReadOnlySpan<CompiledExpressionToken> tokens, CellKind kind) {
             var stack = new List<ProgramNode>(capacity: tokens.Length);
 
             foreach (ref readonly var token in tokens) {
@@ -119,79 +153,92 @@ internal static class ProgramClosures {
 
                 switch (token.Step) {
                     case ExpressionStep.Constant:
-                        stack.Add(item: new ConstantNode(value: token.Constant));
+                        Add(node: new ConstantNode(value: token.Constant), stack: stack);
 
                         continue;
                     case ExpressionStep.Argument:
-                        stack.Add(item: ((((ulong)token.Constant) < RuleExpressions.MaxArguments)
+                        Add(node: ((((ulong)token.Constant) < RuleExpressions.MaxArguments)
                             ? new ArgumentNode(slot: ((int)token.Constant))
-                            : new FaultNode(children: [])));
+                            : new FaultNode(children: [])), stack: stack);
 
                         continue;
                     case ExpressionStep.Member:
-                        stack.Add(item: new MemberNode());
+                        Add(node: new MemberNode(), stack: stack);
 
                         continue;
                     case ExpressionStep.Read:
-                        stack.Add(item: new ReadNode(carrier: carrier, operand: token.Operand!));
+                        Add(node: new ReadNode(carrier: carrier, operand: token.Operand!), stack: stack);
 
                         continue;
-                    case ExpressionStep.ReadAddressed:
-                        stack.Add(item: new ReadAddressedNode(
-                            carrier: carrier,
-                            feeds: Pop(count: token.Consumes, stack: stack),
-                            operand: token.Operand!
-                        ));
+                    case ExpressionStep.ReadAddressed: {
+                            var feeds = Pop(count: token.Consumes, stack: stack);
+
+                            Add(node: new ReadAddressedNode(carrier: carrier, feeds: feeds, operand: token.Operand!), operands: feeds, stack: stack);
+                        }
 
                         continue;
-                    case ExpressionStep.IsAbsent:
-                        stack.Add(item: new IsAbsentNode(value: Pop(stack: stack)));
+                    case ExpressionStep.IsAbsent: {
+                            var value = Pop(stack: stack);
+
+                            Add(node: new IsAbsentNode(value: value), operands: [value], stack: stack);
+                        }
 
                         continue;
-                    case ExpressionStep.NotBody:
-                        stack.Add(item: new NotBodyNode(body: Body(body: token.Call!.Body, kind: kind)));
+                    case ExpressionStep.NotBody: {
+                            var body = Body(body: token.Call!.Body, kind: kind);
+
+                            Add(body: body, node: new NotBodyNode(body: body), stack: stack);
+                        }
 
                         continue;
                     case ExpressionStep.Not: {
                             var value = Pop(stack: stack);
 
                             // `not` over a negated body is the body's truth: the shape a short-circuit's left operand takes.
-                            stack.Add(item: ((value is NotBodyNode negated)
-                                ? new TruthNode(body: negated.Body)
-                                : new NotNode(value: value)));
+                            if (value is NotBodyNode negated) {
+                                Add(body: negated.Body, node: new TruthNode(body: negated.Body), stack: stack);
+                            } else {
+                                Add(node: new NotNode(value: value), operands: [value], stack: stack);
+                            }
 
                             continue;
                         }
                     case ExpressionStep.And:
-                    case ExpressionStep.Or:
-                        stack.Add(item: new ShortCircuitNode(
-                            body: Body(body: token.Call!.Body, kind: kind),
-                            isAnd: (token.Step == ExpressionStep.And),
-                            left: Pop(stack: stack)
-                        ));
+                    case ExpressionStep.Or: {
+                            var body = Body(body: token.Call!.Body, kind: kind);
+                            var left = Pop(stack: stack);
+
+                            Add(body: body, node: new ShortCircuitNode(body: body, isAnd: (token.Step == ExpressionStep.And), left: left), operands: [left], stack: stack);
+                        }
 
                         continue;
                     case ExpressionStep.Coalesce: {
                             var fallback = Pop(stack: stack);
 
-                            stack.Add(item: new CoalesceNode(fallback: fallback, value: Pop(stack: stack)));
+                            var value = Pop(stack: stack);
+
+                            Add(node: new CoalesceNode(fallback: fallback, value: value), operands: [value, fallback], stack: stack);
 
                             continue;
                         }
-                    case ExpressionStep.Fold:
-                        stack.Add(item: new FoldNode(
-                            body: Body(body: token.Fold!.Body, kind: token.Fold.MemberKind),
-                            fold: token.Fold
-                        ));
+                    case ExpressionStep.Fold: {
+                            var body = Body(body: token.Fold!.Body, kind: token.Fold.MemberKind);
+
+                            Add(body: body, node: new FoldNode(body: body, fold: token.Fold), stack: stack);
+                        }
 
                         continue;
                     case ExpressionStep.Call: {
                             var call = token.Call!;
                             var arguments = Pop(count: call.Arity, stack: stack);
 
-                            stack.Add(item: ((call.Arity > RuleExpressions.MaxArguments)
-                                ? new FaultNode(children: arguments)
-                                : new CallNode(arguments: arguments, body: Body(body: call.Body, kind: kind))));
+                            if (call.Arity > RuleExpressions.MaxArguments) {
+                                Add(node: new FaultNode(children: arguments), operands: arguments, stack: stack);
+                            } else {
+                                var body = Body(body: call.Body, kind: kind);
+
+                                Add(body: body, node: new CallNode(arguments: arguments, body: body), operands: arguments, stack: stack);
+                            }
 
                             continue;
                         }
@@ -199,12 +246,18 @@ internal static class ProgramClosures {
 
                 var operands = Pop(count: token.Consumes, stack: stack);
 
-                stack.Add(item: Operator(carrier: carrier, operands: operands, token: in token));
+                Add(node: Operator(carrier: carrier, operands: operands, token: in token), operands: operands, stack: stack);
             }
 
-            return ((stack.Count == 1)
-                ? stack[0]
-                : new FaultNode(children: [.. stack]));
+            if (stack.Count == 1) {
+                return stack[0];
+            }
+
+            var leftover = new FaultNode(children: [.. stack]);
+
+            Add(node: leftover, operands: stack.ToArray(), stack: []);
+
+            return leftover;
         }
 
         public ProgramNode Gate(ReadOnlySpan<GateToken> gate) {
@@ -354,26 +407,39 @@ internal static class ProgramClosures {
         }
         // The binary operators a sweep meets most answer through kernels of their own, each the operation's one
         // definition in ExpressionArithmetic; the rest through its one dispatch.
+        // A binary operation whose left operand is another binary operation extends that one into a chain, which runs
+        // the operands and operations in the postfix order without a frame for each; the rest stand alone.
         private static ProgramNode Binary(ExpressionOp operation, CellKind carrier, ProgramNode left, ProgramNode right) {
+            var applied = Operation(carrier: carrier, operation: operation);
+
+            if (left is ChainNode chain) {
+                return chain.Then(operation: applied, right: right);
+            }
+            if (left is IBinaryNode binary) {
+                return new ChainNode(first: binary.Left, operations: [binary.Operation, applied], rights: [binary.Right, right]);
+            }
+
+            return applied.Node(left: left, right: right);
+        }
+        // The binary operators a sweep meets most answer through kernels of their own, each the operation's one
+        // definition in ExpressionArithmetic; the rest through its one dispatch.
+        private static BinaryOperation Operation(ExpressionOp operation, CellKind carrier) {
             if (carrier is not (CellKind.Int or CellKind.Fixed)) {
-                return new BinaryNode(carrier: carrier, left: left, operation: operation, right: right);
+                return new ArithmeticOperation(carrier: carrier, operation: operation);
             }
 
             return operation switch {
-                ExpressionOp.Add => Kernel<AddKernel>(left: left, right: right),
-                ExpressionOp.Subtract => Kernel<SubtractKernel>(left: left, right: right),
-                ExpressionOp.Equal => Kernel<EqualKernel>(left: left, right: right),
-                ExpressionOp.NotEqual => Kernel<NotEqualKernel>(left: left, right: right),
-                ExpressionOp.Less => Kernel<LessKernel>(left: left, right: right),
-                ExpressionOp.LessOrEqual => Kernel<LessOrEqualKernel>(left: left, right: right),
-                ExpressionOp.Greater => Kernel<GreaterKernel>(left: left, right: right),
-                ExpressionOp.GreaterOrEqual => Kernel<GreaterOrEqualKernel>(left: left, right: right),
-                _ => new BinaryNode(carrier: carrier, left: left, operation: operation, right: right),
+                ExpressionOp.Add => KernelOperation<AddKernel>.Instance,
+                ExpressionOp.Subtract => KernelOperation<SubtractKernel>.Instance,
+                ExpressionOp.Equal => KernelOperation<EqualKernel>.Instance,
+                ExpressionOp.NotEqual => KernelOperation<NotEqualKernel>.Instance,
+                ExpressionOp.Less => KernelOperation<LessKernel>.Instance,
+                ExpressionOp.LessOrEqual => KernelOperation<LessOrEqualKernel>.Instance,
+                ExpressionOp.Greater => KernelOperation<GreaterKernel>.Instance,
+                ExpressionOp.GreaterOrEqual => KernelOperation<GreaterOrEqualKernel>.Instance,
+                _ => new ArithmeticOperation(carrier: carrier, operation: operation),
             };
         }
-        private static ProgramNode Kernel<TKernel>(ProgramNode left, ProgramNode right) where TKernel : struct, IBinaryKernel => ((right is ConstantNode constant)
-            ? new KernelConstantNode<TKernel>(left: left, right: constant.Value)
-            : new KernelNode<TKernel>(left: left, right: right));
         private static ProgramNode[] Arity(int count, ProgramNode[] operands) => ((operands.Length == count)
             ? operands
             : throw new InvalidOperationException(message: $"An operator token consumes {operands.Length} values where its operation takes {count}."));
@@ -864,7 +930,36 @@ internal readonly struct GreaterOrEqualKernel : IBinaryKernel {
         return true;
     }
 }
-internal sealed class KernelNode<TKernel>(ProgramNode left, ProgramNode right) : ProgramNode where TKernel : struct, IBinaryKernel {
+// A binary operation as a value: the kernel or dispatch a node or a chain applies, and the node that applies it alone.
+internal abstract class BinaryOperation {
+    public abstract bool TryApply(long left, long right, out long value);
+    public abstract ProgramNode Node(ProgramNode left, ProgramNode right);
+}
+internal sealed class KernelOperation<TKernel> : BinaryOperation where TKernel : struct, IBinaryKernel {
+    public static KernelOperation<TKernel> Instance { get; } = new();
+
+    public override bool TryApply(long left, long right, out long value) => TKernel.TryApply(left: left, right: right, value: out value);
+    public override ProgramNode Node(ProgramNode left, ProgramNode right) => ((right is ConstantNode constant)
+        ? new KernelConstantNode<TKernel>(left: left, right: constant)
+        : new KernelNode<TKernel>(left: left, right: right));
+}
+internal sealed class ArithmeticOperation(ExpressionOp operation, CellKind carrier) : BinaryOperation {
+    // Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked semantics are
+    // kept without an exception per evaluation.
+    public override bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TryBinary(operation, carrier, left, right, out value);
+    public override ProgramNode Node(ProgramNode left, ProgramNode right) => new BinaryNode(left: left, operation: this, right: right);
+}
+// A node applying one binary operation to two operands, which a chain extends.
+internal interface IBinaryNode {
+    ProgramNode Left { get; }
+    BinaryOperation Operation { get; }
+    ProgramNode Right { get; }
+}
+internal sealed class KernelNode<TKernel>(ProgramNode left, ProgramNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
+    public ProgramNode Left => left;
+    public BinaryOperation Operation => KernelOperation<TKernel>.Instance;
+    public ProgramNode Right => right;
+
     internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
         var absent = false;
 
@@ -883,7 +978,13 @@ internal sealed class KernelNode<TKernel>(ProgramNode left, ProgramNode right) :
             : Stop(context: ref context, halt: Halt.Domain));
     }
 }
-internal sealed class KernelConstantNode<TKernel>(ProgramNode left, long right) : ProgramNode where TKernel : struct, IBinaryKernel {
+internal sealed class KernelConstantNode<TKernel>(ProgramNode left, ConstantNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
+    private readonly long m_right = right.Value;
+
+    public ProgramNode Left => left;
+    public BinaryOperation Operation => KernelOperation<TKernel>.Instance;
+    public ProgramNode Right => right;
+
     internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
         var answered = left.Run(frame: ref frame, context: ref context);
 
@@ -896,12 +997,16 @@ internal sealed class KernelConstantNode<TKernel>(ProgramNode left, long right) 
                 return 0L;
         }
 
-        return (TKernel.TryApply(left: answered, right: right, value: out var value)
+        return (TKernel.TryApply(left: answered, right: m_right, value: out var value)
             ? value
             : Stop(context: ref context, halt: Halt.Domain));
     }
 }
-internal sealed class BinaryNode(ExpressionOp operation, CellKind carrier, ProgramNode left, ProgramNode right) : ProgramNode {
+internal sealed class BinaryNode(ProgramNode left, BinaryOperation operation, ProgramNode right) : ProgramNode, IBinaryNode {
+    public ProgramNode Left => left;
+    public BinaryOperation Operation => operation;
+    public ProgramNode Right => right;
+
     internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
         var absent = false;
 
@@ -915,11 +1020,40 @@ internal sealed class BinaryNode(ExpressionOp operation, CellKind carrier, Progr
             return Stop(context: ref context, halt: Halt.Absent);
         }
 
-        // Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked semantics are
-        // kept without an exception per evaluation.
-        return (ExpressionArithmetic.TryBinary(operation, carrier, leftValue, rightValue, out var value)
+        return (operation.TryApply(left: leftValue, right: rightValue, value: out var value)
             ? value
             : Stop(context: ref context, halt: Halt.Domain));
+    }
+}
+// Binary operations each over the result before it (`a + b - c * d` read left to right as the postfix walk ran it):
+// the first operand, then each right operand and the operation that takes it. An absent operand is the program's
+// absence once the operation that consumes it runs, and a refused operation stops the chain before the next operand.
+internal sealed class ChainNode(ProgramNode first, BinaryOperation[] operations, ProgramNode[] rights) : ProgramNode {
+    // Every operand the chain runs, first among them, which is what its depth reads.
+    public ProgramNode[] Operands { get; } = [first, .. rights];
+
+    public ChainNode Then(BinaryOperation operation, ProgramNode right) => new(first: first, operations: [.. operations, operation], rights: [.. rights, right]);
+
+    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
+        var absent = false;
+
+        if (!Operand(absent: ref absent, context: ref context, frame: ref frame, node: first, value: out var accumulated)) {
+            return 0L;
+        }
+
+        for (var index = 0; (index < rights.Length); index++) {
+            if (!Operand(absent: ref absent, context: ref context, frame: ref frame, node: rights[index], value: out var right)) {
+                return 0L;
+            }
+            if (absent) {
+                return Stop(context: ref context, halt: Halt.Absent);
+            }
+            if (!operations[index].TryApply(left: accumulated, right: right, value: out accumulated)) {
+                return Stop(context: ref context, halt: Halt.Domain);
+            }
+        }
+
+        return accumulated;
     }
 }
 internal sealed class UnaryNode(ExpressionOp operation, CellKind carrier, ProgramNode value) : ProgramNode {
