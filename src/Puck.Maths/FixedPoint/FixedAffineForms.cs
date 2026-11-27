@@ -160,13 +160,34 @@ public static class FixedAffineForms {
     /// <param name="b">The multiplier.</param>
     /// <returns>The product.</returns>
     public static FixedAffineForm Multiply(FixedQ4816 a, FixedAffineForm b) => Multiply(a: b, b: a);
-    /// <summary>Divides two forms as the carrier's rounded quotient, through the interval quotient of their ranges:
-    /// fresh noise, correlated with nothing; <see cref="FixedAffineForm.Entire"/> when the divisor's range holds
-    /// zero.</summary>
+    /// <summary>Divides two forms as the carrier's rounded quotient: by a constant where the divisor holds one value, else
+    /// the narrower of the dividend times the divisor's reciprocal interval (the dividend's symbols carried at the
+    /// reciprocal's centre, the rest in the error) and the interval quotient of their ranges as fresh noise;
+    /// <see cref="FixedAffineForm.Entire"/> when the divisor's range holds zero.</summary>
     /// <param name="a">The dividend.</param>
     /// <param name="b">The divisor.</param>
     /// <returns>The quotient.</returns>
-    public static FixedAffineForm Divide(FixedAffineForm a, FixedAffineForm b) => FixedAffineForm.FromInterval(interval: (a.Range / b.Range));
+    public static FixedAffineForm Divide(FixedAffineForm a, FixedAffineForm b) {
+        if (a.IsUnbounded || b.IsUnbounded) {
+            return FixedAffineForm.Entire;
+        }
+
+        if (b.RawRadius == 0) {
+            return Divide(a: a, b: b.Center);
+        }
+
+        var quotient = FixedAffineForm.FromInterval(interval: (a.Range / b.Range));
+
+        if (quotient.IsUnbounded) {
+            return quotient;
+        }
+
+        // a/b is a times 1/b, which the reciprocal interval holds for every value b holds, so the product holds the exact
+        // quotient, and its pad raw the carrier's rounding of it.
+        var product = Product(a: a, b: FixedAffineForm.FromInterval(interval: (FixedInterval.FromPoint(value: FixedQ4816.One) / b.Range)), pad: 1L);
+
+        return ((product.IsUnbounded || (product.RawRadius > quotient.RawRadius)) ? quotient : product);
+    }
     /// <summary>Divides by a constant as the carrier's rounded quotient; <see cref="FixedAffineForm.Entire"/> for a zero
     /// divisor.</summary>
     /// <param name="a">The dividend.</param>
@@ -474,6 +495,23 @@ public static class FixedAffineForms {
     public static FixedAffineForm SegmentParameter(FixedAffineForm3 p, FixedVector3 segment) => (Squares(segment: [segment.X.Value, segment.Y.Value, segment.Z.Value]) is { } squares
         ? SegmentParameter(components: [p.X, p.Y, p.Z], segment: [segment.X.Value, segment.Y.Value, segment.Z.Value], squares: squares)
         : FixedAffineForm.FromInterval(interval: FixedInterval.SegmentParameter(segment: segment, x: p.X.Range, y: p.Y.Range, z: p.Z.Range)));
+    /// <summary>Returns the parameter of a point's projection onto a segment from the origin whose end is itself a form, as
+    /// <see cref="FixedVector2.SegmentParameter"/> takes it at every value the forms hold: the constant segment's rule where
+    /// the end holds one value, else the clamped quotient of the two dot products; every value of <c>[0, 1]</c> where the
+    /// squared length's range reaches zero.</summary>
+    /// <param name="p">The point.</param>
+    /// <param name="segment">The segment's end.</param>
+    /// <returns>The clamped parameter.</returns>
+    public static FixedAffineForm SegmentParameter(FixedAffineForm2 p, FixedAffineForm2 segment) =>
+        SegmentParameter(p: [p.X, p.Y], segment: [segment.X, segment.Y]);
+    /// <summary>Returns the parameter of a point's projection onto a segment from the origin whose end is itself a form, as
+    /// <see cref="FixedVector3.SegmentParameter"/> takes it (see
+    /// <see cref="SegmentParameter(FixedAffineForm2, FixedAffineForm2)"/>).</summary>
+    /// <param name="p">The point.</param>
+    /// <param name="segment">The segment's end.</param>
+    /// <returns>The clamped parameter.</returns>
+    public static FixedAffineForm SegmentParameter(FixedAffineForm3 p, FixedAffineForm3 segment) =>
+        SegmentParameter(p: [p.X, p.Y, p.Z], segment: [segment.X, segment.Y, segment.Z]);
     /// <summary>Turns a point back through a constant rotation as <see cref="FixedQuaternion.RotateInverse"/> does: the
     /// exact linear map of the conjugate applied to the centre and every symbol's coefficients, so a rotated box stays a
     /// rotated box, and the point rotation's own few raws in the error.</summary>
@@ -796,6 +834,42 @@ public static class FixedAffineForms {
         // The point side clamps after its one rounding, and both bounds are on the grid, so clamping the rounded
         // quotient's form clamps every value it holds.
         return Clamp(a: Linear(denominator: squares, forms: components, pad: 1L, weights: weights), high: FixedQ4816.One, low: FixedQ4816.Zero);
+    }
+    // A segment parameter whose segment is a form: the constant segment's rule where the end holds one value, else
+    // clamp(dot(p, s) / dot(s, s), 0, 1) over the two dot products' forms (each holds the exact dot product, as Dot's do).
+    // The point side rounds the exact quotient once and clamps it, or answers zero for a zero segment, so every answer
+    // lies in [0, 1], and where the squared length's range stays above zero the quotient's form holds the rounded one
+    // before the clamp.
+    private static FixedAffineForm SegmentParameter(ReadOnlySpan<FixedAffineForm> p, ReadOnlySpan<FixedAffineForm> segment) {
+        Span<long> ends = stackalloc long[segment.Length];
+        var held = true;
+
+        for (var index = 0; (index < segment.Length); index++) {
+            held &= (!segment[index].IsUnbounded && (segment[index].RawRadius == 0));
+            ends[index] = segment[index].RawCenter;
+        }
+
+        if (held && (Squares(segment: ends) is { } constantSquares)) {
+            return SegmentParameter(components: p, segment: ends, squares: constantSquares);
+        }
+
+        var numerator = FixedAffineForm.FromPoint(value: FixedQ4816.Zero);
+        var squares = FixedAffineForm.FromPoint(value: FixedQ4816.Zero);
+
+        for (var index = 0; (index < segment.Length); index++) {
+            numerator = Add(a: numerator, b: Product(a: p[index], b: segment[index], pad: 0L));
+            squares = Add(a: squares, b: Product(a: segment[index], b: segment[index], pad: 0L));
+        }
+
+        var unit = FixedAffineForm.FromInterval(interval: new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One));
+
+        if (numerator.IsUnbounded || squares.IsUnbounded || (squares.RawLow <= 0)) {
+            return unit;
+        }
+
+        var quotient = Divide(a: numerator, b: squares);
+
+        return (quotient.IsUnbounded ? unit : Clamp(a: quotient, high: FixedQ4816.One, low: FixedQ4816.Zero));
     }
     // The form plus every value of [low, high], as its own noise.
     private static FixedAffineForm Offset(FixedAffineForm form, Int128 low, Int128 high) {

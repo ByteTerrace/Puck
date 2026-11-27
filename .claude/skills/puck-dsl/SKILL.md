@@ -112,7 +112,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `dot`, `contains`, `indexOf`, `find`, `zip`, `reverse`, `slice`, `join`, and `minimum(list)`/`maximum(list)`
   (`DocumentBuiltins.Lists.cs`; `DocumentBuiltins.Collections` lists each with its signature). Reach for them before a
   `length(filter(…))` or a `reduce` prefix sum. `scan(lengths)[i]` is where item `i` starts. A shade program reads `fraction`,
-  `clamp` and `pi` too (`WorldShadeLowering`), so none is written by hand.
+  `clamp` and `pi` too (`WorldShadeLowering`), so none is written by hand. Of `any`, `all`, `count`, `sum`, `minimum` and
+  `maximum`, the library holds only the lambda-free forms (`sum(array)`); written with a lambda each is a `ListFolds` fold
+  (below), never evaluated a second way.
 - **Compile-time `for` generates rows and list elements; builtins transform values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time — both in statement/section position (emitting rows) and directly
