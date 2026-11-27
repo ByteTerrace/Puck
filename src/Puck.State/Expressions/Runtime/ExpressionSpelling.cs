@@ -707,10 +707,12 @@ public static partial class ExpressionSpelling {
             var character = text[index];
 
             // A segment may open with the sigil: a reserved name's ":$each", and a dotted "row.$each" that stays one
-            // name so its reader refuses it by name.
+            // name so its reader refuses it by name. Inside a reserved name a segment may also carry a generated name's
+            // joiner (a module instance's `alias$name`, GeneratedName.Joiner, the sigil's own character), which no
+            // author name holds, so the reserved spelling stays one bare name.
             if (
                 IsNamePart(character: character) ||
-                ((character == IdentifierSpelling.Sigil) && ((text[(index - 1)] == '.') || (reserved && (text[(index - 1)] == ':'))))
+                ((character == IdentifierSpelling.Sigil) && (reserved || (text[(index - 1)] == '.')))
             ) {
                 index++;
                 continue;

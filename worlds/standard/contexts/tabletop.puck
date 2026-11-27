@@ -93,10 +93,15 @@ let seatButtons = concat(
   seatSteps
 )
 
-// Seat 1 holds `channelName` past half way in the direction `sign` names. The test of `sign` short-circuits, so a
+// Seat `seat` holds `channelName` past half way in the direction `sign` names. The test of `sign` short-circuits, so a
 // constant sign leaves only its own comparison in the gate, where a choice (`?:`) would read both.
-function seatPast(channelName, sign) = (sign > 0 and channel(1, channelName) >= 0.5) or
-  (sign <= 0 and channel(1, channelName) <= -0.5)
+function seatPastOf(seat, channelName, sign) = (sign > 0 and channel(seat, channelName) >= 0.5) or
+  (sign <= 0 and channel(seat, channelName) <= -0.5)
+function seatPast(channelName, sign) = seatPastOf(1, channelName, sign)
+
+// Whether seat `seat` sits at `boardName` in the chair on side `chairSide` (0 -Z, 1 +X, 2 +Z, 3 -X).
+function seatAtSide(boardName, seat, chairSide) = (board(engaged, boardName, seat) == 1) and
+  (board(side, boardName, seat) == chairSide)
 
 // Seat 1 is at `boardName` and holds `channelName` past half way in the direction `sign` names.
 function seatHeld(boardName, channelName, sign = 1) = board(engaged, boardName, 1) == 1 and seatPast(channelName, sign)
@@ -125,24 +130,33 @@ function seatBySide(chairSide, negativeZ, positiveX, positiveZ, negativeX) = ((c
 // its chair's side and its right is that forward crossed with up, as the board view's camera's is (WorldTabletopFrame in
 // Puck.World.Schema): from the -Z side ahead is +row and right is -column, and each side round the board turns both a
 // quarter.
-function seatColumnStep(boardName, aheadStep, rightStep) = (seatBySide(
-  board(side, boardName, 1),
+function seatColumnStepOn(chairSide, aheadStep, rightStep) = (seatBySide(
+  chairSide,
   0 - rightStep,
   0 - aheadStep,
   rightStep,
   aheadStep
 ))
-function seatRowStep(boardName, aheadStep, rightStep) = (seatBySide(
-  board(side, boardName, 1),
+function seatRowStepOn(chairSide, aheadStep, rightStep) = (seatBySide(
+  chairSide,
   aheadStep,
   0 - rightStep,
   0 - aheadStep,
   rightStep
 ))
 
-// The cell a step moves a cursor to from `fromCell` on a grid `gridColumns` wide and `gridRows` deep, held at its edges.
-function seatStepCell(boardName, fromCell, gridColumns, gridRows, aheadStep, rightStep) = (clamp(
-  (fromCell - fromCell % gridColumns) / gridColumns + seatRowStep(boardName, aheadStep, rightStep),
+// The cell a step from a chair on side `chairSide` moves a cursor to from `fromCell` on a grid `gridColumns` wide and
+// `gridRows` deep, held at its edges; `seatStepCell` steps seat 1 from whichever chair it sits in.
+function seatStepCellOn(chairSide, fromCell, gridColumns, gridRows, aheadStep, rightStep) = (clamp(
+  (fromCell - fromCell % gridColumns) / gridColumns + seatRowStepOn(chairSide, aheadStep, rightStep),
   0,
   gridRows - 1
-) * gridColumns + clamp(fromCell % gridColumns + seatColumnStep(boardName, aheadStep, rightStep), 0, gridColumns - 1))
+) * gridColumns + clamp(fromCell % gridColumns + seatColumnStepOn(chairSide, aheadStep, rightStep), 0, gridColumns - 1))
+function seatStepCell(boardName, fromCell, gridColumns, gridRows, aheadStep, rightStep) = seatStepCellOn(
+  board(side, boardName, 1),
+  fromCell,
+  gridColumns,
+  gridRows,
+  aheadStep,
+  rightStep
+)

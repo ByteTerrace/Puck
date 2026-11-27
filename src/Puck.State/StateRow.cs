@@ -388,7 +388,7 @@ public static class StateCapacity {
     /// generation and change stamp in every arena over the catalog; its cells are counted by the arena's byte
     /// ceiling (<see cref="ArenaCapacity.MaxBytes"/>), and what a rule does across rows is priced on the work
     /// sheet.</summary>
-    public const int MaxRows = 1024;
+    public const int MaxRows = 4096;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units: two bytes a unit,
     /// so one text cell holds at most two kibibytes.</summary>
     public const int MaxTextValueLength = 1024;

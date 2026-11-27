@@ -79,14 +79,28 @@ function faceFill(at, rotation, half, color, round = 0, depth = 0.03) = {
   rounding: round
   color: color
 }
-function faceText(at, rotation, half, template, ink, em, align = "center", wrap = false, markup = false, spacing = 1, depth = 0.03) = {
+function faceText(at, rotation, half, template, ink, em, align = "center", wrap = false, markup = false, spacing = 1, depth = 0.03, anchor = null) = {
   type: "Box"
   position: at
   rotation: rotation
   scale [half[0], half[1], depth]
   color: ink
-  text { template: template, emHeight: em, align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
+  text: faceLettering(template, em, align, wrap, markup, spacing, anchor)
 }
+// A text paint's lettering; `anchor` names the line of the block that stands on the box's middle (`capMiddle` centres
+// a line of capitals), and null centres the whole block.
+function faceLettering(template, em, align, wrap, markup, spacing, anchor) = ((anchor == null)
+  ? { template: template, emHeight: em, align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
+  : {
+    template: template
+    emHeight: em
+    align: align
+    fit: true
+    wrap: wrap
+    markup: markup
+    lineSpacing: spacing
+    anchor: anchor
+  })
 
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
 // clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing

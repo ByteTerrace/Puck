@@ -189,7 +189,8 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
 /// local XY plane (+X the advance, +Y the ascent), and drawn as the paint's colour on every surface of the slot the
 /// box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the
 /// world's text font catalog each frame, so a placeholder's cell changing rewrites the lettering with no new program
-/// and no bake. The block is centred on the box's height and placed across its width by <paramref name="Align"/>.
+/// and no bake. The block is placed across the box's width by <paramref name="Align"/> and on its height by
+/// <paramref name="Anchor"/>.
 /// </summary>
 /// <param name="Template">The text: literal characters and <c>{state.&lt;row&gt;[.&lt;key&gt;]}</c> placeholders, each
 /// replaced by its cell's value (an Int, Fixed, Bool or Text row; an absent cell reads empty). A line feed breaks a
@@ -209,6 +210,9 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
 /// <param name="Markup">Whether the substituted text is read as effect markup.</param>
 /// <param name="EffectUnit">The length, in the paint frame's units, of one unit of a markup effect's amplitude (a
 /// shake's or wave's travel, a caret's lift); null = a thirty-second of <paramref name="EmHeight"/>.</param>
+/// <param name="Anchor">Which line of the block stands on the box's middle, one of
+/// <see cref="TextRunDocument.AnchorNames"/> (<c>capMiddle</c> centres a line of capitals on it); null centres the whole
+/// laid-out block, its ascent to its descent.</param>
 public sealed record PalettePaintTextDocument(
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)] string Template,
     float EmHeight,
@@ -221,7 +225,9 @@ public sealed record PalettePaintTextDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Wrap = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Fit = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Markup = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? EffectUnit = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? EffectUnit = null,
+    [property: DocumentText("a text anchor")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Anchor = null
 ) {
     /// <summary>Gets the layout options the lettering is laid out under, for a box of a given width.</summary>
     /// <param name="boxWidth">The box's full width, in the paint frame's units, which lines wrap at when
@@ -231,7 +237,8 @@ public sealed record PalettePaintTextDocument(
         Alignment: Alignment,
         LineHeightScale: (LineSpacing ?? 1f),
         MaxLineWidth: ((Wrap && (boxWidth > 0f)) ? boxWidth : null),
-        Tracking: (Tracking ?? 0f)
+        Tracking: (Tracking ?? 0f),
+        VerticalAnchor: (TextRunDocument.AnchorOf(anchor: Anchor) ?? Puck.Text.TextVerticalAnchor.Baseline)
     );
     /// <summary>Gets where the block sits across the box: the alignment <see cref="Align"/> names, center when it names
     /// none.</summary>

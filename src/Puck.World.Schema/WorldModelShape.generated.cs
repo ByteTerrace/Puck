@@ -1990,6 +1990,7 @@ public static partial class WorldModelShape {
                 M("fit", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.PalettePaintTextDocument), "Fit", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintTextDocument)value).Fit),
                 M("markup", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.PalettePaintTextDocument), "Markup", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintTextDocument)value).Markup),
                 M("effectUnit", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PalettePaintTextDocument), "EffectUnit", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintTextDocument)value).EffectUnit),
+                M("anchor", typeof(global::System.String), typeof(global::Puck.World.Authoring.PalettePaintTextDocument), "Anchor", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintTextDocument)value).Anchor, text: "a text anchor"),
                 M("alignment", typeof(global::System.Object), typeof(global::Puck.World.Authoring.PalettePaintTextDocument), "Alignment", None),
             ],
             []),

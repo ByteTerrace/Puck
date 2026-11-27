@@ -478,6 +478,14 @@ rule "chess-play-cancel" {
   play.held = -1
 }
 
+// While a piece is up the board is the seated player's: the game's display door takes no move (chess.puck's chessPut).
+rule "chess-play-grip" {
+  local held = play.held >= 0
+  when chessGrip != held
+  mode: Level
+  chessGrip = held
+}
+
 rule "chess-play-release" {
   when play.releaseEdge == 1
   mode: Level

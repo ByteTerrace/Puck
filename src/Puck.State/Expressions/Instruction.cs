@@ -91,9 +91,15 @@ public sealed record Instruction(ExpressionOp Operation, InstructionPayload? Pay
     }
 
     // Every operand prints and reads back as itself, so a name no spelling can write is refused where the operand is
-    // built rather than printed as text that reads back as nothing or as another name.
+    // built rather than printed as text that reads back as nothing or as another name. Only a plain name prints as a
+    // name: a reserved channel's call and a pool field print through their own structure, and an expression key is
+    // infix text the spelling printed, whose names may be backquoted (a module instance's `alias$name`).
     private static void RequireSpelled(StateChannelRef? reference, string parameter) {
-        if ((reference is not null) && !ExpressionSpelling.IsSpelledName(name: reference.Spelling)) {
+        if (
+            (reference?.Name is { } name) &&
+            !name.StartsWith(comparisonType: StringComparison.Ordinal, value: RuleFacts.ExpressionKeyPrefix) &&
+            !ExpressionSpelling.IsSpelledName(name: name)
+        ) {
             throw new ArgumentException(
                 message: $"an operand's name is nonempty and holds no backquote, which '{reference.Spelling}' does not",
                 paramName: parameter

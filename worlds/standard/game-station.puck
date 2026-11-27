@@ -4,37 +4,51 @@
 // which games its catalog holds and how each game's board is drawn are the importing world's.
 //
 // A station is `{ id, at }`: `id` names it in every cell keyed by station, and `at` is the world point of its placement,
-// whose creation's floor lies `gameStationFloor` over it, so a station placed at a floor's height minus that stands on
-// the floor. A station stands with no yaw: its seat is at its -Z edge facing +Z, so +Z runs away from the player and +X
-// to the player's left. A catalog is a list of `{ id, title }`, one row a game; a game's place in the list is its index,
-// which the station's selection cell holds.
+// whose creation's floor lies `gameStationFloor` under it, so a station placed at a floor's height minus that stands on
+// the floor. A station stands with no yaw: its near chair is at its -Z edge facing +Z, so +Z runs away from that player
+// and +X to their left, and its far chair at its +Z edge faces back across the glass. A catalog is a list of
+// `{ id, title }`, one row a game; a game's place in the list is its index, which the station's selection cell holds.
 //
-// The glass shows, at the player's left, the catalog as a list; a tap on a row shows that game, as a tap on a display
-// console's list shows that exhibit. Beside it lies the board area, which each game's own presentation draws (a game
-// module's tokens and the paints the world passes in), and along the near edge a status line. Everything on the glass is
-// a paint over one of the glass's panels or a token placement, so the glass follows the games' state without a bake.
+// The glass carries, along the near edge, the menu (GAMES, a button a game and NEW GAME) and above it the status line;
+// along the far edge the same status line reads for the far chair; between them lies the board area, the whole width
+// of the glass, which each game's own presentation draws centred on it (a game module's tokens and the paints the world
+// passes in). Everything on the glass is a paint over one of the glass's panels or a token placement, so the glass
+// follows the games' state without a bake, and a paint changes only when the cell it reads does.
+//
+// The station's state is split by who reads it. What its paints and the console read is the world's, one row for every
+// station keyed by its id (`gameStationState`): a paint names its cell, and a creation's paints read the world's rows.
+// What its rules alone read is the station's own (`gameStationSeatState`), expanded inside the module instance a world
+// makes per station (`use … as <id>(…)`), so twelve stations hold twelve games that never touch one another:
 //
 //   import "../standard/game-station"
 //   let station = { id: "station", at [0, -0.5, 0] }
 //   let catalog = [{ id: "chess", title: "CHESS" }, { id: "klondike", title: "KLONDIKE" }]
-//   prototypes { gameStationPrototype(station: station, catalog: catalog, boardPaints: []) }
+//   prototypes { gameStationPrototype(station: station, catalog: catalog, boardPanels: []) }
 //   placements { gameStationPlacement(station: station) }
 //   state { gameStationGrid(station: station)  world { gameStationState(stations [station], catalog: catalog) } }
-//   gameStationRules(station: station, catalog: catalog)
 //   commands: gameStationCommands(stations [station], catalog: catalog)
+//   module games(station) {
+//     state { world { gameStationSeatState() } }
+//     gameStationRules(station: station, catalog: catalog)
+//   }
+//   use games as station(station: station)
 //
-// The state, keyed by station id:
+// The world's state, keyed by station id:
 //
-//   gameStationGame     the index of the game the glass shows (the selection), which the list's taps write
+//   gameStationGame     the index of the game the glass shows (the selection), which the menu's taps write
 //   gameStationPick     the mailbox `station.game` writes to, keyed `<station>-<game>`: 1 asks for that game
-//   gameStationShown    the selection the list and status were last drawn for
-//   gameStationDown     the seated seat's buttons held this tick, one bit each (gameStationBits)
-//   gameStationEdges    the buttons pressed this tick, one bit each, with the list's own tap apart from the board's
-//   gameStationPointer  the pick cell the seat points at, -1 off the grid
 //   gameStationStatus   the status line's text; a game's rules write it while their game is shown
+//   gameStationRowInk   each menu button's ink, keyed `<station>-<index>`: the game shown lit, the rest dim
 //
-// A game's rules read a station's presses as `(gameStationEdges[id] & gameStationBits.pick) != 0` and so on, and its
-// pointer as `gameStationPointer[id]`, a cell of the station's pick grid (`gameStationColumn`, `gameStationRow`).
+// The station's own, each keyed `near` and `far` by chair:
+//
+//   gameStationChair    the seat (1 to 4) sitting in the chair, 0 while it stands empty
+//   gameStationDown     the chair's buttons held this tick, one bit each (gameStationBits)
+//   gameStationEdges    the buttons pressed this tick, one bit each, with the menu's taps apart from the board's
+//   gameStationPointer  the pick cell the chair's seat points at, -1 off the glass
+//
+// A game's rules read a chair's presses as `(gameStationEdges.near & gameStationBits.pick) != 0` and so on, and its
+// pointer as `gameStationPointer.near`, a cell of the station's pick grid (`gameStationCellX`, `gameStationCellZ`).
 import "architecture"
 import "contexts/tabletop"
 
@@ -44,37 +58,65 @@ let gameStationFloor = 0.5
 let gameStationSurface = 1.45
 let gameStationHalf = [0.94, 0.88]
 
-// The glass: its extent across (x) and away (z); the catalog list's column at the player's left, its rows lettered to
-// read from the seat as a display console's list does; the board area beside it, which takes most of the glass; and the
-// status line along the near edge.
+// The glass: its extent across (x) and away (z). Along the near edge the menu, a row of buttons the near player reads
+// left to right (from +X), with GAMES at its left; above it the status line; along the far edge the status line again,
+// read from the far chair; and between them the board area, the glass's whole width, which every game centres on.
 let gameStationGlass = { x0: -0.86, x1: 0.86, z0: -0.8, z1: 0.8 }
-let gameStationList = { x0: 0.58, x1: 0.84, z0: -0.1, z1: 0.6 }
-let gameStationListRows = 6
-let gameStationRowPitch = ((gameStationList.z1 - gameStationList.z0) / gameStationListRows)
-let gameStationListEm = 0.042
-let gameStationBoard = { x0: -0.62, x1: 0.5, z0: -0.672, z1: 0.672 }
-let gameStationStatusLine = { x0: -0.62, x1: 0.5, z0: -0.77, z1: -0.69 }
-let gameStationStatusEm = 0.045
+let gameStationMenu = { x0: -0.84, x1: 0.84, z0: -0.785, z1: -0.695 }
+let gameStationMenuLabel = 0.24
+let gameStationGap = 0.02
+let gameStationMenuEm = 0.042
+let gameStationStatusLine = { x0: -0.84, x1: 0.84, z0: -0.68, z1: -0.615 }
+let gameStationFarLine = { x0: -0.84, x1: 0.84, z0: 0.695, z1: 0.78 }
+let gameStationStatusEm = 0.046
+let gameStationBoard = { x0: -0.84, x1: 0.84, z0: -0.6, z1: 0.68 }
+// The board area's middle, which a game's layout centres on.
+let gameStationBoardMid = [
+  ((gameStationBoard.x0 + gameStationBoard.x1) / 2),
+  ((gameStationBoard.z0 + gameStationBoard.z1) / 2)
+]
 
-// The pick grid: 2.8 cm cells from the board area's near right corner across the list's column, its columns running +X
-// (column 0 at the player's right) and its rows +Z (row 0 nearest the player).
-let gameStationCell = 0.028
-let gameStationColumns = 53
-let gameStationRows = 48
+// The pick grid: 2.7 cm cells over the whole glass (a topology holds at most 4096 cells) from its near right corner, its columns running +X (column 0 at the
+// near player's right) and its rows +Z (row 0 nearest the near chair). A cell's centre in the station's frame is
+// `gameStationCellX` across and `gameStationCellZ` away.
+let gameStationCell = 0.027
+let gameStationColumns = 64
+let gameStationRows = 60
 function gameStationColumn(cell) = (cell % gameStationColumns)
 function gameStationRow(cell) = ((cell - (cell % gameStationColumns)) / gameStationColumns)
-// The list's first pick column: the first whose cells lie wholly past gameStationList.x0.
-let gameStationListColumn = 43
+function gameStationCellX(cell) = (gameStationGlass.x0 + (gameStationCell * (gameStationColumn(cell) + 0.5)))
+function gameStationCellZ(cell) = (gameStationGlass.z0 + (gameStationCell * (gameStationRow(cell) + 0.5)))
 
-// The seated seat's buttons, one bit each, and the list's two taps, which a pick on the list's column makes in place of
-// the board's pick: on a game's row (`list`), or on the list's last row, NEW GAME (`action`), which the game shown
+// The menu's buttons, one a game and NEW GAME last, from the near player's left: `count` buttons share the row's width
+// right of the GAMES label, `gameStationGap` apart. A button's index from a point across is `gameStationButtonsX1`
+// less the point over the pitch.
+let gameStationButtonsX1 = ((gameStationMenu.x1 - gameStationMenuLabel) - gameStationGap)
+function gameStationButtonPitch(count) = ((((gameStationButtonsX1 - gameStationMenu.x0) -
+  (gameStationGap * (count - 1))) /
+  count) +
+  gameStationGap)
+function gameStationButtonRect(button, count) = {
+  x0: ((gameStationButtonsX1 - (gameStationButtonPitch(count) * button)) -
+    (gameStationButtonPitch(count) - gameStationGap))
+  x1: (gameStationButtonsX1 - (gameStationButtonPitch(count) * button))
+  z0: gameStationMenu.z0
+  z1: gameStationMenu.z1
+}
+
+// A chair's buttons, one bit each, and the menu's two taps, which a pick on the menu makes in place of the board's pick:
+// on a game's button (`list`, with the button in `gameStationButton`), or on NEW GAME (`action`), which the game shown
 // answers by starting afresh.
 let gameStationBits = { pick: 1, cancel: 2, ahead: 4, behind: 8, right: 16, left: 32, list: 64, action: 128 }
-let gameStationActionRow = (gameStationListRows - 1)
+
+// The chairs: the near one at the -Z edge (board side 0) and the far one at +Z (side 2). The local seats a chair may
+// hold are 1 to `gameStationSeats`.
+let gameStationChairs = [{ name: "near", side: 0 }, { name: "far", side: 2 }]
+let gameStationSeats = 4
 
 // The station's look, in the display stations' family (architecture.puck): the console's glass and its interface's
 // colours, the plinth's cream, ochre, teal, brass and glowing ring for the table. `light` and `dark` are a board's two
-// square inks, `last`, `picked` and `cursor` the rings a board's rules light, and `off` the bare glass.
+// square inks, `last`, `picked`, `cursor` and `rival` the rings a board's rules light (the far chair's cursor in
+// `rival`), and `off` the bare glass.
 let gameStationLook = {
   glass: consoleGlass
   table: plinthPalette
@@ -89,6 +131,7 @@ let gameStationLook = {
   last: consoleLook.terracotta
   picked: consoleLook.lit
   cursor: "#9FE6F0"
+  rival: "#F2A0C8"
   off: consoleLook.field
 }
 
@@ -101,9 +144,18 @@ function gameStationWorld(station, x, z) = [
 function gameStationMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.z0 + rect.z1) / 2)]
 function gameStationHalfOf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.z1 - rect.z0) / 2)]
 
+// A chair's place on the floor, in the world: 1.5 m out from the station's centre at its edge, inside the engage radius.
+function gameStationChairAt(station, chair) = [
+  station.at[0],
+  (station.at[1] + gameStationFloor),
+  (station.at[2] + ((chair == "far") ? 1.5 : -1.5))
+]
+
 // The rotation that lays a paint flat on a level glass, read from its -Z edge: the paint's +X runs to that reader's right
-// (world -X), its +Y away from the reader (world +Z) and its +Z up through the glass.
+// (world -X), its +Y away from the reader (world +Z) and its +Z up through the glass. `displayReadingFar` reads it from
+// the +Z edge.
 let displayReading = [0, 0.7071068, 0.7071068, 0]
+let displayReadingFar = compose(rotate([0, 1, 0], 180), displayReading)
 // A filled rectangle on a level glass, centred at the world point `at`, `half` its half extents across and away.
 function displayFill(at, half, color, round = 0) = faceFill(at, displayReading, half, color, round)
 // A rounded rectangle's outline on a level glass, `stroke` wide, its corners rounded by `round` of its smaller half
@@ -117,15 +169,21 @@ function displayRing(at, half, color, stroke, round = 0.25) = {
   stroke: stroke
   color: color
 }
-// Lettering on a level glass, read from its -Z edge: `half` is the box it fits, across and away.
-function displayText(at, half, template, ink, em, align = "center") = faceText(
+// Lettering on a level glass, read from its -Z edge (or `rotation`'s): `half` is the box it fits, across and away, and a
+// line of capitals stands centred on the box's middle.
+function displayText(at, half, template, ink, em, align = "center", rotation = displayReading) = faceText(
   at,
-  displayReading,
+  rotation,
   half,
   template,
   ink,
   em,
-  align
+  align,
+  false,
+  false,
+  1,
+  0.03,
+  "capMiddle"
 )
 // A rectangle of the station's frame filled on its glass.
 function gameStationFill(station, rect, color, round = 0) = displayFill(
@@ -134,65 +192,87 @@ function gameStationFill(station, rect, color, round = 0) = displayFill(
   color,
   round
 )
-function gameStationText(station, rect, template, ink, em, align = "center") = displayText(
+function gameStationText(station, rect, template, ink, em, align = "center", rotation = displayReading) = displayText(
   gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]),
   gameStationHalfOf(rect),
   template,
   ink,
   em,
-  align
+  align,
+  rotation
 )
 
-// The list's row `row`, from the top.
-function gameStationRowRect(row) = {
-  x0: gameStationList.x0
-  x1: gameStationList.x1
-  z0: (gameStationList.z1 - (gameStationRowPitch * (row + 1)) + 0.006)
-  z1: (gameStationList.z1 - (gameStationRowPitch * row) - 0.006)
-}
-
-// The list's paints: its title over the column, each game's row filled in its ink (the game shown lit) and lettered
-// with its title, then the status line.
-function gameStationListPaints(station, catalog, look) = concat(
+// The near strip's paints: each game's button filled in its ink (the game shown lit), NEW GAME's, and the status line
+// above them. The buttons' lettering never changes, so it is the table's own (gameStationLabels), not a paint.
+function gameStationMenuPaints(station, catalog, look) = concat(
+  map(
+    catalog,
+    (game, button) => gameStationFill(
+      station,
+      gameStationButtonRect(button, (length(catalog) + 1)),
+      $"state.gameStationRowInk.{station.id}-{button}",
+      0.012
+    )
+  ),
   [
+    gameStationFill(station, gameStationButtonRect(length(catalog), (length(catalog) + 1)), look.action, 0.012)
     gameStationText(
       station,
-      {
-        x0: gameStationList.x0
-        x1: gameStationList.x1
-        z0: (gameStationList.z1 + 0.02)
-        z1: (gameStationList.z1 + 0.08)
-      },
-      "GAMES",
-      look.title,
-      0.05
+      gameStationStatusLine,
+      $"{{state.gameStationStatus.{station.id}}}",
+      look.status,
+      gameStationStatusEm
     )
-  ],
-  map(
-    catalog,
-    (game, row) => gameStationFill(
-      station,
-      gameStationRowRect(row),
-      $"state.gameStationRowInk.{station.id}-{row}",
-      0.01
-    )
-  ),
-  map(
-    catalog,
-    (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, gameStationListEm)
-  ),
-  [
-    gameStationFill(station, gameStationRowRect(gameStationActionRow), look.action, 0.01)
-    gameStationText(station, gameStationRowRect(gameStationActionRow), "NEW GAME", look.label, gameStationListEm)
   ]
 )
 
+// The menu's fixed lettering, in the table's own frame: GAMES at the menu's left in `titleSlot`, and each button's title
+// and NEW GAME in `labelSlot`, embossed a millimetre and a half proud of the glass and read from the near chair, each
+// line of capitals centred on its box (`capMiddle`).
+function gameStationLabels(catalog, labelSlot, titleSlot) = concat(
+  [
+    {
+      text: "GAMES"
+      position [
+        (gameStationMenu.x1 - (gameStationMenuLabel / 2))
+        gameStationSurface
+        gameStationMid(gameStationMenu)[1]
+      ]
+      rotation: displayReading
+      emHeight: 0.05
+      depth: 0.0015
+      mode: "emboss"
+      material: titleSlot
+      align: "center"
+      anchor: "capMiddle"
+      maxWidth: (gameStationMenuLabel - 0.02)
+    }
+  ],
+  map(concat(map(catalog, game => game.title), ["NEW GAME"]), (title, button) => {
+    text: title
+    position [
+      gameStationMid(gameStationButtonRect(button, (length(catalog) + 1)))[0],
+      gameStationSurface,
+      gameStationMid(gameStationMenu)[1]
+    ]
+    rotation: displayReading
+    emHeight: gameStationMenuEm
+    depth: 0.0015
+    mode: "emboss"
+    material: labelSlot
+    align: "center"
+    anchor: "capMiddle"
+    maxWidth: (gameStationButtonPitch((length(catalog) + 1)) - (2 * gameStationGap))
+  })
+)
+
 // The table: a thick cream cap bevelled at its rim with the glass set in it, a glowing line in the shadow under the
-// cap's lip, an ochre apron with a teal seam, a brass rail along the player's edge where a hand rests, and a cream
-// column on a teal foot, as the display plinth is built. `panels` are the glass's panels, each `{ x0, x1, z0, z1 }` in the
+// cap's lip, an ochre apron with a teal seam, a brass rail along each chair's edge where a hand rests, and a cream column
+// on a teal foot, as the display plinth is built. `panels` are the glass's panels, each `{ x0, x1, z0, z1 }` in the
 // station's frame, each wearing its own palette slot from `base + 6` (the plinth's six slots come first), so each
-// carries its own paints. A creation is authored in the station's own frame, so a panel stands where its extent says.
-template gameStationTable(panels, base = 0) {
+// carries its own paints; the menu's lettering (`catalog`'s titles) wears the two slots after them. A creation is
+// authored in the station's own frame, so a panel stands where its extent says.
+template gameStationTable(panels, catalog, base = 0) {
   let capTop = (gameStationSurface - 0.004)
   let capHalf = 0.03
   let apronHalf = 0.04
@@ -229,11 +309,13 @@ template gameStationTable(panels, base = 0) {
     position [0, apronAt, 0]
     scale [(gameStationHalf[0] - 0.046), 0.008, (gameStationHalf[1] - 0.046)]
   }
-  shape Box "rail" {
-    material: (base + plinthBrass)
-    position [0, (capTop - capHalf), (0 - (gameStationHalf[1] + 0.008))]
-    scale [(gameStationHalf[0] - 0.12), 0.01, 0.01]
-    rounding: 0.008
+  for (edge, k) in [-1, 1] {
+    shape Box $"rail-{k}" {
+      material: (base + plinthBrass)
+      position [0, (capTop - capHalf), (edge * (gameStationHalf[1] + 0.008))]
+      scale [(gameStationHalf[0] - 0.12), 0.01, 0.01]
+      rounding: 0.008
+    }
   }
   shape Box "column" {
     material: (base + plinthCream)
@@ -253,71 +335,75 @@ template gameStationTable(panels, base = 0) {
     scale [0.44, 0.05, 0.44]
     chamfer: 0.03
   }
+  textRuns: gameStationLabels(catalog, (base + 6 + length(panels)), (base + 7 + length(panels)))
 }
 
-// The glass's panels: the list's column, the near strip under the board area that carries the status line, then the
-// board area split along +Z so no panel carries more paints than a palette slot draws. `boardPanels` lists that split,
-// each `{ z0, z1, paints }` from the board area's near edge to the glass's far edge, across the board area and the
-// glass's margin beyond it.
+// The glass's panels: the near strip (the menu and the status line), the far strip (the far chair's status line), then
+// the board area split along +Z so no panel carries more paints than a palette slot draws. `boardPanels` lists that
+// split, each `{ z0, z1, paints }` from the board area's near edge to its far edge, across the glass's whole width.
 function gameStationPanels(station, catalog, look, boardPanels) = concat(
   [
     {
-      x0: (gameStationList.x0 - 0.02)
+      x0: gameStationGlass.x0
       x1: gameStationGlass.x1
       z0: gameStationGlass.z0
-      z1: gameStationGlass.z1
-      paints: gameStationListPaints(station, catalog, look)
+      z1: gameStationBoard.z0
+      paints: gameStationMenuPaints(station, catalog, look)
     }
     {
       x0: gameStationGlass.x0
-      x1: (gameStationList.x0 - 0.02)
-      z0: gameStationGlass.z0
-      z1: gameStationBoard.z0
+      x1: gameStationGlass.x1
+      z0: gameStationBoard.z1
+      z1: gameStationGlass.z1
       paints [
         gameStationText(
           station,
-          gameStationStatusLine,
+          gameStationFarLine,
           $"{{state.gameStationStatus.{station.id}}}",
           look.status,
-          gameStationStatusEm
+          gameStationStatusEm,
+          "center",
+          displayReadingFar
         )
       ]
     }
   ],
   map(
     boardPanels,
-    panel => {
-      x0: gameStationGlass.x0
-      x1: (gameStationList.x0 - 0.02)
-      z0: panel.z0
-      z1: panel.z1
-      paints: panel.paints
-    }
+    panel => { x0: gameStationGlass.x0, x1: gameStationGlass.x1, z0: panel.z0, z1: panel.z1, paints: panel.paints }
   )
 )
 
 // The station's prototype, `<id>-table`: the table with its glass. `boardPanels` is the board area's split and the
-// paints each panel carries (the games' boards); a station with none draws a bare board area.
+// paints each panel carries (the games' boards); a station with none draws a bare board area. A prototype is the
+// world's, never an instance's: its paints read the world's rows by the station's key.
 template gameStationPrototype(station, catalog, boardPanels = [], look = gameStationLook) {
   let panels = gameStationPanels(
     station,
     catalog,
     look,
-    ((length(boardPanels) == 0) ? [{ z0: gameStationBoard.z0, z1: gameStationGlass.z1, paints [] }] : boardPanels)
+    ((length(boardPanels) == 0) ? [{ z0: gameStationBoard.z0, z1: gameStationBoard.z1, paints [] }] : boardPanels)
   )
   prototype $"{station.id}-table" {
     document {
       name: $"{station.id}-table"
       schema: "puck.creation.v2"
-      palette: concat(look.table, map(panels, panel => (look.glass with { paints: panel.paints })))
-      gameStationTable(panels: panels)
+      palette: concat(
+        look.table,
+        map(panels, panel => (look.glass with { paints: panel.paints })),
+        [
+          { color: look.label, roughness: 0.5, specular: 0.1 }
+          { color: look.title, roughness: 0.4, specular: 0.2, emissive: 300 }
+        ]
+      )
+      gameStationTable(panels: panels, catalog: catalog)
     }
   }
 }
 
-// The station's placement: the table, solid, carrying its pick grid as a board the seat sits at. The context button
-// within 2.5 m of its centre sits the seat down at its -Z edge facing +Z, wherever it stands, and the camera looks down
-// on the glass from there; the pointer picks 2 cm over the glass.
+// The station's placement: the table, solid, carrying its pick grid as a board two chairs sit at. The context button
+// within 2.5 m of its centre sits the seat down in the chair at the edge it faces most squarely, and the camera looks
+// down on the glass from there; the pointer picks 2 cm over the glass.
 template gameStationPlacement(station) {
   placement $"{station.id}-table" {
     prototype: $"{station.id}-table"
@@ -330,7 +416,7 @@ template gameStationPlacement(station) {
         pitch: 62
         margin: 0.12
         surface: 0.02
-        seats [{ yawDegrees: 180 }]
+        seats [{ yawDegrees: 180 }, { yawDegrees: 0 }]
       }
     }
     position: station.at
@@ -338,7 +424,7 @@ template gameStationPlacement(station) {
   }
 }
 
-// The station's pick grid and the row of its cells the board carries, inside the world's `state` block.
+// The station's pick grid, inside the world's `state` block.
 template gameStationGrid(station) {
   lattices [
     grid(
@@ -346,7 +432,7 @@ template gameStationGrid(station) {
       cellSize: gameStationCell,
       depth: gameStationRows,
       width: gameStationColumns,
-      origin: [gameStationBoard.x0, gameStationSurface, gameStationBoard.z0],
+      origin: [gameStationGlass.x0, gameStationSurface, gameStationGlass.z0],
       name: $"{station.id}Grid",
       wrap: None
     )
@@ -363,7 +449,7 @@ template gameStationCells(name, stations, value, kind = "Int") {
   }
 }
 
-// The stations' state, inside the world's `state.world` block.
+// The world's station state, inside its `state.world` block: what the stations' paints and the console read.
 template gameStationState(stations, catalog, look = gameStationLook) {
   for station in stations {
     row {
@@ -380,10 +466,6 @@ template gameStationState(stations, catalog, look = gameStationLook) {
     capacity: (length(stations) * length(catalog))
     cells: flatMap(stations, station => map(catalog, game => { key: $"{station.id}-{game.id}", value: 0 }))
   }
-  gameStationCells(name: "gameStationShown", stations: stations, value: -1)
-  gameStationCells(name: "gameStationDown", stations: stations, value: 0)
-  gameStationCells(name: "gameStationEdges", stations: stations, value: 0)
-  gameStationCells(name: "gameStationPointer", stations: stations, value: -1)
   gameStationCells(name: "gameStationStatus", stations: stations, value: catalog[0].title, kind: "Text")
   row {
     name: "gameStationRowInk"
@@ -410,45 +492,112 @@ template gameStationState(stations, catalog, look = gameStationLook) {
   }
 }
 
-// The seated seat's presses at a station: the seat's buttons held past half way this tick, one bit each, and the bits
-// that rose since the last tick, with a pick whose pointer rests on the list's column turned into the list's tap. While
-// no seat sits at the station and no button is held, the rule is idle.
+// A station's own state, inside its module instance's `state.world` block: what its rules alone read.
+template gameStationSeatState() {
+  table gameStationChair capacity(auto) {
+    near = 0
+    far = 0
+  }
+  table gameStationDown capacity(auto) {
+    near = 0
+    far = 0
+  }
+  table gameStationEdges capacity(auto) {
+    near = 0
+    far = 0
+  }
+  table gameStationPointer capacity(auto) {
+    near = -1
+    far = -1
+  }
+  slot gameStationButton = -1
+  slot gameStationShown = -1
+}
+
+// The buttons seat `seat` holds past half way this tick, one bit each.
+function gameStationWord(seat) = (gameStationBits.pick * seatPastOf(seat, "confirm", 1) +
+  gameStationBits.cancel * seatPastOf(seat, "cancel", 1) +
+  gameStationBits.ahead * seatPastOf(seat, "forward", 1) +
+  gameStationBits.behind * seatPastOf(seat, "forward", -1) +
+  gameStationBits.right * seatPastOf(seat, "strafe", 1) +
+  gameStationBits.left * seatPastOf(seat, "strafe", -1))
+// The seat sitting in the chair on side `side` of the board `cells`, the lowest-numbered if several do, or 0.
+function gameStationSeatIn(cells, side) = (seatAtSide(cells, 1, side) ? 1 : (seatAtSide(cells, 2, side) ? 2 :
+  (seatAtSide(cells, 3, side) ? 3 : (seatAtSide(cells, 4, side) ? 4 : 0))))
+// The buttons and the pick cell of seat `seat` (1 to 4; 0 holds none and points nowhere).
+function gameStationButtonsOf(seat) = (((seat == 1) * gameStationWord(1)) |
+  ((seat == 2) * gameStationWord(2)) |
+  ((seat == 3) * gameStationWord(3)) |
+  ((seat == 4) * gameStationWord(4)))
+function gameStationPointedBy(cells, seat) = ((seat == 1) ? board(pointer, cells, 1) : ((seat == 2) ? board(
+  pointer,
+  cells,
+  2
+) : ((seat == 3) ? board(pointer, cells, 3) : ((seat == 4) ? board(pointer, cells, 4) : -1))))
+
+// A station's rules, inside its module instance. The chairs rule reads who sits where; it reads only whether a seat is
+// at the board and where, so it runs when one sits down or stands up. A chair's presses rule reads its seat's buttons
+// and pointer and is idle while its chair stands empty; the near chair's pick on the menu turns into the menu's tap.
 template gameStationRules(station, catalog) {
   let key = station.id
+  let cells = $"{key}Cells"
   let games = length(catalog)
-  rule $"game-station-{key}-presses" {
-    local pointed = board(pointer, $"{key}Cells", 1)
-    local now = (
-      gameStationBits.pick * seatHeld($"{key}Cells", "confirm", 1) +
-      gameStationBits.cancel * seatHeld($"{key}Cells", "cancel", 1) +
-      gameStationBits.ahead * seatHeld($"{key}Cells", "forward", 1) +
-      gameStationBits.behind * seatHeld($"{key}Cells", "forward", -1) +
-      gameStationBits.right * seatHeld($"{key}Cells", "strafe", 1) +
-      gameStationBits.left * seatHeld($"{key}Cells", "strafe", -1)
-    )
-    local rose = now & ~(gameStationDown[key])
-    local onList = (pointed >= 0) and (gameStationColumn(pointed) >= gameStationListColumn)
-    local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(pointed) + 0.5))
-    local tap = (
-      (toInt(below / gameStationRowPitch) == gameStationActionRow) ? gameStationBits.action : gameStationBits.list
-    )
-    local edges = onList ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * tap)) : rose
-    when gameStationDown[key] != now or gameStationEdges[key] != edges or gameStationPointer[key] != pointed
+  let pitch = gameStationButtonPitch((games + 1))
+
+  rule $"game-station-{key}-chairs" {
+    local near = gameStationSeatIn(cells, 0)
+    local far = gameStationSeatIn(cells, 2)
+    when gameStationChair.near != near or gameStationChair.far != far
     mode: Level
-    gameStationDown[key] = now
-    gameStationEdges[key] = edges
-    gameStationPointer[key] = pointed
+    gameStationChair.near = near
+    gameStationChair.far = far
   }
 
-  // A tap on the list shows the game on the row it lands on, and `station.game` posts a game to the mailbox.
-  rule $"game-station-{key}-list" {
-    local below = (
-      gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(gameStationPointer[key]) + 0.5))
+  rule $"game-station-{key}-near" {
+    local seat = gameStationChair.near
+    local pointed = gameStationPointedBy(cells, seat)
+    local now = gameStationButtonsOf(seat)
+    local rose = now & ~(gameStationDown.near)
+    local x = gameStationCellX(pointed)
+    local z = gameStationCellZ(pointed)
+    local onMenu = (pointed >= 0) and (z >= gameStationMenu.z0) and (z <= gameStationMenu.z1)
+    local button = toInt((gameStationButtonsX1 - x) / pitch)
+    local onButton = onMenu and (x <= gameStationButtonsX1) and (x >= gameStationMenu.x0) and (button <= games)
+    local tap = (button == games) ? gameStationBits.action : gameStationBits.list
+    local edges = (
+      onMenu ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * onButton * tap)) : rose
     )
-    local chosen = toInt(below / gameStationRowPitch)
-    when (gameStationEdges[key] & gameStationBits.list) != 0 and below >= 0 and chosen >= 0 and chosen < games
+    local chosen = onButton ? button : -1
+    when (seat or gameStationDown.near or gameStationPointer.near != -1) and (gameStationDown.near != now or
+        gameStationEdges.near != edges or
+        gameStationPointer.near != pointed or
+        gameStationButton != chosen)
     mode: Level
-    gameStationGame[key] = chosen
+    gameStationDown.near = now
+    gameStationEdges.near = edges
+    gameStationPointer.near = pointed
+    gameStationButton = chosen
+  }
+
+  rule $"game-station-{key}-far" {
+    local seat = gameStationChair.far
+    local pointed = gameStationPointedBy(cells, seat)
+    local now = gameStationButtonsOf(seat)
+    local edges = now & ~(gameStationDown.far)
+    when (seat or gameStationDown.far or gameStationPointer.far != -1) and (gameStationDown.far != now or
+        gameStationEdges.far != edges or
+        gameStationPointer.far != pointed)
+    mode: Level
+    gameStationDown.far = now
+    gameStationEdges.far = edges
+    gameStationPointer.far = pointed
+  }
+
+  // A tap on a game's button shows that game, and `station.game` posts a game to the mailbox.
+  rule $"game-station-{key}-list" {
+    when (gameStationEdges.near & gameStationBits.list) != 0 and gameStationButton >= 0 and gameStationButton < games
+    mode: Level
+    gameStationGame[key] = gameStationButton
   }
   for (game, row) in catalog {
     rule $"game-station-{key}-pick-{game.id}" {
@@ -459,9 +608,9 @@ template gameStationRules(station, catalog) {
     }
   }
 
-  // The list follows the selection: the game shown lit and the others dim, written once each time it changes.
+  // The menu follows the selection: the game shown lit and the others dim, written once each time it changes.
   rule $"game-station-{key}-shown" {
-    when gameStationShown[key] != gameStationGame[key]
+    when gameStationShown != gameStationGame[key]
     mode: Level
     for (game, row) in catalog {
       if gameStationGame[key] == row {
@@ -476,7 +625,7 @@ template gameStationRules(station, catalog) {
       fromState: gameStationTitles,
       fromKey: $"$cell:gameStationGame:{key}"
     )
-    gameStationShown[key] = gameStationGame[key]
+    gameStationShown = gameStationGame[key]
   }
 }
 
@@ -526,11 +675,11 @@ template gameStationTokens(prefix, station, game, row, keys, centres, codes, bla
   }
 }
 
-// `station.game <station> <game>` shows a game on a station, as a tap on its list does.
+// `station.game <station> <game>` shows a game on a station, as a tap on its menu does.
 function gameStationCommands(stations, catalog) = [
   {
     name: "station.game"
-    help: "Shows a game on a game station's glass, as a tap on its list does: the station's id and the game's id."
+    help: "Shows a game on a game station's glass, as a tap on its menu does: the station's id and the game's id."
     parameters [
       { name: "station", kind: Choice, values: map(stations, station => station.id) }
       { name: "game", kind: Choice, values: map(catalog, game => game.id) }

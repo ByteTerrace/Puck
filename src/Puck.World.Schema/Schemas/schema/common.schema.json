@@ -11694,7 +11694,7 @@
       "title": "ShapeCurveDocument"
     },
     "PalettePaintTextDocument": {
-      "description": "The lettering a text paint draws (Text): text laid out in the paint\u0027s box, on its local XY plane (\u002BX the advance, \u002BY the ascent), and drawn as the paint\u0027s colour on every surface of the slot the box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the world\u0027s text font catalog each frame, so a placeholder\u0027s cell changing rewrites the lettering with no new program and no bake. The block is centred on the box\u0027s height and placed across its width by Align.",
+      "description": "The lettering a text paint draws (Text): text laid out in the paint\u0027s box, on its local XY plane (\u002BX the advance, \u002BY the ascent), and drawn as the paint\u0027s colour on every surface of the slot the box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the world\u0027s text font catalog each frame, so a placeholder\u0027s cell changing rewrites the lettering with no new program and no bake. The block is placed across the box\u0027s width by Align and on its height by Anchor.",
       "type": [
         "object",
         "null"
@@ -11759,6 +11759,14 @@
           "description": "The length, in the paint frame\u0027s units, of one unit of a markup effect\u0027s amplitude (a shake\u0027s or wave\u0027s travel, a caret\u0027s lift); null = a thirty-second of EmHeight.",
           "type": [
             "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "description": "Which line of the block stands on the box\u0027s middle, one of AnchorNames (capMiddle centres a line of capitals on it); null centres the whole laid-out block, its ascent to its descent.",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

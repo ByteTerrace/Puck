@@ -23,7 +23,10 @@
 //
 // A world whose board is drawn rather than stood with pieces (a game station) passes `digital: true` to the judge and to
 // the put-down's judgement: its pieces are their cells alone, the board is always at rest, and an arrangement judged
-// illegal is put back by writing its cells (worlds/games/chess-game.puck is that document). A table of physical pieces
+// illegal is put back by writing its cells. It may also expand `chessFreshGame()`, the door (`chessFresh.request`) that
+// sets every piece back and starts the game afresh. A game station's module instance holds one such game per station
+// (worlds/debug/game-stations.puck); a world holding several games names each one's search job (`chessSearch(name:)`).
+// A table of physical pieces
 // derives each piece's cell from where its body settled, keeps `chessRested` at whether its scope rests, and poses its
 // bodies back itself when a put-down is refused.
 //
@@ -302,13 +305,33 @@ template chessGameState(settleTicks, digital = false) {
   slot chessHold = 0 bounds(0..1)
 
   // The display door (chessPutDown): the squares a move leaves and lands on and the request a presentation of the game
-  // away from its board posts, and whether a seat plays the game there now.
+  // away from its board posts, and whether a seat plays the game there now. While a physical table's seated player holds
+  // a piece up (`chessGrip`, which such a table keeps), the door takes no move: the board is the player's until the
+  // piece is down.
   table chessPut capacity(auto) {
     from = -1
     to = -1
     request = 0
   }
   slot chessSeated = 0 bounds(0..1)
+  slot chessGrip = 0 bounds(0..1)
+
+  // The fresh-game door (chessFreshGame) and each piece's starting square and code.
+  table chessFresh capacity(auto) {
+    request = 0
+  }
+  row {
+    name: "pieceStartCell"
+    kind: "Int"
+    capacity: 32
+    cells: map(range(0, 32), i => { key: $"piece{i}", value: initialPieceCells[i] })
+  }
+  row {
+    name: "pieceStartCode"
+    kind: "Int"
+    capacity: 32
+    cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
+  }
 
   // A put-down awaiting its verdict (`judging`), the arrangement being put back this tick (`revert`), and what the
   // put-down is judged against: every piece's cell and code the tick it was made.
@@ -357,12 +380,13 @@ template chessGameState(settleTicks, digital = false) {
   slot boardCollisions = 0 bounds(0..64)
 }
 
-// The computer opponent's search over the same rules.
-template chessSearch() {
+// The computer opponent's search over the same rules. A search job's name is the search section's own, never an
+// instance's, so a world holding several games names each game's job.
+template chessSearch(name = "chessAI") {
   search {
     jobs [
       {
-        name: "chessAI"
+        name: name
         tokens: pieceCell
         board: board
         turn: turn
@@ -1158,11 +1182,14 @@ template chessMoveDone() {
 // presentation of the game away from its board asks for a move (a game station's glass), and the capture of what the
 // move is judged against. A seated player's put-down at a physical table sets `ai` and `putDown.judging` itself, ahead
 // of this template. A request waits while the board settles, a move is applied or judged, or something holds the doors
-// off, and lapses once its square holds no piece of the side to move or that side is the computer's.
+// off (a physical player's held piece among them, `chessGrip`), and lapses once its square holds no piece of the side to
+// move or that side is the computer's.
 template chessPutDown(settleTicks) {
   rule "chess-put" {
     local mover = board[chessPut.from]
-    local ready = (chessHold == 0 and ai.pending == 0 and putDown.judging == 0 and settleHold == settleTicks)
+    local ready = (
+      chessHold == 0 and chessGrip == 0 and ai.pending == 0 and putDown.judging == 0 and settleHold == settleTicks
+    )
     when chessPut.request == 1
     mode: Level
     if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {
@@ -1213,5 +1240,59 @@ template chessPutSettled() {
     when putDown.revert == 1
     mode: Level
     putDown.revert = 0
+  }
+}
+
+// The fresh-game door of a drawn board: a request sets every piece on its starting square with its starting code and
+// the game's turn, rights, clocks, history and doors as they stood at the start, then the judge reads the board again
+// as at boot (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a
+// live door, never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces
+// back instead.
+template chessFreshGame() {
+  rule "chess-fresh-pieces" {
+    when search(ply) == 0 and chessFresh.request == 1
+    mode: Level
+    forEach: pieceCode
+    pieceCode[$each] = pieceStartCode[$each]
+    pieceCell[$each] = pieceStartCell[$each]
+  }
+
+  rule "chess-fresh" {
+    when search(ply) == 0 and chessFresh.request == 1
+    mode: Level
+    turn = 0
+    verdict = 1
+    castleRights = 0
+    enPassantTarget = -1
+    halfmoveClock = 0
+    repetitionCount = 0
+    historyLength = 0
+    historyPending = 0
+    historyReset = 0
+    gameStarted = 0
+    settleHold = 0
+    illegalCount = 0
+    boardMismatch = 0
+    boardChanged = 0
+    boardCollisions = 0
+    inCheck[0] = 0
+    inCheck[1] = 0
+    previousInCheck[0] = 0
+    previousInCheck[1] = 0
+    promotionPending[0] = -1
+    promotionPending[1] = -1
+    move.from = -1
+    move.to = -1
+    move.kind = 0
+    move.mover = 0
+    move.captured = 0
+    ai.pending = 0
+    aiEnabled = 0
+    aiBest.token = -1
+    putDown.judging = 0
+    putDown.revert = 0
+    chessPut.request = 0
+    chessInput.request = 0
+    chessFresh.request = 0
   }
 }

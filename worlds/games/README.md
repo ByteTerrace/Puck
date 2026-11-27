@@ -13,10 +13,11 @@ world's table ([`../debug/chess.puck`](../debug/chess.puck), notes in
 
 [`chess-game.puck`](chess-game.puck) is chess as a document for a drawn board:
 the library in its digital mode, its pieces their cells alone, for a world
-without a physical table (`gallery-root.puck`, `game-station-root.puck`).
+without a physical table (`gallery-root.puck`). A game station holds its own
+digital game instead, the same templates expanded in its module instance.
 [`klondike.puck`](klondike.puck) and [`freecell.puck`](freecell.puck) are
-patience as rules over piles, which [`solitaire.puck`](solitaire.puck) collects
-and switches between.
+patience as rules over piles, each one template a world expands where it wants
+a game, which [`solitaire.puck`](solitaire.puck) collects and switches between.
 
 Two libraries draw these games on the standard's game station
 ([`../standard/game-station.puck`](../standard/game-station.puck)) from their

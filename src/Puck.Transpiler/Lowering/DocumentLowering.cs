@@ -528,7 +528,9 @@ public static partial class DocumentLowering {
         }
     }
 
-    private const string MemberContextKey = "MemberContext";
+    /// <summary>The annotation holding the position the value being lowered fills (<see cref="MemberContext"/>). A
+    /// scope that lowers with annotations of its own, as a module instance does, copies it from where it stands.</summary>
+    public const string MemberContextKey = "MemberContext";
     private const string CallingFunctionsKey = "CallingFunctions";
 
     /// <summary>Returns the value function a name calls in this scope.</summary>

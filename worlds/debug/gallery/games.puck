@@ -1,53 +1,62 @@
-import "../../standard/game-station"
-import "../../games/chess-station"
-import "../../games/solitaire"
-import "../../games/patience-station"
+import "layout"
 import "../game-stations"
-// The board game room's game station: the standard's station (../../standard/game-station.puck) with the debug world
-// set's catalog (../game-stations.puck), where the card table stood. Its glass plays chess (chess-station.puck, over the
-// chess game the root composes: the debug world's physical table, chess.puck, or a drawn board, chess-game.puck) and the
-// patience collection (patience-station.puck, over solitaire.puck, with the deck a root imports from
-// ../game-station-deck.puck). The gallery imports this file, so the station stands in the debug world and gallery-root
-// alike. ../game-station.md says how to play and drive it.
+// The gallery's game floor on level 3 (layout.puck's galleryGameStations plans twelve stations, six on each gallery).
+// It stands the plan's first, south3, the debug world set's station (../game-stations.puck) in its shared-chess form:
+// its Klondike and FreeCell are its own, and its chess is the world's (the debug world's chess table, or
+// ../../games/chess-game.puck's drawn board in gallery-root), so a move at the glass moves the table's pieces too. The
+// rest of the plan waits on the rule work sheet: one station holding its own chess prices about 0.72 million work units a
+// tick (../game-station.md, "Cost"), so twelve exceed the tick's 4.2 million. The gallery imports this file, so the
+// station stands in the debug world and gallery-root alike, and each root imports its card bodies from
+// ../game-station-deck.puck where its body order wants them. ../game-station.md says how to play and drive it.
+
+let stations = [galleryGameStations[0]]
 
 prototypes {
-  gameStationPrototype(
-    station: boardRoomStation,
-    catalog: gameStationCatalog,
-    boardPanels: chessStationPanels(boardRoomStation)
-  )
-  chessStationPrototypes()
-  patienceStationPrototypes()
+  gameStationSetPrototypes(stations: stations)
 }
 
 placements {
-  gameStationPlacement(station: boardRoomStation)
-  chessStationTokens(station: boardRoomStation, game: 0)
-  patienceStationSpots(station: boardRoomStation)
+  gameStationSetPlacements(stations: stations)
 }
 
-// At the station's chair, its -Z edge, 1.5 m from its centre and facing +Z across the glass, inside the engage radius:
-// the context button sits her down.
+// At the first station's near chair (south3), 1.5 m from its centre at its -Z edge and facing +Z across the glass,
+// inside the engage radius: the context button sits her down.
 spawnPoints [
-  {
-    id: "cards"
-    position [boardRoomStation.at[0], (boardRoomStation.at[1] + gameStationFloor), (boardRoomStation.at[2] - 1.5)]
-    yawDegrees: 180
-  }
+  { id: "cards", position: gameStationChairAt(stations[0], "near"), yawDegrees: 180 }
 ]
 
 state {
-  gameStationGrid(station: boardRoomStation)
-  patienceStationSlots(station: boardRoomStation)
+  // The chess game's vocabularies (../game-stations.puck's header).
+  enum PieceKind {
+    None
+    Pawn
+    Knight
+    Bishop
+    Rook
+    Queen
+    King
+  }
+
+  enum MoveKind {
+    Illegal
+    Quiet
+    Capture
+    EnPassant
+    Castle
+  }
+
+  enum TurnColor {
+    White
+    Black
+  }
+
+  gameStationSetGrids(stations: stations)
   world {
-    gameStationState(stations: [boardRoomStation], catalog: gameStationCatalog)
-    chessStationState(stations: [boardRoomStation])
-    patienceStationState()
+    gameStationSetState(stations: stations)
   }
 }
 
-gameStationRules(station: boardRoomStation, catalog: gameStationCatalog)
-chessStationRules(station: boardRoomStation, game: 0, ordinal: 0)
-patienceStationRules(station: boardRoomStation, klondike: 1, freecell: 2)
+commands: gameStationSetCommands(stations)
 
-commands: gameStationCommands([boardRoomStation], gameStationCatalog)
+// One instance a station, aliased by the station's id.
+use gameStationSharedChess as south3(station: stations[0])

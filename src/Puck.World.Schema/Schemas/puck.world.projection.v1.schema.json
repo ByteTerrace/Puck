@@ -6232,6 +6232,14 @@
                                   "null"
                                 ],
                                 "default": null
+                              },
+                              "anchor": {
+                                "description": "Which line of the block stands on the box\u0027s middle, one of AnchorNames (capMiddle centres a line of capitals on it); null centres the whole laid-out block, its ascent to its descent.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
                               }
                             },
                             "required": [
