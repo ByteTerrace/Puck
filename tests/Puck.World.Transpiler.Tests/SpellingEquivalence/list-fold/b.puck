@@ -23,7 +23,8 @@ state {
 
 rule "tick" {
   when (count(pile0) > 0 or count(pile1) > 0 or count(pile2) > 0) and chair.near == 0 and chair.far == 0
-  total = (count(pile0) == 0) + (count(pile1) == 0) + (count(pile2) == 0) +
-    ((count(pile0) != 0) + (count(pile2) != 0)) + 14
+  total = (
+    (count(pile0) == 0) + (count(pile1) == 0) + (count(pile2) == 0) + ((count(pile0) != 0) + (count(pile2) != 0)) + 14
+  )
   seat = (chair.near == 1 ? 10 : (chair.far == 2 ? 20 : -1)) + minimum(chair.near, chair.far)
 }

@@ -3,9 +3,7 @@
 schema: "puck.world.definition.v1"
 documentId: "pair"
 
-function eased(f, n) = let at = f * n in
-let from = floor(at) in
-at - from
+function eased(f, n) = let at = f * n in let from = floor(at) in at - from
 let quarter = eased(0.75, 3)
 
 state {

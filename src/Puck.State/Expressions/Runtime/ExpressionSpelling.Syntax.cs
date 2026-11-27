@@ -105,6 +105,133 @@ public static partial class ExpressionSpelling {
         }
     }
 
+    /// <summary>Returns a source tree node's direct children in printed order: a call's argument values, an index's
+    /// target then key, a let's value then body, a choice's condition then arms.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The children; empty for a literal, a name, a string or an atom.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<SyntaxNode> SourceChildren(SyntaxNode node) {
+        ArgumentNullException.ThrowIfNull(node);
+
+        return node switch {
+            SourceGroup group => [group.Value],
+            SourceIndex index => [index.Target, index.Index],
+            SourceAccess access => [access.Target],
+            SourceCall call => call.Arguments.Select(selector: static argument => argument.Value),
+            SourceLambda lambda => [lambda.Body],
+            SourceList list => list.Items,
+            SourceLet let => [let.Value, let.Body],
+            Unary unary => [unary.Operand],
+            Binary binary => [binary.Left, binary.Right],
+            Ternary ternary => [ternary.Condition, ternary.WhenTrue, ternary.WhenFalse],
+            _ => [],
+        };
+    }
+    /// <summary>Returns a source tree node with each direct child replaced by <paramref name="map"/>'s answer, the
+    /// children visited in printed order (<see cref="SourceChildren"/>), so a walk that numbers atoms as it goes
+    /// numbers them as the printed text holds them.</summary>
+    /// <param name="node">The node.</param>
+    /// <param name="map">The replacement for one child.</param>
+    /// <returns>The rebuilt node; <paramref name="node"/> itself when every answer is the child it was given.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="node"/> or <paramref name="map"/> is
+    /// <see langword="null"/>.</exception>
+    public static SyntaxNode MapSourceChildren(SyntaxNode node, Func<SyntaxNode, SyntaxNode> map) {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(map);
+
+        switch (node) {
+            case SourceGroup group: {
+                    var value = map(arg: group.Value);
+
+                    return (ReferenceEquals(objA: value, objB: group.Value) ? group : (group with { Value = value }));
+                }
+            case SourceIndex index: {
+                    var target = map(arg: index.Target);
+                    var key = map(arg: index.Index);
+
+                    return ((ReferenceEquals(objA: target, objB: index.Target) && ReferenceEquals(objA: key, objB: index.Index)) ? index : new SourceIndex(Index: key, Target: target));
+                }
+            case SourceAccess access: {
+                    var target = map(arg: access.Target);
+
+                    return (ReferenceEquals(objA: target, objB: access.Target) ? access : (access with { Target = target }));
+                }
+            case SourceCall call: {
+                    SourceArgument[]? arguments = null;
+
+                    for (var at = 0; (at < call.Arguments.Count); at++) {
+                        var argument = call.Arguments[at];
+                        var value = map(arg: argument.Value);
+
+                        if (!ReferenceEquals(objA: value, objB: argument.Value)) {
+                            arguments ??= [.. call.Arguments];
+                            arguments[at] = (argument with { Value = value });
+                        }
+                    }
+                    return ((arguments is null) ? call : (call with { Arguments = arguments }));
+                }
+            case SourceLambda lambda: {
+                    var body = map(arg: lambda.Body);
+
+                    return (ReferenceEquals(objA: body, objB: lambda.Body) ? lambda : (lambda with { Body = body }));
+                }
+            case SourceList list: {
+                    SyntaxNode[]? items = null;
+
+                    for (var at = 0; (at < list.Items.Count); at++) {
+                        var item = map(arg: list.Items[at]);
+
+                        if (!ReferenceEquals(objA: item, objB: list.Items[at])) {
+                            items ??= [.. list.Items];
+                            items[at] = item;
+                        }
+                    }
+                    return ((items is null) ? list : (list with { Items = items }));
+                }
+            case SourceLet let: {
+                    var value = map(arg: let.Value);
+                    var body = map(arg: let.Body);
+
+                    return ((ReferenceEquals(objA: value, objB: let.Value) && ReferenceEquals(objA: body, objB: let.Body)) ? let : (let with { Value = value, Body = body }));
+                }
+            case Unary unary: {
+                    var operand = map(arg: unary.Operand);
+
+                    return (ReferenceEquals(objA: operand, objB: unary.Operand) ? unary : (unary with { Operand = operand }));
+                }
+            case Binary binary: {
+                    var left = map(arg: binary.Left);
+                    var right = map(arg: binary.Right);
+
+                    return ((ReferenceEquals(objA: left, objB: binary.Left) && ReferenceEquals(objA: right, objB: binary.Right)) ? binary : (binary with { Left = left, Right = right }));
+                }
+            case Ternary ternary: {
+                    var condition = map(arg: ternary.Condition);
+                    var whenTrue = map(arg: ternary.WhenTrue);
+                    var whenFalse = map(arg: ternary.WhenFalse);
+
+                    return ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
+                        ? ternary
+                        : new Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
+                }
+            default:
+                return node;
+        }
+    }
+
+    /// <summary>Returns a source tree with each atom's index replaced by <paramref name="map"/>'s answer, the atoms
+    /// visited in printed order.</summary>
+    /// <param name="node">The tree.</param>
+    /// <param name="map">The new index for an atom's index.</param>
+    /// <returns>The renumbered tree.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="node"/> or <paramref name="map"/> is
+    /// <see langword="null"/>.</exception>
+    public static SyntaxNode MapSourceAtoms(SyntaxNode node, Func<int, int> map) {
+        ArgumentNullException.ThrowIfNull(map);
+
+        return ((node is SourceAtom atom) ? (atom with { Index = map(arg: atom.Index) }) : MapSourceChildren(map: child => MapSourceAtoms(map: map, node: child), node: node));
+    }
+
     private static void PrintSourceNode(SourceNode node, StringBuilder into) {
         switch (node) {
             case SourceGroup group:

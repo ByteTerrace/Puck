@@ -17,40 +17,12 @@ public static partial class WorldDocumentEmitter {
         // as (ElementSyntax): a number as its literal, a name or text as an atom holding it, a record or list only
         // through a read of one of its members. An interpolated string that reads the name is lowered with the name
         // bound and stands as the atom of its text. Nothing the result holds refers to a binding the expansion made,
-        // so FoldOperand's result binds the same under any binder of the scope.
-        internal Syntax.SyntaxNode Expand(Syntax.SyntaxNode node, OperandExpressionNode operand) {
-            return (Expands(node: node) ? Walk(current: node) : node);
-
-            Syntax.SyntaxNode Walk(Syntax.SyntaxNode current) => current switch {
-                Syntax.SourceLet let => ExpandLet(let: let, operand: operand),
-                Syntax.SourceCall call when (TryExpandFold(call: call, operand: operand) is { } unrolled) => unrolled,
-                Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = Walk(current: argument.Value) })] },
-                Syntax.SourceGroup group => group with { Value = Walk(current: group.Value) },
-                Syntax.SourceIndex index => index with { Target = Walk(current: index.Target), Index = Walk(current: index.Index) },
-                Syntax.SourceAccess access => access with { Target = Walk(current: access.Target) },
-                Syntax.SourceLambda lambda => lambda with { Body = Walk(current: lambda.Body) },
-                Syntax.SourceList list => list with { Items = [.. list.Items.Select(selector: Walk)] },
-                Syntax.Unary unary => unary with { Operand = Walk(current: unary.Operand) },
-                Syntax.Binary binary => binary with { Left = Walk(current: binary.Left), Right = Walk(current: binary.Right) },
-                Syntax.Ternary ternary => new Syntax.Ternary(Condition: Walk(current: ternary.Condition), WhenTrue: Walk(current: ternary.WhenTrue), WhenFalse: Walk(current: ternary.WhenFalse)),
-                _ => current,
-            };
-        }
-        // Whether anything in the tree is a let or a call shaped as a list fold, so an operand with neither (a row's
-        // `count(pile)` included) is left as it is, the same object.
-        private static bool Expands(Syntax.SyntaxNode node) => node switch {
-            Syntax.SourceLet => true,
-            Syntax.SourceCall call => (FoldShaped(call: call) ||
-                call.Arguments.Any(predicate: argument => Expands(node: argument.Value))),
-            Syntax.SourceGroup group => Expands(node: group.Value),
-            Syntax.SourceIndex index => (Expands(node: index.Target) || Expands(node: index.Index)),
-            Syntax.SourceAccess access => Expands(node: access.Target),
-            Syntax.SourceLambda lambda => Expands(node: lambda.Body),
-            Syntax.SourceList list => list.Items.Any(predicate: Expands),
-            Syntax.Unary unary => Expands(node: unary.Operand),
-            Syntax.Binary binary => (Expands(node: binary.Left) || Expands(node: binary.Right)),
-            Syntax.Ternary ternary => (Expands(node: ternary.Condition) || Expands(node: ternary.WhenTrue) || Expands(node: ternary.WhenFalse)),
-            _ => false,
+        // so FoldOperand's result binds the same under any binder of the scope. A tree with neither a let nor a fold
+        // over a compile-time list (a row's `count(pile)` included) comes back as the same object.
+        internal Syntax.SyntaxNode Expand(Syntax.SyntaxNode node, OperandExpressionNode operand) => node switch {
+            Syntax.SourceLet let => ExpandLet(let: let, operand: operand),
+            Syntax.SourceCall call when (TryExpandFold(call: call, operand: operand) is { } unrolled) => unrolled,
+            _ => Syntax.MapSourceChildren(map: child => Expand(node: child, operand: operand), node: node),
         };
 
         private static bool FoldShaped(Syntax.SourceCall call) => ListFolds.Shaped(
@@ -146,17 +118,9 @@ public static partial class WorldDocumentEmitter {
         // How many times the body reads the name where it is not shadowed.
         private static int Reads(string name, Syntax.SyntaxNode node) => node switch {
             Syntax.SourceName { Quoted: false } read => ((read.Name == name) ? 1 : 0),
-            Syntax.SourceLambda lambda => ((lambda.Binder == name) ? 0 : Reads(name: name, node: lambda.Body)),
-            Syntax.SourceLet let => (Reads(name: name, node: let.Value) + ((let.Name == name) ? 0 : Reads(name: name, node: let.Body))),
-            Syntax.SourceCall call => call.Arguments.Sum(selector: argument => Reads(name: name, node: argument.Value)),
-            Syntax.SourceGroup group => Reads(name: name, node: group.Value),
-            Syntax.SourceIndex index => (Reads(name: name, node: index.Target) + Reads(name: name, node: index.Index)),
-            Syntax.SourceAccess access => Reads(name: name, node: access.Target),
-            Syntax.SourceList list => list.Items.Sum(selector: item => Reads(name: name, node: item)),
-            Syntax.Unary unary => Reads(name: name, node: unary.Operand),
-            Syntax.Binary binary => (Reads(name: name, node: binary.Left) + Reads(name: name, node: binary.Right)),
-            Syntax.Ternary ternary => (Reads(name: name, node: ternary.Condition) + Reads(name: name, node: ternary.WhenTrue) + Reads(name: name, node: ternary.WhenFalse)),
-            _ => 0,
+            Syntax.SourceLambda lambda when (lambda.Binder == name) => 0,
+            Syntax.SourceLet let when (let.Name == name) => Reads(name: name, node: let.Value),
+            _ => Syntax.SourceChildren(node: node).Sum(selector: child => Reads(name: name, node: child)),
         };
         // A name, or a name read by literal keys and members: what a program reads as one operand, which costs the same
         // read however many times it is written.
@@ -194,38 +158,16 @@ public static partial class WorldDocumentEmitter {
         private Syntax.SyntaxNode BindName(string name, Syntax.SyntaxNode node, OperandExpressionNode operand, JsonNode? value) {
             return Rebind(current: node);
 
-            Syntax.SyntaxNode Rebind(Syntax.SyntaxNode current) {
-                switch (current) {
-                    case Syntax.SourceName { Quoted: false } read when (read.Name == name):
-                        return ElementSyntax(operand: operand, value: value);
-                    case Syntax.SourceAccess or Syntax.SourceIndex when ((value is JsonObject or JsonArray) && (Root(node: current) is Syntax.SourceName { Quoted: false } root) && (root.Name == name)):
-                        return Spelled(read: ReadThrough(node: current));
-                    case Syntax.SourceAtom atom when ReadsName(expression: AtomAt(index: atom.Index, operand: operand), name: name):
-                        return ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), Bound(name: name, value: value)));
-                    case Syntax.SourceLambda lambda:
-                        return ((lambda.Binder == name) ? lambda : lambda with { Body = Rebind(current: lambda.Body) });
-                    case Syntax.SourceLet let:
-                        return let with { Value = Rebind(current: let.Value), Body = ((let.Name == name) ? let.Body : Rebind(current: let.Body)) };
-                    case Syntax.SourceCall call:
-                        return call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = Rebind(current: argument.Value) })] };
-                    case Syntax.SourceGroup group:
-                        return group with { Value = Rebind(current: group.Value) };
-                    case Syntax.SourceIndex index:
-                        return index with { Target = Rebind(current: index.Target), Index = Rebind(current: index.Index) };
-                    case Syntax.SourceAccess access:
-                        return access with { Target = Rebind(current: access.Target) };
-                    case Syntax.SourceList list:
-                        return list with { Items = [.. list.Items.Select(selector: Rebind)] };
-                    case Syntax.Unary unary:
-                        return unary with { Operand = Rebind(current: unary.Operand) };
-                    case Syntax.Binary binary:
-                        return binary with { Left = Rebind(current: binary.Left), Right = Rebind(current: binary.Right) };
-                    case Syntax.Ternary ternary:
-                        return new Syntax.Ternary(Condition: Rebind(current: ternary.Condition), WhenTrue: Rebind(current: ternary.WhenTrue), WhenFalse: Rebind(current: ternary.WhenFalse));
-                    default:
-                        return current;
-                }
-            }
+            Syntax.SyntaxNode Rebind(Syntax.SyntaxNode current) => current switch {
+                Syntax.SourceName { Quoted: false } read when (read.Name == name) => ElementSyntax(operand: operand, value: value),
+                Syntax.SourceAccess or Syntax.SourceIndex when ((value is JsonObject or JsonArray) && (Root(node: current) is Syntax.SourceName { Quoted: false } root) && (root.Name == name)) =>
+                    Spelled(read: ReadThrough(node: current)),
+                Syntax.SourceAtom atom when ReadsName(expression: AtomAt(index: atom.Index, operand: operand), name: name) =>
+                    ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), Bound(name: name, value: value))),
+                Syntax.SourceLambda lambda when (lambda.Binder == name) => lambda,
+                Syntax.SourceLet let when (let.Name == name) => let with { Value = Rebind(current: let.Value) },
+                _ => Syntax.MapSourceChildren(map: Rebind, node: current),
+            };
             // A chain of members and keys from the name, read at compile time while the value it reaches is a record
             // or a list and the key is known; from the first scalar on, the rest of the chain reads state through it
             // (a name held in a record is a row, and `[$each]` its runtime key).

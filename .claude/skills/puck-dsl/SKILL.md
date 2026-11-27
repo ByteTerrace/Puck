@@ -122,6 +122,10 @@ A document's `schema:` field selects its vocabulary, never the filename.
   operand). In a rule a compile-time value binds like a fold's element; a state-reading value is substituted only
   where the body reads it once or it is a plain read, else it is refused with the fix, a rule `local`
   (`OperandBinder.ExpandLet`). A long chain prints one binding a line.
+- **A walk over rule-operand syntax rides `ExpressionSpelling.MapSourceChildren` and `SourceChildren`** (printed
+  order, identity kept when nothing changes; `MapSourceAtoms` renumbers atoms), so a new source node
+  (`SourceList`, `SourceLet`) is taught once; only walks that change form or scope per child (the rewriter, the
+  linter, `IsCompileTime`) switch over the nodes themselves.
 - **`if cond { } else { }` in document or section position emits one branch's rows**
   (`DocumentLowering.ExpandConditionalStatements`, the one expansion every section calls); a branch may hold `let`s
   and, unlike a `for` body, field assignments, so one member of a row can be conditional. A row written or left out is
