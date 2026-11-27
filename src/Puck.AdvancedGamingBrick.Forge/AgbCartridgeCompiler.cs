@@ -17,6 +17,9 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </remarks>
 public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint ArrayBaseAddress = 0x02000900u;
+    // Screenblock 31 holds the background's map and screenblock 30, directly below it, the panel's; the map-write
+    // queue's drain relies on that adjacency.
+    private const uint BackgroundMapAddress = (PanelMapAddress + 0x800u);
     private const uint BitmapFillAddress = 0x02000400u;
     private const uint ClockReplyAddress = 0x020003F0u;
     private const uint DirectSoundStateAddress = 0x02000160u;
@@ -25,6 +28,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint RasterTableAddress = 0x02000500u;
     private const uint SaveMirrorAddress = 0x02000200u;
     private const uint SoundStateAddress = 0x02000130u;
+    private const uint PanelMapAddress = 0x0600F000u;
     private const uint VoidAddress = 0x020000C0u;
     // The declared scene variable, read once before any rule evaluates. Every guard on it compares against THIS byte,
     // so a rule that writes the variable changes which scene runs next frame and never opens a second one in this.
@@ -59,15 +63,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             widths[name] = slot.Width;
         }
 
-        var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
-        var lengths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var next = ArrayBaseAddress;
-
-        foreach (var array in document.Arrays) {
-            arrays[key: array.Name] = next;
-            lengths[key: array.Name] = array.Initial.Length;
-            next += ((uint)array.Initial.Length);
-        }
+        var arrays = layout.ArrayOffsets.ToDictionary(
+            keySelector: static pair => pair.Key,
+            elementSelector: static pair => (ArrayBaseAddress + ((uint)pair.Value)),
+            comparer: StringComparer.Ordinal);
+        var lengths = layout.ArrayLengths;
 
         var emitter = new ThumbEmitter();
         var arithmetic = new ThumbCartridgeArithmetic(emitter: emitter);
@@ -106,28 +106,16 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         var audio = ((document.Sounds.Length == 0) ? null : new AgbSoundDriver(emitter: emitter, stateAddress: SoundStateAddress));
         var digital = (document.Sounds.Any(predicate: static sound => (sound.Sample is not null)) ? new AgbDirectSound(emitter: emitter, stateAddress: DirectSoundStateAddress) : null);
         AgbSaveModule? saver = null;
-        var persisted = new List<(uint Address, int Length)>();
+        var persisted = layout.SavePayload.Select(selector: run => ((run.IsArray ? arrays[run.Name] : variables[run.Name]), run.Length)).ToList();
 
         if (document.Save is { } declared) {
-            var defaults = new List<byte>();
-
-            foreach (var name in declared.Variables) {
-                persisted.Add(item: (variables[name], layout.Slots[name].Width));
-                defaults.AddRange(collection: layout.InitialBytes(name: name));
-            }
-
-            foreach (var name in declared.Arrays) {
-                var array = document.Arrays.First(predicate: candidate => (candidate.Name == name));
-
-                persisted.Add(item: (arrays[name], array.Initial.Length));
-                defaults.AddRange(collection: array.Initial.Select(selector: static value => ((byte)value)));
-            }
+            var defaults = layout.SaveDefaults;
 
             // The host recognizes the backup kind by scanning the image for this identifier.
             Add(bytes: System.Text.Encoding.ASCII.GetBytes(s: AgbSaveModule.SignatureText));
             saver = new AgbSaveModule(
                 emitter: emitter, mirrorAddress: SaveMirrorAddress, defaultsAddress: Add(bytes: [.. defaults]),
-                payloadByteCount: defaults.Count, version: ((byte)declared.Version));
+                payloadByteCount: defaults.Length, version: ((byte)declared.Version));
         }
 
         kernel.EmitBootPrologue();
@@ -154,7 +142,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             : document.Map);
 
         if (document.Bitmap is null) {
-            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: cells)), destination: 0x0600F800, count: 2048);
+            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: cells)), destination: BackgroundMapAddress, count: 2048);
         }
 
         // Keep one baked sine table for both turning surfaces. Allocate it at the sprite site when present so
@@ -215,7 +203,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                 ? panel.Map.Select(selector: (tile, index) => tile | ((tint[index] & 0x0F) << 12)).ToArray()
                 : panel.Map);
 
-            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: panelCells)), destination: 0x0600F000, count: 2048);
+            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: panelCells)), destination: PanelMapAddress, count: 2048);
             // Screenblock 30, priority above the first layer.
             StoreHalf(address: AgbAddresses.Background1Control, value: (30 << 8));
             // A background layer tiles the whole screen, so the window unit is what clips the panel to its corner:
@@ -247,7 +235,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
         }
         // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them.
-        var arrayInitial = document.Arrays.SelectMany(selector: static array => array.Initial.Select(selector: static value => ((byte)value))).ToArray();
+        var arrayInitial = layout.ArrayInitial;
 
         if (arrayInitial.Length != 0) {
             CopyBytes(sourceAddress: Add(bytes: arrayInitial), destination: ArrayBaseAddress, count: arrayInitial.Length);
@@ -316,14 +304,32 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             Flush();
         }
 
-        foreach (var rule in document.Rules) {
-            var end = emitter.NewLabel();
-
-            Gate(predicate: rule.When, fail: end);
-            Statements(statements: rule.Body, breakLabel: -1);
-            emitter.MarkLabel(label: end);
-            Flush();
-        }
+        new CartridgeRuleLowering(
+            newLabel: emitter.NewLabel,
+            mark: label => emitter.MarkLabel(label: label),
+            jump: label => emitter.Branch(label: label),
+            compare: Compare,
+            assign: Act,
+            step: Step,
+            repeatEnter: index => {
+                emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
+                emitter.LoadConstant(destination: LowRegister.R2, value: variables[index]);
+                emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
+            },
+            repeatTest: (index, count, exit) => {
+                emitter.LoadConstant(destination: LowRegister.R2, value: variables[index]);
+                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
+                emitter.CompareImmediate(register: LowRegister.R0, value: ((byte)count));
+                Require(condition: ThumbCondition.CarryClear, end: exit);
+            },
+            repeatAdvance: index => {
+                emitter.LoadConstant(destination: LowRegister.R2, value: variables[index]);
+                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
+                emitter.AddImmediate(register: LowRegister.R0, value: 1);
+                emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
+            },
+            settle: Flush
+        ).Rules(rules: document.Rules);
         if (raster is null) {
             Load(expression: document.ScrollX, register: LowRegister.R0); StoreResult(address: AgbAddresses.Background0HorizontalOffset);
             Load(expression: document.ScrollY, register: LowRegister.R0); StoreResult(address: AgbAddresses.Background0VerticalOffset);
@@ -482,13 +488,14 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.Branch(condition: ThumbCondition.Equal, label: done);
             emitter.LoadConstant(destination: LowRegister.R4, value: QueueBaseAddress);
             emitter.MarkLabel(label: drain);
-            // address = 0x0600F800 + (row * 32 + column) * 2
+            // address = PanelMapAddress + (row * 32 + column) * 2. A queued row carries its surface: rows 0..31 are the
+            // panel's screenblock and rows 32..63 the background's, the next screenblock up (EmitQueuePush).
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 0, destination: LowRegister.R0);
             emitter.ShiftImmediate(amount: 5, destination: LowRegister.R0, op: ThumbShift.LogicalLeft, source: LowRegister.R0);
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 1, destination: LowRegister.R1);
             emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R1, source: LowRegister.R0);
             emitter.ShiftImmediate(amount: 1, destination: LowRegister.R0, op: ThumbShift.LogicalLeft, source: LowRegister.R0);
-            emitter.LoadConstant(destination: LowRegister.R2, value: 0x0600F800u);
+            emitter.LoadConstant(destination: LowRegister.R2, value: PanelMapAddress);
             emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R2, source: LowRegister.R0);
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 2, destination: LowRegister.R1);
             // A map entry carries its cell's palette in its top four bits.
@@ -525,6 +532,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.MoveImmediate(destination: LowRegister.R0, value: 31);
             emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.And, source: LowRegister.R0);
             emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R0);
+            if (statement.Surface != "panel") {
+                emitter.AddImmediate(register: LowRegister.R5, value: 32);
+            }
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: LowRegister.R5);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 1, source: LowRegister.R6);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 2, source: LowRegister.R7);
@@ -539,7 +549,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
             for (var line = 0; (line < height); ++line) {
-                var destination = (0x0600F800u + (((uint)(((CartridgeExpressions.Whole(expression: statement.Row)!.Value + line) * 32) + CartridgeExpressions.Whole(expression: statement.Column)!.Value)) * 2u));
+                var destination = (BackgroundMapAddress + (((uint)(((CartridgeExpressions.Whole(expression: statement.Row)!.Value + line) * 32) + CartridgeExpressions.Whole(expression: statement.Column)!.Value)) * 2u));
 
                 Copy(count: (width * 2), destination: destination, sourceAddress: (sourceAddress + ((uint)((line * width) * 2))));
             }
@@ -578,290 +588,198 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         }
         uint Add(byte[] bytes) { var address = (AgbForgeCartridge.DataAddress + ((uint)data.Count)); data.AddRange(collection: bytes); return address; }
 
-        // Jumps to fail when any condition misses; falls through when all hold.
-        // Branches to fail when the gate misses; falls through when it holds. An absent gate always holds.
-        void Gate(ActionPredicate? predicate, int fail) {
-            switch (predicate) {
-                case null:
-                    return;
-                case ActionPredicate.All all:
-                    foreach (var inner in all.Predicates) { Gate(fail: fail, predicate: inner); }
-
-                    return;
-                case ActionPredicate.Any any: {
-                        var holds = emitter.NewLabel();
-
-                        foreach (var inner in any.Predicates) {
-                            var next = emitter.NewLabel();
-
-                            Gate(fail: next, predicate: inner);
-                            emitter.Branch(label: holds);
-                            emitter.MarkLabel(label: next);
-                        }
-
-                        emitter.Branch(label: fail);
-                        emitter.MarkLabel(label: holds);
-
-                        return;
-                    }
-                case ActionPredicate.Not not: {
-                        // The inner gate branches away when it MISSES, which is exactly when this one holds.
-                        var holds = emitter.NewLabel();
-
-                        Gate(predicate: not.Predicate, fail: holds);
-                        emitter.Branch(label: fail);
-                        emitter.MarkLabel(label: holds);
-
-                        return;
-                    }
-                default: {
-                        var compare = ((ActionPredicate.CompareValue)predicate);
-
-                        Load(expression: compare.Left, register: LowRegister.R0, guard: true);
-                        emitter.Push(includeLinkRegister: false, registers: LowRegisterMask.R0);
-                        Load(expression: compare.Right, register: LowRegister.R1, guard: true);
-                        emitter.Pop(includeProgramCounter: false, registers: LowRegisterMask.R0);
-                        emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
-                        Require(condition: compare.Comparison switch {
-                            ExpressionOp.Equal => ThumbCondition.Equal,
-                            ExpressionOp.NotEqual => ThumbCondition.NotEqual,
-                            ExpressionOp.Less => ThumbCondition.CarryClear,
-                            ExpressionOp.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
-                            ExpressionOp.Greater => ThumbCondition.UnsignedHigher,
-                            _ => ThumbCondition.CarrySet,
-                        }, end: fail);
-
-                        return;
-                    }
-            }
+        // Branches to fail when the comparison misses; falls through when it holds.
+        void Compare(ActionPredicate.CompareValue compare, int fail) {
+            Load(expression: compare.Left, register: LowRegister.R0, guard: true);
+            emitter.Push(includeLinkRegister: false, registers: LowRegisterMask.R0);
+            Load(expression: compare.Right, register: LowRegister.R1, guard: true);
+            emitter.Pop(includeProgramCounter: false, registers: LowRegisterMask.R0);
+            emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
+            Require(condition: compare.Comparison switch {
+                ExpressionOp.Equal => ThumbCondition.Equal,
+                ExpressionOp.NotEqual => ThumbCondition.NotEqual,
+                ExpressionOp.Less => ThumbCondition.CarryClear,
+                ExpressionOp.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
+                ExpressionOp.Greater => ThumbCondition.UnsignedHigher,
+                _ => ThumbCondition.CarrySet,
+            }, end: fail);
         }
 
-        // breakLabel is the enclosing loop's exit, or -1 outside any loop; validation has already refused a stray break.
-        void Statements(CartridgeStatement[] statements, int breakLabel) {
-            foreach (var statement in statements) {
-                switch (statement.Kind) {
-                    case "set":
-                        Act(action: statement);
-                        break;
-                    case "if": {
-                            var otherwise = emitter.NewLabel();
+        // Every step but set, if, repeat and break: the ones that touch this machine's own hardware.
+        void Step(CartridgeStatement statement) {
+            switch (statement.Kind) {
+                case "play": {
+                        var sound = sounds[statement.Sound!];
 
-                            Gate(predicate: statement.When!, fail: otherwise);
-                            Statements(statements: statement.Then!, breakLabel: breakLabel);
-                            if (statement.Else is { } alternative) {
-                                var joined = emitter.NewLabel();
+                        if (sound.SampleLength > 0) {
+                            digital!.EmitStart(sampleAddress: sound.Parts[0].Address, sampleLength: sound.SampleLength, rate: ((statement.Rate is null) ? null : register => Load(expression: statement.Rate, register: register)));
+                        } else {
+                            foreach (var part in sound.Parts) {
+                                // The wave voice plays through a pattern, which must be in place before the voice starts.
+                                if (part.Pattern != 0u) { audio!.EmitWavePatternLoad(patternAddress: part.Pattern); }
 
-                                emitter.Branch(label: joined);
-                                emitter.MarkLabel(label: otherwise);
-                                Statements(breakLabel: breakLabel, statements: alternative);
-                                emitter.MarkLabel(label: joined);
-                            } else {
-                                emitter.MarkLabel(label: otherwise);
-                            }
-
-                            Flush();
-                            break;
-                        }
-                    case "repeat": {
-                            // A break leaves the index at the iteration that broke; normal completion leaves it at count.
-                            var address = variables[statement.Index!];
-                            var top = emitter.NewLabel();
-                            var exit = emitter.NewLabel();
-
-                            emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
-                            emitter.LoadConstant(destination: LowRegister.R2, value: address);
-                            emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
-                            emitter.MarkLabel(label: top);
-                            emitter.LoadConstant(destination: LowRegister.R2, value: address);
-                            emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
-                            emitter.CompareImmediate(register: LowRegister.R0, value: ((byte)statement.Count!.Value));
-                            Require(condition: ThumbCondition.CarryClear, end: exit);
-                            Statements(statements: statement.Body!, breakLabel: exit);
-                            emitter.LoadConstant(destination: LowRegister.R2, value: address);
-                            emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
-                            emitter.AddImmediate(register: LowRegister.R0, value: 1);
-                            emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
-                            emitter.Branch(label: top);
-                            emitter.MarkLabel(label: exit);
-                            Flush();
-                            break;
-                        }
-                    case "play": {
-                            var sound = sounds[statement.Sound!];
-
-                            if (sound.SampleLength > 0) {
-                                digital!.EmitStart(sampleAddress: sound.Parts[0].Address, sampleLength: sound.SampleLength, rate: ((statement.Rate is null) ? null : register => Load(expression: statement.Rate, register: register)));
-                            } else {
-                                foreach (var part in sound.Parts) {
-                                    // The wave voice plays through a pattern, which must be in place before the voice starts.
-                                    if (part.Pattern != 0u) { audio!.EmitWavePatternLoad(patternAddress: part.Pattern); }
-
-                                    if (sound.IsMusic) {
-                                        audio!.EmitStart(streamAddress: part.Address, voice: part.Voice);
-                                    } else {
-                                        audio!.EmitEffectStart(streamAddress: part.Address, voice: part.Voice);
-                                    }
+                                if (sound.IsMusic) {
+                                    audio!.EmitStart(streamAddress: part.Address, voice: part.Voice);
+                                } else {
+                                    audio!.EmitEffectStart(streamAddress: part.Address, voice: part.Voice);
                                 }
                             }
-
-                            Flush();
-                            break;
-                        }
-                    case "stop":
-                        foreach (var voice in musicVoices) {
-                            audio!.EmitStop(voice: voice);
                         }
 
                         Flush();
                         break;
-                    case "save": {
-                            var offset = 0;
+                    }
+                case "stop":
+                    foreach (var voice in musicVoices) {
+                        audio!.EmitStop(voice: voice);
+                    }
 
-                            foreach (var (address, length) in persisted) {
-                                CopyBytes(count: length, destination: (SaveMirrorAddress + ((uint)offset)), sourceAddress: address);
-                                offset += length;
-                            }
+                    Flush();
+                    break;
+                case "save": {
+                        var offset = 0;
 
-                            saver!.EmitStore();
-                            Flush();
-                            break;
+                        foreach (var (address, length) in persisted) {
+                            CopyBytes(count: length, destination: (SaveMirrorAddress + ((uint)offset)), sourceAddress: address);
+                            offset += length;
                         }
-                    case "load": {
-                            saver!.EmitLoad();
-                            var offset = 0;
 
-                            foreach (var (address, length) in persisted) {
-                                CopyBytes(count: length, destination: address, sourceAddress: (SaveMirrorAddress + ((uint)offset)));
-                                offset += length;
-                            }
-
-                            Flush();
-                            break;
-                        }
-                    case "blend": {
-                            // The blend unit mixes the named surface with whatever the picture has already drawn
-                            // beneath it: the weight is the top's share in sixteenths, the rest comes from below.
-                            var surface = (1u << Array.IndexOf(array: CartridgeLimits.BlendSurfaces, value: statement.Surface!));
-                            var control = surface | 0x40u | ((0x3Fu & ~surface) << 8);
-
-                            Load(expression: statement.Weight!, register: LowRegister.R0);
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: CartridgeLimits.BlendWeights);
-                            emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
-                            var held = emitter.NewLabel();
-
-                            emitter.Branch(condition: ThumbCondition.UnsignedLowerOrSame, label: held);
-                            emitter.MoveImmediate(destination: LowRegister.R0, value: CartridgeLimits.BlendWeights);
-                            emitter.MarkLabel(label: held);
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: CartridgeLimits.BlendWeights);
-                            emitter.SubtractRegister(destination: LowRegister.R1, operand: LowRegister.R0, source: LowRegister.R1);
-                            emitter.ShiftImmediate(amount: 8, destination: LowRegister.R1, op: ThumbShift.LogicalLeft, source: LowRegister.R1);
-                            emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Or, source: LowRegister.R1);
-                            StoreResult(address: AgbAddresses.BlendAlpha);
-                            emitter.LoadConstant(destination: LowRegister.R0, value: control);
-                            StoreResult(address: AgbAddresses.BlendControl);
-                            Flush();
-                            break;
-                        }
-                    case "fade": {
-                            // This machine fades in hardware: every layer and the backdrop are selected as targets, the
-                            // mode picks brighten or darken, and the level register carries the step.
-                            emitter.LoadConstant(destination: LowRegister.R0, value: ((statement.Toward == "white") ? 0x3FBFu : 0x3FFFu));
-                            StoreResult(address: AgbAddresses.BlendControl);
-                            Load(expression: statement.Amount!, register: LowRegister.R0);
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: 16);
-                            emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
-                            var clamped = emitter.NewLabel();
-
-                            emitter.Branch(condition: ThumbCondition.UnsignedLowerOrSame, label: clamped);
-                            emitter.MoveImmediate(destination: LowRegister.R0, value: 16);
-                            emitter.MarkLabel(label: clamped);
-                            StoreResult(address: AgbAddresses.BlendBrightness);
-                            Flush();
-                            break;
-                        }
-                    case "clock": {
-                            clock!.EmitRead();
-                            foreach (var (name, address) in new[] {
-                                (document.Clock!.Seconds, clock.SecondAddress), (document.Clock.Minutes, clock.MinuteAddress),
-                                (document.Clock.Hours, clock.HourAddress), (document.Clock.Day, clock.DayAddress),
-                                (document.Clock.Month, clock.MonthAddress), (document.Clock.Year, clock.YearAddress),
-                            }) {
-                                if (name is null) {
-                                    continue;
-                                }
-
-                                emitter.LoadConstant(destination: LowRegister.R2, value: address);
-                                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
-                                emitter.LoadConstant(destination: LowRegister.R2, value: variables[name]);
-                                emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
-                                Flush();
-                            }
-
-                            Flush();
-                            break;
-                        }
-                    case "plot": {
-                            var dropped = emitter.NewLabel();
-                            var odd = emitter.NewLabel();
-                            var written = emitter.NewLabel();
-
-                            // Off the surface is dropped rather than wrapped, which would draw on another row.
-                            Load(expression: statement.Column!, register: LowRegister.R5);
-                            emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
-                            emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.Compare, source: LowRegister.R0);
-                            emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
-                            emitter.Branch(condition: ThumbCondition.Equal, label: dropped);
-                            Load(expression: statement.Row!, register: LowRegister.R6);
-                            emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Height);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Compare, source: LowRegister.R0);
-                            emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
-                            emitter.Branch(condition: ThumbCondition.Equal, label: dropped);
-
-                            // r5 becomes the pixel's byte offset: row times the width, plus the column.
-                            emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Multiply, source: LowRegister.R0);
-                            emitter.AddRegister(destination: LowRegister.R5, operand: LowRegister.R6, source: LowRegister.R5);
-                            Load(expression: statement.Colour!, register: LowRegister.R7);
-                            emitter.LoadConstant(destination: LowRegister.R0, value: AgbAddresses.VideoRam);
-                            emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R5, source: LowRegister.R0);
-
-                            // Video memory ignores a single-byte write, so the pixel's halfword is read and rebuilt.
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: 1);
-                            emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.And, source: LowRegister.R1);
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: 1);
-                            emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.BitClear, source: LowRegister.R1);
-                            emitter.LoadHalf(baseRegister: LowRegister.R0, byteOffset: 0, destination: LowRegister.R6);
-                            emitter.CompareImmediate(register: LowRegister.R5, value: 0);
-                            emitter.Branch(condition: ThumbCondition.NotEqual, label: odd);
-                            emitter.LoadConstant(destination: LowRegister.R1, value: 0xFF00u);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R1);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Or, source: LowRegister.R7);
-                            emitter.Branch(label: written);
-                            emitter.MarkLabel(label: odd);
-                            emitter.MoveImmediate(destination: LowRegister.R1, value: 0xFF);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R1);
-                            emitter.ShiftImmediate(amount: 8, destination: LowRegister.R7, op: ThumbShift.LogicalLeft, source: LowRegister.R7);
-                            emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Or, source: LowRegister.R7);
-                            emitter.MarkLabel(label: written);
-                            emitter.StoreHalf(baseRegister: LowRegister.R0, byteOffset: 0, source: LowRegister.R6);
-                            emitter.MarkLabel(label: dropped);
-                            Flush();
-                            break;
-                        }
-                    case "map":
-                        EmitQueuePush(statement: statement);
+                        saver!.EmitStore();
                         Flush();
                         break;
-                    case "blit": {
-                            var screen = screens[statement.Screen!];
+                    }
+                case "load": {
+                        saver!.EmitLoad();
+                        var offset = 0;
 
-                            EmitBlit(height: screen.Height, sourceAddress: screen.Address, statement: statement, width: screen.Width);
-                            break;
+                        foreach (var (address, length) in persisted) {
+                            CopyBytes(count: length, destination: address, sourceAddress: (SaveMirrorAddress + ((uint)offset)));
+                            offset += length;
                         }
-                    default:
-                        emitter.Branch(label: breakLabel);
+
+                        Flush();
                         break;
-                }
+                    }
+                case "blend": {
+                        // The blend unit mixes the named surface with whatever the picture has already drawn
+                        // beneath it: the weight is the top's share in sixteenths, the rest comes from below.
+                        var surface = (1u << Array.IndexOf(array: CartridgeLimits.BlendSurfaces, value: statement.Surface!));
+                        var control = surface | 0x40u | ((0x3Fu & ~surface) << 8);
+
+                        Load(expression: statement.Weight!, register: LowRegister.R0);
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: CartridgeLimits.BlendWeights);
+                        emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
+                        var held = emitter.NewLabel();
+
+                        emitter.Branch(condition: ThumbCondition.UnsignedLowerOrSame, label: held);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: CartridgeLimits.BlendWeights);
+                        emitter.MarkLabel(label: held);
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: CartridgeLimits.BlendWeights);
+                        emitter.SubtractRegister(destination: LowRegister.R1, operand: LowRegister.R0, source: LowRegister.R1);
+                        emitter.ShiftImmediate(amount: 8, destination: LowRegister.R1, op: ThumbShift.LogicalLeft, source: LowRegister.R1);
+                        emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Or, source: LowRegister.R1);
+                        StoreResult(address: AgbAddresses.BlendAlpha);
+                        emitter.LoadConstant(destination: LowRegister.R0, value: control);
+                        StoreResult(address: AgbAddresses.BlendControl);
+                        Flush();
+                        break;
+                    }
+                case "fade": {
+                        // This machine fades in hardware: every layer and the backdrop are selected as targets, the
+                        // mode picks brighten or darken, and the level register carries the step.
+                        emitter.LoadConstant(destination: LowRegister.R0, value: ((statement.Toward == "white") ? 0x3FBFu : 0x3FFFu));
+                        StoreResult(address: AgbAddresses.BlendControl);
+                        Load(expression: statement.Amount!, register: LowRegister.R0);
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: 16);
+                        emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.Compare, source: LowRegister.R1);
+                        var clamped = emitter.NewLabel();
+
+                        emitter.Branch(condition: ThumbCondition.UnsignedLowerOrSame, label: clamped);
+                        emitter.MoveImmediate(destination: LowRegister.R0, value: 16);
+                        emitter.MarkLabel(label: clamped);
+                        StoreResult(address: AgbAddresses.BlendBrightness);
+                        Flush();
+                        break;
+                    }
+                case "clock": {
+                        clock!.EmitRead();
+                        foreach (var (name, address) in new[] {
+                            (document.Clock!.Seconds, clock.SecondAddress), (document.Clock.Minutes, clock.MinuteAddress),
+                            (document.Clock.Hours, clock.HourAddress), (document.Clock.Day, clock.DayAddress),
+                            (document.Clock.Month, clock.MonthAddress), (document.Clock.Year, clock.YearAddress),
+                        }) {
+                            if (name is null) {
+                                continue;
+                            }
+
+                            emitter.LoadConstant(destination: LowRegister.R2, value: address);
+                            emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
+                            emitter.LoadConstant(destination: LowRegister.R2, value: variables[name]);
+                            emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
+                            Flush();
+                        }
+
+                        Flush();
+                        break;
+                    }
+                case "plot": {
+                        var dropped = emitter.NewLabel();
+                        var odd = emitter.NewLabel();
+                        var written = emitter.NewLabel();
+
+                        // Off the surface is dropped rather than wrapped, which would draw on another row.
+                        Load(expression: statement.Column!, register: LowRegister.R5);
+                        emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
+                        emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.Compare, source: LowRegister.R0);
+                        emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
+                        emitter.Branch(condition: ThumbCondition.Equal, label: dropped);
+                        Load(expression: statement.Row!, register: LowRegister.R6);
+                        emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Height);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Compare, source: LowRegister.R0);
+                        emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: dropped);
+                        emitter.Branch(condition: ThumbCondition.Equal, label: dropped);
+
+                        // r5 becomes the pixel's byte offset: row times the width, plus the column.
+                        emitter.LoadConstant(destination: LowRegister.R0, value: CartridgeBitmap.Width);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Multiply, source: LowRegister.R0);
+                        emitter.AddRegister(destination: LowRegister.R5, operand: LowRegister.R6, source: LowRegister.R5);
+                        Load(expression: statement.Colour!, register: LowRegister.R7);
+                        emitter.LoadConstant(destination: LowRegister.R0, value: AgbAddresses.VideoRam);
+                        emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R5, source: LowRegister.R0);
+
+                        // Video memory ignores a single-byte write, so the pixel's halfword is read and rebuilt.
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: 1);
+                        emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.And, source: LowRegister.R1);
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: 1);
+                        emitter.Alu(destination: LowRegister.R0, op: ThumbAlu.BitClear, source: LowRegister.R1);
+                        emitter.LoadHalf(baseRegister: LowRegister.R0, byteOffset: 0, destination: LowRegister.R6);
+                        emitter.CompareImmediate(register: LowRegister.R5, value: 0);
+                        emitter.Branch(condition: ThumbCondition.NotEqual, label: odd);
+                        emitter.LoadConstant(destination: LowRegister.R1, value: 0xFF00u);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R1);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Or, source: LowRegister.R7);
+                        emitter.Branch(label: written);
+                        emitter.MarkLabel(label: odd);
+                        emitter.MoveImmediate(destination: LowRegister.R1, value: 0xFF);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R1);
+                        emitter.ShiftImmediate(amount: 8, destination: LowRegister.R7, op: ThumbShift.LogicalLeft, source: LowRegister.R7);
+                        emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.Or, source: LowRegister.R7);
+                        emitter.MarkLabel(label: written);
+                        emitter.StoreHalf(baseRegister: LowRegister.R0, byteOffset: 0, source: LowRegister.R6);
+                        emitter.MarkLabel(label: dropped);
+                        Flush();
+                        break;
+                    }
+                case "map":
+                    EmitQueuePush(statement: statement);
+                    Flush();
+                    break;
+                case "blit": {
+                        var screen = screens[statement.Screen!];
+
+                        EmitBlit(height: screen.Height, sourceAddress: screen.Address, statement: statement, width: screen.Width);
+                        break;
+                    }
             }
         }
 
@@ -1168,9 +1086,18 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             var inside = emitter.NewLabel();
             var length = lengths[key: array];
 
+            // A sixteen-bit index (a bare two-byte slot, or a literal past a byte) arrives whole in r3, so it is bounded
+            // against the full length; a byte index can only miss an array shorter than a byte reaches.
+            var wideIndex = CartridgeExpressions.ReadsWide(expression: index, layout: layout);
+
             Load(expression: index, guard: guard, register: LowRegister.R3);
-            if (length < CartridgeLimits.ArrayLength) {
-                emitter.CompareImmediate(register: LowRegister.R3, value: ((byte)length));
+            if (wideIndex || (length < CartridgeLimits.ArrayLength)) {
+                if (length <= CartridgeLimits.NarrowMaximum) {
+                    emitter.CompareImmediate(register: LowRegister.R3, value: ((byte)length));
+                } else {
+                    emitter.LoadConstant(destination: address, value: ((uint)length));
+                    emitter.Alu(destination: LowRegister.R3, op: ThumbAlu.Compare, source: address);
+                }
                 emitter.Branch(condition: ThumbCondition.CarryClear, label: inside);
                 emitter.MoveImmediate(destination: LowRegister.R3, value: 0);
                 emitter.LoadConstant(destination: address, value: VoidAddress);

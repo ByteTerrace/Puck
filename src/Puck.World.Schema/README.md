@@ -3501,7 +3501,7 @@ plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 
 `WorldIdentityProjection` (`WorldIdentity.cs`) is everything an identity
 discloses when it walks into another authority: id, name, colour, the two
-motion rates, the records `identity.records` selects, and the facts row
+motion rates, the crossing record pools `identity.travel` names, and the facts row
 (`WorldIdentityFacts.Validate` admits a carried one). An empty row preserves
 the owner's authored row name and capacity before its first fact. An identity rebuilt from
 it (`WorldIdentity.FromProjection`) has no document; its records and facts are

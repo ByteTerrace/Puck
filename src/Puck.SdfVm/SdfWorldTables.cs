@@ -111,6 +111,7 @@ public sealed partial class SdfWorldTables : IDisposable {
 
     private readonly GpuDeviceServices m_gpu;
     private readonly SdfGpuWork m_gpuWork;
+    private readonly SdfLightingHold m_lighting;
 
     /// <summary>Gets the tables' background GPU work: work that is not a frame's, submitted on completion of the last
     /// rather than once a frame, which binds the latest upload's World set (the mesh bake's sampling among it).</summary>
@@ -397,7 +398,6 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_previousDynamicTransforms.Fit((ulong)m_dynamicTransformRegion.ByteCount);
         m_previousMeshTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-mesh-transforms"), retire: RetireBuffer));
         m_previousMeshTransforms.Fit(MeshPoseBytes);
-        m_meshIrradiance = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("mesh-irradiance"), sizing: GpuBufferSizing.Exact, retire: RetireBuffer));
         m_meshHistoryCopies = scope.Own(created: new GpuBufferStridedCopy(buffers: gpu.BufferFactory, bindings: gpu.Bindings,
             recorder: gpu.Recorder, pipeline: m_regionCopyPipeline, frameSlotCount: FrameRingSize, recordingCount: 2,
             name: NameOf(part: "mesh-history-copy")));
@@ -411,6 +411,7 @@ public sealed partial class SdfWorldTables : IDisposable {
             handle: m_pool,
             release: m_bindings.DestroyPool
         );
+        ReserveShadowPools(scope: scope);
 
         // The World set per ring slot, which every view's compute passes bind, is allocated and written the first time
         // one is bound (WorldSet).
@@ -433,6 +434,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
         m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner, selector: m_meshGrant.Selector));
+        // Reserved before the bake fills the mesh region: the volume sizes it at its first staging (SdfMeshIrradiance.Stage).
+        m_lighting = scope.Own(created: m_meshGrant.Selector.ReserveLighting());
         // The mesh region's owed words land through it (SdfWorldTables.MeshLanding.cs).
         m_gpuWork.Add(client: new MeshLanding(tables: this));
         m_gpuWork.Add(client: new MeshRowsReadback(tables: this));
@@ -486,6 +489,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         // No idle wait: the views' submissions, which the tables' own fences cannot see, read every table, so the owner
         // disposes the tables only once they have completed (the residency through GpuDeviceRetirement) or after a loss.
         m_gpuWork.Dispose();
+        m_lighting.Dispose();
         SdfProgram.Exchange(held: ref m_backgroundProgram, next: null);
         SdfProgram.Exchange(held: ref m_liveProgram, next: null);
         // The rows' names and the names ahead leave the store with the residency; the last one to leave disposes it.
@@ -493,6 +497,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_meshClaims?.Dispose(); m_meshClaims = null;
         m_shadows?.Dispose();
         m_shadows = null;
+        DestroyShadowPools();
         DisposeRetired(completed: ulong.MaxValue);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {

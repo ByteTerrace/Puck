@@ -27,7 +27,8 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason), wait: view.Residency.WaitPipelineBuilds);
-        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * SdfWorldPackage.VisibilityRecordByteLength));
+        // The records lead the buffer; the tint plane, a word a pixel, follows them (VisibilityPixelByteLength).
+        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * SdfWorldPackage.VisibilityPixelByteLength));
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // (0.25, 0.75) samples pixel (8, 24).
         var record = ((((24 * ((int)Extent)) + 8)) * SdfWorldPackage.VisibilityRecordByteLength);

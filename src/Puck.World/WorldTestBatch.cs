@@ -45,6 +45,9 @@ internal sealed class WorldTestBatch {
 
     private Timer? m_legDeadline;
     private string? m_legFailure;
+    // Each failed leg's directory and reason, repeated on the worker's own stderr when it exits: every leg's streams go
+    // to that leg's transcripts, so without these lines a failed worker exits 1 with nothing on its stderr.
+    private readonly List<string> m_failures = [];
     private WorldDisclosureRun? m_disclosure;
     private CrossingLog m_crossings = null!;
 
@@ -95,9 +98,12 @@ internal sealed class WorldTestBatch {
                 .. ((first.Workers is { } workers) ? new[] { "--workers", workers.ToString(provider: CultureInfo.InvariantCulture) } : []),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
-                batch.m_legDeadline?.Dispose();
-                batch.m_control?.Dispose();
+                batch.ReleaseHost();
                 if ((exit != 0) || batch.m_aborted || (batch.m_index == startingIndex)) { break; }
+            }
+            foreach (var failure in batch.m_failures) { previousError.WriteLine(value: $"[test.batch: {failure}]"); }
+            if ((exit != 0) && (batch.m_index < legs.Length)) {
+                previousError.WriteLine(value: $"[test.batch: the host of leg {legs[batch.m_index].Directory} exited {exit}]");
             }
 
             return (((exit == 0) && !batch.m_failed && (batch.m_index == legs.Length)) ? 0 : 1);
@@ -114,6 +120,21 @@ internal sealed class WorldTestBatch {
         }
     }
 
+    // Drops everything the batch took from a host that has stopped (its services, console session, observed instances,
+    // probes and crossing log, each of which reaches its server), so an ended run's server is unreachable while the next
+    // host boots. Initialize takes them again from the next host.
+    private void ReleaseHost() {
+        m_legDeadline?.Dispose();
+        m_legDeadline = null;
+        m_control?.Dispose();
+        m_control = null!;
+        m_probes.Clear();
+        m_snapshots.Clear();
+        m_observed.Clear();
+        m_disclosure = null;
+        m_crossings = null!;
+        m_services = null!;
+    }
     private T Get<T>() where T : notnull => m_services.GetRequiredService<T>();
     private void Initialize(IHost host) {
         m_services = host.Services;
@@ -209,7 +230,10 @@ internal sealed class WorldTestBatch {
         try { return CompleteLeg(); } catch (Exception exception) {
             m_failed = true;
             m_aborted = true;
-            try { Console.Error.WriteLine(value: $"[test.batch: {exception}]"); } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
+            try {
+                Console.Error.WriteLine(value: $"[test.batch: {exception}]");
+                RecordFailure(leg: m_legs[m_index], reason: $"the worker could not report the leg: {exception.Message}");
+            } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
             return true;
         }
     }
@@ -274,14 +298,21 @@ internal sealed class WorldTestBatch {
         } catch (Exception exception) {
             Console.Error.WriteLine(value: $"[test.batch: {exception}]");
             try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "1"); } catch { }
+            RecordFailure(leg: leg, reason: exception.Message);
             m_failed = true;
         }
-        m_probes.Clear();
-        m_snapshots.Clear();
         m_output.Flush(); m_error.Flush();
         m_index++;
         Get<IHostApplicationLifetime>().StopApplication();
         return true;
+    }
+    // Names a failed leg's reason in its directory (`failure`, one line, which the CLI reports beside the leg's exit
+    // code) and keeps it for the worker's own stderr.
+    private void RecordFailure(Leg leg, string reason) {
+        var line = reason.ReplaceLineEndings(replacementText: " ");
+
+        m_failures.Add(item: $"leg {leg.Directory} failed: {line}");
+        try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "failure"), line); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private void ArchiveStateFiles(string directory) {
         var root = Get<WorldStateRoot>().FullPath;

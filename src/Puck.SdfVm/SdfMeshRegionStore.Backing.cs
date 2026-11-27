@@ -95,7 +95,8 @@ public sealed partial class SdfMeshRegionStore {
     // it holds more than half as much again and the pool has room for the smaller buffer beside it, which carries the
     // words below its size on the GPU.
     private void Fit(ulong bytes) {
-        var fitted = GrownBytes(mappedChunkBytes: m_region.MappedChunkBytes, mostBytes: Math.Max(val1: bytes, val2: ((ulong)(m_arena.LimitWords * sizeof(uint)))), needBytes: Math.Max(val1: bytes, val2: sizeof(uint)));
+        var need = Math.Max(val1: bytes, val2: sizeof(uint));
+        var fitted = GrownBytes(mappedChunkBytes: m_region.MappedChunkBytes, mostBytes: Math.Max(val1: need, val2: ((ulong)(m_arena.LimitWords * sizeof(uint)))), needBytes: need);
         var held = m_region.ByteCount;
 
         if (m_region.Mapped) {

@@ -16,6 +16,7 @@ namespace Puck.World;
 /// (<see cref="Replace"/>) is held with the slices it was built from, so its own are never cut again. A member the
 /// serializer omits (a null value) has no slice; its absence is part of the pin.</remarks>
 public sealed class WorldDefinitionMembers {
+    [SideTable(reason: "serializes the whole document to pin it and is read by no product build")]
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldDefinitionMembers> Held = new();
 
     /// <summary>The JSON name of the root member holding the state section.</summary>

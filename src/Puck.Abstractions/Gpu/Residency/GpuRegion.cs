@@ -732,6 +732,18 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return created;
     }
+    /// <summary>Returns the descriptor pools a staged region whose owner reserves no copy sets for it creates: its own copy
+    /// pool, then, once it reserves its run copies (<see cref="ReserveRunCopies"/>), the
+    /// moves' and the gathers' pools, each one set per slot. An owner admits a device's heap for such a region by these.</summary>
+    /// <param name="slotCount">The region's frame slots; at least one.</param>
+    /// <param name="runCopies">Whether the region reserves its run copies.</param>
+    /// <returns>The pools, in the order the region creates them.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slotCount"/> is not positive.</exception>
+    public static GpuDescriptorPoolSizes[] OwnedPoolSizes(int slotCount, bool runCopies) {
+        var pool = GpuRegionCopyPool.SizesOf(regionCount: 1, slotCount: slotCount);
+
+        return (runCopies ? [pool, pool, pool] : [pool]);
+    }
     // Creates the copy pool of a staged region whose owner reserved no sets for it: one set per slot, named as the region.
     private GpuRegionCopyPool CreateCopyPool() => new(
         bindings: m_bindings,
@@ -1698,8 +1710,10 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_moves = CreateRunCopy(detail: "moves", mode: CopyMoveMode);
         m_gathers = CreateRunCopy(detail: "gathers", mode: CopyGatherMode);
     }
+    // A run copy's request buffers are host-visible, so they are named as the region's staging is, never as its
+    // destination, which the memory account charges to the region's own owner.
     private GpuRegionRunCopy CreateRunCopy(string detail, uint mode) {
-        var name = (m_name.IsEmpty ? default : new GpuObjectName(owner: m_name.Owner!, part: m_name.Part!, detail: detail));
+        var name = (m_stagingName.IsEmpty ? default : new GpuObjectName(owner: m_stagingName.Owner!, part: m_stagingName.Part!, detail: detail));
 
         return new GpuRegionRunCopy(bindings: m_bindings, buffers: m_buffers, pipeline: m_copyPipeline!, recorder: m_recorder, name: in name,
             slotCount: SlotCount, mode: mode);

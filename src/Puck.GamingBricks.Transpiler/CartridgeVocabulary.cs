@@ -14,7 +14,7 @@ public sealed class CartridgeVocabulary : IDocumentVocabulary {
         ["blend"] = ["surface", "weight"],
         ["blit"] = ["row", "column", "screen"],
         ["fade"] = ["amount", "toward"],
-        ["map"] = ["row", "column", "tile", "palette"],
+        ["map"] = ["row", "column", "tile", "palette", "surface"],
         ["play"] = ["sound", "rate"],
         ["plot"] = ["row", "column", "colour"],
     };
@@ -46,12 +46,22 @@ public sealed class CartridgeVocabulary : IDocumentVocabulary {
 
         return names[positionalIndex];
     }
+    /// <summary>Returns whether a member of a document object is one of the fields a cartridge evaluates at run time
+    /// (a sprite's position, a panel's visibility, a scroll), which carry their expression's infix spelling.</summary>
+    /// <param name="fieldKey">The member's name.</param>
+    /// <returns><see langword="true"/> for an expression field.</returns>
+    public static bool IsExpressionField(string fieldKey) => ExpressionFields.Contains(item: fieldKey);
     /// <inheritdoc />
+    /// <remarks>Only an expression that reads machine state is lowered here, since generic lowering cannot evaluate
+    /// it; a value compile-time bindings decide lowers generically wherever it stands, so a <c>let</c> record whose
+    /// member shares an expression field's name (<c>{ x: 64 }</c>) keeps its value. The emitter spells the expression
+    /// fields of the document itself afterwards (<see cref="CartridgeDocumentEmitter"/>).</remarks>
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out JsonNode? value) {
         value = null;
         if (
             (fieldKey is null) ||
-            !ExpressionFields.Contains(item: fieldKey)
+            !ExpressionFields.Contains(item: fieldKey) ||
+            !CartridgeOperand.ReadsState(expression: DocumentLowering.InlineFunctions(expression: expression, scope: scope), scope: scope)
         ) { return false; }
         value = CartridgeOperand.FromExpression(
             expression: expression,

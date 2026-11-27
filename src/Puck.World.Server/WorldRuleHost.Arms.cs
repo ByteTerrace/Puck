@@ -74,7 +74,10 @@ public sealed partial class WorldRuleHost {
     // clean and rebinds to the interface's own implementation, which flushes no identity fact and refuses every
     // world arm as unbound, so their accessibility is load-bearing.
     /// <inheritdoc/>
-    public void Committed(int scope) => FlushIdentityFacts();
+    public void Committed(int scope) {
+        FlushIdentityFacts();
+        FlushIdentityStages();
+    }
     /// <inheritdoc/>
     public void Preflighting() {
         // A unit prepared for a firing that then did not commit is released here.
@@ -247,6 +250,12 @@ public sealed partial class WorldRuleHost {
                     effect: fact,
                     refusal: out refusal,
                     values: firing.Values
+                );
+            case WorldIdentityRecordEffect record:
+                return FireIdentityRecord(
+                    effect: record,
+                    firing: in firing,
+                    refusal: out refusal
                 );
             case WorldBodyStateEffect bodyState:
                 return FireBodyState(

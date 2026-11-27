@@ -45,7 +45,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 46;
+    public const ushort SupportedVersion = 47;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -63,7 +63,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteSection(body, EncodeEscrow(section: checkpoint.Escrow), MaxSectionBytes);
         WriteSection(body, EncodeInputHold(section: checkpoint.InputHold), MaxSectionBytes);
         WriteSection(body, EncodeEventFeed(section: checkpoint.EventFeed), MaxSectionBytes);
-        WriteSection(body, EncodeOwnedWorlds(section: checkpoint.OwnedWorlds), MaxSectionBytes);
         WriteSection(body, EncodeHostRow(section: checkpoint.HostRow), MaxSectionBytes);
         WriteSection(body, EncodeFields(section: checkpoint.Fields), MaxSectionBytes);
         WriteSection(body, EncodeSearch(section: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty)), MaxSectionBytes);
@@ -207,10 +206,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "event feed section",
             maxBytes: MaxSectionBytes
         );
-        var ownedWorldsBytes = body.ReadBlock(
-            field: "owned worlds section",
-            maxBytes: MaxSectionBytes
-        );
         var hostRowBytes = body.ReadBlock(
             field: "host row section",
             maxBytes: MaxSectionBytes
@@ -292,13 +287,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         )) {
             return false;
         }
-        if (!TryDecodeOwnedWorlds(
-            bytes: ownedWorldsBytes,
-            reason: out reason,
-            section: out var ownedWorlds
-        )) {
-            return false;
-        }
         if (!TryDecodeHostRow(
             bytes: hostRowBytes,
             reason: out reason,
@@ -345,7 +333,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             InputHold: inputHold,
             Machines: machines,
             Addons: ((addonBytes.Length == 0) ? null : addonBytes),
-            OwnedWorlds: ownedWorlds,
             Population: population,
             Search: search,
             Server: server

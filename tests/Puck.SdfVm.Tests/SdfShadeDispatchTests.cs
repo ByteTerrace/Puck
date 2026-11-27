@@ -23,7 +23,8 @@ public sealed class SdfShadeDispatchTests {
         foreach (var job in plan.Jobs) {
             Assert.Equal(end, job.FirstGroup);
             Assert.InRange(job.Groups, 1u, 65535u);
-            Assert.Equal(job.Groups * 64UL * shade.PixelWork(SdfShadeProgram.MaxLights) * (glass ? 2UL : 1UL), job.Work);
+            // Glass prices every interface of the pixel's layer list (SdfWorldPackage.GlassLayers, the same number).
+            Assert.Equal(job.Groups * 64UL * shade.PixelWork(SdfShadeProgram.MaxLights) * (glass ? SdfShadeProgram.GlassInterfaces : 1UL), job.Work);
             Assert.InRange(job.Work, 1UL, SdfShadeProgram.MaxWork);
             end += job.Groups;
         }

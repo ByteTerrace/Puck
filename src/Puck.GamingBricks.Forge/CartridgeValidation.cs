@@ -158,7 +158,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 items: array.Initial,
                 path: (path + ".initial"),
                 min: 1,
-                max: CartridgeLimits.ArrayLength
+                max: CartridgeLimits.ArrayByteCount
             )) {
                 continue;
             }
@@ -201,23 +201,59 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
         for (var index = 0; (index < bank.Length); ++index) {
             var entry = bank[index];
 
+            var master = (document.Target == "hgd");
+
             if (
                 (entry is null) ||
                 (entry.Length != colors)
             ) {
                 Error(
-                    message: $"Expected {colors} RGB555 integers.",
+                    message: (master
+                        ? $"Expected {colors} master-palette indices."
+                        : $"Expected {colors} RGB555 integers."),
                     path: $"{path}[{index}]"
                 );
                 continue;
             }
 
-            if (entry.Any(predicate: static color => (color is < 0 or > 32767))) {
+            if (master && entry.Any(predicate: static color => (color is < 0 or >= CartridgeLimits.DeckColourCount))) {
+                Error(
+                    message: $"Expected master-palette indices in 0..{(CartridgeLimits.DeckColourCount - 1)}; the hgd picture unit draws from a fixed palette.",
+                    path: $"{path}[{index}]"
+                );
+            } else if (!master && entry.Any(predicate: static color => (color is < 0 or > 32767))) {
                 Error(
                     message: "Expected RGB555 integers in 0..32767.",
                     path: $"{path}[{index}]"
                 );
             }
+        }
+    }
+    // A board names how an hgd image is wired; no other target has a choice to make.
+    private void Board() {
+        if (document.Board is not { } board) {
+            return;
+        }
+
+        if (document.Target != "hgd") {
+            Error(
+                message: $"Only the hgd target is built for a choice of boards; the {document.Target} target has one.",
+                path: "board"
+            );
+
+            return;
+        }
+
+        if (board is not ("nrom" or "mmc1" or "mmc3")) {
+            Error(
+                message: "Expected nrom, mmc1 or mmc3.",
+                path: "board"
+            );
+        } else if ((board == "nrom") && (document.Save is not null)) {
+            Error(
+                message: "An nrom board carries no battery-backed memory to save to; choose mmc1 or mmc3.",
+                path: "board"
+            );
         }
     }
     private void Bitmap() {
@@ -258,6 +294,13 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
         }
 
         m_clocks = true;
+
+        if (document.Target == "hgd") {
+            Error(
+                message: "The hgd target's boards carry no real-time clock.",
+                path: "clock"
+            );
+        }
 
         // The two machines carry different clocks: one counts days since the cartridge was started, the other keeps a
         // calendar date. Naming a field the target's device does not have would silently report a made-up value.
@@ -399,9 +442,12 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             return;
         }
 
-        Value(
+        // A bare two-byte slot or a literal past a byte is read as sixteen bits, which is how an index reaches past an
+        // array's first CartridgeLimits.ArrayLength elements; every other index is a byte expression.
+        Expression(
             path: (path + ".index"),
-            value: index
+            value: index,
+            wide: true
         );
         if (
             (Literal(value: index) is { } literal) &&
@@ -687,11 +733,13 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
         }
 
-        var wave = (part.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave);
+        var wave = ((part.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave) && (document.Target != "hgd"));
 
         if (wave != (part.Waveform is not null)) {
             Error(
-                message: "A part on the wave voice carries a waveform, and no other voice may.",
+                message: ((document.Target == "hgd")
+                    ? "The hgd target's wave voice is its triangle channel, whose shape is fixed, so no part carries a waveform."
+                    : "A part on the wave voice carries a waveform, and no other voice may."),
                 path: (path + ".waveform")
             );
         } else if (
@@ -756,6 +804,15 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
         );
     }
     private void Raster() {
+        if ((document.Target == "hgd") && (document.Raster.Length != 0)) {
+            Error(
+                message: "Mid-picture scroll changes are not compiled for the hgd target.",
+                path: "raster"
+            );
+
+            return;
+        }
+
         var previous = -1;
 
         for (var index = 0; (index < document.Raster.Length); ++index) {
@@ -1172,7 +1229,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             }
 
             if (sound.Effect is { } effect) {
-                var wave = (effect.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave);
+                var wave = ((effect.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave) && (document.Target != "hgd"));
 
                 if (effect.Voice is not (Puck.Assets.Documents.AudioEffectDocument.VoicePulse1 or Puck.Assets.Documents.AudioEffectDocument.VoiceNoise or Puck.Assets.Documents.AudioEffectDocument.VoiceWave)) {
                     Error(
@@ -1186,7 +1243,9 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                     );
                 } else if (wave != (sound.Waveform is not null)) {
                     Error(
-                        message: "A wave effect carries a waveform, and no other voice may.",
+                        message: ((document.Target == "hgd")
+                            ? "The hgd target's wave voice is its triangle channel, whose shape is fixed, so no effect carries a waveform."
+                            : "A wave effect carries a waveform, and no other voice may."),
                         path: (path + ".waveform")
                     );
                 } else if (
@@ -1333,10 +1392,31 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 break;
             case "map":
                 Reject(
-                    allowed: "row column tile palette",
+                    allowed: "row column tile palette surface",
                     path: path,
                     value: value
                 );
+                // A write lands in the scrolling background's map unless it names the panel, whose own map is what a
+                // dialog or a status line over the moving world is drawn into at run time.
+                if (value.Surface is { } mapSurface) {
+                    if (Array.IndexOf(
+                        array: CartridgeLimits.MapSurfaces,
+                        value: mapSurface
+                    ) < 0) {
+                        Error(
+                            message: "Expected background or panel.",
+                            path: (path + ".surface")
+                        );
+                    } else if (
+                        (mapSurface == "panel") &&
+                        (document.Window is null)
+                    ) {
+                        Error(
+                            message: "Writing the panel needs a declared window.",
+                            path: (path + ".surface")
+                        );
+                    }
+                }
                 Value(
                     value: value.Row,
                     path: (path + ".row")
@@ -1717,6 +1797,15 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             return;
         }
 
+        if (document.Target == "hgd") {
+            Error(
+                message: "A panel needs a second background the hgd target does not have; draw it into the map instead.",
+                path: "window"
+            );
+
+            return;
+        }
+
         if (!Count(
             items: window.Map,
             path: "window.map",
@@ -1774,12 +1863,14 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             );
             return m_errors;
         }
-        if (document.Target is not ("cgb" or "dmg" or "agb")) {
+        if (document.Target is not ("cgb" or "dmg" or "agb" or "hgd")) {
             Error(
-                message: "Expected cgb, dmg or agb.",
+                message: "Expected cgb, dmg, agb or hgd.",
                 path: "target"
             );
         }
+
+        Board();
 
         if (!Ascii(
             value: document.Title,
@@ -1807,10 +1898,11 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             ? 16
             : 4
         );
-        var paletteCount = ((document.Target == "agb")
-            ? CartridgeLimits.AdvancedPaletteCount
-            : CartridgeLimits.HumblePaletteCount
-        );
+        var paletteCount = document.Target switch {
+            "agb" => CartridgeLimits.AdvancedPaletteCount,
+            "hgd" => CartridgeLimits.DeckPaletteCount,
+            _ => CartridgeLimits.HumblePaletteCount,
+        };
 
         Palettes(
             colors: colors,

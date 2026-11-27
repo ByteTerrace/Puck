@@ -53,16 +53,6 @@ public sealed partial class SdfWorldTables {
     // its own changes, and the owner outlives them (DisposeRegions).
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(name: "sdf.world.region-host-copies");
 
-    // The mesh region's slots: the upload ring's, then one per background GPU work slot, which lands meshes
-    // (MeshLandingSlot).
-    private const int MeshRegionSlotCount = (FrameRingSize + SdfGpuWork.SlotCount);
-
-    // The pool of the mesh region's own copy sets, which the region creates with itself at construction.
-    private static GpuDescriptorPoolSizes MeshRegionCopyPoolSizes =>
-        GpuRegionCopyPool.SizesOf(
-            regionCount: 1,
-            slotCount: MeshRegionSlotCount
-        );
     // The one pool of the copy sets the tables reserve for their regions (ReserveRegionCopyPool).
     private static GpuDescriptorPoolSizes RegionCopyPoolSizes =>
         GpuRegionCopyPool.SizesOf(
@@ -110,7 +100,6 @@ public sealed partial class SdfWorldTables {
             RegionAt(index: index)?.Dispose();
         }
 
-        m_meshIrradiance.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
         m_regionHostCopies.Dispose();
@@ -160,7 +149,6 @@ public sealed partial class SdfWorldTables {
             var bytes = (new GpuMemoryBytes(DeviceLocal: ((((m_previousDynamicTransforms.Buffer!.SizeBytes + m_previousMeshTransforms.Buffer!.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes) + (ulong)(m_shadows?.Bytes ?? 0L)), HostVisible: 0));
 
             bytes += m_meshHistoryCopies.OwnedBytes;
-            bytes += MeshIrradianceBufferBytes;
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {

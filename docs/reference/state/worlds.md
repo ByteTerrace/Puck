@@ -366,8 +366,9 @@ reclaiming the slot resolves the new lifetime's own field value.
 
 ### Owned identity records
 
-An owned identity can carry typed records with it. `identity.records` selects
-pools that travel with the identity:
+An owned identity holds a record store: every pool and pair pool its own
+document declares, at any capacity. `identity.travel` gives a pool its travel
+class; a pool it does not name stays home:
 
 ```puck
 identity {
@@ -376,35 +377,44 @@ identity {
   color: "#FFFFFF"
   moveSpeedState: moveSpeed
   turnSpeedState: turnSpeed
-  records [purse]
+  travel [{ pool: marks, class: Crossing }]
 }
 
 state {
-  record Purse {
-    gold: Int bounds(0..999) = 0
-  }
-  pool purse of Purse capacity(1) = [{ gold: 0 }]
-
-  world {
-    slot moveSpeed = 4.5
-    slot turnSpeed = 3.5
-  }
+  record Note { text: Text = "" }
+  record Mark { kind: Int bounds(0..255) = 0 }
+  pool notes of Note capacity(512)
+  pool marks of Mark capacity(256)
 }
 ```
 
-This compiles as a complete world document. Each selected pool must have
-capacity one with slot zero live, and it can't be selected twice.
+A `Home` pool (the journal's notes) stays with the account: a world on the
+account's host writes it through the owned identity a seat drives under, and no
+projection carries it. A `Crossing` pool (marks, items, quest progress) travels
+in the identity's projection to every world it enters, with the pair pools that
+join two crossing pools and the declarations they depend on
+(`WorldIdentityRecords.Select`); its owner adopts what a colocated traveller
+carried home. The standard's template, `worlds/standard/identity.puck`, is the
+worked store.
 
-`WorldIdentity.TryReadRecord(record, field, out value)` reads a typed field, and
-`TryWriteRecord(record, field, value, out reason)` writes one after checking its
-kind and bounds. A refused write leaves the identity's document unchanged. A
-successful write updates the owned document, which the persistence service
-saves.
+An instance is named by its pool, slot and generation: a claim takes the lowest
+free slot, a release advances the slot's generation, and a reference to a
+released lifetime reads absent, so the arena's append-only key table never grows
+with what players make. A world's rules write the store with
+`claimIdentityRecord`, `claimIdentityPair`, `setIdentityRecord` and
+`releaseIdentityRecord` (`WorldIdentityRecordEffect`). Each lands in a stage
+over the addressed body's identity (`WorldIdentityStage`), which the firing's
+journal rewinds and its commit installs through the account's one door,
+`WorldOwnedWorlds.TryCommit`, under the writer the executing world's package
+names (`WorldIdentityWriter`): a package writes a shared pool or one it
+qualifies with its own name (`<package>$<pool>`), never another package's or a
+name the template lists in `identity.homeScoped`. `WorldIdentity.TryReadRecord`
+and `CountRecords` read the store as it stands.
 
-When the identity travels to another authority or is checkpointed, it carries
-only the selected pools and the record, enum, and vector-space declarations they
-depend on. None of the world's other rows travel, so unselected state stays
-private to the world that owns it.
+None of a world's other rows travel, so unselected state stays private to the
+world that owns it. A world's image never holds an owned identity: the account
+is an identity's only truth, so a restore, a history seek or a replay never
+rolls a character back.
 
 ## Search in a world
 
@@ -681,8 +691,9 @@ run it.
 - A delivered arm can't be rolled back with its firing.
 - A search judge can't read world-only facts, so a rule that needs one is left
   out of the judge or refuses the job.
-- Only capacity-one pools can be identity records, and an identity carries only
-  the pools it selects.
+- A rule writes an identity's records but reads none yet: a gate on a record
+  waits for a record operand, and reads go through facts meanwhile.
+- A projection carries only an identity's crossing pools.
 - A `presentation` peer never receives the `state` section itself, only resolved
   values and the observations its visibility admits.
 

@@ -407,6 +407,24 @@ public sealed partial class SdfMeshPathBake {
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
     public SdfMeshLibrary Library { get; init; } = new();
+    /// <summary>Gets the test of whether a program's material emits light the irradiance volume samples from the triangles
+    /// it traces (<see cref="SdfMeshIrradianceScene.Emits"/>), or <see langword="null"/> where no material does. A group
+    /// carrying such a material traces what it draws, never its floor, since a floor need not keep a small emitter's
+    /// surface or material. The bake reads it only to choose what a group traces, never what it makes, and its caller
+    /// constructs it, so no appearance code enters the bake's code identity (<see cref="SdfMeshBakeClosure"/>).</summary>
+    public Func<SdfProgram, int, bool>? Emitting { get; init; }
+    // Whether a group carries a material the held program emits from, asked as its trace is chosen rather than kept from
+    // its plan, so an appearance edit that keeps the group's geometry reaches it.
+    private bool Emits(SdfMeshBakeGroup group) {
+        if ((Emitting is not { } emitting) || (Volatile.Read(location: ref m_program) is not { } program)) { return false; }
+        foreach (var material in group.MaterialOrder) {
+            if (emitting(arg1: program, arg2: material)) { return true; }
+        }
+        return false;
+    }
+    // The mesh the irradiance volume traces in a group's place (Group.Trace), or null for the drawn one, which an emitting
+    // group always traces (Emits).
+    private SdfMesh? TraceOf(Group group) => (Emits(group: group) ? null : group.Trace);
     /// <summary>Gets or sets the identity of the bake on the kernels it dispatches (<see cref="SdfMeshStore.IdentityOf"/>),
     /// under which a new program's groups load from the library's store and its meshes are written there; the residency
     /// sets it from its kernel set. A group keeps the identity its program started under. A program that misses groups
@@ -872,7 +890,7 @@ public sealed partial class SdfMeshPathBake {
         internal readonly bool Lists(SdfMeshBakeGroup group) => Held((Group)group).Listed;
         internal readonly SdfMesh? MeshOf(SdfMeshBakeGroup group) => Held((Group)group).Shown;
         // The mesh the irradiance volume traces in place of the group's drawn one (Group.Trace), null for the drawn one.
-        internal readonly SdfMesh? TraceOf(SdfMeshBakeGroup group) => Held((Group)group).Trace;
+        internal readonly SdfMesh? TraceOf(SdfMeshBakeGroup group) => Owner.TraceOf(group: Held((Group)group));
         // The tier the mesh a group draws was baked at: the replaced group's while a replacement lands ahead.
         internal readonly int TierOf(SdfMeshBakeGroup group) => (Held((Group)group).Replaces ?? group).Tier;
         // The floor a group keeps of its own shape beside the finer tier it draws (Group.CurrentFloor), which a view too
@@ -3136,15 +3154,19 @@ public sealed partial class SdfMeshPathBake {
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Finishes the followers of the leaders done since it last ran (Follow), then records the bake's wall time once every
-    // group is done, and reports it: the done line of the work its accounts opened (BeginAccounts), once.
+    // group is done and no floor owes its first detail, and reports it: the done line of the work its accounts opened
+    // (BeginAccounts), once.
     //
-    // Invariant: a bake whose accounts are open and whose groups are all done reports, whatever path made the last group
-    // done (a landing, a load, a library take a replacement starts with, a replacement given back, an evicted floor, a
-    // follower). Every change to a group happens under the gate, and GateScope.Dispose, the one release of the gate, calls
-    // this before it publishes what the bake owes, so no path that changes a group can skip it. Under the gate.
+    // Invariant: a live bake whose accounts are open, whose groups are all done and whose arrivals owe no first detail
+    // reports, whatever path made the last group done (a landing, a load, a library take a replacement starts with, a
+    // replacement given back, an evicted floor, a follower), and a retiring bake never does: its groups end because the
+    // residency let them go, not because their work finished. Every change to a group happens under the gate, and
+    // GateScope.Dispose, the one release of the gate, calls this before it publishes what the bake owes, so no path that
+    // changes a group can skip it; m_retiring is set under the gate before the release lets go of anything
+    // (EndReports, Retire). Under the gate.
     private void SettleCompletion() {
         if (m_followable.Count > 0) { Follow(); }
-        if (m_reported || !m_clock.IsRunning || (DoneThrough() < m_groups.Count)) { return; }
+        if (m_reported || m_retiring || !m_clock.IsRunning || (m_firstDetailsOwed > 0) || (DoneThrough() < m_groups.Count)) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
         // The large pool keeps its arrays past the bake: a world in play restarts a bake at every program change, in each
@@ -3872,12 +3894,10 @@ public sealed partial class SdfMeshPathBake {
         // the trace scene standing. A floor of the group's own shape kept beside a finer tier, unless the trace judge
         // declined it; at or past the floor tier the group's own floor product once it draws it, and until then what the
         // group it replaces traces, where that group is of the same shape. Nothing else: a group drawing its stand-in of
-        // another shape, or no floor of its own shape, traces what it draws, and so does a group whose shapes emit
-        // (SdfMeshBakeGroup.Emits), since the volume samples emitters from the triangles it traces
-        // (SdfMeshIrradianceScene.Emitters) and a floor need not keep a small emitter's surface or material.
+        // another shape, or no floor of its own shape, traces what it draws. A group whose shapes emit traces what it
+        // draws too, which the bake's TraceOf decides over this (Emits).
         public SdfMesh? Trace {
             get {
-                if (Emits) { return null; }
                 if (CurrentFloor is { } kept) { return ((FloorVerdict?.Declined ?? false) ? null : kept); }
                 if (!AtFloor) { return null; }
                 if (!Ahead && (OwnProduct is { } own)) { return own; }

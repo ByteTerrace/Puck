@@ -68,11 +68,13 @@ public sealed record WorldPrototype(
     /// reads, and its reach. Every consumer of motion reads this. Cached
     /// on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit, and shared by every row
     /// whose document has the same canonical bytes (<see cref="CanonicalHash"/>): the rows of one creation that each world
-    /// a process runs carries, the authority's and its presentation's, hold one rig and one engine document.</summary>
+    /// a process runs carries, the authority's and its presentation's, hold one rig and one engine document. A document
+    /// holding a state reference, whose values its canonical bytes do not hold, has a rig of its own.</summary>
     [JsonIgnore]
     public CreationRig Rig => (m_rig ??= SharedRig());
 
-    // A rig is a function of its document's canonical form, which the canonical hash names.
+    // A rig is a function of its document's canonical form, which the canonical hash names, for a document whose values
+    // its canonical bytes hold (SharedRig).
     private static readonly Puck.Abstractions.CodeDerivedSharedValues<string, CreationRig> SharedRigs = new();
 
     private static CreationRig Compile(CreationDocument document) => CreationRig.Compile(document: CreationCanonicalizer.Normalize(document: document));
@@ -82,10 +84,15 @@ public sealed record WorldPrototype(
     // resolves it): the canonical bytes name a program by its key alone, so its rig, whose document holds the palette,
     // is not interchangeable with the rig of the same bytes resolved, and sharing it would hand every later row of
     // those bytes a palette that names programs it does not hold.
+    // So does a document holding a state reference (a palette colour bound to a cell): its canonical bytes write the
+    // reference, never the value, and its holders belong to one owner (bound to that owner's live arena, or resolved
+    // against its cells). The same bytes in another world, or a later run of one, name other values, and a shared rig
+    // would hand them, through Rig.Document, holders that read the first owner's arena and keep that owner's server
+    // reachable through their clock.
     private CreationRig SharedRig() {
         string key;
 
-        if (!ShadeReference.HoldsEvery(palette: Document.Palette)) { return Compile(document: Document); }
+        if (!ShadeReference.HoldsEvery(palette: Document.Palette) || WorldStateDocumentValues.HasReference(graph: Document)) { return Compile(document: Document); }
         try { key = CanonicalHash; } catch (Puck.Assets.Documents.DocumentValidationException) { return Compile(document: Document); }
         return SharedRigs.GetValue(derive: static document => Compile(document: document), key: key, state: Document);
     }

@@ -2865,9 +2865,9 @@ capture provider operations. The tape also captures intents and the two
 peer-lifecycle server events—carried in
 [`docs/game/design.md`](../../docs/game/design.md). A capture armed mid-session
 starts from the checkpoint taken at the arm (`WorldReplayTape.Start.cs`,
-`WorldReplaySnapshot.Start.cs`). The checkpoint leaves out the owned-world
-catalog and the host row, so its seats carry their identities as projections,
-and the re-drive restores it with `restoreOwnedIdentities: false`. Its tick 0
+`WorldReplaySnapshot.Start.cs`). A checkpoint holds no owned identity and the
+tape's leaves out the host row, so its seats carry their identities as
+projections, and the re-drive restores it with `bindHomeSeats: false`. Its tick 0
 therefore indicts the checkpoint, never a boot image. Input the history's capture
 already held for the open tick when the recording armed has reached the server,
 and the checkpoint holds it, so the recording's first tick leaves it out.

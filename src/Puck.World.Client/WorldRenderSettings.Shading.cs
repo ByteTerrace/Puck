@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public sealed partial class WorldRenderSettings {
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
+    private static readonly WorldDocumentDerivedTable<IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
     private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPrototype>, DeclaredShadeEntry> DeclaredShadeInputs = new();
     private SdfShadeProgram? m_shadeOverride;
     private SdfProgram? m_shadeScene;
@@ -60,7 +60,7 @@ public sealed partial class WorldRenderSettings {
     public static IReadOnlyList<SdfShadeProgram> DeclaredShades(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return DeclaredShadeSets.GetValue(key: definition, derive: static definition => DeclaredShadesOf(definition: definition));
+        return DeclaredShadeSets.GetValue(definition: definition, derive: static definition => DeclaredShadesOf(definition: definition));
     }
     // The set reads the creations, the field regions and render.shade alone, so a definition a mutation replaced that
     // still holds the same three objects holds the same list, whose identity the renderer's specialization keys on.

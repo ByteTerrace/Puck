@@ -23,6 +23,15 @@ props write them.
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 
+[learning/](learning/) is the content the learning games share, whatever machine
+or world draws it: one alphabet with its glyphs and text layout (`text.puck`),
+the question bank and maths drills by subject and level with the rule that
+adapts the level (`questions.puck`), clues that name a scene's spots
+(`clues.puck`), critters and treasures (`finds.puck`), and the places and the
+progress record that travels between devices (`places.puck`). Each is a library
+of `let`s and functions; a cartridge imports it by relative path. The
+[Field Notes design](../../docs/game/edutainment/README.md) holds the contract.
+
 [agreement.puck](agreement.puck) is an agreement between two worlds, each owning
 its half: `agreementOffers` in the offering world (the offer and its lease, whom
 it admits, the partner's grant it follows, and whether the agreement stands),
@@ -31,6 +40,14 @@ it admits, the partner's grant it follows, and whether the agreement stands),
 its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
+
+[companion.puck](companion.puck) is the companion, one per owner: `companionDesign`
+once (its creation, flight kit, the world's interests and the guide commands),
+then `companion(owner, slot, position)` for each owner's seat. Its rules project
+what it senses and where a guide sends it into the owner's sense row, and its
+pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
+`companionUnlock` and `companionSight` keep what it learns on its owner's
+identity. The debug world's faerie is one (`../debug/companion.puck`).
 
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
@@ -49,13 +66,14 @@ documents under [`contexts/`](contexts/) hold them:
 | Swimming | [`contexts/swimming.puck`](contexts/swimming.puck) | `swimPlay()`: the `swimming` row and its rule, and the `swim` group (surface and dive) | The seat's body is in a world's medium: `swimming[<body>]` is 1 |
 | At a tabletop | [`contexts/tabletop.puck`](contexts/tabletop.puck) | `tabletopControls()`: the `tabletop` group's Board page, and the seat library a game's rules read a seated player through (`seatButtons`, `seatHeld`, `seatPress`, `seatStepCell`) | The seat sits at a board: `engagement` reads `tabletop` |
 | At a terminal | [`contexts/terminal.puck`](contexts/terminal.puck) | `terminalPlay(terminals)`, `terminalFamily()`, `terminalCamera(...)`, `terminalRoute()` and `pointerCapture()` | The context button, within a terminal's reach |
+| In conversation | [`contexts/conversation.puck`](contexts/conversation.puck) | `conversationPlay(speakers, script)`: speakers a seat talks with, a script of choices each speaker shows and answers (on a sign whose text reads `conversationLine(number)`), what a choice does (body registers it sets, an action for the world's rules, whether it ends the talk), the `conversation` group and `conversationFamily()` | The context button, within a speaker's reach |
 | At a terminal's console | [`contexts/terminal-console.puck`](contexts/terminal-console.puck) | `terminalPlay(console: ...)`'s hidden command line, kept per terminal for the terminal's own screen to show: the `terminal-console` group, `terminalConsoleFamily()`, `terminalConsoleScreen(...)` and `terminalConsolePrompt(...)` for the screen's text, and `terminalWrap(...)` for replies | The console key (the backtick), while engaged at a desk-view terminal |
 
 `contexts/modes.puck` holds the other half of a context: which actions the
 simulation accepts in it. `engagementFamily()` is the `inputModes` family for the
 contexts the engine's engagement selects (a tabletop, a machine's screen, a
 screen pointed at, another body), and each opt-in context brings its own family
-(`terminalFamily`, `typingFamily`, `instrumentFamily`). A binding group decides
+(`terminalFamily`, `conversationFamily`, `typingFamily`, `instrumentFamily`). A binding group decides
 what a key does; an input family decides whether the action is live.
 
 A world switches a seat between contexts with the mechanism every one of these

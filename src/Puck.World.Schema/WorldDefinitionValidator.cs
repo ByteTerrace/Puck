@@ -1736,6 +1736,7 @@ public static partial class WorldDefinitionValidator {
         return retainCompilation && (errors.Count == 0) ? compiled : null;
     }
 
+    [SideTable(reason: "each value records its own document reads (WorldRuleCompilation inputs) and is the only vouching for them")]
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldRuleCompilation> ValidatedPrograms = new();
 
     // The checks and compilation of executable rules form one product. Only that product vouches for its inputs.

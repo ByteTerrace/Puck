@@ -2415,32 +2415,27 @@ check; this packet holds the defects beside it.
   targets by the timer, which is serviced). The control plane's C0.6 puts the
   Direct3D 12 frame latency waitable on the door. Step 3's slow-present
   reading at `world.target 20` says how much is lost.
-- [medium] The lighting's device memory (the trace scene's region, the
-  feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
-  fixed storage with no reservation; only a job's slot buffers reserve
-  (`SdfGpuWorkHold`). Most of it is allocated after the bake settles (a first
-  light, the trace scene over the standing meshes), and the selector's elastic
-  budget is what the pool's limit leaves after everything held
-  (`SdfResidencySelector`'s `UsableOf`), so the bake is granted room mid-bake
-  that the lighting then takes back: the region's budget falls once the bake
-  has filled it, and the bias rises to coarsen what was already placed. The
-  fix is a reservation the lighting makes before the bake fills the region,
-  sized from its indirect tier (`SdfMeshIrradiance.LevelsOf`) for the volume
-  tables and hit cache, with the trace scene's words reserved as the region's
-  meshes stand.
-- [high] A volume's words stand three times: the host's copy
-  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
-  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
-  published table the views read, which each publication copies from the
-  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
-  two device tables bind one layout at one binding
-  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
-  so a view can reject a slot mid-move. On the RTX 2060's route the two read
-  about 230 MB each at the device's peak. Have the views bind the feedback
-  table and make a publication a revision alone, with the barriers the views'
-  stages need on that table. It changes what the passes read, so it is the
-  frame lane's edit with this plan; check that a still view stands until a
-  publication and that the probe history's serials still gate its reuse.
+- [medium] Two parts of the lighting's device storage are still outside its
+  reservation (`SdfLightingHold`): the ray-query structures
+  (`SdfMeshProbeGpuWork.Rays.cs`, `SdfMeshTraceBottoms`), whose sizes only the
+  driver's prebuild answer gives, so they still arrive after the scene builds
+  and lower the elastic budget then; and the trace words, which are estimated
+  from each traced level's triangles (`SdfMeshIrradianceScene.EstimateGpuWords`)
+  rather than measured, so the budget still moves by what the built scene
+  holds past or short of the estimate. A second scene of one world reserves
+  the trace words of the meshes it shares with the first again, though the
+  probe scenes place them once. Ask the device's prebuild size for each traced
+  geometry as its mesh is first named, and reserve the shared geometries once
+  in the probe scenes (`SdfMeshProbeScenes`) rather than per residency.
+- [medium] A volume's words still stand twice: the host's copy
+  (`SdfMeshIrradiance`'s volume words), which the CPU reference and a
+  reattach's snapshot read, and the probe service's feedback table, which the
+  views bind. A relayout or a reattach also sends the whole
+  volume through a host snapshot and the feedback region's staging
+  (`SdfMeshIrradiance.Gpu.cs`'s `volumeSnapshot`), about three tables of host
+  memory at once on the RTX 2060 at the High tier. Stage the snapshot from the
+  volume words under a hold of `m_blocks` instead of a copy, and size the
+  staging by chunks.
 - [medium] The temporal resolve's window (`historyWindow`,
   `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
   1920 by 1080) follows the display and not the device's table, so the RTX
@@ -3984,11 +3979,13 @@ Companions, beside the protocol's steps:
   upload is asynchronous, so the stop needs a completion that waits for a
   durable image across drains.
 - [medium] Build the rest of the [companion decision](../decisions/companions.md):
-  the destination's role declaration (`accept` the visitor's pinned driver,
-  the same pin, a substituted driver, or nothing), with `worlds/standard/`
-  declaring `accept`; the player's HUD notice on a refusal; driver grants keyed
-  by placement or role group; the faerie's lasting state in registers; `night`
-  declaring the companion role with the faerie's pin. `lane/companion-v1`
+  the destination honouring its role declaration (running the visitor's pinned
+  driver under `accept`, the same pin, a substituted driver, or refusing), so
+  the standard companion, whose body now holds the role and follows its owner's
+  seat, is driven where it arrives instead of standing inert; the player's HUD
+  notice on a refusal; driver grants keyed by placement or role group (the
+  standard `companion` template's grants still name the population slot a
+  world hands it); the companion's lasting state in registers. `lane/companion-v1`
   holds the prior art step 9 ports onto `WorldCompanionCustody.TryBinding`
   (`TryRoleVerdict`, the `WorldRole` fields, the faerie split); keep the
   branch until then.
@@ -4013,8 +4010,6 @@ images (H7), battery saves (H8) and minimal identities:
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
   a read against a working tree.
-- [medium] `WorldOwnedWorlds.IdentityBase` copies the whole host world into
-  every identity.
 
 State and server:
 
@@ -4367,8 +4362,7 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   projection. Build it when a creation-library step needs it, or delete the
   remark.
 - [low] The work sheet prices a few shapes above what one tick runs:
-  `companion-interest-*` is about 170 running-minimum rules a nearest-point
-  reduction would replace; a write whose key is not literal counts against
+  a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
 - [medium] Rule evaluation by change has four known places where a binding is
@@ -5176,7 +5170,7 @@ runs.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
-  (`worlds/debug/addons/companion.wat`).
+  (`worlds/standard/addons/companion.wat`).
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a
   long-running World: the picture depends on which cells the trace has cached
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
@@ -5461,6 +5455,12 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A value function is inlined three ways, one per tree it lands in: `DocumentLowering.InlineFunctions` substitutes
+  arguments into the body's document syntax (the cartridge operands, `CartridgeOperand.FromExpression`), the world
+  operand binder's `Inline` substitutes into operand syntax (`WorldDocumentEmitter.OperandBinder`), and
+  `WorldShadeLowering` binds parameters as constants and lowers the body under them. Each shares
+  `DocumentLowering.BindFunctionArguments` and `ExpandFunction`; one inliner over the document tree, which the
+  operand path converts to and from (`PuckParser.CreateOperand`), would serve all three.
 - A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
   (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
   (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer

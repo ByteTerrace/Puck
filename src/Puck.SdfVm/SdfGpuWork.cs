@@ -252,11 +252,7 @@ public readonly ref struct SdfGpuWorkRecording {
         region.Flush(slot: regionSlot);
         m_owner.Consume(slot: m_slot);
 
-        var command = CommandBuffer;
-        var copies = new GpuRegionCopyRecording(recorder: Recorder, readers: readers, begin: () => command);
-
-        copies.Record(flushed: true, handsToReaders: true, region: region, slot: regionSlot);
-        _ = copies.Finish();
+        GpuRegionCopyRecording.RecordFlushed(commandBuffer: CommandBuffer, readers: readers, recorder: Recorder, region: region, slot: regionSlot);
         m_owner.NoteCopied(slot: m_slot, region: region, regionSlot: regionSlot);
     }
 }

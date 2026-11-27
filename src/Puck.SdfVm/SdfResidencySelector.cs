@@ -17,10 +17,12 @@ namespace Puck.SdfVm;
 /// <param name="CanLower">Whether the residency would stay under its budget with every demand half a rung finer, with
 /// nothing owed, in flight or landing.</param>
 /// <param name="Elapsed">The frames since the residency's last decision.</param>
-/// <param name="Floored">Whether another half rung of bias would move none of the residency's demanded tiers: every
-/// demand already stands at its floor or at what its pixel asks past it (<see cref="SdfMeshTier.Demanded"/>). The bias
-/// rises only while some fresh report is not floored, so a demand past the budget at every floor rests over it rather
-/// than raising a bias that coarsens nothing. <see langword="false"/> where the residency does not know.</param>
+/// <param name="Floored">Whether another half rung of bias would relieve nothing the residency draws: no group drawing a
+/// mesh of its own would demand a coarser tier no finer than the one it draws, because every such demand stands at its
+/// floor or at what its pixel asks past it (<see cref="SdfMeshTier.Demanded"/>), or moves only between tiers finer than
+/// the drawn one; a group that draws nothing yet relieves nothing. The bias rises only while some fresh report is not
+/// floored, so a demand past the budget at every floor rests over it rather than raising a bias that coarsens nothing.
+/// <see langword="false"/> where the residency does not know.</param>
 public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool CanLower, int Elapsed, bool Floored = false);
 /// <summary>
 /// A presentation's selector: the one place the residencies of a device share its memory and its background GPU time,
@@ -72,6 +74,11 @@ public sealed class SdfResidencySelector {
     /// samples, hits, readbacks): workspace, reserved before it is allocated and refused when its pool has no room,
     /// apart from the one job a service cannot progress without.</summary>
     public const string WorkOwner = "sdf.gpu-work";
+    /// <summary>The owner the lighting's device storage is created under: every residency's irradiance table (the probe
+    /// service's feedback table, which the views read), its hit, camera-sample and batch caches, and the probe scenes'
+    /// trace words, reserved as fixed storage before they are allocated (<see cref="ReserveLighting"/>), so the elastic
+    /// budget the mesh region is held to does not fall when the lighting first lights.</summary>
+    public const string LightingOwner = "sdf.lighting";
 
     [SideTable(reason: "one selector per device, holding that device's residency state")]
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
@@ -158,6 +165,14 @@ public sealed class SdfResidencySelector {
     public SdfGpuWorkHold ReserveWork() => new(
         device: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: Pool),
         host: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: PhysicalMemory.Host)
+    );
+    /// <summary>Returns a reservation for one residency's lighting: fixed storage under <see cref="LightingOwner"/>, in
+    /// the pool the mesh regions lie in, which the residency's irradiance volume sizes from its tier and the trace words
+    /// its standing static meshes need (<see cref="SdfLightingHold.Reserve"/>).</summary>
+    /// <returns>The reservation, holding nothing; disposing it releases it.</returns>
+    public SdfLightingHold ReserveLighting() => new(
+        account: m_account,
+        device: m_account.ReserveDevice(memoryClass: MemoryClass.Fixed, owner: LightingOwner, pool: Pool)
     );
     /// <summary>Registers a residency: its grant, which budgets its detail. The residency's meshes lie in the
     /// presentation's one region (<see cref="AttachStore"/>), which holds the reservation.</summary>

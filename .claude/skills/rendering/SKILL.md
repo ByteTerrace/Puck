@@ -169,8 +169,9 @@ camera light in the pass block. `SdfWorldResidency.IsUnchanged` reads no state o
 volume's background work, so nothing the pool finishes mid-frame decides whether a view
 stands; `SdfMeshIrradiance.Settling` serves a converging frame, the residency's
 preparation and a rig that settles the volume whole.
-Waiting on every allocated residency
-deadlocks on hidden routed scenes whose GPU work correctly never starts.
+A wait on every allocated residency's bake settles once each has baked: a routed scene no
+view renders is staged by the frame's minimum (`SdfWorldPasses.StageMinimum`), so its GPU
+work starts whether or not anything shows it.
 
 ## Mesh pipeline limits
 
@@ -663,6 +664,15 @@ records the options weighed.
   compiles the classes out for a reload, which must leave a paused still unchanged.
 - **Memory.** Every layer, block-bounds and extinction buffer is held under one fixed `MemoryAccount` reservation
   (`Hold`, `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
+- **Descriptors.** The tables reserve the descriptor pools of the distant entry and the first anchor at construction
+  (`SdfWorldShadows.ReservedEntries`, listed in `SdfWorldTables.DescriptorPools` beside the mesh store's own,
+  `SdfMeshRegionStore.DescriptorPools`), so the first shadow takes no descriptor range a later frame could be refused;
+  a later anchor is made only where the heaps admit its pools then (`IGpuBindings.CanAdmit`), else its view reads the
+  nearest anchor.
+- **Standing.** `SdfWorldTables.ShadowsStand` says every entry a view reads has drawn and owes nothing, so a still
+  frame's upload draws no shadow. Only under the rates lever (`SdfUpdateRates.ShadowDistant`, on in a World) does a
+  layer hold; with the levers off, as a bare `SdfFrame` has them, every static layer is drawn again on every upload, so
+  a device-free law that pins a still upload sets `UpdateRates` and settles to `ShadowsStand` first.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
   (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
   and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's
@@ -808,7 +818,7 @@ add the row you found.
 | Build, compact or bind an acceleration structure the ray hardware walks | `GpuDeviceServices.AccelerationStructures` (`IGpuAccelerationStructures`: size, create, scratch, `GpuAccelerationStructureInstance` records, the descriptor of a `GpuBindingKind.AccelerationStructure` binding) and the recorder's `BuildAccelerationStructure`, `WriteCompactedSize` and `CompactAccelerationStructure`, which carry their own barriers; a buffer a build reads declares `GpuBufferUsage.AccelerationStructureInput`. Both backends refuse every call on a device without `GpuOptionalCapabilities.RayQuery` | `src/Puck.Abstractions/Gpu/Rays`, `DirectXGpuAccelerationStructures`, `VulkanGpuAccelerationStructures` |
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Grow or shrink a large device buffer without holding a second copy, or give back its unused interior | `IGpuMappedBuffer` through `IGpuBufferFactory.TryCreateMapped`, used through a `GpuRegion` created `mapped` (`Grow`, `Shrink`, `MapRange`, `UnmapRange`) | `src/Puck.Abstractions/Gpu/Residency`, `src/Puck.DirectX/DirectXGpuMappedBuffer.cs` |
-| Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
+| Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`, the lighting's reservation `SdfLightingHold` under `SdfResidencySelector.LightingOwner`); never a share of `GpuMemoryProfile`. `host.memory families` prints each reservation by owner (`MemoryAccount.ReadReservations`) | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
 | Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, taken only while a reading asked (`SdfWorldTables.MarksSelections`), one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
 | Show a world from far away without holding it (a planet from its moon, a neighbour across a seam) | The world's far product (`SdfFarProduct`: read from the mesh store under a name of its static draws' shapes, placements and materials, and derived by `SdfMeshCluster` and `SdfMeshChunks.Bake` from a settled residency's static draws only where the store holds none; its log line says `stored` or `derived`), drawn by a sky `view` layer with `farProduct: true` through `WorldFarProductEmitter`; products are published and judged by document version in `WorldScreenBinder.Device.Far.cs` | `src/Puck.SdfVm`, `src/Puck.World.Presentation`; [decision](../../../docs/decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product) |
@@ -2127,9 +2137,10 @@ a working path. A device's table is its `render.devices` row's own `table`, or
 its tier's preset (`WorldDeviceProfile.TableIn`); a windowed boot applies it once
 the device names its adapter, and the benchmark applies it again before its first
 chapter (`--profile`). A table sizes storage through the levers it sets: its
-indirect tier sizes the irradiance volume, its hit cache and its published and
-feedback tables (`SdfMeshIrradiance.LevelsOf`), and its distant map's texels size
-that map. The output-sized temporal history (`SdfWorldPackage.HistoryWindowWords`)
+indirect tier sizes the irradiance volume, its hit cache and its one device
+table, the probe service's feedback table the views bind (`SdfMeshIrradiance.LevelsOf`),
+all reserved as the volume first stages (`SdfLightingHold`), and its distant map's
+texels size that map. The output-sized temporal history (`SdfWorldPackage.HistoryWindowWords`)
 follows the display, not the table.
 
 For a frame-time bar,
@@ -2207,11 +2218,14 @@ counts in `sdf.transforms`, never in `records.posed`.
   whose `SdfWorldResidency.MeshesFirstArriving` holds: a group owing its first mesh or the first detail over its floor (`SdfMeshPathBake.OwedGroups`), or a staged draw waiting for its mesh; a retier or another residency's landing is no arrival. A
   world the sight has not wanted for `SdfWorldResidency.PressedParkSeconds` (`SightLetGo`) takes no window: the render
   observes its residency, so a kept window would hold a world nobody approaches from parking for good. A
-  residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
-  still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
-  background work binds. In `world.residency`, a residency
-  whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
-  nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
+  residency's bake samples, its meshes land and its probes trace only against an upload that binds the bake's program
+  (`SdfWorldTables.BindsBackgroundWork`), and a pack moves what that binds without uploading it. So every residency the
+  frame's minimum serves (`SdfWorldResidency.OwesPreparation`) is also staged, after the packs and before any render is
+  scheduled (`SdfWorldPasses.StageMinimum`), and each frame's upkeep pumps its work against that upload between
+  minimums: a routed scene no view renders still bakes and lights. An idle park passes over a residency whose meshes are
+  making their arrival; pressure parks it. In `world.residency`, a residency whose `uploads` stand still while
+  `unbound` in its `gpu-work` counts every pump and `owed` stays above zero names a staging path that skipped it.
+  `gpu.faults lose` makes every residency land again, a quick check of that path.
 - **A view's storage follows what is shown.** A session view no schedule renders for
   `WorldViewGraphHost.ParkedShrinkFrames`, while its glass asks no footprint (out of sight, held or occluded), renders
   at its least share until its node installs that extent (`ReserveShrinks`, which reads the node's installed `Extent`,

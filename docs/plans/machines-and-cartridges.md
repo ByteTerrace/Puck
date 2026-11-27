@@ -405,6 +405,18 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
      beyond documented contracts, since the retail-BIOS comparison ran only
      against a supplied image (a retail-BIOS control still runs inside several
      Advanced Tier A stages when `--bios` names one by hand).
+- A cartridge step that exchanges declared state over the link cable (a `send`
+  and a `receive`, in both native compilers), so the learning games carry the
+  notes record from the Brick to the Advanced Brick
+  ([Field Notes](../game/edutainment/README.md#one-world-three-devices)). The
+  emulators already link the machines; the cartridge language has no serial step.
+- An operand that indexes a member of a compile-time record (`drill.left[0]`)
+  fails to parse ("already names a lexical pool field"); an author wraps it in a
+  function today. The operand grammar should read a record member and then its
+  index, in cartridge and world operands alike.
+- The cartridge validator does not check a sound's note names, so an
+  out-of-range note (below C2) reaches the compiler's `ApuNotePeriod` and fails
+  the bind instead of `forge.check`.
 - Low priority: shorten the two emulator batteries. `Puck.HumbleGamingBrick.Tests`
   runs the Humble battery with an empty corpus cache and
   `Puck.HumbleGamingDeck.Tests` runs the Deck's Tier A, each in a child process;

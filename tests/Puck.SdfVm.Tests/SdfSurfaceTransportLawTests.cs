@@ -260,18 +260,21 @@ public sealed partial class SdfSurfaceTransportLawTests {
         var sky = CodeOf(path: "passes/sdf-sky-pass.hlsli");
         var transport = CodeOf(path: "shade/sdf-transport.hlsli");
 
-        // Views leaves each hit's color through the atmosphere's transmittance along its own ray.
-        Assert.Contains(actualString: views, expectedSubstring: "sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t)");
-        // The spatial path reads each transport tap beside its color tap and sums both over one footprint.
-        Assert.Matches(actualString: resolve, expectedRegexPattern: @"tapColor = puckReconstructionTapWithin\(currentColor, at,[^;]*;\s*tapTransport = sdfResolveTransportAt\(at, render, tapColor\.a, origin, direction\);");
+        // Views leaves each hit's color through the atmosphere's transmittance along its own ray, from the one evaluation of
+        // the air that also gives the sample's stored air (sdfAirTransmittance is the same function's transmittance).
+        Assert.Matches(actualString: views, expectedRegexPattern: @"SdfAir air = sdfAirAlong\(p\.rayOrigin, p\.rayDirection, s\.t, true\);\s*transmittance = air\.transmittance;");
+        Assert.Contains(actualString: views, expectedSubstring: "lerp(transmittance, 1.0, saturate(passGroup.screenFidelity))");
+        // The spatial path reads each tap's color and transport from the one sample the group's tile formed for it
+        // (sdfResolveSampleAt) and sums both over one footprint.
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"SdfResolveSample sample = sdfResolveSampleAt\(at\);\s*tapColor = sample\.color;\s*tapTransport = sample\.transport;");
         Assert.Contains(actualString: resolve, expectedSubstring: "puckReconstructionAdd(footprint, tap, tapColor, colors);");
         Assert.Contains(actualString: resolve, expectedSubstring: "puckReconstructionAdd(footprint, tap, tapTransport, transports);");
         Assert.Contains(actualString: resolve, expectedSubstring: "color = puckReconstructionFinish(footprint, colors);");
         Assert.Contains(actualString: resolve, expectedSubstring: "transport = puckReconstructionFinish(footprint, transports);");
-        // The temporal path accumulates it with the Gaussian weights, and its history with the history color's.
+        // The temporal path accumulates it with the Gaussian weights; its history is read bilinearly over the history
+        // surface's four nearest texels (sdfHistoryAt), since the transport is smooth across a surface and clipped after.
         Assert.Contains(actualString: resolve, expectedSubstring: "transportSum += (weight * transport);");
-        Assert.Contains(actualString: resolve, expectedSubstring: "rowTransport += (wx[x] * sdfUnpackTransport(");
-        Assert.Contains(actualString: resolve, expectedSubstring: "transport += (wy[y] * rowTransport);");
+        Assert.Contains(actualString: resolve, expectedSubstring: "transport += (weight * sdfUnpackTransport(");
         Assert.Contains(actualString: resolve, expectedSubstring: "lerp(spatialTransport, accumulatedTransport, shown)");
         // No nearest-sample distance survives anywhere the composite reads from.
         Assert.DoesNotContain(actualString: ((resolve + composite) + sky), expectedSubstring: "surfaceDistance");

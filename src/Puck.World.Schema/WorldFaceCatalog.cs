@@ -73,7 +73,7 @@ public sealed class WorldFaceCatalog {
 
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
 
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
+    private static readonly WorldDocumentDerivedTable<WorldFaceCatalog> PerDefinition = new();
     // A half turn about +Y, built exactly (never Quaternion.CreateFromAxisAngle): the rotation of a screen shape turned to
     // face its creation's front (-Z), since a box's face is its local +Z.
     private static readonly Quaternion HalfTurn = new(
@@ -507,7 +507,7 @@ public sealed class WorldFaceCatalog {
         ArgumentNullException.ThrowIfNull(definition);
 
         return PerDefinition.GetValue(
-            key: definition,
+            definition: definition,
             derive: static built => Derive(definition: built)
         );
     }
@@ -633,16 +633,12 @@ public sealed class WorldFaceCatalog {
 
     // The catalog reads placements, creations, cameras and the authoring policy, never a state row, so a definition
     // that replaced another's state section alone derives the same catalog.
-    internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) {
-        if (PerDefinition.TryGetValue(key: source, value: out var catalog)) {
-            PerDefinition.AddOrUpdate(key: target, value: catalog);
-        }
-    }
+    internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) => _ = PerDefinition.Carry(source: source, target: target);
     // Hands a definition's catalog to one that differs from it only in the holding masks of the named rows
     // (WorldDefinition.WithPlacementHoldings), when no creation a named row shows before or after derives a facet:
     // such a change derives the same rows, so the target derives nothing.
     internal static void CarryAcrossHolding(WorldDefinition source, WorldDefinition target, IReadOnlyList<(int Row, WorldResponseHolding Holding)> holdings) {
-        if (!PerDefinition.TryGetValue(key: source, value: out var catalog)) {
+        if (!PerDefinition.Holds(definition: source)) {
             return;
         }
         foreach (var (row, _) in holdings) {
@@ -654,6 +650,6 @@ public sealed class WorldFaceCatalog {
             }
         }
 
-        PerDefinition.AddOrUpdate(key: target, value: catalog);
+        _ = PerDefinition.Carry(source: source, target: target);
     }
 }

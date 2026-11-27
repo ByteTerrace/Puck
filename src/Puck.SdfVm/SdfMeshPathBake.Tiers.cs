@@ -588,9 +588,9 @@ public sealed partial class SdfMeshPathBake {
         // A mesh the region refuses presses whatever the bytes say: the arena's free runs, not the sum, decide a place.
         var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))) || (m_regionRefused > 0));
         var anySpare = false;
-        // Whether another half rung of bias would move none of this bake's demanded tiers, which the selector reads as
-        // this residency's part in whether a rise could relieve any budget. The walk stops at the first group a rise moves.
-        var floored = ((bias >= SdfMeshTier.MaxBias) || (((m_detail is not null) || over) && !BiasCoarsens(bias: bias)));
+        // Whether another half rung of bias would relieve nothing this bake draws, which the selector reads as this
+        // residency's part in whether a rise could relieve any budget. The walk stops at the first group a rise relieves.
+        var floored = ((bias >= SdfMeshTier.MaxBias) || (((m_detail is not null) || over) && !BiasRelieves(bias: bias)));
 
         if (over) {
             var expected = (named - freed);
@@ -732,12 +732,23 @@ public sealed partial class SdfMeshPathBake {
             }
         });
     }
-    // Whether another half rung of bias would coarsen any group's demanded tier: false once every group stands at its
-    // floor, where the bias stops (SdfMeshTier.Demanded).
-    private bool BiasCoarsens(int bias) {
+    // Whether another half rung of bias would relieve the budget: some group drawing a mesh of its own would then demand a
+    // coarser tier no finer than the one it draws, so it turns spare (given back coarser) or stops owing the finer tier it
+    // waits on (held back). A demand that moves on a group drawing nothing (an arrival whose floor has not landed, a world
+    // whose bake has not sampled) frees no byte, and neither does one that moves between two tiers both finer than the
+    // drawn one: the bias stops where no rise moves a drawn tier (SdfMeshTier.Demanded never coarsens past the floor).
+    private bool BiasRelieves(int bias) {
         foreach (var group in m_groups) {
             if (group.Retired || !group.Listed || !group.HasDemandBox || float.IsNaN(f: group.DemandPixel)) { continue; }
-            if (SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias + 1), pixel: group.DemandPixel) != DemandedTierOf(group: group, pixel: group.DemandPixel)) { return true; }
+
+            var drawn = (group.Replaces ?? group);
+
+            if (!drawn.Done || (drawn.Mesh is null)) { continue; }
+
+            var now = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias, pixel: group.DemandPixel);
+            var risen = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias + 1), pixel: group.DemandPixel);
+
+            if ((risen > now) && (risen >= drawn.Tier)) { return true; }
         }
         return false;
     }

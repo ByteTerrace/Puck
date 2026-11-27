@@ -95,7 +95,20 @@ of the cartridge. That is how one game serves several targets:
 `cgb/tetromino.cgb.puck` and `dmg/tetromino.dmg.puck` each
 `import "../shared/tetromino"`, declare their `target` and `palettes`, and call
 `tetromino()`. `puck compile` resolves imports beside the source; a module
-compiles to no document of its own.
+compiles to no document of its own. A module may live outside the cartridge
+folders: the learning games import their questions, clues and text from the
+standard package (`import "../../../standard/learning/text"`), content any
+cartridge or world reads unchanged.
+
+The source's compile-time language reaches into operands. A value function
+(`function solidAt(x, y) = ...`) is written out where a rule, gate, sprite field
+or step argument calls it, its compile-time parts evaluated and its reads of
+machine state kept; a member of a compile-time record (`adaptation.gain`) reads
+as its value; and a rule's interpolated name (`rule $"wander{i}" { }`) names
+each rule a compile-time `for` generates. A record bound by a `let` keeps its
+own members' values even where a member shares a sprite field's name
+(`{ x: 64 }`): only the document's own expression fields carry an expression's
+spelling.
 
 ## Source contract
 
@@ -109,10 +122,11 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | Field | Meaning and limits |
 |---|---|
 | `schema` | Exactly `puck.cartridge.v1`. |
-| `target` | `cgb`, `dmg` or `agb`. `cgb` uses the Color hardware at double speed and its image refuses to run on a DMG; `dmg` builds for the monochrome machine at single speed, which a Color machine also runs in its compatibility mode. |
+| `target` | `cgb`, `dmg`, `agb` or `hgd`. `cgb` uses the Color hardware at double speed and its image refuses to run on a DMG; `dmg` builds for the monochrome machine at single speed, which a Color machine also runs in its compatibility mode; `hgd` builds a 6502 image for the [Humble Gaming Deck](../hgd/README.md#compiled-cartridges). |
+| `board` | Optional, `hgd` only: `nrom`, `mmc1` or `mmc3`. Absent lets the compiler pick the smallest board the image fits. A battery `save` needs `mmc1` or `mmc3`. |
 | `title` | 1–12 printable ASCII characters, canonicalized to uppercase. |
 | `gameCode` | Four ASCII characters; used by the AGB header. |
-| `palettes` | `{background,object}`, each 1–8 palettes on CGB and DMG or 1–16 on AGB. A palette is 4 RGB555 integers on CGB and DMG, 16 on AGB. DMG shades each colour by its luma into one of four greys, the background from the first palette and sprites from the first two. Object color zero is transparent. |
+| `palettes` | `{background,object}`, each 1–8 palettes on CGB and DMG, 1–16 on AGB or 1–4 on HGD. A palette is 4 RGB555 integers on CGB and DMG, 16 on AGB, and 4 master-palette indices (0–63) on HGD, where colour zero of every palette is the first background palette's first colour. DMG shades each colour by its luma into one of four greys, the background from the first palette and sprites from the first two. Object color zero is transparent. |
 | `tiles` | 1–256 named 8×8 tiles. Each `pixels` array has eight strings of eight hexadecimal palette indices. Sprite color zero is transparent. |
 | `map` | Exactly 1024 tile indices, row-major over a 32×32 background. |
 | `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. DMG accepts every per-cell selection (here, a map step's `palette`, a screen's `palettes`) and shades every cell from palette zero. |
@@ -125,7 +139,7 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
 | `variables` | Up to 128 `{name,initial,max}` unsigned slots. `max` selects the representation and bounds the initial value, 1 through 65535; absent is 255. A slot whose ceiling fits a byte spends one byte, a wider one spends two, little-endian. Wide slots precede byte slots, keeping halfwords aligned; compilation exposes their addresses by name. Arithmetic wraps modulo 256 or 65536 according to storage width. Assignment, `Add`, `Subtract` and comparisons support wide slots; byte destinations and composed byte expressions refuse wide reads and literals above 255. |
 | `scene` | Optional name of a declared variable whose value partitions a frame. Every rule guarded by one equality of it against a constant belongs to that value's scene, and at most one scene's rules run per frame. The frame snapshots it before any rule evaluates, so a rule that writes it names the NEXT frame's scene: a phase machine no longer has to name its successor in a staging variable adopted by a trailing ungated rule, and the estimate charges the dearest scene wherever the write sits. |
-| `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length at 1–256; a byte index cannot address more. |
+| `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length, from 1 up to that budget. A byte index reaches an array's first 256 elements; a two-byte index, a bare read of a wide slot or a literal past 255, reaches all of it, so a long text bank is read through a wide cursor (`text[cursor]`, `cursor += 1`). |
 | `screens` | Up to 16 named `{name,width,tiles,palettes}` rectangles, at most 120 tiles, painted by a blit step. `palettes` is optional and gives one background palette index per tile. |
 | `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
 | `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. Variables contribute their full one- or two-byte representation; arrays contribute all elements. |
@@ -194,6 +208,7 @@ A rule body is a tree of steps, not a flat list. Each step is one of:
 {"kind":"repeat","count":18,"index":"row","body":[...]}
 {"kind":"break"}
 {"kind":"map","row":"y","column":"x","tile":"3","palette":"colour"}
+{"kind":"map","row":"2","column":"1","tile":"text[cursor]","surface":"panel"}
 {"kind":"blit","screen":"panel","row":"0","column":"0"}
 {"kind":"play","sound":"theme"}
 {"kind":"stop"}
@@ -205,8 +220,11 @@ A rule body is a tree of steps, not a flat list. Each step is one of:
 {"kind":"load"}
 ```
 
-A `map` step writes one background cell at run time, tile and colour together:
-its optional `palette` picks the background palette the cell is drawn through, so
+A `map` step writes one cell at run time, tile and colour together: a cell of
+the scrolling background, or with `surface` set to `panel` a cell of the
+declared window's own map, which is how a status line or a text box over the
+moving world is drawn. The background is `surface`'s default, and the panel
+needs a declared `window`. Its optional `palette` picks the background palette the cell is drawn through, so
 what stands in a cell decides its colour rather than where the cell is. Writes
 are queued and land together in the next frame's vertical blank, so a cell
 changed this frame appears the frame after. The queue holds 24 entries, and validation bounds a frame's map
@@ -357,7 +375,8 @@ memory addresses for debugging and memory watches.
 
 This version supports background maps written at run time, byte and wide state,
 addressable byte arrays, sprites, cartridge audio and battery-backed state on every
-target. ROM banking and visual editing are not yet part of this document schema. A blit compiles and runs on every target;
+target. The hgd target's `board` selects banked ROM, and its compiler places data in
+the banks; visual editing is not yet part of this document schema. A blit compiles and runs on every target;
 its display-off interval is not priced as ordinary frame work. Existing Tune audio
 documents retain their separate compiler. These boundaries are explicit so
 an editor cannot silently discard unsupported authored data.

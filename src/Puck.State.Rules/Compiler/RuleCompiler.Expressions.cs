@@ -147,7 +147,7 @@ public static partial class RuleCompiler {
             );
             // A read of live state, of a fold member, or of a call's own operand has no value at compile time, and
             // neither does a fold over a family.
-            var constant = (token.Operation is not (ExpressionOp.Operand or ExpressionOp.Member or ExpressionOp.Argument or ExpressionOp.All or ExpressionOp.Any or ExpressionOp.Count or ExpressionOp.Sum));
+            var constant = ((token.Fold is null) && (token.Operation is not (ExpressionOp.Operand or ExpressionOp.Member or ExpressionOp.Argument)));
 
             for (var argument = (depth - arity); (argument < depth); argument++) {
                 constant &= constants[argument];
@@ -596,17 +596,33 @@ public static partial class RuleCompiler {
             }
 
             // A sum passes its numeric context into the body. Predicate folds still leave Int, and their
-            // members keep their declared encoding until a numeric operation widens the read.
-            var foldedKind = operation == ExpressionOp.Sum && fixedAt[current] ? CellKind.Fixed : member;
-            var (body, _, requiredArguments) = SharedBody(
-                argumentKinds: argumentKinds,
-                kind: member,
-                memberKind: member,
-                resultKind: ((operation == ExpressionOp.Sum)
-                    ? foldedKind
-                    : CellKind.Int),
-                subprogram: fold.Subprogram
-            );
+            // members keep their declared encoding until a numeric operation widens the read. An arg fold's body
+            // is a score in whatever kind it computes, and the fold leaves the member it chose in the member's kind.
+            var choosing = (operation is ExpressionOp.ArgMinimum or ExpressionOp.ArgMaximum);
+            var foldedKind = ((operation == ExpressionOp.Sum) && fixedAt[current])
+                ? CellKind.Fixed
+                : member;
+            var outerMember = context.FoldMember;
+            (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) shape;
+
+            context.FoldMember = member;
+            try {
+                shape = SharedBody(
+                    argumentKinds: argumentKinds,
+                    kind: member,
+                    memberKind: member,
+                    resultKind: operation switch {
+                        ExpressionOp.Sum => foldedKind,
+                        ExpressionOp.ArgMinimum or ExpressionOp.ArgMaximum => null,
+                        _ => CellKind.Int,
+                    },
+                    subprogram: fold.Subprogram
+                );
+            } finally {
+                context.FoldMember = outerMember;
+            }
+
+            var (body, _, requiredArguments) = shape;
             if (contextualArguments is not null) {
                 for (var argument = 0; argument < requiredArguments.Length; argument++) {
                     contextualArguments[argument] |= requiredArguments[argument];
@@ -630,9 +646,9 @@ public static partial class RuleCompiler {
                     ),
                     Operation: operation
                 ),
-                ((operation == ExpressionOp.Sum)
+                ((operation == ExpressionOp.Sum) || choosing)
                     ? foldedKind
-                    : CellKind.Int)
+                    : CellKind.Int
             );
         }
         CompiledExpressionToken ResolveMember() {

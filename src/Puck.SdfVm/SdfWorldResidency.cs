@@ -175,7 +175,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_width = width;
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
-        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
+        // An emitting group traces what it draws (SdfMeshPathBake.Emitting), by the test the volume samples emitters with.
+        MeshPathBake = new SdfMeshPathBake {
+            Demand = MeshDemand,
+            Emitting = static (program, material) => SdfMeshIrradianceScene.Emits(appearance: program.Appearance, material: material),
+            Identity = SdfMeshStore.IdentityOf(kernels: kernels),
+            Library = (meshLibrary ?? m_ownedLibrary!),
+            Residency = name,
+        };
         m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
         MeshIrradiance = new SdfMeshIrradiance(allocator: MeshPathBake.Library.Allocator);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
@@ -213,7 +220,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="SdfWorldTables.DescribeRegionFlushes"/>), what the raster passes selected of it
     /// (<see cref="SdfWorldTables.DescribeSelection"/>), the motion scopes its passes sign with and why each last moved
     /// (<see cref="SdfWorldTables.DescribeMotion"/>), its presentation's selector
-    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
+    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the lighting's reservation (<see cref="SdfLightingHold.Describe"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
     /// volume's probe cache.</summary>
@@ -236,6 +243,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
+            (m_tables?.Lighting.Describe() ?? "lighting=none"),
             DescribeParking(),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
@@ -255,12 +263,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Names what keeps the meshes from being resident (<see cref="SdfWorldTables.MeshResidencyPending"/>),
     /// or <see langword="null"/> once resident. Read on the frame thread; never waits.</summary>
     public string? MeshResidencyPending => ((m_tables is { } tables) ? tables.MeshResidencyPending() : "its tables are not built");
-    /// <summary>Gets whether the residency's meshes are still arriving, and only frames that render one of its views
-    /// bring them: its bake owes the frame a mesh (<see cref="SdfMeshPathBake.Pending"/>), whose GPU sampling such a frame
-    /// dispatches, or its tables still owe the staged meshes' words or their upload
-    /// (<see cref="SdfWorldTables.MeshesArriving"/>), which land only after such a frame's upload. A frame that renders
-    /// none of its views still prepares the residency and may pack a frame, which moves what the background work binds,
-    /// so a residency nobody renders stops landing until one of its views renders again. A parked residency
+    /// <summary>Gets whether the residency's meshes are still arriving: its bake owes the frame a mesh
+    /// (<see cref="SdfMeshPathBake.Pending"/>), or its tables still owe the staged meshes' words or their upload
+    /// (<see cref="SdfWorldTables.MeshesArriving"/>). Both proceed only against an upload that binds the bake's program,
+    /// which a frame that renders one of its views stages, and which the presentation's minimum stages for a residency
+    /// nobody renders (<see cref="OwesPreparation"/>, <see cref="SdfWorldPasses.BeginFrame"/>). A parked residency
     /// (<see cref="IsParked"/>) has nothing arriving until a reader wakes it. Read on the frame thread; never
     /// waits.</summary>
     public bool MeshesArriving => (!m_parked && (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false)));
@@ -462,6 +469,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         m_disposed = true;
+        // The bake's groups end from here as the release lets them go, which is no bake finishing.
+        MeshPathBake.EndReports();
         if (m_deviceContext is { } device) {
             device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: () => ReleaseDeviceObjects(deviceLost: false)));
         } else {

@@ -44,6 +44,14 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
     /// <summary>Gets the document every name resolves against.</summary>
     public WorldDefinition Definition { get; }
+    /// <summary>Gets the namespace this world's rules write an identity's facts under
+    /// (<see cref="WorldPackageManifest.IdentityNamespaceOf"/>), or <see langword="null"/> when it has none.</summary>
+    public string? IdentityNamespace => (m_identityNamespace ??= (WorldPackageManifest.IdentityNamespaceOf(definition: Definition) ?? string.Empty)) switch {
+        "" => null,
+        var resolved => resolved,
+    };
+
+    private string? m_identityNamespace;
 
     /// <inheritdoc/>
     public override Puck.State.Rules.RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) {
@@ -724,6 +732,26 @@ public static partial class WorldFactsVocabulary {
                 ),
                 discriminator: "setIdentityFact",
                 effectType: typeof(WorldEffect.SetIdentityFact)
+            ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveIdentityRecord(context: context, effect: effect, ruleName: ruleName),
+                discriminator: "claimIdentityRecord",
+                effectType: typeof(WorldEffect.ClaimIdentityRecord)
+            ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveIdentityRecord(context: context, effect: effect, ruleName: ruleName),
+                discriminator: "claimIdentityPair",
+                effectType: typeof(WorldEffect.ClaimIdentityPair)
+            ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveIdentityRecord(context: context, effect: effect, ruleName: ruleName),
+                discriminator: "setIdentityRecord",
+                effectType: typeof(WorldEffect.SetIdentityRecord)
+            ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveIdentityRecord(context: context, effect: effect, ruleName: ruleName),
+                discriminator: "releaseIdentityRecord",
+                effectType: typeof(WorldEffect.ReleaseIdentityRecord)
             ),
             new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyState(

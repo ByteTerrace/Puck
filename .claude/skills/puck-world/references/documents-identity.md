@@ -212,18 +212,33 @@ space left, ...), and a host that must not even show the file's directory passes
 (`TryLoadFileForAdmission`; the catalog passes the file name). `NarrationPaths.AssertNone` holds that over the save, discard,
 refusal, save-flat and push narration by asserting the test's own paths are absent.
 
-**Seeding.** When the identity directory holds zero admitted documents,
-`WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
-(`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both
-unique ignoring case, hex color — `ValidateIdentitySeeds` in
-`WorldDefinitionValidator.Identities.cs`; an id is a document name, so a
-duplicate is refused in `DocumentName.Collision`'s words) and persists each
-immediately.
+**Seeding.** Every character is seeded from the identity template the hosting
+world names in `seatDefaults.identityTemplate` (a document path, relocated
+through imports like every document path; the standard's is
+`worlds/standard/identity.puck`, named by `worlds/standard/character.puck`), or
+from an empty document when the world names none (`WorldOwnedWorlds.LoadTemplate`);
+no section of the hosting world enters a character. When the identity directory
+holds zero admitted documents, `WorldOwnedWorlds` seeds one owned world per
+`seatDefaults.identities` row (`WorldIdentitySeed(Id, Name, Color)`, validated
+non-empty, ids and names both unique ignoring case, hex color —
+`ValidateIdentitySeeds` in `WorldDefinitionValidator.Identities.cs`; an id is a
+document name, so a duplicate is refused in `DocumentName.Collision`'s words),
+or, when the world authors none, one character from the template's own
+`identity` section, and persists each immediately. A world whose account holds
+no character still seats the roster's `seat1` stand-in.
+
+**One account.** The boot row's catalog is the process's account:
+`WorldInstanceHost` hands it to every row it starts (`WorldServer.Account` at
+`AdmitBoot`), and a local seat crossing between rows lands bound to the owned
+identity itself, so a fact written in one world is the document the next reads.
+The desktop catalog holds `account.lock` exclusively; a second process opens the
+account read-only and saves nothing. A world's checkpoint carries no owned
+document (I14 of [the hub plan](../../../../docs/plans/hub-and-saves.md#invariants)).
 
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-Controllers, Voice, Facts, Records)`; `Records` names the capacity-one record pools the identity owns and carries across authority boundaries): `MoveSpeed`/`TurnSpeed` read
+Controllers, Voice, Facts, Travel, HomeScoped)`; `Travel` gives each record pool that crosses an authority seam its class, every other pool the document declares stays home, and `HomeScoped` names the facts and pools no world's rule writes; the record store and its rule effects are [Owned identity records](../../../../docs/reference/state/worlds.md#owned-identity-records)): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see
@@ -246,9 +261,17 @@ carries on its own document — minted on the first write, capacity-bounded,
 validated as that one number. A world receives them only through a reserved
 keyed `int` row named `identity` it declares in `state.world`
 (`WorldIdentityFactLane`; cells keyed `<bodyIndex>-<fact>`), loaded into a
-body's cells when a seat binds the identity and zeroed when it unbinds. A rule
+body's cells when a seat binds the identity and zeroed when it unbinds. A fact
+key is namespaced by the package that writes it (`<package>$<fact>`, the
+package whose `manifest.json` encloses the executing document, else its document
+id: `WorldPackageManifest.IdentityNamespaceOf`); a rule spells a fact bare and the
+compiler qualifies it (`WorldFactsCompiler.QualifyIdentityFact`), a read may name
+another package's fact qualified, and a write qualified with another package's
+name is refused at compile (`IdentityFactForeign`). A rule
 writes one with the `setIdentityFact` effect (`{key: <body>, fact, value |
 expression}` — lane and identity row together through `WorldOwnedWorlds.TrySetFact`,
+which admits the write through `WorldIdentityWriter` (the package's namespace only,
+never a home-scoped name),
 which persists an identity the catalog owns and keeps a visitor's fact on the
 travelling row of the projection it arrived as; the visitor's own authority
 adopts it when the seat comes home) and reads one through `$identity:<bodyRef>:<fact>`
