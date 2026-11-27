@@ -782,9 +782,16 @@ let cabinetDeckRot = rotate([1, 0, 0], 17.46)
 function cabinetDeckAt(x, u, h) = [x, (1.19 - (u * 0.3) + (h * 0.9539)), (0.2 + (u * 0.9539) + (h * 0.3))]
 // A cabinet's half-width: a one-player cabinet's, or the wider two-player one whose deck carries a control panel for
 // each player side by side.
+// A control panel's centre down the deck and its half-extents [across, down the deck]; the players' marks sit in its outer
+// front corners, cabinetMarkMargin in from the side and from the front. A text run's position is its first baseline and,
+// aligned left or right, its outer edge, so those are what the margin measures to.
+let cabinetPanelMid = 0.265
+let cabinetPanelHalf = [0.54, 0.235]
+let cabinetMarkMargin = 0.04
 // A control panel's buttons, [x from the panel's centre, u down the deck]: two rows of three, the first column set a
-// little lower so the rows follow the fingers' curve, clear of the stick on the left and the player's mark in front.
-let cabinetButtonLayout = [[-0.08, 0.28], [0.07, 0.25], [0.22, 0.25], [-0.08, 0.41], [0.07, 0.38], [0.22, 0.38]]
+// little lower so the rows follow the fingers' curve, the rows 2.7 cm apart between collars, clear of the stick on
+// the left and the player's mark in front.
+let cabinetButtonLayout = [[-0.08, 0.255], [0.07, 0.225], [0.22, 0.225], [-0.08, 0.41], [0.07, 0.38], [0.22, 0.38]]
 function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 
 // A bar stool at `at` (on y 0): a round padded seat `height` up on a single post over a weighted foot disc. `seat` and
@@ -1150,9 +1157,9 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   for (c, p) in panels {
     shape Box $"cabinet-panel-{p}" {
       material: (base + cabinetShelf)
-      position: cabinetDeckAt(c, 0.265, 0)
+      position: cabinetDeckAt(c, cabinetPanelMid, 0)
       rotation: cabinetDeckRot
-      scale [0.54, 0.015, 0.235]
+      scale [cabinetPanelHalf[0], 0.015, cabinetPanelHalf[1]]
       rounding: 0.012
     }
     shape Cylinder $"cabinet-stick-base-{p}" {
@@ -1226,13 +1233,13 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (c, p) in ((players == 2) ? panels : []) {
       {
         text: $"P{p + 1}"
-        position: cabinetDeckAt((c + (((p * 2) - 1) * 0.455)), 0.42, 0.015)
+        position: cabinetDeckAt((c + (((p * 2) - 1) * (cabinetPanelHalf[0] - cabinetMarkMargin))), ((cabinetPanelMid + cabinetPanelHalf[1]) - cabinetMarkMargin), 0.015)
         rotation: rotate([1, 0, 0], -72.54)
         emHeight: 0.075
         depth: 0.008
         mode: "emboss"
         material: (base + cabinetInk)
-        align: "center"
+        align: ((p == 0) ? "left" : "right")
         maxWidth: 0.2
       }
     }
