@@ -1307,7 +1307,7 @@ public static partial class WorldDocumentEmitter {
 
             // The verdict names its gate as written, so a line a `for` repeats says which element it was run for.
             if (bound is not null) {
-                gate = $"{gate}  [{string.Join(separator: ", ", values: bound.Select(selector: static entry => $"{entry.Key} = {(KeyText(value: entry.Value) ?? entry.Value?.ToJsonString())}"))}]";
+                gate = $"{gate}  [{string.Join(separator: ", ", values: bound.Select(selector: static entry => $"{entry.Key} = {(DocumentLowering.KeyText(node: entry.Value) ?? entry.Value?.ToJsonString())}"))}]";
             }
 
             var row = VerdictRow(line: line);
