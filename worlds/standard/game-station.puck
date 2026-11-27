@@ -134,7 +134,7 @@ function gameStationListPaints(station, catalog, look) = concat(
 // cap's lip, an ochre apron with a teal seam, a brass rail along the player's edge where a hand rests, and a cream
 // column on a teal foot, as the display plinth is built. `panels` are the glass's panels, each `{ x0, x1, z0, z1 }` in the
 // station's frame, each wearing its own palette slot from `base + 6` (the plinth's six slots come first), so each
-// carries its own paints. The author frame is the station's turned half round, so a panel's x and z negate.
+// carries its own paints. A creation is authored in the station's own frame, so a panel stands where its extent says.
 template gameStationTable(panels, base = 0) {
   let capTop = (gameStationSurface - 0.004)
   let capHalf = 0.03
@@ -151,7 +151,7 @@ template gameStationTable(panels, base = 0) {
   for (panel, i) in panels {
     shape Box $"glass-{i}" {
       material: (base + 6 + i)
-      position [(0 - ((panel.x0 + panel.x1) / 2)), (gameStationSurface - 0.006), (0 - ((panel.z0 + panel.z1) / 2))]
+      position [((panel.x0 + panel.x1) / 2), (gameStationSurface - 0.006), ((panel.z0 + panel.z1) / 2)]
       scale [((panel.x1 - panel.x0) / 2), 0.006, ((panel.z1 - panel.z0) / 2)]
     }
   }
@@ -174,7 +174,7 @@ template gameStationTable(panels, base = 0) {
   }
   shape Box "rail" {
     material: (base + plinthBrass)
-    position [0, (capTop - capHalf), (gameStationHalf[1] + 0.008)]
+    position [0, (capTop - capHalf), (0 - (gameStationHalf[1] + 0.008))]
     scale [(gameStationHalf[0] - 0.12), 0.01, 0.01]
     rounding: 0.008
   }
@@ -229,7 +229,7 @@ template gameStationPrototype(station, catalog, boardPanels = [], look = gameSta
   prototype $"{station.id}-table" {
     document {
       name: $"{station.id}-table"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: concat(look.table, map(panels, panel => (look.glass with { paints: panel.paints })))
       gameStationTable(panels: panels)
     }
@@ -354,7 +354,7 @@ template gameStationRules(station, catalog) {
   // A tap on the list shows the game on the row it lands on, and `station.game` posts a game to the mailbox.
   rule $"game-station-{key}-list" {
     local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(gameStationPointer[key]) + 0.5))
-    local chosen = floor(below / gameStationRowPitch)
+    local chosen = toInt(below / gameStationRowPitch)
     when (gameStationEdges[key] & gameStationBits.list) != 0 and below >= 0 and chosen < games
     mode: Level
     gameStationGame[key] = chosen
