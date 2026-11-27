@@ -169,21 +169,6 @@ let braid1Rotation = [
   [0, 0, -braidTwist, braidUntwist]
 ]
 
-template cameraLayout(name) {
-  layout name {
-    seatCount: 0
-    slots [
-      {
-        camera: name
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-  }
-}
-
 // One column of the plait's lobes, from where the root becomes the braid below her jaw down to the tie.
 template braidChain(chainIdx, baseId, positions, rotations) {
   for i in range(0, 8) {

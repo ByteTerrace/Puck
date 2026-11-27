@@ -83,17 +83,7 @@ inputModes {
 }
 
 // The font the plinth labels and the console emboss and draw in, as the debug world declares it.
-text {
-  defaultFont: "inter"
-  fonts [
-    {
-      name: "inter"
-      source: "../fonts/inter-regular.ttf"
-      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
-      codePointRanges ["U+0020-U+007E"]
-    }
-  ]
-}
+labText()
 
 state {
   world {

@@ -225,7 +225,7 @@ let fallOpen = false
 // the debug world's entry names it; `title` and `note` are its plaque. `open` says whether the door leads anywhere: a
 // closed door's glass reads OPENING SOON and its plaque still stands, so a lab whose document lands later opens by
 // setting `open` alone. Adding a lab is one row. The doors keep clear of the corner stairs (bays 0 and 12), and the
-// tree's bay (6) stays open across the aisle, so the wing is two courts of three either side of it.
+// tree's bay (6) stays open across the aisle, so the wing is a court either side of it.
 let labWingRow = (wallRowNorth - 1)
 let labWingPlan = [
   {
@@ -239,6 +239,10 @@ let labWingPlan = [
   {
     id: "surface", bay: 4, open: true, document: "labs/surface"
     title: "SURFACE LAB", note: "Relief panels near, middle and far, each filtered beside unfiltered, down a long fogged sight line toward a low sun."
+  }
+  {
+    id: "moth", bay: 5, open: true, document: "labs/moth"
+    title: "MOTH LAB", note: "The Moth on a grey stage, then her run, turns, steps, slopes, jumps, dash, climb and flight, and a tight corridor for her camera."
   }
   {
     id: "shapes", bay: 8, open: true, document: "labs/shapes"

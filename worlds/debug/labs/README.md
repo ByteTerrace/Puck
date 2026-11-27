@@ -24,13 +24,14 @@ whose `open` is false keeps its door and plaque, its glass reading OPENING
 SOON, and names no destination, so it costs nothing until its lab lands.
 
 The doors stand on the aisle's second tile row in from the north wall, glass
-toward the nave, in two courts of three either side of the tree's bay:
+toward the nave, in a court either side of the tree's bay:
 
 | Door | Bay | Lab | Open |
 |---|---|---|---|
 | `lab-climbing` | 2 | [climbing.puck](climbing.puck) | yes |
 | `lab-light` | 3 | [light.puck](light.puck) | yes |
 | `lab-surface` | 4 | [surface.puck](surface.puck) | yes |
+| `lab-moth` | 5 | [moth.puck](moth.puck) | yes |
 | `lab-shapes` | 8 | [shapes.puck](shapes.puck) | yes |
 | `lab-tree` | 9 | `tree.puck` (not yet landed) | no |
 | `lab-board-games` | 10 | [board-games.puck](board-games.puck) | yes |
@@ -53,7 +54,7 @@ leg). By hand, `--world worlds/debug/labs/<lab>.puck` on the
 [puck-world recipe](../../../.claude/skills/puck-world/SKILL.md#running-it).
 Every lab is the Moth's (`basis: "../avatars/moth"`) and imports the debug world
 set's controls, so getting about needs nothing new; the climbing, light,
-surface and shape labs also import noclip. In those four, `debug.go <place>`
+surface, shape and Moth labs also import noclip. In those five, `debug.go <place>`
 (lab-kit.puck's `goCommand`, the debug world's own command) poses a body at any
 of the lab's places; elsewhere `body.pose spawn:<place>` does.
 
@@ -156,6 +157,40 @@ each row from that command so every capture frames it the same way.
 
 Places: `hero`, `surface-near`, `surface-middle`, `surface-far` (6 m before
 each row) and `surface-sight` (the sight line's head, facing east along it).
+
+### Moth
+
+[moth.puck](moth.puck): where the Moth's look, motion and camera are judged,
+on a grey floor under the held midday. Seven stations stand apart, each course
+running north (-Z, the way she faces) from its spawn point, and nothing here
+adds an ability: the walk, run, jump, dash, climb and jetpack are her basis's
+own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
+
+- `look-stage`: a grey room round the origin under the sun and a rim light,
+  where her basis's inspection cameras frame her. `moth.look front|three-quarter|side|back|close`
+  poses her there and picks one; `moth.turntable [turns a second]` turns the
+  disc she stands on (still until asked, 0 stops it);
+- `locomotion`: a 100 m lane with a mark every metre, longer at 5 and 10 m, for
+  walk, run, turn on the spot, stop and start; `slalom`: posts 8 m apart, then
+  4 m apart;
+- `terrain`: step-ups 0.1 to 0.5 m (her step height is 0.3 m), ramps at 10, 20,
+  30, 40, 50, 58, 62 and 70 degrees (her limit is 60) and two stairs, one with
+  0.25 m risers and one with 0.35 m;
+- `jump`: a run-up and raised platforms with gaps of 1, 2, 3, 4, 6 and 8 m for
+  the jump, air jump and dash, and ledges 0.6 to 2.6 m high to pull up onto;
+- `climb`: a holdable face 3.5 m tall over a block to stand on, small beside the
+  climbing lab's walls;
+- `flight`: four pylons with decks at 10, 20 and 30 m, bands every 5 m, for the
+  jetpack (F);
+- `camera`: a 2 m wide corridor, a low ceiling at 2.4 m and pillars
+  (`camera-pillar` stands her with a pillar close behind), for the chase
+  camera's clearance, fade and cutaway (`camera.clearance Cutaway|Fade`).
+
+`moth.frame <station>` stands her at a station's spawn point and shows it from
+a fixed overview camera, the same every time; `debug.go` hands back the chase
+camera. The `arrival` frame stands outside the stage's doorway, and a sign by it
+says where each station lies. Settled when the bake is done; the look stage is
+judged in stills, everything else in motion.
 
 ### Shapes
 
