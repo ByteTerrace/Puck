@@ -29,7 +29,18 @@ public readonly record struct LatchKey(int Left, int Right, long LeftGeneration 
 /// faults or refuses has not crossed its Edge, and a firing committed inside an enclosing scope is undone with that
 /// scope. <see cref="Restore"/> and <see cref="Clear"/> are lifecycle writes between ticks and refuse to run inside a
 /// scope.</remarks>
-public sealed class RuleLatch : IJournalParticipant {
+/// <param name="fresh">Whether the latch stays fresh (<see cref="Fresh"/>): it keeps no edge bit at all, for a caller
+/// that judges independent positions and never reads a crossing back.</param>
+public sealed class RuleLatch(bool fresh = false) : IJournalParticipant {
+    /// <summary>Gets whether the latch stays fresh: it keeps no edge bit, so every binding it is asked about reads as
+    /// never judged and every crossing is a first one. <see cref="SetHeld"/> and <see cref="Restore"/> write nothing on
+    /// it, so nothing can make a binding read otherwise, and an evaluation over it writes no bookkeeping: a closed gate
+    /// opens no scope and an open one fires in its scope without the edge bit. A search judge evaluates every
+    /// candidate over one, which gives every candidate exactly what judging it over a <see cref="Reset"/> latch gives,
+    /// since nothing within one evaluation reads a binding's bit back (each binding of a sweep and each rule name is
+    /// judged once). A fresh latch is not simulation state worth hashing: it hashes and flattens as empty.</summary>
+    public bool Fresh { get; } = fresh;
+
     /// <summary>One binding's memoized value and the row versions it was computed against.</summary>
     public sealed class BindingMemo {
         /// <summary>Gets or sets the schedule instance <see cref="Versions"/> was captured against. A rule
@@ -274,7 +285,8 @@ public sealed class RuleLatch : IJournalParticipant {
     private const long WasOpen = 2L;
 
     /// <summary>Writes one binding's edge bit, recording what it held in the arena's journal first. A firing's write
-    /// goes through here, so the scope it runs in restores the bit on a rewind.</summary>
+    /// goes through here, so the scope it runs in restores the bit on a rewind. A <see cref="Fresh"/> latch writes and
+    /// records nothing.</summary>
     /// <param name="journal">The journal of the arena the firing writes.</param>
     /// <param name="state">The rule's state.</param>
     /// <param name="binding">The binding.</param>
@@ -283,6 +295,10 @@ public sealed class RuleLatch : IJournalParticipant {
     public void SetHeld(ArenaJournal journal, RuleState state, LatchKey binding, bool held) {
         ArgumentNullException.ThrowIfNull(argument: journal);
         ArgumentNullException.ThrowIfNull(argument: state);
+
+        if (Fresh) {
+            return;
+        }
 
         var entry = state.Binding(binding);
         Record(binding: binding, journal: journal, previous: entry.Held switch {
@@ -350,7 +366,9 @@ public sealed class RuleLatch : IJournalParticipant {
     /// so a caller that judges many positions from a clean latch allocates nothing per position.</summary>
     /// <remarks>The latch then reads as empty: <see cref="Count"/> is zero and every crossing is a first one. A
     /// rule's emptied storage is still enumerated by name, so a latch that is hashed or checkpointed uses
-    /// <see cref="Clear"/>. An entry removed while a scope is open comes back with that scope.</remarks>
+    /// <see cref="Clear"/>. An entry removed while a scope is open comes back with that scope, so each removal is
+    /// journaled; a caller that never reads a crossing back uses a <see cref="Fresh"/> latch instead, which holds
+    /// nothing to remove.</remarks>
     /// <param name="journal">The journal of the arena the latch judges beside.</param>
     public void Reset(ArenaJournal journal) {
         ArgumentNullException.ThrowIfNull(argument: journal);
@@ -578,7 +596,7 @@ public sealed class RuleLatch : IJournalParticipant {
 
     private readonly List<(LatchKey Binding, bool Held)> m_remapScratch = [];
 
-    /// <summary>Restores one flattened entry.</summary>
+    /// <summary>Restores one flattened entry. A <see cref="Fresh"/> latch keeps nothing.</summary>
     /// <param name="name">The rule's name.</param>
     /// <param name="binding">The binding the entry belongs to.</param>
     /// <param name="held">Whether the gate held.</param>
@@ -586,6 +604,9 @@ public sealed class RuleLatch : IJournalParticipant {
     /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
     public void Restore(string name, LatchKey binding, bool held, ArenaJournal journal) {
         ArgumentNullException.ThrowIfNull(argument: name);
+        if (Fresh) {
+            return;
+        }
         RefuseInsideScope(journal: journal);
 
         Rule(name: name).Binding(binding).Held = held;

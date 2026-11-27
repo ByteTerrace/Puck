@@ -86,7 +86,7 @@ public static partial class WorldDocumentEmitter {
             var known = node switch {
                 Syntax.SourceList => true,
                 Syntax.SourceName { Quoted: false } name => (!name.Name.StartsWith(value: '$') && !IsRuntimeName(name: name.Name) &&
-                    scope.TryLowerBinding(name.Name, out var bound) && (bound is JsonArray)),
+                    scope.TryReadBinding(name.Name, out var bound) && (bound is JsonArray)),
                 Syntax.SourceCall call => DocumentBuiltins.Collections.ContainsKey(key: call.Name),
                 Syntax.SourceAccess or Syntax.SourceIndex => HasBoundRoot(node: node),
                 _ => false,
@@ -139,7 +139,7 @@ public static partial class WorldDocumentEmitter {
             Syntax.SourceName { Quoted: true } => true,
             Syntax.SourceName { Name: "true" or "false" } => true,
             Syntax.SourceName name => (!name.Name.StartsWith(value: '$') && !IsRuntimeName(name: name.Name) &&
-                !GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name) && scope.TryLowerBinding(name.Name, out _)),
+                !GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name) && scope.TryReadBinding(name.Name, out _)),
             Syntax.SourceAccess access => ((Constant(access: access) is not null) || HasBoundRoot(node: access)),
             Syntax.SourceIndex index => (HasBoundRoot(node: index) && IsCompileTime(node: index.Index)),
             Syntax.SourceGroup group => IsCompileTime(node: group.Value),

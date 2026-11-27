@@ -544,7 +544,7 @@ public sealed class WorldProjectionHold(ContentAddressedStore? content = null, F
                         if (node is null) {
                             _ = extensions.Remove(key: member);
                         } else {
-                            extensions[member] = JsonSerializer.Deserialize<JsonElement>(utf8Json: CanonicalJsonDocument.SerializeCompact(node: node));
+                            extensions[member] = JsonElement.Parse(utf8Json: CanonicalJsonDocument.SerializeCompact(node: node));
                         }
                         break;
                 }

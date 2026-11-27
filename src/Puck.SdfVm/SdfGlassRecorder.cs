@@ -48,7 +48,11 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
             outputs: outputs,
             slots: context.InFlightFrames
         );
-        m_skyFilterOutput = Array.IndexOf(array: outputs, value: SdfWorldPackage.Parts.GlassSkyFilter);
+        // The filter is a version of the clear's storage, so the compiled port may carry either name.
+        m_skyFilterOutput = Array.FindIndex(array: outputs, match: static name => (name is SdfWorldPackage.Parts.GlassSkyFilter or SdfWorldPackage.Parts.GlassSkyFilterCleared));
+        if (m_skyFilterOutput < 0) {
+            throw new InvalidOperationException(message: $"The glass shading pass of '{context.Instance}' declares no sky filter output (outputs: {string.Join(separator: ", ", values: outputs)}).");
+        }
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
