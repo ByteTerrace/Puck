@@ -33,6 +33,14 @@ checking partner, covering:
 
 A panel that fails is regenerated or removed, never kept with a caveat.
 
+Concept art leads the build; the build never leads the concept art (the owner's
+ruling, after a direction pack painted over live captures only restated what
+the gallery already was). A pack meant to raise a place's direction is briefed
+in words alone: what the place holds, how it is used and the atmosphere it
+should have. It is never given captures of the current build to repaint, so it
+can propose what the build has not yet imagined. Captures belong to the review
+afterwards, when the build is judged against the art.
+
 For the [caldera water pack](caldera-water-pack/review.md), the owner explicitly
 assigns the primary artist as the deciding judge. Its written audit records
 that scoped arrangement and does not claim checking-partner approval.
