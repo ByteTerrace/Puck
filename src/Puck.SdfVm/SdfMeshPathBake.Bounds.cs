@@ -265,7 +265,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Next = null;
                 group.Done = true;
                 group.Mesh = null;
-                Finish();
             } else {
                 group.Next = (bounded ? blocks!.Request(end: blocks.Count.Z, first: 0, lattice: in request) : request) with { Bounded = true };
             }
@@ -407,7 +406,6 @@ public sealed partial class SdfMeshPathBake {
         group.Next = null;
         group.Done = true;
         group.Mesh = null;
-        Finish();
         return emptied;
     }
 }

@@ -37,8 +37,10 @@ if ((args.Length == 4) && (args[0] == "--devices") && (args[1] == "none") && (ar
 return await RunWorldAsync(args: args, script: null);
 static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHost? batchHost = null) {
     // Every line written through the console from here on is also held in a bounded ring that host.log reads, so an
-    // Operator attachment reads what only this process's launcher otherwise sees.
-    var hostLog = HostLog.CaptureConsole();
+    // Operator attachment reads what only this process's launcher otherwise sees. The tee lasts as long as this run, its
+    // host included: a test batch's next scenario starts from the console this one found.
+    using var consoleCapture = HostLog.CaptureConsole();
+    var hostLog = consoleCapture.Log;
     // The run's state root, resolved from --state-dir once the command line parses.
     Puck.World.Server.WorldStateRoot? stateRoot = null;
 

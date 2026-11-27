@@ -5,7 +5,8 @@ namespace Puck.World;
 
 /// <summary>
 /// How a creation darkens what stands about it (<see cref="WorldPrototype.Occlusion"/>): an analytic occluder
-/// (<see cref="SdfOccluder"/>) fitted to the box its shapes fill at rest, which takes its share of the ambient and
+/// (<see cref="SdfOccluder"/>), which a body takes from its kit's collider where that is one sphere, capsule or box and
+/// a placement fits to the box the creation's shapes fill at rest, which takes its share of the ambient and
 /// indirect light of the surfaces about it and casts a soft shadow toward every ranged light, screen and emitter face,
 /// never toward a directional light. Every placement showing the creation and every body wearing it as a look carries
 /// it, at its scale, and it moves as they move. The creation's own surfaces on a moving body are neither darkened nor
@@ -20,8 +21,9 @@ namespace Puck.World;
 /// eased to nothing there; the bounding sphere's own radius by default.</param>
 /// <param name="Softness">The penumbra's half slope toward a light of no size (a point or spot light): its shadow's edge
 /// widens by this much for each unit from the occluder; zero by default, a point light's hard edge.</param>
-/// <param name="Shape">Which solid is fitted: a sphere, a capsule along the long axis, the box itself, or by default the
-/// one the box's proportions suggest.</param>
+/// <param name="Shape">Which solid is fitted to the rest box: a sphere, a capsule along the long axis, the box itself, or
+/// by default the one the box's proportions suggest. A body whose kit's collider stands for it casts that collider's
+/// solid whatever this says.</param>
 public sealed record WorldPrototypeOcclusion(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Strength = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Shadow = null,
