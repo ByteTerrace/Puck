@@ -180,8 +180,10 @@ each tap against the receiver's own plane from the hit triangle's normal
 The occlusion and each shadow are one tap pattern's estimate per pixel: each
 pixel turns and spaces its taps (the occlusion's spiral, the shadow's blocker
 search and filter disks) by its cell of a 4×4 ordered-dither tile
-(`sdfMeshPattern`), stepped within the tile's strata by a temporal view's sample
-index, and views filters them.
+(`sdfMeshPattern`). A temporal view moves every pixel two cells along the tile at
+each sample of its period and steps the pattern within the tile's strata, so each
+pixel's history averages eight rotations wherever views' filter keeps only part
+of its window (beside a crease or a silhouette), and views filters them.
 
 The surface record also carries mean curvature for edge weathering. Half the
 surface divergence of the interpolated unit vertex normals estimates it in

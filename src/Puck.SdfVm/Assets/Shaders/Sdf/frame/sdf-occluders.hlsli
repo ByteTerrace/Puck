@@ -5,10 +5,14 @@
 // its hit points (sdfViewsTileLights) and glass to those reaching its wave's (sdfWaveLightMasks), by the set bits, as it
 // walks lights; a view whose mask is empty reads no record.
 //
-// The invariant every mask rests on: an occluder adds nothing at a point Reach or farther from its center. Both its
-// terms are scaled by the window a point light's falloff eases to zero by (sdfLightWindow over the distance to the
-// center against Reach), so a mask may leave out an occluder whose sphere of reach misses every point its lanes shade
-// (sdfOccluderReachesBox), and nothing else.
+// The invariant every mask rests on: an occluder adds nothing at a point where neither of its terms reaches. Its ambient
+// term is scaled by the window a point light's falloff eases to zero by (sdfLightWindow over the distance to the center
+// against Reach), so it adds nothing Reach or farther from its center (sdfOccluderReachesBox). Its shadow toward a light
+// is cast as far as the light reaches, as a real shadow is, and is exactly zero wherever the segment from the point to
+// the light passes the occluder's bounding sphere by the shadow's penumbra or more (sdfOccludersShadow), so it adds
+// nothing at a point outside the hull of that sphere, grown by the penumbra, and the light (sdfOccluderShadowsBox). A mask
+// may leave out an occluder that neither test keeps over every point its lanes shade, for every light those lanes walk,
+// and nothing else.
 //
 // A surface of the moving body an occluder stands for (its frame slot within OwnSlot..OwnSlot + OwnSlots) is never
 // darkened or shadowed by that occluder, which only approximates the body's own shape.
@@ -31,6 +35,39 @@ bool sdfOccluderReachesBox(SdfOccluder occluder, float3 low, float3 high) {
     float reach = (occluder.Reach * (1.0 + SdfLightReachMargin));
 
     return (sdfBoxDistanceSquared(occluder.Center, low, high) <= (reach * reach));
+}
+// The radius about its center that holds an occluder's solid (SdfOccluder.BoundingRadius, KEEP IN SYNC).
+float sdfOccluderBound(SdfOccluder occluder) {
+    if (occluder.Shape == SDF_OCCLUDER_BOX) {
+        return sqrt((dot(occluder.AxisX, occluder.AxisX) + dot(occluder.AxisY, occluder.AxisY)) + dot(occluder.AxisZ, occluder.AxisZ));
+    }
+
+    return ((occluder.Shape == SDF_OCCLUDER_CAPSULE) ? (length(occluder.AxisX) + occluder.Radius) : occluder.Radius);
+}
+// Whether an occluder can shadow, toward a light standing within `lightExtent` of `light` whose disc is `lightRadius`
+// wide (sdfOccludersShadow's target and radius), any point of the box `low`..`high`. sdfOccludersShadow darkens a point
+// only where the segment from it to the light passes the occluder's solid by less than the penumbra's half width, which is
+// at most the light's radius plus the segment's length times the occluder's Softness, so only where the segment passes
+// its bounding sphere by less than that. Every such segment lies in the hull of the light's sphere and the sphere about
+// the box, which is the union of the spheres about the points of the segment between their centers whose radii run
+// between theirs, so the occluder shadows nothing in the box while that segment passes its center by more than its
+// bound, the penumbra, the box's radius and the light's extent together.
+bool sdfOccluderShadowsBox(SdfOccluder occluder, float3 light, float lightExtent, float lightRadius, float3 low, float3 high) {
+    if (occluder.Shadow <= 0.0) {
+        return false;
+    }
+
+    float3 center = ((low + high) * 0.5);
+    float boxRadius = (0.5 * length(high - low));
+    float3 span = (center - light);
+    float spanSquared = dot(span, span);
+    float along = ((spanSquared > 1.0e-12) ? saturate(dot((occluder.Center - light), span) / spanSquared) : 0.0);
+    float3 offset = (occluder.Center - (light + (span * along)));
+    float far = ((sqrt(spanSquared) + boxRadius) + lightExtent);
+    float reach = (((((sdfOccluderBound(occluder) + lightRadius) + (far * occluder.Softness)) + 1.0e-4) + boxRadius) + lightExtent);
+
+    reach *= (1.0 + SdfLightReachMargin);
+    return (dot(offset, offset) <= (reach * reach));
 }
 // Whether a surface riding `frameSlot` is the occluder's own body's.
 bool sdfOccluderOwns(SdfOccluder occluder, int frameSlot) {
@@ -231,7 +268,8 @@ float2 sdfOccluderRayGap(SdfOccluder occluder, float3 origin, float3 direction, 
 // half size of the disc it is taken as) `lightRadius`: for each occluder, the light's visible share across the occluder's
 // silhouette, smoothstepped over a penumbra centred on it whose half width at a distance t along the ray is t times the
 // wider of the light's half slope from the surface (its radius over its distance) and the occluder's Softness, scaled by
-// its Shadow strength and its window, multiplied together. One where the mask holds none.
+// its Shadow strength, multiplied together. The shadow reaches as far as the light does, with no window about the
+// occluder: a lamp high to one side throws a body's shadow well past the body's reach. One where the mask holds none.
 float sdfOccludersShadow(uint4 mask, float3 position, float3 target, float lightRadius, int frameSlot) {
     float visible = 1.0;
     float3 toLight = (target - position);
@@ -262,17 +300,11 @@ float sdfOccludersShadow(uint4 mask, float3 position, float3 target, float light
                 continue;
             }
 
-            float window = sdfOccluderWindow(occluder, position);
-
-            if (window <= 0.0) {
-                continue;
-            }
-
             float2 gap = sdfOccluderRayGap(occluder, position, direction, far);
             float width = max((gap.y * max(lightSlope, occluder.Softness)), 1.0e-4);
             float share = saturate(0.5 + ((0.5 * gap.x) / width));
 
-            visible *= (1.0 - ((occluder.Shadow * window) * (1.0 - ((share * share) * (3.0 - (2.0 * share))))));
+            visible *= (1.0 - (occluder.Shadow * (1.0 - ((share * share) * (3.0 - (2.0 * share))))));
         }
     }
 

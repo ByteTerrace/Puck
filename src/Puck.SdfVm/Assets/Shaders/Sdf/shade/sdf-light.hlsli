@@ -323,12 +323,75 @@ SdfLightMasks sdfViewLightMasks() {
 
     return masks;
 }
+// Whether an occluder can add anything at a point of the box `low`..`high` for a walk over `lights` and `screens`: its
+// ambient term where its sphere of reach meets the box (sdfOccluderReachesBox), and its shadow toward any point, spot or
+// line light of `lights` or any screen slot of `screens` (sdfOccluderShadowsBox), each light's target and disc taken as
+// sdfLightInputs takes them: a point or spot light's position, a line's segment about its midpoint, a screen's or an
+// emitter face's centre and the disc of its area.
+bool sdfOccluderReachesWalk(SdfOccluder occluder, uint4 lights, uint4 screens, float3 low, float3 high) {
+    if (sdfOccluderReachesBox(occluder, low, high)) {
+        return true;
+    }
+    if (occluder.Shadow <= 0.0) {
+        return false;
+    }
+
+    uint count = worldLightCount();
+
+    [loop] for (uint word = 0u; (word < 4u); word++) {
+        uint bits = sdfComponent(lights, word);
+
+        [loop] while (bits != 0u) {
+            uint index = ((word * 32u) + firstbitlow(bits));
+
+            bits &= (bits - 1u);
+            if (index >= count) {
+                break;
+            }
+
+            SdfLight record = sdfLights[index];
+
+            if (sdfLightRanged(record.Kind)) {
+                float extent = ((record.Kind == SDF_LIGHT_LINE) ? length(record.SpotAxis) : 0.0);
+                float radius = ((record.Kind == SDF_LIGHT_LINE) ? max(extent, record.SpotOffset) : 0.0);
+
+                if (sdfOccluderShadowsBox(occluder, worldPointLightPosition(record), extent, radius, low, high)) {
+                    return true;
+                }
+            }
+        }
+    }
+#ifdef SDF_SCREEN_SOURCES
+    uint screenCount = sdfScreenLightCount();
+
+    [loop] for (uint screenWord = 0u; (screenWord < 4u); screenWord++) {
+        uint screenBits = sdfComponent(screens, screenWord);
+
+        [loop] while (screenBits != 0u) {
+            uint screen = ((screenWord * 32u) + firstbitlow(screenBits));
+
+            screenBits &= (screenBits - 1u);
+            if (screen >= screenCount) {
+                break;
+            }
+
+            ScreenSurfaceData surface = worldScreenSurface(screen);
+            float weight = (((4.0 * surface.right.w) * surface.up.w) / SDF_PI);
+
+            if (sdfOccluderShadowsBox(occluder, surface.origin.xyz, 0.0, sqrt(max(weight, 0.0)), low, high)) {
+                return true;
+            }
+        }
+    }
+#endif
+    return false;
+}
 // The view's masks narrowed to the lights that can reach a point any active lane of the wave shades, `position` this
 // lane's: the box about the active lanes' points, and every light of the view's mask that sdfLightReachesBox keeps over
 // it (a directional or a rim reaches everything and is kept), its lights shared out among the active lanes and their
 // answers joined across the wave, with no group memory and no barrier. Every active lane must call it, each with the
-// point its walk shades, and walk the masks it answers; the screens stay the view's, and the occluders narrow by their
-// spheres of reach as the lights do (sdfOccluderReachesBox). A light it leaves out adds nothing
+// point its walk shades, and walk the masks it answers; the screens stay the view's, and the occluders narrow to those
+// whose ambient or shadow toward a kept light or a screen can reach the box (sdfOccluderReachesWalk). A light it leaves out adds nothing
 // at any of those points, on the rule a views tile leaves one out by (sdfViewsTileLights). Views' tiles bound their
 // walks as tightly already (a wave's box narrowed a hall's visits by under one in a hundred), so glass alone reads it.
 SdfLightMasks sdfWaveLightMasks(float3 position) {
@@ -362,7 +425,8 @@ SdfLightMasks sdfWaveLightMasks(float3 position) {
     }
     masks.lights = kept;
 
-    // The occluders likewise, by their spheres of reach (sdfOccluderReachesBox); a view with none reads no record.
+    // The occluders likewise, by their spheres of reach and their shadows toward the lights the wave keeps and the view's
+    // screens (sdfOccluderReachesWalk); a view with none reads no record.
     if (any(masks.occluders != 0u)) {
         uint occluderCount = worldOccluderCount();
         uint4 reaching = uint4(0u, 0u, 0u, 0u);
@@ -376,7 +440,7 @@ SdfLightMasks sdfWaveLightMasks(float3 position) {
                 uint word = (index / 32u);
                 uint flag = (1u << (index % 32u));
 
-                if (((sdfComponent(masks.occluders, word) & flag) != 0u) && sdfOccluderReachesBox(sdfOccluders[index], low, high)) {
+                if (((sdfComponent(masks.occluders, word) & flag) != 0u) && sdfOccluderReachesWalk(sdfOccluders[index], masks.lights, masks.screens, low, high)) {
                     bit = uint4(((word == 0u) ? flag : 0u), ((word == 1u) ? flag : 0u), ((word == 2u) ? flag : 0u), ((word == 3u) ? flag : 0u));
                 }
             }

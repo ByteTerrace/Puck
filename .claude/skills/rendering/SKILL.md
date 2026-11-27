@@ -1097,11 +1097,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that lights behind its face) widens the tile test in the same change, or
   tiles cut its light off. `SdfLightMasks` carries a third mask, the analytic
   occluders (`SdfOccluder`, `frame/sdf-occluders.hlsli`), culled by the same
-  boxes on the same rule: an occluder adds nothing at or past its `Reach` from
-  its centre, because `sdfOccludersAmbient` and `sdfOccludersShadow`, its only
-  readers, multiply by `sdfOccluderWindow`. A new occluder term that reaches
-  farther widens `sdfOccluderReachesBox` and the view selection in the same
-  change. An occluder takes from the ambient, indirect and environment terms and
+  boxes once a tile's lights and screens stand (`sdfOccluderReachesWalk`): its
+  ambient adds nothing at or past its `Reach` from its centre
+  (`sdfOccludersAmbient` multiplies by `sdfOccluderWindow`), and its shadow,
+  which reaches as far as its light does, nothing outside the hull of the light
+  and its bounding sphere grown by the penumbra (`sdfOccluderShadowsBox`, the
+  host's `SdfLightSelection.ShadowMaySee`). A new occluder term, or a wider
+  penumbra in `sdfOccludersShadow`, widens those tests and the view selection in
+  the same change. An occluder takes from the ambient, indirect and environment terms and
   from a ranged light's, screen's or emitter face's visibility in
   `sdfLightInputs`, never from a directional's, and never from a body's own
   surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot). A binned

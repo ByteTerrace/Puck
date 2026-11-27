@@ -13,9 +13,9 @@ namespace Puck.SignedDistance;
 /// place among them included, is never kept. A positional light that rides a dynamic transform, whose position the host
 /// does not hold, is always kept. The views pass narrows this mask again for each tile it shades, by the same reaches
 /// against the tile's hit points (<c>sdfViewsTileLights</c> and <c>sdfLightReachesBox</c>, which holds a point light to
-/// the same cutoff). An analytic occluder (<see cref="SdfOccluder"/>) is selected the same way into a mask of its own
-/// (<see cref="SelectOccluders(SdfOccluders, in CameraSnapshot, float)"/>): past its <see cref="SdfOccluder.Reach"/> it adds
-/// nothing.
+/// the same cutoff). An analytic occluder (<see cref="SdfOccluder"/>) is selected into a mask of its own
+/// (<see cref="SelectOccluders"/>): by its <see cref="SdfOccluder.Reach"/>, past which its ambient term adds nothing, and
+/// by where its shadow toward a light the view shades can fall.
 /// </summary>
 public static class SdfLightSelection {
     /// <summary>The fraction the view's frustum sides are widened by: past any temporal jitter or render-scale rounding,
@@ -49,27 +49,113 @@ public static class SdfLightSelection {
         return mask;
     }
     /// <summary>Returns the mask of the analytic occluders a view shades: each whose sphere of reach
-    /// (<see cref="SdfOccluder.Reach"/> about its center) the view's frustum, widened by <see cref="Margin"/>, may see,
-    /// since an occluder adds nothing past its reach.</summary>
+    /// (<see cref="SdfOccluder.Reach"/> about its center), past which its ambient term adds nothing, the view's frustum,
+    /// widened by <see cref="Margin"/>, may see, and each whose shadow toward a point, spot or line light the view shades
+    /// may fall where the frustum sees (<see cref="ShadowMaySee"/>). The views pass narrows the mask again for each tile,
+    /// by the same two rules and the screens besides (<c>sdfOccluderReachesWalk</c>); a screen's or an emitter face's
+    /// shadow is kept here only through the occluder's reach.</summary>
     /// <param name="occluders">The frame's occluders table.</param>
+    /// <param name="lights">The frame's lights table.</param>
+    /// <param name="lightMask">The lights the view shades (<see cref="Select"/>).</param>
     /// <param name="camera">The view's camera.</param>
     /// <param name="far">The frame's far distance, in world units.</param>
+    /// <param name="exposure">The view's exposure multiplier the light mask was selected at (<see cref="ReachAt"/>).</param>
     /// <returns>Bit <c>i</c> set for each occluder <c>i</c> below <see cref="SdfOccluders.Count"/> the view
     /// shades.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="occluders"/> is <see langword="null"/>.</exception>
-    public static UInt128 SelectOccluders(SdfOccluders occluders, in CameraSnapshot camera, float far) {
+    /// <exception cref="ArgumentNullException"><paramref name="occluders"/> or <paramref name="lights"/> is
+    /// <see langword="null"/>.</exception>
+    public static UInt128 SelectOccluders(SdfOccluders occluders, SdfLights lights, UInt128 lightMask, in CameraSnapshot camera, float far, float exposure) {
         ArgumentNullException.ThrowIfNull(argument: occluders);
+        ArgumentNullException.ThrowIfNull(argument: lights);
 
         var mask = UInt128.Zero;
         var records = occluders.Records;
 
         for (var index = 0; (index < records.Length); index++) {
-            if (camera.MaySee(center: records[index].Center, halfX: Vector3.Zero, halfY: Vector3.Zero, halfZ: Vector3.Zero, margin: Margin, far: far, reach: records[index].Reach)) {
+            if (camera.MaySee(center: records[index].Center, halfX: Vector3.Zero, halfY: Vector3.Zero, halfZ: Vector3.Zero, margin: Margin, far: far, reach: records[index].Reach)
+                || ShadowMaySee(camera: in camera, exposure: exposure, far: far, lightMask: lightMask, lights: lights, occluder: in records[index])) {
                 mask |= (UInt128.One << index);
             }
         }
 
         return mask;
+    }
+    /// <summary>Returns whether an occluder's shadow toward a point, spot or line light of a view's light mask may fall
+    /// where the view's frustum sees. <c>sdfOccludersShadow</c> darkens a point only where the segment from it to the
+    /// light passes the occluder's bounding sphere by less than the penumbra's half width, the light's radius plus the
+    /// segment's length times the occluder's <see cref="SdfOccluder.Softness"/> at most; a point the light reaches lies
+    /// within its reach (<see cref="ReachAt"/>) of its segment. So the shadowed points lie in the cone from the light through
+    /// the occluder's sphere grown by that width, out to the reach, which a capsule from the occluder's center to the
+    /// cone's far end, as wide as the cone there and the grown sphere together, holds. A light riding a dynamic transform,
+    /// whose position the host does not hold, keeps every occluder that casts a shadow.</summary>
+    /// <param name="occluder">The occluder.</param>
+    /// <param name="lights">The frame's lights table.</param>
+    /// <param name="lightMask">The lights the view shades.</param>
+    /// <param name="camera">The view's camera.</param>
+    /// <param name="far">The frame's far distance, in world units.</param>
+    /// <param name="exposure">The view's exposure multiplier.</param>
+    /// <returns><see langword="true"/> when the view must shade the occluder for its shadow.</returns>
+    public static bool ShadowMaySee(in SdfOccluder occluder, SdfLights lights, UInt128 lightMask, in CameraSnapshot camera, float far, float exposure) {
+        ArgumentNullException.ThrowIfNull(argument: lights);
+
+        if (!(occluder.Shadow > 0f)) {
+            return false;
+        }
+
+        var bound = occluder.BoundingRadius;
+
+        for (var bits = lightMask; (bits != UInt128.Zero); bits &= (bits - UInt128.One)) {
+            var index = (int)UInt128.TrailingZeroCount(value: bits);
+
+            if (index >= lights.Count) {
+                break;
+            }
+
+            var light = lights[index];
+
+            if (!light.IsRanged) {
+                continue;
+            }
+            if (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot) {
+                return true;
+            }
+
+            var reach = ReachAt(exposure: exposure, light: in light);
+
+            if (!(reach > 0f)) {
+                continue;
+            }
+
+            // A line's points lie within its half segment of its midpoint, its disc as wide as the wider of that and its
+            // radius (sdfLightInputs).
+            var extent = ((light.Kind == SdfLightKind.Line) ? light.SpotAxis.Length() : 0f);
+            var radius = ((light.Kind == SdfLightKind.Line) ? MathF.Max(x: extent, y: light.SpotOffset) : 0f);
+            var length = (reach + (2f * extent));
+            // The shader's least penumbra half width, 1e-4 m, beside the widest.
+            var grown = (((((bound + radius) + (length * occluder.Softness)) + 1.0e-4f) + extent) * (1f + CutoffMargin));
+            var toOccluder = (occluder.Center - light.Direction);
+            var distance = toOccluder.Length();
+
+            if (distance >= (length + grown)) {
+                continue;
+            }
+            if (distance <= grown) {
+                if (camera.MaySee(center: light.Direction, halfX: Vector3.Zero, halfY: Vector3.Zero, halfZ: Vector3.Zero, margin: Margin, far: far, reach: (reach + extent))) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            var end = (light.Direction + (toOccluder * (length / distance)));
+            var width = (((length * grown) / MathF.Sqrt(x: ((distance * distance) - (grown * grown)))) + grown);
+
+            if (camera.MaySee(center: ((occluder.Center + end) * 0.5f), halfX: ((end - occluder.Center) * 0.5f), halfY: Vector3.Zero, halfZ: Vector3.Zero, margin: Margin, far: far, reach: width)) {
+                return true;
+            }
+        }
+
+        return false;
     }
     /// <summary>Returns the distance from its position past which a light lights nothing: a point's or a line's range,
     /// and infinity for a light that reaches every surface.</summary>

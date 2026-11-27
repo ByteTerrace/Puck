@@ -151,7 +151,7 @@ public sealed partial class SdfWorldTables {
 
         return ((frame.Views.Count == 0) ? Every(count: frame.Lights.Count) : MasksOf(frame: frame, view: view).LightMask);
     }
-    /// <summary>Returns the mask of the analytic occluders a view shades (<see cref="SdfLightSelection.SelectOccluders(SdfOccluders, in Puck.Abstractions.Cameras.CameraSnapshot, float)"/>),
+    /// <summary>Returns the mask of the analytic occluders a view shades (<see cref="SdfLightSelection.SelectOccluders"/>),
     /// computed with its light mask once a frame for each view and shared by every pass block and signature that reads
     /// it; the mask sits in the lighting signature's members, and the records it keeps in the view's lighting
     /// inputs.</summary>
@@ -177,7 +177,9 @@ public sealed partial class SdfWorldTables {
             var camera = frame.Views[index].Camera;
 
             inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: frame.Lights);
-            inputs.OccluderMask = ((frame.Occluders.Count > 0) ? SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: frame.Occluders) : UInt128.Zero);
+            inputs.OccluderMask = ((frame.Occluders.Count > 0)
+                ? SdfLightSelection.SelectOccluders(camera: in camera, exposure: exposure, far: frame.FarDistance, lightMask: inputs.LightMask, lights: frame.Lights, occluders: frame.Occluders)
+                : UInt128.Zero);
             inputs.MaskFrame = frame;
             inputs.MaskEpoch = m_viewInputsEpoch;
             inputs.MaskExposure = exposure;
