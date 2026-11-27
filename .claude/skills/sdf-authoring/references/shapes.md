@@ -117,7 +117,7 @@ Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
 | `id` | stable integer id | duplicated |
 | `name` | the handle `parent` and a trim's `shape` reference | — |
 | `type` | the primitive | unrecognized |
-| `position`, `rotation`, `scale` | author-frame transform; scale defaults to 1 | non-finite; **any negative scale component** — mirror with a symmetry domain op, not a negative scale |
+| `position`, `rotation`, `scale` | transform in the creation's frame; scale defaults to 1 | non-finite; **any negative scale component** — mirror with a symmetry domain op, not a negative scale |
 | `parent` | name of a shape declared **earlier** | names no shape, or names a later one |
 | `joint` | hinge point used only when an effector bone declares no swings | non-finite |
 

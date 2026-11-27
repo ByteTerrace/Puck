@@ -58,7 +58,7 @@ shade template tierReveal(seed) {
 prototypes {
   prototype "tier-folded-step" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierFoldedStep() }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -67,7 +67,7 @@ prototypes {
   }
   prototype "tier-lattice-corner" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierLatticeCorner(seed: 7) }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -76,7 +76,7 @@ prototypes {
   }
   prototype "tier-footprint-edge" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierFootprintEdge() }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -85,7 +85,7 @@ prototypes {
   }
   prototype "tier-quantized-hash" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierQuantizedHash() }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -94,7 +94,7 @@ prototypes {
   }
   prototype "tier-reveal" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#B09070", roughness: 0.6, specular: 0.04, shade: tierReveal(seed: 11) }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -103,7 +103,7 @@ prototypes {
   }
   prototype "tier-water" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         flowed(waterMaterial, stillFlowLayer with { frame: Object, coverage: 0.3, tilt: 0.1 }, world: 0, glass: 1)
       ]

@@ -5,7 +5,7 @@
     "null"
   ],
   "items": {
-    "description": "One creation asset row \u2014 a whole puck.creation.v1 document embedded inline, in canonical form, in the world file with its identity hash pinned beside it. The document and hash must come from the same CanonicalDocument\u00601: the compose boundary canonicalizes on upsert and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a tampered world file rejects loudly. World files stay self-contained \u2014 the CAS is an authoring-time import/export cache, never a load-time dependency.",
+    "description": "One creation asset row \u2014 a whole puck.creation.v2 document embedded inline, in canonical form, in the world file with its identity hash pinned beside it. The document and hash must come from the same CanonicalDocument\u00601: the compose boundary canonicalizes on upsert and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a tampered world file rejects loudly. World files stay self-contained \u2014 the CAS is an authoring-time import/export cache, never a load-time dependency.",
     "type": [
       "object",
       "null"
@@ -32,7 +32,7 @@
         ],
         "properties": {
           "vertices": {
-            "description": "The vertex positions, in the author frame.",
+            "description": "The vertex positions, in the creation\u0027s frame.",
             "type": "array",
             "items": {
               "type": "array",
@@ -84,7 +84,7 @@
         ],
         "properties": {
           "schema": {
-            "description": "The document version tag (puck.creation.v1).",
+            "description": "The document version tag (puck.creation.v2).",
             "type": [
               "string",
               "null"
@@ -751,7 +751,7 @@
                 },
                 "position": {
                   "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                  "description": "The eye offset from the anchored shape\u0027s frame origin, in the creation\u0027s author frame (see CreationFrame)."
+                  "description": "The eye offset from the anchored shape\u0027s frame origin, in the creation\u0027s frame."
                 },
                 "yaw": {
                   "description": "The eye heading offset, degrees (null = 0).",
@@ -1033,7 +1033,7 @@
               "null"
             ],
             "items": {
-              "description": "One engraved/embossed text run a creation carries \u2014 a string laid onto one of the creation\u0027s own surfaces (a shop facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into Glyph shapes via the shared font atlas \u002B Puck.Text.TextLayout (never persisted pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (Position centre \u002B Rotation, in the creation\u0027s workbench space: local \u002BX = advance, \u002BY = ascent, \u002BZ = the relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed (engrave / Subtraction) but never coplanar \u2014 coincident zero-sets speckle (docs/rendering/sdf/reference/text-and-glyphs.md). Position/Rotation are authored in the creation\u0027s author frame (see CreationFrame).",
+              "description": "One engraved/embossed text run a creation carries \u2014 a string laid onto one of the creation\u0027s own surfaces (a shop facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into Glyph shapes via the shared font atlas \u002B Puck.Text.TextLayout (never persisted pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (Position centre \u002B Rotation, in the creation\u0027s workbench space: local \u002BX = advance, \u002BY = ascent, \u002BZ = the relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed (engrave / Subtraction) but never coplanar \u2014 coincident zero-sets speckle (docs/rendering/sdf/reference/text-and-glyphs.md). Position/Rotation are in the creation\u0027s frame, so an unturned run reads from \u002BZ, behind a creation facing \u2212Z: a run on its front turns a half turn about up.",
               "type": [
                 "object",
                 "null"
@@ -1472,7 +1472,7 @@
                     },
                     "direction": {
                       "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                      "description": "KindSurface: the probe direction in the creation\u0027s author frame (see CreationFrame), so it turns with the body \u2014 [0, -1, 0] is \u0022below the body\u0022, which on a wall-held body points at the wall\u0027s own down. KindShape (optional): the way the tip approaches the point, carried by Shape\u0027s motion; its reverse is the normal an effector\u0027s align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.",
+                      "description": "KindSurface: the probe direction in the creation\u0027s frame, so it turns with the body \u2014 [0, -1, 0] is \u0022below the body\u0022, which on a wall-held body points at the wall\u0027s own down. KindShape (optional): the way the tip approaches the point, carried by Shape\u0027s motion; its reverse is the normal an effector\u0027s align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.",
                       "default": null
                     },
                     "reach": {
@@ -1495,7 +1495,7 @@
                     },
                     "offset": {
                       "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                      "description": "KindBody: the offset from that body\u0027s root (or its Part), in the creation\u0027s author frame, riding the target\u0027s attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape\u0027s motion (null = the shape\u0027s own origin).",
+                      "description": "KindBody: the offset from that body\u0027s root (or its Part), in the creation\u0027s frame, riding the target\u0027s attitude (null = the point exactly). KindShape: a point in the creation at rest, in its frame, that rides Shape\u0027s motion (null = the shape\u0027s own origin).",
                       "default": null
                     },
                     "reference": {
@@ -1913,7 +1913,7 @@
                                 "null"
                               ],
                               "items": {
-                                "description": "One step of a key\u0027s turn, written as a swing is: an axis in the creation\u0027s frame and an angle about it. It crosses the author frame as a swing\u0027s axis does (its axis flips and its angle does not).",
+                                "description": "One step of a key\u0027s turn, written as a swing is: an axis in the creation\u0027s frame and an angle about it.",
                                 "type": [
                                   "object",
                                   "null"

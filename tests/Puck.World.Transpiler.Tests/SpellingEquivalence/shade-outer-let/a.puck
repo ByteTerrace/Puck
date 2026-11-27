@@ -4,7 +4,7 @@ documentId: "shade-pair"
 shade template program(seed) { let n = select(clock, seed, seed)
 surface { roughness: lattice(surface.position, n) } }
 prototypes { prototype "p" { document {
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette [{ color: "#808080", shade: program(7) }]
   shape Box "box" { scale [1, 1, 1] }
 } } }

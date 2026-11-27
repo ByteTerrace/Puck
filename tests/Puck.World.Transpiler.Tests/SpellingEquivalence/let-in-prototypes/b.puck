@@ -4,7 +4,7 @@ documentId: "pair"
 prototypes {
   prototype "pillar" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "pillar"
       palette [{ color: "#888888", roughness: 0.5 }]
       shape Box "body" {

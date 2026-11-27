@@ -11336,7 +11336,7 @@
       "title": "PaletteFlowRegionDocument"
     },
     "PaletteFlowDocument": {
-      "description": "A palette slot\u0027s flow layer: the slot\u0027s shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader\u0027s frame, as the other palette layers are: for a creation, its engine frame (the author frame\u0027s x and z negated), turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.",
+      "description": "A palette slot\u0027s flow layer: the slot\u0027s shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader\u0027s frame, as the other palette layers are: for a creation, its own frame, turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.",
       "type": [
         "object",
         "null"
@@ -12208,11 +12208,11 @@
         },
         "pivot": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The joint the shape turns about, in the creation\u0027s author frame (see CreationFrame) \u2014 a shoulder or a hip, not the shape\u0027s own centre."
+          "description": "The joint the shape turns about, in the creation\u0027s frame \u2014 a shoulder or a hip, not the shape\u0027s own centre."
         },
         "axis": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The rotation axis, in the creation\u0027s author frame; normalized at canonicalization. A positive angle turns right-handed about it."
+          "description": "The rotation axis, in the creation\u0027s frame; normalized at canonicalization. A positive angle turns right-handed about it."
         },
         "amplitude": {
           "$ref": "#/$defs/DocumentScalar",
@@ -12254,7 +12254,7 @@
         },
         "axis": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The slide direction, in the creation\u0027s author frame; normalized at canonicalization."
+          "description": "The slide direction, in the creation\u0027s frame; normalized at canonicalization."
         },
         "amplitude": {
           "$ref": "#/$defs/DocumentScalar",
@@ -12623,11 +12623,11 @@
       ],
       "title": "ShapeLightForm",
       "x-enumDescriptions": {
-        "Face": "A box\u0027s front face (\u002BZ in the author frame, the face its half-extents along X and Y span) lights what stands before it as a screen\u0027s face does."
+        "Face": "A box\u0027s face (its local \u002BZ, the face its half-extents along X and Y span; a box turned a half turn about up faces its creation\u0027s front) lights what stands before it as a screen\u0027s face does."
       }
     },
     "ShapeDocument": {
-      "description": "The persisted form of a placed shape. Position and Rotation are authored in the creation\u0027s author frame \u2014 see CreationFrame \u2014 and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table.",
+      "description": "The persisted form of a placed shape. Position and Rotation are in the creation\u0027s frame, the engine\u0027s own (\u002BY up, \u2212Z the creation\u0027s front, \u002BX its right), and Scale is the primitive\u0027s size directly: see CreationGeometry\u0027s unit table.",
       "type": [
         "object",
         "null"
@@ -12648,7 +12648,7 @@
         },
         "position": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The shape\u0027s position (the author frame\u0027s workbench space)."
+          "description": "The shape\u0027s position, in the creation\u0027s frame."
         },
         "rotation": {
           "$ref": "#/$defs/DocumentQuaternion",
@@ -12758,7 +12758,7 @@
         },
         "joint": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector\u0027s solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.",
+          "description": "The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector\u0027s solve turns a bone about it (Joint). In the creation\u0027s frame, like every other point here. It changes no pose on its own.",
           "default": null
         },
         "taper": {
@@ -12893,7 +12893,7 @@
         },
         "lightsAs": {
           "$ref": "#/$defs/ShapeLightForm",
-          "description": "How the shape\u0027s surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box\u0027s front face (\u002BZ in the author frame). The light is the mean of the material\u0027s painted albedo times its emissive over the face, so a console\u0027s interface or a marquee\u0027s lettering lights the room in its own colours, and the shape keeps its material and paints.",
+          "description": "How the shape\u0027s surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box\u0027s face (its local \u002BZ). The light is the mean of the material\u0027s painted albedo times its emissive over the face, so a console\u0027s interface or a marquee\u0027s lettering lights the room in its own colours, and the shape keeps its material and paints.",
           "default": null
         }
       },

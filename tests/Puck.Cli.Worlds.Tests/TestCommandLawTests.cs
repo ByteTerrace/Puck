@@ -452,7 +452,7 @@ public sealed class TestCommandLawTests {
                   }
                   name: "frame"
                   palette [{ color: "#C9A43A", roughness: 0.4, specular: 0.4 }]
-                  schema: "puck.creation.v1"
+                  schema: "puck.creation.v2"
                   shape Box "rim" {
                     material: 0
                     position [0, 1.3, 0]
@@ -519,7 +519,7 @@ public sealed class TestCommandLawTests {
                   }
                   name: "frame"
                   palette [{ color: "#C9A43A", roughness: 0.4, specular: 0.4 }]
-                  schema: "puck.creation.v1"
+                  schema: "puck.creation.v2"
                   shape Box "rim" {
                     material: 0
                     position [0, 1.3, 0]

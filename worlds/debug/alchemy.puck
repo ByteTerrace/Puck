@@ -247,7 +247,7 @@ prototypes {
         { color: alchemyWoodColor }
         { color: alchemySlateColor, roughness: 0.7 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       twoPedestalTable(0)
       // The workbench base and rim enclosing the 8x5 `alchemyGrid`.
       shape Box "base" {
@@ -257,22 +257,22 @@ prototypes {
       }
       shape Box "rim-north" {
         material: 1
-        position [0, 1.3275, 0.39]
+        position [0, 1.3275, -0.39]
         scale [0.64, 0.0275, 0.04]
       }
       shape Box "rim-south" {
         material: 1
-        position [0, 1.3275, -0.39]
+        position [0, 1.3275, 0.39]
         scale [0.64, 0.0275, 0.04]
       }
       shape Box "rim-east" {
         material: 1
-        position [0.6, 1.3275, 0]
+        position [-0.6, 1.3275, 0]
         scale [0.04, 0.0275, 0.35]
       }
       shape Box "rim-west" {
         material: 1
-        position [-0.6, 1.3275, 0]
+        position [0.6, 1.3275, 0]
         scale [0.04, 0.0275, 0.35]
       }
     }
@@ -291,67 +291,67 @@ prototypes {
         { color: alchemyBrewColor, emissive: 180nit, roughness: 0.2 }
         { color: alchemyLecternColor, roughness: 0.75, specular: 0.08 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "hand-left-plinth" {
         material: 3
-        position [-0.21, 1.346, -0.28]
+        position [0.21, 1.346, 0.28]
         scale [0.062, 0.006, 0.062]
       }
       shape Cylinder "hand-left-well" {
         material: 1
-        position [-0.21, 1.352, -0.28]
+        position [0.21, 1.352, 0.28]
         scale [0.05, 0.003, 0.05]
       }
       shape Cylinder "hand-right-plinth" {
         material: 3
-        position [0.21, 1.346, -0.28]
+        position [-0.21, 1.346, 0.28]
         scale [0.062, 0.006, 0.062]
       }
       shape Cylinder "hand-right-well" {
         material: 1
-        position [0.21, 1.352, -0.28]
+        position [-0.21, 1.352, 0.28]
         scale [0.05, 0.003, 0.05]
       }
       shape Cylinder "cauldron-foot" {
         material: 2
-        position [0, 1.355, -0.28]
+        position [0, 1.355, 0.28]
         scale [0.088, 0.015, 0.088]
       }
       shape Ellipsoid "cauldron-belly" {
         material: 2
-        position [0, 1.405, -0.28]
+        position [0, 1.405, 0.28]
         scale [0.115, 0.062, 0.115]
       }
       shape Torus "cauldron-rim" {
         material: 3
-        position [0, 1.448, -0.28]
+        position [0, 1.448, 0.28]
         scale [0.098, 0.014, 0.098]
       }
       shape Cylinder "cauldron-brew" {
         material: 4
-        position [0, 1.446, -0.28]
+        position [0, 1.446, 0.28]
         scale [0.086, 0.008, 0.086]
       }
       shape Box "lectern-foot" {
         material: 3
-        position [0, 1.312, -0.64]
+        position [0, 1.312, 0.64]
         scale [0.16, 0.012, 0.12]
       }
       shape Cylinder "lectern-stem" {
         material: 0
-        position [0, 1.44, -0.64]
+        position [0, 1.44, 0.64]
         scale [0.04, 0.14, 0.04]
       }
       shape Box "lectern-board" {
         material: 5
-        position [0, 1.58, -0.6]
-        rotation [-0.258819, 0, 0, 0.965926]
+        position [0, 1.58, 0.6]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.38, 0.22, 0.018]
       }
       shape Box "lectern-lip" {
         material: 3
-        position [0, 1.47, -0.5]
-        rotation [-0.258819, 0, 0, 0.965926]
+        position [0, 1.47, 0.5]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.38, 0.015, 0.03]
       }
     }
@@ -370,24 +370,20 @@ prototypes {
           specular: style.specular
         }
       )
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "tile-reset" {
         material: 0
-        position [
-          (0 - (alchemyOriginX + (alchemyCellSize * 0.5))),
-          (alchemySurface - 0.0075),
-          (0 - (alchemyOriginZ + (alchemyCellSize * 0.5)))
-        ]
+        position [(alchemyOriginX + (alchemyCellSize * 0.5)),
+  (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * 0.5))
+]
         scale [0.062, 0.0075, 0.062]
       }
       for e in elementIds {
         shape Box $"tile-{e}" {
           material: e
-          position [
-            (0 - (alchemyOriginX + (alchemyCellSize * (alchemyTokenHomeColumn[(e - 1)] + 0.5)))),
-            (alchemySurface - 0.0075),
-            (0 - (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5))))
-          ]
+          position [(alchemyOriginX + (alchemyCellSize * (alchemyTokenHomeColumn[(e - 1)] + 0.5))),
+  (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5)))
+]
           scale [0.062, 0.0075, 0.062]
         }
       }
@@ -404,7 +400,7 @@ prototypes {
         { color: alchemyIvoryColor, roughness: 0.35, specular: 0.28 }
         { color: alchemyIronColor, roughness: 0.65, specular: 0.15 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "known-rim" {
         material: 0
         position [0, 0.006, 0]
@@ -427,25 +423,25 @@ prototypes {
     document {
       name: "alchemyCursor"
       palette [{ color: alchemyCursorColor, roughness: 0.4, specular: 0.3 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "near" {
-        material: 0
-        position [0, 0.0025, -0.062]
-        scale [0.066, 0.0025, 0.004]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0.0025, 0.062]
         scale [0.066, 0.0025, 0.004]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0.0025, -0.062]
+        scale [0.066, 0.0025, 0.004]
+      }
       shape Box "left" {
         material: 0
-        position [-0.062, 0.0025, 0]
+        position [0.062, 0.0025, 0]
         scale [0.004, 0.0025, 0.058]
       }
       shape Box "right" {
         material: 0
-        position [0.062, 0.0025, 0]
+        position [-0.062, 0.0025, 0]
         scale [0.004, 0.0025, 0.058]
       }
     }

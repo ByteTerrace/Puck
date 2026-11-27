@@ -118,7 +118,8 @@ let ochreTone = "#C98F35"
 template pilotArm(name, side, baseId, handGroup) {
   shape Sweep $"upperArm-{name}" {
     id: baseId
-    position [side * 0.172, 1.355, -0.015]
+    position [side * -0.172, 1.355, 0.015]
+    rotation: rotate([0, 1, 0], 180)
     material: sleeve
     parent: "torso"
     curve {
@@ -147,7 +148,8 @@ template pilotArm(name, side, baseId, handGroup) {
   // The deltoid under the sleeve; the lavender patch over it is paint.
   shape Superellipsoid $"deltoid-{name}" {
     id: baseId + 1
-    position [side * 0.182, 1.325, -0.016]
+    position [side * -0.182, 1.325, 0.016]
+    rotation: rotate([0, 1, 0], 180)
     scale [0.05, 0.066, 0.056]
     material: sleeve
     parent: $"upperArm-{name}"
@@ -156,7 +158,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"forearm-{name}" {
     id: baseId + 2
-    position [side * 0.212, 1.068, -0.032]
+    position [side * -0.212, 1.068, 0.032]
+    rotation: rotate([0, 1, 0], 180)
     material: sleeve
     parent: $"upperArm-{name}"
     curve {
@@ -186,7 +189,7 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Superellipsoid $"elbowPad-{name}" {
     id: baseId + 3
-    position [side * 0.218, 1.062, -0.066]
+    position [side * -0.218, 1.062, 0.066]
     scale [0.04, 0.05, 0.022]
     material: pad
     parent: $"forearm-{name}"
@@ -195,7 +198,7 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Superellipsoid $"cuff-{name}" {
     id: baseId + 4
-    position [side * 0.222, 0.846, -0.01]
+    position [side * -0.222, 0.846, 0.01]
     scale [0.033, 0.013, 0.033]
     material: collarKnit
     parent: $"forearm-{name}"
@@ -205,7 +208,8 @@ template pilotArm(name, side, baseId, handGroup) {
   // The bare hand hangs palm in, its fingers curling a little toward the palm.
   shape Sweep $"wrist-{name}" {
     id: baseId + 5
-    position [side * 0.222, 0.845, -0.01]
+    position [side * -0.222, 0.845, 0.01]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     group: handGroup
     parent: $"forearm-{name}"
@@ -220,7 +224,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Superellipsoid $"palm-{name}" {
     id: baseId + 6
-    position [side * 0.224, 0.777, -0.006]
+    position [side * -0.224, 0.777, 0.006]
+    rotation: rotate([0, 1, 0], 180)
     scale [0.017, 0.05, 0.041]
     material: skin
     blend: "SmoothUnion"
@@ -232,7 +237,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"thumb-{name}" {
     id: baseId + 7
-    position [side * 0.214, 0.79, 0.022]
+    position [side * -0.214, 0.79, -0.022]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.006
@@ -249,7 +255,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"finger-{name}-0" {
     id: baseId + 8
-    position [side * 0.222, 0.735, 0.024]
+    position [side * -0.222, 0.735, -0.024]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     parent: $"forearm-{name}"
     curve {
@@ -263,7 +270,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"finger-{name}-1" {
     id: baseId + 9
-    position [side * 0.222, 0.735, 0.0035]
+    position [side * -0.222, 0.735, -0.0035]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     parent: $"forearm-{name}"
     curve {
@@ -277,7 +285,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"finger-{name}-2" {
     id: baseId + 10
-    position [side * 0.222, 0.735, -0.0165]
+    position [side * -0.222, 0.735, 0.0165]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     parent: $"forearm-{name}"
     curve {
@@ -291,7 +300,8 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"finger-{name}-3" {
     id: baseId + 11
-    position [side * 0.222, 0.737, -0.036]
+    position [side * -0.222, 0.737, 0.036]
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     parent: $"forearm-{name}"
     curve {
@@ -310,7 +320,8 @@ template pilotArm(name, side, baseId, handGroup) {
 template pilotLeg(name, side, baseId) {
   shape Sweep $"thigh-{name}" {
     id: baseId
-    position [side * 0.088, 0.92, 0]
+    position [side * -0.088, 0.92, 0]
+    rotation: rotate([0, 1, 0], 180)
     material: trousers
     parent: "pelvis"
     curve {
@@ -336,7 +347,8 @@ template pilotLeg(name, side, baseId) {
 
   shape Sweep $"shin-{name}" {
     id: baseId + 1
-    position [side * 0.1, 0.475, 0.012]
+    position [side * -0.1, 0.475, -0.012]
+    rotation: rotate([0, 1, 0], 180)
     material: trousers
     parent: $"thigh-{name}"
     curve {
@@ -359,7 +371,7 @@ template pilotLeg(name, side, baseId) {
 
   shape Prism $"kneePad-{name}" {
     id: baseId + 2
-    position [side * 0.1, 0.468, 0.07]
+    position [side * -0.1, 0.468, -0.07]
     scale [0.054, 0.07, 0.017]
     material: pad
     parent: $"shin-{name}"
@@ -372,8 +384,8 @@ template pilotLeg(name, side, baseId) {
 
   shape Prism $"boot-{name}" {
     id: baseId + 3
-    position [side * 0.105, 0.025, 0.04]
-    rotation [0, -diagonal, 0, diagonal]
+    position [side * -0.105, 0.025, -0.04]
+    rotation: compose(rotate([0, 1, 0], 180), [0, -diagonal, 0, diagonal])
     scale [0.13, 0.13, 0.055]
     material: leather
     parent: $"shin-{name}"
@@ -398,7 +410,7 @@ template pilotLeg(name, side, baseId) {
 
   shape Superellipsoid $"bootShaft-{name}" {
     id: baseId + 4
-    position [side * 0.105, 0.12, -0.008]
+    position [side * -0.105, 0.12, 0.008]
     scale [0.058, 0.09, 0.066]
     material: leather
     parent: $"boot-{name}"
@@ -407,8 +419,8 @@ template pilotLeg(name, side, baseId) {
 
   shape Prism $"sole-{name}" {
     id: baseId + 5
-    position [side * 0.105, 0.0125, 0.04]
-    rotation [diagonal, 0, 0, diagonal]
+    position [side * -0.105, 0.0125, -0.04]
+    rotation [-diagonal, 0, 0, diagonal]
     scale [0.054, 0.135, 0.0125]
     material: sole
     parent: $"boot-{name}"
@@ -422,7 +434,7 @@ template pilotLeg(name, side, baseId) {
 prototypes {
   prototype "moth-pilot" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "moth-pilot"
       // At rest her breath re-poses her ten times a second: a breath's few millimetres stay smooth at it, and the views
       // that show her stand between poses. A stride poses her on the frame it starts.
@@ -436,22 +448,22 @@ prototypes {
         {
           name: "hold"
           transforms [
-            { id: 230, position [0, 1.2, 0.3378], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 243, position [0, 1.16238, 0.33196], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 244, position [0, 1.19594, 0.33084], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 245, position [0.002, 1.18528, 0.3233], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 246, position [0, 1.24241, 0.36834], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 247, position [0, 1.17584, 0.33165], rotation [0.183, -0.183, 0.68299, 0.68299] }
-            { id: 248, position [0, 1.16199, 0.32365], rotation [0.183, -0.183, 0.68299, 0.68299] }
-            { id: 249, position [0, 1.23267, 0.34321], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 257, position [0, 1.23297, 0.34269], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 250, position [0.0335, 1.24479, 0.35021], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 251, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 252, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 253, position [-0.0262, 1.18812, 0.31738], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 254, position [-0.0132, 1.18137, 0.31348], rotation [0.2588, 0, 0, 0.9659] }
-            { id: 255, position [0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
-            { id: 256, position [-0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
+            { id: 230, position [0, 1.2, -0.3378], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 243, position [0, 1.16238, -0.33196], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 244, position [0, 1.19594, -0.33084], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 245, position [-0.002, 1.18528, -0.3233], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 246, position [0, 1.24241, -0.36834], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 247, position [0, 1.17584, -0.33165], rotation [0.68299, 0.68299, -0.183, 0.183] }
+            { id: 248, position [0, 1.16199, -0.32365], rotation [0.68299, 0.68299, -0.183, 0.183] }
+            { id: 249, position [0, 1.23267, -0.34321], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 257, position [0, 1.23297, -0.34269], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 250, position [-0.0335, 1.24479, -0.35021], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 251, position [-0.0215, 1.18394, -0.31462], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 252, position [-0.0215, 1.18394, -0.31462], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 253, position [0.0262, 1.18812, -0.31738], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 254, position [0.0132, 1.18137, -0.31348], rotation [0, 0.9659, -0.2588, 0] }
+            { id: 255, position [-0.0085, 1.16556, -0.30446], rotation [0.20902, 0.94301, -0.25267, 0.056] }
+            { id: 256, position [0.0085, 1.16556, -0.30446], rotation [0.20902, 0.94301, -0.25267, 0.056] }
           ]
         }
         // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face.
@@ -723,7 +735,8 @@ prototypes {
       // acceleration and drops into a landing, as the suited Moth's does at her own height.
       shape Superellipsoid "pelvis" {
         id: 120
-        position [0, 0.93, -0.008]
+        position [0, 0.93, 0.008]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.155, 0.105, 0.108]
         material: trousers
         group: 43
@@ -748,7 +761,8 @@ prototypes {
       // swings out of its own below them.
       shape Superellipsoid "hip-left" {
         id: 135
-        position [0.088, 0.845, -0.006]
+        position [-0.088, 0.845, 0.006]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.088, 0.1, 0.097]
         material: trousers
         blend: "SmoothUnion"
@@ -760,7 +774,8 @@ prototypes {
 
       shape Superellipsoid "hip-right" {
         id: 136
-        position [-0.088, 0.845, -0.006]
+        position [0.088, 0.845, 0.006]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.088, 0.1, 0.097]
         material: trousers
         blend: "SmoothUnion"
@@ -772,7 +787,7 @@ prototypes {
 
       shape Superellipsoid "belt" {
         id: 121
-        position [0, 1.0, -0.004]
+        position [0, 1.0, 0.004]
         scale [0.142, 0.022, 0.104]
         material: belt
         parent: "pelvis"
@@ -781,7 +796,7 @@ prototypes {
 
       shape Box "beltBuckle" {
         id: 122
-        position [0, 1.0, 0.1]
+        position [0, 1.0, -0.1]
         scale [0.026, 0.018, 0.008]
         material: ochre
         parent: "pelvis"
@@ -789,7 +804,7 @@ prototypes {
 
       shape Box "beltTab-left" {
         id: 123
-        position [0.105, 1.0, 0.068]
+        position [-0.105, 1.0, -0.068]
         rotation [0, 0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -798,7 +813,7 @@ prototypes {
 
       shape Box "beltTab-right" {
         id: 124
-        position [-0.105, 1.0, 0.068]
+        position [0.105, 1.0, -0.068]
         rotation [0, -0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -809,7 +824,8 @@ prototypes {
       // waist, chest, shoulders and upper back blend into one torso that rides it.
       shape Superellipsoid "torso" {
         id: 125
-        position [0, 1.205, -0.008]
+        position [0, 1.205, 0.008]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.148, 0.165, 0.112]
         material: undersuit
         group: 40
@@ -828,7 +844,8 @@ prototypes {
 
       shape Superellipsoid "waist" {
         id: 126
-        position [0, 1.05, -0.004]
+        position [0, 1.05, 0.004]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.122, 0.11, 0.092]
         material: undersuit
         blend: "SmoothUnion"
@@ -840,7 +857,8 @@ prototypes {
 
       shape Superellipsoid "chest" {
         id: 127
-        position [0, 1.218, 0.045]
+        position [0, 1.218, -0.045]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.118, 0.062, 0.07]
         material: undersuit
         blend: "SmoothUnion"
@@ -852,7 +870,8 @@ prototypes {
 
       shape Superellipsoid "trapezius" {
         id: 128
-        position [0, 1.335, -0.022]
+        position [0, 1.335, 0.022]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.168, 0.058, 0.082]
         material: undersuit
         blend: "SmoothUnion"
@@ -865,8 +884,8 @@ prototypes {
       // The harness: two flat front straps from her shoulders to her belt, each in two runs that bridge her chest.
       shape Box "strapUpper-left" {
         id: 129
-        position [0.068, 1.312, 0.075]
-        rotation [-0.2124, 0, 0, 0.9772]
+        position [-0.068, 1.312, -0.075]
+        rotation [0, 0.9772, 0.2124, 0]
         scale [0.016, 0.076, 0.003]
         material: strap
         parent: "torso"
@@ -874,8 +893,8 @@ prototypes {
 
       shape Box "strapUpper-right" {
         id: 130
-        position [-0.068, 1.312, 0.075]
-        rotation [-0.2124, 0, 0, 0.9772]
+        position [0.068, 1.312, -0.075]
+        rotation [0, 0.9772, 0.2124, 0]
         scale [0.016, 0.076, 0.003]
         material: strap
         parent: "torso"
@@ -883,8 +902,8 @@ prototypes {
 
       shape Box "strapLower-left" {
         id: 131
-        position [0.068, 1.127, 0.103]
-        rotation [0.0399, 0, 0, 0.9992]
+        position [-0.068, 1.127, -0.103]
+        rotation [0, 0.9992, -0.0399, 0]
         scale [0.016, 0.113, 0.003]
         material: strap
         parent: "torso"
@@ -892,8 +911,8 @@ prototypes {
 
       shape Box "strapLower-right" {
         id: 132
-        position [-0.068, 1.127, 0.103]
-        rotation [0.0399, 0, 0, 0.9992]
+        position [0.068, 1.127, -0.103]
+        rotation [0, 0.9992, -0.0399, 0]
         scale [0.016, 0.113, 0.003]
         material: strap
         parent: "torso"
@@ -902,7 +921,7 @@ prototypes {
       // The harness's ochre plate between her shoulder blades, where the painted back straps cross.
       shape Box "harnessPlate" {
         id: 134
-        position [0, 1.245, -0.12]
+        position [0, 1.245, 0.12]
         scale [0.03, 0.028, 0.006]
         material: ochre
         parent: "torso"
@@ -912,7 +931,7 @@ prototypes {
       // into a turn.
       shape Superellipsoid "collar" {
         id: 133
-        position [0, 1.37, -0.004]
+        position [0, 1.37, 0.004]
         scale [0.06, 0.04, 0.056]
         material: collarKnit
         parent: "torso"
@@ -933,7 +952,8 @@ prototypes {
       // It rides her head, so it sways a little as she walks.
       shape Sweep "braid-0" {
         id: 220
-        position [-0.12, 1.478, 0.03]
+        position [0.12, 1.478, -0.03]
+        rotation: rotate([0, 1, 0], 180)
         material: hair
         parent: "collar"
         curve {
@@ -947,7 +967,8 @@ prototypes {
 
       shape Sweep "braid-1" {
         id: 221
-        position [-0.125, 1.345, 0.088]
+        position [0.125, 1.345, -0.088]
+        rotation: rotate([0, 1, 0], 180)
         material: hair
         parent: "collar"
         curve {
@@ -961,7 +982,8 @@ prototypes {
 
       shape Sweep "braid-2" {
         id: 222
-        position [-0.1, 1.22, 0.11]
+        position [0.1, 1.22, -0.11]
+        rotation: rotate([0, 1, 0], 180)
         material: hair
         parent: "collar"
         curve {
@@ -976,8 +998,8 @@ prototypes {
       for (lobe, i) in braidLobes {
         shape Superellipsoid $"braidLobe-{i}" {
           id: 231 + i
-          position: lobe
-          rotation: ((i % 2) == 0) ? [0, 0, braidTwist, braidUntwist] : [0, 0, -braidTwist, braidUntwist]
+          position: (lobe * [-1, 1, -1])
+          rotation: ((i % 2) == 0) ? [0, 0, -braidTwist, braidUntwist] : [0, 0, braidTwist, braidUntwist]
           scale [0.0125, 0.02, 0.0135]
           material: hair
           parent: "collar"
@@ -987,7 +1009,7 @@ prototypes {
 
       shape Cylinder "braidTie" {
         id: 223
-        position [-0.098, 1.082, 0.108]
+        position [0.098, 1.082, -0.108]
         scale [0.017, 0.008, 0.017]
         material: ochre
         parent: "collar"
@@ -996,7 +1018,7 @@ prototypes {
 
       shape Superellipsoid "braidTassel" {
         id: 224
-        position [-0.098, 1.05, 0.107]
+        position [0.098, 1.05, -0.107]
         scale [0.014, 0.03, 0.013]
         material: hair
         parent: "collar"
@@ -1014,7 +1036,8 @@ prototypes {
       // face is its -Z side, toward her eyes when held, so the d-pad on the face's left as she looks at it lies at +X.
       shape Prism "handheld" {
         id: 230
-        position [0, 1.17, -0.00725]
+        position [0, 1.17, 0.00725]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0375, 0.0665, 0.0115]
         material: brickGlass
         parent: "torso"
@@ -1027,7 +1050,8 @@ prototypes {
 
       shape Prism "brickBay" {
         id: 243
-        position [0, 1.1345, 0.0065]
+        position [0, 1.1345, -0.0065]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.029, 0.021, 0.00225]
         material: brickGlass
         parent: "handheld"
@@ -1040,7 +1064,8 @@ prototypes {
 
       shape Box "brickBoard" {
         id: 244
-        position [0, 1.163, -0.01125]
+        position [0, 1.163, 0.01125]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.034, 0.054, 0.0006]
         material: brickBoard
         parent: "handheld"
@@ -1048,7 +1073,8 @@ prototypes {
 
       shape Box "brickChip" {
         id: 245
-        position [0.002, 1.15, -0.01245]
+        position [-0.002, 1.15, 0.01245]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0075, 0.0075, 0.0006]
         material: brickChip
         parent: "handheld"
@@ -1056,7 +1082,8 @@ prototypes {
 
       shape Box "brickCartridge" {
         id: 246
-        position [0, 1.222, -0.002]
+        position [0, 1.222, 0.002]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0285, 0.023, 0.0038]
         material: brickCartridge
         parent: "handheld"
@@ -1064,8 +1091,8 @@ prototypes {
 
       shape Cylinder "brickCell-upper" {
         id: 247
-        position [0, 1.146, -0.0005]
-        rotation [0, 0, diagonal, diagonal]
+        position [0, 1.146, 0.0005]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.00725, 0.02525, 0.00725]
         material: brickCell
         parent: "handheld"
@@ -1074,8 +1101,8 @@ prototypes {
 
       shape Cylinder "brickCell-lower" {
         id: 248
-        position [0, 1.13, -0.0005]
-        rotation [0, 0, diagonal, diagonal]
+        position [0, 1.13, 0.0005]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.00725, 0.02525, 0.00725]
         material: brickCell
         parent: "handheld"
@@ -1084,7 +1111,8 @@ prototypes {
 
       shape Prism "brickLens" {
         id: 249
-        position [0, 1.201, -0.0189]
+        position [0, 1.201, 0.0189]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0285, 0.0245, 0.0006]
         material: brickLens
         parent: "handheld"
@@ -1099,7 +1127,8 @@ prototypes {
       // game (devices.puck).
       shape Box "brickPicture" {
         id: 257
-        position [0, 1.201, -0.0195]
+        position [0, 1.201, 0.0195]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.022, 0.0198, 0.001]
         material: brickLens
         parent: "handheld"
@@ -1107,7 +1136,8 @@ prototypes {
 
       shape Sphere "brickLed" {
         id: 250
-        position [0.0335, 1.215, -0.0189]
+        position [-0.0335, 1.215, 0.0189]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0011, 0.0011, 0.0011]
         material: brickLed
         parent: "handheld"
@@ -1115,7 +1145,8 @@ prototypes {
 
       shape Box "brickDpad-across" {
         id: 251
-        position [0.0215, 1.1445, -0.0193]
+        position [-0.0215, 1.1445, 0.0193]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0105, 0.0036, 0.0016]
         material: brickKeys
         parent: "handheld"
@@ -1124,7 +1155,8 @@ prototypes {
 
       shape Box "brickDpad-down" {
         id: 252
-        position [0.0215, 1.1445, -0.0193]
+        position [-0.0215, 1.1445, 0.0193]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0036, 0.0105, 0.0016]
         material: brickKeys
         parent: "handheld"
@@ -1133,7 +1165,8 @@ prototypes {
 
       shape Prism "brickButton-a" {
         id: 253
-        position [-0.0262, 1.1495, -0.019]
+        position [0.0262, 1.1495, 0.019]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0048, 0.0048, 0.0014]
         material: brickButtons
         parent: "handheld"
@@ -1146,7 +1179,8 @@ prototypes {
 
       shape Prism "brickButton-b" {
         id: 254
-        position [-0.0132, 1.1417, -0.019]
+        position [0.0132, 1.1417, 0.019]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.0048, 0.0048, 0.0014]
         material: brickButtons
         parent: "handheld"
@@ -1159,8 +1193,8 @@ prototypes {
 
       shape Prism "brickSelect" {
         id: 255
-        position [0.0085, 1.1235, -0.0189]
-        rotation [0, 0, 0.2164, 0.9763]
+        position [-0.0085, 1.1235, 0.0189]
+        rotation [0.2164, 0.9763, 0, 0]
         scale [0.0052, 0.0017, 0.0009]
         material: brickRubber
         parent: "handheld"
@@ -1173,8 +1207,8 @@ prototypes {
 
       shape Prism "brickStart" {
         id: 256
-        position [-0.0085, 1.1235, -0.0189]
-        rotation [0, 0, 0.2164, 0.9763]
+        position [0.0085, 1.1235, 0.0189]
+        rotation [0.2164, 0.9763, 0, 0]
         scale [0.0052, 0.0017, 0.0009]
         material: brickRubber
         parent: "handheld"

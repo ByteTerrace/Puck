@@ -73,7 +73,7 @@ state {
 prototypes {
   prototype "traversal-marker" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "traversal-marker"
       palette [{ color: "#FF5845" }]
       shape Sphere "failure" {

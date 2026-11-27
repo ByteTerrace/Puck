@@ -14,10 +14,10 @@ namespace Puck.Cli.Mesh;
 /// <c>puck mesh preview --world &lt;path&gt; --prototype &lt;id&gt; --output &lt;dir&gt;</c>: bakes a prototype's rest mesh on
 /// the CPU as <c>mesh audit --cpu</c> does (<see cref="RestScene"/> plans the groups a World's first frame bakes,
 /// <see cref="MeshCpuBake"/> answers their lattices through the fixed-point field evaluator), joins every group into the
-/// creation's author frame and draws it from a set of views (<see cref="MeshPreviewImage"/>): one PNG a view and a contact
+/// creation's frame and draws it from a set of views (<see cref="MeshPreviewImage"/>): one PNG a view and a contact
 /// sheet of them all, each captioned with what it leaves out. A prototype that no look, body or placement of the world
 /// stands has no emitted geometry to bake. An animated creation is drawn in its pooled rest pose. A static placement keeps
-/// the placement's own orientation, which the author frame's front assumes is unturned. Exit codes: 0 written; 2 loading
+/// the placement's own orientation, which the creation's front (−Z) assumes is unturned. Exit codes: 0 written; 2 loading
 /// failed, a usage error, or the prototype baked no surface.
 /// </summary>
 public static class MeshPreviewCommand {
@@ -31,12 +31,12 @@ public static class MeshPreviewCommand {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document whose prototype to preview.", Required = true };
         var prototypeOption = new Option<string>(name: "--prototype") { Description = "The prototype whose creation to bake and draw; a look, body or placement of the world must stand it.", Required = true };
         var outputOption = new Option<string>(name: "--output") { Description = "The directory to write the PNGs into: one per view, named <prototype>-<view>.png, and <prototype>-sheet.png holding them all.", Required = true };
-        var viewsOption = new Option<string[]>(name: "--views") { AllowMultipleArgumentsPerToken = true, Description = "The views to draw: standard names (front, back, left, right, front-left, front-right, back-left, back-right, top, below; 'all', the default, is every one), or name=azimuth,elevation[,x,y,z,halfWidth] in degrees about the author frame (azimuth 0 is the front, +90 the subject's own left, elevation 90 from above), and with x,y,z,halfWidth a close window of that half width in metres about the author-frame point." };
+        var viewsOption = new Option<string[]>(name: "--views") { AllowMultipleArgumentsPerToken = true, Description = "The views to draw: standard names (front, back, left, right, front-left, front-right, back-left, back-right, top, below; 'all', the default, is every one), or name=azimuth,elevation[,x,y,z,halfWidth] in degrees about the creation's frame (azimuth 0 stands before the front, its −Z side; +90 on the subject's own left, its −X side; elevation 90 from above), and with x,y,z,halfWidth a close window of that half width in metres about a point in the creation's frame." };
         var sizeOption = new Option<string>(name: "--size") { DefaultValueFactory = static _ => "480x480", Description = "Each view's width and height in pixels, WxH; a caption strip is added under it." };
         var shadingOption = new Option<string>(name: "--shading") { DefaultValueFactory = static _ => "smooth", Description = "smooth lights each pixel by the mesh's normals interpolated across the triangle; flat lights each triangle by its own face normal, which shows the tessellation." };
         var openOption = new Option<bool>(name: "--open-edges") { DefaultValueFactory = static _ => true, Description = "Tint red each triangle that holds an edge no other triangle shares; false leaves every triangle in its material's colour." };
         var command = new Command(
-            description: "Bakes a prototype's rest mesh on the CPU (the bake mesh audit --cpu measures), joins its groups in the creation's author frame and draws it from standard views (front, back, both sides, four three-quarter views, top, below) and any named view as lit, palette-coloured PNGs and one contact sheet, with no device. Paints, insets and wear are omitted and each image says so; an animated creation is drawn at its pooled rest pose. Reports triangles, groups and open edges.",
+            description: "Bakes a prototype's rest mesh on the CPU (the bake mesh audit --cpu measures), joins its groups in the creation's frame and draws it from standard views (front, back, both sides, four three-quarter views, top, below) and any named view as lit, palette-coloured PNGs and one contact sheet, with no device. Paints, insets and wear are omitted and each image says so; an animated creation is drawn at its pooled rest pose. Reports triangles, groups and open edges.",
             name: "preview"
         ) { worldOption, prototypeOption, outputOption, viewsOption, sizeOption, shadingOption, openOption };
 
@@ -131,7 +131,7 @@ public static class MeshPreviewCommand {
 
         text.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh preview: {CliPaths.ToDisplay(fullPath: fullPath)} prototype {prototype}: {selected.Length} group(s), {subject.Mesh.TriangleCount} triangles, {subject.Mesh.VertexCount} vertices, {subject.OpenTriangles.Count(predicate: static held => held)} triangles on open edges\n");
         text.Append(provider: CultureInfo.InvariantCulture, handler: $"  {(animated ? "animated: the pooled rest pose" : "static")}, baked on the CPU through the field evaluator in {bakeSeconds:0.0} s, {chosen.Count} view(s) drawn in {drawn.Elapsed.TotalSeconds:0.0} s\n");
-        text.Append(provider: CultureInfo.InvariantCulture, handler: $"  author frame (+Z front, +X the subject's left, metres): x {low.X:0.000}..{high.X:0.000}, y {low.Y:0.000}..{high.Y:0.000}, z {low.Z:0.000}..{high.Z:0.000}\n");
+        text.Append(provider: CultureInfo.InvariantCulture, handler: $"  creation frame (−Z front, +X the subject's right, metres): x {low.X:0.000}..{high.X:0.000}, y {low.Y:0.000}..{high.Y:0.000}, z {low.Z:0.000}..{high.Z:0.000}\n");
         text.Append(value: report);
         foreach (var file in files) {
             text.Append(provider: CultureInfo.InvariantCulture, handler: $"  {CliPaths.ToDisplay(fullPath: file)}\n");
@@ -144,7 +144,7 @@ public static class MeshPreviewCommand {
     // The instance a group belongs to: its body or its placement.
     private static string Instance(SdfMeshBakeGroup group, RestScene scene) =>
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"{scene.Owner(group: group)?.BodyIndex}/{scene.Placement(group: group)}");
-    // The groups' meshes joined in the author frame, with a line per group and the palette colours' use; null when none baked.
+    // The groups' meshes joined in the creation's frame, with a line per group and the palette colours' use; null when none baked.
     private static MeshPreviewSubject? Join(RestScene scene, SdfMeshBakeGroup[] selected, SdfMeshBakeGroup? anchor, Dictionary<int, SdfMesh> baked, bool openEdges, out string report) {
         var positions = new List<Vector3>();
         var normals = new List<Vector3>();
@@ -165,7 +165,7 @@ public static class MeshPreviewCommand {
                 continue;
             }
 
-            var map = ToAuthor(anchor: anchor, group: group, scene: scene);
+            var map = ToCreation(anchor: anchor, group: group, scene: scene);
             var origin = map(Vector3.Zero);
             var edges = SdfMeshAudit.EdgeCounts(mesh: mesh);
             var offset = (uint)positions.Count;
@@ -205,22 +205,18 @@ public static class MeshPreviewCommand {
 
         return new MeshPreviewSubject(Albedo: [.. albedo], Mesh: new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: materials.ToArray()), OpenTriangles: [.. open]);
     }
-    // A group's frame into the creation's author frame: the world point it poses through its slot, taken back through the
-    // body that wears the creation, or for a placement through the first dynamic group's slot, then turned half about up
-    // (Puck.World.Authoring.CreationFrame). A static group is already in the world, kept as placed.
-    private static Func<Vector3, Vector3> ToAuthor(RestScene scene, SdfMeshBakeGroup group, SdfMeshBakeGroup? anchor) {
+    // A group's frame into the creation's frame: the world point it poses through its slot, taken back through the body
+    // that wears the creation, or for a placement through the first dynamic group's slot. A static group is already in
+    // the world, kept as placed.
+    private static Func<Vector3, Vector3> ToCreation(RestScene scene, SdfMeshBakeGroup group, SdfMeshBakeGroup? anchor) {
         var toWorld = scene.ToWorld(group: group);
 
-        if (scene.Owner(group: group) is { } owner) { return point => owner.ToAuthor(world: toWorld(point)); }
-        if (!group.Dynamic || (anchor is null) || (anchor.Slot >= scene.Transforms.Count)) { return static point => new Vector3(x: -point.X, y: point.Y, z: -point.Z); }
+        if (scene.Owner(group: group) is { } owner) { return point => owner.ToCreation(world: toWorld(point)); }
+        if (!group.Dynamic || (anchor is null) || (anchor.Slot >= scene.Transforms.Count)) { return static point => point; }
 
         var root = scene.Transforms[anchor.Slot];
         var back = Quaternion.Inverse(value: SdfMeshGeometryBuilder.PoseOf(transform: root).Orientation);
 
-        return point => {
-            var local = (Vector3.Transform(value: (toWorld(point) - root.Position), rotation: back) / root.Scale);
-
-            return new Vector3(x: -local.X, y: local.Y, z: -local.Z);
-        };
+        return point => (Vector3.Transform(value: (toWorld(point) - root.Position), rotation: back) / root.Scale);
     }
 }

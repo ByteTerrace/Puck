@@ -1,25 +1,27 @@
 # Puck.World.Authoring
 
 The authored-content document families `Puck.World` embeds inline:
-`puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`) and
+`puck.creation.v2` (`CreationDocument`/`CreationCanonicalizer`) and
 `puck.music.v1` (`MusicDocument`), both
 riding the shared `DocumentCanonicalizer` core in `Puck.Assets`—which also
 owns the `puck.tune.v1`/`puck.synthesizer-patch.v1` families (`Puck.Assets.Documents`),
-so the ROM forges can consume them without a world assembly. `CreationFrame`
-and `GridSnap` live here too. Host-side float on purpose—
+so the ROM forges can consume them without a world assembly. `GridSnap` lives
+here too. Host-side float on purpose—
 authoring/presentation math, outside the simulation-state determinism
 contract.
 
 The SM83 ROM forge is `Puck.HumbleGamingBrick.Forge` (see the `rom-forge`
 skill); the AGB forge is `Puck.AdvancedGamingBrick.Forge`.
 
-## The creation author frame
+## The creation frame
 
-Every `puck.creation.v1` position, rotation, and camera offset is authored in
-ONE frame—right-handed, +Y up, +Z the front a shape faces, +X screen-right
-when looking at that front—a 180° yaw about +Y away from the engine's own
-frame (+Y up, −Z forward). `CreationFrame` is the one place that crosses
-between them; nothing else in the document or the engine names either frame.
+Every `puck.creation.v2` position, rotation, and camera offset is authored in
+the engine's own frame: right-handed, +Y up, −Z the front a creation faces
+(the way a body walks and a camera looks), +X its right. A placement turns and
+moves that frame and nothing converts it. A text run, a face light and a screen
+face their local +Z, so one on a creation's front turns a half turn about up.
+A `puck.creation.v1` document was written in the retired author frame (x and z
+mirrored); validation refuses it and `puck migrate frame` converts it.
 
 The primitive vocabulary and its dimensions belong to `Puck.SignedDistance`:
 `SdfSolidPrimitive` names the shapes and `SdfSolidGeometry` is the one place
@@ -282,11 +284,8 @@ Worked rigs, all built from the same three parts:
 Every one of these is presentation-only: the facets are read where a body-rooted
 stamp's per-frame transforms are packed (`Puck.World.Client.WorldCreationInstances`) and
 nowhere else, so the emitted SDF program, the analytic colliders, the compiled
-solid field, and simulation state are all blind to them. `CreationFrame` carries
-a swing's `pivot` and both facets' `axis` across the author frame; a half turn
-about +Y is a proper rotation, so a rotation axis takes the same
-`(−x, y, −z)` flip a direction does and the amplitude, phase, and waveform are
-unchanged. A shape carrying `domain` operators admits a `parent` but never a
+solid field, and simulation state are all blind to them. A swing's `pivot` and
+both facets' `axis` are in the creation's frame. A shape carrying `domain` operators admits a `parent` but never a
 facet of its own: the animated pool packs its slot with the rigid delta its
 parent's chain imparts to creation space (identity with no parent) and applies
 the domain ops against that carried frame before the shape's own static
@@ -336,7 +335,7 @@ coxa—sweep by cyclic coordinate descent, stopping early once the tip is within
 
 | `target.kind` | Reads |
 |---|---|
-| `surface` | marches the client's shared static-scene query field from the posed tip along `direction` (author frame, so it turns with the body) up to `reach`, and places the tip `standoff` off the hit along the surface's own normal. A miss eases the correction out. |
+| `surface` | marches the client's shared static-scene query field from the posed tip along `direction` (in the creation's frame, so it turns with the body) up to `reach`, and places the tip `standoff` off the hit along the surface's own normal. A miss eases the correction out. |
 | `body` | another population entity's root pose (`index`) plus `offset`, rotated into THAT body's attitude—a hand on a carried crate stays on its corner as it turns. |
 | `state` | a `state.<row>[.<key>]` text cell spelling a world-space `[x, y, z]`, read at the frame's tick. |
 
@@ -384,9 +383,8 @@ standoff that puts the whole sole on the surface.
 
 Effectors are presentation-only on exactly the terms the swings are: the correction is
 folded into each bone's own per-frame delta in `Puck.World.Client.WorldCreationInstances` and
-read nowhere else. `CreationFrame` carries a probe `direction`, a body `offset`, and a
-shape's `joint` across the author frame; the reach, standoff, weight, and window are
-frame-invariant. A bone carrying `domain` operators is refused, on the same grounds a
+read nowhere else. A probe `direction`, a body `offset`, and a shape's `joint` are in
+the creation's frame. A bone carrying `domain` operators is refused, on the same grounds a
 swing on one is.
 
 A `surface` target probes the field built from the world's SOLID placements only—the

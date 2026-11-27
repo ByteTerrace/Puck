@@ -30,7 +30,7 @@ A palette slot has no `bounce` member either; it is refused as unmapped, and
 `fill` is the artistic tint. A light's `bounce` is a separate transport gain.
 
 An emissive surface lights nothing by itself. A box shape with `lightsAs: Face`
-lights what stands before its front face (+Z in the author frame) with the mean
+lights what stands before its face (its local +Z) with the mean
 of its material's painted albedo times `emissive` over that face, lettering
 included, as a screen's face does (the gallery consoles' glass, a cabinet's
 marquee). Only a box carries one, and only on a static placement for now.
@@ -215,8 +215,8 @@ outside the ramp. For a sclera, make it the last stop: pupil, iris, optional
 limbus, then sclera, within the four-stop cap. A low modulation amplitude adds
 fibres, and coat adds a corneal highlight.
 
-Neither inset origin nor rotation is converted by `CreationFrame`. Work in
-the shader's frame, not blindly in the shape's author frame. A useful eye
+Inset origin and rotation are in the shader's frame (the slot that won the
+hit), not the shape's own position. A useful eye
 setup aims the plane's local +Z toward the viewer and places it behind the
 visible front surface. The actual acceptance test after refraction is
 `t = (-depth - p.z) / d.z >= 0`, with a nondegenerate ray and nonzero d.z.
@@ -407,8 +407,8 @@ discharge through `coverageLane: "fallsFlow"` under `render { lanes
 (`stretch / scale`), or the pattern visibly smears before it fades.
 
 **Frames.** As the other palette layers, an `Object` velocity is in the
-shader's frame: for a creation its engine frame, the author frame with x and z
-negated, so a creation whose author +Z is its flow authors `[0, 0, -speed]`; it
+shader's frame: for a creation its own frame, so a creation whose flow runs
+toward its front (−Z) authors `[0, 0, -speed]`; it
 turns with every placement and slot, and its pattern is placed as the
 weathering's is (world space on a static placement). `World` keeps both the
 velocity and the pattern in world space whatever the surface rides, so a

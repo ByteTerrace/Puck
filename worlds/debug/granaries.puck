@@ -256,7 +256,7 @@ prototypes {
         { color: "#3E2B1D", roughness: 0.75, specular: 0.08 }
         { color: "#D6A13E", metal: 0.85, roughness: 0.3, specular: 0.4 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       twoPedestalTable(0)
       // The board: a dark base the tiles' seams show, inside a dark rim flush with the tiles' faces.
       shape Box "base" {
@@ -266,45 +266,45 @@ prototypes {
       }
       shape Box "rim-north" {
         material: 1
-        position [0, 1.3275, 0.345]
+        position [0, 1.3275, -0.345]
         scale [0.385, 0.0275, 0.035]
       }
       shape Box "rim-south" {
         material: 1
-        position [0, 1.3275, -0.345]
+        position [0, 1.3275, 0.345]
         scale [0.385, 0.0275, 0.035]
       }
       shape Box "rim-east" {
         material: 1
-        position [0.345, 1.3275, 0]
+        position [-0.345, 1.3275, 0]
         scale [0.035, 0.0275, 0.31]
       }
       shape Box "rim-west" {
         material: 1
-        position [-0.345, 1.3275, 0]
+        position [0.345, 1.3275, 0]
         scale [0.035, 0.0275, 0.31]
       }
       // The lectern behind the board on the +Z edge, holding the screen.
       shape Box "lectern-foot" {
         material: 3
-        position [0, 1.312, 0.64]
+        position [0, 1.312, -0.64]
         scale [0.16, 0.012, 0.12]
       }
       shape Cylinder "lectern-stem" {
         material: 0
-        position [0, 1.44, 0.64]
+        position [0, 1.44, -0.64]
         scale [0.04, 0.14, 0.04]
       }
       shape Box "lectern-board" {
         material: 2
-        position [0, 1.58, 0.6]
-        rotation [-0.258819, 0, 0, 0.965926]
+        position [0, 1.58, -0.6]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.38, 0.22, 0.018]
       }
       shape Box "lectern-lip" {
         material: 3
-        position [0, 1.47, 0.5]
-        rotation [-0.258819, 0, 0, 0.965926]
+        position [0, 1.47, -0.5]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [0.38, 0.015, 0.03]
       }
     }
@@ -314,7 +314,7 @@ prototypes {
     document {
       name: "granaryTile"
       palette [{ color: "#6E7A52", roughness: 0.85, specular: 0.04 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "tile" {
         material: 0
         position [0, 0, 0]
@@ -327,25 +327,25 @@ prototypes {
     document {
       name: "granaryCursor"
       palette [{ color: granaryCursorColor, roughness: 0.4, specular: 0.3 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "near" {
-        material: 0
-        position [0, 0.0025, -0.0715]
-        scale [0.0775, 0.0025, 0.004]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0.0025, 0.0715]
         scale [0.0775, 0.0025, 0.004]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0.0025, -0.0715]
+        scale [0.0775, 0.0025, 0.004]
+      }
       shape Box "left" {
         material: 0
-        position [-0.0715, 0.0025, 0]
+        position [0.0715, 0.0025, 0]
         scale [0.004, 0.0025, 0.0675]
       }
       shape Box "right" {
         material: 0
-        position [0.0715, 0.0025, 0]
+        position [-0.0715, 0.0025, 0]
         scale [0.004, 0.0025, 0.0675]
       }
     }
@@ -366,7 +366,7 @@ prototypes {
         { color: "#2E9FD0", roughness: 0.3, specular: 0.3 }
         { color: "#174E6A" }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "water-marker" {
         position [0, 0.05, 0]
         scale [0.02, 0.05, 0.02]
@@ -378,7 +378,7 @@ prototypes {
         material: 1
       }
       shape Box "water-coverage-patch" {
-        position [(0.55 + granaryFirst), 0.0125, 0]
+        position [(0 - (0.55 + granaryFirst)), 0.0125, 0]
         scale: "state.granaryIrrigationPatch"
         material: 0
       }
@@ -392,7 +392,7 @@ prototypes {
         { color: "#E0B84C", roughness: 0.3, specular: 0.3 }
         { color: "#76551B" }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "power-marker" {
         position [0, 0.06, 0]
         scale [0.02, 0.06, 0.02]
@@ -404,7 +404,7 @@ prototypes {
         material: 1
       }
       shape Box "power-coverage-patch" {
-        position [((0 - granaryFirst) - 0.55), 0.0125, 0]
+        position [(0.55 - (0 - granaryFirst)), 0.0125, 0]
         scale: "state.granaryPowerPatch"
         material: 0
       }
@@ -424,7 +424,7 @@ template granaryStore(name, body, roof) {
         { color: "#513F33", roughness: 0.8 }
         { color: "#B4A283", roughness: 0.9 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "stone-foot" {
         material: 3
         position [0, 0.006, 0]
@@ -437,19 +437,19 @@ template granaryStore(name, body, roof) {
       }
       shape Box "roof-west" {
         material: 1
-        position [-0.027, 0.066, 0]
-        rotation [0, 0, 0.2419219, 0.9702957]
-        scale [0.034, 0.004, 0.054]
-      }
-      shape Box "roof-east" {
-        material: 1
         position [0.027, 0.066, 0]
         rotation [0, 0, -0.2419219, 0.9702957]
         scale [0.034, 0.004, 0.054]
       }
+      shape Box "roof-east" {
+        material: 1
+        position [-0.027, 0.066, 0]
+        rotation [0, 0, 0.2419219, 0.9702957]
+        scale [0.034, 0.004, 0.054]
+      }
       shape Box "door" {
         material: 2
-        position [0, 0.028, 0.0445]
+        position [0, 0.028, -0.0445]
         scale [0.016, 0.02, 0.002]
       }
     }

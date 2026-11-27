@@ -86,7 +86,7 @@ public class LspSugarTests {
     [InlineData("rule \"x\" {\nlocal amount = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
     [InlineData("let data = { exp|onent: 2.7 }\n")]
     [InlineData("schema: \"puck.cartridge.v1\"\nshape Box \"x\" { exp|onent: 2.7 }\n")]
-    [InlineData("schema: \"puck.creation.v1\"\nnoise { rough|ness: 0.5 }\n")]
+    [InlineData("schema: \"puck.creation.v2\"\nnoise { rough|ness: 0.5 }\n")]
     [Theory]
     public async Task HoverDoesNotInventOutOfScopeOrNonCodeSymbols(string source) {
         Assert.Null(@object: await LanguageServerClient.RequestAtAsync(
@@ -122,7 +122,7 @@ public class LspSugarTests {
     [InlineData("shape Superellipsoid \"stone\" { blend: Smooth|Union }", "blend: SmoothUnion", "SmoothUnion")]
     [Theory]
     public async Task HoverExplainsCreationFieldsInsideAWorldPrototype(string body, string field, string description) {
-        var source = (("schema: \"puck.world.definition.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v1\"\n" + body) + "\n} } }\n");
+        var source = (("schema: \"puck.world.definition.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v2\"\n" + body) + "\n} } }\n");
         var text = await LanguageServerClient.HoverAsync(markedSource: source);
 
         Assert.NotNull(@object: text);
@@ -193,7 +193,7 @@ public class LspSugarTests {
             expectedSubstring: description
         );
     }
-    [InlineData("schema: \"puck.creation.v1\"\nshape Box \"x\" { mat|erial: 0 }", "palette slot")]
+    [InlineData("schema: \"puck.creation.v2\"\nshape Box \"x\" { mat|erial: 0 }", "palette slot")]
     [InlineData("host { wi|dth: 1280 }", "width in pixels")]
     [InlineData("value: orbit(ya|w: 0deg)", "heading in radians")]
     [InlineData("value: setState(st|ate: \"hp\", value: 3)", "state row name")]

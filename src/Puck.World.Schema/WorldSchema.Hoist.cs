@@ -368,7 +368,7 @@ public static partial class WorldSchema {
                 );
             }
 
-            // A node carrying its own "$id" (an embedded document schema, puck.creation.v1) resolves its pointers
+            // A node carrying its own "$id" (an embedded document schema, puck.creation.v2) resolves its pointers
             // against that id, so it passes through whole: a leaf no def is hoisted out of.
             if (
                 (source is JsonObject island) &&

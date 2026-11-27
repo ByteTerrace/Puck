@@ -11,7 +11,7 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>A document composed over a basis refines one shape of the basis's creation by its name, carries only the
 /// members it writes, and a shape list that cannot tell its rows apart refuses instead of replacing the basis's.</summary>
 public sealed class ShapeRefinementLawTests {
-    private const string Creation = "      name: \"thing\"\n      schema: \"puck.creation.v1\"\n      palette [\n        { color: \"#9AA0A8\", roughness: 0.6, specular: 0.04, emissive: 0 }\n      ]\n";
+    private const string Creation = "      name: \"thing\"\n      schema: \"puck.creation.v2\"\n      palette [\n        { color: \"#9AA0A8\", roughness: 0.6, specular: 0.04, emissive: 0 }\n      ]\n";
 
     private static (JsonDocument Composed, DiagnosticBag Diagnostics) Compose(TemporaryDirectory files, string basis, string child) {
         _ = files.WriteText(name: "base.puck", text: (WorldSources.Header + basis));
