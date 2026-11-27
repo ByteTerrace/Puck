@@ -513,6 +513,34 @@ one says so:
   each admitted to the same remote authority under its own identity, and the
   four views together hold the 4070's frame bar.
 
+**The owner's order for the next session.** The owner set it in the session that closed the foundation campaign; it
+leads the list below until the owner changes it.
+
+1. [high] [The gallery's visual pass](visual-pass.md): rapid visual feedback in quick bursts on the RTX 4070, with
+   an authoring wall handed to a lane. In order: the tree's pathing and feel, then foliage, planters and decorations,
+   then the netting, a climbing wall and the windows. The stations are left alone.
+2. [high] The rendering walls the pass already knows ([the visual pass](visual-pass.md#walls-already-known)), on
+   the RTX 2060 machine:
+   - glass washing out, and the stair-stepped reflection streaks across glass, floors and piers;
+   - coloured light through glass;
+   - emitters too weak at night;
+   - the haze, the black smudge and the pier blotches.
+3. [high] [Card tables in the board game room](#card-tables-in-the-board-game-room): twelve game stations under
+   the work sheet ceiling. The ordered remainder (the chairs, chess, placing the twelve, room in the debug world) is
+   that packet's first item.
+4. [medium] The verification still owed from that session:
+   - the affine bounds lane's laws and its review-only skip review (`SdfMeshPathBake.Classify`, `FixedAffineForms`);
+   - a long sampled `puck test` run, to see whether the multi-GB growth the RTX 2060 measured survives the
+     search-restart fix (chess-tests 10.4 GB and freecell-tests 6.1 GB before it; the live worlds hold flat);
+   - the SDF field views, automatic relief (`worlds/debug/shade-relief-checks.puck`) and the cleanup lane's deliberate
+     look changes (valley relief masks, grouped trees, the gallery canopy's limbs), each seen live;
+   - a Vulkan boot of the batch.
+5. [medium] Unlanded branches to decide:
+   - `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7`: stopped by the owner; still in creation frame v1, so
+     each needs `puck migrate frame` before it can land;
+   - `lane/companion-v1`, `lane/g5` and `lane/toon-3`: older;
+   - the RTX 2060's `test/2060-*` capture branches, which are not meant to merge.
+
 **The bounds on the bars.** The route's frame-thread trace
 ([verification debts](#verification-debts), item 2) orders the remaining CPU work.
 
@@ -5763,6 +5791,9 @@ then Spider.
   per body (`fall-recovery` sweeps a region under the valley instead). A card drawn as a token placement a pile slot
   (as the chess pieces are) carries no body, but a slot's 53 faces as responses make the document large;
   weigh a placement whose shown creation is a cell's value without a response list.
+- [medium] A search judge that pulls in a clock-reading rule restarts every tick and never lands (the debug chess
+  table's demo rules did, until `chess-demo-hold` was gated `search(ply) == 0`). `world.search` shows
+  `lastRestart=clock`, but nothing warns at compile time; `WorldSearch` `JudgeRules` should name the rule.
 - [medium] The computer's search runs on the tick thread, bounded per step and only while `aiEnabled` (its side's turn,
   the game shown). Running it off the tick, over a copy of the job's rows, keeps a step from ever landing in a frame.
 - [low] A `rules "" when … { }` group drops a template call in its body without a word (the chess templates vanished
