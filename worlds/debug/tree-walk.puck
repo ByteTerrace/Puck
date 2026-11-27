@@ -4,17 +4,13 @@
 // emits no document. The benchmark route `tree-walk` (benchmark-route.puck) plays them as a player does, through seat
 // 1's own controls, and tree-walk-tests.puck plays that route headless and gates every waypoint.
 //
-// Every point is derived from the tree's own plan (gallery/layout.puck's `treeTreadPlan`, `treeBranchAt`,
-// `treeLimbs`, `galleryFloor`), in the building's frame and stood where the world stands the building
-// (`galleryWorld`), so the walk follows the tree when the tree changes.
+// Every point is derived from the tree's own plan (gallery/layout.puck's `treeTreadWalk`, `treeBranchAt`,
+// `treeBranchLanding`, `treeLimbs`, `galleryFloor`), in the building's frame and stood where the world stands the
+// building (`galleryWorld`), so the walk follows the tree when the tree changes.
 
 import "gallery/layout"
 import "../standard/paths"
 
-// How far out from the bark, in metres, the walk crosses each tread: inside the narrowest shelf's reach (a shelf reaches
-// 1.4 m less its wander), so a straight step from one waypoint to the next, which cuts the spiral's curve inward by
-// about 0.14 m over two treads, keeps the walker's 0.35 m radius clear of the bark.
-let treeWalkOut = 0.75
 // The walk takes a waypoint every `treeWalkTreadStride` treads: each step between two is still one riser at a time, and
 // every branch leaves from an even tread (`treeLimbs`), so each junction is a waypoint.
 let treeWalkTreadStride = 2
@@ -44,7 +40,7 @@ function treeWalkPoint(name, kind, plan, within, level = -1) = {
 function treeWalkTread(k) = treeWalkPoint(
   $"tread {k}",
   ((length(filter(treeLimbs, b => (b.tread == k))) > 0) ? "junction" : "tread"),
-  treeTreadPlan(k, treeWalkOut),
+  treeTreadWalk(k),
   treeWalkTreadWithin
 )
 // A branch's waypoints out from its junction to its landing on its balcony, and back.
@@ -53,7 +49,7 @@ function treeWalkOutAlong(b) = map(
   n => ((n == treeWalkBranchSamples) ? treeWalkPoint(
     $"level {b.level} {b.side} landing",
     "landing",
-    treeBranchAt(b, 1),
+    treeBranchLanding(b),
     treeWalkLandingWithin,
     b.level
   ) : treeWalkPoint(
@@ -80,14 +76,15 @@ function treeWalkTreads(from, to) = map(
   k => treeWalkTread(k)
 )
 
-// The bearing the walk comes in to the trunk on: half a tread round before the first, which runs between the roots
-// either side of the spiral's foot (tree.puck's `treeRootRows`), and a point on the nave floor that far out from the
-// bark on it. The walk starts three and a half metres out, facing the trunk (a heading of 90 degrees less the bearing:
-// heading 0 faces -z, the bearing turns from +x toward +z), and comes in to the trunk's foot.
-let treeWalkFootBearing = treeTreadAngle(-0.5)
-function treeWalkFloor(out) = ([treeX, galleryFloor[0], treeZ] +
-  polarPoint((treeTrunk.base + out), treeWalkFootBearing, 0))
-let treeWalkStart = treeWalkWorld(treeWalkFloor(3.5))
+// The bearing the walk comes in to the trunk on: a whole tread round before the first, so the foot stands on the floor
+// before the first riser (which lies half a tread before the first tread's bearing), between that riser and the root that
+// flanks the spiral's foot (tree.puck's `treeRootRows`). The walk starts on the nave floor `treeWalkApproach` metres
+// from the trunk's axis, facing it (a heading of 90 degrees less the bearing: heading 0 faces -z, the bearing turns from
+// +x toward +z), and comes in to the spiral's walking radius.
+let treeWalkFootBearing = treeTreadAngle(-1)
+let treeWalkApproach = 6.5
+function treeWalkFloor(radius) = ([treeX, galleryFloor[0], treeZ] + polarPoint(radius, treeWalkFootBearing, 0))
+let treeWalkStart = treeWalkWorld(treeWalkFloor(treeWalkApproach))
 let treeWalkStartYaw = (90 - treeWalkFootBearing)
 
 // The walk in sections, each a route chapter: the foot, then for each branch the climb to its junction and the branch
@@ -97,7 +94,7 @@ let treeWalkSections = concat(
   [
     {
       name: "the nave floor to the trunk's foot"
-      points [treeWalkPoint("trunk foot", "foot", treeWalkFloor(treeWalkOut), treeWalkTreadWithin)]
+      points [treeWalkPoint("trunk foot", "foot", treeWalkFloor(treeWalkRadius), treeWalkTreadWithin)]
     }
   ],
   flatMap(range(0, length(treeLimbs)), i => [
