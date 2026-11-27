@@ -240,7 +240,21 @@ piece. A curve holds at most `StateAdvance.MaxCurveCoefficients` coefficients
 and the result's after, so a chain past the bound is refused at the link that
 passes it at no more than that link's cost. The clock then has no curve:
 projection sends its value as ordinary updates, and the authority's own read
-(`ComputeCurrentValue`) is unchanged. Every curve inside the bound is exact.
+(`ComputeCurrentValue`) does not need the curve. Every curve inside the bound is
+exact. A rate's own coefficients and piece starts are bounded the same way: the
+validator refuses one past `StateAdvance.MaxCurveCoefficientBits`, and a
+projection anchor whose curve passes either bound is refused when a recipient
+parses it (`WorldClockAnchor.MaxCurveCoefficients`, `MaxCurveCoefficientBits`).
+
+The authority's exact read has its own bound, because it evaluates each link's
+polynomial at its parent's exact value, which grows by the link's degree. The
+validator refuses a chain whose exact value composes past degree
+`StateAdvance.MaxExactDegree`, the product of its links' `IntegralDegree` (one
+above the highest power of a shaped link's pieces, one for an unshaped link), so a
+document never meets the run-time guard. The guard covers a rate written into
+an arena afterwards: a parent whose exact value passes
+`StateAdvance.MaxExactValueBits` a part reads as unavailable, and its child holds
+its base, the same answer on every machine.
 
 ## Smooth a value for presentation
 

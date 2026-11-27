@@ -12,6 +12,15 @@ namespace Puck.State.Tests;
 /// </summary>
 public sealed class ClockCurveBoundLawTests {
     private const ulong EngineTick = 1000UL;
+    private const ulong ReadTick = (EngineTick * 7UL);
+
+    private static long ReadValue(IStateClockCells cells, StateClockCell cell) => cell.Advance!.ComputeCurrentValue(
+        baseValue: cell.Base,
+        cells: cells,
+        currentEngineTick: ReadTick,
+        epochEngineTick: 0L,
+        row: cell.Row
+    );
 
     // A chain of Fixed rows: "r0" advances on the engine's seconds and "r<n>" runs on "r<n-1>" with one rate piece whose
     // polynomial has `rateCoefficients` small coefficients, so each link integrates to degree `rateCoefficients`.
@@ -82,20 +91,82 @@ public sealed class ClockCurveBoundLawTests {
         Assert.True(condition: TryCurve(cells: Chain(links: 1, rateCoefficients: 8), row: "r1", curve: out _));
     }
     [Fact]
-    public void ACoefficientPastTheBitBound_IsRefusedAtLowDegree() {
-        // A rate whose own coefficient spells more bits than the bound makes a curve of degree one that is still refused.
+    public void ACoefficientPastTheBitBound_IsRefusedWhenTheShapeCompiles() {
+        // A rate coefficient that spells more bits than the bound is refused by name where the shape compiles, so no read
+        // ever evaluates it: the advance accumulates at its rate alone.
         var huge = (BigInteger.One << (StateAdvance.MaxCurveCoefficientBits + 8)).ToString();
-        var rows = new List<StateRow> {
-            Row(name: "r0", advance: new StateAdvance(PerSecondNumerator: 1L, PerSecondDenominator: 1L)),
-            Row(name: "r1", advance: new StateAdvance(
+        var pieces = new[] { new StateRatePiece(From: "0", Coefficients: [huge]) };
+
+        Assert.False(condition: StateAdvance.TryCompileShape(pieces: pieces, reason: out var reason, shape: out var shape));
+        Assert.Null(@object: shape);
+        Assert.Contains(expectedSubstring: "rate[0].coefficients[0]", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: nameof(StateAdvance.MaxCurveCoefficientBits), actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Null(@object: new StateAdvance(PerSecondNumerator: 1L, PerSecondDenominator: 1L, By: "r0", Rate: pieces).RateShape());
+    }
+    [Fact]
+    public void APieceStartPastTheBitBound_IsRefusedWhenTheShapeCompiles() {
+        var huge = (BigInteger.One << (StateAdvance.MaxCurveCoefficientBits + 8)).ToString();
+
+        Assert.False(condition: StateAdvance.TryCompileShape(pieces: [new StateRatePiece(From: $"1/{huge}", Coefficients: ["1"])], reason: out var reason, shape: out _));
+        Assert.Contains(expectedSubstring: "rate[0].from", actualString: reason, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void ACoefficientInsideTheBound_StillCompilesAtItsWidest() {
+        var widest = (BigInteger.One << (StateAdvance.MaxCurveCoefficientBits - 1)).ToString();
+
+        Assert.True(condition: StateAdvance.TryCompileShape(pieces: [new StateRatePiece(From: "0", Coefficients: [widest])], reason: out var reason, shape: out var shape), userMessage: reason);
+        Assert.NotNull(@object: shape);
+    }
+    [Fact]
+    public async Task TheExactRead_OfAChainOfShapedRates_ReturnsAndIsTheSameEachTime() {
+        // Each shaped link multiplies the size of the exact value it reads by about nine, so a chain of sixteen is past
+        // any memory unless the read bounds what it builds on. It answers, and answers the same value twice.
+        foreach (var links in new[] { 2, 4, 8, StateAdvance.MaxNestingDepth }) {
+            var cells = Chain(links: links, rateCoefficients: (StateAdvance.MaxRateDegree + 1));
+
+            Assert.True(condition: cells.TryClockCell(row: $"r{links}", cell: out var cell));
+
+            var read = Task.Run(
+                function: () => (
+                    First: ReadValue(cells: cells, cell: cell),
+                    Second: ReadValue(cells: cells, cell: cell),
+                    Turn: cell.Advance!.TurnAt(row: cell.Row, baseValue: cell.Base, cells: cells, currentEngineTick: ReadTick, epochEngineTick: 0L)
+                ),
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            var (first, second, _) = await read.WaitAsync(timeout: TimeSpan.FromSeconds(30), cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(expected: first, actual: second);
+        }
+    }
+    [Fact]
+    public void ThePastBoundParent_ReadsAsUnavailable_SoItsChildHoldsItsBase() {
+        // Three shaped links of nine coefficients take the exact value past the bound, so the fourth reads a parent it
+        // cannot build on and holds its base, while a chain inside the bound is read exactly.
+        var cells = Chain(links: 4, rateCoefficients: (StateAdvance.MaxRateDegree + 1));
+
+        Assert.True(condition: StateAdvance.TryReadExactClock(cells: cells, depth: 0, engineTick: ReadTick, row: "r3", value: out var third));
+        Assert.False(condition: third.FitsBits(maxBits: StateAdvance.MaxExactValueBits));
+        Assert.True(condition: cells.TryClockCell(row: "r4", cell: out var cell));
+        Assert.Equal(expected: cell.Base, actual: ReadValue(cells: cells, cell: cell));
+
+        var small = Chain(links: 2, rateCoefficients: 3);
+
+        Assert.True(condition: small.TryClockCell(row: "r2", cell: out var near));
+        Assert.NotEqual(expected: near.Base, actual: ReadValue(cells: small, cell: near));
+    }
+    [Fact]
+    public void TheIntegralDegree_IsOneAboveTheHighestPiece() {
+        Assert.Equal(expected: 1, actual: new StateAdvance(PerSecondNumerator: 1L, PerSecondDenominator: 1L).IntegralDegree());
+        Assert.Equal(expected: 1, actual: new StateAdvance(PerSecondNumerator: 1L, PerSecondDenominator: 1L, By: "r0").IntegralDegree());
+        Assert.Equal(
+            expected: (StateAdvance.MaxRateDegree + 1),
+            actual: new StateAdvance(
                 PerSecondNumerator: 1L,
                 PerSecondDenominator: 1L,
                 By: "r0",
-                Rate: [new StateRatePiece(From: "0", Coefficients: [huge])]
-            )),
-        };
-
-        Assert.False(condition: TryCurve(cells: new StateRowClockCells(rows: rows), row: "r1", curve: out var curve));
-        Assert.True(condition: curve.IsZero);
+                Rate: [new StateRatePiece(From: "0", Coefficients: [.. Enumerable.Repeat(element: "1", count: (StateAdvance.MaxRateDegree + 1))])]
+            ).IntegralDegree()
+        );
     }
 }
