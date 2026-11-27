@@ -2005,7 +2005,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
     // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
-    // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
+    // running, whose done line then covers it. A bake whose accounts never opened reports no done line (SettleCompletion).
     private void BeginAccounts(string cause, bool fresh, int instances, long restarted, PlaceCounts started) {
         var begun = (((started.Baking + started.Loading) + started.Shared) + started.Joined);
 
@@ -2025,7 +2025,6 @@ public sealed partial class SdfMeshPathBake {
             m_loadsQueued += started.Loading;
             if ((started.Loading > 0) && (m_loadFirst == 0)) { m_loadFirst = restarted; }
         }
-        if (m_clock.IsRunning) { Finish(); }
     }
     // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
     // materials, or, for a dynamic group, the same form and materials, which are the same shapes in another relative pose,
@@ -2206,7 +2205,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Next = null;
                 group.Done = true;
                 group.Mesh = null;
-                Finish();
                 return;
             }
 
@@ -2527,7 +2525,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Next = null;
                 group.Done = true;
                 group.Mesh = null;
-                Finish();
             } else {
                 final.Answered = 0;
                 group.Next = FinalChunk(final: final, group: group);
@@ -2715,7 +2712,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Outcome = ((contour is null) ? "contour refused" : "contour empty");
                 group.Done = true;
                 group.Mesh = null;
-                Finish();
                 return;
             }
             group.Contour = contour;
@@ -3075,7 +3071,6 @@ public sealed partial class SdfMeshPathBake {
 
             group.Points.Resize(0);
             group.PointMaterials.Resize(0);
-            Finish();
         }
     }
     // Takes a group's mesh from the library's store; a group whose entry the store refuses or no longer holds bakes from
@@ -3121,7 +3116,6 @@ public sealed partial class SdfMeshPathBake {
             group.Stored = true;
             if (mesh is null) { group.FoundNoSurface(how: ", as stored before"); }
             Draw(group: group, mesh: mesh);
-            Finish();
         }
     }
     // Makes a group's new mesh its product. A group rebaking after an edit keeps drawing its previous mesh until this
@@ -3141,11 +3135,16 @@ public sealed partial class SdfMeshPathBake {
         if (mesh is not null) { m_landedRungs.Add(item: (group.Shape, group.Tier)); }
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
-    // Records the bake's wall time once its last group finishes, and reports it.
-    private void Finish() {
-        Follow();
-        if (DoneThrough() < m_groups.Count) { return; }
-        if (m_reported) { return; }
+    // Finishes the followers of the leaders done since it last ran (Follow), then records the bake's wall time once every
+    // group is done, and reports it: the done line of the work its accounts opened (BeginAccounts), once.
+    //
+    // Invariant: a bake whose accounts are open and whose groups are all done reports, whatever path made the last group
+    // done (a landing, a load, a library take a replacement starts with, a replacement given back, an evicted floor, a
+    // follower). Every change to a group happens under the gate, and GateScope.Dispose, the one release of the gate, calls
+    // this before it publishes what the bake owes, so no path that changes a group can skip it. Under the gate.
+    private void SettleCompletion() {
+        if (m_followable.Count > 0) { Follow(); }
+        if (m_reported || !m_clock.IsRunning || (DoneThrough() < m_groups.Count)) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
         // The large pool keeps its arrays past the bake: a world in play restarts a bake at every program change, in each

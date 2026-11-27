@@ -92,6 +92,8 @@ public sealed partial class SdfMeshPathBake {
     // take's batch, the groups waiting on a dispatch, in flight and on the workers, and the frame thread's waits on the
     // bake's gate, which show a worker holding it through array-sized work as frame time.
     private readonly SdfMeshBakeReport.Accounts m_accounts = new();
+    // How deep the thread holding the gate has entered it (the gate is reentrant). Read and written only under the gate.
+    private int m_gateDepth;
 
     // Takes the gate on the frame thread, counting the wait.
     private GateScope EnterFrameGate(SdfMeshBakeReport.Gate site) {
@@ -126,6 +128,7 @@ public sealed partial class SdfMeshPathBake {
             m_entered = Stopwatch.GetTimestamp();
             m_nested = owner.m_accounts.GateNestedTicks;
             Waited = waited;
+            owner.m_gateDepth++;
             SdfMeshBakeReport.GateEntered();
         }
 
@@ -142,6 +145,9 @@ public sealed partial class SdfMeshPathBake {
         }
         public void Dispose() {
             m_owner.m_accounts.GateHeld(held: HeldAt(now: Stopwatch.GetTimestamp()), site: m_site, waited: Waited);
+            // Only the outermost hold settles: a nested entry (a property read inside a restart) leaves while the
+            // section that holds the gate may still be rebuilding the group list.
+            if (--m_owner.m_gateDepth == 0) { m_owner.SettleCompletion(); }
             m_owner.PublishOwing();
             m_scope.Dispose();
             SdfMeshBakeReport.GateLeft();
@@ -332,7 +338,6 @@ public sealed partial class SdfMeshPathBake {
                         m_accounts.SamplesSaved += share.Samples;
                     }
                 }
-                Finish();
                 return;
             }
             if (share is not null) {
@@ -499,7 +504,6 @@ public sealed partial class SdfMeshPathBake {
             group.Outcome = $"failed: {exception.GetType().Name}";
             group.Next = null;
             group.Done = true;
-            Finish();
         }
     }
     // The pool's queued stages, every residency's.

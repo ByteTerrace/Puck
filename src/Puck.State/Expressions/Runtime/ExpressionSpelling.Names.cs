@@ -45,14 +45,22 @@ public static partial class ExpressionSpelling {
             text: name
         ) == name.Length) && (name.Length > 0) && name is not ("not" or "and" or "or"));
     /// <summary>Whether a name can be spelled at all: a name the bare form cannot carry is backquoted, and the
-    /// backquoted form has no escape, so a name is spelled exactly when it is nonempty and holds no backquote. Every
-    /// <see cref="CellName"/> is one; an expression operand naming anything else is refused where it is built.</summary>
+    /// backquoted form has no escape, so a name is spelled exactly when it is nonempty and either scans bare whole (a
+    /// reserved name's live-zone group carries its index's backquotes inside its brackets) or holds no backquote.
+    /// Every <see cref="CellName"/> is one; an expression operand naming anything else is refused where it is
+    /// built.</summary>
     /// <param name="name">The name.</param>
     /// <returns><see langword="true"/> when the name prints bare or backquoted and reads back as itself.</returns>
     public static bool IsSpelledName(string name) {
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        return ((name.Length > 0) && !name.Contains(value: '`'));
+        return (
+            (name.Length > 0) &&
+            (!name.Contains(value: '`') || (ScanBareName(
+                start: 0,
+                text: name
+            ) == name.Length))
+        );
     }
     /// <summary>Whether this name belongs to a function, fold, vector function, or board query in call position.
     /// Without parentheses the same name resolves as a value.</summary>

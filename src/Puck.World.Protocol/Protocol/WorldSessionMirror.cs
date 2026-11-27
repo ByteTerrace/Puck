@@ -556,17 +556,8 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
 
     private static WorldBodyContactMode[] CompileBodyContacts(WorldDefinition definition) =>
         definition.Kits.Select(selector: static kit => kit.BodyContact).ToArray();
-    private static FixedWorldCollider?[] CompileColliders(WorldDefinition definition) {
-        var colliders = new FixedWorldCollider?[definition.Kits.Count];
-
-        for (var index = 0; (index < colliders.Length); index++) {
-            colliders[index] = FixedWorldCollider.Compile(
-                collider: definition.Kits[index].Collider,
-                creations: definition.Creations
-            );
-        }
-        return colliders;
-    }
+    private static FixedWorldCollider?[] CompileColliders(WorldDefinition definition) =>
+        FixedWorldCollider.CompileEach(creations: definition.Creations, kits: definition.Kits);
     private static bool SnapshotContains(in WorldSnapshot snapshot, in WorldEntityAddress entity) {
         if (!string.Equals(
             a: snapshot.Authority,
