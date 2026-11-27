@@ -1155,6 +1155,7 @@
         {"vocabulary": "expression", "operation": "CycleDistance", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
         {"vocabulary": "expression", "operation": "SmallestMissing", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
         {"vocabulary": "expression", "operation": "IsPrime", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
+        {"vocabulary": "expression", "operation": "Hash", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
         {"vocabulary": "expression", "operation": "PrimeAt", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
         {"vocabulary": "expression", "operation": "BinomialCoefficient", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},
         {"vocabulary": "expression", "operation": "Factorial", "numericKinds": ["Int"], "shapeParameters": [], "kernel": "state.expression.function"},

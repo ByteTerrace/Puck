@@ -880,15 +880,24 @@ public static partial class RuleCompiler {
     /// <param name="malformed">The refusal category for an undeclared or text row.</param>
     /// <param name="channel">The authored spelling, for refusal text.</param>
     /// <returns>The declared row.</returns>
-    public static StateRowDeclaration ResolveNumericRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel) => ResolveRequiredRow(
-        channel: channel,
-        context: context,
-        malformed: malformed,
-        name: name,
-        requireKeyed: requireKeyed,
-        requireNumeric: true,
-        ruleName: ruleName
-    );
+    public static StateRowDeclaration ResolveNumericRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel) {
+        var row = ResolveRequiredRow(
+            channel: channel,
+            context: context,
+            malformed: malformed,
+            name: name,
+            requireKeyed: requireKeyed,
+            requireNumeric: true,
+            ruleName: ruleName
+        );
+
+        // A tally's cells are its engine-owned table: a reduction, a board or a pattern over them reads no count.
+        if (row.EffectiveDomain is StateDomain.Tally) {
+            throw new RuleException(detail: $"'{channel}' reads tally '{name}' whole — a tally is read one count at a time, '{name}[key]'", refusal: malformed, ruleName: ruleName);
+        }
+
+        return row;
+    }
     /// <summary>Resolves the catalog ordinal of a declared row, recording a host-owned row on the rule's needs.</summary>
     /// <param name="context">The compile context.</param>
     /// <param name="name">The row name.</param>

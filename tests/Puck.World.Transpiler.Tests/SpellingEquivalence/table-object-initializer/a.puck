@@ -1,0 +1,11 @@
+// A table initialized with an object is its members written as cells, in order.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let base = { apple: 2, pear: 3 }
+
+state {
+  world {
+    table prices = base with { plum: 5 }
+  }
+}

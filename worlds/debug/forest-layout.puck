@@ -8,10 +8,11 @@ let forestGlades = [
   { x: 65, z: -168, rx: 10, rz: 8 }
   { x: 12, z: -181, rx: 8, rz: 6 }
 ]
-function forestInGlade(x, z, margin = 0) = reduce(forestGlades, false, (inside, g) => inside or
-  (x - g.x) * (x - g.x) / ((g.rx + margin) * (g.rx + margin)) +
-    (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) <
-    1)
+function forestInGlade(x, z, margin = 0) = any(forestGlades, g => (x - g.x) *
+  (x - g.x) /
+  ((g.rx + margin) * (g.rx + margin)) +
+  (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) <
+  1)
 function forestInBelt(x, z, margin = 0) = x * x + z * z >
   (130 - margin + 2.5 * sine(x * 0.09)) * (130 - margin + 2.5 * sine(x * 0.09)) and x * x + z * z < (192 +
   margin +

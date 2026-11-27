@@ -316,4 +316,9 @@ public enum ExpressionOp : byte {
     Or,
     /// <summary>Truth negation. Zero and absence are false; other numeric values are true.</summary>
     Not,
+    /// <summary>A deterministic 64-bit hash of two integers, order-sensitive: the FNV-1a fold of both words, least
+    /// significant byte first, finished by SplitMix64's invertible mixer (Int). <c>hash(a, b, c, …)</c> is spelled as
+    /// one call and is <c>hash(hash(a, b), c, …)</c>, so a tuple of any length hashes through one instruction per
+    /// word after the first.</summary>
+    Hash,
 }

@@ -165,6 +165,71 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
 
         return result;
     }
+    /// <summary>Returns the degree <see cref="Compose"/> gives, without composing: the product of the two degrees, zero
+    /// when either polynomial is constant or zero. A caller that bounds a curve's size asks this before the Horner
+    /// expansion, whose cost and coefficient size grow with it.</summary>
+    /// <param name="inner">The inner polynomial.</param>
+    /// <returns>The composition's degree, or zero for a composition that is constant or zero.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="inner"/> is <see langword="null"/>.</exception>
+    public long ComposedDegree(RationalPolynomial inner) {
+        ArgumentNullException.ThrowIfNull(argument: inner);
+
+        return (((Degree <= 0) || (inner.Degree <= 0))
+            ? 0L
+            : (((long)Degree) * inner.Degree)
+        );
+    }
+    /// <summary>Tests whether the polynomial stays within a degree and a coefficient size, the two quantities an exact
+    /// evaluation or composition costs by.</summary>
+    /// <param name="maxDegree">The highest degree allowed.</param>
+    /// <param name="maxBits">The most bits a coefficient's reduced numerator or denominator may take
+    /// (<see cref="Rational.FitsBits"/>).</param>
+    /// <returns><see langword="true"/> when the degree and every coefficient are within bounds.</returns>
+    public bool Fits(int maxDegree, int maxBits) {
+        if (Degree > maxDegree) { return false; }
+
+        foreach (var coefficient in m_coefficients) {
+            if (!coefficient.FitsBits(maxBits: maxBits)) { return false; }
+        }
+
+        return true;
+    }
+    /// <summary>Tests, without evaluating, whether the polynomial's value at every whole number from zero to a bound has a
+    /// reduced numerator and denominator within a number of bits (<see cref="Rational.FitsBits"/>). The test is
+    /// sufficient and not necessary: over the common denominator <c>D</c> of the coefficients the value at <c>x</c> is
+    /// <c>P(x) / D</c> with <c>P</c> integral, so the reduced denominator is at most <c>D</c> and the reduced numerator at
+    /// most <c>|P(x)|</c>, which the sum of the coefficients' magnitudes times powers of the bound caps.</summary>
+    /// <param name="maxArgument">The greatest argument, zero or greater.</param>
+    /// <param name="maxBits">The most bits either part of a value may take.</param>
+    /// <returns><see langword="true"/> when every value at a whole argument in <c>[0, maxArgument]</c> is proven to
+    /// fit; <see langword="false"/> when one may not.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxArgument"/> is negative.</exception>
+    public bool ValuesFitBits(BigInteger maxArgument, int maxBits) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: maxArgument);
+
+        var denominator = BigInteger.One;
+
+        foreach (var coefficient in m_coefficients) {
+            var next = coefficient.Denominator;
+
+            denominator = ((denominator / BigInteger.GreatestCommonDivisor(left: denominator, right: next)) * next);
+
+            if (denominator.GetBitLength() > maxBits) { return false; }
+        }
+
+        var bound = BigInteger.Zero;
+        var power = BigInteger.One;
+
+        foreach (var coefficient in m_coefficients) {
+            bound += ((BigInteger.Abs(value: coefficient.Numerator) * (denominator / coefficient.Denominator)) * power);
+
+            if (bound.GetBitLength() > maxBits) { return false; }
+
+            power *= maxArgument;
+        }
+
+        return true;
+    }
     /// <summary>Returns the derivative, by the power rule.</summary>
     /// <returns>The derivative; the zero polynomial for a constant.</returns>
     public RationalPolynomial Derivative() => new(trimmed: DerivativeOf(coefficients: m_coefficients));

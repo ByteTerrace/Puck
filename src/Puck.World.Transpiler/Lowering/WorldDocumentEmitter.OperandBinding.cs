@@ -22,22 +22,25 @@ public static partial class WorldDocumentEmitter {
     // operand's root is a row, a runtime name or a binding holding a name, all of which address state instead.
     private static JsonNode? CompileTimeRead(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTimeRead(operand: operand);
-    // The operand with its value functions inlined (OperandBinder.Inline) and what its compile-time constants decide
-    // folded (OperandBinder.Fold), or itself when neither changes it.
+    // The operand with its value functions inlined (OperandBinder.Inline), its folds over compile-time lists and its
+    // lets written out (OperandBinder.Expand) and what its compile-time constants decide folded (OperandBinder.Fold),
+    // or itself when none changes it. The result names nothing but the scope's own bindings, so binding it again with
+    // a fresh binder reads it the same.
     private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) {
         if ((operand.Form != DocumentValueForm.Expression) || (operand.Syntax is not { } syntax)) {
             return operand;
         }
         var binder = new OperandBinder(scope: scope);
         var inlined = binder.Inline(node: syntax, operand: operand);
-        var folded = binder.Fold(node: inlined, operand: operand);
+        var expanded = binder.Expand(node: inlined, operand: operand);
+        var folded = binder.Fold(node: expanded, operand: operand);
 
         return (ReferenceEquals(objA: folded, objB: syntax)
             ? operand
             : PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value), .. binder.InlinedAtoms], original: operand, syntax: folded));
     }
 
-    private sealed class OperandBinder(DocumentScope scope) {
+    private sealed partial class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
         private readonly List<InterpolatedStringNode> m_inlinedAtoms = [];
 
@@ -50,18 +53,9 @@ public static partial class WorldDocumentEmitter {
         internal Syntax.SyntaxNode Inline(Syntax.SyntaxNode node, OperandExpressionNode operand) {
             return (CallsFunction(node: node) ? Splice(current: node) : node);
 
-            Syntax.SyntaxNode Splice(Syntax.SyntaxNode current) => current switch {
-                Syntax.SourceCall call when (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is { } function) => Expand(call: call, function: function),
-                Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = Splice(current: argument.Value) })] },
-                Syntax.SourceGroup group => group with { Value = Splice(current: group.Value) },
-                Syntax.SourceIndex index => index with { Target = Splice(current: index.Target), Index = Splice(current: index.Index) },
-                Syntax.SourceAccess access => access with { Target = Splice(current: access.Target) },
-                Syntax.SourceLambda lambda => lambda with { Body = Splice(current: lambda.Body) },
-                Syntax.Unary unary => unary with { Operand = Splice(current: unary.Operand) },
-                Syntax.Binary binary => binary with { Left = Splice(current: binary.Left), Right = Splice(current: binary.Right) },
-                Syntax.Ternary ternary => new Syntax.Ternary(Condition: Splice(current: ternary.Condition), WhenTrue: Splice(current: ternary.WhenTrue), WhenFalse: Splice(current: ternary.WhenFalse)),
-                _ => current,
-            };
+            Syntax.SyntaxNode Splice(Syntax.SyntaxNode current) => (((current is Syntax.SourceCall call) && (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is { } function))
+                ? Expand(call: call, function: function)
+                : Syntax.MapSourceChildren(map: Splice, node: current));
             Syntax.SyntaxNode Expand(Syntax.SourceCall call, FunctionExpressionNode function) {
                 if (DocumentLowering.BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: operand.Span) is not { } bound) {
                     return new Syntax.Literal(Value: 0m);
@@ -98,44 +92,20 @@ public static partial class WorldDocumentEmitter {
             }
         }
 
-        private bool CallsFunction(Syntax.SyntaxNode node) => node switch {
-            Syntax.SourceCall call => ((DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is not null) || call.Arguments.Any(predicate: argument => CallsFunction(node: argument.Value))),
-            Syntax.SourceGroup group => CallsFunction(node: group.Value),
-            Syntax.SourceIndex index => (CallsFunction(node: index.Target) || CallsFunction(node: index.Index)),
-            Syntax.SourceAccess access => CallsFunction(node: access.Target),
-            Syntax.SourceLambda lambda => CallsFunction(node: lambda.Body),
-            Syntax.Unary unary => CallsFunction(node: unary.Operand),
-            Syntax.Binary binary => (CallsFunction(node: binary.Left) || CallsFunction(node: binary.Right)),
-            Syntax.Ternary ternary => (CallsFunction(node: ternary.Condition) || CallsFunction(node: ternary.WhenTrue) || CallsFunction(node: ternary.WhenFalse)),
-            _ => false,
-        };
+        private bool CallsFunction(Syntax.SyntaxNode node) => (((node is Syntax.SourceCall call) && (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is not null)) ||
+            Syntax.SourceChildren(node: node).Any(predicate: CallsFunction));
         // A parameter's every bare reading becomes its argument, grouped unless the argument is a primary, so an
-        // argument's operators keep their own precedence; a lambda binder of the same name shadows it.
+        // argument's operators keep their own precedence; a lambda binder or a let of the same name shadows it.
         private static Syntax.SyntaxNode Substitute(Syntax.SyntaxNode node, IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments) => node switch {
             Syntax.SourceName { Quoted: false } name when arguments.TryGetValue(key: name.Name, value: out var argument) =>
                 ((argument is Syntax.Literal or Syntax.SourceName or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : new Syntax.SourceGroup(Value: argument)),
-            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Substitute(arguments: arguments, node: item.Value) })] },
-            Syntax.SourceGroup group => group with { Value = Substitute(arguments: arguments, node: group.Value) },
-            Syntax.SourceIndex index => index with { Target = Substitute(arguments: arguments, node: index.Target), Index = Substitute(arguments: arguments, node: index.Index) },
-            Syntax.SourceAccess access => access with { Target = Substitute(arguments: arguments, node: access.Target) },
-            Syntax.SourceLambda lambda => lambda with { Body = Substitute(arguments: (arguments.ContainsKey(key: lambda.Binder) ? arguments.Where(predicate: pair => (pair.Key != lambda.Binder)).ToDictionary(comparer: StringComparer.Ordinal) : arguments), node: lambda.Body) },
-            Syntax.Unary unary => unary with { Operand = Substitute(arguments: arguments, node: unary.Operand) },
-            Syntax.Binary binary => binary with { Left = Substitute(arguments: arguments, node: binary.Left), Right = Substitute(arguments: arguments, node: binary.Right) },
-            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Substitute(arguments: arguments, node: ternary.Condition), WhenTrue: Substitute(arguments: arguments, node: ternary.WhenTrue), WhenFalse: Substitute(arguments: arguments, node: ternary.WhenFalse)),
-            _ => node,
+            Syntax.SourceLambda lambda when arguments.ContainsKey(key: lambda.Binder) => lambda with { Body = Substitute(arguments: Without(arguments: arguments, name: lambda.Binder), node: lambda.Body) },
+            Syntax.SourceLet let when arguments.ContainsKey(key: let.Name) => let with { Value = Substitute(arguments: arguments, node: let.Value), Body = Substitute(arguments: Without(arguments: arguments, name: let.Name), node: let.Body) },
+            _ => Syntax.MapSourceChildren(map: child => Substitute(arguments: arguments, node: child), node: node),
         };
-        private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : node switch {
-            Syntax.SourceAtom atom => atom with { Index = (atom.Index + offset) },
-            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Renumber(node: item.Value, offset: offset) })] },
-            Syntax.SourceGroup group => group with { Value = Renumber(node: group.Value, offset: offset) },
-            Syntax.SourceIndex index => index with { Target = Renumber(node: index.Target, offset: offset), Index = Renumber(node: index.Index, offset: offset) },
-            Syntax.SourceAccess access => access with { Target = Renumber(node: access.Target, offset: offset) },
-            Syntax.SourceLambda lambda => lambda with { Body = Renumber(node: lambda.Body, offset: offset) },
-            Syntax.Unary unary => unary with { Operand = Renumber(node: unary.Operand, offset: offset) },
-            Syntax.Binary binary => binary with { Left = Renumber(node: binary.Left, offset: offset), Right = Renumber(node: binary.Right, offset: offset) },
-            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Renumber(node: ternary.Condition, offset: offset), WhenTrue: Renumber(node: ternary.WhenTrue, offset: offset), WhenFalse: Renumber(node: ternary.WhenFalse, offset: offset)),
-            _ => node,
-        });
+        private static Dictionary<string, Syntax.SyntaxNode> Without(IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments, string name) =>
+            arguments.Where(predicate: pair => (pair.Key != name)).ToDictionary(comparer: StringComparer.Ordinal);
+        private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : Syntax.MapSourceAtoms(map: index => (index + offset), node: node));
 
         private HashSet<string>? m_derived;
         private string? m_binder;
@@ -383,6 +353,14 @@ public static partial class WorldDocumentEmitter {
                     Write(lambda.Body, DocumentValueForm.Expression, operand);
                     m_binder = previous;
                     break;
+                // Expand leaves a list only where nothing folds it, and no rule value holds one.
+                case Syntax.SourceList or Syntax.SourceLet:
+                    Refuse(message: DiagnosticText.Compose(
+                        fix: "Fold the list with sum, count, any, all, minimum, maximum or first, or read one element with a compile-time index",
+                        problem: "A list is known only at compile time, and a rule value is one number, name or text"
+                    ), span: operand.Span);
+                    m_text.Append(value: '0');
+                    break;
                 default:
                     throw new InvalidOperationException(message: $"Unexpected operand syntax {node.GetType().Name}.");
             }
@@ -606,17 +584,7 @@ public static partial class WorldDocumentEmitter {
         // locals, so they win over a local of the same name.
         private bool IsRuntimeName(string name) => ((name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name) ||
             ((Syntax.CurrentLocals?.Contains(item: name) == true) && !scope.RuleBinders.Contains(item: name)));
-        private bool HasRuntimeRoot(Syntax.SyntaxNode node) {
-            while (true) {
-                switch (node) {
-                    case Syntax.SourceAccess access: node = access.Target; break;
-                    case Syntax.SourceIndex index: node = index.Target; break;
-                    default:
-                        return ((node is Syntax.SourceName { Quoted: false } name) &&
-                        IsRuntimeName(name: name.Name));
-                }
-            }
-        }
+        private bool HasRuntimeRoot(Syntax.SyntaxNode node) => ((Root(node: node) is Syntax.SourceName { Quoted: false } name) && IsRuntimeName(name: name.Name));
         private bool HasBoundRoot(Syntax.SyntaxNode node) {
             if (HasRuntimeRoot(node: node)) { return false; }
             // A binding a key or member is read through that holds a name (a template parameter or loop variable
@@ -641,7 +609,7 @@ public static partial class WorldDocumentEmitter {
             Syntax.SourceName { Quoted: true } name => new LiteralExpressionNode(name.Name),
             Syntax.SourceName name => new IdentifierExpressionNode(name.Name, Offset: operand.Offset, Length: operand.Length, Line: operand.Line, Column: operand.Column),
             Syntax.SourceString text => new LiteralExpressionNode(text.Value),
-            Syntax.SourceAtom atom => operand.Atoms[atom.Index].Value,
+            Syntax.SourceAtom atom => AtomAt(index: atom.Index, operand: operand),
             Syntax.SourceAccess access when ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out _)) => new IdentifierExpressionNode(qualified),
             Syntax.SourceAccess access when (InstanceName(node: access) is { } instanceName) => new LiteralExpressionNode(instanceName),
             Syntax.SourceAccess access => new IndexExpressionNode(ToCompileTime(node: access.Target, operand: operand), new LiteralExpressionNode(access.Member)),
@@ -650,6 +618,9 @@ public static partial class WorldDocumentEmitter {
             Syntax.Binary binary => new BinaryExpressionNode(ToCompileTime(node: binary.Left, operand: operand), binary.Operator, ToCompileTime(node: binary.Right, operand: operand)),
             Syntax.Ternary ternary => new ConditionalExpressionNode(ToCompileTime(node: ternary.Condition, operand: operand), ToCompileTime(node: ternary.WhenTrue, operand: operand), ToCompileTime(node: ternary.WhenFalse, operand: operand)),
             Syntax.SourceCall call => new CallExpressionNode(call.Name, [.. call.Arguments.Select(selector: argument => new ArgumentNode(argument.Name, ToCompileTime(node: argument.Value, operand: operand)))]),
+            Syntax.SourceList list => new ArrayExpressionNode([.. list.Items.Select(selector: item => ToCompileTime(node: item, operand: operand))]),
+            Syntax.SourceLambda lambda => new LambdaExpressionNode([lambda.Binder], ToCompileTime(node: lambda.Body, operand: operand)),
+            Syntax.SourceLet let => new LetExpressionNode(let.Name, ToCompileTime(node: let.Value, operand: operand), ToCompileTime(node: let.Body, operand: operand)),
             _ => RefuseCompileTime(operand: operand),
         };
         private LiteralExpressionNode RefuseCompileTime(OperandExpressionNode operand) {

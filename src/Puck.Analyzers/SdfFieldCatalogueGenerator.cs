@@ -284,28 +284,39 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
 
         // The box walk's side: each formula's affine overload (SdfFormula's affine lowering over FixedAffineForm), and a
         // dispatch over the entries that have one; an entry without one answers the unbounded form, and the box walk
-        // takes its interval rule there.
-        var affines = SdfFormula.EmitAllFixedAffine(out var affineCovered, formulas.Select(static item => item.Formula).Distinct().ToArray());
-        void AffineSwitch(string signature, string subject, string property, string fallback, Func<SdfFormula, bool>? admits = null) {
+        // takes its interval rule there. Each dispatch comes twice: over the instruction's raws, and over its parameter
+        // enclosures (the Enclosed dispatches, SdfFormula's THE ENCLOSED READING) for an instruction whose floats lie off
+        // the raw grid.
+        var affines = SdfFormula.EmitAllFixedAffine(out var affineCovered, out var affineEnclosed, formulas.Select(static item => item.Formula).Distinct().ToArray());
+        void AffineSwitch(string signature, string subject, string property, string fallback, bool enclosed, Func<SdfFormula, bool>? admits = null) {
+            var held = (enclosed ? affineEnclosed : affineCovered);
             source.AppendLine($"    private static {signature} => {subject} switch {{");
-            foreach (var (entry, _, formula) in formulas.Where(item => item.Property == property && affineCovered.Contains(item.Formula) && admits?.Invoke(item.Formula) != false)) {
-                source.AppendLine($"        {discriminator}.{entry.Name} => {formula.Dispatch(shader: false)},");
+            foreach (var (entry, _, formula) in formulas.Where(item => item.Property == property && held.Contains(item.Formula) && admits?.Invoke(item.Formula) != false)) {
+                source.AppendLine($"        {discriminator}.{entry.Name} => {(enclosed ? formula.DispatchEnclosed() : formula.Dispatch(shader: false))},");
             }
             source.AppendLine($"        _ => {fallback},");
             source.AppendLine("    };");
         }
+        static bool MapsPoint(SdfFormula formula) => formula.ResultType == SdfFormulaType.Vector3;
+        static bool EditsField(SdfFormula formula) => formula.ResultType == SdfFormulaType.Scalar && !formula.FixedState("weight").Any();
         switch (discriminator) {
             case "SdfShapeType":
-                AffineSwitch("FixedAffineForm EvaluateShape(in CompiledInstruction instruction, FixedAffineForm3 p, ref PowerWork powerWork)", "((SdfShapeType)instruction.Shape)", "Formula", "FixedAffineForm.Entire");
+                foreach (var enclosed in new[] { false, true }) {
+                    AffineSwitch($"FixedAffineForm EvaluateShape{(enclosed ? "Enclosed" : "")}(in CompiledInstruction instruction, FixedAffineForm3 p, ref PowerWork powerWork)", "((SdfShapeType)instruction.Shape)", "Formula", "FixedAffineForm.Entire", enclosed);
+                }
                 break;
             case "SdfBlendOp":
-                AffineSwitch("FixedAffineForm BlendShape(FixedAffineForm current, FixedAffineForm candidate, uint blend, FixedQ4816 smoothRadius, FixedQ4816 operand)", "((SdfBlendOp)blend)", "Formula", "FixedAffineForm.Entire");
+                AffineSwitch("FixedAffineForm BlendShape(FixedAffineForm current, FixedAffineForm candidate, uint blend, FixedQ4816 smoothRadius, FixedQ4816 operand)", "((SdfBlendOp)blend)", "Formula", "FixedAffineForm.Entire", enclosed: false);
+                AffineSwitch("FixedAffineForm BlendShapeEnclosed(FixedAffineForm current, FixedAffineForm candidate, uint blend, FixedAffineForm smoothRadius, FixedAffineForm operand)", "((SdfBlendOp)blend)", "Formula", "FixedAffineForm.Entire", enclosed: true);
+                // PopOperand over the enclosures: a stairs pop's step count in Data1.z, or the blend's operand formula.
+                AffineSwitch("FixedAffineForm PopOperandEnclosed(in CompiledInstruction instruction)", "((SdfBlendOp)instruction.Blend)", "Operand", "FixedAffineForm.FromInterval(interval: instruction.Bounds1Z)", enclosed: true);
                 break;
             case "SdfOp":
-                AffineSwitch("FixedAffineForm3 MapPoint(in CompiledInstruction instruction, FixedAffineForm3 p)", "instruction.Op", "Formula", "AffineEntirePoint",
-                    static formula => formula.ResultType == SdfFormulaType.Vector3);
-                AffineSwitch("FixedAffineForm EditField(in CompiledInstruction instruction, FixedAffineForm3 p, FixedAffineForm distance)", "instruction.Op", "Formula", "FixedAffineForm.Entire",
-                    static formula => formula.ResultType == SdfFormulaType.Scalar && !formula.FixedState("weight").Any());
+                foreach (var enclosed in new[] { false, true }) {
+                    var suffix = (enclosed ? "Enclosed" : "");
+                    AffineSwitch($"FixedAffineForm3 MapPoint{suffix}(in CompiledInstruction instruction, FixedAffineForm3 p)", "instruction.Op", "Formula", "AffineEntirePoint", enclosed, MapsPoint);
+                    AffineSwitch($"FixedAffineForm EditField{suffix}(in CompiledInstruction instruction, FixedAffineForm3 p, FixedAffineForm distance)", "instruction.Op", "Formula", "FixedAffineForm.Entire", enclosed, EditsField);
+                }
                 break;
         }
         source.Append(affines);

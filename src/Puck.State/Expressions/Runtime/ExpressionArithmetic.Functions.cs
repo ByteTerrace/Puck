@@ -775,6 +775,14 @@ public static partial class ExpressionArithmetic {
                         : 0L
                     );
                     return true;
+                case ExpressionOp.Hash: {
+                        var hash = Fnv1aHash.Create();
+
+                        hash.Add(value: arguments[0]);
+                        hash.Add(value: arguments[1]);
+                        value = unchecked((long)InvertibleBitMix.Mix64(value: hash.Value));
+                        return true;
+                    }
                 case ExpressionOp.PrimeAt:
                     if (
                         (arguments[0] < 0L) ||

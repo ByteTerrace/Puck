@@ -113,7 +113,7 @@ public sealed partial class PuckLanguageServer {
         );
         var children = new JsonArray();
 
-        foreach (var cell in table.Cells) {
+        foreach (var cell in table.Cells.OfType<StateCellEntryNode>().Where(predicate: static cell => (cell.KeyExpression is null))) {
             AddNode(
                 array: children,
                 node: CreateSymbol(kind: 7, name: cell.Key, node: cell, source: source)

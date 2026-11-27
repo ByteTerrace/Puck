@@ -538,6 +538,30 @@ public sealed partial record FunctionExpressionNode(
     Line,
     Column
 );
+/// <summary>A name bound for one expression: <c>let name = value in body</c>. In a document value it evaluates
+/// <paramref name="Value"/> once and <paramref name="Body"/> with the name bound to it; in a rule operand the body is
+/// the program, with the value in place of the name.</summary>
+/// <param name="Name">The name <paramref name="Body"/> reads.</param>
+/// <param name="Value">The bound value; the name is not visible in it.</param>
+/// <param name="Body">The expression the whole stands for.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record LetExpressionNode(
+    string Name,
+    ExpressionNode Value,
+    ExpressionNode Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A record derived from another: <c>base with { member: value }</c> or <c>base with overrides</c>. It
 /// evaluates to <paramref name="Base"/>'s object with each member <paramref name="Overrides"/> carries replaced, and
 /// those it does not have added; shallow, so a nested override is spelled by nesting

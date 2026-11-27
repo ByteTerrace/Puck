@@ -1450,8 +1450,8 @@ public sealed class MemoryAccount {
         /// the system signals low memory or past the machine's free physical memory less the headroom, and an authoring
         /// owner refused there makes the process give back what it no longer uses and asks once more, as
         /// <see cref="TryReserve"/> does. One owner in the
-        /// process holds the allowance at a time, from this call until its reservation is released
-        /// (<see cref="ReleaseReservation"/>) or it is disposed; the bytes forced are counted
+        /// process holds the allowance at a time, from this call until it hands the allowance on (<see cref="PassForced"/>),
+        /// its reservation is released (<see cref="ReleaseReservation"/>) or it is disposed; the bytes forced are counted
         /// (<see cref="MemoryAdmissionReading.Forced"/>).</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <returns><see langword="true"/> when the reservation is held; <see langword="false"/> when another owner holds
@@ -1478,12 +1478,23 @@ public sealed class MemoryAccount {
         public void ReleaseReservation() {
             lock (m_account.m_gate) {
                 if (m_kind == OwnerKind.Admitted) { SetPeak(peak: 0); }
-                if (ReferenceEquals(objA: m_account.m_forced, objB: this)) {
-                    m_account.m_forced = null;
-                    m_account.m_forcedBytes = 0;
-                    m_account.SignalRoom();
-                }
+                PassForcedLocked();
             }
+        }
+        /// <summary>Hands the process's forced allowance on, keeping the owner's reservation, once the step it was
+        /// granted for holds what it needs: the next forced job may start while this owner's work runs on asking the
+        /// account for no more, so the allowance paces the steps that need room past the pool's, one at a time, never
+        /// the whole of the work behind them. The reservation still counts against the pool and the machine's floor as
+        /// every other does. Nothing when the owner does not hold the allowance, or is disposed.</summary>
+        public void PassForced() {
+            lock (m_account.m_gate) { PassForcedLocked(); }
+        }
+        // Under the account's lock: the one place the forced allowance leaves its holder.
+        private void PassForcedLocked() {
+            if (!ReferenceEquals(objA: m_account.m_forced, objB: this)) { return; }
+            m_account.m_forced = null;
+            m_account.m_forcedBytes = 0;
+            m_account.SignalRoom();
         }
         /// <summary>Reserves the owner's simultaneous peak for transient work that holds nothing else, waiting for room
         /// when the pool has none: it is admitted when the reservation fits (<see cref="TryReserve"/>) or, with no other

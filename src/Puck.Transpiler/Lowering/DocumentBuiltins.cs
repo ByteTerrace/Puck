@@ -15,7 +15,7 @@ namespace Puck.Transpiler.Lowering;
 /// arrays to fold, so they exist in one language only. The SCALAR ones are not restated here at all: they come from
 /// <see cref="ExpressionVocabulary"/>, the table the rule language is built from, so the two cannot drift over a
 /// spelling. <see cref="DocumentScalars"/> folds them.</para></remarks>
-public static class DocumentBuiltins {
+public static partial class DocumentBuiltins {
     /// <summary>The collection builtins — the document language's own, with no rule-language counterpart — by name:
     /// each one's spelling and meaning, as the language server shows them, beside the evaluation a call runs.</summary>
     public static IReadOnlyDictionary<string, DocumentCollectionBuiltin> Collections { get; } = new Dictionary<string, DocumentCollectionBuiltin>(comparer: StringComparer.Ordinal) {
@@ -74,6 +74,84 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, fieldKey) => GroupBy(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
             signature: "groupBy(array, (item, index) => key)"
         ),
+        ["any"] = new(
+            description: "Returns 1 when some element's condition is truthy, else 0; with no lambda, when some element is truthy, stopping at the first. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "any(array, (item, index) => condition)"
+        ),
+        ["all"] = new(
+            description: "Returns 1 when every element's condition is truthy, else 0 (1 for an empty array); with no lambda, when every element is truthy, stopping at the first miss. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "all(array, (item, index) => condition)"
+        ),
+        ["count"] = new(
+            description: "Returns how many elements' conditions are truthy; with no lambda, how many elements are. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "count(array, (item, index) => condition)"
+        ),
+        ["sum"] = new(
+            description: "Adds the elements, or the lambda's value for each element, as + does: numbers add exactly and numeric arrays add element by element. An empty array sums to 0. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Sum(call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "sum(array, (item, index) => value)"
+        ),
+        ["scan"] = new(
+            description: "Returns the running totals in one pass: one more value than the array, starting at 0 and ending at the total, so scan([3, 4, 5]) is [0, 3, 7, 12] and element i is the sum of the first i elements. The lambda is optional, as sum's.",
+            evaluate: static (call, scope, fieldKey) => Scan(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "scan(array, (item, index) => value)"
+        ),
+        ["dot"] = new(
+            description: "Returns the dot product of two arrays of numbers of one length.",
+            evaluate: static (call, scope, fieldKey) => Dot(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "dot(a, b)"
+        ),
+        ["contains"] = new(
+            description: "Returns 1 when an element equals the value, as == compares, else 0.",
+            evaluate: static (call, scope, fieldKey) => Contains(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "contains(array, value)"
+        ),
+        ["indexOf"] = new(
+            description: "Returns the position of the first element equal to the value, or of the first whose lambda condition is truthy; -1 when none is.",
+            evaluate: static (call, scope, fieldKey) => Find(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "indexOf(array, value) or indexOf(array, (item, index) => condition)"
+        ),
+        ["find"] = new(
+            description: "Returns the first element whose condition is truthy, or null when none is.",
+            evaluate: static (call, scope, fieldKey) => Find(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "find(array, (item, index) => condition)"
+        ),
+        ["zip"] = new(
+            description: "Pairs the arrays' elements by position: zip([1, 2], [3, 4]) is [[1, 3], [2, 4]]. The arrays share one length.",
+            evaluate: static (call, scope, fieldKey) => Zip(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "zip(a, b, ...)"
+        ),
+        ["reverse"] = new(
+            description: "Returns the array's elements in the opposite order.",
+            evaluate: static (call, scope, fieldKey) => Reverse(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "reverse(array)"
+        ),
+        ["slice"] = new(
+            description: "Returns the elements from start up to, but not including, end (the array's end when omitted). A negative bound counts from the end, and a bound beyond either end stops there.",
+            evaluate: static (call, scope, fieldKey) => Slice(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "slice(array, start, end)"
+        ),
+        ["join"] = new(
+            description: "Joins the strings and numbers of an array into one string, the separator (empty when omitted) between them.",
+            evaluate: static (call, scope, fieldKey) => Join(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "join(array, separator)"
+        ),
         ["fraction"] = new(
             description: "Returns the part of a number above its floor, x - floor(x), in [0, 1).",
             evaluate: static (call, scope, fieldKey) => DocumentVectors.Fraction(call: call, fieldKey: fieldKey, scope: scope),
@@ -110,6 +188,9 @@ public static class DocumentBuiltins {
             signature: "polarPoint(radius, degrees, y)"
         ),
     };
+    /// <summary>The names of the builtins that take a lambda argument, in declaration order: the collection builtins
+    /// whose signature spells one.</summary>
+    public static IReadOnlyList<string> LambdaTakers { get; } = [.. Collections.Where(predicate: static entry => entry.Value.Signature.Contains(value: "=>", comparisonType: StringComparison.Ordinal)).Select(selector: static entry => entry.Key)];
     /// <summary>The named numeric constants every value position reads at compile time, by name: <c>pi</c> is the
     /// ratio of a circle's circumference to its diameter, in double precision. A <c>let</c>, a parameter or a loop
     /// variable of the same name hides one.</summary>
@@ -729,6 +810,58 @@ public static class DocumentBuiltins {
 
         return arr;
     }
+    // A fold over a list evaluates each element's term once, binds the values as fresh locals and evaluates the
+    // expression ListFolds unrolls to over them, so the fold's arithmetic is the document's own `+`, `or`, `and`,
+    // `minimum`, `maximum` and choice. A fold over truth values binds each term's truth, as the rule language reads it.
+    private static JsonNode? ListFold(CallExpressionNode call, DocumentScope scope, string? fieldKey) {
+        var args = call.Arguments;
+
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
+            return Refuse(call: call, message: $"{call.Name}'s first argument is a list", scope: scope);
+        }
+        var first = (call.Name == "first");
+        var term = (LambdaExpressionNode)args[1].Value;
+        var value = ((first && (args.Count == 4)) ? (args[2].Value as LambdaExpressionNode) : null);
+
+        if ((term.Parameters.Count > 2) || (value?.Parameters.Count is > 2) || (first && (args.Count == 4) && (value is null))) {
+            return Refuse(call: call, message: $"{call.Name}'s lambdas take the item, or the item and its index", scope: scope);
+        }
+        scope.Budget.Collection(count: source.Count, span: call.Span);
+        var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal);
+        var terms = new List<ExpressionNode>(capacity: source.Count);
+        var values = (first ? new List<ExpressionNode>(capacity: source.Count) : null);
+        var truth = (first || ListFolds.ReadsTruth(name: call.Name));
+
+        for (var index = 0; (index < source.Count); index++) {
+            var item = source[index];
+            var position = JsonValue.Create(value: ((long)index));
+            var read = Apply(lambda: term, scope: scope, fieldKey: fieldKey, first: item, second: position);
+
+            terms.Add(item: Bind(name: $"$term{index}", value: (truth ? JsonValue.Create(value: (DocumentLowering.IsTruthy(node: read) ? 1L : 0L)) : read)));
+            values?.Add(item: Bind(name: $"$value{index}", value: ((value is null) ? item : Apply(lambda: value, scope: scope, fieldKey: fieldKey, first: item, second: position))));
+        }
+        var otherwise = (first ? Bind(name: "$otherwise", value: DocumentLowering.EvaluateValue(expr: args[^1].Value, scope: scope, fieldKey: fieldKey)) : null);
+
+        if (ListFolds.Unroll(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: DocumentFoldSpelling.Instance, terms: terms, values: values) is not { } unrolled) {
+            return Refuse(call: call, message: refusal!, scope: scope);
+        }
+        return DocumentLowering.EvaluateValue(expr: unrolled, scope: scope.WithLocals(lambdaLocals: locals), fieldKey: fieldKey);
+
+        IdentifierExpressionNode Bind(string name, JsonNode? value) {
+            locals[name] = value;
+            return new IdentifierExpressionNode(Name: name);
+        }
+    }
+    private sealed class DocumentFoldSpelling : ListFoldSpelling<ExpressionNode> {
+        public static DocumentFoldSpelling Instance { get; } = new();
+
+        public override ExpressionNode Number(decimal value) => new LiteralExpressionNode(Value: (decimal.IsInteger(value: value) ? ((object)(long)value) : (double)value));
+        public override ExpressionNode Binary(ExpressionNode left, string symbol, ExpressionNode right) => new BinaryExpressionNode(Left: left, Operator: symbol, Right: right);
+        public override ExpressionNode Call(string name, ExpressionNode left, ExpressionNode right) => new CallExpressionNode(Arguments: [new ArgumentNode(Name: null, Value: left), new ArgumentNode(Name: null, Value: right)], Name: name);
+        public override ExpressionNode Choice(ExpressionNode condition, ExpressionNode whenTrue, ExpressionNode whenFalse) => new ConditionalExpressionNode(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue);
+        // The terms of a fold over truth values are bound already reduced to 1 or 0.
+        public override bool IsTruth(ExpressionNode term) => true;
+    }
     private static bool TryReadOperand(
         CallExpressionNode call,
         IReadOnlyList<ArgumentNode> args,
@@ -804,11 +937,25 @@ public static class DocumentBuiltins {
 
         result = null;
 
+        // A fold is told by its lambda, so a construct or a scalar of the same name (a gate's `all`, `minimum(a, b)`)
+        // keeps its own meaning.
+        if (ListFolds.Shaped(arguments: call.Arguments.Count, name: call.Name, secondIsLambda: ((call.Arguments.Count > 1) && (call.Arguments[1].Value is LambdaExpressionNode)))) {
+            result = ListFold(call: call, fieldKey: fieldKey, scope: scope);
+            return true;
+        }
         if (!Names.Contains(item: call.Name)) {
             return false;
         }
         if (Canonical(name: call.Name) is var canonical && !string.Equals(a: canonical, b: call.Name, comparisonType: StringComparison.Ordinal)) {
             call = (call with { Name = canonical });
+        }
+
+        if (
+            Collections.TryGetValue(key: call.Name, value: out var named) &&
+            named.PositionalOnly &&
+            call.Arguments.Any(predicate: static argument => (argument.Name is not null))
+        ) {
+            return false;
         }
 
         result = (Collections.TryGetValue(key: call.Name, value: out var collection)
@@ -828,11 +975,15 @@ public static class DocumentBuiltins {
 /// <param name="description">What the call produces, in one or two sentences.</param>
 /// <param name="evaluate">The evaluation of a call: the call as written, the lowering scope and the enclosing JSON
 /// key, returning the produced node or <see langword="null"/> after reporting a refusal into the scope.</param>
-public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate) {
+/// <param name="positionalOnly">Whether a call that names any argument is not this builtin: a vocabulary arm of the same
+/// name (<c>all(predicates: [...])</c>) reads its named arguments, so a call written that way is the arm's.</param>
+public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate, bool positionalOnly = false) {
     /// <summary>Gets the call as an author writes it.</summary>
     public string Signature { get; } = signature;
     /// <summary>Gets what the call produces.</summary>
     public string Description { get; } = description;
+    /// <summary>Gets whether a call naming any argument belongs to a vocabulary arm instead of this builtin.</summary>
+    public bool PositionalOnly { get; } = positionalOnly;
 
     internal Func<CallExpressionNode, DocumentScope, string?, JsonNode?> Evaluate { get; } = evaluate;
 }

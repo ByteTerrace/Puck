@@ -120,27 +120,6 @@ public static partial class PuckParser {
         }
         throw CreateException(context: context, message: message);
     }
-    // `table`/`slot` open a declaration only when a row name (and optional [size]) follows on the same line, so an
-    // ordinary `table: ...` or `slot: ...` property — always spelled with the colon immediately after the name, no
-    // space and no second name in between — still parses as it always has.
-    private static bool TryMatchDeclarationKeyword(ParseContext context, string keyword) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (
-            TryMatchKeyword(context: context, keyword: keyword) &&
-            SkipSpacesOnLine(context: context) &&
-            TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)
-        ) {
-            cursor.ResetPosition(position: saved);
-
-            return TryMatchKeyword(context: context, keyword: keyword);
-        }
-
-        cursor.ResetPosition(position: saved);
-
-        return false;
-    }
     // Skips bracketed span on the current line.
     private static bool TrySkipBracketedSpanOnLine(ParseContext context) {
         var cursor = context.Scanner.Cursor;
@@ -178,6 +157,53 @@ public static partial class PuckParser {
         }
 
         return skipped;
+    }
+    // A row declaration's name: a bare identifier, or an interpolation a lowering scope resolves (`$"pile{z}Of"`), which
+    // rides the node as an expression with the name left empty. `display` is the name as written, for a refusal.
+    private static string ReadDeclarationName(ParseContext context, string keyword, out ExpressionNode? expression, out string display) {
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, spelling: out var spelling, text: out var name)) {
+            throw CreateException(context: context, message: $"Expected a row name after '{keyword}'");
+        }
+        if (spelling.Expression is { } interpolation) {
+            expression = interpolation;
+            display = $"$\"{name}\"";
+
+            return string.Empty;
+        }
+
+        expression = null;
+        display = name;
+
+        return name;
+    }
+    // A family's bracket, and the name `as` binds to each member's family index (`pile hand[seats] as seat`), which the
+    // member's own modifiers, cells and value read; a binder without a bracket is no family and is refused.
+    private static void ParseFamily(ParseContext context, string keyword, string name, out ExpressionNode? size, out IReadOnlyList<FamilyMemberNode>? members, out string? memberIndex) {
+        var cursor = context.Scanner.Cursor;
+
+        memberIndex = null;
+        SkipSpacesOnLine(context: context);
+        ParseFamilyBracket(context: context, keyword: keyword, members: out members, name: name, size: out size);
+        if ((size is null) && (members is null)) {
+            return;
+        }
+
+        var saved = cursor.Position;
+
+        SkipSpacesOnLine(context: context);
+        if (!TryMatchKeyword(context: context, keyword: "as")) {
+            cursor.ResetPosition(position: saved);
+
+            return;
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var binder)) {
+            throw CreateException(context: context, message: $"Expected the name of the member index after '{keyword} {name}[...] as'");
+        }
+
+        memberIndex = binder;
     }
     // `: word` after the name names the enum the row's cells are drawn from, the way a record field names one
     // (`field: Enum`). A cell kind is never written, so `: Int` and its siblings are refused and consumed, and the rest
@@ -235,40 +261,64 @@ public static partial class PuckParser {
     }
     private static StatementNode ParseStateTableDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
+        var name = ReadDeclarationName(context: context, display: out var display, expression: out var nameExpression, keyword: "table");
 
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
-            throw CreateException(context: context, message: "Expected a row name after 'table'");
-        }
+        ParseFamily(context: context, keyword: "table", memberIndex: out var memberIndex, members: out var familyMembers, name: display, size: out var familySize);
 
-        SkipSpacesOnLine(context: context);
-        ParseFamilyBracket(context: context, keyword: "table", members: out var familyMembers, name: name, size: out var familySize);
-
-        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "table", name: name, span: out var enumSpan);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "table", name: display, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "table", vocabulary: vocabulary);
         ExpressionNode? initializer = null;
-        var cells = new List<StateCellEntryNode>();
+        IReadOnlyList<StatementNode> cells = [];
 
         SkipWhiteSpace(context: context);
         if (TryConsume(c: '=', context: context)) {
             initializer = ParseExpression(context: context);
         } else if (TryConsume(c: '{', context: context)) {
-            SkipWhiteSpace(context: context);
-            while (!cursor.Eof && (cursor.Current != '}')) {
-                cells.Add(item: ParseStateCellEntry(context: context, diagnostics: diagnostics, keyword: "table", vocabulary: vocabulary));
-                ConsumeSeparator(context: context);
-                SkipWhiteSpace(context: context);
-            }
-
-            if (!TryConsume(c: '}', context: context)) {
-                throw CreateException(context: context, message: $"Expected '}}' closing the cell body for 'table {name}'");
-            }
+            cells = ParseCellBody(closing: $"the cell body for 'table {display}'", context: context, diagnostics: diagnostics, keyword: "table", vocabulary: vocabulary);
         }
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateTableDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset) { EnumSpan = enumSpan };
+        return new StateTableDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: string.Empty, Length: len, Line: line, MemberIndex: memberIndex, Modifiers: modifiers, Name: name, NameExpression: nameExpression, Offset: startOffset) { EnumSpan = enumSpan };
+    }
+    // A table's or grid's cell body after its opening brace, through its closing one: cell entries, and the compile-time
+    // `let`, `for` and `if` that produce more of them, each loop or branch body read by this same reader. A cell keyed by
+    // one of those words (`for = 1`) is still a cell, since a statement never follows its keyword with '='
+    // (TryMatchStatementKeyword).
+    private static List<StatementNode> ParseCellBody(ParseContext context, DiagnosticBag? diagnostics, string keyword, IDocumentVocabulary? vocabulary, string closing) =>
+        ParseBracedBody(
+            body: (inner, bag) => ParseCellBodyStatement(context: inner, diagnostics: bag, keyword: keyword, vocabulary: vocabulary),
+            closing: closing,
+            context: context,
+            diagnostics: diagnostics,
+            schema: null,
+            vocabulary: vocabulary
+        );
+    private static StatementNode ParseCellBodyStatement(ParseContext context, DiagnosticBag? diagnostics, string keyword, IDocumentVocabulary? vocabulary) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+
+        var before = cursor.Position;
+        var startOffset = cursor.Offset;
+        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+
+        StatementNode? Body(ParseContext inner, DiagnosticBag? bag) => ParseCellBodyStatement(context: inner, diagnostics: bag, keyword: keyword, vocabulary: vocabulary);
+
+        if (TryMatchStatementKeyword(context: context, keyword: "let")) {
+            cursor.ResetPosition(position: before);
+
+            return ParseStatement(context: context, diagnostics: diagnostics, vocabulary: vocabulary);
+        }
+        if (TryMatchStatementKeyword(context: context, keyword: "for")) {
+            return ParseForStatement(body: Body, col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
+        }
+        if (TryMatchStatementKeyword(context: context, keyword: "if")) {
+            return ParseConditionalStatement(body: Body, col: col, context: context, diagnostics: diagnostics, line: line, schema: null, startOffset: startOffset, vocabulary: vocabulary);
+        }
+
+        return ParseStateCellEntry(context: context, diagnostics: diagnostics, keyword: keyword, vocabulary: vocabulary);
     }
     // A family's bracket is either a bare count -- [8], today's spelling -- or a member list: comma-separated index
     // ranges ([0, 2..12], so a family may have gaps) and quoted member row names (["PileA", "PileB"]).
@@ -348,33 +398,45 @@ public static partial class PuckParser {
 
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
 
-        if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out var key)) {
-            throw CreateException(context: context, message: "Expected a cell key inside a 'table' body");
+        // A computed key is an interpolation or, by the one bracket rule, an expression in brackets.
+        string key;
+        ExpressionNode? keyExpression = null;
+
+        if (TryConsume(c: '[', context: context)) {
+            keyExpression = ParseExpression(context: context);
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: ']', context: context)) {
+                throw CreateException(context: context, message: $"Expected ']' closing a computed cell key inside a '{keyword}' body");
+            }
+            key = string.Empty;
+        } else if (TryReadName(admitted: NameForms.Identifier | NameForms.String | NameForms.Interpolated, context: context, spelling: out var spelling, text: out key)) {
+            if (spelling.Expression is InterpolatedStringNode interpolation) {
+                keyExpression = interpolation;
+                key = string.Empty;
+            }
+        } else {
+            throw CreateException(context: context, message: $"Expected a cell key inside a '{keyword}' body");
         }
 
         SkipWhiteSpace(context: context);
         if (!TryConsume(c: '=', context: context)) {
-            throw CreateException(context: context, message: $"Expected '=' after cell key '{key}'");
+            throw CreateException(context: context, message: ((keyExpression is null) ? $"Expected '=' after cell key '{key}'" : "Expected '=' after a computed cell key"));
         }
 
         var value = ParseExpression(context: context);
         var modifiers = ParseStateModifiers(context: context, keyword: keyword, vocabulary: vocabulary);
         var len = (cursor.Offset - startOffset);
 
-        return new StateCellEntryNode(Column: col, Key: key, Length: len, Line: line, Modifiers: modifiers, Offset: startOffset, Value: value);
+        return new StateCellEntryNode(Column: col, Key: key, KeyExpression: keyExpression, Length: len, Line: line, Modifiers: modifiers, Offset: startOffset, Value: value);
     }
     private static StatementNode ParseStateSlotDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
 
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
-            throw CreateException(context: context, message: "Expected a row name after 'slot'");
-        }
+        var name = ReadDeclarationName(context: context, display: out var display, expression: out var nameExpression, keyword: "slot");
 
-        SkipSpacesOnLine(context: context);
-        ParseFamilyBracket(context: context, keyword: "slot", members: out var familyMembers, name: name, size: out var familySize);
+        ParseFamily(context: context, keyword: "slot", memberIndex: out var memberIndex, members: out var familyMembers, name: display, size: out var familySize);
 
-        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "slot", name: name, span: out var enumSpan);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "slot", name: display, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "slot", vocabulary: vocabulary);
         ExpressionNode? value = null;
@@ -387,21 +449,27 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateSlotDeclarationNode(Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value) { EnumSpan = enumSpan };
+        return new StateSlotDeclarationNode(Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, MemberIndex: memberIndex, Modifiers: modifiers, Name: name, NameExpression: nameExpression, Offset: startOffset, Value: value) { EnumSpan = enumSpan };
     }
     // `pile` opens a declaration only when a row name and the bare keyword 'of' follow on the same line, mirroring
-    // `TryMatchDeclarationKeyword`'s own guard — an ordinary `pile: ...` property still parses as it always has.
+    // `TryMatchKeywordFollowedByName`'s guard — an ordinary `pile: ...` property still parses as it always has.
     private static bool TryMatchPileKeyword(ParseContext context) {
         var cursor = context.Scanner.Cursor;
         var saved = cursor.Position;
 
         if (TryMatchKeyword(context: context, keyword: "pile") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
+            if (TryReadName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, spelling: out _, text: out _)) {
                 SkipSpacesOnLine(context: context);
 
                 if (!cursor.Eof && (cursor.Current == '[')) {
                     TrySkipBracketedSpanOnLine(context: context);
                     SkipSpacesOnLine(context: context);
+
+                    // A family's member index binder stands between the bracket and 'of'.
+                    if (TryMatchKeyword(context: context, keyword: "as") && SkipSpacesOnLine(context: context)) {
+                        _ = TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _);
+                        SkipSpacesOnLine(context: context);
+                    }
                 }
 
                 if (TryMatchKeyword(context: context, keyword: "of")) {
@@ -419,22 +487,18 @@ public static partial class PuckParser {
     private static StatementNode ParseStatePileDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
 
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
-            throw CreateException(context: context, message: "Expected a row name after 'pile'");
-        }
+        var name = ReadDeclarationName(context: context, display: out var display, expression: out var nameExpression, keyword: "pile");
 
-        SkipSpacesOnLine(context: context);
-        ParseFamilyBracket(context: context, keyword: "pile", members: out var familyMembers, name: name, size: out var familySize);
+        ParseFamily(context: context, keyword: "pile", memberIndex: out var memberIndex, members: out var familyMembers, name: display, size: out var familySize);
 
         SkipWhiteSpace(context: context);
         if (!TryMatchKeyword(context: context, keyword: "of")) {
-            throw CreateException(context: context, message: $"Expected 'of' and a token-domain row after 'pile {name}'");
+            throw CreateException(context: context, message: $"Expected 'of' and a token-domain row after 'pile {display}'");
         }
 
         SkipWhiteSpace(context: context);
         if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var tokenRow)) {
-            throw CreateException(context: context, message: $"Expected a token-domain row name after 'pile {name} of'");
+            throw CreateException(context: context, message: $"Expected a token-domain row name after 'pile {display} of'");
         }
 
         var modifiers = ParseStateModifiers(context: context, keyword: "pile", vocabulary: vocabulary);
@@ -462,13 +526,13 @@ public static partial class PuckParser {
             }
 
             if (!TryConsume(c: '}', context: context)) {
-                throw CreateException(context: context, message: $"Expected '}}' closing the token body for 'pile {name}'");
+                throw CreateException(context: context, message: $"Expected '}}' closing the token body for 'pile {display}'");
             }
         }
 
         var len = (cursor.Offset - startOffset);
 
-        return new StatePileDeclarationNode(Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, TokenRow: tokenRow, Tokens: tokens);
+        return new StatePileDeclarationNode(Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Length: len, Line: line, MemberIndex: memberIndex, Modifiers: modifiers, Name: name, NameExpression: nameExpression, Offset: startOffset, TokenRow: tokenRow, Tokens: tokens);
     }
     private static StatePileTokenNode ParseStatePileToken(ParseContext context) {
         var cursor = context.Scanner.Cursor;
@@ -489,39 +553,25 @@ public static partial class PuckParser {
     private static StatementNode ParseStateGridDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
 
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
-            throw CreateException(context: context, message: "Expected a row name after 'grid'");
-        }
+        var name = ReadDeclarationName(context: context, display: out var display, expression: out var nameExpression, keyword: "grid");
 
-        SkipSpacesOnLine(context: context);
-        ParseFamilyBracket(context: context, keyword: "grid", members: out var familyMembers, name: name, size: out var familySize);
+        ParseFamily(context: context, keyword: "grid", memberIndex: out var memberIndex, members: out var familyMembers, name: display, size: out var familySize);
 
-        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "grid", name: name, span: out var enumSpan);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "grid", name: display, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "grid", vocabulary: vocabulary);
-        var cells = new List<StateCellEntryNode>();
+        IReadOnlyList<StatementNode> cells = [];
         var hasBody = false;
 
         SkipWhiteSpace(context: context);
         if (TryConsume(c: '{', context: context)) {
             hasBody = true;
-
-            SkipWhiteSpace(context: context);
-            while (!cursor.Eof && (cursor.Current != '}')) {
-                cells.Add(item: ParseStateCellEntry(context: context, diagnostics: diagnostics, keyword: "grid", vocabulary: vocabulary));
-                ConsumeSeparator(context: context);
-                SkipWhiteSpace(context: context);
-            }
-
-            if (!TryConsume(c: '}', context: context)) {
-                throw CreateException(context: context, message: $"Expected '}}' closing the cell body for 'grid {name}'");
-            }
+            cells = ParseCellBody(closing: $"the cell body for 'grid {display}'", context: context, diagnostics: diagnostics, keyword: "grid", vocabulary: vocabulary);
         }
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateGridDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset) { EnumSpan = enumSpan };
+        return new StateGridDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: string.Empty, Length: len, Line: line, MemberIndex: memberIndex, Modifiers: modifiers, Name: name, NameExpression: nameExpression, Offset: startOffset) { EnumSpan = enumSpan };
     }
     // Zero or more `name(args)` calls, chained: `bounds(...) advance(...)`. Each candidate is read speculatively —
     // an identifier not immediately followed by '(' belongs to whatever statement comes next (the next declaration,

@@ -4707,7 +4707,7 @@ export type ShapeNonNullable8 = {
   name: string;
 };
 
-export type ShapeNonNullable9 = "ToFixed" | "ToInt" | "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "ArcSine" | "ArcCosine" | "ArcTangent" | "ArcTangent2" | "Hypotenuse" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "Logarithm" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not";
+export type ShapeNonNullable9 = "ToFixed" | "ToInt" | "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "ArcSine" | "ArcCosine" | "ArcTangent" | "ArcTangent2" | "Hypotenuse" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "Logarithm" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not" | "Hash";
 
 /**
  * A second-material inset face region carried by a ShapeDocument — one authored shape that reads as two: an eroded copy of the same primitive, offset along its own local face and composed with its own material, recessed into or raised proud of the plate. Authored as one shape that bakes two field operands; no budget admits or refuses them, StampShapeCount only reports that bake work (a panelled shape counts as 2).
@@ -5002,6 +5002,14 @@ export type StateDomainRing = {
 
 export type StateDomainSlot = {
   $type?: "slot";
+};
+
+export type StateDomainTally = {
+  $type?: "tally";
+  /**
+   * The most distinct keys the row holds between resets, from 1 to MaxCapacity.
+   */
+  capacity: number;
 };
 
 /**
@@ -15618,7 +15626,7 @@ export type WorldStateRow = {
   /**
    * A StateRow's declared cell domain — the closed answer to "which keys does this row's storage admit" that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits — a row's Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ Overflow — are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.
    */
-  domain?: StateDomainSlot | StateDomainKeys | StateDomainKeysOf | StateDomainCellsOf | StateDomainRing | null;
+  domain?: StateDomainSlot | StateDomainKeys | StateDomainKeysOf | StateDomainCellsOf | StateDomainRing | StateDomainTally | null;
   /**
    * A CellsOf row's declared inverse: the board's cells are not authored directly but derived from a keyed Tokens row naming cells of the same topology and a Codes row keyed the same way, giving each token's code. Legitimate only on a Int or Bool row (TryProveDerivedDomain) whose EffectiveDomain is CellsOf and that carries no field trait — a document project's validator enforces both.
    */

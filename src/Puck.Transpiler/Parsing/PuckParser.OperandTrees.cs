@@ -68,10 +68,18 @@ public static partial class PuckParser {
                     return new Syntax.SourceCall(call.Name, [.. call.Arguments.Select(selector: argument => new Syntax.SourceArgument(Name: argument.Name, Value: Convert(node: argument.Value)))]);
                 case LambdaExpressionNode { Parameters.Count: 1 } lambda:
                     return new Syntax.SourceLambda(Binder: lambda.Parameters[0], Body: Convert(node: lambda.Body));
+                case ArrayExpressionNode list:
+                    return new Syntax.SourceList(Items: [.. list.Elements.Select(selector: Convert)]);
+                case LetExpressionNode let: {
+                        // Atoms are numbered in printed order, and the value prints before the body.
+                        var value = Convert(node: let.Value);
+
+                        return new Syntax.SourceLet(Body: Convert(node: let.Body), Name: let.Name, Value: value);
+                    }
                 case OperandExpressionNode { Syntax: { } tree } operand:
                     var offset = atoms.Count;
                     atoms.AddRange(collection: operand.Atoms.Select(selector: static atom => atom.Value));
-                    return MapAtoms(map: index => (index + offset), node: tree);
+                    return Syntax.MapSourceAtoms(map: index => (index + offset), node: tree);
                 default:
                     error = $"A {node.GetType().Name} is not an operand expression";
                     return new Syntax.Literal(Value: 0);
@@ -86,7 +94,7 @@ public static partial class PuckParser {
     public static OperandExpressionNode RebuildOperand(OperandExpressionNode original, Syntax.SyntaxNode syntax, IReadOnlyList<InterpolatedStringNode> atoms) {
         var ordered = new List<InterpolatedStringNode>();
 
-        syntax = MapAtoms(syntax, index => {
+        syntax = Syntax.MapSourceAtoms(syntax, index => {
             ordered.Add(item: atoms[index]);
             return (ordered.Count - 1);
         });
@@ -106,16 +114,4 @@ public static partial class PuckParser {
         }
         return (text.StartsWith(value: '$') ? new Syntax.SourceName(text) : QualifiedName.Parse(text: text).ToSyntax());
     }
-    private static Syntax.SyntaxNode MapAtoms(Syntax.SyntaxNode node, Func<int, int> map) => node switch {
-        Syntax.SourceAtom atom => atom with { Index = map(atom.Index) },
-        Syntax.SourceGroup group => group with { Value = MapAtoms(group.Value, map) },
-        Syntax.SourceIndex index => index with { Target = MapAtoms(index.Target, map), Index = MapAtoms(index.Index, map) },
-        Syntax.SourceAccess access => access with { Target = MapAtoms(access.Target, map) },
-        Syntax.Unary unary => unary with { Operand = MapAtoms(unary.Operand, map) },
-        Syntax.Binary binary => binary with { Left = MapAtoms(binary.Left, map), Right = MapAtoms(binary.Right, map) },
-        Syntax.Ternary ternary => ternary with { Condition = MapAtoms(ternary.Condition, map), WhenTrue = MapAtoms(ternary.WhenTrue, map), WhenFalse = MapAtoms(ternary.WhenFalse, map) },
-        Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = MapAtoms(argument.Value, map) })] },
-        Syntax.SourceLambda lambda => lambda with { Body = MapAtoms(lambda.Body, map) },
-        _ => node,
-    };
 }

@@ -95,7 +95,7 @@ public sealed class ProjectionTimelineLawTests {
 
         foreach (var (clock, refusal) in new[] {
             (Mode, "projection carries clock 'mode' over state row 'phase'; a projection carries a state clock as an anchor of its phase, never its row."),
-            (new WorldClock(Anchor: new WorldClockAnchor(Curve: ["five"], Phase: 0UL, Tick: 0UL), Name: "mode"), $"projection anchors clock 'mode' with a curve of 1 coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals, and its value at the anchor's tick is the anchor's phase."),
+            (new WorldClock(Anchor: new WorldClockAnchor(Curve: ["five"], Phase: 0UL, Tick: 0UL), Name: "mode"), $"projection anchors clock 'mode' with a curve of 1 coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals of at most {WorldClockAnchor.MaxCurveCoefficientBits} bits a part, and its value at the anchor's tick is the anchor's phase."),
         }) {
             var forged = projection with { Timeline = new WorldTimelineSection(Clocks: [Day, clock]) };
 

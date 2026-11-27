@@ -364,8 +364,10 @@ public sealed partial class ShaderPipelineRenderNode {
     private void NoteRecordFailure(Exception error) {
         var reason = $"its frame recording failed and was abandoned: {error.Message}";
 
+        // A new reason names the line that failed: the exception's whole text, its stack and inner exceptions included,
+        // once, so a class of failure that repeats every frame is diagnosable from the log without a debugger.
         if (!string.Equals(a: reason, b: LastRecordError, comparisonType: StringComparison.Ordinal)) {
-            Console.Error.WriteLine(value: $"[render.record] instance '{m_name}' {reason}");
+            Console.Error.WriteLine(value: $"[render.record] instance '{m_name}' {reason}{Environment.NewLine}{error}");
         }
         LastRecordError = reason;
     }

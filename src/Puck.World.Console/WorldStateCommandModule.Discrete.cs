@@ -351,6 +351,7 @@ public sealed partial class WorldStateCommandModule {
             val1: row.HistoryCursor,
             val2: ring.Capacity
         )}",
+            StateDomain.Tally tally => $"domain=tally capacity={tally.Capacity}",
             var other => throw new InvalidOperationException(message: $"unknown state domain '{other.GetType().Name}'"),
         };
 

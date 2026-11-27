@@ -1,11 +1,12 @@
 # Debug world Go table
 
-The gallery's board room holds a 19×19 Go table at (56.5, 9.905, 30.6), north
-of [chess](chess.md). The 3.50 m by 1.84 m table keeps its original height;
+The gallery's board room holds a 19×19 Go table east of [chess](chess.md),
+its board's centre at (44, 9.905, 10.3) over the table's placement (`goTable`
+in go.puck). The 3.50 m by 1.84 m table keeps its original height;
 the flat 1.60 m board has 0.08 m pitch, 19 lines each way and nine star points.
 Its face and painted markings belong to one creation; flush rectangular
-prisms keep the support flat across its material patches. The adjacent
-[Alchemy table](alchemy.md) stands at (65, 30.6).
+prisms keep the support flat across its material patches. The
+[Reversi](reversi.md) and [Alchemy](alchemy.md) tables stand beyond it to the east.
 [go.puck](go.puck) authors the table, imported by debug.puck.
 
 All 361 stones are rigid bodies: 181 black and 180 white. Each colour shares
@@ -58,11 +59,11 @@ player's right (the standard seat library's step, `worlds/standard/contexts/tabl
 physics. Seat 1 plays every side the computer does not own.
 
 Point ordinal = 19 × row + column, along +Z and +X respectively. Point 0 is
-(55.78, 29.88), centre 180 is (56.5, 30.6), and point 360 is (57.22, 31.32).
+(43.28, 9.58), centre 180 is (44, 10.3), and point 360 is (44.72, 11.02).
 Black stones are `goStone0` through `goStone180`; White's are `goStone181`
 through `goStone360`. The cursor is body 481 and stone n is body 480 − n.
 Off-board stone n reads `-1 - n`. Seat 1 may pose every stone; for example,
-`body.pose 56.58 10 30.6 0 0 0 480` drops the first black stone at point 181.
+`body.pose 44.08 10 10.3 0 0 0 480` drops the first black stone at point 181.
 
 | Action | Console |
 |---|---|

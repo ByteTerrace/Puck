@@ -5,7 +5,7 @@ import "shapes"
 import "gametable"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (gallery/gallery.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
-// world imports this file whole. The table stands north of the chess table, its board's centre at (56.5, 9.905, 30.6)
+// world imports this file whole. The table stands east of the chess table, its board's centre goSurface over goTable
 // on level 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 181 or 180 stones at their right-hand end.
 // go.md beside this file says how to play, read the game and set the opponent.
 //

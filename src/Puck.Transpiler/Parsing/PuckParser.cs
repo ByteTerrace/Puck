@@ -797,10 +797,13 @@ public static partial class PuckParser {
             return ParseRecordDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, keyword: "pool")) {
+        // A row or pool declaration opens only when its name follows the keyword on the same line, so an ordinary
+        // `table: ...`, `slot: ...` or `pool: ...` property, its colon right after the word, still parses as a property.
+        // A row declaration's name may be an interpolation, which no property spells either.
+        if (TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "pool")) {
             return ParseStatePoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
         }
-        if (TryMatchDeclarationKeyword(context: context, keyword: "pairPool")) {
+        if (TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "pairPool")) {
             return ParseStatePairPoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
         }
 
@@ -828,11 +831,11 @@ public static partial class PuckParser {
             return ParseRuleBlock(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, keyword: "table")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "table")) {
             return ParseStateTableDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, keyword: "slot")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "slot")) {
             return ParseStateSlotDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
@@ -840,7 +843,7 @@ public static partial class PuckParser {
             return ParseStatePileDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, keyword: "grid")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "grid")) {
             return ParseStateGridDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
@@ -1013,8 +1016,9 @@ public static partial class PuckParser {
         return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
     }
     // `if cond { … }`, with an optional `else { … }` or `else if …` tail, in document position. An `else if` is an Else
-    // holding one nested ConditionalStatementNode, as a rule body's `if` chains.
-    private static ConditionalStatementNode ParseConditionalStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema, IDocumentVocabulary? vocabulary) {
+    // holding one nested ConditionalStatementNode, as a rule body's `if` chains. `body` parses one statement of each
+    // branch where the `if` stands somewhere other than a document block, such as a table's cell body.
+    private static ConditionalStatementNode ParseConditionalStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema, IDocumentVocabulary? vocabulary, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
         var cursor = context.Scanner.Cursor;
         var condition = ParseExpression(context: context);
 
@@ -1023,7 +1027,7 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting an 'if' body");
         }
 
-        var then = ParseBracedBody(closing: "an 'if' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+        var then = ParseBracedBody(body: body, closing: "an 'if' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
         IReadOnlyList<StatementNode>? otherwise = null;
         var savedPosition = cursor.Position;
 
@@ -1035,13 +1039,13 @@ public static partial class PuckParser {
             var (elseLine, elseCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: elseStart);
 
             if (TryMatchKeyword(context: context, keyword: "if")) {
-                otherwise = [ParseConditionalStatement(col: elseCol, context: context, diagnostics: diagnostics, line: elseLine, schema: schema, startOffset: elseStart, vocabulary: vocabulary)];
+                otherwise = [ParseConditionalStatement(body: body, col: elseCol, context: context, diagnostics: diagnostics, line: elseLine, schema: schema, startOffset: elseStart, vocabulary: vocabulary)];
             } else {
                 if (!TryConsume(c: '{', context: context)) {
                     throw CreateException(context: context, message: "Expected '{' or 'if' after 'else'");
                 }
 
-                otherwise = ParseBracedBody(closing: "an 'else' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+                otherwise = ParseBracedBody(body: body, closing: "an 'else' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
             }
         } else {
             cursor.ResetPosition(position: savedPosition);
@@ -1926,7 +1930,8 @@ public static partial class PuckParser {
         while ((probe < buffer.Length) && (buffer[probe] is ' ' or '\t')) {
             probe++;
         }
-        if ((probe < buffer.Length) && (buffer[probe] is ':' or '{' or '[')) {
+        // A keyword followed by ':', '{', '[' or a lone '=' is a member named by the word, never the statement.
+        if ((probe < buffer.Length) && ((buffer[probe] is ':' or '{' or '[') || ((buffer[probe] == '=') && (((probe + 1) >= buffer.Length) || (buffer[(probe + 1)] != '='))))) {
             cursor.ResetPosition(position: saved);
 
             return false;

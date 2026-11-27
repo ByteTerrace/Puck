@@ -1305,6 +1305,19 @@ public static class ExpressionOperators {
             signature: ExpressionSignature.Int,
             symbol: null
         ),
+        // Priced on the table's own scale (an add is one unit, a multiply three): the FNV-1a fold of two 64-bit words is
+        // sixteen dependent xor-then-multiply byte steps (64), and SplitMix64's finalizer three xor-shifts and two
+        // multiplies (12).
+        Define(
+            arity: 2,
+            cost: 76L,
+            function: true,
+            name: "hash",
+            operation: ExpressionOp.Hash,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
         Define(
             arity: 1,
             cost: 3L,
