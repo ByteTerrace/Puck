@@ -438,36 +438,26 @@ packet; these are the ones owed now, most valuable first.
      far wall, `world.screenshot <path>.png presented 16`) on both backends:
      the resolve reads each sample's air from views, so the haze along a
      silhouette holds as it did.
-10. **Three render-graph laws to read before calling them stale or real.**
-   Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
-   of the GPU leap:
-   - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
-     assertion in its `Cadence` file fails.
-   - `PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion`: three copies
-     where none was asked for.
-   - `TheViewsRecorderWritesTheLiveFadeCountAsync`: "Resource 'sdf.world$lit'
-     was refused at the frame's latch", from `SdfWorldPassRecorder.BindPorts`.
+10. **Two render-graph laws wait on one run each.** `SdfWorldPassesLawTests`
+    holds both, and each fails on the head after the plan changes of the GPU
+    leap, with a cause no reading has named:
+    - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
+      assertion in its `Cadence` file fails.
+    - `PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion`: three copies
+      where none was asked for.
 
-   `ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput` and
-   `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
-   history port and the cascades' move out of the plan); update or delete
-   them when the class is next touched.
-11. **`SdfWorldPassesLawTests` run whole: about fifty laws wait out a volume
-    that never settles, and the process holds about 15 GB.** On the fake
-    device about fifty of the class's 104 laws fail with "The irradiance
-    volume's lighting never settled within 200000 frames", most from the
-    rig's constructor, with the volume describing an empty scene
-    (`triangles=0 lights=0 traced=0 relit=0`) while
-    `SdfMeshIrradiance.Settling` stays true;
-    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` above is one of them.
-    The integration head fails them without the `gpu-frame` changes. It may
-    be the stop the gallery's lighting showed
-    ([lighting](#lighting-and-gi)), reproduced without a device, which would
-    make one such law the cheapest witness of that fix. Unread: which of
-    `Settling`'s terms holds, and whether a rig whose constructor throws
-    leaves its volume's native storage held, which fifty failures would
-    multiply into the process's size. Until then run one law by
-    `--filter-method`, and the class only under `puck lease heavy`.
+    Run them by `--filter-method`, with
+    `AMovingPointerGetsAnAnswerEveryRoundTripWithOneCopyInFlight` beside the
+    picking law, and read the failing assertion before changing either.
+11. **`SdfWorldPassesLawTests` run whole: one re-run owed.** A rig whose
+    irradiance volume never settled used to fail about fifty laws and leave the
+    process holding about 15 GB. The stuck term was `worker`: the probe scene's
+    root was never uploaded while views stood, which
+    `SdfWorldPasses.StageOwedCopies` now stages. `TemporalRig` releases its
+    residencies, runtime and feed when its constructor throws, so a failing law
+    no longer leaves native storage held. Run the class once under
+    `puck lease heavy` and read what still fails; a law that still waits out a
+    volume names its cause in the `settling=` term of `world.probe`.
 
 ### Tooling caveats
 
@@ -2633,6 +2623,17 @@ Light through coloured glass:
 
 The volume's cost and convergence:
 
+- [medium] The `scene-placement` stop has no device-free law. A probe job
+  whose scene names a mesh the tables have not placed is refused until
+  `AdmissionWait` and then cancelled (`SdfMeshProbeGpuWork.TryTake`), and the
+  gallery's lighting showed that stop, but only a windowed run reaches it. A
+  law over a fake device that holds a scene's meshes unplaced and checks the
+  head's cancel and the volume's `NoteScenePlacement` answer would witness it.
+- [medium] The `scene-upload` refusal has no time bound. `TryTake` refuses
+  every take while a scene uploads (`ServeSceneUpload`), and only the
+  placement wait is bounded by `AdmissionWait`, so an upload that never
+  completes holds the volume's work indefinitely. Give the upload the same
+  bound and name the stop where it ends.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
