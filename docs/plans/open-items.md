@@ -1940,10 +1940,10 @@ The frame's GPU side:
 
 Stalls and hitches to attribute:
 
-- [medium] A sustained overload at the chess demo's cycle boundary
-  (`[replay.scope: chess-demo RECORDED …]`): iterations run with no pacer
-  wait, simulate and produce rising without a tick. Trace it across the
-  demo's restore.
+- [medium] A sustained overload at a scoped replay's cycle boundary (seen at the
+  retired chess demo's, `[replay.scope: chess-demo RECORDED …]`): iterations run
+  with no pacer wait, simulate and produce rising without a tick. Trace it
+  across the next scope exhibit's restore.
 - [medium] The endless fall's first visit produces in pieces (the window
   feeds' first binding, `WriteOwedMeshes`, `PackDynamicTransforms`, the camera
   sample's trace), and frames block in `Present` with the GPU busy, since each
@@ -5447,9 +5447,8 @@ their lane order; this packet keeps the single duplicates and leads.
 - Go and Reversi (`worlds/debug/go.puck`, `reversi.puck`) are whole documents of the gallery's board game room, so the board
   games lab (`worlds/debug/labs/board-games.puck`) cannot stand them: each imports the gallery's shape catalog, derives its
   body slots from `galleryPopulation` and the other tables' counts, grants `Drive` over those absolute body indices and
-  stands at level-2 coordinates. Turning each into a module that takes a table position and a body base, as
-  `physicalChessTable` does, lets the lab stand them and their scenarios (`go-tests.puck`, `reversi-tests.puck`, and
-  `chess-tests.puck`'s absolute coordinates) leave the whole debug world.
+  stands at level-2 coordinates. Making each a game station's game (as chess is, on the station's holodeck) lets the lab
+  stand them and their scenarios (`go-tests.puck`, `reversi-tests.puck`) leave the whole debug world.
 - Two types answer "is this raw value one of a set or inside a range": `CompiledActionStateEnvelope` (`Puck.Physics`,
   a register's runtime envelope: `Contains` by a linear search, and `Clamp`, which substitutes the initial value for a
   set miss) and `ValueBounds` (`Puck.State.Rules`, the rule analysis's bound: a sorted set or a range, with inclusion
@@ -5831,19 +5830,48 @@ confirming its site in the debug world and its work-budget share.
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: twelve game stations on the work sheet (below); the windowed look at the game station's
-chess, Klondike and FreeCell, close and wide, on `worlds/debug/game-station-root.puck` (`worlds/debug/game-station.md`);
-then Spider.
+ordinary, the owner's direction · Next: physical cards on the holodeck (below); twelve game stations on the work sheet;
+the windowed look at the game station's holodeck chess, Klondike and FreeCell, close and wide, in the board games lab
+(`worlds/debug/labs/board-games.puck`, `worlds/debug/game-station.md`); then Spider.
+
+The owner's direction (docs/decisions/play.md, "Tabletop"): the game station is the table and its board a holodeck that
+materializes a shown game's tokens as real bodies, judges the game from where they settle and releases them when the
+game changes or ends; the old physical chess table is retired (done), and the single-purpose game displays retire as
+the owner migrates them. Everything is modular: rules, physical reading, geometry, the holodeck pool and the station
+shell, each usable alone, each named for what it does.
+
+- [high] Physical cards on the holodeck. The station's 52 cards are a holodeck pool (patience-station.puck
+  `patienceStationPool`, materialized while a patience game is shown and released otherwise), but they are still
+  kinematic `cardSlab` bodies posed exactly into the slot graph, and a move is the door over the piles. The next step
+  makes them rigid card bodies that stack, are picked up, flipped, set down and knocked, read through the same tabletop
+  primitive: each settled card's slot read from the `patienceSlots` graph and its face from its attitude (a card-sized
+  `fromCreation` collider and a `cellOf` over a graph topology, which today resolves only a `Grid`), a reading that
+  differs from the piles turned into the door's own move request (`klondikeAction 2`, `freecellAction 2`), and a refused
+  move put back as chess puts back an illegal arrangement. Its checks: a dealt pile stacks and rests (the settled reading
+  equals the piles), a legal physical move is accepted, an illegal one is refused and put back, under `--reproduce`.
+- [high] The debug world's cards stand always (`patienceStationCards(holodeck: false)` in
+  worlds/debug/game-station-deck.puck): its bodies below the deck are numbered from it (go-tests, alchemy-tests and
+  the other tables' literal body indices, the companion, fuzzer and traversal lets in shapes.puck), so a pool deck would
+  renumber them. Moving those readers onto placement keys lets the debug world's deck be a pool too.
+- [medium] A scoped replay exhibit. The debug world's chess table carried the live example of a scoped replay (its idle
+  demonstration, `replay.scope chess-demo`, and the sweep's `chess-scope` signal), retired with the table. A replay
+  scope over holodeck bodies needs a continuation boundary that carries a count-driven inhabitant's admission and
+  release; until then an exhibit stands on fixed-count bodies elsewhere in the debug world.
+- [medium] The computer's reply lands by a pose and a short drop (chess-station.puck's `chess-station-<id>-place`); a
+  carried move along an arc (`timedMove`'s `toward` and `arc`) for a rigid piece would show the move travelling.
+- [low] Every piece shares one box collider (`chessStationPiece`); a collider per kind (`fromCreation` over each piece
+  prototype, at most 16 volumes) would let a king topple as a king does, and a queened pawn would need its kit chosen by
+  its code.
 
 - [high] Twelve game stations on the work sheet. The engine sweeps a set of stations per binding: a family member
   the binding's key selects and a zone table over families are reached and priced as that station's alone, and a rule
   may sweep a row family itself (`forEach: pile`, `$each` the card, `$member` the station), due per (member, key) and
   priced at one member's bindings (docs/reference/state/analysis.md). Klondike, FreeCell and the patience layout are
   one set of rules over every station (worlds/games/klondike.puck, freecell.puck, patience-station.puck
-  `patienceSetRules`), together about 230 thousand units whatever the count. One station prices 381 thousand, twelve
-  2.9 million, the debug world with its one station 3.6 million (worlds/debug/game-station.md, "Cost"); each station
-  past the first adds about 230 thousand: chess (about 170), the chairs (12), the patience rules that read the chairs
-  (11, `patienceStationRules`), chess-station's display. In order: (1) the chairs (worlds/standard/game-station.puck
+  `patienceSetRules`). With holodeck chess, one station prices 497 thousand, twelve playing themselves (the board games
+  stress lab) 3.85 million, the debug world with its one station 3.64 million (`puck compile <world> --validate
+  --budget 40`; worlds/debug/game-station.md, "Cost"); each station past the first adds about 305 thousand, most of it
+  chess's instance lines and the 32-binding sweeps a game switch or a put-back opens. In order: (1) the chairs (worlds/standard/game-station.puck
   `gameStationRules`) as a set over the stations, writing rows keyed by the station's number
   (`gameStationChairNear[i]`, `gameStationEdgesNear[i]`, `gameStationPointerNear[i]`, ...) so `patienceStationRules`
   and chess-station join their sets; that needs a host fact over a family member (`board(pointer, <id>Cells, seat)`,
@@ -5872,11 +5900,10 @@ then Spider.
   Conservative, so nothing leaks, but per-seat hidden hands as one rule over a family (poker, shedding at several
   tables) wait on it. The fix judges a member read by the binding's own key against the same binding's members only.
 - [medium] Card bodies cost every body sweep: each station's deck is 54 bodies, and rules sweeping `$bodies` price
-  per body (`fall-recovery` sweeps a region under the valley instead). A card drawn as a token placement a pile slot
-  (as the chess pieces are) carries no body, but a slot's 53 faces as responses make the document large;
-  weigh a placement whose shown creation is a cell's value without a response list.
-- [medium] A search judge that pulls in a clock-reading rule restarts every tick and never lands (the debug chess
-  table's demo rules did, until `chess-demo-hold` was gated `search(ply) == 0`). `world.search` shows
+  per body (`fall-recovery` sweeps a region under the valley instead). A holodeck deck stands only while a patience game
+  is shown, which bounds it; the debug world's deck stands always (above).
+- [medium] A search judge that pulls in a clock-reading rule restarts every tick and never lands (the retired debug
+  chess table's demo rules did, until they were gated `search(ply) == 0`). `world.search` shows
   `lastRestart=clock`, but nothing warns at compile time; `WorldSearch` `JudgeRules` should name the rule.
 - [medium] The computer's search runs on the tick thread, bounded per step and only while `aiEnabled` (its side's turn,
   the game shown). Running it off the tick, over a copy of the job's rows, keeps a step from ever landing in a frame.

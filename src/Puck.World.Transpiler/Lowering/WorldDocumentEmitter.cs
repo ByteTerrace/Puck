@@ -694,6 +694,7 @@ public static partial class WorldDocumentEmitter {
                 hashed: true,
                 member: "addons",
                 parent: parent,
+                row: typeof(WorldAddonRow),
                 scope: scope
             ),
             WorldRootArm.Cartridge => LowerCartridgeBlock(
@@ -858,37 +859,18 @@ public static partial class WorldDocumentEmitter {
 
         return true;
     }
-    // One `addon { }`/`material { }` block, appended to the named root array under its own pointer. An addon
-    // additionally resolves its content hash.
-    private static bool LowerRowCollectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string member, bool hashed) {
-        if (parent[member] is not JsonArray rows) {
-            rows = [];
-            parent[member] = rows;
-        }
-
-        var rowPointer = DocumentJsonPointer.Child(index: rows.Count, pointer: DocumentJsonPointer.Child(name: member, pointer: scope.CurrentPointer));
-
-        scope.SourceMap?.Register(
-            jsonPointer: rowPointer,
-            span: block.Span
+    // One `addon { }`/`material { }` block, appended to the named root array under its own pointer. An addon lowers at
+    // its model type, so its module path written by a template in another directory is re-expressed for the document,
+    // and additionally resolves its content hash.
+    private static bool LowerRowCollectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string member, bool hashed, Type? row = null) {
+        var rowObj = AppendNamedBlock(
+            block: block,
+            row: row,
+            scope: scope,
+            target: parent,
+            targetKey: member
         );
 
-        var oldPointer = scope.CurrentPointer;
-
-        scope.CurrentPointer = rowPointer;
-        var rowObj = LowerBlockToObject(
-            block: block,
-            scope: scope
-        );
-
-        scope.CurrentPointer = oldPointer;
-
-        if (DocumentLowering.ResolveBlockName(
-            block: block,
-            scope: scope
-        ) is { } resolved) {
-            rowObj["name"] = resolved;
-        }
         if (hashed) {
             ResolveAddonHash(
                 addon: rowObj,
@@ -897,7 +879,6 @@ public static partial class WorldDocumentEmitter {
                 span: block.Span
             );
         }
-        rows.AppendNode(item: rowObj);
 
         return true;
     }
@@ -1429,9 +1410,10 @@ public static partial class WorldDocumentEmitter {
             );
         }
     }
-    // A row given its model type lowers each member at its own position, so a file path member is re-expressed for
-    // the document and a misspelled member is refused.
-    private static void AppendNamedBlock(
+    // One named block appended to a root or section array under its own pointer, its name resolved as its header
+    // writes it (an interpolated header included). A row given its model type lowers each member at its own position,
+    // so a file path member is re-expressed for the document and a misspelled member is refused.
+    private static JsonObject AppendNamedBlock(
         BlockNode block,
         DocumentScope scope,
         JsonObject target,
@@ -1457,10 +1439,15 @@ public static partial class WorldDocumentEmitter {
 
         scope.CurrentPointer = oldPointer;
 
-        if (block.Name is not null) {
-            obj["name"] = block.Name;
+        if (DocumentLowering.ResolveBlockName(
+            block: block,
+            scope: scope
+        ) is { } resolved) {
+            obj["name"] = resolved;
         }
         array.AppendNode(item: obj);
+
+        return obj;
     }
     private static void ResolveAddonHash(JsonObject addon, bool isAddon, DocumentScope scope, SourceSpan span = default) {
         var sourcePath = (addon["modulePath"]?.ToString() ?? (addon["source"]?.ToString() ?? (addon["path"]?.ToString() ?? (addon["rom"]?.ToString() ?? (addon["name"]?.ToString() ?? "addon")))));
@@ -1476,10 +1463,15 @@ public static partial class WorldDocumentEmitter {
         }
 
         byte[]? wasmBytes = null;
+        // An addon's module path is already re-expressed for the document being lowered (LowerRowCollectionBlock), so
+        // it resolves beside that document, not beside a template's source that wrote it.
+        var beside = ((isAddon && (scope.Annotations.GetValueOrDefault(key: WorldDocumentVocabulary.DocumentDirectoryAnnotation) is string document))
+            ? document
+            : scope.BasePath);
 
-        if (scope.BasePath is not null) {
+        if (beside is not null) {
             var fullPath = Path.Combine(
-                path1: scope.BasePath,
+                path1: beside,
                 path2: sourcePath
             );
 

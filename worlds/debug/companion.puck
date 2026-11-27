@@ -46,8 +46,6 @@ state {
   world [
     // The cue edges the gallery's sounds are heard at: the guide's spoken arrival and the lift's door.
     { name: "companionCue", kind: "Int", cells: [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
-    // The identity lane: each seat's identity facts load here, the companion's unlocks among them.
-    { name: "identity", kind: "Int", capacity: 64 }
   ]
 }
 

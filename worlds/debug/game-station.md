@@ -11,18 +11,23 @@ the floor and is 1.72 m across by 1.6 m deep.
 
 ## The owner's rulings
 
-- **Every station is a digital game table with its own games.** A station swaps
-  games through its menu (chess, Klondike, FreeCell) and keeps its own state for
-  each game it can show, so swapping games or playing at one station never
-  touches another. The gallery is planned to hold twelve, as it holds twelve
-  display stations.
+- **Every station is a game table with its own games.** A station swaps games
+  through its menu (chess, Klondike, FreeCell) and keeps its own state for each
+  game it can show, so swapping games or playing at one station never touches
+  another. The gallery is planned to hold twelve, as it holds twelve display
+  stations.
+- **The board is a holodeck.** When a game that uses tokens is shown, the board
+  materializes that game's tokens as real bodies (the standard chess set's
+  pieces, the deck's cards) and releases them when the game changes or ends.
+  Players pick pieces up, set them down and knock them over, and the game is
+  judged from where they settle. The station is the one place chess is played;
+  the old physical chess table is retired, and the single-purpose game displays
+  retire as the owner migrates them
+  ([the decision](../../docs/decisions/play.md#tabletop)).
 - **Two seats for chess.** A player in the far chair plays the other side; with
   no one there the computer plays it. Anyone else watches. Patience stays one
   player's.
 - **NEW GAME works for every game**, chess included.
-- **A station move waits while a physical table's player holds a piece.** Where
-  a station shows a physical table's game, the game's display door takes no
-  move while the table's seated player has a piece up.
 - **Every operation is bounded in memory and CPU**, and twelve stations at once
   stay cheap: an idle station does no rule work, a station's rules wake only on
   its own input or its game's state, the computer's search runs bounded and
@@ -44,14 +49,15 @@ every station.
   placement and pick grid, the rows its paints and the console read
   (`gameStationGame`, `gameStationPick`, `gameStationStatus`,
   `gameStationRowInk`, and the chess board's inks), the constant tables every
-  station's rules copy from, the console commands, and the decks' faces and
-  kit.
+  station's rules copy from, the console commands, the decks' faces and kit,
+  and the chess pieces' looks and kit (`chessStationSet`).
 - **The station's instance**, `use gameStationGames as <id>(station: …, index: <i>)`,
   with the station's id as the alias and `i` its place in the world's list of
   stations: its chairs and presses, its chess game (the chess library,
-  [`../games/chess.puck`](../games/chess.puck), in its digital mode), its
-  chess display ([`../games/chess-station.puck`](../games/chess-station.puck))
-  and the patience rules that read its chairs (`patienceStationRules` in
+  [`../games/chess.puck`](../games/chess.puck), with its physical judge), its
+  board and piece bodies and their play
+  ([`../games/chess-station.puck`](../games/chess-station.puck)) and the
+  patience rules that read its chairs (`patienceStationRules` in
   [`../games/patience-station.puck`](../games/patience-station.puck)).
   Every row and rule the instance declares is the instance's own, `<id>$<name>`
   (`world.state south3$gameStationChair`).
@@ -71,12 +77,17 @@ every station.
   `forEach: klondikePile2Of`), binding the card to `$each` and the station to
   `$member`, and poses each card about its own station
   (`frame: placement:$each`).
-- **The shared-chess instance**, `gameStationSharedChess`, is the same station
-  but for its chess, which is the world's own game: the debug world's chess
-  table ([`chess.md`](chess.md)), whose own rules judge, hold and reset it, so a
-  move at the glass moves the table's pieces too.
+- **The holodeck** ([`../standard/holodeck.puck`](../standard/holodeck.puck)) is
+  the pool of bodies a game's tokens stand as: each body an inhabited placement
+  whose count is a cell (`holodeckLive`), asked for and released through one
+  door (`holodeckSet`), posed once it exists. Chess's 32 pieces are the
+  station's instance's pool (`piece0` to `piece31`, as the chess library keys
+  them); the cards are a world pool keyed `<station>-card<k>`. A materialized
+  body takes the population's highest free slot, so a world sizes its bodies
+  for the largest token game each station hosts (`gameStationBodies`: the
+  outlines and 52 cards).
 
-Three worlds stand stations:
+Worlds that stand stations:
 
 - [`game-station-root.puck`](game-station-root.puck) stands one station with its
   own chess (id `station`) on a small floor. Boot it with
@@ -86,10 +97,18 @@ Three worlds stand stations:
   plans twelve stations, six on each gallery
   ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`, clear of
   the corner stairs, the terrace, the lift's landing, the wonder keys' stand
-  and the tree's north branch). It stands the first, `south3`, in its
-  shared-chess form; the rest wait on the work sheet ([Cost](#cost)).
-  `debug.go cards` stands the seat at its near chair.
-- The test worlds ([`klondike-tests.puck`](klondike-tests.puck),
+  and the tree's north branch). It stands the first, `south3`, holding its own
+  chess; the rest wait on the work sheet ([Cost](#cost)). `debug.go cards` and
+  `debug.go chess` stand the seat at its near chair. The debug world numbers
+  its bodies below the deck from it, so its cards stand always rather than as a
+  pool (`holodeck: false`), and its chess pieces take the free slots
+  `galleryPopulation` keeps.
+- The board games lab ([`labs/board-games.puck`](labs/board-games.puck)) stands
+  one station, and its stress mode
+  ([`labs/board-games-stress.puck`](labs/board-games-stress.puck)) twelve, each
+  playing chess against itself (`autoplay`).
+- The test worlds ([`chess-tests.puck`](chess-tests.puck),
+  [`klondike-tests.puck`](klondike-tests.puck),
   [`freecell-tests.puck`](freecell-tests.puck)) stand stations of their own on
   `gameStationRoom`, the root's small room.
 
@@ -108,9 +127,9 @@ The menu's lettering is embossed in the table and the status lines are text
 paints; each line of capitals is centred on its box by the text's `anchor`
 (`capMiddle`), never by hand offsets.
 
-- **Chess** draws 15 cm squares centred on the board area, the pieces standing
-  on them at 1.5 times the standard set's size. The near chair plays White, the
-  far chair Black. The near chair's cursor ring is pale cyan, the far chair's
+- **Chess** draws 15 cm squares centred on the board area, and while chess is
+  shown its pieces stand on them as rigid bodies at 1.5 times the standard
+  set's size. The near chair plays White, the far chair Black. The near chair's cursor ring is pale cyan, the far chair's
   pink, a lifted piece's amber and the last legal move's two squares
   terracotta.
 - **Klondike and FreeCell** lay their cards (16 by 23 cm) centred on the board
@@ -132,10 +151,16 @@ it up.
 
 A tap on a game's button shows that game; NEW GAME starts the game shown
 afresh (chess sets every piece back, patience deals again). In chess, on your
-side's turn a pick on your piece lifts it and a pick on another square asks the
-game's display door (`chessPut`) for the move, which the game judges as it
-judges any move. The computer plays the side whose chair stands empty (Black
-when no one sits at all, neither when both chairs are taken). In patience, the
+side's turn with the board at rest, a pick on your piece lifts its body, which
+hovers over your cursor; a pick on another square sets it down there. The
+game's own apply path relocates the move (a captured piece's body is released,
+a castling rook stands on its square, a pawn on the last rank comes back as a
+queen) and the settled board is judged. An arrangement judged illegal, a
+set-down or a piece knocked over alike, is put back as the last legal one stood,
+every body standing on its square again. The computer plays the side whose
+chair stands empty (Black when no one sits at all, neither when both chairs are
+taken), and its move stands its piece's body on the new square to settle and be
+judged like yours. In patience, the
 pointer reaches any card of a fan and the keys stand on a column's last card;
 a pick on a face-up card lifts it and every card after it, and a pick on
 another pile plays the run there.
@@ -148,6 +173,8 @@ another pile plays the run there.
 | Read every station's game, status and menu | `world.state gameStationGame`, `gameStationStatus`, `gameStationRowInk` |
 | Read who sits where and their presses | `world.state <station>$gameStationChair`, `<station>$gameStationEdges`, `<station>$gameStationPointer` |
 | Read chess at the glass | `world.state <station>$chessStationCursor`, `<station>$chessStationPicked`, `<station>$chessStationRingCode` |
+| Read the holodeck's pieces | `world.state <station>$holodeckLive` (1 a standing body), `<station>$holodeckAt` (the square each was last stood on), `<station>$pieceCell` (the game's squares) |
+| Read a station's turns played | `world.state <station>$chessStationPlies`, `<station>$chessStationGames` (games a self-playing station set up afresh) |
 | Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
 | Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
 | Deal or move in patience | `klondike.deal <i> 1`, `klondike.draw <i>`, `klondike.move <i> <from> <to> <card>`, `freecell.deal <i>`, `freecell.move <i> <from> <to> <card>` (each takes the station's number, 0 for the first) |
@@ -157,31 +184,28 @@ another pile plays the run there.
 
 ## Cost
 
-Counts read from the compiled documents with the rule work sheet the World
-admits (`world.budget.rules` reads the same sheet live):
+The rule work sheet the World admits, read from the compiled documents with
+`puck compile <world> --validate --budget <lines>` (`world.budget.rules` reads
+the same sheet live, and `--spent` what it spent):
 
-| | Rows | Rules | Sheet (work units a tick, at rest plus one change) |
-|---|---|---|---|
-| One station with its own chess | 214 | 187 | 380,806 |
-| Two | 324 | 260 | 651,750 |
-| Twelve | 1,424 | 990 | 2,891,160 |
-| The debug world with its one station | | | 3,628,517 |
-| gallery-root with its one station | | | 1,709,619 |
+| | Sheet (work units a tick, at rest plus one change) |
+|---|---|
+| One station (game-station-root, the board games lab) | 496,713 |
+| Twelve stations playing themselves (the stress lab) | 3,847,956 |
+| The debug world with its one station | 3,640,191 |
 
-Klondike's, FreeCell's and the patience layout's rules are one set for every
-station and price about 230 thousand units whatever the count: the layout's 35
-pile reads are one family sweep each and share one allowance (each pins its
-station's `patienceSyncScan`), and a card is posed only when its slot or face
-moved. Chess (about 170 thousand a station), the chairs (about 12 thousand) and
-the patience rules that read the chairs (about 11 thousand) are still copied
-into each station's instance, so each station past the first adds about 230
-thousand. The tick admits 4.2 million units
-(`RuleCapacity.MaxWorkUnitsPerTick`), so twelve stations in the debug world wait
-on moving chess and the chairs to the same shape. What an idle station spends is a
-different number from what the sheet admits: a station's rules are judged by
-change, so at rest they do no work; `world.budget.rules --spent` reads what
-they spent. Bringing the sheet down to admit twelve is the open item
-"Twelve game stations on the work sheet" in
+The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Each
+station past the first adds about 305 thousand: its instance's own lines
+(about 263 thousand summed, chess most of them) and its members of the
+patience set's family sweeps. Every cell a firing writes is priced (about 512
+units), so the holodeck's door writes two cells a body and a body at rest costs
+nothing: each lifecycle and pose rule closes its own gate. The costliest chess
+lines are the ones a game switch or a put-back opens for all 32 pieces at once
+(the lifecycle, the pose, the tidy and the settled read, each about 17 to 34
+thousand). What an idle station spends is a different number: its rules are
+judged by change, so at rest they do no work. Twelve stations in the debug
+world itself still wait on the sheet: the open item "Twelve game stations on
+the work sheet" in
 [the open items](../../docs/plans/open-items.md#card-tables-in-the-board-game-room).
 
 ## Tests
@@ -190,5 +214,10 @@ they spent. Bringing the sheet down to admit twelve is the open item
 [`freecell-tests.puck`](freecell-tests.puck) hold the patience scenarios on
 stations of their own, reading only what every seeded deal shares;
 `freecell-tests.puck` also stands two stations and claims a game at one never
-touches the other. [`chess-tests.puck`](chess-tests.puck) holds the chess
-table's. Run them with `puck test <file> --reproduce --jobs 1`.
+touches the other; `klondike-tests.puck` also claims the cards stand while
+Klondike is shown and are released when chess is. [`chess-tests.puck`](chess-tests.puck)
+holds holodeck chess: the pieces materialize and are read as the start, a
+seated player's physical move is accepted and the computer's reply lands, an
+illegal one is put back, and a game switch releases the pieces. The stress
+lab claims every station plays its turns. Run them with
+`puck test <file> --reproduce --jobs 1`.

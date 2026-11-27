@@ -1468,11 +1468,12 @@ row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 `boneHolder` and `reporter` admit the garden's full body-index range. This
 identity data belongs to the garden rather than an imported game.
 
-Physical chess stands in the debug world's board game room beside Go and
-Reversi ([`go.md`](../../worlds/debug/go.md), [`reversi.md`](../../worlds/debug/reversi.md)):
-its chess table, [`chess-table.puck`](../../worlds/debug/chess-table.puck), whose
-[notes](../../worlds/debug/chess.md) cover play, its computer opponent, and
-its scenarios. Its board uses the tabletop primitive (see the
+Physical chess stands on the gallery's game station, whose holodeck stands the
+pieces as bodies while chess is shown
+([`chess-station.puck`](../../worlds/games/chess-station.puck); its
+[notes](../../worlds/debug/game-station.md) cover play, its computer opponent,
+and its scenarios), near the board game room's Go and Reversi
+([`go.md`](../../worlds/debug/go.md), [`reversi.md`](../../worlds/debug/reversi.md)). Its board uses the tabletop primitive (see the
 [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
 and `world.tabletop` reads the board's frame, observation, and bound rows.
 
@@ -2085,8 +2086,8 @@ The same button sits a seat at a tabletop whose board facet authors an `engage`
 block: the seat is captured on `placement:<id>`, its camera eases to a view of
 the whole board from its side, its controls switch through the `engagement`
 context family's `tabletop` state, and the world's rules play the game from
-its channels and `board(pointer|side|engaged, …)` (the debug world's chess
-table, [`chess.md`](../../worlds/debug/chess.md);
+its channels and `board(pointer|side|engaged, …)` (a game station,
+[`game-station.md`](../../worlds/debug/game-station.md);
 [engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)).
 
 A THIRD registered engine, `tune-instrument`

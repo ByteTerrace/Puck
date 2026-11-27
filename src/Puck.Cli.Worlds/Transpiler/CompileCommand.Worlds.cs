@@ -10,7 +10,38 @@ using Puck.World;
 namespace Puck.Cli.Transpiler;
 
 public static partial class CompileCommand {
-    private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null) {
+    // The rule price sheet of a composed, validated world, as `world.budget.rules` reads it from a running one: the tick's
+    // total against the ceiling, the share of each module instance (a line's name before its generated joiner) and of
+    // the world's own lines, then the costliest `lines` lines.
+    private static void PrintRuleBudget(System.Text.Json.Nodes.JsonObject composed, int lines, string name) {
+        if (!WorldDefinitionFileSource.TryReadDocument(definition: out var definition, json: composed.ToJsonString(), reason: out var reason, refusal: out _, sourceName: name) || (definition is null)) {
+            Console.Error.WriteLine(value: $"budget: '{name}' could not be read for pricing: {reason}");
+            return;
+        }
+
+        WorldRuleCompilation compilation;
+
+        try {
+            compilation = WorldRuleCompilation.Compile(definition: definition);
+        } catch (Puck.State.RuleException exception) {
+            Console.Error.WriteLine(value: $"budget: '{name}' has a rule that does not compile, so it has no sheet: {exception.Message}");
+            return;
+        }
+        var contributors = compilation.WorkContributors;
+
+        Console.WriteLine(value: $"budget '{name}': {compilation.WorkBudget.WorkUnitsPerTick} of {Puck.State.RuleCapacity.MaxWorkUnitsPerTick} work units a tick, {contributors.Count} lines");
+        foreach (var share in contributors
+            .GroupBy(keySelector: static line => (line.Name.Contains(value: Puck.State.GeneratedName.Joiner) ? line.Name[..line.Name.IndexOf(value: Puck.State.GeneratedName.Joiner)] : "(world)"), comparer: StringComparer.Ordinal)
+            .Select(selector: static group => (Owner: group.Key, Units: group.Sum(selector: static line => (line.WorkUnits.IsKnown ? line.WorkUnits.Units : 0L)), Lines: group.Count()))
+            .OrderByDescending(keySelector: static share => share.Units)
+            .ThenBy(keySelector: static share => share.Owner, comparer: StringComparer.Ordinal)) {
+            Console.WriteLine(value: $"  {share.Owner}: {share.Units} over {share.Lines} lines");
+        }
+        foreach (var line in contributors.Take(count: lines)) {
+            Console.WriteLine(value: $"  {line.WorkUnits,10} {line.Name} x{line.Multiplier} check {line.CheckUnits} fire {line.FiringUnits}: {line.Response}");
+        }
+    }
+    private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null, int budgetLines = 0) {
         var compilation = WorldCompileSession.Shared.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
         var diagnostics = compilation.Diagnostics;
 
@@ -28,7 +59,13 @@ public static partial class CompileCommand {
 
             foreach (var output in outputs) {
                 if (WorldSemanticValidator.IsRootDocument(loweredJson: output.Json)) {
-                    _ = WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
+                    var validated = WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
+
+                    // A world refused for its work alone is the one whose sheet matters most, so a composed world is priced
+                    // whatever its validation found.
+                    if ((budgetLines > 0) && (validated is not null)) {
+                        PrintRuleBudget(composed: validated, lines: budgetLines, name: output.Name);
+                    }
                 }
             }
         }

@@ -1,23 +1,28 @@
 // The debug world set's game stations: the catalog every station of the set offers, the module instance each station
 // holds its games in, and what the world holds for all of them. A module library over the standard's game station
-// (../standard/game-station.puck): the gallery's board game room stands twelve (gallery/games.puck), and the isolated
-// roots stand one (game-station-root.puck) or twelve (game-stations-root.puck). game-station.md says how to play and
-// drive them.
+// (../standard/game-station.puck): the gallery's board game room stands its first (gallery/games.puck), the board games
+// lab one (labs/board-games.puck) and its stress mode twelve (labs/board-games-stress.puck), and the isolated root one
+// (game-station-root.puck). game-station.md says how to play and drive them.
 //
-// Every station is a digital game table that swaps games through its menu, the way a display station swaps shapes,
-// and holds its own game of each: a world stands a station by
+// Every station is a game table that swaps games through its menu, the way a display station swaps shapes, and holds its
+// own game of each. Its board is a holodeck (../standard/holodeck.puck): the game shown stands its tokens on the glass as
+// real bodies (chess's pieces, chess-station.puck; patience's cards, patience-station.puck) and the station releases them
+// when it shows another. A world stands a station by
 //
 //   - expanding the world's part over its list of stations: `gameStationSetPrototypes`, `gameStationSetPlacements`,
-//     `gameStationSetGrids` and `gameStationSetState` in their blocks, `gameStationSetRules` at its top level (the
-//     rules one set plays for every station: the patience games'), `gameStationSetCommands` as its commands, and the deck
-//     (`patienceDeck`, `patienceStationCards`) where its body order wants the cards;
+//     `gameStationSetGrids` and `gameStationSetState` in their blocks, `gameStationSetRules` and `chessStationSet` at its
+//     top level (the rules one set plays for every station: the patience games'; the chess pieces' looks and kit),
+//     `gameStationSetCommands` as its commands, and the deck (`patienceDeck`, `patienceStationCards`) where its body order
+//     wants the cards;
 //   - declaring the chess game's three vocabularies (`PieceKind`, `MoveKind`, `TurnColor`, chess.puck's header) in its
 //     own `state` block, since a template cannot carry them;
 //   - and making one instance a station, `use gameStationGames as <id>(station: <station>, index: <i>)`, with the
 //     station's id as the alias, so every row and rule the instance declares is `<id>$<name>` and the console commands
 //     reach it, and `i` the station's place in the list, which keys its cells in the rules one set plays for every
 //     station (`klondikeRequest[i]`, `freecellPile8Of<i>`). A world with other than `gameStationSeats` local seats
-//     passes its count as `seats: <n>`, which the chairs read.
+//     passes its count as `seats: <n>`, which the chairs read, and a station that plays chess against itself passes
+//     `autoplay` (chess-station.puck's `chessStationPlay`);
+//   - and sizing its population for every body its stations may stand at once: `gameStationBodies` a station.
 import "../standard/game-station"
 import "../games/chess"
 import "../games/chess-station"
@@ -34,67 +39,53 @@ let gameStationCatalog = [
   { id: "freecell", title: "FREECELL" }
 ]
 
-// The ticks a drawn chess board waits after a move before it is judged.
-let chessGameSettleTicks = 2
+// The ticks the pieces must stay at rest after a move before the board is judged.
+let chessGameSettleTicks = 9
+
+// A station's bodies at most: its cursor and held outlines, and its largest token game's tokens, the patience deck's 52
+// cards (patience-station.puck), since its holodeck stands one game's tokens at a time (chess's 32 pieces,
+// chess-station.puck, are fewer). A world whose cards stand always (`holodeck: false`) adds the chess pieces' 32.
+let gameStationBodies = 54
+let gameStationChessBodies = 32
 
 // The station the isolated root stands: at the origin, its creation's floor on the root's floor.
 let rootStation = { id: "station", at [0, -0.5, 0] }
 
-// One station's games: chess (chess.puck in its digital mode, drawn by chess-station.puck) and the patience collection
+// One station's games: chess (chess.puck, its pieces stood by chess-station.puck's holodeck) and the patience collection
 // (solitaire.puck over klondike.puck and freecell.puck, laid out by patience-station.puck), with the station's menu and
-// chairs (the standard's gameStationRules). Every name it declares is the instance's own, so a station's games and
-// presses never touch another's; it reads and writes the world's rows only by its own station's key. The rules run in
-// the order below: the chairs' presses first, then each game.
-module gameStationGames(station, index, seats = gameStationSeats) {
+// chairs (the standard's gameStationRules). Every name it declares is the instance's own, so a station's games, bodies
+// and presses never touch another's; it reads and writes the world's rows only by its own station's key. The rules run
+// in the order below: the chairs' presses first, then chess (the judge reads the settled pieces, the doors and the play
+// write the cells, and the holodeck stands the bodies where the cells say), then patience.
+module gameStationGames(station, index, seats = gameStationSeats, autoplay = null) {
   state {
-    chessBoardGrid(cellSize: 0.1, origin: [-0.4, 0, -0.4], band: 0.1)
+    chessStationGrid()
     world {
       gameStationSeatState()
-      chessGameState(settleTicks: chessGameSettleTicks, digital: true)
+      chessGameState(settleTicks: chessGameSettleTicks, placed: true)
       chessStationState(station: station)
       patienceStationState(station: station)
     }
   }
   placements {
-    chessStationTokens(station: station, game: 0)
+    chessStationBoard(station: station)
     patienceStationSpots(station: station, index: index)
   }
 
   gameStationRules(station: station, catalog: gameStationCatalog, seats: seats)
 
   chessSearch(name: $"chessAI-{station.id}")
-  chessJudge(settleTicks: chessGameSettleTicks, digital: true)
+  chessJudge(settleTicks: chessGameSettleTicks, scope: "pieceCode")
   chessComputer(settleTicks: chessGameSettleTicks)
   chessMoveDoor(settleTicks: chessGameSettleTicks)
   chessMoveDone()
+  chessStationPlay(station: station, game: 0, settleTicks: chessGameSettleTicks, autoplay: autoplay)
   chessPutDown(settleTicks: chessGameSettleTicks)
-  chessPutJudged(settleTicks: chessGameSettleTicks, digital: true)
-  chessPutSettled()
+  chessPutJudged(settleTicks: chessGameSettleTicks, restoresCells: true)
   chessFreshGame()
-  chessStationRules(station: station, game: 0)
-
-  patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
-}
-
-// A station whose chess is the world's own game (a physical table's, or chess-game.puck's drawn board): the same
-// station but for its chess game, which it shows and plays through the game's display door (`chessPut`) and leaves to
-// the world's rules to judge, hold and reset. The debug world stands one beside its chess table, so a move at the glass
-// moves the table's pieces too.
-module gameStationSharedChess(station, index, seats = gameStationSeats) {
-  state {
-    world {
-      gameStationSeatState()
-      chessStationState(station: station)
-      patienceStationState(station: station)
-    }
-  }
-  placements {
-    chessStationTokens(station: station, game: 0)
-    patienceStationSpots(station: station, index: index)
-  }
-
-  gameStationRules(station: station, catalog: gameStationCatalog, seats: seats)
-  chessStationRules(station: station, game: 0, owns: false)
+  chessStationHolodeck(station: station, game: 0)
+  chessPutSettled()
+  chessStationGlass(station: station, game: 0)
 
   patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
 }
@@ -125,29 +116,30 @@ template gameStationSetGrids(stations) {
 }
 
 // What the stations' paints, the console and every station's rules read, inside the world's `state.world` block.
-template gameStationSetState(stations) {
+template gameStationSetState(stations, holodeck = true) {
   gameStationState(stations: stations, catalog: gameStationCatalog)
   chessStationDisplayState(stations: stations)
-  patienceDisplayState(stations: stations)
+  patienceDisplayState(stations: stations, holodeck: holodeck)
   solitaireState(count: length(stations))
 }
 
 // The rules the world holds once for every station, at the world's top level: the patience games' and the patience
 // layout's, each sweeping the stations' tables (`solitaireTable`, keyed by a station's place in the list, the `index`
-// its instance is made with) or a family a member a station (`patienceCardNoOf`, `klondikePile2Of`).
-template gameStationSetRules() {
+// its instance is made with) or a family a member a station (`patienceCardNoOf`, `klondikePile2Of`). `holodeck` is
+// patience-station.puck's: whether the cards are a holodeck pool.
+template gameStationSetRules(holodeck = true) {
   solitaireGame()
-  patienceSetRules()
+  patienceSetRules(holodeck: holodeck)
 }
 
-// A small room holding `stations` on their own: a floor, `seats` local seats and visitors with the stations' decks
-// above them, a spawn at the first station's near chair (`hero`) and at its far chair (`rival`), the glass's font, and
-// the world's part of every station. game-station-root.puck and the stations' test worlds stand on it; each still declares the
-// chess vocabularies and makes one instance a station itself (this file's header). A world standing more inhabitants
-// beside the stations (a lab's physical chess table: 33 bodies) names their count in `extraBodies`.
+// A small room holding `stations` on their own: a floor, `seats` local seats and visitors with room above them for every
+// station's bodies, a spawn at the first station's near chair (`hero`) and at its far chair (`rival`), the glass's font,
+// and the world's part of every station. game-station-root.puck, the board games labs and the stations' test worlds
+// stand on it; each still declares the chess vocabularies and makes one instance a station itself (this file's header).
+// A world standing more bodies beside the stations names their count in `extraBodies`.
 template gameStationRoom(stations, seats = gameStationSeats, extraBodies = 0) {
   bodies {
-    capacity: (12 + (54 * length(stations)) + extraBodies)
+    capacity: (12 + (gameStationBodies * length(stations)) + extraBodies)
     localSeats: seats
     networkPlayers: 8
     seatSpawns [hero, rival]
@@ -176,6 +168,7 @@ template gameStationRoom(stations, seats = gameStationSeats, extraBodies = 0) {
   for station in stations {
     patienceStationCards(station: station)
   }
+  chessStationSet(stations: stations)
 
   placements {
     placement "floor" {

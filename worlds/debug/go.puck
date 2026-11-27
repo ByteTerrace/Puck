@@ -3,6 +3,7 @@ import "../standard/kits"
 import "../standard/contexts/tabletop"
 import "shapes"
 import "gametable"
+import "board-cursor"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (gallery/gallery.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
 // world imports this file whole. The table stands east of the chess table, its board's centre goSurface over goTable

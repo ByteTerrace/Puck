@@ -226,6 +226,14 @@ public sealed record WorldPlacementInhabit(
     [JsonIgnore]
     public WorldPlacementInhabitCount ResolvedCount => (Count ?? new WorldPlacementInhabitCount(Literal: 1));
 
+    /// <summary>Gets whether the facet stands at most one body, so <c>placement:&lt;id&gt;</c> names that body (or none):
+    /// an authored literal of 1, or a cell reference whose <see cref="Distribution"/> disc declares one sample, which
+    /// <c>WorldPopulation.ReconcileInhabitCounts</c> clamps the live count to. A holodeck's pool body is the second kind:
+    /// its count cell switches it between standing and released.</summary>
+    [JsonIgnore]
+    public bool StandsOneBody => (ResolvedCount is { Row: null, Literal: 1 }) ||
+        ((ResolvedCount.Row is not null) && ((Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount == 1));
+
     /// <summary>The largest live count this facet could ever admit — the document-global dynamic-instance
     /// ceiling's own worst-case term for this row: the authored literal, or, for a cell reference whose live value
     /// the ceiling cannot know at author time, the tighter of <paramref name="peerCapacity"/> and

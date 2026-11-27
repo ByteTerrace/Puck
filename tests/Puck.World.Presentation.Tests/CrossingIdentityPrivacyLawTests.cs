@@ -27,7 +27,8 @@ public sealed class CrossingIdentityPrivacyLawTests {
             : null);
     private static string Record(WorldIdentity identity, string field) => (identity.TryReadRecord(
         field: Name(value: field),
-        record: Name(value: "stats"),
+        pool: Name(value: "stats"),
+        slot: 0,
         value: out var value
     )
         ? ((value.Kind == CellKind.Text) ? value.AsText : value.AsInt.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))

@@ -4,6 +4,7 @@ import "../standard/inputs"
 import "../standard/kits"
 import "shapes"
 import "gametable"
+import "board-cursor"
 
 // Physical Alchemy at a board room table on level 2 (gallery/gallery.puck): 31 element tokens, four starters (Air,
 // Earth, Fire, Water), a cauldron with two hand wells (left and right), and a lectern recipe-book screen showing

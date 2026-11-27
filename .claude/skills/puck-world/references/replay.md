@@ -147,9 +147,9 @@ or unbounded live body targets is refused rather than rewinding outside bindings
 Standalone level rules carry no edge latch. Restore
 replaces only those entries and invalidates their scheduling observations. Decision
 continuations, undo groups and groups writing outside the scope are refused.
-Authors must keep the rules' live dependencies local; the chess table uses each
-piece's resting fact through `physics(quiescent, "chess-demo")` rather than the
-population-wide `physics(quiescent)` census.
+Authors must keep the rules' live dependencies local: a scope's rest is read
+through `physics(quiescent, "<scope>")`, which restricts the census to the
+scope's bodies, rather than the population-wide `physics(quiescent)`.
 
 The derived start and tape ride `WorldServerCheckpoint`; their rolling
 input/hash digests, the actual privately copied starting-image digest, and cursors
@@ -169,8 +169,10 @@ restore, which then restores its own); a `world.reload` is an edit of the rows
 its source changed
 ([what an install rebuilds](../../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
 
-The live example is [the chess table](../../../../worlds/debug/chess.md), with
-positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck`.
+The debug world's live example, its chess table's idle demonstration, was
+retired with the table; the open item "A scoped replay exhibit" in
+[the open items](../../../../docs/plans/open-items.md#card-tables-in-the-board-game-room)
+names its replacement.
 [WorldScopedReplayTests](../../../../tests/Puck.World.Server.Tests/WorldScopedReplayTests.cs)
 covers row isolation, divergence, body input doors, checkpoint continuation and
 a whole-session tape controlling a scoped replay without doubling its derived inputs.

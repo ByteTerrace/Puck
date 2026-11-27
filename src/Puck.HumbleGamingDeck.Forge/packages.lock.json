@@ -2,16 +2,15 @@
   "version": 1,
   "dependencies": {
     "net11.0": {
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[11.0.0, )",
-        "resolved": "11.0.0",
-        "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
-      },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
         "resolved": "11.0.0",
         "contentHash": "KygQMITBDDPXw7+AAgdwQvVAaTXuDsc1iCAuvhO73ERxKX+d92cdbgZmpoYF7DIUq2hfs/yO2KD87uIreRy3MA=="
+      },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "2.3.1",
+        "contentHash": "wCNWERk46ATkXor8SK43dgpO8GCuH5BQnvwuVogEVWrYilDKA7QituNhq17iYyL0RAHTuIIyczfuV0AWSe8ZLw=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
@@ -37,6 +36,21 @@
       "ByteTerrace.Puck.Confinement": {
         "type": "Project"
       },
+      "ByteTerrace.Puck.GamingBricks.Forge": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.HumbleGamingDeck": {
         "type": "Project",
         "dependencies": {
@@ -57,6 +71,22 @@
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
+      },
+      "ByteTerrace.Puck.State": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[2.*, )"
+        }
       }
     }
   }
