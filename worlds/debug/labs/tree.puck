@@ -1,0 +1,88 @@
+// The tree's lab: the gallery tree (gallery/tree.puck) and its walkway alone, with just enough of the building for every
+// branch to land: the hall's floor about the trunk, a stretch of balcony at each landing, the magic barrier behind each
+// level-1 landing and the doorway at each level-2 and level-3 landing, under the debug world's day. It bakes and settles
+// in a fraction of the debug world's time, so the tree is built, walked and judged here (AGENTS.md, the labs ruling);
+// `tree-walk-tests.puck` plays the walkway's route in it. Boot it with `--world worlds/debug/labs/tree.puck`.
+//
+// Its document id, `lab-tree`, is the address the gallery's lab wing reaches it by: a plaque's portal names it.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-tree"
+
+import "../day-alone"
+import "../set-controls"
+import "../size"
+import "../gallery/layout"
+import "../gallery/shell"
+import "../gallery/look"
+import "../gallery/tree"
+import "../gallery/wonder"
+import "../tree-walk"
+import "../../standard/place"
+import "../../standard/benchmark"
+
+metadata {
+  title: "The tree's lab"
+  description: "The gallery tree and its walkway, with the floor and the balcony landings its branches reach."
+}
+
+// Each branch's landing: a bay of balcony from the arcade's far side to the balcony's edge, at its level.
+let labTreeLandingDepth = 2.5
+function labTreeBalcony(b) = ((b.side == "south") ? [(arcadeSouth - labTreeLandingDepth), naveSouth] : [
+  naveNorth,
+  (arcadeNorth + labTreeLandingDepth)
+])
+// The hall's floor about the trunk: from wall to wall across the nave, and as far along the hall as the branches reach.
+let labTreeFloorReach = 16
+
+spawnPoints [
+  { id: "hero", parent: gallery, position: treeWalkFloor(treeWalkApproach), yawDegrees: treeWalkStartYaw }
+]
+
+routes [treeWalkRoute]
+
+prototypes {
+  prototype "lab-tree-floors" {
+    document {
+      name: "lab-tree-floors"
+      schema: "puck.creation.v2"
+      palette: shellPlain
+      shellSlab(
+        label: "floor",
+        x0: (treeX - labTreeFloorReach),
+        x1: (treeX + labTreeFloorReach),
+        y0: (galleryFloor[0] - 0.3),
+        y1: galleryFloor[0],
+        z0: galleryWall,
+        z1: galleryNorth
+      )
+      for (b, i) in treeLimbs {
+        shellSlab(
+          label: $"balcony-{i}",
+          x0: (b.x - (arcadePitch / 2)),
+          x1: (b.x + (arcadePitch / 2)),
+          y0: (galleryFloor[b.level] - 0.3),
+          y1: galleryFloor[b.level],
+          z0: labTreeBalcony(b)[0],
+          z1: labTreeBalcony(b)[1]
+        )
+      }
+    }
+  }
+  shellTreeEdgePrototypes()
+}
+
+placements {
+  placement "gallery" {
+    prototype: "place"
+    position: gallerySite
+  }
+  placement "lab-tree-floors" {
+    prototype: "lab-tree-floors"
+    parent: "gallery"
+    position [0, 0, 0]
+    solid
+  }
+  shellTreeEdges()
+}

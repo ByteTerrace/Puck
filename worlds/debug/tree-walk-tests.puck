@@ -1,6 +1,7 @@
-// The gallery tree's walkway, walked as a player walks it: seat 1 plays the `tree-walk` route (benchmark-route.puck,
-// its waypoints from tree-walk.puck) with the standard's `walker` program, which works the seat's own stick and camera
-// toward each waypoint in turn, so every step the body takes is the step a player's pad would ask for. Rules in this
+// The gallery tree's walkway, walked as a player walks it, in the tree's lab (labs/tree.puck): seat 1 plays the
+// `tree-walk` route (tree-walk.puck's treeWalkRoute) with the standard's `walker` program, which works the seat's own
+// stick and camera toward each waypoint in turn, so every step the body takes is the step a player's pad would ask for,
+// as a plain visitor holding no pass. Rules in this
 // test world latch the walk as it goes: which waypoint the body last reached, and the waypoint after which each kind of
 // failure first showed (`kinematics(body, 0, <witness>)`, what the body's own contact phase decided each step). The
 // expectations at the export tick then read where the walk got to and why it stopped, if it did:
@@ -9,7 +10,10 @@
 //   late        no waypoint reached after its time (its distance at a slow walk, plus a turn)
 //   fell        no airborne run longer than `treeWalkAirborne` once the walk is under way
 //   stuck       no run of driven steps that did not move the body longer than `treeWalkStuck`
-//   refused     no step-up refused: no riser the body cleared at its step height and could not stand on
+//   refused     no step-up refused: no riser the body cleared at its step height and could not stand on; a
+//               failing walk also reports the first refusal's outcome (5 no landing, 6 nothing it may stand on),
+//               the edge clearance and normal of the face it met, and where the body stood (`kinematics`' refusal
+//               witnesses), each line reading its value
 //   deep        no step that ended a contact solve still pushing as deep as the walker's contact skin
 //   flat        every climbing stretch between two tread waypoints took at least one step-up
 //   landed      the body stood on each landing's balcony floor when it reached it, grounded
@@ -18,10 +22,9 @@
 // foot), so a failing line names the segment. Play the same route live with `world.benchmark run tree-walk`.
 
 schema: "puck.world.definition.v1"
-basis: "debug"
-// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
-documentId: "debug"
-import "stopped-machines"
+basis: "labs/tree"
+// The lab's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
+documentId: "lab-tree"
 import "gallery/layout"
 import "tree-walk"
 
@@ -64,6 +67,14 @@ state {
     slot treeWalkDeepAt = treeWalkNone
     slot treeWalkFlatAt = treeWalkNone
     slot treeWalkRefusalBase = 0
+    slot treeWalkRefusalOutcome = 0
+    slot treeWalkRefusalHeight = 0.0
+    slot treeWalkRefusalNormalX = 0.0
+    slot treeWalkRefusalNormalY = 0.0
+    slot treeWalkRefusalNormalZ = 0.0
+    slot treeWalkRefusalX = 0.0
+    slot treeWalkRefusalY = 0.0
+    slot treeWalkRefusalZ = 0.0
     slot treeWalkStepMark = 0
     table treeWalkLanded {
       for k in treeWalkLandings {
@@ -131,6 +142,14 @@ rule "tree-walk-refused" {
     kinematics(body, 0, stepRefusals) > treeWalkRefusalBase)
   mode: Level
   treeWalkRefusedAt = treeWalkReached
+  treeWalkRefusalOutcome = kinematics(body, 0, refusalOutcome)
+  treeWalkRefusalHeight = kinematics(body, 0, refusalHeight)
+  treeWalkRefusalNormalX = kinematics(body, 0, refusalNormalX)
+  treeWalkRefusalNormalY = kinematics(body, 0, refusalNormalY)
+  treeWalkRefusalNormalZ = kinematics(body, 0, refusalNormalZ)
+  treeWalkRefusalX = kinematics(body, 0, refusalX)
+  treeWalkRefusalY = kinematics(body, 0, refusalY)
+  treeWalkRefusalZ = kinematics(body, 0, refusalZ)
 }
 rule "tree-walk-deep" {
   when treeWalkReached >= 0 and treeWalkDeepAt == treeWalkNone and kinematics(body, 0, depth) >= treeWalkSkin
@@ -151,6 +170,14 @@ test "the tree's walkway, foot to the last landing" {
     treeWalkFellAt == treeWalkNone
     treeWalkStuckAt == treeWalkNone
     treeWalkRefusedAt == treeWalkNone
+    treeWalkRefusalOutcome == 0
+    treeWalkRefusalHeight == 0
+    treeWalkRefusalNormalX == 0
+    treeWalkRefusalNormalY == 0
+    treeWalkRefusalNormalZ == 0
+    treeWalkRefusalX == 0
+    treeWalkRefusalY == 0
+    treeWalkRefusalZ == 0
     treeWalkDeepAt == treeWalkNone
     treeWalkFlatAt == treeWalkNone
     for k in treeWalkLandings {

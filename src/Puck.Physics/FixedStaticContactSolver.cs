@@ -337,12 +337,15 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     var probe = ((position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)) +
                         (push.Normal * (push.Penetration - ContactSkin)));
 
-                    // A nearly flat fillet at or below the pre-move foot is support, not a new riser. A surface that
-                    // offers no witness keeps the climb blocked and asks no step height.
+                    // An edge that rises no more than the contact skin above the ground the body walks is support, not
+                    // a new riser: a fillet at the pre-move foot, or a crease where a slope eases off, whose edge lies on
+                    // the plane the body is climbing (GroundRise), though it stands above the foot. A surface that offers
+                    // no witness keeps the climb blocked and asks no step height.
                     var witnessed = FixedSurfaceQuery.TryNearestOnCollider(collider: in collider, normal: out var normal, point: out var witness, probe: probe);
 
                     if (witnessed) {
-                        blockClimb = ((FixedVector3.Dot(left: witness, right: up) - bottom) > FixedQ4816.Epsilon);
+                        blockClimb = (((FixedVector3.Dot(left: witness, right: up) - bottom) -
+                            GroundRise(movement: in movement, offset: (witness - previousPosition), up: in up)) > ContactSkin);
                     }
                     if (blockClimb && witnessed) {
                         requiredStepHeight = FixedQ4816.Max(x: requiredStepHeight, y: ((EdgeTop(collider: in collider, normal: in normal,
@@ -710,6 +713,21 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         return swept;
     }
 
+    // How far the ground a body walks rises along up over an offset from its pre-move foot: the slice's movement follows
+    // its ground (a walking step is projected onto its support), so the ground rises at the movement's slope along the
+    // movement's heading. Zero for a level or descending move, or one with no planar part.
+    private static FixedQ4816 GroundRise(in FixedVector3 movement, in FixedVector3 offset, in FixedVector3 up) {
+        var planar = movement.RejectFrom(unitAxis: up);
+        var climb = FixedVector3.Dot(left: movement, right: up);
+
+        if ((climb <= FixedQ4816.Zero) || !planar.TryLength(length: out var run) || (run <= FixedQ4816.Zero)) {
+            return FixedQ4816.Zero;
+        }
+
+        var along = (FixedVector3.Dot(left: offset.RejectFrom(unitAxis: up), right: planar) / run);
+
+        return ((along <= FixedQ4816.Zero) ? FixedQ4816.Zero : ((along * climb) / run));
+    }
     // previousPosition is the whole move's start, the pre-move foot every slice's edge test measures from, as
     // FixedStepUp raises from that start; sliceStart begins this slice, whose displacement is the approach direction.
     private ContactResolution ResolveEndpoint(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
