@@ -437,7 +437,11 @@ them.
 A creation that carries an `occlusion` (`WorldPrototype.Occlusion`) stands for
 itself as one analytic solid, an `SdfOccluder`: a sphere, a capsule along its
 long axis, or its box, fitted to the box its shapes fill at rest
-(`SdfOccluder.Fit`, `WorldCreationOccluders.LocalOf`). Every placement showing
+(`SdfOccluder.Fit`, `WorldCreationOccluders.LocalOf`). A body wearing it casts
+its kit's collider instead wherever that is one sphere, capsule or box
+(`WorldCreationOccluders.BodyLocalOf`): the rest box counts a shape no box holds
+(a flare, a twist, a sweep) by its cull sphere, which for a character stands far
+wider than the body and reaches under its feet. Every placement showing
 the creation and every body wearing it as a look carries the solid at its scale,
 posed each frame from the anchor the frame draws it at (`WorldAnchorPoses`), so
 a rigid body, a walking character and a moving placement move their occluders
@@ -489,7 +493,8 @@ a fitted sphere or capsule darkens the faces it holds a little.
 The values are the author's: `strength` and `shadow` (shares of the light,
 default one and the strength), `reach` (past the solid's bounding sphere, default
 that sphere's radius), `softness` (default zero, a point light's hard edge) and
-`shape` (`Auto`, `Sphere`, `Capsule`, `Box`). With no `occlusion` a creation
+`shape` (`Auto`, `Sphere`, `Capsule`, `Box`, the solid fitted to the rest box,
+which a body casting its collider does not read). With no `occlusion` a creation
 casts nothing. The standard package's `bodyOcclusion` and `propOcclusion`
 (`worlds/standard/occlusion.puck`) are the values its walker, its citizens and
 the debug world's characters and props cast with.

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Physics;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -10,7 +11,8 @@ namespace Puck.World.Client;
 /// anchor (<see cref="WorldAnchor.Placement"/>, as a creation's lights do, <see cref="WorldCreationLights"/>), and one for
 /// each live body that renders as an occluding creation (<see cref="WorldBodyStampCensus.TryResolveCreation"/>),
 /// riding its drawn root (<see cref="WorldAnchorPoses.TryEntity"/>), so a body that moves moves its occluder through the
-/// pose its stamp draws. Each is the creation's own solid (<see cref="LocalOf"/>) at the row's or the body's scale. A
+/// pose its stamp draws. A placement's is the creation's own solid (<see cref="LocalOf"/>) at the row's scale, and a
+/// body's its kit's collider where one solid stands for it (<see cref="BodyLocalOf"/>) at the body's drawn scale. A
 /// body's occluder names its stamp's slots (<see cref="WorldCreationInstances.TryBodyTransformSlot(int, out int, out int)"/>),
 /// so the body's own surfaces take nothing from it.
 /// </summary>
@@ -77,6 +79,66 @@ public sealed class WorldCreationOccluders {
             ? prototype.Occlusion.Apply(fitted: fitted)
             : null);
     }
+    /// <summary>Returns the occluder a body wearing a creation casts, in the body's frame at unit scale: the solid of its
+    /// kit's collider where that is one sphere, capsule or box (<see cref="SolidOf"/>), which is the volume a body's kit
+    /// is authored to fill, else the creation's own (<see cref="LocalOf"/>); with the creation's occlusion's strengths,
+    /// reach and softness either way. The collider is preferred because the rest box a creation's shapes fill counts a
+    /// shape no box holds (a flared, twisted or swept one) by its cull sphere, which for a character can stand far wider
+    /// than the body and reach under the ground it stands on.</summary>
+    /// <param name="prototype">The creation the body wears.</param>
+    /// <param name="collider">The body's kit's compiled collider (<see cref="IWorldStampSource.Collider"/>), or
+    /// <see langword="null"/> for a kit that authors none.</param>
+    /// <returns>The occluder, or <see langword="null"/> for a creation that casts none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="prototype"/> is <see langword="null"/>.</exception>
+    public static SdfOccluder? BodyLocalOf(WorldPrototype prototype, FixedWorldCollider? collider) {
+        ArgumentNullException.ThrowIfNull(argument: prototype);
+
+        if (prototype.Occlusion is not { } occlusion) {
+            return null;
+        }
+
+        return (((collider is { } kit) && (SolidOf(collider: kit) is { } solid)) ? occlusion.Apply(fitted: solid) : LocalOf(prototype: prototype));
+    }
+    /// <summary>Returns the analytic solid of a collider that is one sphere, capsule or box volume, in the body's frame at
+    /// unit scale, its strengths, reach and softness zero.</summary>
+    /// <param name="collider">The compiled collider.</param>
+    /// <returns>The solid, or <see langword="null"/> for a collider of several volumes or of an ellipsoid, which no one
+    /// sphere, capsule or box stands for.</returns>
+    public static SdfOccluder? SolidOf(FixedWorldCollider collider) {
+        var volumes = collider.Volumes;
+
+        if (volumes.Length != 1) {
+            return null;
+        }
+
+        var volume = volumes[0];
+        var center = volume.Center.ToVector3();
+
+        switch (volume.Kind) {
+            case FixedBodyColliderKind.Sphere:
+                return new SdfOccluder { Center = center, Radius = (float)volume.Radius, Shape = SdfOccluderShape.Sphere };
+            case FixedBodyColliderKind.Capsule: {
+                    // The volume's Center is the core's lower end and its Endpoint the upper.
+                    var half = (0.5f * (volume.Endpoint.ToVector3() - center));
+
+                    return new SdfOccluder { AxisX = half, Center = (center + half), Radius = (float)volume.Radius, Shape = SdfOccluderShape.Capsule };
+                }
+            case FixedBodyColliderKind.Box: {
+                    var rotation = volume.Rotation.ToQuaternion();
+                    var half = volume.HalfExtents.ToVector3();
+
+                    return new SdfOccluder {
+                        AxisX = Vector3.Transform(value: new Vector3(x: half.X, y: 0f, z: 0f), rotation: rotation),
+                        AxisY = Vector3.Transform(value: new Vector3(x: 0f, y: half.Y, z: 0f), rotation: rotation),
+                        AxisZ = Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: half.Z), rotation: rotation),
+                        Center = center,
+                        Shape = SdfOccluderShape.Box,
+                    };
+                }
+            default:
+                return null;
+        }
+    }
 
     /// <summary>Appends this frame's creation occluders to a table that may already hold the authored ones, then keeps the
     /// nearest <see cref="SdfOccluders.MaxOccluders"/> of them all to <paramref name="eye"/>.</summary>
@@ -109,7 +171,7 @@ public sealed class WorldCreationOccluders {
         scope.Source.CopyActiveBodies(bodies: m_bodies);
         foreach (var body in m_bodies) {
             if (!WorldBodyStampCensus.TryResolveCreation(creation: out var creation, definition: definition, index: body, scale: out var scale, source: scope.Source)
-                || (LocalOf(prototype: creation) is not { } local)
+                || (BodyLocalOf(collider: scope.Source.Collider(index: body), prototype: creation) is not { } local)
                 || !WorldAnchorPoses.TryEntity(body: body, pose: out var pose, scope: in scope)) {
                 continue;
             }

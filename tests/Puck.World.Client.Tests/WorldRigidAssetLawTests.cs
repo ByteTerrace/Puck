@@ -157,6 +157,7 @@ public sealed class WorldRigidAssetLawTests {
         public WorldQueryField? StaticField => null;
 
         public WorldEntityAddress EntityAddress(int index) => new("rigid", index, 0);
+        public FixedWorldCollider? Collider(int index) => null;
         public BodyFacts Facts(int index) => default;
         public bool IsActive(int index) => true;
         public WorldLook Look(int index) => WorldLook.Implicit;

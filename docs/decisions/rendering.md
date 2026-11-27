@@ -949,6 +949,19 @@ carries (`SdfFrame.Occluders`), posed on the host from the anchors the frame
 draws its placements and bodies at (`WorldCreationOccluders`,
 `WorldAnchorPoses`). It reads no field and feeds nothing back.
 
+**Which solid.** A body casts its kit's collider where that is one sphere,
+capsule or box (`WorldCreationOccluders.BodyLocalOf`, from the compiled
+collider `IWorldStampSource.Collider` gives): the volume the kit is authored to
+fill, and the one the body collides as. A placement, and a body whose kit has
+no such collider, fits a solid to the box the creation's shapes fill at rest
+(`WorldCreationOccluders.LocalOf`). That box counts a shape no box holds (a
+flared, twisted, elongated or swept one) by its cull sphere, which for a
+character stands far wider than the body. The Moth's rest box is about 2 m
+by 2.4 m by 1.6 m and reaches 0.37 m under her feet, because her flared shins
+and shoulder pods count by cull spheres up to 0.8 m in radius; the capsule fitted to it
+is 0.9 m in radius, sunk into the floor, against her 0.35 m kit capsule, and it
+takes most of the sky from the floor and furniture a metre and more about her.
+
 **What enforces it, and where that stops.** `sdfOccludersAmbient` and
 `sdfOccludersShadow` are the only readers of an occluder, and each multiplies by
 `sdfOccluderWindow`, so a culled occluder changes no pixel. A body's own
@@ -956,8 +969,8 @@ surfaces skip its occluder by the frame slots its record names, which only a
 body's stamp provides; a static creation's sphere or capsule darkens the faces of
 its own it holds. One solid stands for a whole creation at rest: a creation
 whose rest box holds far more than its body (a lounge's rug, a stool before a
-cabinet) casts as its box, and a part that swings away from the rest pose leaves
-its solid behind.
+cabinet, a shape counted by its cull sphere) casts as its box, and a part that
+swings away from the rest pose leaves its solid behind.
 
 **What it costs.** A view with no occluder in its mask reads no record and runs
 no loop. A pixel pays a sphere or capsule test for each occluder its tile keeps
