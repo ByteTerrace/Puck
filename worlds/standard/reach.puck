@@ -1,7 +1,7 @@
 // A reach: the floor before a plate, a button or a door, where a press of the context button acts. It is a region
 // (place.puck's `place` carries it), so the rule a press fires is one rule over whoever stands there,
 // `forEach: region(id)`, and costs the bodies in reach rather than one copy of the rule for every seat and visitor.
-// A module library: it hands its importers a template and a function and emits no document; an importer composes
+// A module library: it hands its importers a template and functions and emits no document; an importer composes
 // place.puck for the carrier.
 //
 //   placements {
@@ -33,3 +33,9 @@ template reach(id, box, capacity = reachCapacity) {
 
 // Whether the body a reach's sweep binds presses the context button; a body no player holds reads no channel.
 function pressing() = channel(each, interact) >= 1
+
+// Whether a point (px, py, pz) stands within `r` of the world point `at` on the ground plane and within `h` of it up or
+// down: the round reach of a thing a body walks up to and uses in place (a terminal, a speaker), which its rules read at
+// one radius to enter and a wider one to leave.
+function reachedFrom(at, px, py, pz, r, h) = ((((px - at[0]) * (px - at[0])) + ((pz - at[2]) * (pz - at[2])) <= (r * r)) and
+  (absolute(py - at[1]) <= h))

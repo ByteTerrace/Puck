@@ -1,0 +1,283 @@
+// In conversation: someone a player walks up to and talks with. A speaker says something, offers a few choices, and
+// answers the one the player picks. A library: it hands its importers functions and a template and emits no document,
+// and it names no speaker, place or look: who the speakers are, where they stand, what they say and what a choice does
+// are the importing world's.
+//
+// Every conversation goes the same way. The player walks within `radius` of a speaker's `at` (on the ground plane, and
+// within `height` of it up or down) and presses the context button (`interact`); the speaker greets it and lists its
+// choices, the first one marked. The step keys (`stepSources`: W and S, the arrows, the pad's d-pad) move the mark, the
+// pick button (`pickSources`: Space or Enter, the pad's South) says the marked choice, and the speaker answers it. The
+// context button (`leaveSources`) or `cancel` (`backSources`) ends the conversation, as does the body leaving the
+// speaker's reach any other way (a teleport). A choice that `leaves` ends it as it is said.
+//
+// What a speaker says is world state keyed by the speaker, never a panel in one seat's view, so everyone near sees it
+// and a player learns by watching another (as a terminal's console is: docs/decisions/play.md "In-world consoles"). The
+// world shows it where it likes, typically on a sign or slate beside the speaker whose text template reads
+// `conversationSaid` (`conversationLine(number)` writes the placeholder).
+//
+// Saying a choice posts its `action` and `value` to the speaking body's mailbox (`conversationAction` and
+// `conversationValue`, keyed by the body), and the world's own rules carry it out: a rule sweeping `$players` that reads
+// the action, acts on `$each` and writes 0 back. A choice with no action only answers.
+//
+// The state, for a world's rules, signs and lamps to read:
+//
+//   conversation        the body register: the number of the speaker the body talks with (its place in `speakers`
+//                       plus one), 0 for none; the input family's selector
+//   conversationWith    the same number as a world cell keyed by the body, which the binding context reads with `$body`
+//   conversationShow    keyed by speaker number: what the speaker shows, 0 its resting line, 1 to n its choices with
+//                       choice k marked, and n + k its answer to choice k
+//   conversationSaid    keyed by speaker number: that text, which a sign's template reads
+//   conversationAction  keyed by body: the action of the choice the body last said, until the world's rules take it and
+//                       write 0; conversationValue its value
+//
+// A script is { idle, greeting, choices, marker, unmarked }: `idle` the lines a speaker shows while nobody talks with it,
+// `greeting` the lines over its choices, and each choice { say, action, value, reply, leaves }: `say` the line the
+// player says, `action` a whole number the world's rules read (0, the default, only answers), `value` the number posted
+// beside it, `reply` the lines the speaker answers with, `leaves` whether saying it ends the conversation. `marker`
+// leads the marked choice and `unmarked` the others.
+//
+//   import "../standard/contexts/conversation"
+//   inputModes { global ["interact"], families [conversationFamily(), ...] }
+//   conversationPlay(speakers: [{ at: [4, 0, 9] }], script: { idle ["Ask me"], greeting ["Hello"], choices [{ say: "Bye", leaves: true }] })
+//
+// A world whose movement family should stand still while a seat talks lists
+// `suspendedBy [{ family: "conversation", states ["talking"] }]` on it, as it does for a terminal.
+import "../reach"
+
+// The most speakers one world declares: the register's range, and the talking state's.
+let conversationLimit = 64
+
+// The family that offers a conversation's channels while the seat talks. `suspendedBy` is the families whose selection
+// takes the conversation's channels away; `channels` what the talking seat may press beyond the world's globals.
+function conversationFamily(suspendedBy = [], channels = ["conversationStep", "confirm", "cancel"]) = {
+  name: "conversation"
+  selector { kind: BodyState, name: "conversation" }
+  default: "free"
+  states [
+    { name: "free", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+    { name: "talking", ranges [{ minimum: 1 / 65536, maximum: conversationLimit }], channels: channels }
+  ]
+  suspendedBy: suspendedBy
+  transitions []
+}
+
+// The text placeholder a sign's template reads for speaker `number`: what that speaker shows now.
+function conversationLine(number) = $"{{state.conversationSaid.{number}}}"
+
+// What speaker shows code `show` says, for a script (see conversationShow above): its resting lines, its greeting over
+// its choices with the `mark`-th one marked, or its answer to a choice.
+function conversationMenu(script, mark) = join(
+  concat(
+    script.greeting,
+    map(range(0, length(script.choices)), i => $"{((i + 1) == mark) ? script.marker : script.unmarked}{script.choices[i].say}")
+  ),
+  "\n"
+)
+function conversationSaying(script) = concat(
+  [join(script.idle, "\n")],
+  map(range(1, length(script.choices) + 1), mark => conversationMenu(script, mark)),
+  map(script.choices, choice => join(choice.reply, "\n"))
+)
+
+// The conversations of `speakers`, each { at }: a world point the speaker is talked to from, within `radius` on the
+// ground plane and `height` up or down, and kept while the body stays within `margin` past that. `script` is what every
+// speaker says (see above). `seats` sizes the body cells (bodies 0 to seats - 1 are seeded; a visitor's body takes a cell
+// when it first talks, up to `capacity`). The talking seat's controls are the `conversation` binding group: the step
+// keys, the pick button, the context button to leave and the back button.
+template conversationPlay(speakers, script, radius = 1.5, height = 2, margin = 0.25, seats = 4, capacity = 16, stepUpSources = [
+  "keyboard.w"
+  "keyboard.arrowUp"
+  "gamepad.dpadUp"
+], stepDownSources = [
+  "keyboard.s"
+  "keyboard.arrowDown"
+  "gamepad.dpadDown"
+], pickSources = [
+  "keyboard.space"
+  "keyboard.enter"
+  "gamepad.buttonSouth"
+], leaveSources = [
+  "keyboard.e"
+  "gamepad.rightShoulder"
+], backSources = [
+  "keyboard.backspace"
+  "gamepad.buttonEast"
+]) {
+  let count = length(speakers)
+  let shown = ({ idle [""], greeting [], marker: "> ", unmarked: "  " } with script)
+  let choices = map(shown.choices, choice => ({ action: 0, value: 0, reply [], leaves: false } with choice))
+  let said = conversationSaying((shown with { choices: choices }))
+  let choiceCount = length(choices)
+  let numbered = map(range(0, count), i => { number: i + 1, at: speakers[i].at })
+  let bodies = map(range(0, seats), body => $"{body}")
+  let numbers = map(range(1, count + 1), number => $"{number}")
+
+  channels [
+    { name: "conversationStep", shape: Bipolar, composition: true }
+  ]
+
+  state {
+    body [
+      {
+        name: "conversation"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: conversationLimit }
+      }
+    ]
+    world {
+      for name in ["conversationWith", "conversationPosed", "conversationAction", "conversationValue"] {
+        row {
+          name: name
+          kind: Int
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: 0 })
+        }
+      }
+      for name in ["conversationShow", "conversationShown"] {
+        table $"{name}" capacity(count) {
+          for number in numbers {
+            [number] = 0
+          }
+        }
+      }
+      table conversationSaid capacity(count) {
+        for number in numbers {
+          [number] = said[0]
+        }
+      }
+      // Every text a speaker can show, keyed by its code (conversationShow).
+      row {
+        name: "conversationTexts"
+        kind: Text
+        capacity: length(said)
+        cells: map(range(0, length(said)), code => { key: $"{code}", value: said[code] })
+      }
+    }
+  }
+
+  // The context button starts a conversation with the first speaker in reach, and ends the one under way: one answer,
+  // written once. `conversation-pose` carries the change to the body and the speaker.
+  rule "conversation-use" {
+    forEach: $players
+    local at = conversationWith[$each] ?? 0
+    local px = bodyPosition(each, x)
+    local py = bodyPosition(each, y)
+    local pz = bodyPosition(each, z)
+    local near = first(numbered, s => reachedFrom(s.at, px, py, pz, radius, height), s => s.number, 0)
+    local target = (at != 0) ? 0 : near
+    when channel(each, interact) >= 1
+    mode: Edge
+    conversationWith[$each] = target
+  }
+  // `cancel` ends the conversation, and so does a body that left its speaker's reach any other way.
+  rule "conversation-cancel" {
+    forEach: $players
+    when channel(each, cancel) >= 1 and (conversationWith[$each] ?? 0) != 0
+    mode: Edge
+    conversationWith[$each] = 0
+  }
+  rule "conversation-drift" {
+    forEach: $players
+    local at = conversationWith[$each] ?? 0
+    local px = bodyPosition(each, x)
+    local py = bodyPosition(each, y)
+    local pz = bodyPosition(each, z)
+    local kept = any(numbered, s => (at == s.number) and reachedFrom(s.at, px, py, pz, radius + margin, height))
+    when at != 0 and not kept
+    mode: Level
+    conversationWith[$each] = 0
+  }
+  // Carries a change of `conversationWith` to the body's register, and to the speakers: the one it left goes back to its
+  // resting line, and the one it starts with greets it with its first choice marked. `conversationPosed` follows
+  // `conversationWith`, so the gate closes as it fires.
+  rule "conversation-pose" {
+    forEach: $players
+    local at = conversationWith[$each] ?? 0
+    local was = conversationPosed[$each] ?? 0
+    when was != at
+    mode: Level
+    conversationPosed[$each] = at
+    setBodyState(key: $each, state: "conversation", expression: at)
+    if was > 0 {
+      conversationShow[was] = 0
+    }
+    if at > 0 {
+      conversationShow[at] = 1
+    }
+  }
+
+  // The step keys move the mark one choice up or down the list, held at its ends; from an answer they mark the choice
+  // it answered first.
+  for step in [{ name: "up", by: -1, sign: 1 }, { name: "down", by: 1, sign: -1 }] {
+    rule $"conversation-step-{step.name}" {
+      forEach: $players
+      local at = conversationWith[$each] ?? 0
+      local show = conversationShow[at] ?? 1
+      local mark = (show > choiceCount) ? (show - choiceCount) : maximum(show, 1)
+      when at > 0 and (channel(each, conversationStep) * step.sign) >= 0.5
+      mode: Edge
+      conversationShow[at] = clamp(mark + step.by, 1, choiceCount)
+    }
+  }
+  // The pick button says the marked choice: its action and value go to the body's mailbox, the speaker answers it, and a
+  // choice that leaves ends the conversation.
+  rule "conversation-pick" {
+    forEach: $players
+    local at = conversationWith[$each] ?? 0
+    local show = conversationShow[at] ?? 1
+    local mark = (show > choiceCount) ? (show - choiceCount) : show
+    when at > 0 and channel(each, confirm) >= 1
+    mode: Edge
+    for (choice, i) in choices {
+      if mark == (i + 1) {
+        conversationShow[at] = choiceCount + i + 1
+        if choice.action != 0 {
+          conversationAction[$each] = choice.action
+          conversationValue[$each] = choice.value
+        }
+        if choice.leaves {
+          conversationWith[$each] = 0
+        }
+      }
+    }
+  }
+  // Each speaker's text follows what it shows, written only when that changes.
+  rule "conversation-show" {
+    forEach: conversationShow
+    local show = conversationShow[$each] ?? 0
+    when (conversationShown[$each] ?? 0) != show
+    mode: Level
+    conversationShown[$each] = show
+    setState(state: conversationSaid, key: $each, fromState: conversationTexts, fromKey: conversationShow[$each])
+  }
+
+  // The talking seat's controls, which the seat's bindings switch to while its cell names a speaker.
+  bindingOverlays [
+    {
+      id: "conversation"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        contexts: map(range(1, count + 1), number => { family: "state:conversationWith", state: $"{number}", group: "conversation" })
+        chords [
+          {
+            chord []
+            group: "conversation"
+            page {
+              id: "conversation"
+              label: "Talk"
+              entries [
+                { channel: "conversationStep", id: "earlier", label: "Up", scale: 1, sources: stepUpSources }
+                { channel: "conversationStep", id: "later", label: "Down", scale: -1, sources: stepDownSources }
+                { channel: "confirm", id: "say", label: "Say", scale: 1, sources: pickSources }
+                { channel: "interact", id: "interact", label: "Leave", scale: 1, sources: leaveSources }
+                { channel: "cancel", id: "cancel", label: "Back", scale: 1, sources: backSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

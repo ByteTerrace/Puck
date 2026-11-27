@@ -56,6 +56,7 @@
 // an engaged terminal's own screen into a typed command line every onlooker sees, and a world that does so also lists
 // `terminalConsoleFamily()` in its `inputModes` and gives the terminal's screen a terminal mode to respond with.
 import "terminal-console"
+import "../reach"
 
 // The most terminals one world declares: the register's range, and the engaged state's.
 let terminalLimit = 64
@@ -73,13 +74,6 @@ function terminalFamily(suspendedBy = [], channels = ["cancel"]) = {
   suspendedBy: suspendedBy
   transitions []
 }
-
-// Whether a point stands within a terminal's reach: within `r` of its `at` on the ground plane and within `h` of it
-// vertically.
-function terminalReach(terminal, px, py, pz, r, h) = ((((px - terminal.at[0]) * (px - terminal.at[0])) +
-  ((pz - terminal.at[2]) * (pz - terminal.at[2])) <=
-  (r * r)) and
-  (absolute(py - terminal.at[1]) <= h))
 
 // A desk view's camera, as a `cameras` row a terminal names by `camera`. It looks at `centre`, a point in the axes of
 // `anchor` (a camera subject: a placement, a world point), from far enough that a height of twice `halfHeight` there
@@ -256,7 +250,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
         $"kept{i}" or
         (
           near == i + 1 and
-            terminalReach(terminal, px, py, pz, radius + margin, height) and
+            reachedFrom(terminal.at, px, py, pz, radius + margin, height) and
             $"fit{i}n{length(terminal.needs)}"
         )
       )
@@ -265,7 +259,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
     for j in range(0, count) {
       local $"first{count - 1 - j}" = (
         (
-          terminalReach(gated[count - 1 - j], px, py, pz, radius, height) and
+          reachedFrom(gated[count - 1 - j].at, px, py, pz, radius, height) and
           $"fit{count - 1 - j}n{length(gated[count - 1 - j].needs)}"
         ) ?
           (count - j) :

@@ -1,0 +1,409 @@
+// The gallery's stewards: four of the Moth's crew (docs/game/art/moth-concept-pack, the owner's Arcade Flight Crew
+// sheet: Vector, Skylark, Bulwark and Forge) who stand on level 0 and, asked, give a visitor its normal size back. The
+// owner's ruling: a visitor who leaves the toybox small has several ways back to its size, and any steward is one. Where
+// each stands is layout.puck's `stewardPlan`; why there, gallery.md's "Ways back to normal size".
+//
+// Talking to a steward is the standard's conversation (standard/contexts/conversation.puck): walk up to its slate,
+// press the context button (E, the pad's RB), and it greets you and lists what you can ask, the first marked. W and S
+// (the pad's d-pad) move the mark, Space or Enter (the pad's South) asks it, and E or Backspace (RB or B) steps away.
+// Asking "Help me back to my normal size" posts the steward's restore action to the asking body's mailbox, and the rule
+// below gives that body its full size: its `size` register back to one, and the size fields' released hold
+// (standard/size-hold.puck) so that a body asking on a size field's ground keeps its size until it walks off the field.
+// What a steward says is shown on its slate, to everyone near.
+//
+// The gallery module imports this, so the gallery booted alone and the debug world both stand the stewards.
+import "../../standard/architecture"
+import "../../standard/occlusion"
+import "../../standard/contexts/conversation"
+import "../shapes"
+import "layout"
+
+// The crew, each a colourway of the suit the Moth's crew share (thick plates on a charcoal undersuit, ivory trim, a hood
+// with round ear discs) and a build: `bulk` widens the torso, shoulders and arms, `bob` gives a bob of hair under the
+// hood and `beard` a beard. The names are what each slate is headed with.
+let stewardCrew = [
+  { id: "vector", name: "VECTOR", plate: "#2E7D78", trim: "#E9DCC0", skin: "#E3B48C", hair: "#17161B", bulk: 1, bob: false, beard: false }
+  { id: "skylark", name: "SKYLARK", plate: "#C4442C", trim: "#EBDDBF", skin: "#EEC4A0", hair: "#9B3B22", bulk: 0.95, bob: true, beard: false }
+  { id: "bulwark", name: "BULWARK", plate: "#D79A2A", trim: "#3A3B42", skin: "#8C5B3B", hair: "#231A15", bulk: 1.3, bob: false, beard: false }
+  { id: "forge", name: "FORGE", plate: "#B5442E", trim: "#E7D5B2", skin: "#E7B48E", hair: "#C1622B", bulk: 1.2, bob: false, beard: true }
+]
+function stewardMember(id) = filter(stewardCrew, c => (c.id == id))[0]
+
+// The figure's palette slots: the crew's plate, its trim, the charcoal undersuit, skin, hair, the eyes' ink, the cyan of
+// the suit's lamps and the brass of a steward's badge and belt.
+let stewardPlate = 0
+let stewardTrim = 1
+let stewardUnder = 2
+let stewardSkin = 3
+let stewardHair = 4
+let stewardInk = 5
+let stewardGlow = 6
+let stewardBrass = 7
+function stewardPalette(c) = [
+  { color: c.plate, roughness: 0.55, specular: 0.05 }
+  { color: c.trim, roughness: 0.6, specular: 0.04 }
+  { color: "#26272E", roughness: 0.75, specular: 0.04 }
+  { color: c.skin, roughness: 0.7, specular: 0.03 }
+  { color: c.hair, roughness: 0.8, specular: 0.03 }
+  { color: "#161214", roughness: 0.4, specular: 0.05 }
+  { color: "#7FF3FF", roughness: 0.4, emissive: 400nit }
+  { color: "#C8902E", roughness: 0.3, metal: 1 }
+]
+
+// A steward standing at ease, facing -z, its boots on y 0 and the top of its hood 1.85 m up. The boots, legs, torso,
+// shoulders, arms, head and hood collide; trims, lamps and the face's details are drawn only.
+template stewardFigure(c) {
+  let b = c.bulk
+  let chest = (0.11 * b)
+  for side in [-1, 1] {
+    let leg = (side * 0.12 * b)
+    let arm = (side * 0.3 * b)
+    shape Box $"boot-{side}" {
+      material: stewardPlate
+      position [leg, 0.09, -0.03]
+      scale [(0.09 * b), 0.09, 0.16]
+      rounding: 0.04
+    }
+    shape Box $"sole-{side}" {
+      detail: true
+      material: stewardUnder
+      position [leg, 0.015, -0.03]
+      scale [((0.09 * b) + 0.008), 0.015, 0.168]
+      rounding: 0.01
+    }
+    shape Superellipsoid $"shin-{side}" {
+      material: stewardPlate
+      exponent: 2.6
+      position [leg, 0.38, 0]
+      scale [0.085, 0.2, 0.095]
+    }
+    shape Superellipsoid $"knee-{side}" {
+      detail: true
+      material: stewardTrim
+      exponent: 2.4
+      position [leg, 0.58, -0.05]
+      scale [0.07, 0.06, 0.05]
+    }
+    shape Superellipsoid $"thigh-{side}" {
+      material: stewardUnder
+      exponent: 2.2
+      position [leg, 0.78, 0]
+      scale [0.085, 0.17, 0.09]
+    }
+    shape Box $"thigh-plate-{side}" {
+      detail: true
+      material: stewardTrim
+      position [leg, 0.8, -0.075]
+      scale [0.055, 0.1, 0.02]
+      rounding: 0.018
+    }
+    shape Superellipsoid $"shoulder-{side}" {
+      material: stewardPlate
+      exponent: 2.2
+      position [arm, 1.42, 0]
+      scale [(0.12 * b), 0.1, (0.13 * b)]
+    }
+    shape Box $"shoulder-band-{side}" {
+      detail: true
+      material: stewardTrim
+      position [arm, 1.42, 0]
+      scale [((0.12 * b) + 0.006), 0.022, ((0.13 * b) + 0.006)]
+      rounding: 0.02
+    }
+    shape Superellipsoid $"upper-arm-{side}" {
+      material: stewardUnder
+      exponent: 2.2
+      position [arm, 1.22, 0]
+      scale [0.06, 0.13, 0.06]
+    }
+    shape Superellipsoid $"gauntlet-{side}" {
+      material: stewardPlate
+      exponent: 2.6
+      position [(arm + (side * 0.01)), 0.98, -0.01]
+      scale [(0.075 * b), 0.12, (0.08 * b)]
+    }
+    shape Box $"gauntlet-band-{side}" {
+      detail: true
+      material: stewardTrim
+      position [(arm + (side * 0.01)), 1.06, -0.01]
+      scale [((0.075 * b) + 0.006), 0.018, ((0.08 * b) + 0.006)]
+      rounding: 0.015
+    }
+    shape Sphere $"hand-{side}" {
+      detail: true
+      material: stewardUnder
+      position [(arm + (side * 0.01)), 0.83, -0.01]
+      scale [0.055, 0.06, 0.055]
+    }
+    shape Cylinder $"ear-{side}" {
+      material: stewardTrim
+      position [(side * 0.125), 1.69, 0.01]
+      rotation: rotate([0, 0, 1], 90)
+      scale [0.045, 0.025, 0.045]
+    }
+    shape Cylinder $"ear-lamp-{side}" {
+      detail: true
+      material: stewardGlow
+      position [(side * 0.15), 1.69, 0.01]
+      rotation: rotate([0, 0, 1], 90)
+      scale [0.02, 0.004, 0.02]
+    }
+    shape Sphere $"eye-{side}" {
+      detail: true
+      material: stewardInk
+      position [(side * 0.038), 1.69, -0.104]
+      scale [0.016, 0.02, 0.01]
+    }
+  }
+  shape Box "pelvis" {
+    material: stewardUnder
+    position [0, 0.98, 0]
+    scale [(0.19 * b), 0.09, (0.12 * b)]
+    rounding: 0.04
+  }
+  shape Box "belt" {
+    detail: true
+    material: stewardBrass
+    position [0, 1.04, 0]
+    scale [((0.19 * b) + 0.01), 0.022, ((0.12 * b) + 0.01)]
+    rounding: 0.02
+  }
+  shape Superellipsoid "torso" {
+    material: stewardUnder
+    exponent: 2.4
+    position [0, 1.25, 0]
+    scale [(0.2 * b), 0.22, (0.13 * b)]
+  }
+  shape Box "chest-border" {
+    detail: true
+    material: stewardTrim
+    position [0, 1.32, (0.005 - chest)]
+    scale [(0.19 * b), 0.14, 0.035]
+    rounding: 0.03
+  }
+  shape Box "chest" {
+    detail: true
+    material: stewardPlate
+    position [0, 1.32, (0 - chest)]
+    scale [(0.17 * b), 0.125, 0.04]
+    rounding: 0.035
+  }
+  shape Box "chest-lamp" {
+    detail: true
+    material: stewardGlow
+    position [0, 1.37, (-0.04 - chest)]
+    scale [0.045, 0.012, 0.006]
+    rounding: 0.004
+  }
+  // The steward's badge, a brass disc on the chest's right.
+  shape Cylinder "badge" {
+    detail: true
+    material: stewardBrass
+    position [(0.1 * b), 1.27, (-0.042 - chest)]
+    rotation: rotate([1, 0, 0], 90)
+    scale [0.026, 0.005, 0.026]
+  }
+  shape Cylinder "collar" {
+    detail: true
+    material: stewardBrass
+    position [0, 1.49, 0]
+    scale [(0.1 * b), 0.025, (0.09 * b)]
+    rounding: 0.01
+  }
+  shape Cylinder "neck" {
+    material: stewardUnder
+    position [0, 1.54, 0]
+    scale [0.055, 0.05, 0.055]
+  }
+  shape Sphere "head" {
+    material: stewardSkin
+    position [0, 1.68, -0.01]
+    scale [0.11, 0.12, 0.11]
+  }
+  // The hood covers the crown and the back of the head and leaves the face open; its rim is the trim.
+  shape Superellipsoid "hood" {
+    material: stewardPlate
+    exponent: 2.2
+    position [0, 1.75, 0.035]
+    scale [0.128, 0.1, 0.122]
+  }
+  shape Superellipsoid "hood-rim" {
+    detail: true
+    material: stewardTrim
+    exponent: 2.2
+    position [0, 1.745, 0.03]
+    scale [0.133, 0.028, 0.127]
+  }
+  shape Box "fringe" {
+    detail: true
+    material: stewardHair
+    position [0, 1.765, -0.088]
+    scale [0.095, 0.022, 0.022]
+    rounding: 0.015
+  }
+  if c.bob {
+    shape Superellipsoid "bob" {
+      detail: true
+      material: stewardHair
+      exponent: 2.2
+      position [0, 1.62, 0.04]
+      scale [0.125, 0.085, 0.085]
+    }
+  }
+  if c.beard {
+    shape Superellipsoid "beard" {
+      detail: true
+      material: stewardHair
+      exponent: 2.2
+      position [0, 1.6, -0.07]
+      scale [0.092, 0.065, 0.055]
+    }
+  }
+}
+
+// A steward's slate: a dark board on two legs that stands before it, facing -z, its face 0.84 m across and 0.54 m high
+// with its middle 0.72 m up, so a visitor small or full size reads it. Its paints, in the world's frame, head it with the
+// steward's name and write what the steward says (`conversationLine`) below.
+let stewardSlateMiddle = 0.72
+let stewardSlateHalf = [0.42, 0.27]
+let stewardSlateDepth = 0.012
+let stewardChalk = "#F2EAD8"
+let stewardChalkDim = "#B9C9C4"
+// A point on the slate's face, `across` to a reader's right and `up` from its middle, in the world.
+function stewardSlateFace(s, across, up) = (let p = (stewardSlate(s) +
+  rotatePoint(rotate([0, 1, 0], s.yaw), [(0 - across), (stewardSlateMiddle + up), (0 - stewardSlateDepth)])) in galleryWorld(
+  p[0],
+  p[1],
+  p[2]
+))
+function stewardSlatePaints(s, number) = [
+  faceText(
+    stewardSlateFace(s, 0, 0.215),
+    rotate([0, 1, 0], (s.yaw + 180)),
+    [0.39, 0.035],
+    $"{stewardMember(s.crew).name}, GALLERY STEWARD",
+    stewardChalkDim,
+    0.04
+  )
+  faceFill(stewardSlateFace(s, 0, 0.17), rotate([0, 1, 0], (s.yaw + 180)), [0.39, 0.003], stewardChalkDim)
+  faceText(
+    stewardSlateFace(s, 0, -0.045),
+    rotate([0, 1, 0], (s.yaw + 180)),
+    [0.39, 0.2],
+    conversationLine(number),
+    stewardChalk,
+    0.042,
+    "left",
+    wrap: true
+  )
+]
+
+prototypes {
+  for c in stewardCrew {
+    prototype $"gallery-steward-{c.id}" {
+      occlusion: bodyOcclusion
+      document {
+        name: $"gallery-steward-{c.id}"
+        schema: "puck.creation.v2"
+        palette: stewardPalette(c)
+        stewardFigure(c: c)
+      }
+    }
+  }
+  for (s, i) in stewardPlan {
+    prototype $"gallery-steward-slate-{s.id}" {
+      occlusion: propOcclusion
+      document {
+        name: $"gallery-steward-slate-{s.id}"
+        schema: "puck.creation.v2"
+        palette [
+          { color: "#22302E", roughness: 0.9, specular: 0.02, paints: stewardSlatePaints(s, (i + 1)) }
+          { color: "#2F6E7A", roughness: 0.6, specular: 0.04 }
+          { color: "#C8902E", roughness: 0.3, metal: 1 }
+        ]
+        shape Box "face" {
+          material: 0
+          position [0, stewardSlateMiddle, 0]
+          scale [stewardSlateHalf[0], stewardSlateHalf[1], stewardSlateDepth]
+        }
+        shape Box "frame" {
+          material: 1
+          position [0, stewardSlateMiddle, 0.006]
+          scale [(stewardSlateHalf[0] + 0.035), (stewardSlateHalf[1] + 0.035), (stewardSlateDepth + 0.004)]
+          rounding: 0.012
+        }
+        for side in [-1, 1] {
+          shape Box $"leg-{side}" {
+            material: 1
+            position [(side * (stewardSlateHalf[0] - 0.04)), ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.006]
+            scale [0.025, ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.025]
+            rounding: 0.008
+          }
+          shape Box $"foot-{side}" {
+            detail: true
+            material: 2
+            position [(side * (stewardSlateHalf[0] - 0.04)), 0.01, 0.006]
+            scale [0.03, 0.01, 0.16]
+            rounding: 0.006
+          }
+        }
+      }
+    }
+  }
+}
+
+placements {
+  for s in stewardPlan {
+    placement $"gallery-steward-{s.id}" {
+      prototype: $"gallery-steward-{s.crew}"
+      parent: "gallery"
+      position [s.x, galleryFloor[0], s.z]
+      yawDegrees: s.yaw
+      solid
+    }
+    placement $"gallery-steward-slate-{s.id}" {
+      prototype: $"gallery-steward-slate-{s.id}"
+      parent: "gallery"
+      position: stewardSlate(s)
+      yawDegrees: s.yaw
+      solid
+    }
+  }
+}
+
+// What every steward says, and its one action: give the asking body its size back.
+let stewardRestore = 1
+let stewardScript = {
+  idle ["Feeling small?", "Come and ask me."]
+  greeting ["Hello! What can I do for you?", ""]
+  choices [
+    {
+      say: "Help me back to my normal size"
+      action: stewardRestore
+      reply ["There you are, your own size again.", "Mind the toybox: its floor makes you small."]
+    }
+    { say: "Nothing, thanks", leaves: true }
+  ]
+}
+
+conversationPlay(
+  speakers: map(stewardPlan, s => { at: galleryWorld(stewardSlate(s)[0], stewardSlate(s)[1], stewardSlate(s)[2]) }),
+  script: stewardScript,
+  radius: stewardReach,
+  seats: seatPopulation,
+  capacity: (seatPopulation + visitorPopulation)
+)
+
+// A steward's restore: the asking body's size register back to one, and, unless something holds it already (a debug
+// noclip), the size fields' released hold, so a body asking on a size field's ground keeps its size there until it
+// walks off the field (standard/size-field.puck).
+rule "steward-restore" {
+  forEach: $players
+  when (conversationAction[$each] ?? 0) == stewardRestore
+  mode: Level
+  setBodyState(key: $each, state: "size", expression: 1.0)
+  if bodyState(each, sizeHold) == 0 {
+    setBodyState(key: $each, state: "sizeHold", expression: 1.0)
+  }
+  conversationAction[$each] = 0
+}
