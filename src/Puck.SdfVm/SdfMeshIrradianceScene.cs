@@ -114,6 +114,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         GeometriesBuilt = source.GeometriesBuilt;
         TrianglesBuilt = source.TrianglesBuilt;
         Materials = source.Materials;
+        Emitters = source.Emitters;
+        EmitterDigest = source.EmitterDigest;
         Counters = source.Counters;
         TopDepth = source.TopDepth;
         GeometryDepth = source.GeometryDepth;
@@ -273,8 +275,10 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// or its own triangles. Zero, the default, traces every mesh's own triangles.</param>
     /// <param name="allocator">The native allocator a geometry's copies of its mesh level (positions, indices, triangle
     /// materials) take their storage from, or <see langword="null"/> to keep them in the managed heap.</param>
+    /// <param name="emits">The test of whether a program material emits light the volume samples as an emitter
+    /// (<see cref="Emitters"/>), or <see langword="null"/> to gather none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
-    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null, WorkCounterSet? counters = null, float traceError = 0f, IAllocator? allocator = null) {
+    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null, WorkCounterSet? counters = null, float traceError = 0f, IAllocator? allocator = null, Func<int, bool>? emits = null) {
         ArgumentNullException.ThrowIfNull(argument: draws);
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
@@ -349,6 +353,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             materials.CopyTo(order);
 
             Array.Sort(array: order);
+            var (emitters, emitterDigest) = ((emits is null) ? (Array.Empty<SdfMeshEmitter>(), 0UL) : GatherEmitters(emits: emits, instances: content.Instances.AsSpan(start: 0, length: content.InstanceCount)));
 
             return new SdfMeshIrradianceScene(
                 content: content, workspace: workspace,
@@ -357,7 +362,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 geometriesBuilt: pending.Count,
                 retained: Retain(geometries: geometries, previous: previous),
                 trianglesBuilt: trianglesBuilt
-            ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, SdfMeshIrradiance.Kinds) };
+            ) { Materials = order, Emitters = emitters, EmitterDigest = emitterDigest, Counters = counters ?? new(SdfMeshIrradiance.SourceName, SdfMeshIrradiance.Kinds) };
         } catch {
             content.Release();
             throw;

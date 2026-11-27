@@ -99,6 +99,13 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
                 cameraSampleSky[axis * SDF_PROBE_GROUP_SIZE + lane] += weight * sky;
             }
         }
+        // The emitting patches, a share a lane, at the weight the sums are divided by, as the relight adds them (sdfProbeEmitters).
+        float3 emitted[6];
+        [unroll] for (uint clear = 0; clear < 6; clear++) { emitted[clear] = 0; }
+        sdfProbeEmitters(origin.xyz, lane, SDF_PROBE_GROUP_SIZE, lane, emitted);
+        [unroll] for (uint face = 0; face < 6; face++) {
+            cameraSampleLight[face * SDF_PROBE_GROUP_SIZE + lane] += emitted[face] * sdfProbeLighting[9 + face / 4][face % 4];
+        }
         if (lane == 0) { sdfProbeCacheRW[cache] = 1; }
         // The closure: a hit no probe answers reflects the light the sample itself receives about its normal, iterated
         // from the sample's light without it. `total` is the group's, so every lane takes these barriers.

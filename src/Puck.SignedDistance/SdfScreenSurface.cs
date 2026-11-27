@@ -28,6 +28,10 @@ namespace Puck.SignedDistance;
 /// -1 for a sampled screen. An emitter face is light alone: the shape whose face it is keeps its own material and
 /// paints, and the face lights what stands before it as a screen's face does, with the mean of what the material shows
 /// over the face (its painted albedo times its emissive), reduced on the GPU in the screens' emission pass.</param>
+/// <param name="Instance">The program instance an emitter face was declared in (the builder's instance count when it was
+/// declared), or -1 for a sampled screen. A face whose instance lies in a mesh template's range draws only where a copy
+/// draws that template, so it lights only there, carried by each copy's pose (<c>Puck.SdfVm.SdfWorldResidency</c>'s
+/// emitter faces); any other face lights where it was declared.</param>
 public readonly record struct SdfScreenSurface(
     Vector3 Origin,
     Vector3 Right,
@@ -35,9 +39,29 @@ public readonly record struct SdfScreenSurface(
     float HalfWidth,
     float HalfHeight,
     int ScreenIndex,
-    int EmitterMaterial = -1
+    int EmitterMaterial = -1,
+    int Instance = -1
 ) {
     /// <summary>Gets whether this is an emitter face: light alone, reduced from its material rather than sampled from a
     /// source.</summary>
     public bool IsEmitter => (EmitterMaterial >= 0);
+
+    /// <summary>Returns the face carried by a copy's root matrix: its origin placed, its axes turned and its half-extents
+    /// scaled by the matrix, everything else kept.</summary>
+    /// <param name="objectToWorld">The copy's root matrix, a uniform scale, a rotation and a translation, in the
+    /// row-vector convention of <see cref="Matrix4x4"/>.</param>
+    /// <returns>The carried face.</returns>
+    public SdfScreenSurface CarriedBy(Matrix4x4 objectToWorld) {
+        var right = Vector3.TransformNormal(normal: Right, matrix: objectToWorld);
+        var up = Vector3.TransformNormal(normal: Up, matrix: objectToWorld);
+        var scale = right.Length();
+
+        return (this with {
+            HalfHeight = (HalfHeight * scale),
+            HalfWidth = (HalfWidth * scale),
+            Origin = Vector3.Transform(position: Origin, matrix: objectToWorld),
+            Right = (right / scale),
+            Up = Vector3.Normalize(value: up),
+        });
+    }
 }

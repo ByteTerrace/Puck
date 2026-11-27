@@ -43,7 +43,8 @@ public static class SdfMeshProbeRelight {
     /// then its source and trace flags.</summary>
     public const int CameraSampleOutputWords = 20;
     /// <summary>The header row whose third lane carries the lighting's epoch (<see cref="SdfMeshIrradianceProbe.EpochMask"/>),
-    /// beside the last two axis totals.</summary>
+    /// beside the last two axis totals, and whose fourth carries the count of emitting patches the rows hold after the
+    /// lights (<see cref="EmitterRows"/>).</summary>
     public const int EpochRow = 10;
     /// <summary>The first of the float4 rows holding the sky's radiance about each hit texel's ray, gain applied, zero when
     /// the sky source is off: one row a texel.</summary>
@@ -51,8 +52,12 @@ public static class SdfMeshProbeRelight {
     /// <summary>Float4 rows preceding materials: counts, sources, gains, three window pairs, axis totals and the sky's
     /// radiance per hit texel.</summary>
     public const int HeaderRows = SkyRow + SdfMeshProbeTrace.HitCount;
-    /// <summary>Reflected RGB and wrap, then emitted RGB.</summary>
-    public const int MaterialRows = 2;
+    /// <summary>Reflected RGB and wrap. A hit's emission is no material row: the relight samples every emitting patch from
+    /// the probe's centre instead (<see cref="EmitterRows"/>).</summary>
+    public const int MaterialRows = 1;
     /// <summary>Position/direction and range, colour and weight, cone, then bounce/index/shadow/kind.</summary>
     public const int LightRows = 4;
+    /// <summary>One emitting patch, after the lights: its centroid and range, its area-weighted normal sum and area, then
+    /// the radiance it emits in nits, the emission gain applied.</summary>
+    public const int EmitterRows = 3;
 }

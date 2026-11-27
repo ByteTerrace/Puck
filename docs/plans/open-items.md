@@ -5911,13 +5911,27 @@ annotate, the `probes` and `exposure` views) are
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen. Find why a named world camera row does not replace
   the view.
-- The gallery's twelve display consoles light nothing: each interface is paint
-  on the plinth's glass (`displayScreen`, `consoleText` in `shapes.puck`), and
-  the irradiance volume traces neither paint nor glass, while only a `screens`
-  row lights through the screen-light walk. Rebuild each interface as a screen
-  whose picture is its glyph decal (`SdfWorldTables.SetScreenDecal`), so it
-  lights what stands before it as the toybox's pictures do, or let the volume
-  trace a paint's emission.
+- Emitters at night: what still lights nothing, beside the emitter faces each
+  copy carries (`SdfWorldResidency`'s `CollectEmitterFaces`) and the emitting
+  patches the volume samples (`SdfMeshIrradianceScene.Emitters`):
+  - The volume reads no paint: a hit reflects, and an emitting patch emits, its
+    material's base colour, so a painted emissive that is no emitter face lights
+    the volume in its base colour. Paints need a CPU evaluator beside
+    `shade/shade-paints.hlsli` before the relight can read them in step.
+  - A lane-driven emissive (`emissiveLane`, the fibre fir) emits nothing into
+    the volume, as the views shade a static one dark; a world lane
+    (`SdfFrame.WorldLanes`) could drive it once a lane's motion stops moving the
+    local lighting key every frame.
+  - A material that first turns emissive after a scene is built gathers no
+    patch until the next scene build (`SdfMeshIrradianceScene.Build`'s
+    `emits`).
+  - An emitter face on a body or an animated placement still declares none
+    (`CreationStampEmitter`'s `StampEmitterFace`, `WorldCreationInstances`'
+    `PoolShapeFrame`): its paints ride its slot's frame, which the screens'
+    emission pass does not read.
+  - Screens and emitter faces light receivers through the screen-light walk
+    alone; their bounce off the walls waits on the illumination plan's area
+    emitters in the relight ([step 6](illumination.md#the-build-order)).
 - The GPU looks owed at the gallery (the warps II row, the hall's light
   switches) and the `puck mesh audit` gaps are the
   [rendering plan](rendering.md)'s.
