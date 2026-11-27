@@ -1076,7 +1076,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screens are unbounded (a residency holds `SdfProgramBuilder.MaxScreenSurfaces` slots for the resident ones) and bounded volumes 64; representation overflow refuses explicitly.
 - XInput caps at four pads locally; HID pads are uncapped.
 - Inhabitants are numbered from the top of `bodies.capacity` down, the first
-  inhabited placement highest (`cardtable.puck`'s `cardsTop`). A rule row keyed
+  inhabited placement highest (`game-station-deck.puck`'s deck, `shapes.puck`'s `cardBodies`). A rule row keyed
   by body number keeps its keys across a count change only when its placements
   come last, just above the seats' reserve (`worlds/debug/pond.puck`).
 - A destination whose frames show another world through a session source boots
@@ -1162,9 +1162,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   that can show one carries no distribution or mirror. Each of the gallery's
   display stations can show every exhibit of the catalog, motion ones included,
   this way (`displayPlacements` in `worlds/debug/shapes.puck`), and a display
-  table's board shows each cell's piece this way (`displayTokens` in
-  `worlds/standard/display-table.puck`; the board room's game table,
-  `worlds/debug/cardtable.puck`, draws the chess table's game with it).
+  station's board shows each cell's piece this way (`gameStationTokens` in
+  `worlds/standard/game-station.puck`; `worlds/games/chess-station.puck` stands
+  the chess game's pieces on a station's squares with it).
 - A placement turns about its own up axis with a `turn` facet
   (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
   numeric state binding, give `phase + rate × clock` turns on top of its yaw.

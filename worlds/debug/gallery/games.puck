@@ -11,7 +11,11 @@ import "../game-stations"
 // alike. ../game-station.md says how to play and drive it.
 
 prototypes {
-  gameStationPrototype(station: boardRoomStation, catalog: gameStationCatalog, boardPanels: chessStationPanels(boardRoomStation))
+  gameStationPrototype(
+    station: boardRoomStation,
+    catalog: gameStationCatalog,
+    boardPanels: chessStationPanels(boardRoomStation)
+  )
   chessStationPrototypes()
   patienceStationPrototypes()
 }
@@ -25,7 +29,11 @@ placements {
 // At the station's chair, its -Z edge, 1.5 m from its centre and facing +Z across the glass, inside the engage radius:
 // the context button sits her down.
 spawnPoints [
-  { id: "cards", position [boardRoomStation.at[0], (boardRoomStation.at[1] + gameStationFloor), (boardRoomStation.at[2] - 1.5)], yawDegrees: 180 }
+  {
+    id: "cards"
+    position [boardRoomStation.at[0], (boardRoomStation.at[1] + gameStationFloor), (boardRoomStation.at[2] - 1.5)]
+    yawDegrees: 180
+  }
 ]
 
 state {

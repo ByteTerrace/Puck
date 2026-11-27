@@ -9,7 +9,7 @@ floor. White's back rank is on the table's -Z side and Black's on the +Z side.
 `chess.puck` holds it and `debug.puck` imports it whole (`import "chess"`); the
 rules it plays by are the shared [`../games/chess.puck`](../games/chess.puck)
 library, whose templates the table expands. The room's game table
-([`cardtable.md`](cardtable.md)) draws this same game on its glass and plays it
+([`game-station.md`](game-station.md)) draws this same game on its glass and plays it
 through the display door below, so a move made at either table moves the
 pieces here.
 
@@ -160,16 +160,19 @@ The authored timing constants stand near the top of `chess.puck`.
 ## The display door
 
 `chessPut` is the door a presentation of this game away from the table asks a
-move through: the game table's glass ([`cardtable.md`](cardtable.md)) writes
+move through: a game station's glass ([`game-station.md`](game-station.md)) writes
 the square a piece leaves (`from`) and the square it lands on (`to`) and sets
-`request`. The door takes the path a seated player's put-down takes: the apply
-relocates and poses the pieces, the board rests and is judged, and an
-arrangement judged illegal is put back as it stood. A request waits while the
-board settles, a piece is held or a move is being judged, and lapses once its
+`request`. The door is the chess library's (`chessPutDown` in
+[`../games/chess.puck`](../games/chess.puck)), and the seated player's put-down
+shares its judgement: the apply relocates and poses the pieces, the board rests
+and is judged (`putDown.judging`), and an arrangement judged illegal is put back
+as it stood (`putDown.revert`, the pieces posed back from `putBefore`). A request
+waits while the board settles or a move is being judged, and lapses once its
 square holds no piece of the side to move or that side is the computer's;
-either way `request` returns to 0. While `seated` is 1 (a seat playing the
-game at the glass) the idle demonstration waits, as for a seat at this table.
-The table exports what the glass reads (`board`, `turn`, `verdict`, `move`,
+either way `request` returns to 0. While `chessSeated` is 1 (a seat playing the
+game at the glass) the idle demonstration waits, as for a seat at this table,
+and while the demonstration plays `chessHold` holds the computer and the door
+off. The table exports what the glass reads (`board`, `turn`, `verdict`, `move`,
 `inCheck`, `aiSide`, `halfmoveClock`, `repetitionCount`) and the door.
 
 ## The opponent

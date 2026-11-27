@@ -7,7 +7,7 @@ import "../games/chess"
 // one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's board game
 // room on level 2 (gallery/gallery.puck): its board's centre over the table's placement (`chessTable`), White's back rank
 // on its -Z side and Black's on +Z. chess.md beside this file says how to move a piece, read the game and set the
-// opponent. The board room's display table (cardtable.puck) draws the same game on its glass and asks its moves through
+// opponent. The board game room's game station (gallery/games.puck) draws the same game on its glass and asks its moves through
 // the display door below, so a game played at either table is one game.
 
 // What a game station's glass (../standard/game-station.puck, the gallery's board game room) reads of this game to draw

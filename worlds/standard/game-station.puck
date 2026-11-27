@@ -93,7 +93,11 @@ let gameStationLook = {
 }
 
 // A point of the station's frame on its glass, in the world: `x` across and `z` away.
-function gameStationWorld(station, x, z) = [(station.at[0] + x), (station.at[1] + gameStationSurface), (station.at[2] + z)]
+function gameStationWorld(station, x, z) = [
+  (station.at[0] + x),
+  (station.at[1] + gameStationSurface),
+  (station.at[2] + z)
+]
 function gameStationMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.z0 + rect.z1) / 2)]
 function gameStationHalfOf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.z1 - rect.z0) / 2)]
 
@@ -114,10 +118,30 @@ function displayRing(at, half, color, stroke, round = 0.25) = {
   color: color
 }
 // Lettering on a level glass, read from its -Z edge: `half` is the box it fits, across and away.
-function displayText(at, half, template, ink, em, align = "center") = faceText(at, displayReading, half, template, ink, em, align)
+function displayText(at, half, template, ink, em, align = "center") = faceText(
+  at,
+  displayReading,
+  half,
+  template,
+  ink,
+  em,
+  align
+)
 // A rectangle of the station's frame filled on its glass.
-function gameStationFill(station, rect, color, round = 0) = displayFill(gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]), gameStationHalfOf(rect), color, round)
-function gameStationText(station, rect, template, ink, em, align = "center") = displayText(gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]), gameStationHalfOf(rect), template, ink, em, align)
+function gameStationFill(station, rect, color, round = 0) = displayFill(
+  gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]),
+  gameStationHalfOf(rect),
+  color,
+  round
+)
+function gameStationText(station, rect, template, ink, em, align = "center") = displayText(
+  gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]),
+  gameStationHalfOf(rect),
+  template,
+  ink,
+  em,
+  align
+)
 
 // The list's row `row`, from the top.
 function gameStationRowRect(row) = {
@@ -130,9 +154,33 @@ function gameStationRowRect(row) = {
 // The list's paints: its title over the column, each game's row filled in its ink (the game shown lit) and lettered
 // with its title, then the status line.
 function gameStationListPaints(station, catalog, look) = concat(
-  [gameStationText(station, { x0: gameStationList.x0, x1: gameStationList.x1, z0: (gameStationList.z1 + 0.02), z1: (gameStationList.z1 + 0.08) }, "GAMES", look.title, 0.05)],
-  map(catalog, (game, row) => gameStationFill(station, gameStationRowRect(row), $"state.gameStationRowInk.{station.id}-{row}", 0.01)),
-  map(catalog, (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, gameStationListEm)),
+  [
+    gameStationText(
+      station,
+      {
+        x0: gameStationList.x0
+        x1: gameStationList.x1
+        z0: (gameStationList.z1 + 0.02)
+        z1: (gameStationList.z1 + 0.08)
+      },
+      "GAMES",
+      look.title,
+      0.05
+    )
+  ],
+  map(
+    catalog,
+    (game, row) => gameStationFill(
+      station,
+      gameStationRowRect(row),
+      $"state.gameStationRowInk.{station.id}-{row}",
+      0.01
+    )
+  ),
+  map(
+    catalog,
+    (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, gameStationListEm)
+  ),
   [
     gameStationFill(station, gameStationRowRect(gameStationActionRow), look.action, 0.01)
     gameStationText(station, gameStationRowRect(gameStationActionRow), "NEW GAME", look.label, gameStationListEm)
@@ -225,16 +273,38 @@ function gameStationPanels(station, catalog, look, boardPanels) = concat(
       x1: (gameStationList.x0 - 0.02)
       z0: gameStationGlass.z0
       z1: gameStationBoard.z0
-      paints [gameStationText(station, gameStationStatusLine, $"{{state.gameStationStatus.{station.id}}}", look.status, gameStationStatusEm)]
+      paints [
+        gameStationText(
+          station,
+          gameStationStatusLine,
+          $"{{state.gameStationStatus.{station.id}}}",
+          look.status,
+          gameStationStatusEm
+        )
+      ]
     }
   ],
-  map(boardPanels, panel => { x0: gameStationGlass.x0, x1: (gameStationList.x0 - 0.02), z0: panel.z0, z1: panel.z1, paints: panel.paints })
+  map(
+    boardPanels,
+    panel => {
+      x0: gameStationGlass.x0
+      x1: (gameStationList.x0 - 0.02)
+      z0: panel.z0
+      z1: panel.z1
+      paints: panel.paints
+    }
+  )
 )
 
 // The station's prototype, `<id>-table`: the table with its glass. `boardPanels` is the board area's split and the
 // paints each panel carries (the games' boards); a station with none draws a bare board area.
 template gameStationPrototype(station, catalog, boardPanels = [], look = gameStationLook) {
-  let panels = gameStationPanels(station, catalog, look, ((length(boardPanels) == 0) ? [{ z0: gameStationBoard.z0, z1: gameStationGlass.z1, paints [] }] : boardPanels))
+  let panels = gameStationPanels(
+    station,
+    catalog,
+    look,
+    ((length(boardPanels) == 0) ? [{ z0: gameStationBoard.z0, z1: gameStationGlass.z1, paints [] }] : boardPanels)
+  )
   prototype $"{station.id}-table" {
     document {
       name: $"{station.id}-table"
@@ -319,7 +389,13 @@ template gameStationState(stations, catalog, look = gameStationLook) {
     name: "gameStationRowInk"
     kind: Text
     capacity: (length(stations) * length(catalog))
-    cells: flatMap(stations, station => map(catalog, (game, row) => { key: $"{station.id}-{row}", value: ((row == 0) ? look.rowLit : look.rowDim) }))
+    cells: flatMap(
+      stations,
+      station => map(
+        catalog,
+        (game, row) => { key: $"{station.id}-{row}", value: ((row == 0) ? look.rowLit : look.rowDim) }
+      )
+    )
   }
   row {
     name: "gameStationInks"
@@ -353,7 +429,9 @@ template gameStationRules(station, catalog) {
     local rose = now & ~(gameStationDown[key])
     local onList = (pointed >= 0) and (gameStationColumn(pointed) >= gameStationListColumn)
     local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(pointed) + 0.5))
-    local tap = (toInt(below / gameStationRowPitch) == gameStationActionRow) ? gameStationBits.action : gameStationBits.list
+    local tap = (
+      (toInt(below / gameStationRowPitch) == gameStationActionRow) ? gameStationBits.action : gameStationBits.list
+    )
     local edges = onList ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * tap)) : rose
     when gameStationDown[key] != now or gameStationEdges[key] != edges or gameStationPointer[key] != pointed
     mode: Level
@@ -364,7 +442,9 @@ template gameStationRules(station, catalog) {
 
   // A tap on the list shows the game on the row it lands on, and `station.game` posts a game to the mailbox.
   rule $"game-station-{key}-list" {
-    local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(gameStationPointer[key]) + 0.5))
+    local below = (
+      gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(gameStationPointer[key]) + 0.5))
+    )
     local chosen = toInt(below / gameStationRowPitch)
     when (gameStationEdges[key] & gameStationBits.list) != 0 and below >= 0 and chosen >= 0 and chosen < games
     mode: Level
@@ -390,7 +470,12 @@ template gameStationRules(station, catalog) {
         setState(state: gameStationRowInk, key: $"{key}-{row}", fromState: gameStationInks, fromKey: dim)
       }
     }
-    setState(state: gameStationStatus, key: $"{key}", fromState: gameStationTitles, fromKey: $"$cell:gameStationGame:{key}")
+    setState(
+      state: gameStationStatus,
+      key: $"{key}",
+      fromState: gameStationTitles,
+      fromKey: $"$cell:gameStationGame:{key}"
+    )
     gameStationShown[key] = gameStationGame[key]
   }
 }
@@ -423,8 +508,19 @@ template gameStationTokens(prefix, station, game, row, keys, centres, codes, bla
       position [(station.at[0] + centre[0]), (station.at[1] + gameStationSurface), (station.at[2] + centre[1])]
       scale: scale
       respond: concat(
-        [{ when: state(state: gameStationGame, key: station.id, comparison: NotEqual, value: game), prototypeId: blank }],
-        map(codes, code => { when: state(state: row, key: keys[i], comparison: Equal, value: code.value), prototypeId: code.prototype })
+        [
+          {
+            when: state(state: gameStationGame, key: station.id, comparison: NotEqual, value: game)
+            prototypeId: blank
+          }
+        ],
+        map(
+          codes,
+          code => {
+            when: state(state: row, key: keys[i], comparison: Equal, value: code.value)
+            prototypeId: code.prototype
+          }
+        )
       )
     }
   }

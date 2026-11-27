@@ -393,8 +393,7 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     match: vacant*
   }
 
-  if digital {
-  } else {
+  if digital {} else {
     rule "tabletop-rested" {
       local rested = physics(quiescent, scope)
       when chessRested != rested
@@ -415,8 +414,7 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     settleHold = 0
   }
 
-  if digital {
-  } else {
+  if digital {} else {
     rules "" when settleHold == settleTicks {
       mode: "Edge"
       rule "tabletop-derive-cell-upright" {
@@ -1164,12 +1162,7 @@ template chessMoveDone() {
 template chessPutDown(settleTicks) {
   rule "chess-put" {
     local mover = board[chessPut.from]
-    local ready = (
-      chessHold == 0 and
-      ai.pending == 0 and
-      putDown.judging == 0 and
-      settleHold == settleTicks
-    )
+    local ready = (chessHold == 0 and ai.pending == 0 and putDown.judging == 0 and settleHold == settleTicks)
     when chessPut.request == 1
     mode: Level
     if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {

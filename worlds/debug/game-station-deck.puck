@@ -10,13 +10,6 @@ import "game-stations"
 // and the bodies the station's rules pose.
 export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s-5`, `card-s-6`, `card-h-a`, `card-h-2`, `card-h-3`, `card-h-4`, `card-h-5`, `card-h-6`, `card-c-a`, `card-c-2`, `card-c-3`, `card-c-4`, `card-c-5`, `card-c-6`, `card-d-a`, `card-d-2`, `card-d-3`, `card-d-4`, `card-d-5`, `card-d-6`
 
-export read patienceCursor, patienceHeld, patienceCard0, patienceCard1, patienceCard2, patienceCard3, patienceCard4,
-  patienceCard5, patienceCard6, patienceCard7, patienceCard8, patienceCard9, patienceCard10, patienceCard11,
-  patienceCard12, patienceCard13, patienceCard14, patienceCard15, patienceCard16, patienceCard17, patienceCard18,
-  patienceCard19, patienceCard20, patienceCard21, patienceCard22, patienceCard23, patienceCard24, patienceCard25,
-  patienceCard26, patienceCard27, patienceCard28, patienceCard29, patienceCard30, patienceCard31, patienceCard32,
-  patienceCard33, patienceCard34, patienceCard35, patienceCard36, patienceCard37, patienceCard38, patienceCard39,
-  patienceCard40, patienceCard41, patienceCard42, patienceCard43, patienceCard44, patienceCard45, patienceCard46,
-  patienceCard47, patienceCard48, patienceCard49, patienceCard50, patienceCard51
+export read patienceCursor, patienceHeld, patienceCard0, patienceCard1, patienceCard2, patienceCard3, patienceCard4, patienceCard5, patienceCard6, patienceCard7, patienceCard8, patienceCard9, patienceCard10, patienceCard11, patienceCard12, patienceCard13, patienceCard14, patienceCard15, patienceCard16, patienceCard17, patienceCard18, patienceCard19, patienceCard20, patienceCard21, patienceCard22, patienceCard23, patienceCard24, patienceCard25, patienceCard26, patienceCard27, patienceCard28, patienceCard29, patienceCard30, patienceCard31, patienceCard32, patienceCard33, patienceCard34, patienceCard35, patienceCard36, patienceCard37, patienceCard38, patienceCard39, patienceCard40, patienceCard41, patienceCard42, patienceCard43, patienceCard44, patienceCard45, patienceCard46, patienceCard47, patienceCard48, patienceCard49, patienceCard50, patienceCard51
 
 patienceStationCards(station: boardRoomStation)

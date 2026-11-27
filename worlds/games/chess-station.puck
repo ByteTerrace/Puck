@@ -33,11 +33,16 @@ let chessStationX0 = (gameStationBoard.x0 + (gameStationCell * chessStationColum
 let chessStationZ0 = (gameStationBoard.z0 + (gameStationCell * chessStationRow0))
 // A square's centre in the station's frame, [x, z], and whether it is light (row + column even: column 0 of rank 1 is
 // h1, so a1 is dark at the seat's left).
-function chessStationSquareAt(cell) = [(chessStationX0 + (chessStationSquare * ((cell % 8) + 0.5))), (chessStationZ0 + (chessStationSquare * (floor(cell / 8) + 0.5)))]
+function chessStationSquareAt(cell) = [
+  (chessStationX0 + (chessStationSquare * ((cell % 8) + 0.5))),
+  (chessStationZ0 + (chessStationSquare * (floor(cell / 8) + 0.5)))
+]
 let chessStationParity = map(range(0, 64), cell => ((floor(cell / 8) + (cell % 8)) % 2))
 // The rings' codes, which name their inks in `chessStationInks`.
 let chessStationRings = { last: 2, picked: 3, cursor: 4, rest: 5 }
-let chessStationLineTexts = ["WHITE TO MOVE", "BLACK TO MOVE", "WHITE IS IN CHECK", "BLACK IS IN CHECK", "THE COMPUTER IS MOVING", "DRAWN"]
+let chessStationLineTexts = [
+  "WHITE TO MOVE", "BLACK TO MOVE", "WHITE IS IN CHECK", "BLACK IS IN CHECK", "THE COMPUTER IS MOVING", "DRAWN"
+]
 
 // The pieces' two sides: ivory with amber trim, charcoal with teal trim, each glowing faintly as the glass's content does.
 let chessStationPieces = [
@@ -61,7 +66,8 @@ function chessStationSquarePaints(station, cell) = [
   displayFill(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
     [0.068, 0.068],
-    ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInk.{station.id}-light" : $"state.chessStationBoardInk.{station.id}-dark"),
+    ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInk.{station.id}-light" :
+      $"state.chessStationBoardInk.{station.id}-dark"),
     0.004
   )
   displayRing(
@@ -129,13 +135,19 @@ template chessStationState(stations, look = gameStationLook) {
     name: "chessStationOf"
     kind: Int
     capacity: (64 * length(stations))
-    cells: flatMap(range(0, length(stations)), s => map(range(0, 64), cell => { key: $"{stations[s].id}-{cell}", value: s }))
+    cells: flatMap(
+      range(0, length(stations)),
+      s => map(range(0, 64), cell => { key: $"{stations[s].id}-{cell}", value: s })
+    )
   }
   row {
     name: "chessStationRingCode"
     kind: Int
     capacity: (64 * length(stations))
-    cells: flatMap(stations, station => map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: chessStationRings.rest }))
+    cells: flatMap(
+      stations,
+      station => map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: chessStationRings.rest })
+    )
   }
   row {
     name: "chessStationRingInk"
@@ -147,7 +159,10 @@ template chessStationState(stations, look = gameStationLook) {
     name: "chessStationBoardInk"
     kind: Text
     capacity: (2 * length(stations))
-    cells: flatMap(stations, station => [{ key: $"{station.id}-light", value: look.light }, { key: $"{station.id}-dark", value: look.dark }])
+    cells: flatMap(
+      stations,
+      station => [{ key: $"{station.id}-light", value: look.light }, { key: $"{station.id}-dark", value: look.dark }]
+    )
   }
   row {
     name: "chessStationInks"
@@ -183,7 +198,10 @@ template chessStationRules(station, game, ordinal) {
     when gameStationGame[key] == game and pointed != chessStationPointer[key]
     mode: Level
     if onBoard {
-      chessStationCursor[key] = 8 * ((row - row % chessStationCells) / chessStationCells) + (column - column % chessStationCells) / chessStationCells
+      chessStationCursor[key] = (
+        8 * ((row - row % chessStationCells) / chessStationCells) +
+        (column - column % chessStationCells) / chessStationCells
+      )
     }
     chessStationPointer[key] = pointed
   }
@@ -293,7 +311,12 @@ template chessStationRules(station, game, ordinal) {
     mode: Level
     chessStationStatus[key] = code
     if code >= 0 {
-      setState(state: gameStationStatus, key: $"{key}", fromState: chessStationLines, fromKey: $"$cell:chessStationStatus:{key}")
+      setState(
+        state: gameStationStatus,
+        key: $"{key}",
+        fromState: chessStationLines,
+        fromKey: $"$cell:chessStationStatus:{key}"
+      )
     }
   }
 }
