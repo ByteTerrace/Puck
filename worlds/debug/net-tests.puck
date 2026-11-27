@@ -1,0 +1,98 @@
+// The rope net panel on level 1's north edge (gallery/shell.puck, layout.puck's toyLatticeNetBay), climbed as a player
+// climbs it: seat 1 plays the `net-climb` route (benchmark-route.puck) with the standard's `walker` program, which walks
+// the body straight at the net, pushes into it until the climb takes it, climbs until it is a metre up, hangs, then runs
+// back, which lets go. Rules in this test world latch how far the climb got and what the net did, reading the body's own
+// facts and the net's readings (`net(<placement>, deflection|awake|holders|pushers)`, $net:):
+//
+//   reached     the climb's last stage: 1 took the net, 2 a metre up on it, 3 back on the floor after letting go
+//   held        the most bodies the net carried at once while she climbed: one
+//   dipped      the net's deepest deflection while she hung on it, past a strand's thickness: her weight pulled it
+//   bounded     never past the net's reach: the solver's bound held
+//   settled     the net asleep again at the export tick: it came to rest and costs nothing
+//
+// The same block run twice with `puck test --reproduce worlds/debug/net-tests.puck` shows the net's nodes are part of
+// the state two runs agree on: a pushed, held and released net steps bit for bit alike.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
+documentId: "debug"
+import "stopped-machines"
+import "gallery/layout"
+import "../standard/architecture"
+
+// The rope net placement (shell.puck names it gallery-lattice-north-<toyLatticeNetBay>, bay 10, which the reads below
+// spell out), and the readings that judge it: a strand's thickness is the least dip worth calling one, and
+// the net's reach (standard/architecture.puck's ropeNet) the most any node may stand off rest.
+let netStrand = ropeNet.strand
+let netReach = ropeNet.reach
+// How far over level 1's floor the body's foot is a metre up the net, and the band over the floor it stands in again.
+let netFloor = galleryWorld(0, galleryFloor[1], 0)[1]
+let netClimb = 1
+let netFloorBand = 0.3
+
+state {
+  world {
+    slot netReached = 0
+    slot netHeld = 0
+    // Deflections, in metres.
+    row {
+      name: "netDeepest"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "netFarthest"
+      kind: Fixed
+      value: "0"
+    }
+  }
+}
+
+rule "net-took" {
+  when netReached == 0 and fact(body, 0, HoldingUnwalkable) == 1 and net("gallery-lattice-north-10", holders) >= 1
+  mode: Level
+  netReached = 1
+}
+rule "net-climbed" {
+  when netReached == 1 and fact(body, 0, HoldingUnwalkable) == 1 and bodyPosition(body, 0, y) >= (netFloor + netClimb)
+  mode: Level
+  netReached = 2
+}
+rule "net-dropped" {
+  when (netReached == 2 and fact(body, 0, HoldingUnwalkable) == 0 and fact(body, 0, Grounded) == 1 and
+    bodyPosition(body, 0, y) <= (netFloor + netFloorBand))
+  mode: Level
+  netReached = 3
+}
+// The most holders and the deepest dip while she is on the net; the farthest deflection ever.
+rule "net-held" {
+  when netReached >= 1 and netReached <= 2 and net("gallery-lattice-north-10", holders) > netHeld
+  mode: Level
+  netHeld = net("gallery-lattice-north-10", holders)
+}
+rule "net-dipped" {
+  when netReached >= 1 and netReached <= 2 and net("gallery-lattice-north-10", deflection) > netDeepest
+  mode: Level
+  netDeepest = net("gallery-lattice-north-10", deflection)
+}
+rule "net-farthest" {
+  when net("gallery-lattice-north-10", deflection) > netFarthest
+  mode: Level
+  netFarthest = net("gallery-lattice-north-10", deflection)
+}
+
+test "the rope net, taken, climbed a metre and let go" {
+  when {
+    seat1: route.play net-climb
+    ticks 900
+  }
+  expect {
+    netReached == 3
+    netHeld == 1
+    netDeepest > netStrand
+    netFarthest <= netReach
+    net("gallery-lattice-north-10", awake) == 0
+    fact(body, 0, Grounded) == 1
+  }
+}

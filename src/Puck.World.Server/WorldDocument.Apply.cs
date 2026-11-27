@@ -911,7 +911,9 @@ public sealed partial class WorldDocument {
             Inputs: Host.Input.Publish(),
             InputAnswers: Host.Input.Answers(),
             OwnBodies: Host.Population.CaptureOwnBodies(engineTick: Host.CompletedEngineTicks, tick: tick),
-            SolidScales: Host.Population.SolidScales()
+            SolidScales: Host.Population.SolidScales(),
+            // The nets' nodes ride with the cells: a snapshot that carries none leaves them owed to the next.
+            Nets: (cells ? Host.Population.TakeNetNodes(full: !consumeContinuity) : default)
         );
     }
 

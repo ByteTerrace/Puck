@@ -1888,6 +1888,21 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
+            // The NET facet: the row's creation is a net the authority steps (see WorldPlacementNet). Its nodes rest on the
+            // row's one static frame and collide through the row's solid facet, so it needs both.
+            if (placement.Net is { } net) {
+                net.Validate(errors: errors, path: $"{path}.net");
+                if (placement.Solid is null) {
+                    errors.Add(item: $"{path}.net: a net collides through the row's solid facet; add `solid` to the row.");
+                }
+                if (!placement.HasStaticFrame || (placement.Distribution is not null) || (placement.Deal is not null)) {
+                    errors.Add(item: $"{path}.net: a net rests on one static frame, so its row carries no distribution, deal, mirror, attach, inhabit or turn facet.");
+                }
+                if (placement.Respond is { Count: > 0 }) {
+                    errors.Add(item: $"{path}.net: a net's displaced drawing binds the one creation the row shows, so its row carries no respond facet.");
+                }
+            }
+
             // The CONTRIBUTION facet: a host-authored slot a federation partner fills (see WorldPlacementContribution).
             if (placement.Contribution is { } slotContribution) {
                 ValidateContribution(

@@ -8,7 +8,8 @@
 // sdfMeshWord (sdf-mesh-words.hlsli). A draw's placement passes through sdfMeshPoseOf, which poses a draw riding its frame
 // slot from the slot's row and any other from the matrix its record holds. Every read of a vertex's position or normal
 // passes through sdfMeshWorldPosition, sdfMeshWorldNormal or, for the previous frame, sdfMeshPreviousPosition, which
-// displace a height field's draw (sdfMeshDisplaced), so every pass sees one surface.
+// displace a displaced draw (sdfMeshDisplaced: a height field's heights, a sheet's node offsets), so every pass sees one
+// surface.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
@@ -280,10 +281,10 @@ uint sdfMeshDisplacementEntry(uint record) {
 // raised columns alone (height above zero) so a level holds to the edge of the raised columns; the point's own column's
 // height, with no slope, where none of the four is raised. Columns past the lattice's edge read its edge's.
 float sdfMeshHeightAt(uint entry, bool previous, float2 point2, out float2 gradient) {
-    uint width = sdfFrameSampled[entry];
-    uint depth = sdfFrameSampled[(entry + 1u)];
-    float2 origin = asfloat(uint2(sdfFrameSampled[(entry + 2u)], sdfFrameSampled[(entry + 4u)]));
-    float cell = asfloat(sdfFrameSampled[(entry + 5u)]);
+    uint width = sdfFrameSampled[(entry + 1u)];
+    uint depth = sdfFrameSampled[(entry + 2u)];
+    float2 origin = asfloat(uint2(sdfFrameSampled[(entry + 3u)], sdfFrameSampled[(entry + 5u)]));
+    float cell = asfloat(sdfFrameSampled[(entry + 6u)]);
     uint values = ((entry + SDF_FRAME_SAMPLED_HEADER_WORDS) + (previous ? (width * depth) : 0u));
     float2 grid = (((point2 - origin) / cell) - 0.5);
     float2 corner = floor(grid);
@@ -325,15 +326,10 @@ float sdfMeshHeightAt(uint entry, bool previous, float2 point2, out float2 gradi
 // cells above the origin and its base a cell below it. The top band, from a cell under the reference top up, which holds
 // the top face and its edge rounding, rises by the height less the reference; the band below scales from the base, so
 // walls stay vertical. A normal goes through the map's inverse transpose (its parts along x and z tilted by the map's
-// slope), which on the top face is the height's gradient. A draw that is not displaced returns the point and normal as
-// they are.
-float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 normal) {
-    uint entry = sdfMeshDisplacementEntry(record);
-
-    if (entry == SDF_FRAME_SAMPLED_NONE) { return p; }
-
-    float originY = asfloat(sdfFrameSampled[(entry + 3u)]);
-    float cell = asfloat(sdfFrameSampled[(entry + 5u)]);
+// slope), which on the top face is the height's gradient.
+float3 sdfMeshHeightDisplaced(uint entry, float3 p, bool previous, inout float3 normal) {
+    float originY = asfloat(sdfFrameSampled[(entry + 4u)]);
+    float cell = asfloat(sdfFrameSampled[(entry + 6u)]);
     float reference = (SDF_HEIGHT_FIELD_REFERENCE_CELLS * cell);
     float base = (originY - cell);
     float split = ((originY + reference) - cell);
@@ -354,6 +350,51 @@ float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 norma
     normal = float3(((normal.x * slopeY) - (normal.y * slopeXZ.x)), normal.y, ((normal.z * slopeY) - (normal.y * slopeXZ.y)));
 
     return p;
+}
+// A sheet's draw's object-space point moved by its nodes' offsets (SdfSheetDisplacement): the point's grid place, in node
+// units, is its offset from the origin dotted with the two gradients the header carries, clamped onto the grid; it moves
+// by the bilinear blend of its cell's four node offsets (three floats a node, row by row, this frame's or the previous
+// frame's). The normal goes through the map's first-order inverse transpose, n - gradS (dO/ds . n) - gradT (dO/dt . n),
+// with no slope along an axis the point was clamped on.
+float3 sdfMeshSheetDisplaced(uint entry, float3 p, bool previous, inout float3 normal) {
+    uint columns = sdfFrameSampled[(entry + 1u)];
+    uint rows = sdfFrameSampled[(entry + 2u)];
+    float3 origin = asfloat(uint3(sdfFrameSampled[(entry + 3u)], sdfFrameSampled[(entry + 4u)], sdfFrameSampled[(entry + 5u)]));
+    float3 gradS = asfloat(uint3(sdfFrameSampled[(entry + 7u)], sdfFrameSampled[(entry + 8u)], sdfFrameSampled[(entry + 9u)]));
+    float3 gradT = asfloat(uint3(sdfFrameSampled[(entry + 10u)], sdfFrameSampled[(entry + 11u)], sdfFrameSampled[(entry + 12u)]));
+    uint values = ((entry + SDF_FRAME_SAMPLED_HEADER_WORDS) + (previous ? (3u * columns * rows) : 0u));
+    float2 last = float2(float(columns - 1u), float(rows - 1u));
+    float2 raw = float2(dot((p - origin), gradS), dot((p - origin), gradT));
+    float2 grid = clamp(raw, float2(0.0, 0.0), last);
+    float2 inside = float2(((raw.x == grid.x) ? 1.0 : 0.0), ((raw.y == grid.y) ? 1.0 : 0.0));
+    uint2 corner = uint2(min(floor(grid), (last - float2(1.0, 1.0))));
+    float2 f = (grid - float2(corner));
+    uint n00 = (values + (3u * ((corner.y * columns) + corner.x)));
+    uint n10 = (n00 + 3u);
+    uint n01 = (n00 + (3u * columns));
+    uint n11 = (n01 + 3u);
+    float3 o00 = asfloat(uint3(sdfFrameSampled[n00], sdfFrameSampled[(n00 + 1u)], sdfFrameSampled[(n00 + 2u)]));
+    float3 o10 = asfloat(uint3(sdfFrameSampled[n10], sdfFrameSampled[(n10 + 1u)], sdfFrameSampled[(n10 + 2u)]));
+    float3 o01 = asfloat(uint3(sdfFrameSampled[n01], sdfFrameSampled[(n01 + 1u)], sdfFrameSampled[(n01 + 2u)]));
+    float3 o11 = asfloat(uint3(sdfFrameSampled[n11], sdfFrameSampled[(n11 + 1u)], sdfFrameSampled[(n11 + 2u)]));
+    float3 bottom = lerp(o00, o10, f.x);
+    float3 top = lerp(o01, o11, f.x);
+    float3 alongS = (lerp((o10 - o00), (o11 - o01), f.y) * inside.x);
+    float3 alongT = ((top - bottom) * inside.y);
+
+    normal = ((normal - (gradS * dot(alongS, normal))) - (gradT * dot(alongT, normal)));
+
+    return (p + lerp(bottom, top, f.y));
+}
+// A displaced draw's object-space point and normal, through whichever kind of displacement its entry names; a draw that
+// is not displaced returns the point and normal as they are.
+float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 normal) {
+    uint entry = sdfMeshDisplacementEntry(record);
+
+    if (entry == SDF_FRAME_SAMPLED_NONE) { return p; }
+    if (sdfFrameSampled[entry] == SDF_DISPLACEMENT_SHEET) { return sdfMeshSheetDisplaced(entry, p, previous, normal); }
+
+    return sdfMeshHeightDisplaced(entry, p, previous, normal);
 }
 #include "sdf-mesh-skin.hlsli"
 // The world position and normal of a draw's vertex `vertex` (sdfMeshWorldVertex takes an index `k` and reads the vertex

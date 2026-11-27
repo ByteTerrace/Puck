@@ -278,6 +278,7 @@
     { "name": "world.metadata", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.navigation", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.nesting", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.nets", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.nudge", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.observe", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.ownership.accept", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

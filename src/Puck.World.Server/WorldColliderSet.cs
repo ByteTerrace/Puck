@@ -266,6 +266,8 @@ public sealed partial class WorldColliderSet : IContactField {
         m_previousAttachedRotations = new FixedQuaternion[attachedRows.Count];
         m_attachedResolved = new bool[attachedRows.Count];
         m_previousAttachedResolved = new bool[attachedRows.Count];
+        m_attachedNetRevisions = new int[attachedRows.Count];
+        m_previousAttachedNetRevisions = new int[attachedRows.Count];
         m_solver = new FixedStaticContactSolver(
             ContactSkin: tuning.ContactSkin,
             GroundedThreshold: tuning.GroundedThreshold,
@@ -1006,6 +1008,7 @@ public sealed partial class WorldColliderSet : IContactField {
         (m_previousAttachedOrigins, m_attachedOrigins) = (m_attachedOrigins, m_previousAttachedOrigins);
         (m_previousAttachedRotations, m_attachedRotations) = (m_attachedRotations, m_previousAttachedRotations);
         (m_previousAttachedResolved, m_attachedResolved) = (m_attachedResolved, m_previousAttachedResolved);
+        (m_previousAttachedNetRevisions, m_attachedNetRevisions) = (m_attachedNetRevisions, m_previousAttachedNetRevisions);
         m_attachedColliders.Clear();
         m_attachedColliderRows.Clear();
         m_movingHoldable.Clear(); m_movingGripOverrides.Clear();
@@ -1064,9 +1067,63 @@ public sealed partial class WorldColliderSet : IContactField {
         }
     }
 
-    // A row moved when it resolves at one refresh and not the other, or at another origin or rotation at both.
+    // A row moved when it resolves at one refresh and not the other, or at another origin, rotation, size or net pose at
+    // both.
     private bool AttachedRowMoved(int row) => ((m_attachedResolved[row] != m_previousAttachedResolved[row]) ||
-        (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]) || (m_attachedScales[row] != m_previousAttachedScales[row]))));
+        (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]) ||
+        (m_attachedScales[row] != m_previousAttachedScales[row]) || (m_attachedNetRevisions[row] != m_previousAttachedNetRevisions[row]))));
+
+    /// <summary>Gets or sets the authority's nets, which a net row's colliders are posed from (<see cref="WorldNets"/>);
+    /// a set with no nets poses a net row at rest. Set by the population as it installs the set.</summary>
+    internal WorldNets Nets { get; set; } = WorldNets.Empty;
+    // Each row's net revision at the latest refresh and the one before it: the net row moved when they differ.
+    private int[] m_attachedNetRevisions;
+    private int[] m_previousAttachedNetRevisions;
+
+    // A net row's movement over its latest step at a point on it, or null for a row that is no net or a point off it.
+    private FixedVector3? NetDisplacement(int row, in FixedVector3 point, ulong stepTicks) {
+        if ((m_attachedRows[row].Placement.Net is null) || !Nets.TryPanel(id: m_attachedRows[row].Placement.Id, panel: out var panel) ||
+            !panel.TryLocate(column: out var column, contactReach: ContactReach, point: in point, row: out var gridRow)) {
+            return null;
+        }
+        return panel.Net.DisplacementAt(column: column, row: gridRow, stepTicks: stepTicks);
+    }
+    /// <summary>Returns how far the net a body holds moved under its hold's anchor over its latest step: what the body
+    /// rides before its own step, as a body standing on a carrier rides it (<see cref="TryRideDisplacement"/>).</summary>
+    /// <param name="anchor">The hold's anchor.</param>
+    /// <param name="stepTicks">The step's length, in engine ticks.</param>
+    /// <param name="displacement">The displacement, in metres.</param>
+    /// <param name="supportRow">The net row the anchor lies on.</param>
+    /// <returns>Whether the anchor lies on a net row that moved it.</returns>
+    public bool TryHeldDisplacement(in FixedVector3 anchor, ulong stepTicks, out FixedVector3 displacement, out int supportRow) {
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            if (Excludes(row: row) || (NetDisplacement(row: row, point: in anchor, stepTicks: stepTicks) is not { } moved)) { continue; }
+            displacement = moved;
+            supportRow = row;
+            return (moved != FixedVector3.Zero);
+        }
+        displacement = FixedVector3.Zero;
+        supportRow = -1;
+        return false;
+    }
+
+    // Records a net row's cell colliders as its net stands, or the row's rest layout when the set holds no net for it.
+    private void RecordNetColliders(int row, WorldPlacementNet facet, FixedQ4816 scale) {
+        var placement = m_attachedRows[row].Placement;
+
+        if (Nets.TryPanel(id: placement.Id, panel: out var panel)) {
+            m_attachedNetRevisions[row] = panel.Net.Revision;
+            foreach (ref readonly var collider in panel.Colliders()) { RecordAttachedCollider(attached: collider); }
+            return;
+        }
+        var moving = m_attachedRows[row];
+        var rest = new FixedNet(spec: facet.SpecAt(origin: moving.Origin, rotation: moving.Rotation, scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale)));
+        var colliders = new FixedStaticCollider[rest.CellCount];
+
+        rest.CellColliders(destination: colliders, radius: ((FixedQ4816.FromDouble(value: facet.Strand) * FixedQ4816.FromDouble(value: placement.Scale)) / FixedQ4816.FromInteger(value: 2)));
+        m_attachedNetRevisions[row] = 0;
+        foreach (var collider in colliders) { RecordAttachedCollider(attached: collider); }
+    }
     private void FoldAttachedMoves(List<FixedStaticCollider> colliders, List<int> rows) {
         for (var index = 0; (index < colliders.Count); index++) {
             if (AttachedRowMoved(row: rows[index])) { m_attachedMoves.Fold(collider: colliders[index]); }
@@ -1200,11 +1257,13 @@ public sealed partial class WorldColliderSet : IContactField {
     /// <param name="orientation">The body's orientation.</param>
     /// <param name="up">The body's unit up axis.</param>
     /// <param name="volumes">The body's scaled collider volumes.</param>
-    /// <param name="displacement">The foot point's displacement under the carrier's translation and yaw.</param>
+    /// <param name="displacement">The foot point's displacement under the carrier's translation and yaw, or, on a net
+    /// row, the net's own movement under the foot over its latest step.</param>
     /// <param name="supportRow">The moving row whose material surface supplies the displacement.</param>
+    /// <param name="stepTicks">The step's length, in engine ticks, over which a net's movement is read.</param>
     /// <returns>Whether a moving support was found.</returns>
     public bool TryRideDisplacement(FixedVector3 position, in FixedQuaternion orientation, in FixedVector3 up,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 displacement, out int supportRow) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, ulong stepTicks, out FixedVector3 displacement, out int supportRow) {
         displacement = FixedVector3.Zero;
         supportRow = -1;
         var found = false;
@@ -1227,6 +1286,13 @@ public sealed partial class WorldColliderSet : IContactField {
                 }
                 var carriedPoint = position;
 
+                if (NetDisplacement(row: row, point: (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)), stepTicks: stepTicks) is { } carried) {
+                    found = true;
+                    supportRow = row;
+                    bestDepth = push.Penetration;
+                    displacement = carried;
+                    continue;
+                }
                 if (m_attachedScales[row] != m_previousAttachedScales[row]) {
                     var probe = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal));
 

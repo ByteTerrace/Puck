@@ -326,6 +326,15 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
         return false;
     }
+    /// <summary>Gets a value indicating whether a placement carries a net facet.</summary>
+    /// <param name="placementId">The placement's id.</param>
+    /// <returns><see langword="true"/> when the placement declares a net.</returns>
+    public bool HasNet(string placementId) {
+        foreach (var placement in Definition.Placements) {
+            if ((placement.Net is not null) && string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) { return true; }
+        }
+        return false;
+    }
     /// <summary>Gets a value indicating whether the document declares a screen at an index.</summary>
     /// <param name="index">The screen index.</param>
     /// <returns><see langword="true"/> when the document declares the screen.</returns>

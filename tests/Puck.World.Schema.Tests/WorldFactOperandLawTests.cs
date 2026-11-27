@@ -302,6 +302,8 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     /// <inheritdoc/>
     public Fact Read(BodyKinematicsOperand operand) => Unserved();
     /// <inheritdoc/>
+    public Fact Read(WorldNetOperand operand) => Unserved();
+    /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) => Unserved();
     public Fact Read(BodyStateOperand operand) => Unserved();
     /// <inheritdoc/>

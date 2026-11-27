@@ -164,6 +164,21 @@ drawn only; a clear pane threaded through it holds every body, so no body
 flies or jumps in from the void and none drops out, while the panel stays open
 to the eye.
 
+**The rope net panel.** One panel is a real net: `gallery-lattice-north-10`
+(the north edge's bay 10, layout.puck's `toyLatticeNetBay`) keeps the lattice's
+frame and drops its pane, and its placement carries the standard's
+`latticeNet` facet (architecture.puck, `ropeNet`'s material): a grid of 12 by
+9 nodes from post to post and sill to head, pinned at all four members, that
+the authority steps as rope (the engine's net, [the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
+It still holds every body, but it gives: a body leaning on it bulges it, a
+body that walks into it takes it and climbs it like a park climbing net (the
+standard's climb, in or out of the Moth's suit), its weight pulls the net in
+under its hands with a ripple outward, and the drawn strands and knots move
+with the nodes. It settles and sleeps when no one touches it. `debug.go
+rope-net` stands a body before it; `world.nets` reads its nodes, deflection,
+holders and leaners; `world.benchmark run net-climb` plays a climb, and
+[net-tests.puck](net-tests.puck) plays the same climb headless.
+
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
 and `gallery-lattice-loose-bridge` (the bridge's middle tile, on the nave's

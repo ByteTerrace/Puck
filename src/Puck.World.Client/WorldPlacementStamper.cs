@@ -916,7 +916,10 @@ public static partial class WorldPlacementStamper {
     /// the prototype's mesh and its text, emit nothing; <see langword="null"/> emits every shape.</param>
     /// <param name="sharedAssets">The visual scene's admitted local copies; null keeps ordinary world-space field
     /// emission, including query fields.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null, WorldRigidAssets? sharedAssets = null) {
+    /// <param name="displacementFor">Resolves the displacement a placement's world-space instances are drawn through (a
+    /// net's node sheet, <see cref="WorldNetPresentation"/>), or <see langword="null"/> when no placement is displaced; a
+    /// displaced placement's emission is never retained, since it names its displacement.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null, WorldRigidAssets? sharedAssets = null, Func<WorldPlacement, SdfDisplacement?>? displacementFor = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -973,7 +976,10 @@ public static partial class WorldPlacementStamper {
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
             var frame = stamp.Frame;
             var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, stamp.Rotation, worldSeed, meshScope, (meshDraws is not null), stamp);
-            var retain = ((palettes is not null) && (tint is null));
+            var displacement = displacementFor?.Invoke(arg: placement);
+            var retain = ((palettes is not null) && (tint is null) && (displacement is null));
+
+            if (displacement is not null) { _ = builder.BeginDisplaced(displacement: displacement); }
 
             if (retain && registered.Emissions.TryGetValue(key: placement, value: out var held) && (held.Key == key) && builder.CanAppendEmission(emission: held.Program)) {
                 builder.AppendEmission(emission: held.Program);
@@ -1024,6 +1030,7 @@ public static partial class WorldPlacementStamper {
                     registered.Emissions.AddOrUpdate(key: placement, value: new(key, builder.RetainEmission(mark: mark), [.. emittedVolumes!], ((emittedDraws is null) ? [] : [.. emittedDraws])));
                 }
             }
+            if (displacement is not null) { _ = builder.EndDisplaced(); }
             if (picks is not null) {
                 var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null) { Prototype = creation.Id };
 

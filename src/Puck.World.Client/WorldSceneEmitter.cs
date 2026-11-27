@@ -21,6 +21,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
+    // The nets the static placements draw through, and the delegates EmitStatic and the frame's publication take, made once.
+    private readonly WorldNetPresentation m_nets = new();
+    private readonly Func<WorldPlacement, SdfDisplacement?> m_netDisplacement;
+    private readonly WorldNetPresentation.NetReader m_netReader;
 
     private readonly WorldCreationInstances m_animator;
     private readonly IWorldAudioCueSink m_audio;
@@ -129,7 +133,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_staticVolumes.Clear();
         WorldPlacementStamper.EmitStatic(builder: builder, definition: client.Definition, creations: creations,
             placements: placements, textCatalog: m_text.Catalog, tintFor: null, volumes: m_staticVolumes,
-            meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation, sharedAssets: m_animator.Rigid);
+            meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation, sharedAssets: m_animator.Rigid,
+            displacementFor: m_netDisplacement);
         m_staticVolumesRevision++;
         m_meshDraws.Static = meshDraws;
 
@@ -293,6 +298,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public void PrepareFrame() {
         PrepareRegistrations();
         m_animator.PrepareGuess(source: m_client);
+        m_nets.Publish(definition: m_client.Definition, read: m_netReader);
     }
     private void PrepareRegistrations() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
@@ -582,6 +588,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         m_client = client;
+        m_netDisplacement = placement => m_nets.DisplacementFor(definition: m_client.Definition, placement: placement);
+        m_netReader = m_client.NetOffsets;
         m_bakedColors = new WorldBakedColors(mirror: client.StateMirror);
         m_continuum = continuum;
         m_animator = animator;

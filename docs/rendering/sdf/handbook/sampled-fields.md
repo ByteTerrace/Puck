@@ -111,7 +111,7 @@ raised from nothing or lowered to nothing. Its *heights* hold one value a
 column, which no instruction samples and the mesh identity never hashes.
 `SdfProgramBuilder.HeightField` emits the reference as an instance's sampled
 instruction and names the heights as that instance's displacement
-(`SdfProgram.HeightFields`), so the field's mesh is keyed by its extent, cell and
+(`SdfProgram.Displacements`), so the field's mesh is keyed by its extent, cell and
 raised columns, never by its heights.
 
 The heights reach the render passes through the frame's sampled table,

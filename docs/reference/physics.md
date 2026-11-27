@@ -572,6 +572,30 @@ per-tick rates use. `CaptureState`/`FromState` preserve the rope limits and
 that accumulator's remainder when a same-world checkpoint must continue on
 the exact next fixed-point fraction.
 
+`FixedTetherConstraint.SolvePair` is the same cap between two points that both
+move, as one compliant (XPBD) projection: slack is an exact no-op, and a taut
+strand moves both ends along their line by shares of their inverse masses, its
+multiplier accumulating across a step's iterations so the answer converges on
+the compliant rope rather than stiffening with the iteration count.
+
+## The net
+
+`FixedNet` is a net of rope strands as a grid of point masses over a
+parallelogram (`FixedNetSpec`), its edges optionally pinned. `Step` integrates
+the free nodes under gravity and the caller's `FixedNetLoad`s (a force at a grid
+point, spread bilinearly) and `FixedNetPusher`s (capsules that push nodes out),
+projects every strand's cap a few times through `SolvePair`, then holds each node
+within `Reach` of rest through `Solve`; a node's stored velocity is its step's
+whole movement, and damping takes its share as the next step integrates. A net
+that nothing touches and whose nodes stay under `RestSpeed` for `SleepTicks`
+sleeps, and a sleeping net's step returns at once. `CellColliders` writes a
+rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
+`DisplacementAt` gives the net's movement under it over its latest step, and
+`TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,
+checkpoints and the hash. Every reader may bound the net by its rest layout grown
+by its reach. `physics.nets` counts its work. The World's host is a placement's
+`net` facet ([the facet](../../.claude/skills/puck-world/references/documents-render.md#a-placements-net-facet)).
+
 ## Bounded local perception
 
 `FixedSpatialNeighborhood` freezes a set of fixed-point positions into an ordered

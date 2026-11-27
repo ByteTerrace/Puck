@@ -72,6 +72,13 @@ let galleryPlaces = concat(
       }
     }
     { id: "lift", at [liftX, 9.2, liftZ], half [1.7, 9.7, 1.9] }
+    // On the rope net panel's aisle side (layout.puck's toyLatticeNetBay), from a metre over level 1's floor up and within
+    // 1.2 m of the net: a body here has climbed the net a metre or more.
+    {
+      id: "net-high"
+      at [bayX(toyLatticeNetBay), (galleryFloor[1] + 2.2), ((naveNorth + balconyInset) + 0.6)]
+      half [2.3, 1.2, 0.6]
+    }
     // The board game room: level 2's south gallery and the wing that projects over the forecourt.
     storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)
   ],
@@ -141,6 +148,9 @@ spawnPoints [
   // into the lobby. The gallery's own places (`gallery`, outside its entrance; `lift`; `stairs`) are the module's
   // (gallery/gallery.puck).
   { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -32), yawDegrees: 180 }
+  // On level 1's north aisle, 1.5 m behind the rope net panel (gallery/shell.puck, layout.puck's toyLatticeNetBay) and
+  // facing it across the nave: walking forward takes the net and climbs it. Posed here, she keeps whatever size she was.
+  { id: "rope-net", position: galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5)), yawDegrees: 0 }
 ]
 
 commands [

@@ -51,9 +51,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// or not whole; a dynamic group casts none only while no instance riding its slot casts, and the world group always
     /// casts.</summary>
     public bool CastsNoShadow { get; private set; }
-    /// <summary>Gets the heights a static group of one height field's instance is displaced by as it is drawn
-    /// (<see cref="SdfProgram.HeightFields"/>), with the handle of the program the group was planned of; <see langword="null"/>
-    /// for a group drawn as it was baked. A height field's instance bakes alone: no instance bakes with it.</summary>
+    /// <summary>Gets the displacement a static group of a displaced instance is moved by as it is drawn
+    /// (<see cref="SdfProgram.Displacements"/>), with the handle of the program the group was planned of; <see langword="null"/>
+    /// for a group drawn as it was baked. A displaced instance bakes alone: no instance bakes with it.</summary>
     public SdfMeshDisplacement? Displacement { get; private set; }
 
     /// <summary>Gets each member of the group's union, in the group's frame: a static instance, a dynamic instance, or each
@@ -380,7 +380,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     group.Glass &= glass;
                     group.CastsNoShadow &= shadowless;
                 }
-            } else if (instance.BakesWithPrevious && (instance.HeightField is null) && (staticRun is { } run) && !glass && !run.Glass && (shadowless == run.CastsNoShadow) && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
+            } else if (instance.BakesWithPrevious && (instance.Displacement is null) && (staticRun is { } run) && !glass && !run.Glass && (shadowless == run.CastsNoShadow) && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
                 group = run;
                 group.Instances++;
                 group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
@@ -391,7 +391,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group.High = (instance.Center + new Vector3(value: radius));
                 group.Glass = glass;
                 group.CastsNoShadow = shadowless;
-                group.Displacement = ((instance.HeightField is null) ? null : DisplacementOf(program: program, instance: index));
+                group.Displacement = ((instance.Displacement is null) ? null : DisplacementOf(program: program, instance: index));
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {
@@ -607,12 +607,12 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         PoseFirst = first;
         PoseRows = rows;
     }
-    // The displacement of the height field a program's instance draws.
+    // The displacement a program's instance is drawn through.
     private static SdfMeshDisplacement DisplacementOf(SdfProgram program, int instance) {
-        foreach (var binding in program.HeightFields) {
+        foreach (var binding in program.Displacements) {
             if (binding.Instance == instance) { return SdfMeshDisplacement.Of(binding: binding); }
         }
-        throw new InvalidOperationException(message: $"Instance {instance} draws a height field its program binds no handle for.");
+        throw new InvalidOperationException(message: $"Instance {instance} carries a displacement its program binds no handle for.");
     }
     // A position rounded to the steps a metre the geometry rounds a slot's position to.
     private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));

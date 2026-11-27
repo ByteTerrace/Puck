@@ -502,6 +502,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             far,
             shadows,
             lattice,
+            DescribeNetBudget(nets: Population.Nets),
             gravity,
             placements,
             $"state {(server.Definition.State?.Count ?? 0)} row(s)",
@@ -518,6 +519,20 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
         };
 
         return $"[world.budget: {string.Join(separator: Environment.NewLine, values: sections)}]";
+    }
+    // The nets' cost: the nodes and strands every awake net solves a tick, times its iterations, and the cell colliders
+    // the analytic provider poses for every net, awake or asleep.
+    private static string DescribeNetBudget(WorldNets nets) {
+        if (nets.Panels.IsEmpty) { return "nets none"; }
+
+        var strandSolves = 0L;
+        var cells = 0;
+
+        foreach (var panel in nets.Panels) {
+            cells += panel.Net.CellCount;
+            if (panel.Net.Awake) { strandSolves += ((long)panel.Net.StrandCount * panel.Net.Spec.Iterations); }
+        }
+        return $"nets {nets.Panels.Length} net(s), {nets.NodeCount} node(s), {cells} cell collider(s), {nets.AwakeCount} awake solving {strandSolves} strand projection(s) / tick";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
@@ -813,6 +828,16 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             audience: CommandAudience.Operator,
             description: "Reads the field lattice back (Immediate): its shape and cadence, and each field's nonzero cell count and mean.",
             handler: (context, args) => new CommandResult(Output: server.DescribeFields()),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.nets",
+            audience: CommandAudience.Operator,
+            description: "Reads every net back (Immediate): its node grid, whether it is awake, its deepest deflection from rest and its reach, and the bodies holding it and the body volumes leaning on it at its latest step.",
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.nets") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: server.DescribeNets())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

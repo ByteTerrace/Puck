@@ -281,7 +281,9 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// <param name="rigid">Whether a slot's two boxes are one box its pose carries, every caster point moving with it, so
     /// the box's displacement bounds the caster's as a standalone row's does; a slot that is not rigid is a union, which
     /// can hide motion inside it, and owes both ends at every entry whenever it moves.</param>
-    internal void Moved(int key, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass, bool rigid = false) {
+    /// <param name="conceals">Whether the draw's vertices move inside a box that stands (a displaced draw,
+    /// <see cref="SdfMeshDraw.Displacement"/>), so the change owes both ends at every entry however little its box moved.</param>
+    internal void Moved(int key, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass, bool rigid = false, bool conceals = false) {
         if ((wasLive && (before is null)) || (isLive && (after is null))) {
             MovedEverywhere();
             return;
@@ -291,8 +293,9 @@ internal sealed class SdfWorldShadows : IDisposable {
         var now = isLive ? after : null;
         var index = StampedIndexTable<SdfMeshBox>.IndexOfSigned(key: key);
         var held = m_judged.TryGetValue(index: index, value: out var previous);
-        // A union can conceal motion inside it, so a slot that is no rigid box owes both ends at every entry.
-        var bounded = ((key < 0) || rigid);
+        // A union can conceal motion inside it, so a slot that is no rigid box owes both ends at every entry, and so does a
+        // row whose vertices move inside a box that stands (a displaced draw, `conceals`).
+        var bounded = (!conceals && ((key < 0) || rigid));
 
         if (bounded && (m_finestTexel > 0f) && held && (was is not null) && (now is { } next) &&
             (Displacement(in previous, in next) < (m_finestTexel * MoveTexels))) {
