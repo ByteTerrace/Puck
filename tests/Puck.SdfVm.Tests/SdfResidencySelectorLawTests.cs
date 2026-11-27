@@ -126,6 +126,29 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Equal(expected: (0, (1, 1)), actual: (selector.Bias, selector.BiasSteps));
     }
     [Fact]
+    public void TheBiasRisesOnlyWhileAHalfRungStillMovesSomeResidencysDemand() {
+        var (account, _, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var valley = selector.Register(name: "valley");
+        using var painting = selector.Register(name: "painting");
+
+        Budget(account: account, localBudget: (2L * Gibibyte), segments: segments, serial: 1UL);
+        _ = valley.Budget(filled: Gibibyte, named: Gibibyte);
+        _ = painting.Budget(filled: (10L * Mebibyte), named: (10L * Mebibyte));
+
+        var floored = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: true, Floored: true);
+        var decisions = (((SdfMeshTier.HoldFrames + SdfMeshTier.MeasureFrames) - 1) / SdfMeshTier.MeasureFrames);
+
+        // Every demand stands where another half rung moves nothing: the budget presses, and the detail rests over it.
+        _ = painting.Decide(report: in floored);
+        for (var index = 0; (index < (4 * decisions)); index++) { _ = valley.Decide(report: in floored); }
+        Assert.Equal(expected: (0, (0, 0)), actual: (selector.Bias, selector.BiasSteps));
+        // A residency whose demand a half rung still moves lets the press raise the one bias.
+        _ = painting.Decide(report: (floored with { Floored = false }));
+        for (var index = 0; (index < decisions); index++) { _ = valley.Decide(report: in floored); }
+        Assert.Equal(expected: 1, actual: selector.Bias);
+    }
+    [Fact]
     public void TheRoomGoesToTheResidenciesThatAskForItAndEvenlyWhileNoneAsks() {
         var (account, _, segments) = Discrete();
         var clock = VirtualClock.ForDevice();
