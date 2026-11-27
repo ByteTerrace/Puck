@@ -99,6 +99,10 @@ by content and identity as before, and a definition object shared by a key's
 uses is compiled once (`SdfShadeProgram.Compile`'s per-instance table). The
 bake never reads a program, so the table leaves the bake identity alone.
 
+The document language's `fraction(x)`, `clamp(x, lo, hi)` and the constant `pi` are read in a phase too, and lower to
+ops the table already has (`x - floor(x)`, `min(max(x, lo), hi)`, a literal), so no op is added and a hand-written
+function of the same formula admits as the same program (`WorldShadeLowering.Expression`).
+
 A structural argument read out of a record (`pen.uneven`) enters as its value
 (`WorldShadeLowering.BindParameter`), since inside a phase a dotted name is a
 stamp member. `WorldShadeLowering` binds each runtime argument through an immutable typed view;

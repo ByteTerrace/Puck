@@ -84,7 +84,7 @@ let kdDowns = map(kdColumns, z => z + kdDown)
 
 // The zone table of the piles in `keep` alone: a transfer or a match between piles a table picks live is priced by the
 // dearest pile the table holds, so each rule names only the piles it can choose.
-function kdZonesOf(keep) = map(range(0, length(kdZones)), z => (length(filter(keep, k => k == z)) > 0) ? kdZones[z] : "")
+function kdZonesOf(keep) = map(range(0, length(kdZones)), z => contains(keep, z) ? kdZones[z] : "")
 
 function klondikeIdle() = (solitaireTable[$each] == 1 and
   klondikeRequest[$each] != klondikeApplied[$each] and

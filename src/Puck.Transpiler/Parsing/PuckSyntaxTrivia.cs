@@ -342,6 +342,13 @@ public static class PuckSyntaxTrivia {
                 rebuild: static (block, body, inner) => (block with { Body = body, Trivia = (block.Trivia with { Inner = inner }) }),
                 visit: TestItem
             ))),
+            TestExpectForNode loop => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: loop,
+                from: (loop.Sequence.Offset + loop.Sequence.Length),
+                items: loop.Body,
+                rebuild: static (block, body, inner) => (block with { Body = body, Trivia = (block.Trivia with { Inner = inner }) }),
+                visit: TestItem
+            ))),
             _ => item,
         });
         private TBlock TestWorldBlock<TBlock, TItem>(TBlock block, IReadOnlyList<TItem> items, Func<TBlock, IReadOnlyList<TItem>, IReadOnlyList<TriviaPiece>, TBlock> rebuild, int from = -1, Func<TItem, TItem>? visit = null)

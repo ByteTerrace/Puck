@@ -954,6 +954,32 @@ public static partial class WorldDocumentEmitter {
             }
         }
     }
+    // A test's expect lines with every `for` expanded: each line once per element, with the names that iteration binds
+    // (null outside every loop).
+    private static IEnumerable<(string? World, TestExpectationNode Expectation, Dictionary<string, JsonNode?>? Bound)> ExpectLines(IReadOnlyList<TestExpectItemNode> items, string? world, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        foreach (var item in items) {
+            switch (item) {
+                case TestExpectationNode expectation:
+                    yield return (world, expectation, bound);
+
+                    break;
+                case TestExpectWorldNode addressed:
+                    foreach (var expectation in addressed.Expectations) {
+                        yield return (addressed.World, expectation, bound);
+                    }
+
+                    break;
+                case TestExpectForNode loop:
+                    foreach (var iteration in LoopBindings(bound: bound, index: loop.Index, item: loop.Item, scope: scope, sequence: loop.Sequence, span: loop.Span)) {
+                        foreach (var line in ExpectLines(bound: iteration, items: loop.Body, scope: scope, world: world)) {
+                            yield return line;
+                        }
+                    }
+
+                    break;
+            }
+        }
+    }
     // A test's when steps with every loop expanded, a `for`'s bound names substituted into each seat step's command.
     private static IEnumerable<(string? World, TestStepNode Step)> WhenLines(IReadOnlyList<TestStepNode> steps, string? world, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
         foreach (var step in steps) {
@@ -1238,7 +1264,7 @@ public static partial class WorldDocumentEmitter {
         var foreign = new List<WorldTestForeign>();
         var line = 0;
 
-        foreach (var (addressed, expectation) in expectations.Lines) {
+        foreach (var (addressed, expectation, bound) in ExpectLines(bound: null, items: expectations.Expectations, scope: scope, world: null)) {
             line++;
 
             if ((addressed is not null) && (targets[0].World is null)) {
@@ -1246,7 +1272,7 @@ public static partial class WorldDocumentEmitter {
                     document: addressed,
                     expectation: expectation,
                     line: line,
-                    scope: scope
+                    scope: Evaluating(bound: bound, scope: scope)
                 ));
 
                 continue;
@@ -1282,9 +1308,15 @@ public static partial class WorldDocumentEmitter {
 
             var condition = LowerPredicate(
                 node: expectation.Predicate,
-                scope: target.Scope
+                scope: Evaluating(bound: bound, scope: target.Scope)
             );
             var gate = PuckPrinter.PrintGate(predicate: expectation.Predicate);
+
+            // The verdict names its gate as written, so a line a `for` repeats says which element it was run for.
+            if (bound is not null) {
+                gate = $"{gate}  [{string.Join(separator: ", ", values: bound.Select(selector: static entry => $"{entry.Key} = {(KeyText(value: entry.Value) ?? entry.Value?.ToJsonString())}"))}]";
+            }
+
             var row = VerdictRow(line: line);
 
             // No author writes a `$` inside a rule's name, but a scope named `expect` joins its own name to a member

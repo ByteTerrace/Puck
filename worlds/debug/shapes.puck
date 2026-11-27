@@ -208,10 +208,7 @@ function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / spee
 // it belongs to (its index in galleryDisplayRows), its place in that group's list (`slot`) and in the catalog (`index`).
 // An exhibit's catalog index is its identity: a display's selection cell (`gallerySelect`) holds it. Every display's console
 // lists the whole catalog, whichever groups its world stands a display for.
-let galleryDisplayFirsts = map(
-  range(0, length(galleryDisplayRows)),
-  i => reduce(map(range(0, i), j => length(galleryDisplayRows[j].names)), 0, (sum, count) => (sum + count))
-)
+let galleryDisplayFirsts = scan(galleryDisplayRows, row => length(row.names))
 let galleryCatalog = flatMap(
   range(0, length(galleryDisplayRows)),
   i => map(
@@ -251,7 +248,7 @@ let displayExhibitDrop = (((plinthCapTop * displayScale) - (0.75 * displayExhibi
 // The display an exhibit is home to, among `displays`: the first whose `homes` name the exhibit's group.
 function stationHome(displays, entry) = filter(
   displays,
-  display => (length(filter(display.homes, home => (home == galleryGroupOf(entry).id))) > 0)
+  display => contains(display.homes, galleryGroupOf(entry).id)
 )[0]
 // An exhibit's station: its name, its catalog index and slot, and its home display's place (the turntable's centre, its
 // level and floor height, the yaw it stands at, `front` and the `site` of its frame).

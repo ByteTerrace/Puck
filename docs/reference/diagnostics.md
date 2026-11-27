@@ -324,7 +324,7 @@ A lambda is written where no collection function takes one.
 
 Example: `thickness: x => x * 2`.
 
-Fix: pass the lambda as an argument of `map`, `filter`, `reduce`, `flatMap`, `groupBy`, `sort` and the like.
+Fix: pass the lambda as an argument of one of the builtins that takes one (`map`, `filter`, `reduce`, `flatMap`, `groupBy`, `sort`, `any`, `all`, `count`, `sum`, `scan`, `indexOf`, `find`); the message lists them. A function that reads values only, such as `sine`, takes none.
 
 ### PUCK043
 

@@ -97,13 +97,9 @@ function terminalWrapStep(lines, word, width, gap) = ((terminalLastOf(lines) == 
   [$"{terminalLastOf(lines)}{gap}{word}"]
 ) : concat(lines, [word])))
 // A reply's first `terminalConsoleReplyLines` lines as one text, joined by line breaks; a screen shows no more.
-function terminalJoin(lines) = reduce(
-  range(0, minimum(length(lines), terminalConsoleReplyLines)),
-  "",
-  (text, i) => ((i == 0) ? lines[i] : $"{text}\n{lines[i]}")
-)
-function terminalLastOf(lines) = lines[length(lines) - 1]
-function terminalInitOf(lines) = filter(lines, (line, i) => (i < (length(lines) - 1)))
+function terminalJoin(lines) = join(slice(lines, 0, terminalConsoleReplyLines), "\n")
+function terminalLastOf(lines) = slice(lines, -1)[0]
+function terminalInitOf(lines) = slice(lines, 0, -1)
 
 // The console's binding group, a binding overlay row listed ahead of the terminal's own so it wins while the body works
 // an open console (`terminalConsoleAt` names one of the `count` terminals): the console key closes it, Enter runs the

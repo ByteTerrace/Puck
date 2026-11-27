@@ -57,7 +57,7 @@ let patienceSurface = 0.002
 // Klondike's piles: zone 0 the stock (52 before a deal), 1 the waste, 2 to 8 the tableau, 10 to 13 the foundations (zone 9
 // unused); pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on. A pile's column, from the player's left.
 let kCaps = [52, 24, 19, 19, 19, 19, 19, 19, 19, 0, 13, 13, 13, 13]
-let kBase = map(range(0, 14), z => reduce(range(0, z), 0, (sum, k) => sum + kCaps[k]))
+let kBase = scan(kCaps)
 let kSlotCount = (kBase[13] + kCaps[13])
 let kColumn = [0, 1, 0, 1, 2, 3, 4, 5, 6, 0, 3, 4, 5, 6]
 let kTopRow = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]
@@ -79,7 +79,7 @@ let kReadCount = length(kReadTurns)
 // columns, then the deck's 24 layers over the first cell during a deal; the graph's last slot lies inside the cap, where
 // the cards wait while another game is shown.
 let fCaps = [1, 1, 1, 1, 13, 13, 13, 13, 19, 19, 19, 19, 19, 19, 19, 19]
-let fBase = map(range(0, 16), z => kSlotCount + reduce(range(0, z), 0, (sum, k) => sum + fCaps[k]))
+let fBase = map(scan(fCaps), base => kSlotCount + base)
 let fDeckBase = (fBase[15] + fCaps[15])
 let fSlotCount = (fDeckBase + 24)
 let fSlotX = map(range(0, 16), z => patienceCentreX + (3.5 - (z < 8 ? z : z - 8)) * patienceFreePitch)

@@ -356,6 +356,46 @@ public static partial class PuckPrinter {
             }
             Trailing(trivia: step.Trivia);
         }
+        private void TestExpectItems(IReadOnlyList<TestExpectItemNode> items, int level) {
+            foreach (var item in items) {
+                switch (item) {
+                    case TestExpectationNode expectation:
+                        TestExpectation(
+                            expectation: expectation,
+                            level: level
+                        );
+
+                        break;
+                    case TestExpectWorldNode addressed:
+                        TestWorldBlock(
+                            level: level,
+                            trivia: addressed.Trivia,
+                            world: addressed.World,
+                            write: () => {
+                                foreach (var expectation in addressed.Expectations) {
+                                    TestExpectation(
+                                        expectation: expectation,
+                                        level: (level + 1)
+                                    );
+                                }
+                            }
+                        );
+
+                        break;
+                    case TestExpectForNode loop:
+                        TestBlock(
+                            keyword: TestLoopHead(item: loop.Item, index: loop.Index, level: level, sequence: loop.Sequence),
+                            level: level,
+                            trivia: loop.Trivia,
+                            write: () => TestExpectItems(items: loop.Body, level: (level + 1))
+                        );
+
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
         private void TestExpectation(TestExpectationNode expectation, int level) {
             Leading(
                 level: level,
@@ -1084,37 +1124,7 @@ public static partial class PuckPrinter {
                                 keyword: "expect",
                                 level: (level + 1),
                                 trivia: expect.Trivia,
-                                write: () => {
-                                    foreach (var item in expect.Expectations) {
-                                        switch (item) {
-                                            case TestExpectationNode expectation:
-                                                TestExpectation(
-                                                    expectation: expectation,
-                                                    level: (level + 2)
-                                                );
-
-                                                break;
-                                            case TestExpectWorldNode addressed:
-                                                TestWorldBlock(
-                                                    level: (level + 2),
-                                                    trivia: addressed.Trivia,
-                                                    world: addressed.World,
-                                                    write: () => {
-                                                        foreach (var expectation in addressed.Expectations) {
-                                                            TestExpectation(
-                                                                expectation: expectation,
-                                                                level: (level + 3)
-                                                            );
-                                                        }
-                                                    }
-                                                );
-
-                                                break;
-                                            default:
-                                                break;
-                                        }
-                                    }
-                                }
+                                write: () => TestExpectItems(items: expect.Expectations, level: (level + 2))
                             );
                         }
                         Inner(

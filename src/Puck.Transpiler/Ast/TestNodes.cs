@@ -248,6 +248,32 @@ public sealed partial record TestExpectWorldNode(
     Line,
     Column
 );
+/// <summary><c>for item in sequence { gate … }</c> inside a test's <c>expect</c> block: the body's gate lines once per
+/// element of an array known at compile time, the bound names read as constants in each gate. Compile-time only: the
+/// generated test world carries the verdict rules it produces, exactly as the same lines written out would.</summary>
+/// <param name="Item">The name bound to each element.</param>
+/// <param name="Index">The name bound to each element's 0-based position, or <see langword="null"/>.</param>
+/// <param name="Sequence">The array walked.</param>
+/// <param name="Body">The gate lines, world blocks and nested loops, in written order.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record TestExpectForNode(
+    string Item,
+    string? Index,
+    ExpressionNode Sequence,
+    IReadOnlyList<TestExpectItemNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : TestExpectItemNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A test's <c>given</c> block — the cells the generated test world boots with.</summary>
 /// <param name="Cells">The assignments and world blocks, in written order.</param>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -325,11 +351,15 @@ public sealed partial record TestExpectBlockNode(
     Line,
     Column
 ) {
-    /// <summary>Gets every gate line the block carries, each with the world it is addressed to, or
-    /// <see langword="null"/> for a line written outside every world block.</summary>
-    public IEnumerable<(string? World, TestExpectationNode Expectation)> Lines => Expectations.SelectMany(selector: static item => (item switch {
+    /// <summary>Gets every gate line the block carries as written, each with the world it is addressed to, or
+    /// <see langword="null"/> for a line written outside every world block. A <c>for</c>'s body is read once, its
+    /// bound names unsubstituted.</summary>
+    public IEnumerable<(string? World, TestExpectationNode Expectation)> Lines => Written(items: Expectations);
+
+    private static IEnumerable<(string? World, TestExpectationNode Expectation)> Written(IReadOnlyList<TestExpectItemNode> items) => items.SelectMany(selector: static item => (item switch {
         TestExpectationNode expectation => [(((string?)null), expectation)],
         TestExpectWorldNode addressed => addressed.Expectations.Select(selector: expectation => (((string?)addressed.World), expectation)),
+        TestExpectForNode loop => Written(items: loop.Body),
         _ => Enumerable.Empty<(string?, TestExpectationNode)>(),
     }));
 }

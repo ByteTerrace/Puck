@@ -18,7 +18,7 @@ let fcPowers = [1, 2, 4, 8, 16, 32, 64, 128, 256]
 // Every pile a rule chooses by number, and the table of the piles in `keep` alone: a transfer or a match between piles a
 // table picks live is priced by the dearest pile the table holds, so each rule names only the piles it can choose.
 let fcZones = map(range(0, 16), k => $"freecellPile{k}Of")
-function fcZonesOf(keep) = map(range(0, 16), k => (length(filter(keep, z => z == k)) > 0) ? fcZones[k] : "")
+function fcZonesOf(keep) = map(range(0, 16), k => contains(keep, k) ? fcZones[k] : "")
 
 // Each table's mailbox and door, one row a field keyed by table, with the value a table starts at.
 let fcFields = [

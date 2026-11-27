@@ -512,10 +512,10 @@ public static partial class DocumentLowering {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.LambdaOutsideBuiltin,
                     message: DiagnosticText.Compose(
-                        fix: $"Pass the lambda as an argument to {string.Join(
+                        fix: $"Pass the lambda as an argument to one of {string.Join(
                             separator: ", ",
-                            values: DocumentBuiltins.Names
-                        )}, or remove the '=>'",
+                            values: DocumentBuiltins.LambdaTakers
+                        )}, or remove the '=>'. Other functions, such as 'sine', take only values",
                         problem: "A lambda ('x => ...') is written where no collection function takes one"
                     ),
                     span: lambda.Span
@@ -955,12 +955,27 @@ public static partial class DocumentLowering {
             return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
         }
 
-        var rightNode = EvaluateValue(
-            expr: bin.Right,
-            scope: scope,
-            fieldKey: fieldKey
+        return ApplyBinary(
+            bin: bin,
+            leftNode: leftNode,
+            rightNode: EvaluateValue(
+                expr: bin.Right,
+                scope: scope,
+                fieldKey: fieldKey
+            ),
+            scope: scope
         );
-
+    }
+    /// <summary>Applies an arithmetic, comparison or equality operator to two operands already evaluated: the one
+    /// fold an operator's expression and a collection builtin's reduction (<c>sum</c>, <c>scan</c>, <c>dot</c>) share,
+    /// so a list folds exactly as the same operator written between its elements does.</summary>
+    /// <param name="bin">The operator node: its <see cref="BinaryExpressionNode.Operator"/> and span name the fold and
+    /// place its refusals; its operands are not read.</param>
+    /// <param name="leftNode">The evaluated left operand.</param>
+    /// <param name="rightNode">The evaluated right operand.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The folded value, or <see langword="null"/> after a refusal reported into the scope.</returns>
+    internal static JsonNode? ApplyBinary(BinaryExpressionNode bin, JsonNode? leftNode, JsonNode? rightNode, DocumentScope scope) {
         // The operator's row is the one description of what it means, in a value as in a rule. A binary node the
         // table does not spell was built by something other than the parser, and it has no value to fold to.
         if (
@@ -1406,7 +1421,7 @@ public static partial class DocumentLowering {
     }
     // A hole's value as it reads inside a string. A whole number prints without a decimal point, so
     // `$"row-{floor(i / 4)}"` reads "row-1" rather than "row-1.0".
-    private static string FormatHole(JsonNode? node) {
+    internal static string FormatHole(JsonNode? node) {
         if (node is not JsonValue value) {
             return (node?.ToJsonString() ?? string.Empty);
         }
