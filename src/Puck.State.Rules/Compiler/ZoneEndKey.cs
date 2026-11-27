@@ -29,7 +29,7 @@ public sealed class ZoneEndKey : RuleKeyFact {
     }
 
     /// <summary>Gets the program the live row's index resolves through, or <see langword="null"/>.</summary>
-    public CompiledExpressionToken[]? FeedProgram => m_rowFrom?.FeedProgram;
+    public CompiledProgram? FeedProgram => m_rowFrom?.FeedProgram;
 
     /// <inheritdoc/>
     public override Resolved<CellKey> Resolve(IStateReader reader) {

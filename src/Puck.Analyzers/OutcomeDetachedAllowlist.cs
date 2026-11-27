@@ -3,7 +3,7 @@ namespace Puck.Analyzers;
 /// <summary>
 /// The one list of files that may call <c>RuleExpressions.EvaluateDetached</c> (<see cref="OutcomeAnalyzer"/>,
 /// OUTCOME003): the consumers that are not a firing, each stating what its <c>Faulted</c> arm does. A caller outside the
-/// list is a firing's evaluation or a new consumer; the first goes through the interpreter's frame, and the second is
+/// list is a firing's evaluation or a new consumer; the first goes through the evaluator's frame, and the second is
 /// added here with its arm.
 /// </summary>
 public static class OutcomeDetachedAllowlist {
@@ -12,7 +12,7 @@ public static class OutcomeDetachedAllowlist {
         new(
             Assembly: "Puck.State.Rules",
             Path: "src/Puck.State.Rules/Compiler/RuleCompiler.Expressions.cs",
-            Reason: "The constant folder: a faulted or absent subtree stays unfolded, so the interpreter answers it at run time."
+            Reason: "The constant folder: a faulted or absent subtree stays unfolded, so the evaluator answers it at run time."
         ),
         new(
             Assembly: "Puck.State.Rules",

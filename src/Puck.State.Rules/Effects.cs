@@ -293,7 +293,7 @@ public sealed class IfEffect : RuleEffect {
     /// <param name="then">The branch fired when <paramref name="condition"/> holds.</param>
     /// <param name="elseEffects">The branch fired when it does not; empty for none.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public IfEffect(GateToken[] condition, IRuleEffect[] then, IRuleEffect[] elseEffects, string describe) : base(describe: describe) {
+    public IfEffect(CompiledGate condition, IRuleEffect[] then, IRuleEffect[] elseEffects, string describe) : base(describe: describe) {
         ArgumentNullException.ThrowIfNull(argument: condition);
         ArgumentNullException.ThrowIfNull(argument: elseEffects);
         ArgumentNullException.ThrowIfNull(argument: then);
@@ -307,7 +307,7 @@ public sealed class IfEffect : RuleEffect {
     /// <inheritdoc/>
     public override IReadOnlyList<IRuleEffect[]> Arms => m_arms;
     /// <summary>Gets the compiled gate.</summary>
-    public GateToken[] Condition { get; }
+    public CompiledGate Condition { get; }
     /// <summary>Gets the branch fired when <see cref="Condition"/> does not hold; empty for none.</summary>
     public IRuleEffect[] Else { get; }
     /// <summary>Gets the branch fired when <see cref="Condition"/> holds.</summary>

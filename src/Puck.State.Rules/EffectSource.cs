@@ -13,7 +13,7 @@ public enum EffectSourceKind : byte {
 /// outside the arena evaluates nothing itself, so a source that faults refuses the firing as faulted instead of an arm
 /// reporting a refusal of its own.</summary>
 public readonly struct EffectSource {
-    private EffectSource(EffectSourceKind kind, CellKey literal, CompiledCellRef? keyFrom, CompiledExpressionToken[]? program, IRuleOperand? operand, CellKind valueKind) {
+    private EffectSource(EffectSourceKind kind, CellKey literal, CompiledCellRef? keyFrom, CompiledProgram? program, IRuleOperand? operand, CellKind valueKind) {
         Kind = kind;
         Literal = literal;
         KeyFrom = keyFrom;
@@ -31,7 +31,7 @@ public readonly struct EffectSource {
     /// <see langword="null"/>.</summary>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>Gets the program of a <see cref="EffectSourceKind.Program"/> source.</summary>
-    public CompiledExpressionToken[]? Program { get; }
+    public CompiledProgram? Program { get; }
     /// <summary>Gets the operand of a <see cref="EffectSourceKind.Operand"/> source.</summary>
     public IRuleOperand? Operand { get; }
     /// <summary>Gets the encoding a program or operand answers in.</summary>
@@ -54,7 +54,7 @@ public readonly struct EffectSource {
     /// <param name="program">The program.</param>
     /// <param name="kind">The encoding the program answers in.</param>
     /// <returns>The source.</returns>
-    public static EffectSource Expression(CompiledExpressionToken[] program, CellKind kind) {
+    public static EffectSource Expression(CompiledProgram program, CellKind kind) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         return new(

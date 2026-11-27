@@ -522,7 +522,7 @@ public static partial class RuleCompiler {
             describe: name,
             operand: new HistoryOperand(
                 age: age,
-                ageProgram: ageProgram,
+                ageProgram: (CompiledProgram?)ageProgram,
                 ring: history,
                 rowOrdinal: ResolveRowOrdinal(
                     context: context,

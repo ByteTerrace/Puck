@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
 
-using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 using RuleExpressions = Puck.State.Rules.RuleExpressions;
 
 namespace Puck.Cli.Bench;
@@ -221,7 +221,7 @@ public class StateArithmeticKernels {
 // body; only the evaluation is measured.
 [MemoryDiagnoser]
 public class StateExpressionKernels {
-    private CompiledExpressionToken[] m_program = [];
+    private CompiledProgram m_program = CompiledProgram.Empty;
     private StateKernelReader? m_reader;
 
     /// <summary>Gets or sets the token count the compiled program carries; for <see cref="KernelRead.ComputedKey"/>,
@@ -239,12 +239,12 @@ public class StateExpressionKernels {
     [GlobalSetup]
     public void Setup() {
         m_reader = new StateKernelReader(cells: StateKernelReader.CellCount);
-        m_program = StateKernelPrograms.Build(
+        m_program = new CompiledProgram(tokens: StateKernelPrograms.Build(
             read: Read,
             reader: m_reader,
             shape: Shape,
             tokens: Tokens
-        );
+        ));
     }
     /// <summary>Evaluates the compiled program once.</summary>
     [Benchmark]

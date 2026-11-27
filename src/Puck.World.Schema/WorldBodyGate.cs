@@ -21,7 +21,7 @@ public static partial class BodyActionSpecFactory {
     /// <param name="stateSlots">The action-state slots, absent for a shaping gate.</param>
     /// <param name="channels">The shaping gate's channel table, absent for an action trigger.</param>
     /// <returns>The compiled rule gate.</returns>
-    public static GateToken[] CompileGate(ActionPredicate? predicate, List<ActionFact> recencyFacts,
+    public static CompiledGate CompileGate(ActionPredicate? predicate, List<ActionFact> recencyFacts,
         List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) {
         return RuleCompiler.CompileGate(predicate, "body gate",
             new BodyGateContext(channels: channels, facts: recencyFacts, slots: stateSlots, windows: recencyWindows));

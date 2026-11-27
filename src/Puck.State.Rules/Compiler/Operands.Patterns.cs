@@ -18,7 +18,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     /// <param name="tokenExpression">The zone's per-token value expression, when the pattern carries one.</param>
     /// <param name="rowFrom">The live row read, or <see langword="null"/> for a fixed row.</param>
     /// <param name="occurrence">The zero-based occurrence selected by an at/length facet.</param>
-    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, LiveRow? rowFrom = null, int occurrence = 0) : base(valueKind: CellKind.Int) {
+    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledProgram? tokenExpression, LiveRow? rowFrom = null, int occurrence = 0) : base(valueKind: CellKind.Int) {
         ArgumentNullException.ThrowIfNull(argument: pattern);
 
         AttributeOrdinal = attributeOrdinal;
@@ -87,9 +87,9 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     /// <inheritdoc/>
     public int RowOrdinal { get; }
     /// <summary>Gets the zone's per-token value expression, when the pattern carries one.</summary>
-    public CompiledExpressionToken[]? TokenExpression { get; }
+    public CompiledProgram? TokenExpression { get; }
     /// <inheritdoc/>
-    public CompiledExpressionToken[]? WordProgram => ((Board is null)
+    public CompiledProgram? WordProgram => ((Board is null)
         ? TokenExpression
         : null);
     /// <inheritdoc/>
@@ -217,7 +217,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     /// <returns>The word's length as a finite answer when it spelled, else what its token letters met — see
     /// <see cref="RuleExpressions.FoldWord"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-    public static Outcome ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledExpressionToken[]? tokenExpression, CellKind kind, Span<long> word, int start = 0) {
+    public static Outcome ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledProgram? tokenExpression, CellKind kind, Span<long> word, int start = 0) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (tokenExpression is not null) {

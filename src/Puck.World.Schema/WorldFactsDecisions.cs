@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Puck.Maths;
-using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledGate = Puck.State.Rules.CompiledGate;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 using CompiledRule = Puck.State.Rules.CompiledRule;
-using GateToken = Puck.State.Rules.GateToken;
 using IRuleCostContext = Puck.State.IRuleCostContext;
 using IRuleEffect = Puck.State.Rules.IRuleEffect;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
@@ -38,7 +38,7 @@ public sealed record CompiledWorldFactsDecisionNeighbors(WorldDecisionNeighbors 
 /// <param name="Score">The score program, in the decision's score kind.</param>
 /// <param name="Effects">The effects fired on entering the option.</param>
 /// <param name="Neighbors">The bounded perception parameters, or <see langword="null"/>.</param>
-public sealed record CompiledWorldFactsDecisionOption(string Name, GateToken[] Gate, CompiledExpressionToken[] Score, IRuleEffect[] Effects, CompiledWorldFactsDecisionNeighbors? Neighbors = null);
+public sealed record CompiledWorldFactsDecisionOption(string Name, CompiledGate Gate, CompiledProgram Score, IRuleEffect[] Effects, CompiledWorldFactsDecisionNeighbors? Neighbors = null);
 /// <summary>An arena-addressed choice policy. <paramref name="PolicyIdentity"/> is the canonical source rule and
 /// seeds lifecycle reconciliation, never randomness.</summary>
 /// <param name="Options">The options, in authored tie-break order.</param>
@@ -54,7 +54,7 @@ public sealed record CompiledWorldFactsDecisionOption(string Name, GateToken[] G
 public sealed record CompiledWorldFactsDecision(
     CompiledWorldFactsDecisionOption[] Options, WorldDecisionMode Mode, CellKind ScoreKind,
     ulong PeriodTicks, ulong CommitmentTicks, long IncumbentBonus, ulong Seed,
-    GateToken[]? Interrupt, IRuleEffect[] OnNoChoice, string PolicyIdentity
+    CompiledGate? Interrupt, IRuleEffect[] OnNoChoice, string PolicyIdentity
 );
 /// <summary>The library's compiled rule plus the two policies only a world evaluates: the choice policy a decision
 /// rule carries and the co-occurrence an interaction sweeps.</summary>
@@ -332,7 +332,7 @@ public static partial class WorldFactsCompiler {
         }
 
         IRuleEffect[] onNoChoice;
-        GateToken[]? interrupt;
+        CompiledGate? interrupt;
 
         try {
             onNoChoice = CompileDecisionEffects(
@@ -465,7 +465,7 @@ public static partial class WorldFactsCompiler {
                 ),
                 Name: option.Name.Value,
                 Neighbors: neighbors,
-                Score: RuleCompiler.CompileExpression(
+                Score: (CompiledProgram)RuleCompiler.CompileExpression(
                     context: context,
                     expression: option.Score,
                     kind: decision.ScoreKind,
