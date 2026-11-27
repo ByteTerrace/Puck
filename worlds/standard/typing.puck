@@ -222,7 +222,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
     local dx = bodyPosition(body, bodyIndex, x) - bench[0]
     local dy = bodyPosition(body, bodyIndex, y) - bench[1]
     local dz = bodyPosition(body, bodyIndex, z) - bench[2]
-    local reach = ((typingSeat == 0) and (dx * dx + dz * dz <= radius * radius) and (absolute(dy) <= 2)) ? 1 : 0
+    local reach = (typingSeat == 0) and (dx * dx + dz * dz <= radius * radius) and (absolute(dy) <= 2)
     when typing.near != reach
     mode: Level
     typing.near = reach

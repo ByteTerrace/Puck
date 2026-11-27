@@ -387,7 +387,7 @@ prototypes {
       document {
         name: $"lift-display-{lit}"
         schema: "puck.creation.v2"
-        palette: concat(liftBase, map(range(0, 4), d => liftLamps[(d == lit) ? 1 : 0]))
+        palette: concat(liftBase, map(range(0, 4), d => liftLamps[d == lit]))
         shape Box "bezel" {
           material: liftChrome
           position [0, 0, -0.015]
@@ -419,7 +419,7 @@ prototypes {
       document {
         name: $"lift-arrows-{arrow}"
         schema: "puck.creation.v2"
-        palette: concat(liftBase, [liftLamps[(arrow == 1) ? 1 : 0], liftLamps[(arrow == 2) ? 1 : 0]])
+        palette: concat(liftBase, [liftLamps[arrow == 1], liftLamps[arrow == 2]])
         shape Prism "up" {
           material: 4
           taper: 0

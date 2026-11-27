@@ -101,7 +101,7 @@ rule "companion-senses" {
   companionSense.kind = 0
   companionSense.near = -1
   companionSense.turn = 0
-  companionSense.door = liftDoors.car == 1 ? 1 : 0
+  companionSense.door = liftDoors.car == 1
   companionAttention.distance = 16
   companionAttention.nearDistance = 2.25
   companionNeighbour.body = nearest(body, 42, companionBodies)

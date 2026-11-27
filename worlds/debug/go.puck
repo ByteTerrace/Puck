@@ -1157,12 +1157,12 @@ state {
     row {
       name: "goIsBlack"
       kind: "Int"
-      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: (i < goPerSide) ? 1 : 0 })
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: i < goPerSide })
     }
     row {
       name: "goIsWhite"
       kind: "Int"
-      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: (i < goPerSide) ? 0 : 1 })
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: i >= goPerSide })
     }
     row {
       name: "goOrdinal"

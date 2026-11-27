@@ -471,7 +471,7 @@ rules "" when alchemyHold == alchemySettleTicks {
   rule "alchemy-read-tokens" {
     local square = board(cellOf, alchemyBoard, placement, $each)
     local home = alchemyElement[$each]
-    local face = upright(placement, $each) >= 0 ? 1 : 0
+    local face = upright(placement, $each) >= 0
     forEach: alchemyElement
     alchemyCell[$each] = square >= 0 ? square : -home
     alchemyFace[$each] = face
@@ -602,7 +602,7 @@ rule "mix" {
   made = result
   fresh = isNew
   mixes += 1
-  alchemyVerdict = (result != Nothing) ? 1 : 0
+  alchemyVerdict = result != Nothing
   discovered = setBitCount(known)
   complete = setBitCount(known) == size - 1
   left = Nothing

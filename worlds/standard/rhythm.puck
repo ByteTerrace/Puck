@@ -138,7 +138,7 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
       local begin = (at > 0) ? judge[$"start{s}"] : pressBeat
       local due = begin + judgePhraseBeat[at]
       local got = ((judgePhrase[at] == note) and (pressBeat == due)) ? window : 0
-      local advance = (pressBeat < due) ? 0 : 1
+      local advance = pressBeat >= due
       when pressed
       mode: Level
       judgeResult(s, steps, missLimit)

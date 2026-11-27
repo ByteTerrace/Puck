@@ -323,7 +323,7 @@ function terrainMaterial(base, bands, breakup = terrainBreakup, world = 0, radia
 // The bands padded to four with empty ones, so every column the program reads has four entries.
 function terrainPadded(bands) = concat(bands, map(range(0, 4 - length(bands)), i => terrainBand("#000000", amount: 0)))
 // The readings a band names a range of (terrain's `use`): 1 slope, 2 altitude, 4 curvature.
-function terrainNamed(range) = range[1] - range[0] < 2 * terrainOpen ? 1 : 0
+function terrainNamed(range) = range[1] - range[0] < 2 * terrainOpen
 function terrainUse(band) = terrainNamed(band.slope) +
   2 * terrainNamed(band.altitude) +
   4 * terrainNamed(band.curvature)

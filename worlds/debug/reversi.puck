@@ -991,12 +991,12 @@ state {
     row {
       name: "reversiBlackTray"
       kind: "Int"
-      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: (i < reversiPerSide) ? 1 : 0 })
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: i < reversiPerSide })
     }
     row {
       name: "reversiWhiteTray"
       kind: "Int"
-      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: (i < reversiPerSide) ? 0 : 1 })
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: i >= reversiPerSide })
     }
     row {
       name: "reversiCell"
