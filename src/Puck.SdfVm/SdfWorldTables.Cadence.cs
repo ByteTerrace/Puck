@@ -114,12 +114,10 @@ public sealed partial class SdfWorldTables {
         public readonly byte[] Block = new byte[SdfFrameBlock.SizeBytes];
         public SdfFrame? Frame;
         public long Epoch = -1;
-        public SdfFrame? LightMaskFrame;
-        public long LightMaskEpoch = -1;
-        public float LightMaskExposure = float.NaN;
+        public SdfFrame? MaskFrame;
+        public long MaskEpoch = -1;
+        public float MaskExposure = float.NaN;
         public UInt128 LightMask;
-        public SdfFrame? OccluderMaskFrame;
-        public long OccluderMaskEpoch = -1;
         public UInt128 OccluderMask;
         public bool Built;
         public SdfPassValues Values;
@@ -150,35 +148,12 @@ public sealed partial class SdfWorldTables {
     public UInt128 LightMaskOf(SdfFrame frame, int view) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        if (frame.Views.Count == 0) {
-            var count = frame.Lights.Count;
-
-            return ((count == 0)
-                ? UInt128.Zero
-                : ((count >= SdfLights.MaxLights) ? ~UInt128.Zero : ((UInt128.One << count) - UInt128.One)));
-        }
-
-        var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
-        var inputs = ViewInputsOf(index: index);
-        // The exposure the view's pass block carries (SdfFrameBlock.Write), which the mask holds point lights to.
-        var exposure = (PassValues.Exposures?.MultiplierOf(view: index) ?? 1f);
-
-        if (!ReferenceEquals(objA: inputs.LightMaskFrame, objB: frame) || (inputs.LightMaskEpoch != m_viewInputsEpoch)
-            || (BitConverter.SingleToUInt32Bits(value: inputs.LightMaskExposure) != BitConverter.SingleToUInt32Bits(value: exposure))) {
-            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
-            var camera = frame.Views[index].Camera;
-
-            inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: frame.Lights);
-            inputs.LightMaskFrame = frame;
-            inputs.LightMaskEpoch = m_viewInputsEpoch;
-            inputs.LightMaskExposure = exposure;
-        }
-
-        return inputs.LightMask;
+        return ((frame.Views.Count == 0) ? Every(count: frame.Lights.Count) : MasksOf(frame: frame, view: view).LightMask);
     }
     /// <summary>Returns the mask of the analytic occluders a view shades (<see cref="SdfLightSelection.SelectOccluders(SdfOccluders, in Puck.Abstractions.Cameras.CameraSnapshot, float)"/>),
-    /// computed once a frame for each view and shared by every pass block and signature that reads it; the mask sits in
-    /// the lighting signature's members, and the records it keeps in the view's lighting inputs.</summary>
+    /// computed with its light mask once a frame for each view and shared by every pass block and signature that reads
+    /// it; the mask sits in the lighting signature's members, and the records it keeps in the view's lighting
+    /// inputs.</summary>
     /// <param name="frame">The frame the tables hold.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
     /// <returns>The view's occluder mask; every occluder of a frame with no view.</returns>
@@ -186,28 +161,31 @@ public sealed partial class SdfWorldTables {
     public UInt128 OccluderMaskOf(SdfFrame frame, int view) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        var count = frame.Occluders.Count;
-
-        if (count == 0) {
-            return UInt128.Zero;
-        }
-        if (frame.Views.Count == 0) {
-            return ((count >= SdfOccluders.MaxOccluders) ? ~UInt128.Zero : ((UInt128.One << count) - UInt128.One));
-        }
-
+        return ((frame.Views.Count == 0) ? Every(count: frame.Occluders.Count) : MasksOf(frame: frame, view: view).OccluderMask);
+    }
+    // A view's light and occluder masks, selected together once for each frame, epoch and exposure: the exposure is the
+    // one the view's pass block carries (SdfFrameBlock.Write), which the light mask holds point lights to.
+    private ViewInputs MasksOf(SdfFrame frame, int view) {
         var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
         var inputs = ViewInputsOf(index: index);
+        var exposure = (PassValues.Exposures?.MultiplierOf(view: index) ?? 1f);
 
-        if (!ReferenceEquals(objA: inputs.OccluderMaskFrame, objB: frame) || (inputs.OccluderMaskEpoch != m_viewInputsEpoch)) {
+        if (!ReferenceEquals(objA: inputs.MaskFrame, objB: frame) || (inputs.MaskEpoch != m_viewInputsEpoch)
+            || (BitConverter.SingleToUInt32Bits(value: inputs.MaskExposure) != BitConverter.SingleToUInt32Bits(value: exposure))) {
+            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
             var camera = frame.Views[index].Camera;
 
-            inputs.OccluderMask = SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: frame.Occluders);
-            inputs.OccluderMaskFrame = frame;
-            inputs.OccluderMaskEpoch = m_viewInputsEpoch;
+            inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: frame.Lights);
+            inputs.OccluderMask = ((frame.Occluders.Count > 0) ? SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: frame.Occluders) : UInt128.Zero);
+            inputs.MaskFrame = frame;
+            inputs.MaskEpoch = m_viewInputsEpoch;
+            inputs.MaskExposure = exposure;
         }
 
-        return inputs.OccluderMask;
+        return inputs;
     }
+    // The mask of every record of a table holding `count`, which a frame with no view shades.
+    private static UInt128 Every(int count) => ((count <= 0) ? UInt128.Zero : ((count >= BitWords.MaskBits) ? ~UInt128.Zero : ((UInt128.One << count) - UInt128.One)));
     // The records of the occluders a view's mask keeps, which its shading reads: a view stands while every occluder it
     // shades stands, whatever the occluders it does not shade do.
     private static ulong OccluderRecordsSignature(SdfOccluders occluders, UInt128 mask) {
