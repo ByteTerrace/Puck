@@ -38,30 +38,33 @@
 import "architecture"
 import "contexts/tabletop"
 
-// The station's frame, in metres from its placement: the floor, the glass's height and the table's half extents.
+// The station's frame, in metres from its placement: the floor, the glass's height (0.95 m over the floor, a standing
+// player's hip) and the table's half extents.
 let gameStationFloor = 0.5
-let gameStationSurface = 1.3
-let gameStationHalf = [0.76, 0.72]
+let gameStationSurface = 1.45
+let gameStationHalf = [0.94, 0.88]
 
-// The glass: its extent across (x) and away (z), the catalog list's column at the player's left and the board area
-// beside it, and the status line along the near edge.
-let gameStationGlass = { x0: -0.68, x1: 0.68, z0: -0.62, z1: 0.62 }
-let gameStationList = { x0: 0.5, x1: 0.66, z0: -0.2, z1: 0.52 }
-let gameStationListRows = 8
+// The glass: its extent across (x) and away (z); the catalog list's column at the player's left, its rows lettered to
+// read from the seat as a display console's list does; the board area beside it, which takes most of the glass; and the
+// status line along the near edge.
+let gameStationGlass = { x0: -0.86, x1: 0.86, z0: -0.8, z1: 0.8 }
+let gameStationList = { x0: 0.58, x1: 0.84, z0: -0.1, z1: 0.6 }
+let gameStationListRows = 6
 let gameStationRowPitch = ((gameStationList.z1 - gameStationList.z0) / gameStationListRows)
-let gameStationBoard = { x0: -0.48, x1: 0.48, z0: -0.54, z1: 0.54 }
-let gameStationStatusLine = { x0: -0.48, x1: 0.48, z0: -0.605, z1: -0.555 }
+let gameStationListEm = 0.042
+let gameStationBoard = { x0: -0.62, x1: 0.5, z0: -0.672, z1: 0.672 }
+let gameStationStatusLine = { x0: -0.62, x1: 0.5, z0: -0.77, z1: -0.69 }
+let gameStationStatusEm = 0.045
 
-// The pick grid: 2 cm cells from the board area's near right corner across the list's column, its columns running +X
+// The pick grid: 2.8 cm cells from the board area's near right corner across the list's column, its columns running +X
 // (column 0 at the player's right) and its rows +Z (row 0 nearest the player).
-let gameStationCell = 0.02
-let gameStationColumns = 58
-let gameStationRows = 54
+let gameStationCell = 0.028
+let gameStationColumns = 53
+let gameStationRows = 48
 function gameStationColumn(cell) = (cell % gameStationColumns)
 function gameStationRow(cell) = ((cell - (cell % gameStationColumns)) / gameStationColumns)
-// The list's first pick column and the pick row of its top edge.
-let gameStationListColumn = 49
-let gameStationListTopRow = 53
+// The list's first pick column: the first whose cells lie wholly past gameStationList.x0.
+let gameStationListColumn = 43
 
 // The seated seat's buttons, one bit each, and the list's tap, which a pick on the list's column makes in place of the
 // board's pick.
@@ -124,9 +127,9 @@ function gameStationRowRect(row) = {
 // The list's paints: its title over the column, each game's row filled in its ink (the game shown lit) and lettered
 // with its title, then the status line.
 function gameStationListPaints(station, catalog, look) = concat(
-  [gameStationText(station, { x0: gameStationList.x0, x1: gameStationList.x1, z0: (gameStationList.z1 + 0.012), z1: (gameStationList.z1 + 0.05) }, "GAMES", look.title, 0.024)],
+  [gameStationText(station, { x0: gameStationList.x0, x1: gameStationList.x1, z0: (gameStationList.z1 + 0.02), z1: (gameStationList.z1 + 0.08) }, "GAMES", look.title, 0.05)],
   map(catalog, (game, row) => gameStationFill(station, gameStationRowRect(row), $"state.gameStationRowInk.{station.id}-{row}", 0.01)),
-  map(catalog, (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, 0.022)),
+  map(catalog, (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, gameStationListEm)),
   []
 )
 
@@ -216,7 +219,7 @@ function gameStationPanels(station, catalog, look, boardPanels) = concat(
       x1: (gameStationList.x0 - 0.02)
       z0: gameStationGlass.z0
       z1: gameStationBoard.z0
-      paints [gameStationText(station, gameStationStatusLine, $"{{state.gameStationStatus.{station.id}}}", look.status, 0.028)]
+      paints [gameStationText(station, gameStationStatusLine, $"{{state.gameStationStatus.{station.id}}}", look.status, gameStationStatusEm)]
     }
   ],
   map(boardPanels, panel => { x0: gameStationGlass.x0, x1: (gameStationList.x0 - 0.02), z0: panel.z0, z1: panel.z1, paints: panel.paints })
@@ -381,6 +384,41 @@ template gameStationRules(station, catalog) {
     }
     setState(state: gameStationStatus, key: $"{key}", fromState: gameStationTitles, fromKey: $"$cell:gameStationGame:{key}")
     gameStationShown[key] = gameStationGame[key]
+  }
+}
+
+// A token a board shows on no cell: a millimetre box under its origin, inside the table's cap.
+template gameStationTokenBlank(id) {
+  prototype id {
+    document {
+      name: id
+      schema: "puck.creation.v2"
+      palette [{ color: "#000000", roughness: 1 }]
+      shape Box "blank" {
+        material: 0
+        position [0, -0.03, 0]
+        scale [0.001, 0.001, 0.001]
+      }
+    }
+  }
+}
+
+// A board of tokens on a station's glass: one placement a cell, `<prefix><i>` at `centres[i]` (a point of the
+// station's frame, [x, z], on its glass), showing the prototype one of `codes` names ({ value, prototype }) while the
+// cell `keys[i]` of the state row `row` holds that value, and `blank` while it holds none of them or while the station
+// shows another game than `game`, each at `scale`. A token is a creation the cell's value picks, as a display's turntable
+// shows the exhibit its selection picks, so a move swaps only the tokens of the cells it changed.
+template gameStationTokens(prefix, station, game, row, keys, centres, codes, blank, scale = 1) {
+  for (centre, i) in centres {
+    placement $"{prefix}{i}" {
+      prototype: blank
+      position [(station.at[0] + centre[0]), (station.at[1] + gameStationSurface), (station.at[2] + centre[1])]
+      scale: scale
+      respond: concat(
+        [{ when: state(state: gameStationGame, key: station.id, comparison: NotEqual, value: game), prototypeId: blank }],
+        map(codes, code => { when: state(state: row, key: keys[i], comparison: Equal, value: code.value), prototypeId: code.prototype })
+      )
+    }
   }
 }
 

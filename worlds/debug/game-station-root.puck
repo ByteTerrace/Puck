@@ -11,6 +11,8 @@ documentId: "game-station"
 import "set-controls"
 import "../standard/skies"
 import "../standard/game-station"
+import "../games/chess-game"
+import "../games/chess-station"
 import "game-stations"
 
 metadata {
@@ -22,6 +24,7 @@ bodies {
   capacity: 12
   localSeats: 4
   networkPlayers: 8
+  seatSpawns [hero]
 }
 
 // The seat starts at the station's chair, 1.5 m from its centre at its -Z edge, facing the glass.
@@ -51,6 +54,7 @@ placements {
     solid
   }
   gameStationPlacement(station: rootStation)
+  chessStationTokens(station: rootStation, game: 0)
 }
 
 prototypes {
@@ -66,17 +70,20 @@ prototypes {
       }
     }
   }
-  gameStationPrototype(station: rootStation, catalog: gameStationCatalog)
+  gameStationPrototype(station: rootStation, catalog: gameStationCatalog, boardPanels: chessStationPanels(rootStation))
+  chessStationPrototypes()
 }
 
 state {
   gameStationGrid(station: rootStation)
   world {
     gameStationState(stations: [rootStation], catalog: gameStationCatalog)
+    chessStationState(stations: [rootStation])
   }
 }
 
 gameStationRules(station: rootStation, catalog: gameStationCatalog)
+chessStationRules(station: rootStation, game: 0, ordinal: 0)
 
 render {
   farDistance: 200

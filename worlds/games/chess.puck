@@ -147,7 +147,7 @@ template chessBoardGrid(cellSize, origin, band) {
 // The game's state rows, expanded inside a table's `state.world` block. A drawn board's pieces start on their squares; a
 // physical table's are read off the board once it first rests.
 template chessGameState(settleTicks, digital = false) {
-  table chessInput {
+  table chessInput capacity(auto) {
     from = -1
     to = -1
     request = 0
@@ -195,7 +195,7 @@ template chessGameState(settleTicks, digital = false) {
   slot aiSide = 1 bounds(-1..1)
   slot aiEnabled = 0 bounds(0..1)
   slot aiRevision = 0
-  table aiBest {
+  table aiBest capacity(auto) {
     token = -1
     to = -1
     score = 0
@@ -303,7 +303,7 @@ template chessGameState(settleTicks, digital = false) {
 
   // The display door (chessPutDown): the squares a move leaves and lands on and the request a presentation of the game
   // away from its board posts, and whether a seat plays the game there now.
-  table chessPut {
+  table chessPut capacity(auto) {
     from = -1
     to = -1
     request = 0
@@ -312,7 +312,7 @@ template chessGameState(settleTicks, digital = false) {
 
   // A put-down awaiting its verdict (`judging`), the arrangement being put back this tick (`revert`), and what the
   // put-down is judged against: every piece's cell and code the tick it was made.
-  table putDown {
+  table putDown capacity(auto) {
     judging = 0
     revert = 0
   }
