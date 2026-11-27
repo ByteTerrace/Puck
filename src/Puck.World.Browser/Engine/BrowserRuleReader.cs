@@ -172,6 +172,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             value: 0L
         )
     );
+    Fact IWorldFacts.Read(BodyKinematicsOperand operand) => Record(
+        operand: nameof(BodyKinematicsOperand),
+        fact: Fact.Finite(
+            kind: operand.ValueKind,
+            value: 0L
+        )
+    );
     Fact IWorldFacts.Read(EngagedOperand operand) => Record(
         operand: nameof(EngagedOperand),
         fact: Fact.Finite(

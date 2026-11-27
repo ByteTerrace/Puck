@@ -265,11 +265,7 @@ let flawExit = filter(treeLimbs, b => ((b.level == 3) and (b.side == "north")))[
 let flawInlay = 0.03
 let flawTreadOut = 0.95
 let flawTreadStep = 4
-function flawBranchAt(b, t) = [
-  (treeX - quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[0]),
-  ((quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[1] + galleryFloor[0]) + flawInlay),
-  (treeZ - quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[2])
-]
+function flawBranchAt(b, t) = (treeBranchAt(b, t) + [0, flawInlay, 0])
 function flawTreadAt(k) = (treeTreadPlan(k, flawTreadOut) + [0, flawInlay, 0])
 let flawWalkway = map(
   range(0, (floor((flawExit.tread / flawTreadStep)) + 1)),
@@ -490,3 +486,12 @@ function treeBranchB(b) = ((b.level >= 2) ? [
   treeBranchOut(b)[1],
   ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)
 ] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
+// The plan point on a branch's walking line `t` of the way from the bark (0) to its landing (1): the quadratic the
+// creation draws the branch along (treeBranchA, treeBranchB, treeBranchC), carried back from the creation's frame into
+// the plan's. The walkway's route (tree-walk.puck) and the flaw read the branches here.
+function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t) in
+[
+  (treeX - p[0]),
+  (p[1] + galleryFloor[0]),
+  (treeZ - p[2])
+])

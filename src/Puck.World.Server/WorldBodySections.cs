@@ -98,6 +98,7 @@ public readonly record struct BodyPoseSection(
 /// <param name="Tether">The rope constraint's state, or <see langword="null"/> when none is attached.</param>
 /// <param name="TetherAnchorBodyIndex">The anchor body's index, or -1 for a world-point tether.</param>
 /// <param name="TetherAnchorPointOrLocalOffset">The world point or the body-local anchor offset.</param>
+/// <param name="Kinematics">What the body's contact phase decided over its life.</param>
 public readonly record struct BodyMotionSection(
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
@@ -147,7 +148,8 @@ public readonly record struct BodyMotionSection(
     bool DetachPreviousBit,
     FixedTetherConstraintState? Tether,
     int TetherAnchorBodyIndex,
-    FixedVector3 TetherAnchorPointOrLocalOffset
+    FixedVector3 TetherAnchorPointOrLocalOffset,
+    BodyKinematicsWitness Kinematics
 ) : IContinuationSection<BodyMotionSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Motion;
@@ -215,6 +217,7 @@ public readonly record struct BodyMotionSection(
         }
         writer.WriteInt32(value: section.TetherAnchorBodyIndex);
         writer.WriteFixedVector(value: section.TetherAnchorPointOrLocalOffset);
+        BodyKinematicsWitness.Write(witness: section.Kinematics, writer: writer);
     }
     /// <inheritdoc/>
     public static BodyMotionSection Read(ref WireReader reader) => new(
@@ -272,7 +275,8 @@ public readonly record struct BodyMotionSection(
             )
             : null),
         TetherAnchorBodyIndex: reader.ReadInt32(),
-        TetherAnchorPointOrLocalOffset: reader.ReadFixedVector()
+        TetherAnchorPointOrLocalOffset: reader.ReadFixedVector(),
+        Kinematics: BodyKinematicsWitness.Read(reader: ref reader)
     );
 }
 /// <summary>The counts and frames that tick or settle while a body idles: the up-turn carry, the sleep floor, island

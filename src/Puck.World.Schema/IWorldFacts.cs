@@ -60,6 +60,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(BodyPositionOperand operand);
+    /// <summary>Returns one kinematic witness of a body's own step.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    Fact Read(BodyKinematicsOperand operand);
     /// <summary>Returns whether a body's participant holds a control application onto a screen.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

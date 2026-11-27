@@ -225,7 +225,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.motion",
-            description: $"Sets or echoes a body's declared motion program: {BodyMotionForms.Spelling}. With no program it echoes the current selection, followed by planarTarget strafe=<s> backward=<b> when that program authors ComputePlanarTargetVelocity's planarTarget parameters, and stepHeight=<h>, the tallest riser the body walks up onto (its kit's motion.stepHeight times its scale; 0 never steps). A switch is authoritative and may re-constrain the pose. The optional trailing body index is 0..4095 (default 0).",
+            description: $"Sets or echoes a body's declared motion program: {BodyMotionForms.Spelling}. With no program it echoes the current selection, followed by planarTarget strafe=<s> backward=<b> when that program authors ComputePlanarTargetVelocity's planarTarget parameters, and stepHeight=<h>, the tallest riser the body walks up onto (its kit's motion.stepHeight times its scale; 0 never steps), then kinematics: with what the body's contact phase decided over its life, each witness by the name kinematics(body, n, <witness>) reads it (stepUps, stepRefusals, stepRise in metres, snaps, leaves, landings, airborneLongest and stuckLongest in seconds, slopeRefusals, penetration in metres). A switch is authoritative and may re-constrain the pose. The optional trailing body index is 0..4095 (default 0).",
             forms: BodyMotionForms,
             handler: MotionHandler,
             ackOnly: true

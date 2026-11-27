@@ -60,6 +60,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
             $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:x|y|z",
+            $"{WorldRuleFacts.KinematicsPrefix}<bodyRef>:<witness>",
             $"{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
@@ -968,6 +969,54 @@ public static partial class WorldFactsVocabulary {
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
                     valueKind: CellKind.Fixed,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.KinematicsPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var width = WorldFactsCompileContext.BodyRefTokenWidth(
+                    start: 0,
+                    tokens: tokens
+                );
+
+                if ((tokens.Length != (width + 1)) || !WorldKinematicsVocabulary.TryResolve(name: tokens[width], witness: out var witness)) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.KinematicsPrefix}<bodyRef>:<witness>' ({WorldFactsCompileContext.BodyRefVocabulary}, then one of {string.Join(separator: ", ", values: WorldKinematicsVocabulary.All)})",
+                        refusal: WorldRuleRefusal.KinematicsMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(
+                    channel: name,
+                    ruleName: ruleName,
+                    start: 0,
+                    tokens: tokens
+                );
+                var operand = new BodyKinematicsOperand(
+                    body: body,
+                    witness: witness
+                );
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    reach: WorldDisclosureReach.Bodies,
+                    payload: operand,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: -1,
+                    valueKind: operand.ValueKind,
                     world: world
                 );
             } else if (name.StartsWith(
