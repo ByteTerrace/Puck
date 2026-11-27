@@ -3,11 +3,11 @@ using System.Text;
 
 namespace Puck.SignedDistance;
 
-// The closed expression language the field's shared formulas are written in. One formula lowers to two readers: the
-// fixed-point C# the query evaluator runs (Puck.Maths carriers, one rounding per carrier operation, narrow widening
-// primitives where a carrier-rounded intermediate would lose the answer) and the precise HLSL the kernels run. The
-// node set is closed on purpose: every op names its lowering on both targets here, so a formula cannot reach a
-// construct one reader lacks. This source is also compiled into the Roslyn generator (Puck.Analyzers), which lowers
+// The closed expression language the field's shared formulas are written in. One formula lowers to every reader the
+// field has: the fixed-point C# the query evaluator runs (Puck.Maths carriers, one rounding per carrier operation, narrow
+// widening primitives where a carrier-rounded intermediate would lose the answer) and the precise HLSL the kernels run,
+// then the wide, dual and affine readers below. The node set is closed on purpose: every op names its lowering on every
+// target here, so a formula cannot reach a construct one reader lacks. This source is also compiled into the Roslyn generator (Puck.Analyzers), which lowers
 // the C# reader at build time; Puck.Shaders.Generator lowers the HLSL reader from the same objects.
 internal enum SdfFormulaType { Scalar, Vector2, Vector3, Condition, Index, Rotation }
 
@@ -449,6 +449,193 @@ internal class SdfFormula {
         return Call(function.NameIn(shader), node.Inputs.Select((input, index) =>
             mask[index] ? Dual(input, names, written, output, shader) : DualValue(input, names, written, output, shader))
             .Concat(!shader && function.UsesPower ? ["ref powerWork"] : []));
+    }
+
+    // === The affine reader =============================================================================================
+    // A fifth lowering, for bounds over a box: each formula again as an overload of the same name whose walk-state inputs
+    // (the point, the running and candidate distances) are affine forms over the box's three axes (Puck.Maths'
+    // FixedAffineForm carriers and FixedAffineForms' functions, named as the dual library names its), which the query
+    // evaluator's box walk reads beside its interval rules (SdfFieldEvaluator.Bounds.cs) so a box keeps the correlations an
+    // interval drops: a rotated box stays rotated, a blend reads its operands' difference narrow. A node is active when it
+    // reads an active input, a comparison and a rounding included, since over a box neither has one value: a comparison
+    // answers a FixedAffineTruth, a selection under an unknown truth joins both arms, and a guarded return the box cannot
+    // decide joins its value into the answer and walks on to the next step. A node the affine library holds no enclosure
+    // of (the ellipse's root, the noises, a varying exponent, segment or smoothstep edge) leaves the formula without an
+    // affine overload, and the box walk takes its interval rule there.
+    private sealed class AffineUncovered(SdfFormulaOp op) : Exception($"Field formula operation {op} has no affine lowering.");
+
+    // The affine overloads of the formulas that have one, and which they are.
+    internal static string EmitAllFixedAffine(out HashSet<SdfFormula> covered, params SdfFormula[] formulas) {
+        var written = new HashSet<string>();
+        var output = new StringBuilder();
+
+        covered = [];
+        foreach (var formula in formulas) {
+            if (formula.Result == SdfFormulaType.Condition) { continue; }
+            var mask = formula.Parameters(shader: false).Select(static parameter => parameter.Bound && DualStates.Contains(parameter.Fixed)).ToArray();
+            if (!mask.Any(static active => active)) { continue; }
+            try {
+                formula.EmitAffine(mask: mask, output: output, written: written);
+                _ = covered.Add(formula);
+            } catch (AffineUncovered) { }
+        }
+        return output.ToString().TrimEnd() + "\n";
+    }
+
+    private static string AffineTypeName(SdfFormulaType type) => type switch {
+        SdfFormulaType.Scalar => "FixedAffineForm",
+        SdfFormulaType.Vector2 => "FixedAffineForm2",
+        SdfFormulaType.Vector3 => "FixedAffineForm3",
+        SdfFormulaType.Condition => "FixedAffineTruth",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+
+    // Which named values a pattern of active parameters makes active, step by step.
+    private Dictionary<string, bool> AffineNames(bool[] mask) {
+        var names = new Dictionary<string, bool>();
+        var parameters = Parameters(shader: false).ToArray();
+        for (var index = 0; index < parameters.Length; index++) { names[parameters[index].Name] = mask[index] && Differentiable(parameters[index].Type); }
+        foreach (var step in m_steps) {
+            if (step.Name is { } name) { names[name] = AffineActive(step.Value, names); }
+        }
+        return names;
+    }
+
+    // Every node that reads an active input is active, a call included: its callee is emitted for the pattern its
+    // arguments pass, and lifts whatever it returns that the pattern leaves plain.
+    private static bool AffineActive(SdfFormulaNode node, Dictionary<string, bool> names) => node.Op switch {
+        SdfFormulaOp.Name => names.TryGetValue(node.Text, out var active) && active,
+        SdfFormulaOp.Literal or SdfFormulaOp.Constant => false,
+        _ => (node.Type != SdfFormulaType.Index) && node.Inputs.Any(input => AffineActive(input, names)),
+    };
+
+    private void EmitAffine(bool[] mask, HashSet<string> written, StringBuilder output) {
+        var key = Name + "/" + string.Concat(mask.Select(static active => active ? '1' : '0'));
+        if (!written.Add(key)) { return; }
+        try {
+            var names = AffineNames(mask: mask);
+            var body = new StringBuilder();
+            var parameters = Parameters(shader: false).ToArray();
+            var arguments = parameters.Select(parameter => (names[parameter.Name] ? AffineTypeName(parameter.Type) : TypeName(parameter.Type, shader: false)) + " " + parameter.Name);
+            if (UsesPower) { arguments = arguments.Concat(["ref PowerWork powerWork"]); }
+            var guarded = m_steps.Any(static step => step.When is not null);
+            body.Append("    private static ").Append(AffineTypeName(Result)).Append(' ').Append(Call(NameIn(shader: false), arguments)).Append(" {\n");
+            // An inactive power still reads the evaluator's exact power memo, as the plain reader's does.
+            if (m_steps.Any(step => Descendants(step.Value).Concat(step.When is { } when ? Descendants(when) : []).Any(node => node.Op == SdfFormulaOp.Power && !AffineActive(node, names)))) {
+                body.Append("        var memo = CurrentPowerMemo();\n");
+            }
+            if (guarded) { body.Append("        ").Append(AffineTypeName(Result)).Append(" affinePending = default;\n        var affineJoined = false;\n"); }
+            foreach (var step in m_steps) {
+                body.Append("        ");
+                if (step.When is { } condition) {
+                    body.Append("{ var affineWhen = ").Append(AffineTruth(condition, names, written, output))
+                        .Append("; if (affineWhen != FixedAffineTruth.False) { var affineValue = ").Append(AffineLift(step.Value, names, written, output))
+                        .Append("; if (affineWhen == FixedAffineTruth.True) { return (affineJoined ? FixedAffineForms.Join(affinePending, affineValue) : affineValue); } ")
+                        .Append("affinePending = (affineJoined ? FixedAffineForms.Join(affinePending, affineValue) : affineValue); affineJoined = true; } }\n");
+                } else if (step.Name is { } name) {
+                    var active = names[name];
+                    body.Append(active ? AffineTypeName(step.Value.Type) : TypeName(step.Value.Type, shader: false)).Append(' ').Append(name).Append(" = ")
+                        .Append(active ? Affine(step.Value, names, written, output) : AffineValue(step.Value, names, written, output)).Append(";\n");
+                } else if (guarded) {
+                    body.Append("{ var affineValue = ").Append(AffineLift(step.Value, names, written, output)).Append("; return (affineJoined ? FixedAffineForms.Join(affinePending, affineValue) : affineValue); }\n");
+                } else {
+                    body.Append("return ").Append(AffineLift(step.Value, names, written, output)).Append(";\n");
+                }
+            }
+            output.Append(body.Append("    }\n")).Append('\n');
+        } catch (AffineUncovered) {
+            _ = written.Remove(key);
+            throw;
+        }
+    }
+
+    // An inactive node's plain value, the plain reader's text over its inputs' plain values.
+    private static string AffineValue(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+        AffineActive(node, names)
+            ? throw new InvalidOperationException($"Field formula operation {node.Op} is active and has no plain value over a box.")
+            : Render(node, shader: false, input => AffineValue(input, names, written, output));
+
+    // A node as an affine value whether active or not: an inactive value lifts to a form holding it alone.
+    private static string AffineLift(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+        AffineActive(node, names) ? Affine(node, names, written, output) : $"FixedAffineForms.Lift({AffineValue(node, names, written, output)})";
+
+    // An operand as the mixed overloads take it: an active node's form, an inactive one's plain value.
+    private static string AffineOperand(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+        AffineActive(node, names) ? Affine(node, names, written, output) : AffineValue(node, names, written, output);
+
+    // A condition as a truth over the box; an inactive one is decided, as the plain reader decides it.
+    private static string AffineTruth(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+        if (!AffineActive(node, names)) { return $"FixedAffineForms.Truth({AffineValue(node, names, written, output)})"; }
+        string Compare(string name) => $"FixedAffineForms.{name}({AffineOperand(node.Inputs[0], names, written, output)}, {AffineOperand(node.Inputs[1], names, written, output)})";
+        return node.Op switch {
+            SdfFormulaOp.Name => node.Text,
+            SdfFormulaOp.Less => Compare("Less"),
+            SdfFormulaOp.LessEqual => Compare("LessEqual"),
+            SdfFormulaOp.Greater => Compare("Greater"),
+            SdfFormulaOp.GreaterEqual => Compare("GreaterEqual"),
+            SdfFormulaOp.Equal => Compare("Equal"),
+            SdfFormulaOp.And => $"FixedAffineForms.And({AffineTruth(node.Inputs[0], names, written, output)}, {AffineTruth(node.Inputs[1], names, written, output)})",
+            _ => throw new InvalidOperationException($"Field formula operation {node.Op} is no condition."),
+        };
+    }
+
+    // An active node as the affine library's call.
+    private static string Affine(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+        if (node.Type == SdfFormulaType.Condition) { return AffineTruth(node, names, written, output); }
+        string Operand(int index) => AffineOperand(node.Inputs[index], names, written, output);
+        string Lifted(int index) => AffineLift(node.Inputs[index], names, written, output);
+        string Value(int index) => AffineValue(node.Inputs[index], names, written, output);
+        bool ActiveAt(int index) => AffineActive(node.Inputs[index], names);
+        string Function(string name, params string[] operands) => "FixedAffineForms." + name + "(" + string.Join(", ", operands) + ")";
+        string Covered(bool covered, Func<string> render) => covered ? render() : throw new AffineUncovered(node.Op);
+        return node.Op switch {
+            SdfFormulaOp.Name => node.Text,
+            SdfFormulaOp.Add => Function("Add", Operand(0), Operand(1)),
+            SdfFormulaOp.Subtract => Function("Subtract", Operand(0), Operand(1)),
+            SdfFormulaOp.Multiply => Function("Multiply", Operand(0), Operand(1)),
+            SdfFormulaOp.Divide => Function("Divide", Operand(0), Operand(1)),
+            SdfFormulaOp.MultiplyComponents => Function("MultiplyComponents", Operand(0), Operand(1)),
+            SdfFormulaOp.DivideComponents => Function("DivideComponents", Operand(0), Operand(1)),
+            SdfFormulaOp.Min => Function("Min", Operand(0), Operand(1)),
+            SdfFormulaOp.Max => Function("Max", Operand(0), Operand(1)),
+            SdfFormulaOp.Dot => Function("Dot", Operand(0), Operand(1)),
+            SdfFormulaOp.Negate => Function("Negate", Operand(0)),
+            SdfFormulaOp.X => Function("X", Operand(0)),
+            SdfFormulaOp.Y => Function("Y", Operand(0)),
+            SdfFormulaOp.Z => Function("Z", Operand(0)),
+            SdfFormulaOp.Abs => Function("Abs", Operand(0)),
+            SdfFormulaOp.Length => Function("Length", Operand(0)),
+            SdfFormulaOp.Round => Function("Round", Operand(0)),
+            SdfFormulaOp.Floor => Function("Floor", Operand(0)),
+            SdfFormulaOp.Vector2 => Function("Vec2", Lifted(0), Lifted(1)),
+            SdfFormulaOp.Vector3 => Function("Vec3", Lifted(0), Lifted(1), Lifted(2)),
+            SdfFormulaOp.Clamp => (ActiveAt(1) || ActiveAt(2)) ? Function("Clamp", Lifted(0), Lifted(1), Lifted(2)) : Function("Clamp", Lifted(0), Value(1), Value(2)),
+            SdfFormulaOp.Lerp => Function("Lerp", Lifted(0), Lifted(1), Lifted(2)),
+            SdfFormulaOp.SegmentParameter => Covered(!ActiveAt(1), () => Function("SegmentParameter", Lifted(0), Value(1))),
+            SdfFormulaOp.MinLength => Function("MinLength", Lifted(0), Lifted(1)),
+            // |p| · min(r) / r rounded once, as the fixed carrier's SuperellipsoidScaledRatio does.
+            SdfFormulaOp.ScaledRatio => Covered(!ActiveAt(1) && !ActiveAt(2), () => Function("MultiplyDivide", Lifted(0), Value(1), Value(2))),
+            SdfFormulaOp.Power => Covered(!ActiveAt(1), () => Function("Power", Lifted(0), Value(1))),
+            SdfFormulaOp.FiniteOr => Function("FiniteOr", Lifted(0), Lifted(1)),
+            SdfFormulaOp.Select => Function("Select", AffineTruth(node.Inputs[0], names, written, output), Lifted(1), Lifted(2)),
+            SdfFormulaOp.Smoothstep => Covered(!ActiveAt(0) && !ActiveAt(1), () => Function("Smoothstep", Value(0), Value(1), Lifted(2))),
+            SdfFormulaOp.RotateInverse => Covered(!ActiveAt(1), () => Function("RotateInverse", Lifted(0), Value(1))),
+            // Detaching drops a value's derivative, never its enclosure: the bounds reader carries the operand's form.
+            SdfFormulaOp.Detach => Lifted(0),
+            SdfFormulaOp.Sqrt => Function("Sqrt", Lifted(0)),
+            SdfFormulaOp.Ellipse2D or SdfFormulaOp.Fbm3 or SdfFormulaOp.CellDistance or SdfFormulaOp.SweepSearch => throw new AffineUncovered(node.Op),
+            SdfFormulaOp.Call => AffineCall(node, names, written, output),
+            _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no affine lowering."),
+        };
+    }
+
+    private static string AffineCall(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+        var mask = node.Inputs.Select(input => AffineActive(input, names)).ToArray();
+        var function = node.Function!;
+        function.EmitAffine(mask: mask, output: output, written: written);
+        return Call(function.NameIn(shader: false), node.Inputs.Select((input, index) =>
+            mask[index] ? Affine(input, names, written, output) : AffineValue(input, names, written, output))
+            .Concat(function.UsesPower ? ["ref powerWork"] : []));
     }
 
     protected SdfFormulaNode Invoke(params ISdfFormulaValue[] arguments) {

@@ -137,7 +137,9 @@ for each is at
 | Rings, shells, shards — index → layer in constant time | `LayerSequence` | [Geometry](../../../../src/Puck.Maths/Geometry/README.md#layersequence) |
 | A per-tick state hash for a determinism or replay probe | `Fnv1aHash` — allocation-free, endianness-independent | root level |
 | An exact integer allocation over intervals (jobs/frame, samples/frame) | `DiscreteMeasure` → `CompiledDiscreteMeasure64` for the hot path | root level |
-| An exact rational, reduced on construction, for authoring and compile-time derivations that round once at the end | `Rational` | root level |
+| An exact rational, reduced on construction, for authoring and compile-time derivations that round once at the end | `Rational` (`TryParse` reads `-12.5` and `7/3`) | root level |
+| An exact polynomial (evaluate, derivative, antiderivative, composition, shift), or coefficient kernels for an exact solver | `RationalPolynomial` | root level |
+| A rate repeating every turn of a phase, integrated between two phases in closed form | `PeriodicPiecewisePolynomial` | root level |
 | An exact real-quadratic value — `RealQuadraticField` names the field `ℚ(√d)`, `RealQuadratic` carries the value with conjugate, norm and trace | `RealQuadratic` | root level |
 | Bit tricks, GCD, integer roots, pairing, factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | root level |
 | The Nth prime or the prime count through a `uint` bound | `PrimeExtensions.NthPrime(uint)` / `PrimeCountingFunction(uint)` (zero-based index) | [Prime exploration](../../../../docs/reference/prime-exploration.md) |

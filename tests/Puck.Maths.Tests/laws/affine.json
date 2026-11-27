@@ -1,0 +1,77 @@
+[
+  {
+    "Id": "affine.forms-hold-the-point-operations",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Add" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Subtract" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Negate" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Multiply" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Divide" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "MultiplyDivide" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Abs" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Min" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Max" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Clamp" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Sqrt" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Lerp" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Length" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Dot" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "SegmentParameter" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "RotateInverse" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Round" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Floor" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Smoothstep" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Select" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Join" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Less" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "LessEqual" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Greater" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "GreaterEqual" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Equal" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": ".ctor" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Center" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Symbol0" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Symbol1" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Symbol2" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Error" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "IsUnbounded" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "every FixedAffineForms operation over forms drawn at magnitudes from a few raws to 2^39, some symbols and errors zero, at a drawn point of the symbol cube (each symbol a multiple of 1/1024): operands realized as raws their forms hold there, and the result form must hold the carrier's point answer there, decided exactly; a bounded result beside a point answer past the carrier fails, and a decided comparison must agree with the point comparison",
+        "Against": "FixedQ4816's own operators, FixedVector2/3.Length, Dot and SegmentParameter, FusedArithmetic.MultiplyDivide, FixedQ4816.Lerp, Smoothstep, Round and Floor, and FixedQuaternion.RotateInverse: the point evaluations a form must hold, never an affine computation. Membership is |answer·1024 − (centre·1024 + Σ symbolᵢ·kᵢ)| ≤ error·1024 in BigInteger, sharing nothing with the subject's Int128 coefficient arithmetic; a point answer the carrier wraps is outside every guarantee and is decided from the exact BigInteger result",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "affine.edges",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Entire" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Range" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "FromPoint" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "FromInterval" },
+      { "Type": "Puck.Maths.FixedAffineForm", "Name": "Symbol" },
+      { "Type": "Puck.Maths.FixedAffineForm3", "Name": "FromBox" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "And" },
+      { "Type": "Puck.Maths.FixedAffineForms", "Name": "Truth" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the unbounded form absorbs through a sum, a product with zero, a minimum, an absolute value, a clamp and a length, and leaves every comparison unknown; the carrier's maximum plus a raw is unbounded; a box's axes ride their own symbols alone and hold their whole extent, an odd raw width included; the shared parts of x − x cancel exactly; truth's conjunction is Kleene's; the constructor refuses a negative error and a range past the carrier",
+        "Against": "Hand-derived expectations: the documented contract of each edge, stated as literals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

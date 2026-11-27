@@ -139,8 +139,8 @@ public readonly record struct FixedInterval {
             var high = Math.BigMul(a: left.Upper.Value, b: right.Lower.Value);
 
             return ((low <= high)
-                ? Exact(lower: (low >> FractionBitCount), upper: Ceiling(shift: FractionBitCount, value: high))
-                : Exact(lower: (high >> FractionBitCount), upper: Ceiling(shift: FractionBitCount, value: low)));
+                ? Exact(lower: (low >> FractionBitCount), upper: FixedDirectedRounding.CeilingShift(shift: FractionBitCount, value: high))
+                : Exact(lower: (high >> FractionBitCount), upper: FixedDirectedRounding.CeilingShift(shift: FractionBitCount, value: low)));
         }
 
         var a = Math.BigMul(a: left.Lower.Value, b: right.Lower.Value);
@@ -150,7 +150,7 @@ public readonly record struct FixedInterval {
 
         return Exact(
             lower: (Int128.Min(x: Int128.Min(x: a, y: b), y: Int128.Min(x: c, y: d)) >> FractionBitCount),
-            upper: Ceiling(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
+            upper: FixedDirectedRounding.CeilingShift(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
         );
     }
 
@@ -246,7 +246,7 @@ public readonly record struct FixedInterval {
 
         return Exact(
             lower: ((low * low) >> FractionBitCount),
-            upper: Ceiling(shift: FractionBitCount, value: (high * high))
+            upper: FixedDirectedRounding.CeilingShift(shift: FractionBitCount, value: (high * high))
         );
     }
     /// <summary>Returns the interval of every square root, with the non-positive part answering zero as
@@ -539,9 +539,6 @@ public readonly record struct FixedInterval {
 
         return (((Int128)integer) << FractionBitCount);
     }
-    // Int128's arithmetic shift is the floor; the ceiling is the negated floor of the negation.
-    private static Int128 Ceiling(Int128 value, int shift) =>
-        -((-value) >> shift);
     private static Int128 FloorRoot(UInt128 radicand) =>
         ((Int128)radicand.SquareRoot());
     private static Int128 CeilingRoot(UInt128 radicand) =>

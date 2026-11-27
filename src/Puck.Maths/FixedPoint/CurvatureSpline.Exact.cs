@@ -505,10 +505,10 @@ internal static class CurvatureSplineExactMath {
         return (table, speeds);
     }
     private static List<Rational[]> BuildSturmSequence(Rational[] polynomial) {
-        var sequence = new List<Rational[]> { polynomial, DerivativeOf(coefficients: polynomial) };
+        var sequence = new List<Rational[]> { polynomial, RationalPolynomial.DerivativeOf(coefficients: polynomial) };
 
         while (!IsZeroPolynomial(coefficients: sequence[^1])) {
-            var remainder = RemainderOf(
+            var remainder = RationalPolynomial.RemainderOf(
                 dividend: sequence[^2],
                 divisor: sequence[^1]
             );
@@ -584,18 +584,18 @@ internal static class CurvatureSplineExactMath {
         var c4 = ((bx2 * bx2) + (bz2 * bz2));
         var speedSquared = new[] { c0, c1, c2, c3, c4 };
 
-        var minimum = Evaluate(
+        var minimum = RationalPolynomial.Evaluate(
             coefficients: speedSquared,
             x: RationalZero
         );
-        var atOne = Evaluate(
+        var atOne = RationalPolynomial.Evaluate(
             coefficients: speedSquared,
             x: Rational.One
         );
 
         if (SignOf(value: (atOne - minimum)) < 0) { minimum = atOne; }
 
-        var derivative = DerivativeOf(coefficients: speedSquared);
+        var derivative = RationalPolynomial.DerivativeOf(coefficients: speedSquared);
 
         if (!IsZeroPolynomial(coefficients: derivative)) {
             foreach (var (lo, hi) in IsolateRoots(
@@ -603,15 +603,15 @@ internal static class CurvatureSplineExactMath {
                 lo: RationalZero,
                 hi: Rational.One
             )) {
-                var candidate = Evaluate(
+                var candidate = RationalPolynomial.Evaluate(
                     coefficients: speedSquared,
                     x: ((lo + hi) * OneHalf)
                 );
-                var atLo = Evaluate(
+                var atLo = RationalPolynomial.Evaluate(
                     coefficients: speedSquared,
                     x: lo
                 );
-                var atHi = Evaluate(
+                var atHi = RationalPolynomial.Evaluate(
                     coefficients: speedSquared,
                     x: hi
                 );
@@ -675,42 +675,10 @@ internal static class CurvatureSplineExactMath {
     }
     private static Rational Cross2(Rational ax, Rational az, Rational bx, Rational bz) =>
         ((ax * bz) - (az * bx));
-    private static int DegreeOf(Rational[] coefficients) {
-        for (var i = (coefficients.Length - 1); (i >= 0); --i) {
-            if (!coefficients[i].Numerator.IsZero) { return i; }
-        }
+    // --- Sturm-sequence real-root isolation over RationalPolynomial's coefficient kernels, shared by the tangent-length
+    // quartic and the interior-cusp cubic. Coefficients are ascending by degree, and the zero polynomial has degree −1,
+    // so callers never confuse it with a nonzero constant. ---
 
-        return -1;
-    }
-    private static Rational[] DerivativeOf(Rational[] coefficients) {
-        var degree = DegreeOf(coefficients: coefficients);
-
-        if (degree <= 0) { return [RationalZero]; }
-
-        var result = new Rational[degree];
-
-        for (var i = 1; (i <= degree); ++i) {
-            result[(i - 1)] = (coefficients[i] * new Rational(
-                (i * BigInteger.One),
-                BigInteger.One
-            ));
-        }
-
-        return result;
-    }
-    // --- Exact rational polynomial arithmetic and Sturm-sequence real-root isolation, shared by the tangent-length
-    // quartic and the interior-cusp cubic. Coefficients are ascending by degree; DegreeOf reports −1 for the zero
-    // polynomial so callers never confuse it with a nonzero constant. ---
-
-    private static Rational Evaluate(Rational[] coefficients, Rational x) {
-        var result = RationalZero;
-
-        for (var i = (coefficients.Length - 1); (i >= 0); --i) {
-            result = ((result * x) + coefficients[i]);
-        }
-
-        return result;
-    }
     private static Rational ExactQ16(FixedQ4816 value) =>
         new(
             value.Value,
@@ -746,7 +714,7 @@ internal static class CurvatureSplineExactMath {
         );
     }
     private static bool IsZeroPolynomial(Rational[] coefficients) =>
-        (DegreeOf(coefficients: coefficients) < 0);
+        (RationalPolynomial.DegreeOf(coefficients: coefficients) < 0);
     // Isolates every real root of `polynomial` within (lo, hi] to width < 2^-GuardBits, as disjoint ascending
     // brackets each certified (by the Sturm sign-variation count) to contain exactly one root. Deterministic: query
     // points that land exactly on a root are nudged by a fixed, tiny epsilon rather than special-cased, so the same
@@ -883,7 +851,7 @@ internal static class CurvatureSplineExactMath {
         );
         var guard = 0;
 
-        while (SignOf(value: Evaluate(
+        while (SignOf(value: RationalPolynomial.Evaluate(
             coefficients: leading,
             x: x
         )) == 0) {
@@ -910,7 +878,7 @@ internal static class CurvatureSplineExactMath {
     // bisection on the polynomial's own sign, halving the width each call. Never used to FIND a root; only to narrow
     // where inside an already-certain one an admissibility bound or an objective tie sits.
     private static (Rational Lo, Rational Hi) RefineBracket(Rational[] polynomial, Rational lo, Rational hi) {
-        var signAtLo = SignOf(value: Evaluate(
+        var signAtLo = SignOf(value: RationalPolynomial.Evaluate(
             coefficients: polynomial,
             x: lo
         ));
@@ -919,7 +887,7 @@ internal static class CurvatureSplineExactMath {
             negative: false,
             x: ((lo + hi) * OneHalf)
         );
-        var signAtMid = SignOf(value: Evaluate(
+        var signAtMid = SignOf(value: RationalPolynomial.Evaluate(
             coefficients: polynomial,
             x: mid
         ));
@@ -928,29 +896,6 @@ internal static class CurvatureSplineExactMath {
             ? (mid, hi)
             : (lo, mid)
         );
-    }
-    private static Rational[] RemainderOf(Rational[] dividend, Rational[] divisor) {
-        var divisorDegree = DegreeOf(coefficients: divisor);
-        var leadDivisor = divisor[divisorDegree];
-        var remainder = ((Rational[])dividend.Clone());
-
-        while (true) {
-            var remainderDegree = DegreeOf(coefficients: remainder);
-
-            if (
-                (remainderDegree < 0) ||
-                (remainderDegree < divisorDegree)
-            ) { break; }
-
-            var scale = (remainder[remainderDegree] / leadDivisor);
-            var shift = (remainderDegree - divisorDegree);
-
-            for (var i = 0; (i <= divisorDegree); ++i) {
-                remainder[(shift + i)] = (remainder[(shift + i)] - (scale * divisor[i]));
-            }
-        }
-
-        return remainder;
     }
     private static long RoundQ32(Rational value, int segmentIndex, string detail) {
         if (!FixedPointRounding.TryRoundRational(
@@ -984,7 +929,7 @@ internal static class CurvatureSplineExactMath {
     // A positive common denominator and positive coefficient gcd scale the polynomial without changing any sign
     // or root. Do this once per Sturm member instead of reducing rational intermediates at every bisection point.
     private static BigInteger[] IntegerCoefficients(Rational[] coefficients) {
-        var degree = DegreeOf(coefficients: coefficients);
+        var degree = RationalPolynomial.DegreeOf(coefficients: coefficients);
 
         if (degree < 0) { return []; }
         var denominator = BigInteger.One;

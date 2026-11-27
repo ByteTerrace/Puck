@@ -9,6 +9,9 @@ public sealed partial class SdfFieldEvaluator {
         private TPoint m_point;
         private TScale m_scale;
 
+        // Whether Capture at this index would capture, so a caller with a wide point builds it only then.
+        public readonly bool Captures(int index) => ((m_pending != 0) && (index == m_pending));
+
         public void Capture(int index, TPoint point, TScale scale) {
             if ((m_pending == 0) || (index != m_pending)) { return; }
 

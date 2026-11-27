@@ -722,9 +722,18 @@ public static class WorldProjection {
         }
 
         var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var grew = true;
 
-        foreach (var row in definition.State) {
-            if ((row.Field is null) && read.Contains(item: row.Name.Value)) { _ = rows.Add(item: row.Name.Value); }
+        // A nested advance reads its parent's slot, so a recipient that evaluates a presented nested row is presented
+        // its chain of parents too; each pass adds one more link, and the validator bounds a chain's depth.
+        for (var pass = 0; (grew && (pass <= StateAdvance.MaxNestingDepth)); pass++) {
+            grew = false;
+
+            foreach (var row in definition.State) {
+                if ((row.Field is null) && read.Contains(item: row.Name.Value) && rows.Add(item: row.Name.Value) && (row.Advance?.By is { } parent)) {
+                    grew |= read.Add(item: parent);
+                }
+            }
         }
 
         return rows;
@@ -816,7 +825,7 @@ public static class WorldProjection {
             }
 
             if (clock.Anchor is { IsWellFormed: false }) {
-                return $"projection anchors clock '{clock.Name}' with rate {clock.Anchor.Rate} over {clock.Anchor.Step} engine ticks; a rate names the ticks it is per, and only a rate does.";
+                return $"projection anchors clock '{clock.Name}' with a curve of {clock.Anchor.Curve?.Count ?? 0} coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals, and its value at the anchor's tick is the anchor's phase.";
             }
         }
 

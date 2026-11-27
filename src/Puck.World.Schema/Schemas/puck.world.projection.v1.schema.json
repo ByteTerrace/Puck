@@ -7547,12 +7547,57 @@
                   ],
                   "properties": {
                     "perSecondNumerator": {
-                      "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+                      "description": "The rate\u0027s signed numerator, in the row\u0027s own displayed unit per second, or per unit of the parent for a nested advance (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert, which holds a clock still.",
                       "type": "integer"
                     },
                     "perSecondDenominator": {
-                      "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
+                      "description": "The rate\u0027s denominator. Refused at zero or below.",
                       "type": "integer"
+                    },
+                    "by": {
+                      "description": "The parent row a nested advance runs on: a document row whose slot advances. Absent, the advance runs on the engine\u0027s seconds.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "rate": {
+                      "description": "The shape of a nested advance\u0027s rate over its parent\u0027s phase: pieces of a polynomial, each starting at a share of the parent\u0027s turn. Absent, the shape is one everywhere. Refused without By.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "description": "One piece of a nested advance\u0027s rate shape (Rate): a polynomial in the parent\u0027s phase that holds from From to the next piece\u0027s start, or to the end of the turn.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "from": {
+                            "description": "Where the piece starts, as an exact share of the parent\u0027s turn: digits with an optional decimal fraction, or a quotient such as 5/8. The first piece starts at zero, and each later one after the one before and below one.",
+                            "type": "string"
+                          },
+                          "coefficients": {
+                            "description": "The polynomial\u0027s exact coefficients in the parent\u0027s phase, constant term first, each spelled as From is.",
+                            "type": "array",
+                            "items": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "coefficients"
+                        ],
+                        "additionalProperties": false,
+                        "title": "StateRatePiece"
+                      },
+                      "default": null
                     }
                   },
                   "required": [
@@ -7934,15 +7979,24 @@
                     "description": "The phase at Tick, a whole turn being 2^64.",
                     "type": "integer"
                   },
-                  "rate": {
-                    "description": "The phase one authoritative tick adds, wrapping; zero for a clock held still.",
+                  "base": {
+                    "description": "The row\u0027s stored raw base the curve accumulates over; zero for a clock held still.",
                     "type": "integer",
                     "default": 0
                   },
-                  "step": {
-                    "description": "The engine ticks one authoritative tick spans; zero exactly when Rate is.",
-                    "type": "integer",
-                    "default": 0
+                  "curve": {
+                    "description": "The accumulation over Base, in raw units, as exact rational coefficients of a polynomial in the engine ticks elapsed since Tick, constant term first; absent for a clock held still.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": null
                   }
                 },
                 "required": [

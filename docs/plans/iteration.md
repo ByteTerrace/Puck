@@ -296,10 +296,14 @@ ahead of further cuts to its CPU stages.
 3. **The candidates.** A quiet cold bake recording worker activity, GPU wait
    per request, GPU timestamps and total time ranks what is left on the
    critical path. The first candidate changes the bake's shape and goes
-   first; with it,
-   [the audit's](state-of-the-art/audit.md#where-each-finding-went)
-   coarse-to-fine pruning by interval bounds on the GPU. The candidates (GPU
-   contouring is rejected as a second mesher):
+   first. [The audit's](state-of-the-art/audit.md#where-each-finding-went)
+   coarse-to-fine pruning stays on the host, which already classifies each
+   grid lattice's blocks before dispatch, shrinking the dispatch and its
+   readback as no kernel can, now with an affine reading beside the intervals
+   ([the counts](efficiency.md#2-bounds-that-skip-a-grid-lattices-empty-blocks)); pruning on the GPU stays held by
+   [field programs](field-programs.md#decided-against-for-now) while the
+   kernel is a few percent of the bake. The candidates (GPU contouring is
+   rejected as a second mesher):
    - *GPU sampling in one round trip per stage* (cutting ~20 round trips per
      group to ~4 by moving root search and gradients onto GPU with a per-stage
      sample cap): requires generating or reading `SdfSampledLattice`'s root

@@ -67,7 +67,6 @@ let companionStar = star(radius: 60, distance: 15000, illuminance: 12000, color:
 let pairSeparation = 2000
 let pairSeconds = 600
 let companionTurn = pairTurn(clock: "pair", separation: pairSeparation, inclination: sharedNoonElevation, node: (0 - sharedSunHeading))
-
 // How fast the sun's light and its pull cross the system. Each world reads the sun's rows that long after the sun
 // wrote them (sun.puck, a followed row's `delaySeconds`), from where the sun stands at the day's start, so the moon,
 // then the nearer of the two, meets a change first.
