@@ -1,5 +1,82 @@
 # The Moth’s companion
 
+## Round seven
+
+The owner liked Rivet and asked for four slightly different versions of him,
+plus four each of Tick and Fleecewick. They want a single expressive eye on
+every variation. The choice is theirs. [Round six](#round-six)
+
+Each is a palm-sized flying guide beside the Moth. The camera iris leads
+the glance, the hinged lid blinks, and the lens aims the flashlight and
+camera. The separate lantern pulses with speech and carries the eight light
+states. Use rounded SDF solids for the housing and wing pivots, broad
+ellipsoid lobes with a shallow noise fringe for the fleece, and emissive
+paint for each lantern. Keep the camera iris clear at peak lantern
+brightness. [The lantern’s light language](#the-lanterns-light-language)
+
+### Rivet
+
+![Rivet in four banked flight views above their matching front views.](r7-rivet.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Cradle | Proportion | The cream helmet grows taller and rounder over a shorter navy chassis. | The big helmet gives the rescue toy a younger look and keeps its head distinct in silhouette. |
+| B · Wink | Eye | The iris has a wider opening under a curved, hinged brow. | A lifted brow reads as curiosity. More of the cyan iris stays visible through a bank. |
+| C · Spade | Wings | Short, broad enamel canards end in rounded-off square tips. | The stubby wings feel like toy parts and give a braking bank a broad, blunt outline. |
+| D · Apron | Lantern | One cyan bar wraps across the lower front edge and up around the corners. | The lit edge gives the squat hull a friendly lift and keeps a speech pulse visible head-on. |
+
+### Tick
+
+![Tick in four banked flight views above their matching front views.](r7-tick.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Bobbin | Proportion | A rounder copper face housing sits over a compact clockwork barrel. | The big round face makes its precise little pivots feel playful and gives the eye a stronger outline. |
+| B · Detent | Eye | A raised sprung lid exposes more of the amber iris. | Tick looks alert and nosy. The extra opening makes the direction of its pupil easier to read. |
+| C · Reed | Wings | Slender brass paddles taper to soft points at the original pivots. | The finer paddles suggest quick strokes and leave the gear case and lantern as the dominant masses. |
+| D · Shutter | Lantern | A continuous amber belt replaces the three slots between the brass rims. | The tail glows like a small workshop lamp. A speech pulse reads across the whole belt in either view. |
+
+### Fleecewick
+
+![Fleecewick in four banked flight views above their matching front views.](r7-fleecewick.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Tuft | Proportion | The charcoal-and-ochre ruff grows rounder and the teal tail shortens. | The plush ball feels buoyant and reads as fleece even when its finer edges disappear. |
+| B · Peep | Eye | The cyan iris opens wider beneath a lifted teal lid. | The eager look reads through the heavy collar. The eye remains the first thing to catch attention. |
+| C · Thistle | Finish | Cream shearling replaces the charcoal pile and keeps the ochre stripe. | The pale coat feels like fleece straight off the sheep and separates the ruff from the dark tail. |
+| D · Hem | Lantern | The mint belt moves directly beneath the ruff and lights the tips of the lower tufts. | The fleece catches each pulse. The lit hem makes the ruff edge readable against the teal shell. |
+
+### At palm scale
+
+![The suited Moth’s head beside all twelve labeled flight views at palm scale.](r7-overview.png)
+
+The overview reuses the flight drawings at a common maximum projected width
+of 0.16 m. The head crop keeps the scale of the 2.06 m suited Moth in her
+front turnaround. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Round-seven panel audit
+
+The artist inspected the four saved panels against the concept-art review.
+The flight rows show banked poses and the front rows show level poses.
+Joint clearance is assessed from the pictured pivots and poses. The
+checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Panel | Attachment and range | Pose, view agreement, and composition |
+| --- | --- | --- |
+| [Rivet](r7-rivet.png) | Canards seat on brass pins outboard of the brow hinges. The pinned brow has room to close over the single lens. | The canards tilt with the chassis in flight. Each brow, paddle shape, and keel light agrees across its pair of views. The corrected flight cheeks are continuous cream enamel around one eye. All eight views clear their neighbors and the sheet edges. |
+| [Tick](r7-tick.png) | Brass paddles seat at round pivots alongside the shallow gear window. The spring and lid sit on the copper face frame, clear of the wings. | The eye leads the bank and the amber lantern trails. The sprung lid, single antenna, wing outline, and tail slots or belt carry across both views. The side gearing shows in perspective. All eight drawings have clear margins. |
+| [Fleecewick](r7-fleecewick.png) | The wings seat in brass mounts above the fleece, with space past the ruff in the drawn poses. The upper lid moves inside the hard face rim. | The head leads and the tail hangs behind the ruff in the bank. Each pair retains a single cyan iris, two feelers, the same coat, and one mint band. The lit tufts on Hem stay attached to the ruff. The tips and fringe fit inside all eight drawings. |
+| [Overview](r7-overview.png) | The twelve scaled crops carry over the eyes, pivots, wings, and lanterns from the flight rows. | The wing and body angles match the larger drawings. Each crop and the source turnaround crop have separate margins. All twelve names follow the order of their comparison sheets. |
+
+The built-in image generator used each round-six character sheet as an anatomy
+and material reference. The prompts asked for four matched banked and front
+views under even light on warm ivory, with one central iris and the four
+changes listed above. An edit pass on Rivet replaced the extra far-side
+lenses in its first flight row with continuous enamel. The overview was
+laid out from the final flight crops and the existing Moth turnaround.
+
 ## Round six
 
 The owner called Sparkbill the first baseline. They want it to feel more
