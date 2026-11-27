@@ -225,7 +225,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   sweep) binds nothing at rest and is priced at one binding. A Level line whose firing closes its own gate
   (`RuleResponse.ClosesItself`: a literal the written literal fails, or `cell != source` with `cell = source` over
   one plain cell or one local) fires nothing at rest; the tested cell may be a host fact an `IFactSettingEffect`
-  sets exactly, which for a register with an envelope needs the source's `RuleBounds` inside it. What rests is one answer: a row by its declarations
+  sets exactly, which for a register with an envelope needs the source's `RuleBounds` inside it. A line whose gate
+  the host proves closed (`RuleResponse.NeverHolds`: a fixed-ply host answers ply zero, so `search(ply) > 0` never
+  holds there) is charged its checks and no firing; the search judge prices those firings (`WorldSearchCompilation.JudgeCost`).
+  A deadline a keyed sweep reads under its own key (`$tick >= due[$each]`) wakes only the bindings it is due for:
+  `RuleEvaluator.SweepBinding` records each binding's wake (`RuleDueList.RecordBindingWake`), a full visit starts
+  the table afresh, and a wake whose positions no longer stand wakes the sweep whole. What rests is one answer: a row by its declarations
   (`RuleCompileContext.RowRests`, the trait and host-owned test
   `RuleSchedule.Build` applies), a host fact by `RuleCompileContext.FactRests`,
   and the world host refuses to leave unversioned a fact

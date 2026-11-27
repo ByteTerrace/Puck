@@ -190,19 +190,24 @@ the same sheet live, and `--spent` what it spent):
 
 | | Sheet (work units a tick, at rest plus one change) |
 |---|---|
-| One station (game-station-root, the board games lab) | 496,713 |
-| Twelve stations playing themselves (the stress lab) | 3,847,956 |
-| The debug world with its one station | 3,640,191 |
+| One station (game-station-root, the board games lab) | 468,465 |
+| Twelve stations playing themselves (the stress lab) | 3,455,784 |
+| The debug world with its one station | 3,600,485 |
 
 The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Each
-station past the first adds about 305 thousand: its instance's own lines
-(about 263 thousand summed, chess most of them) and its members of the
+station past the first adds about 272 thousand: its instance's own lines
+(about 234 thousand summed, chess most of them) and its members of the
 patience set's family sweeps. Every cell a firing writes is priced (about 512
 units), so the holodeck's door writes two cells a body and a body at rest costs
 nothing: each lifecycle and pose rule closes its own gate. The costliest chess
-lines are the ones a game switch or a put-back opens for all 32 pieces at once
-(the lifecycle, the pose, the tidy and the settled read, each about 17 to 34
-thousand). What an idle station spends is a different number: its rules are
+lines are the ones a game switch, a settle or a put-back opens for all 32
+pieces at once (the lifecycle, the pose and the settled read, each about 17 to
+34 thousand). A put-back or a fresh game stands every body again by flipping
+one parity the pose rule folds into each body's last pose, rather than marking
+each body; the fresh-game door writes only what something reads before the
+judge's first settled pass; the search's own lines (`search(ply) > 0`) are
+priced with the search, not the tick; and a pose rule's arrival deadline wakes
+only the bodies it is due for. What an idle station spends is a different number: its rules are
 judged by change, so at rest they do no work. Twelve stations in the debug
 world itself still wait on the sheet: the open item "Twelve game stations on
 the work sheet" in
