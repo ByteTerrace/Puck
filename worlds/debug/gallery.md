@@ -94,9 +94,9 @@ alternate, a station and its twin across the void in one colourway:
 The cabinet is the standard's `arcadeCabinet` with two players: a tapering
 upright with a chamfered hood, a glowing marquee flanked by speaker grilles,
 one picture in a deep dark well with its glass leaning back, and a control deck
-sloping out below it with a cream panel for each player (a ball-top stick, a
-six buttons in two curved rows and a start button, marked P1 and P2 at the deck's front corners under the
-stick), lit T-molding down its fronts and a neon underglow. The
+sloping out below it with a cream panel for each player (a ball-top stick and
+six buttons in two curved rows, marked P1 and P2 at the deck's outer front
+corners), lit T-molding down its fronts and a neon underglow. The
 television set is the standard's
 `televisionSet` and `lounge`: a toy television with rabbit ears on a low stand,
 the deck on the stand's shelf with a pad cabled to each of its two ports lying

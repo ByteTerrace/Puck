@@ -744,7 +744,7 @@ template banner(base, width = 0.9, drop = 2.3) {
 // A toy arcade cabinet's materials, in slot order from `base`: its body, the cheeks, kick and marquee housing, the dark
 // glass bezel (and the control deck), the control panels' cream and the players' marks, the stick's ball and the first
 // button, the second button, the marquee's glowing panel, the marquee's lettering, the cabinet's neon (its T-molding,
-// the start buttons and the underglow) and its brushed metal (the grilles, the stick's
+// and the underglow) and its brushed metal (the grilles, the stick's
 // shaft and the buttons' collars).
 let cabinetBody = 0
 let cabinetTrim = 1
@@ -782,6 +782,9 @@ let cabinetDeckRot = rotate([1, 0, 0], 17.46)
 function cabinetDeckAt(x, u, h) = [x, (1.19 - (u * 0.3) + (h * 0.9539)), (0.2 + (u * 0.9539) + (h * 0.3))]
 // A cabinet's half-width: a one-player cabinet's, or the wider two-player one whose deck carries a control panel for
 // each player side by side.
+// The standard lettering's capital height in em (Inter: 0.727). A run's position is its baseline, so a capital line
+// centred on a point stands half this below it.
+let textCapHeight = 0.727
 // A control panel's centre down the deck and its half-extents [across, down the deck]; the players' marks sit in its outer
 // front corners, cabinetMarkMargin in from the side and from the front. A text run's position is its first baseline and,
 // aligned left or right, its outer edge, so those are what the margin measures to.
@@ -846,7 +849,7 @@ template cabinetSideSlab(label, x, material, z0, z1, y0, y1, points, half = 0.06
 // the back, the glass leaning back in a deep dark well; a control deck that slopes out below the screen; a plain lower
 // section with a kick plate under it; and side panels in the trim colour, a lit T-molding down each front edge and a
 // neon underglow. Each of its `players` (one or two) has a cream control panel on the deck: a ball-top stick on the
-// left, six buttons in two curved rows and a neon start button on the right, marked P1 or P2 at its outer front corner; a two-player cabinet is
+// left and six buttons in two curved rows on the right, marked P1 or P2 at its outer front corner; a two-player cabinet is
 // wider, its panels side by side under one picture. A one-player cabinet is about 2.0 m
 // wide, a two-player one 2.6 m; both are 1.2 m deep and 2.94 m tall, the deck 1.03 to 1.19 m up, at a standing
 // player's hands. The picture is a screen row of the world's (`cabinetPicture`), 1.76 m up and 0.13 m out of the front
@@ -1140,7 +1143,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   }
   // The control deck: a dark slab sloping from the screen bay to a rounded lip, a cream panel for each player, and on
   // it the player's controls, in the deck's own frame (`cabinetDeckAt`): a stick on the left, six buttons in two curved
-  // rows of three to its right (cabinetButtonLayout) and a start button beyond them, which a body walks through.
+  // rows of three to its right (cabinetButtonLayout), which a body walks through.
   shape Box "cabinet-deck" {
     material: (base + cabinetBezel)
     position: cabinetDeckAt(0, 0.27, -0.04)
@@ -1183,22 +1186,6 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
       scale [0.065, 0.065, 0.065]
       detail: true
     }
-    shape Cylinder $"cabinet-start-collar-{p}" {
-      material: (base + cabinetMetal)
-      position: cabinetDeckAt((c + 0.4), 0.27, 0.021)
-      rotation: cabinetDeckRot
-      scale [0.05, 0.006, 0.05]
-      rounding: 0.003
-      detail: true
-    }
-    shape Cylinder $"cabinet-start-{p}" {
-      material: (base + cabinetNeon)
-      position: cabinetDeckAt((c + 0.4), 0.27, 0.027)
-      rotation: cabinetDeckRot
-      scale [0.04, 0.01, 0.04]
-      rounding: 0.006
-      detail: true
-    }
     for (b, i) in cabinetButtonLayout {
       shape Cylinder $"cabinet-button-collar-{p}-{i}" {
         material: (base + cabinetMetal)
@@ -1221,7 +1208,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   textRuns [
     {
       text: title
-      position [0, 2.7, 0.552]
+      position [0, (2.7 - ((textCapHeight * em) / 2)), 0.552]
       rotation [0, 0, 0, 1]
       emHeight: em
       depth: 0.008
