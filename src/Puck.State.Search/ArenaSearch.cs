@@ -269,10 +269,12 @@ public sealed partial class ArenaSearch {
         public int[]? TreeToken { get; set; }
         public long[]? TreeTotal { get; set; }
         public long[]? TreeVisits { get; set; }
-        // A position's value, the plies it covers in the low byte, and its bound flag above; slot 0 of TtMeta reads
-        // 0 for an empty entry, which no stored entry produces.
+        // A position's value, and its meta word (TranspositionGenerationShift): the plies it covers, its bound flag and the
+        // generation of the walk that stored it. An entry is live only while its generation is TtGeneration, so a
+        // restart discards the whole table by moving the generation (RestartTransposition).
         public ulong[]? TtKey { get; set; }
         public bool TreeActive { get; set; }
+        public long TtGeneration { get; set; } = 1L;
         public long[]? TtMeta { get; set; }
         public long[]? TtValue { get; set; }
         // The playout ply's scan: how many candidates it has tried, and the flat candidate it tries from.
@@ -1103,9 +1105,7 @@ public sealed partial class ArenaSearch {
         job.PeakStepWork = 0L;
         job.TreeCount = 0;
         job.Work = 0L;
-        job.TtKey?.AsSpan().Clear();
-        job.TtMeta?.AsSpan().Clear();
-        job.TtValue?.AsSpan().Clear();
+        RestartTransposition(job: job);
         job.TokenCount = m_arena.CellCount(rowOrdinal: job.Plan.TokensOrdinal);
 
         for (var index = 0; (index < job.TokenKeys.Length); index++) {

@@ -224,7 +224,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 }
             }
             if (build.Count != 0) {
-                if (!tables.TryProbeScene(scene: scene, placements: out var placements, meshes: out var meshes, version: out _)) { return false; }
+                if (!tables.TryProbeScene(scene: scene, placements: out var placements, meshes: out var meshes, version: out _, unplaced: out _)) { return false; }
                 var builds = new StructureJob.Build[build.Count];
 
                 for (var index = 0; (index < build.Count); index++) {
