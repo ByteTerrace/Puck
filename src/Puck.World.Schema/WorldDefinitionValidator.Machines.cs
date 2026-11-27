@@ -127,6 +127,23 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
             }
+            if (machine.Attention is { } attention) {
+                if (!float.IsFinite(f: attention.Within) || (attention.Within <= 0f)) {
+                    errors.Add(item: $"{path}.attention.within {attention.Within.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} must be finite and positive.");
+                }
+                if ((attention.Behind is { } behind) && (!float.IsFinite(f: behind) || (behind < 0f))) {
+                    errors.Add(item: $"{path}.attention.behind {behind.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} must be finite and at least zero.");
+                }
+                // Attention is measured from the screens that show the machine, so one no screen shows could never be
+                // attended and would never run.
+                if (!definition.Screens.Any(predicate: screen => ((screen?.Source is WorldScreenSource.Machine source) && string.Equals(
+                    a: source.Instance,
+                    b: machine.Name,
+                    comparisonType: StringComparison.Ordinal
+                )))) {
+                    errors.Add(item: $"{path}.attention: machine '{machine.Name}' is shown by no screen, so nothing could attend it.");
+                }
+            }
             if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
                 errors.Add(item: $"{path}.engine: a provider identifier is required.");
             } else if (catalog is null) {

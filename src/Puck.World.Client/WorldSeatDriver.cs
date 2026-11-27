@@ -722,6 +722,9 @@ public sealed class WorldSeatDriver {
                         }
                         return still;
                     }
+                    // A set-down body starts at the size it spawns at, whatever an earlier chapter left it. Sent once
+                    // the pose has landed, so it reaches the body in the world the pose carried it to.
+                    _ = m_submit(arg: string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose size {Seat}"));
                     m_previousStepPlaces = read.Places;
                     NextStep(tick: tick, rateHz: rateHz);
                 }

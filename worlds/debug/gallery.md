@@ -102,7 +102,14 @@ corner bays and the walls beside them clear, and the lift's landing (bay 4) and
 the endless fall (bay 11).
 
 The ball bounces on its own with no one playing, so the screens move with the
-floor empty. Each screen is a deck's video in its station's dark bezel, at the
+floor empty. A deck runs while someone stands within 40 m of its screen on the
+side it faces (toybox.puck's `toyboxAttention` and `toyboxBehind`, its
+machine's `attention`) or plays it, and stands suspended otherwise, resuming
+from the frame it stopped on: the screens a player in the hall can make out are
+live, and the floor costs no emulation while nobody is near or while the only
+bodies near stand outside the wall behind a station
+([machine hosting](../../docs/emulation/shared/machine-hosting.md#queued-screen-machine-hosting)).
+Each screen is a deck's video in its station's dark bezel, at the
 largest size the bezel frames, through the standard's CRT material. Walk up to
 a station and press the context button (E, or RB on a pad) to play it, through
 the same device route and `devicePad` kit as a Wonderland device
@@ -120,13 +127,16 @@ owner's local `roms/hgd` folder: `machine.content <deck>`, then
 `machine.swap <deck> <name>`. The machine rows, pictures, pad and routes are the
 standard's [machines.puck](../standard/machines.puck).
 
-Read them with `machine.state` (each machine's frames advance) and
-`screen.state <index>` (screens 20 to 31, one to a station in the plan's order,
-south then north), which names each player's port (`engaged=p1@controls+p2@controls-2`)
-and prints the pad each port receives. `gallery.shot toybox` looks from
-level 2's north balcony down across the void at the south stations, and
-`gallery.shot toybox-across` from level 1's south balcony edge at the north
-ones.
+Read them with `machine.state` (a machine's `segments` and frames advance while
+its `attention` reads `attended`, and stand still while it reads `unattended`)
+and `screen.state <index>` (screens 20 to 31, one to a station in the plan's
+order, south then north), which names each player's port
+(`engaged=p1@controls+p2@controls-2`) and prints the pad each port receives.
+`gallery.shot toybox` looks from level 2's north balcony down across the void
+at the south stations, and `gallery.shot toybox-across` from level 1's south
+balcony edge at the north ones. A shot is a camera, which attends nothing:
+stand a body in the hall first (`gallery.go toybox`), or fly the free camera
+there, or the decks it films stand on the frame they stopped at.
 
 ### The lattice
 

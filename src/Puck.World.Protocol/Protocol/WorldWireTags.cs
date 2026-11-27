@@ -99,6 +99,7 @@ public static class WorldWireTags {
     public static bool TryFromWire(byte wire, out SnapPoseMode value) {
         switch (wire) {
             case 0: value = SnapPoseMode.Pose; return true;
+            case 1: value = SnapPoseMode.AuthoredSize; return true;
             default: value = default; return false;
         }
     }
@@ -202,6 +203,7 @@ public static class WorldWireTags {
     public static bool TryToWire(SnapPoseMode value, out byte wire) {
         switch (value) {
             case SnapPoseMode.Pose: wire = 0; return true;
+            case SnapPoseMode.AuthoredSize: wire = 1; return true;
             default: wire = default; return false;
         }
     }

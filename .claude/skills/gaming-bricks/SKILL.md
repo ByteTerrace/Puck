@@ -193,7 +193,11 @@ frame), `timedInputs` (controller changes taken inside segments), `backpressure`
 worker `busyMs` (host time, never state):
 `busyMs` over the wall time between two reads is the share of real time it needs. It is
 a timing reading, so it is taken only on a quiet machine; `nativeFrames` per segment
-is a count any machine can read. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
+is a count any machine can read. `running` says whether the host advances the machine
+now, and `attention` why not when a machine authors one: `unattended` is a machine
+suspended because nobody stands near a screen that shows it or is engaged on one
+([machine hosting](../../../docs/emulation/shared/machine-hosting.md#queued-screen-machine-hosting)),
+and its `segments` and `nativeFrames` stand still until someone does. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
 so these generic checks need no extra frame-stamped input seam. Every queued core
 implements pure `PeekByte`/`PeekBytes` (AGB's reads bus inspection, including byte
 lanes of 16-bit IO registers); the inherited default peeks zero and hides live RAM.

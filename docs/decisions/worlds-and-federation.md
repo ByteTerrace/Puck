@@ -596,6 +596,47 @@ for a body farther than a distance from every occupied body, read from the
 bodies' own fixed-point positions when one of the body's cadences comes due.
 Which cadence a body keeps is a function of the world's state.
 
+It applies to hosted machines the same way. A machine that authors an
+`attention` (`WorldMachineAttention`) is advanced only on the ticks it is
+attended: a participant holds a control application on a screen that shows it
+(someone is engaged with it or playing it), or a body a human occupies or
+possesses (a free camera, a vehicle) stands
+within the authored distance of one of those screens, measured in fixed point
+from the screen's place, and, where the author says how far behind a screen's
+face still counts (`behind`), on the side its picture faces. On every other
+tick it is **suspended**: its clock
+stops, it keeps its hardware state, and it resumes from that state on the tick
+it is attended again. The tick decides it in one place, `WorldTick`'s
+`GateMachines`, after the population's advance, so a body that walks into reach
+or engages resumes its machine on that tick. A machine that authors no
+attention runs on every tick. The verdict is a function of the
+tick's state and is stored nowhere: no tape entry, checkpoint or hash carries
+it, and a replay derives it again.
+
+A suspended machine does not catch up, and that is the defined behaviour. The
+two exact answers for an unattended machine are to run it and to stop its
+clock. An emulated console has no closed form over time shorter than running
+it, so catching up on resume means emulating every skipped tick at once: the
+cost the suspension removed comes back as a hitch that grows with the time
+nobody looked, and a machine left for an hour would hold its world's tick for
+minutes. Stopping the clock is exact, costs nothing to enter or leave, and is
+what `running` and `runsWhen` already do. What an author accepts by opting in
+is that the machine's own time is the time it was attended: an attract loop
+continues from where it was last seen, and a cartridge's clock does not count
+the hours the room was empty. A machine whose state must follow world time (a
+jukebox a rule reads, a link partner in another room) authors no attention.
+A cable link advances while anyone attends any member, since its members
+exchange on every cycle.
+
+Attention is measured to the screens that show the machine, not to what a
+camera shows of them, for the reason option D below is refused: a client's
+view must never reach an authority's state. Where a body stands, and which
+side of a screen's face it stands on, are the authority's own facts and say
+most of what a view test would: a body behind a wall-mounted screen sees no
+picture. A distance also resumes a machine before a walker is near enough to
+read its picture, where a view test would resume it a network round trip after
+the camera turned.
+
 **Options weighed.**
 
 | Option | What it is | What it closes | What it leaves open |
@@ -632,9 +673,13 @@ remote viewer's world is not frozen under it by a host that cannot measure it.
 holds a transfer in flight, always steps, since a neighbour and a lease read
 its ticks one by one. A row whose tape is driving a replay takes its lapses
 from the tape, never from the host's reading. A lapsed body does not coast: a
-citizen is where it stood, not where its errand would have taken it. The
-[plan](../plans/simulation-attention.md) owns the adjacency and the coast as
-steps.
+citizen is where it stood, not where its errand would have taken it. A
+machine's attention reads only its own world: an observer looking in from
+another world, through a painting or a portal, attends nothing, because how
+near anyone stands to that surface is a fact of the observing world and reaches
+this one only as input. The
+[plan](../plans/simulation-attention.md) owns the adjacency, the coast and the
+observer's reading as steps.
 
 **Rulings it rests on.** Determinism pins the mapping (rule 4); authors rule (a
 world's document, never the engine, decides whether attention may matter);
@@ -643,7 +688,8 @@ foundation, which names simulation that runs for nobody as an architecture
 defect.
 
 **Evidence.** [Simulation follows attention](../plans/simulation-attention.md);
-`worlds/debug/attention-tests.puck`; the clean measurement window's tick
+`worlds/debug/attention-tests.puck`; `worlds/debug/machine-attention-tests.puck`;
+the clean measurement window's tick
 findings ([the RTX 4070's report](../plans/measurements/2026-11-25-window.md)).
 
 ## The tables

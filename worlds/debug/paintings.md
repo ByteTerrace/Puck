@@ -54,13 +54,13 @@ Issue each line through the console or the World's MCP attachment.
 - Across the room: `debug.go portal-link`, then walk ahead (west). The body
   comes out of the east painting walking west, back across the room.
 - The endless fall: `debug.go portal-fall`, then walk ahead onto the floor
-  painting. A body posed above it (`body.pose 66 3 22.6 0 0 0`) falls onto the
+  painting. A body posed above it (`body.pose 62.325 3 18.775 0 0 0`) falls onto the
   glass and in.
 
 A headless seat keeps its heading at -Z, so there `body.fly` walks along the
 heading and a sideways walk is a strafe: `body.pose 57 0.05 36.3 180 0 0`, then
 `body.fly -1 0 0 0 0 0 2` walks +Z into the garden painting, and `body.pose
-54.5 0.05 34.5 90 0 0`, then `body.fly 0 -1 0 0 0 0 2` walks -X into the west
+56.425 0.05 14.975 90 0 0`, then `body.fly 0 -1 0 0 0 0 2` walks -X into the west
 painting.
 
 A door fires once the body's origin, at its feet, passes through the glass. A

@@ -46,7 +46,8 @@ public sealed partial class WorldMachineHost {
             (queued?.CompletedSteps ?? CompletedSteps(lease: lease)),
             (queued?.PendingSteps ?? 0),
             lease.Fault,
-            MountedContent(lease: lease)
+            MountedContent(lease: lease),
+            !m_unattended.Contains(item: name)
         );
     }
     /// <inheritdoc/>
