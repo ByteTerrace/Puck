@@ -197,7 +197,7 @@ public sealed partial class WorldRuleHost {
                 reader: reader,
                 rowOrdinal: rowOrdinal,
                 start: start,
-                tokenExpression: expression,
+                tokenExpression: (CompiledProgram?)expression,
                 word: word
             );
 

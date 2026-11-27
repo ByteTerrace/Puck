@@ -640,7 +640,7 @@ public static partial class RuleCompiler {
                             pattern: compiledPattern!,
                             rowFrom: live,
                             rowOrdinal: rowOrdinal,
-                            tokenExpression: tokenExpression
+                            tokenExpression: (CompiledProgram?)tokenExpression
                         )
                     );
                 }

@@ -1046,6 +1046,14 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.count {count.Literal} is outside 1..{peerCapacity} for the authored population capacity.");
         }
 
+        if (inhabit.Pool is { } pool) {
+            var poolRow = ((pool.Row is { } poolName) ? WorldDefinitionRows.FindStateRow(definition.State, poolName) : null);
+
+            if ((poolRow is not { Kind: CellKind.Int }) || (poolRow.IsKeyed != (pool.Key is not null))) {
+                errors.Add(item: $"{path}.pool must name a declared Int row with a matching key shape: the cell that admits the facet's bodies while it is nonzero.");
+            }
+        }
+
         ValidateDistribution(
             distribution: inhabit.Distribution!,
             path: $"{path}.distribution",

@@ -238,7 +238,7 @@ public static class RuleBounds {
                 tokens[index] = new CompiledExpressionToken(Constant: raw, Operation: ExpressionOp.Constant);
             }
 
-            return RuleExpressions.EvaluateDetached(kind: m_kind, program: m_tokens, reader: null);
+            return RuleExpressions.EvaluateDetached(kind: m_kind, program: new ReadOnlySpan<CompiledExpressionToken>(array: m_tokens), reader: null);
         }
 
         private bool Collect(CompiledExpressionToken[] tokens, Assignments assignments) {
@@ -255,7 +255,7 @@ public static class RuleBounds {
                         return false;
                     }
 
-                    tokens[index] = token with { Call = call with { Body = body } };
+                    tokens[index] = token with { Call = call with { Body = new CompiledProgram(tokens: body) } };
                 }
                 if (token.Operation != ExpressionOp.Operand) {
                     continue;

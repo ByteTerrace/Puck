@@ -475,7 +475,7 @@ public sealed partial class RuleEvaluator {
     /// <param name="program">The program.</param>
     /// <param name="kind">The encoding the program answers in.</param>
     /// <returns>What the program answered: a number, an absence, or a fault.</returns>
-    public Outcome Score(CompiledExpressionToken[] program, CellKind kind) {
+    public Outcome Score(CompiledProgram program, CellKind kind) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         var frame = new EvaluationFrame(reader: m_host);

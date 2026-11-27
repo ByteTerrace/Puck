@@ -123,8 +123,8 @@ test "the deal materializes the cards, and a switch back to chess releases them"
   }
   expect {
     klondikeDeals[0] == 1
-    sum(holodeckLive) == 0
-    sum(station.holodeckLive) == 32
+    holodeckShown["0"] == 0
+    station.holodeckShown.pieces == 1
     station.chessHold == 0
   }
 }
@@ -138,8 +138,8 @@ test "while Klondike is shown every card stands in its slot and no piece does" {
     ticks 400
   }
   expect {
-    sum(holodeckLive) == 52
-    sum(station.holodeckLive) == 0
+    holodeckShown["0"] == 1
+    station.holodeckShown.pieces == 0
     station.chessHold == 1
     holodeckAt["station-card0"] >= 0
   }

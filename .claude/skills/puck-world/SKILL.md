@@ -138,8 +138,12 @@ debug world's scoped-replay exhibit went with its chess table; the open item
 pool of bodies a game materializes while it is shown and releases when it is
 not: each body an inhabited placement whose count is a cell over a one-sample
 disc (`WorldPlacementInhabit.StandsOneBody`, so `placement:<id>` names it for a
-pose or a read, or no body while released), asked for and released through
-one door (`holodeckSet`) and posed once it exists (`holodeckStands`). A
+pose or a read, or no body while released), admitted by its pool's one shared
+cell (`WorldPlacementInhabit.Pool`, which `WorldPopulation.ReconcileInhabitCounts`
+reads as a count of zero while it is zero), so a game shown or put away is one
+write through the pool's door (`holodeckShow`), one body is asked for or
+released through its own (`holodeckSet`), and a body is posed once it exists
+(`holodeckStands`), its pose mark folding in the pool's showing (`holodeckMark`). A
 materialized body takes the population's highest free slot, so a pool never
 renumbers a fixed-count inhabitant; a world that numbers bodies below a deck
 from it keeps that deck at a fixed count (`patienceStationCards(holodeck:

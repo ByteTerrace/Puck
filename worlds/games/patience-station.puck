@@ -163,12 +163,13 @@ function patienceStationPool(station) = map(range(0, 52), k => {
 })
 
 // One station's bodies: its cursor and held outlines, which stand always and lie inside its table's cap while no patience
-// game is shown there, and its cards, a holodeck pool (or, with `holodeck: false`, standing always as the outlines do).
-// The outlines are inhabitants at a fixed count, so a world expands this where its body order wants them.
-template patienceStationCards(station, holodeck = true) {
+// game is shown there, and its cards, a holodeck pool keyed by the station's place in the list, `index` (or, with
+// `holodeck: false`, standing always as the outlines do). The outlines are inhabitants at a fixed count, so a world
+// expands this where its body order wants them.
+template patienceStationCards(station, index = 0, holodeck = true) {
   if holodeck {
     placements {
-      holodeckPool(bodies: patienceStationPool(station), kit: "cardSlab")
+      holodeckPool(bodies: patienceStationPool(station), kit: "cardSlab", pool: $"{index}")
     }
   }
   placements {
@@ -369,9 +370,13 @@ template patienceDisplayState(stations, holodeck = true) {
   table patienceSlotOf[count] capacity(52) bounds(0..fSlotCount) = map(range(0, 52), k => patienceAwaySlot)
   table patienceCardAtOf[count] capacity(fSlotCount + 1) = map(range(0, fSlotCount + 1), slot => -1)
 
-  // The cards' holodeck pool, every station's: each standing from the start when the cards are no pool. A card's
-  // `holodeckAt` is its last pose: its slot twice over, plus one face down.
-  holodeckState(bodies: flatMap(stations, station => patienceStationPool(station)), live: (holodeck ? 0 : 1))
+  // The cards' holodeck pools, one a station keyed by its place in the list: each standing from the start when the cards
+  // are no pool. A card's `holodeckAt` is the mark of its last pose: its slot twice over, plus one face down.
+  holodeckState(
+    bodies: flatMap(stations, station => patienceStationPool(station)),
+    pools: map(range(0, count), s => $"{s}"),
+    shown: (holodeck ? 0 : 1)
+  )
 }
 
 // Each pile's cards read their depth: how many cards of the pile stand before them, and of the pile `under` it in the
@@ -466,14 +471,15 @@ template patienceSetRules(holodeck = true) {
     patienceRead(game: 2, turn: z, base: fBase[z], pile: $"freecellPile{z}Of", under: "")
   }
 
-  // A holodeck's cards stand while their station shows a patience game, and each is posed afresh once it stands again.
+  // A holodeck's cards stand while their station shows a patience game, one write a station, and each is posed afresh
+  // once it stands again.
   if holodeck {
     rule "patience-holodeck" {
-      local want = solitaireTable[$member] != 0
-      when holodeckLive[$each] != want
+      local shown = solitaireTable[$each] != 0
+      when holodeckShown[$each] != shown
       mode: Level
-      forEach: patienceCardNoOf
-      holodeckSet()
+      forEach: solitaireTable
+      holodeckShow(pool: $each, shown: shown)
     }
   }
 
@@ -494,8 +500,8 @@ template patienceSetRules(holodeck = true) {
         patienceAwaySlot
       )
     )
-    local posed = slot * 2 + down
-    when holodeckAt[$each] != posed and holodeckStands()
+    local posed = holodeckMark($member, slot * 2 + down)
+    when holodeckAt[$each] != posed and holodeckStands($member)
     mode: Level
     forEach: patienceCardNoOf
     if down {

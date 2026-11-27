@@ -2,7 +2,7 @@ using System.Globalization;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
-using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
 using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
@@ -276,9 +276,9 @@ public static partial class WorldFactsCompiler {
         );
     }
     // One axis of a computed point; a literal point carries no programs.
-    private static CompiledExpressionToken[]? CompilePointAxis(ExpressionProgram? axis, WorldFactsCompileContext context, string ruleName, string verb) => ((axis is null)
+    private static CompiledProgram? CompilePointAxis(ExpressionProgram? axis, WorldFactsCompileContext context, string ruleName, string verb) => ((axis is null)
         ? null
-        : RuleCompiler.CompileExpression(
+        : (CompiledProgram)RuleCompiler.CompileExpression(
             context: context,
             expression: axis,
             kind: CellKind.Fixed,
@@ -315,7 +315,7 @@ public static partial class WorldFactsCompiler {
         }
 
         return new WorldCueEffect(
-            argument: effect.Argument is { } argument ? RuleCompiler.CompileExpression(context: context,
+            argument: effect.Argument is { } argument ? (CompiledProgram)RuleCompiler.CompileExpression(context: context,
                 expression: argument, kind: CellKind.Int, ruleName: ruleName, verb: "emitCue") : null,
             body: body,
             cue: effect.Name,
@@ -671,7 +671,7 @@ public static partial class WorldFactsCompiler {
         if (!frameEach && (effect.Frame is { } frame) && (WorldDefinitionRows.FindPlacement(placements: context.Definition.Placements, id: frame) is not { Attach: null, Inhabit: null })) {
             throw new RuleException(detail: $"poseCell frame '{frame}' must name a declared placement that neither attaches nor inhabits", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
-        var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
+        var expression = new CompiledProgram(tokens: RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell"));
 
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
             FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees), FixedQ4816.FromDegrees(degrees: effect.PitchDegrees), effect.Frame);

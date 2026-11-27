@@ -3326,9 +3326,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var primary = m_cellBlocks[(cx + (cellsX * (cy + (cellsY * cz))))];
 
         if (primary >= 0) { return m_blockSlots[((((primary * side) * side) * side) + (lx + (side * (ly + (side * lz)))))]; }
-        if ((lx != 0) && (ly != 0) && (lz != 0)) { return -1; }
 
+        var zeros = LowFaces(lx: lx, ly: ly, lz: lz);
+
+        if (zeros == 0) { return -1; }
         for (var shift = 1; (shift < 8); shift++) {
+            if ((shift & ~zeros) != 0) { continue; }
+
             var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
 
             if ((cell >= 0) && (m_cellBlocks[cell] is var block and >= 0)) { return m_blockSlots[((((block * side) * side) * side) + (bx + (side * (by + (side * bz)))))]; }
@@ -3347,6 +3351,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return (((ax < 0) || (ay < 0) || (az < 0)) ? (-1, 0, 0, 0) : ((ax + ((m_samplesX - 1) * (ay + ((m_samplesY - 1) * az)))), bx, by, bz));
     }
+    // The axes along which a sample lies on its cell's low face, a bit each (x 1, y 2, z 4): the only axes a step back
+    // (Holder's shift) can find another holder along, so a shift with any other bit names no cell.
+    private static int LowFaces(int lx, int ly, int lz) => (((lx == 0) ? 1 : 0) | ((ly == 0) ? 2 : 0) | ((lz == 0) ? 4 : 0));
     // A measured fine sample's value by its slot: the value CloseSheets closed it at, or the one measured.
     private float MeasuredValue(int slot) {
         if (m_closedCount == 0) { return m_fineValues[slot]; }
@@ -3357,25 +3364,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     }
     // Whether a fine sample's value (FineValue) was measured: a coarse sample's, or one a measured cell holds, rather than
     // one interpolated from the samples about it.
-    private bool MeasuredSample(int x, int y, int z) {
-        var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
-        var factor = m_factor;
-
-        return ((((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) || (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) >= 0));
-    }
+    private bool MeasuredSample(int x, int y, int z) => ((CoarseIndex(x: x, y: y, z: z) >= 0) || (FineSlot(x: x, y: y, z: z) >= 0));
     // A fine sample's value: the coarse sample's at a coarse position, the measured one in a measured cell, and otherwise
     // the trilinear interpolation of its coarse cell's corners.
     private float FineValue(int x, int y, int z) {
-        var factor = m_factor;
-
-        var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
-
-        // A coarse position: every place in the cell is 0 or the far face's m_factor.
-        if (((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) {
-            return Values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
-        }
-
-        if (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) is var slot and >= 0) { return MeasuredValue(slot: slot); }
+        if (CoarseIndex(x: x, y: y, z: z) is var coarse and >= 0) { return Values[coarse]; }
+        if (FineSlot(x: x, y: y, z: z) is var slot and >= 0) { return MeasuredValue(slot: slot); }
 
         Span<StrideCorner> corners = stackalloc StrideCorner[8];
         var count = StrideCorners(x: x, y: y, z: z, corners: corners);
@@ -3387,8 +3381,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         foreach (var corner in corners[..count]) {
             var (gx, gy, gz) = (corner.X, corner.Y, corner.Z);
 
-            sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
-                ? Values[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
+            sum += (corner.Weight * ((CoarseIndex(x: gx, y: gy, z: gz) is var cornerCoarse and >= 0)
+                ? Values[cornerCoarse]
                 : ((FineSlot(x: gx, y: gy, z: gz) is var cornerSlot and >= 0) ? MeasuredValue(slot: cornerSlot) : CoarseValue(x: gx, y: gy, z: gz))));
         }
 
@@ -3423,8 +3417,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
+        var zeros = LowFaces(lx: lx, ly: ly, lz: lz);
 
         for (var shift = 0; (shift < 8); shift++) {
+            if ((shift & ~zeros) != 0) { continue; }
+
             var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
 
             if ((cell < 0) || (m_cellBlocks[cell] < 0)) { continue; }
@@ -3517,11 +3514,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     }
 
     private Vector3 FineGradient(int x, int y, int z) {
-        var factor = m_factor;
-
-        if (((x % factor) == 0) && ((y % factor) == 0) && ((z % factor) == 0)) {
-            return m_gradients[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
-        }
+        if (CoarseIndex(x: x, y: y, z: z) is var coarse and >= 0) { return m_gradients[coarse]; }
 
         if (TryFineGradient(x, y, z, out var measured)) {
             return measured;
@@ -3537,12 +3530,22 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         foreach (var corner in corners[..count]) {
             var (gx, gy, gz) = (corner.X, corner.Y, corner.Z);
 
-            sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
-                ? m_gradients[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
+            sum += (corner.Weight * ((CoarseIndex(x: gx, y: gy, z: gz) is var cornerCoarse and >= 0)
+                ? m_gradients[cornerCoarse]
                 : (TryFineGradient(gx, gy, gz, out var cornerGradient) ? cornerGradient : CoarseGradient(x: gx, y: gy, z: gz))));
         }
 
         return sum;
+    }
+    // The coarse sample's index (Index) of a fine sample at a coarse position, every coordinate a multiple of the
+    // factor, or -1: FineCell's division by the reciprocal, where the sample's place in its cell is the near or far face.
+    private int CoarseIndex(int x, int y, int z) {
+        var factor = m_factor;
+        var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
+
+        return ((((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor)))
+            ? Index(x: (cx + ((lx == 0) ? 0 : 1)), y: (cy + ((ly == 0) ? 0 : 1)), z: (cz + ((lz == 0) ? 0 : 1)))
+            : -1);
     }
     // A fine sample's gradient as its coarse cell's corners' gradients interpolate it.
     private Vector3 CoarseGradient(int x, int y, int z) {

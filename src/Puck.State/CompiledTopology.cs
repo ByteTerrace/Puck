@@ -30,6 +30,10 @@ public sealed partial class CompiledTopology {
     private readonly (int X, int Y, int Z)[]? m_coordinates;
     private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
     private readonly ulong[]? m_directionShiftMasks;
+    // Per direction, the one signed bit distance every cell's neighbour lies at, and the cells a step lands on; zero
+    // where the neighbours lie at different distances (a wrapped edge, a graph).
+    private readonly int[]? m_directionSteps;
+    private readonly ulong[]? m_directionLandings;
 
     // Each direction's longest ray, measured on first use; every measurement is the same, so a race only repeats it.
     private int[]? m_longestRays;
@@ -75,9 +79,13 @@ public sealed partial class CompiledTopology {
             (directions > 0)
         ) {
             var shiftMasks = new ulong[(directions * BoardMask.MaxCells)];
+            var steps = new int[directions];
+            var landings = new ulong[directions];
 
             for (var d = 0; (d < directions); d++) {
                 var offset = (d * BoardMask.MaxCells);
+                var step = 0;
+                var uniform = true;
 
                 for (var cell = 0; (cell < count); cell++) {
                     var neighbour = neighbours[((cell * directions) + d)];
@@ -87,10 +95,16 @@ public sealed partial class CompiledTopology {
                         (neighbour < BoardMask.MaxCells)
                     ) {
                         shiftMasks[(offset + cell)] = (1UL << neighbour);
+                        landings[d] |= (1UL << neighbour);
+                        uniform &= ((neighbour != cell) && ((step == 0) || (step == (neighbour - cell))));
+                        step = (neighbour - cell);
                     }
                 }
+                steps[d] = (uniform ? step : 0);
             }
             m_directionShiftMasks = shiftMasks;
+            m_directionSteps = steps;
+            m_directionLandings = landings;
         }
         if (
             (count <= BoardMask.MaxCells) &&
@@ -530,6 +544,25 @@ public sealed partial class CompiledTopology {
         result: out shifted,
         table: m_directionShiftMasks
     );
+
+    /// <summary>Reads whether every cell's neighbour in a direction lies at one signed bit distance, so a shift of a cell
+    /// mask in that direction is a word shift masked by the cells a step lands on.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <param name="step">The signed bit distance from a cell to its neighbour, or zero when no one distance holds.</param>
+    /// <param name="landing">The cells that are some cell's neighbour that way, or zero when no one distance holds.</param>
+    /// <returns><see langword="true"/> for a topology of at most 64 cells whose direction steps uniformly; otherwise
+    /// <see langword="false"/>.</returns>
+    public bool TryUniformStep(int direction, out int step, out ulong landing) {
+        step = 0;
+        landing = 0UL;
+        if ((m_directionSteps is not { } steps) || (((uint)direction) >= ((uint)steps.Length)) || (steps[direction] == 0)) {
+            return false;
+        }
+        step = steps[direction];
+        landing = m_directionLandings![direction];
+
+        return true;
+    }
 
     // One row of a precomputed per-cell mask table: 64 destination masks per ordinal, indexed by source cell. The
     // image of a mask is the union of the rows its set bits select.

@@ -52,7 +52,7 @@ public static partial class WorldDefinitionValidator {
                 } else if ((follows < 0) || (follows >= definition.Population.LocalSeats)) {
                     errors.Add(item: $"{path}.follows {follows} is outside 0..{(definition.Population.LocalSeats - 1)}, this world's local seats.");
                 }
-                if (inhabit.ResolvedCount is not { Literal: 1, Row: null }) {
+                if ((inhabit.ResolvedCount is not { Literal: 1, Row: null }) || (inhabit.Pool is not null)) {
                     errors.Add(item: $"{path}.role '{roleName}' inhabits exactly one body: a companion is one body its home re-adopts by incarnation.");
                 }
             } else if (inhabit.Follows is not null) {

@@ -8,7 +8,7 @@ public sealed partial class WorldBody {
 
     // Compiler admission restricts these programs to action facts. No arena, binding, or expression can be read.
     // The adapter carries only the current call's lane and intent; neither is persisted or hashed.
-    private bool GateOpen(GateToken[] gate, int recencyLane, in PlayerIntent intent) {
+    private bool GateOpen(CompiledGate gate, int recencyLane, in PlayerIntent intent) {
         if (gate.Length == 0) { return true; }
         var reader = (m_gateReader ??= new BodyGateReader(body: this));
 

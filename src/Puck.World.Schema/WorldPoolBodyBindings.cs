@@ -40,7 +40,7 @@ public static class WorldPoolBodyBindings {
                 for (var index = 0; (index < definition.Placements.Count); index++) {
                     if (definition.Placements[index].Id == placement) { ordinal = index; break; }
                 }
-                if ((ordinal < 0) || (definition.Placements[ordinal].Inhabit?.ResolvedCount.Literal != 1)) {
+                if ((ordinal < 0) || (definition.Placements[ordinal].Inhabit is not { ResolvedCount.Literal: 1, Pool: null })) {
                     throw new InvalidOperationException(message: $"Pool carrier '{pool.Name}' placement '{placement}' must declare exactly one inhabitant.");
                 }
                 target = new CompiledBodyRef(CompiledBodyRefKind.Placement, ordinal, null);

@@ -43,8 +43,8 @@ corrected in the same change.
 | Save, restore, relayout; replay one scope while the world runs | arena export/import and snapshots (`ArenaSnapshot.cs`, `ArenaScopeSnapshot.cs`); `WorldScopedReplayRuntime` | [checkpoints](../../../docs/reference/state/arena.md#checkpoints), [scoped replay](../puck-world/references/replay.md#scoped-live-replays) |
 | Boards: grids, hexes, graphs, tilings, rays, masks, cell sets | `CompiledTopology`, `BoardQueries`, `BoardMask`; a small board's value planes (`StateArena.TryReadBoardPlanes` over `BitmapIndex64`, window from `BoardMask.TryPlaneWindow`) answer `board(mask, …)` and a board cell set | [topologies](../../../docs/reference/state/topologies.md) |
 | Match words over board cells ("does this hand form a run") | `CompiledPattern` (Topology), the `$match` operand | [patterns](../../../docs/reference/state/patterns.md) |
-| Choose the entry a score makes least or greatest (the nearest point, the cheapest option) in one pass | the `argmin`/`argmax` row folds (`ExpressionOp.ArgMinimum`, `ArgMaximum`, run in `RuleExpressions.Fold`); over a row of indices, the binder in brackets (`x[i]`, `RuleFacts.FoldMemberKey`) reads tables keyed alike | [fold over a row](../../../docs/reference/state/expressions.md#fold-over-a-row) |
-| Read state in an expression; fold a row; call a function | the expression IR (`ExpressionProgram`), one interpreter `RuleExpressions.Evaluate` over `ExpressionArithmetic`; spelling in `ExpressionSpelling` | [expressions](../../../docs/reference/state/expressions.md) |
+| Choose the entry a score makes least or greatest (the nearest point, the cheapest option) in one pass | the `argmin`/`argmax` row folds (`ExpressionOp.ArgMinimum`, `ArgMaximum`, run in `FoldNode`); over a row of indices, the binder in brackets (`x[i]`, `RuleFacts.FoldMemberKey`) reads tables keyed alike | [fold over a row](../../../docs/reference/state/expressions.md#fold-over-a-row) |
+| Read state in an expression; fold a row; call a function | the expression IR (`ExpressionProgram`), compiled to `CompiledProgram` and evaluated by `RuleExpressions.Evaluate` as a closure tree (`ProgramClosures`, built once per kind and kept) over `ExpressionArithmetic`; spelling in `ExpressionSpelling` | [expressions](../../../docs/reference/state/expressions.md) |
 | Compile a rule; read a compile refusal | `RuleCompiler` (partial per concern: gates, effects, operands, patterns, transforms, vectors, disclosure) | [rules](../../../docs/reference/state/rules.md#compile-rules) |
 | Evaluate rules each tick; Level versus Edge; atomic firings | `RuleEvaluator`, `RuleLatch`, `EvaluationFrame` | [rules](../../../docs/reference/state/rules.md#follow-one-evaluation), [below](#faults-firings-and-the-one-door) |
 | Shuffle, deal, sort, arrange, flip a ray, transfer tokens, copy a whole row, observe | one kernel per case in `ArenaTransforms.TryApply`, resolved once by `RuleCompiler.TryResolveTransform` | [transforms](../../../docs/reference/state/transforms.md#one-implementation-for-every-caller) |
@@ -54,7 +54,7 @@ corrected in the same change.
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`, over a `RuleLatch.Fresh` latch that writes no edge bit); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
 | Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
-| Bound the values a program or a read can answer; prove a written value lands inside what its destination keeps | `RuleBounds.Of` over `RuleCompileContext.ReadBounds` (a `ValueBounds`: an exact set by enumerating the reads' declared values through the one interpreter, else a range over `FixedInterval`); a host answers for its facts (`WorldBodyStateReads.TryCounterBounds`) | [bounds](../../../docs/reference/state/analysis.md#bound-what-a-program-can-answer) |
+| Bound the values a program or a read can answer; prove a written value lands inside what its destination keeps | `RuleBounds.Of` over `RuleCompileContext.ReadBounds` (a `ValueBounds`: an exact set by enumerating the reads' declared values through the one evaluator, else a range over `FixedInterval`); a host answers for its facts (`WorldBodyStateReads.TryCounterBounds`) | [bounds](../../../docs/reference/state/analysis.md#bound-what-a-program-can-answer) |
 | Know which lane ordinals' slots were touched since you last looked, open writes and rewinds included | `ArenaLaneTouches` through `StateArena.WatchLaneTouches` (the cell-level `RowGeneration`); the open scopes' touched lane ordinals and keys are `StateArena.CollectOpenLaneOrdinals` and `TryCollectOpenKeys` | [arena](../../../docs/reference/state/arena.md#row-versions-and-generations) |
 | Stop a Level rule firing again when its firing changed nothing | the firing schedule (`RuleDataflow.CollectFiring`), settled by `RuleEvaluator.FireProposal`; an unversioned host fact or host-owned row keeps it firing, so version them in the host (`IStateReader.TryScheduleFact`, `IStateReader.TryScheduleHostOwnedRow`) | [keep a Level firing](../../../docs/reference/state/analysis.md#keep-a-level-firing-that-changed-nothing) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
@@ -76,7 +76,7 @@ deciding place reads what it was handed: a rule's judgement holds its latch on a
 re-arms and a fixpoint pass counts no progress, a decision keeps its choice, a search step lands nothing and restarts. An
 effect that meets a fault refuses its firing by name, so a firing that proposes is one no fault touched. Local code may
 drop a value but never the fault: firing evaluations use `EvaluationFrame`; `RuleExpressions.EvaluateDetached`
-enters the same interpreter only from the constant folder, the bounds lowering, a flock's affinity and browser
+enters the same evaluator only from the constant folder, the bounds lowering, a flock's affinity and browser
 read-back, as `OutcomeDetachedAllowlist` specifies. Each consumer handles the cases of what it gets back.
 `Absent` is a value each consumer answers, never a fault
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
@@ -84,7 +84,7 @@ read-back, as `OutcomeDetachedAllowlist` specifies. Each consumer handles the ca
 **An operand never evaluates an expression.** An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`,
 `Finite`, `Absent` or `Forever`, beside its cell kind) and an address resolves to a `Resolved<T>`; both default to the
 faulted case and give their value only through `TryFinite` or `TryNamed`. An operand declares the addresses it reads
-through (`IRuleOperand.Addresses`) and reads through what the interpreter resolved (`Read(ref frame, keys)`,
+through (`IRuleOperand.Addresses`) and reads through what the evaluator resolved (`Read(ref frame, keys)`,
 `RuleExpressions.ReadOperand`), taking the arena and clocks from the `EvaluationFrame`, which asks the host for each once
 per evaluation (so `WorldServer.Arena`'s tick-pending guard runs once, at the first arena read): an address a program computes (a `cards[<expression>]` key, a `$zones[<expression>]` row,
 a ring age) is tokens of the enclosing program that `RuleCompiler`'s lowering puts in front of the operand's own, so a
@@ -140,6 +140,16 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 
 ## Contracts that bite
 
+- **A program evaluates as the tree its tokens lower to.** `CompiledProgram` and
+  `CompiledGate` build their closure trees (`ProgramClosures`) at the first
+  evaluation and never rebuild them, so their tokens are not written after it.
+  A caller that rewrites tokens between evaluations (the constant folder, the
+  bounds lowering) evaluates the span, which builds a tree for that one
+  evaluation. A token array becomes a program only through an explicit
+  `new CompiledProgram(...)` or cast, so no evaluation site wraps an array, and
+  builds a tree, per call; a subprogram body is one program shared by every
+  call site (`RuleCompiler`'s shared bodies), so a chain of calls builds each
+  body once. A new token step is a new node in `ProgramClosures.Builder`.
 - **Determinism.** Values are integers and Q48.16 (`maths-usage`); no wall
   clock reaches a rule. A draw is a site with a persisted cursor, never an
   ambient generator. A deliberate correction moves state hashes; re-record
@@ -209,7 +219,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   binds `$each` to a member's key and `$member` to its family index; its own
   member is `$member`'s (`LiveRow.SelectsOwnMember`, `RuleReads.BoundOwnIndex`),
   a cell under `$member` is `RowReach.MemberKey`, and the due list's
-  `FamilySnapshot` maps a move to (member, key) positions.
+  `FamilySnapshot` maps a move to (member, key) positions. A host fact read for
+  `$each` normally moves by body index, which the due list maps to the key that
+  spells the index; a source whose `$each` reads address what the key names
+  (a body fact read through `placement:$each`, `WorldRuleHost`'s placement facts
+  source) answers the key itself (`IStateReader.TryFactKey`), and a source that
+  answers no key there wakes the wrong binding, which the replay catches.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
@@ -303,6 +318,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Contract | Enforced by |
 |---|---|
 | A fault is never dropped; an operand never resolves its own address | `OutcomeAnalyzer` (`OUTCOME001`–`OUTCOME004`), build errors |
+| A program evaluates as its tokens say | the tree is built from the tokens alone (`ProgramClosures.Build`, `BuildGate`) and published once per program and kind; an array reaches an evaluation entry only as an explicit `CompiledProgram`. Nothing refuses a write to `CompiledTokens.Tokens` after the first evaluation: review holds it |
 | A holder's state is written only through its write side | the compiler, which will not write through the read side's readonly reference, and `DoorAnalyzer` (`DOOR001`, `DOOR002`, `DOOR003`, `DOOR005`), build errors, for a mutating call on a copy, a reinterpreting cast, a mutable field in a record section and a kept write reference |
 | A firing's writes land together or not at all | the scope `RuleEvaluator.FireProposal`/`FireEffects` open and `RuleEvaluator.Commit` closes |
 | A committed change outside a scope is delivered, versioned and ends the undo turns over its rows | the one door `StateArena.MarkOutOfScope`; a restore marks rows only with the change `BeginOutOfScope` opened. The raw column writers are private to `StateArena`, so only its own files can skip the door, and nothing stops them |

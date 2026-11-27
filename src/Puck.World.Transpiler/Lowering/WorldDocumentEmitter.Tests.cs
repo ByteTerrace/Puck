@@ -1433,6 +1433,29 @@ public static partial class WorldDocumentEmitter {
         var witnesses = new SortedDictionary<CellKind, JsonArray>();
 
         foreach (var (readState, readKey) in reads) {
+            // A reduction over a whole Int row (`sum(row)`, `count(row)`: `$reduce:<op>:<row>` with no filter) answers
+            // one integer, which is recorded under `<row>$<op>` in the verdict row, copied from the same channel.
+            if (
+                (readKey is null) &&
+                readState.StartsWith(value: RuleFacts.ReducePrefix, comparisonType: StringComparison.Ordinal) &&
+                (readState[RuleFacts.ReducePrefix.Length..].Split(separator: ':') is [{ Length: > 0 } reduceOp, { Length: > 0 } reduceRow]) &&
+                ((KindOfRow(name: reduceRow, state: state) ?? ((inheritedState is null) ? null : KindOfRow(name: reduceRow, state: inheritedState))) == CellKind.Int)
+            ) {
+                var reduceKey = GeneratedName.Append(name: reduceRow, part: reduceOp);
+
+                if (folded.Add(item: (CellKind.Int, reduceKey))) {
+                    cells.AppendNode(item: new JsonObject { ["key"] = reduceKey, ["value"] = 0 });
+                    effects.AppendNode(item: new JsonObject {
+                        ["$type"] = "setState",
+                        ["fromState"] = readState,
+                        ["key"] = reduceKey,
+                        ["state"] = row,
+                    });
+                }
+
+                continue;
+            }
+
             // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
             // read of a Fixed, Bool or Text row is a cell of that kind's witness.
             if (
