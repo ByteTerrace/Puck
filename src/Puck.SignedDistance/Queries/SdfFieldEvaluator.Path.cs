@@ -57,6 +57,22 @@ public sealed partial class SdfFieldEvaluator {
             paramName: nameof(paths)
         );
     }
+    // Whether a path's edge table holds a float off the raw grid (TableSides).
+    private static bool PathTableOffGrid(IReadOnlyList<SdfCompiledPath> paths, int instructionIndex) {
+        foreach (var path in paths) {
+            if (path.InstructionIndex != instructionIndex) {
+                continue;
+            }
+
+            foreach (var edge in path.Edges) {
+                if (OffGrid(value: edge.A.X) || OffGrid(value: edge.A.Y) || OffGrid(value: edge.B.X) || OffGrid(value: edge.B.Y) || OffGrid(value: edge.RadiusA) || OffGrid(value: edge.RadiusB)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
     // The exact signed distance to the solid an edge list bounds: the least distance to any edge, negated inside by the
     // even/odd crossing parity (one flip per edge whose three tests agree). The kernel keeps the least squared distance and
     // roots it once; each candidate is rooted as a length here, because a squared millimetre distance is a few Q48.16 ulps
@@ -192,8 +208,19 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedInterval PathBounds(IntervalVector3 p, in CompiledInstruction instruction) {
         var edges = (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction."));
         var profile = new IntervalVector2(X: p.X, Y: p.Y);
-        var distance2D = ((instruction.Data1Y > Half) ? PathStroke2DBounds(edges: edges, p: profile) : Polygon2DBounds(edges: new PathEdges(edges: edges), p: profile));
+        // The stroke flag (Data1.y above one half) over its enclosure, both outlines where it straddles; an edge table off
+        // the grid moves either outline's field by at most TableReach.
+        var stroke = instruction.Bounds1Y;
+        FixedInterval? distance2D = null;
 
-        return ExtrudeChamfer2DBounds(c: FixedQ4816.Zero, distance2D: distance2D, halfDepth: instruction.Data0W, z: p.Z);
+        if (stroke.IsUnbounded || (stroke.Upper > Half)) {
+            distance2D = PathStroke2DBounds(edges: edges, p: profile);
+        }
+
+        if (stroke.IsUnbounded || (stroke.Lower <= Half)) {
+            distance2D = Join(joined: distance2D, next: Polygon2DBounds(edges: new PathEdges(edges: edges), p: profile));
+        }
+
+        return ExtrudeChamfer2DBounds(c: Point(value: FixedQ4816.Zero), distance2D: (distance2D!.Value + TableReach(inexact: instruction.TableInexact)), halfDepth: instruction.Bounds0W, sqrtHalf: Point(value: SqrtHalf), z: p.Z);
     }
 }

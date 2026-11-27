@@ -17,8 +17,10 @@ namespace Puck.SignedDistance.Tests;
 /// </summary>
 public sealed class SdfFieldBoundsLawTests {
     // A point box's interval spans its one answer plus the outward raws of every step between: a rotation's two fused
-    // stages, a blend's few products and a norm's root add a handful each.
-    private const long PointBoxWidthRaw = 96L;
+    // stages, a blend's few products and a norm's root add a handful each. The render reading every law here reads also
+    // takes each parameter off the grid as its enclosure, a raw about its float, which a turn's enclosed map carries as a
+    // few raws per unit of the point's reach: twice the allowance still fails a rule widened past its step.
+    private const long PointBoxWidthRaw = 192L;
     // A smooth union's bound widens by four rounding allowances of eight raws, so a run of sixteen (SmoothChain) may span
     // that much more.
     private const long ChainPointBoxWidthRaw = (PointBoxWidthRaw + (16L * 4L * 8L));
@@ -265,6 +267,72 @@ public sealed class SdfFieldBoundsLawTests {
 
         Assert.True(condition: ((((Int128)bounds.Lower.Value) * 65536) <= numerator));
         Assert.True(condition: ((((Int128)bounds.Upper.Value) * 65536) >= numerator));
+    }
+    /// <summary>The render reading's bounds hold the field the kernels evaluate, whose parameters are the packed floats,
+    /// not only the raws the point walk rounds them to. A scale at the floor rounds to seven raws where its float is about
+    /// 6.55, which moves the raws' sphere tenths of a unit from the floats' sphere here, so over a block the floats'
+    /// surface crosses, each reading must hold the floats' field on both sides of it.</summary>
+    [Fact]
+    public void RenderBoundsHoldTheFieldOverThePackedFloats() {
+        var builder = new SdfProgramBuilder();
+        var turn = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (MathF.PI / 4f));
+
+        _ = builder.Scale(scale: new Vector3(value: SdfSolidGeometry.MinimumScale)).Rotate(rotation: turn).Rotate(rotation: Quaternion.Conjugate(value: turn))
+            .Translate(offset: new Vector3(x: 20000f, y: 0f, z: 0f))
+            .Sphere(material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), radius: 1000f);
+
+        var program = builder.Build();
+        var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+        var lower = FixedPosition.FromLocal(local: Fixed(value: new Vector3(x: 1.8625f, y: -0.0375f, z: -0.0375f)));
+        var upper = FixedPosition.FromLocal(local: Fixed(value: new Vector3(x: 1.9375f, y: 0.0375f, z: 0.0375f)));
+
+        foreach (var reading in (ReadOnlySpan<SdfBoundsReading>)[SdfBoundsReading.Interval, SdfBoundsReading.Affine]) {
+            Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, instructionsWalked: out _, lower: lower, reading: reading, upper: upper));
+
+            foreach (var x in (ReadOnlySpan<double>)[1.8925, 1.9075, 1.875, 1.925]) {
+                var value = FloatField(point: (x, 0.0075, 0.0075), program: program);
+
+                Assert.True(condition: ((((double)bounds.Lower) <= value) && (value <= ((double)bounds.Upper))), userMessage: $"the {reading} bounds {bounds} miss the floats' field {value} at x = {x}");
+            }
+        }
+    }
+    // The field the kernels evaluate for resets, translations, turns, scales and unioned spheres, in double over the
+    // packed floats: a turn takes the point back through its quaternion's conjugate, v + 2u×(u×v + w·v) for u = −q.xyz.
+    private static double FloatField(SdfProgram program, (double X, double Y, double Z) point) {
+        var (x, y, z) = point;
+        var scale = 1.0;
+        var result = double.MaxValue;
+
+        foreach (var instruction in program.Instructions) {
+            var data = instruction.Data0;
+
+            switch (instruction.Op) {
+                case SdfOp.ResetPoint:
+                    (x, y, z, scale) = (point.X, point.Y, point.Z, 1.0);
+                    break;
+                case SdfOp.Translate:
+                    (x, y, z) = ((x - data.X), (y - data.Y), (z - data.Z));
+                    break;
+                case SdfOp.Scale:
+                    (x, y, z) = ((x / data.X), (y / data.Y), (z / data.Z));
+                    scale *= data.W;
+                    break;
+                case SdfOp.Rotate: {
+                        var (ux, uy, uz, w) = (-((double)data.X), -((double)data.Y), -((double)data.Z), ((double)data.W));
+                        var (tx, ty, tz) = ((((uy * z) - (uz * y)) + (w * x)), (((uz * x) - (ux * z)) + (w * y)), (((ux * y) - (uy * x)) + (w * z)));
+
+                        (x, y, z) = ((x + (2.0 * ((uy * tz) - (uz * ty)))), (y + (2.0 * ((uz * tx) - (ux * tz)))), (z + (2.0 * ((ux * ty) - (uy * tx)))));
+                        break;
+                    }
+                case SdfOp.ShapeBlend:
+                    result = Math.Min(val1: result, val2: ((Math.Sqrt(d: (((x * x) + (y * y)) + (z * z))) - data.X) * scale));
+                    break;
+                default:
+                    throw new InvalidOperationException(message: $"FloatField reads no {instruction.Op}.");
+            }
+        }
+
+        return result;
     }
 
     // One program per op, shape and blend, each placed off the origin, rotated and composed so every rule meets a
