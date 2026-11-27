@@ -753,7 +753,34 @@ function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 // 2.85 m tall, the shelf 1.06 m up, at a standing player's hands. The marquee's panel stands 3 cm proud of its housing,
 // so the glow stays its own surface however coarsely the bake meshes the cabinet. Every shape is a rounded box,
 // cylinder or sphere joined by union, so the analytic contact collides it as drawn.
-template arcadeCabinet(base, title, em = 0.13, players = 1) {
+// A bar stool at `at` (on y 0): a round padded seat `height` up on a single post over a weighted foot disc. `seat` and
+// `metal` are its palette slots (an arcade cabinet's trim and bezel, so a cabinet's stools wear its colours).
+template barStool(label, at, seat, metal, height = 0.66, radius = 0.19) {
+  shape Cylinder $"{label}-seat" {
+    material: seat
+    position: (at + [0, (height - 0.04), 0])
+    scale [radius, 0.045, radius]
+    rounding: 0.03
+  }
+  shape Cylinder $"{label}-post" {
+    material: metal
+    position: (at + [0, ((height - 0.08) / 2), 0])
+    scale [0.025, ((height - 0.08) / 2), 0.025]
+  }
+  shape Cylinder $"{label}-ring" {
+    material: metal
+    position: (at + [0, (height * 0.38), 0])
+    scale [(radius * 0.7), 0.012, (radius * 0.7)]
+    rounding: 0.01
+  }
+  shape Cylinder $"{label}-foot" {
+    material: metal
+    position: (at + [0, 0.015, 0])
+    scale [(radius * 0.9), 0.015, (radius * 0.9)]
+    rounding: 0.01
+  }
+}
+template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   let w = cabinetHalfWidth(players)
   let panels = ((players == 2) ? [(0 - (w / 2)), (w / 2)] : [0])
   shape Box "cabinet-kick" {
@@ -862,6 +889,12 @@ template arcadeCabinet(base, title, em = 0.13, players = 1) {
       }
     }
   ]
+  // A stool before each player's controls, when asked for, far enough out for a seated player's knees.
+  if stools {
+    for (x, n) in panels {
+      barStool(label: $"cabinet-stool-{n}", at: [x, 0, 0.95], seat: (base + cabinetTrim), metal: (base + cabinetBezel))
+    }
+  }
 }
 
 // A living-room television set's materials, in slot order from `base`: the television's toy-plastic case, its trim

@@ -33,7 +33,7 @@ prototypes {
         name: $"toybox-cabinet-{i}"
         schema: "puck.creation.v1"
         palette: lookCabinetPalette(c)
-        arcadeCabinet(base: 0, title: "BOUNCE", players: 2)
+        arcadeCabinet(base: 0, title: "BOUNCE", players: 2, stools: true)
       }
     }
   }
