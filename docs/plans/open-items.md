@@ -2723,7 +2723,13 @@ What the light gets wrong:
   screen's light (its slot holds no source, so the light walk skips it), the
   irradiance trace's emission reading paints at the hit, and a lane-driven
   emissive's reduction re-running as the world's lanes move (the emission
-  signature folds the program and the decal revision only).
+  signature folds the program and the decal revision only). Neither a screen
+  nor an emitter face enters the relight (`SdfMeshIrradiance.Lighting.Capture`
+  takes directionals and traced point, spot and line lights), so their light
+  reaches the surfaces before them and bounces nowhere: the toybox's twelve
+  pictures light their rugs and beanbags but none of the room beyond. Trace a
+  bound screen's light in the relight's local part at its reduced mean, as a
+  rectangle of its face's area, keyed so the local part follows the reduction.
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case (grazing self-shadowing from the receiver-plane
   clamp, multi-shell meshes oriented by one signed volume, T-junctions
@@ -2735,12 +2741,15 @@ What the light gets wrong:
   a body clipped at a portal's glass or drawn under a mirror is a thin caster
   (`SdfMeshDraw.EnclosesSolid`), shadowed by its own lit side.
 - [high] Night, from the owner's walkthrough at the lawn's trees:
-  - The jump to night is wrong: forcing midnight leaves the scene near-black
-    for seconds while the canopies glow green from inside, since daytime
-    bounce stays in the probes while exposure adapts. From the overlook the
-    valley floor still reads blown white at the EV 2 floor after a minute
-    while `[sdf.mesh-gi] behind` reports a relight shortfall; a layout reset
-    brings the moonlit blue at once.
+  - [unverified] The jump to night. Daytime bounce stayed in the probes for
+    minutes under `[sdf.mesh-gi] behind`; a jump now starts a lighting epoch
+    whose relights read no probe of an earlier one, and the probes a view may
+    read owe it `JumpRelights` relights on the owed allowance
+    ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)). Verify
+    at the lawn's trees (no canopy glowing green from inside) and in the
+    gallery's toybox with every light off, then turn the camera: a probe
+    outside every view keeps its daylight until a view turns toward it, then
+    relights first.
   - The settled night reads as a dim overcast day. The night look is an
     authored standard style (exposure curve, low-light desaturation and blue
     shift, the moon's colour and strength), never an engine default; the

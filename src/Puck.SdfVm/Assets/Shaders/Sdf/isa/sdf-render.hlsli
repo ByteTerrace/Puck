@@ -38,6 +38,7 @@
 #define SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD           44u
 #define SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD            40u
 #define SDF_PROBE_RELIGHT_SKY_ROW                    11u
+#define SDF_PROBE_RELIGHT_EPOCH_ROW                  10u
 #define SDF_MESH_IRRADIANCE_CLEARANCE                0.1
 #define SDF_MESH_IRRADIANCE_INSIDE_SHARE             0.25
 #define SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE        2.0
@@ -235,6 +236,7 @@
 #define SDF_MESH_IRRADIANCE_OFFSET_WORD                 17u
 #define SDF_MESH_IRRADIANCE_WRITTEN                     0x40000000u
 #define SDF_MESH_IRRADIANCE_INVALID                     0x80000000u
+#define SDF_MESH_IRRADIANCE_EPOCH_MASK                  0x000FFFFFu
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS                 0.05
 #define SDF_MESH_IRRADIANCE_BEHIND_SHARE                0.05
 #define SDF_MESH_IRRADIANCE_SURFACE_REACH               1.5

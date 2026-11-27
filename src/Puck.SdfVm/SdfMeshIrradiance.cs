@@ -1505,7 +1505,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var offset = new Vector3(x: corner & 1, y: (corner >> 1) & 1, z: (corner >> 2) & 1);
                 var cell = (((int)(floor.X + offset.X)), ((int)(floor.Y + offset.Y)), ((int)(floor.Z + offset.Z)));
 
-                if (!cache.TryGetValue(key: cell, value: out var probe, hold: in hold) || probe.Invalid) {
+                if (!cache.TryGetValue(key: cell, value: out var probe, hold: in hold) || probe.Invalid || !Current(probe: in probe, epoch: lighting.Epoch)) {
                     continue;
                 }
 
@@ -1658,7 +1658,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} lighting-epoch={(m_lighting?.Epoch ?? 0)} seen-relights-owed={(OwesSeenRelight ? "yes" : "no")} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -1690,7 +1690,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                         ages.Add(item: age);
 
-                        (((m_viewCameras.Length == 0) || InView(center, m_viewCameras[0], m_layout.Reach)) ? visible : outside).Add(item: age);
+                        (((m_viewCameras.Length == 0) || InView(camera: in m_viewCameras[0], center: center, far: m_layout.Reach, reach: 0f, spacing: m_layout.SpacingOf(level))) ? visible : outside).Add(item: age);
                     }
                 }
             }
@@ -1715,11 +1715,35 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         for (var view = 0; (view < views.Count); view++) { if (!views[view].Elsewhere) { m_viewCameras[index++] = views[view].Camera; } }
     }
-    private static bool InView(Vector3 center, CameraSnapshot camera, float far) => camera.MaySee(center, default, default, default, 0, far);
-    private static bool InAnyView(Vector3 center, in Snapshot snapshot) {
+    // Whether a view camera may read a probe: its frustum, every plane moved out by `reach` metres, meets the probe's
+    // trilinear support, the box a spacing about its centre each way, in which lies every receiver whose gather weighs it.
+    // The centre alone is not enough: the view reads the probes about the eye and along the frustum's sides.
+    private static bool InView(in CameraSnapshot camera, Vector3 center, Vector3 spacing, float far, float reach) =>
+        camera.MaySee(center: center, halfX: new Vector3(x: spacing.X, y: 0f, z: 0f), halfY: new Vector3(x: 0f, y: spacing.Y, z: 0f), halfZ: new Vector3(x: 0f, y: 0f, z: spacing.Z),
+            margin: 0f, far: far, reach: reach);
+    private static bool InAnyView(Vector3 center, Vector3 spacing, float reach, in Snapshot snapshot) {
         if (snapshot.ViewCameras.Length == 0) { return true; }
-        foreach (var camera in snapshot.ViewCameras) { if (InView(center, camera, snapshot.Layout.Reach)) { return true; } }
+        foreach (var camera in snapshot.ViewCameras) {
+            if (InView(camera: in camera, center: center, far: snapshot.Layout.Reach, reach: reach, spacing: spacing)) { return true; }
+        }
         return false;
+    }
+    // The relights a probe owes the views after a lighting jump, the first under the new epoch included: each reads the
+    // bounce the probes about its hits hold by then, so the light the views read converges past the jump on the owed
+    // allowance (OwesSeenRelight) rather than on the age budget, which an overloaded volume stretches to minutes. Three
+    // relights leave a surface of albedo one half short of its converged bounce by about an eighth.
+    private const int JumpRelights = 3;
+    // Whether a probe owes the views a relight after a lighting jump (Candidate.Seen): a view may read it or the probes
+    // about the surfaces near what it shows (its support within its level's surface reach of a frustum, InAnyView), and it
+    // has not been relit under the current epoch, or has, with the bounce on, fewer than JumpRelights times. A volume that
+    // never jumped owes none.
+    private static bool OwedAfterJump(in ProbeData probe, bool present, Vector3 center, Vector3 spacing, in Snapshot snapshot) {
+        var lighting = snapshot.Lighting;
+
+        if (!present || probe.Invalid || (lighting.Epoch == 0)) { return false; }
+        var owed = ((probe.Epoch != lighting.Epoch) || (lighting.Feedback && snapshot.Layout.Bounce && probe.ReceivesSurface && (probe.JumpRelights < JumpRelights)));
+
+        return (owed && InAnyView(center: center, reach: SurfaceReachOf(spacing: spacing), snapshot: in snapshot, spacing: spacing));
     }
 
     /// <summary>Describes the volume's cost sheet for <c>world.budget</c>: its probes per level, the bytes a probe takes in
@@ -2300,7 +2324,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var radiance = probe.Radiance;
         var skyLight = probe.SkyLight;
 
-        words[0] = SdfMeshIrradianceProbe.WrittenFlag | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u);
+        words[0] = SdfMeshIrradianceProbe.WrittenFlag | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u) | ((uint)probe.Epoch & SdfMeshIrradianceProbe.EpochMask);
         words[SdfMeshIrradianceProbe.CellWord] = (uint)cell.X;
         words[SdfMeshIrradianceProbe.CellWord + 1] = (uint)cell.Y;
         words[SdfMeshIrradianceProbe.CellWord + 2] = (uint)cell.Z;
@@ -2421,7 +2445,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_listTraces = 0;
                 while ((m_listTraces < candidates.Count) && candidates[m_listTraces].Trace) { m_listTraces++; }
                 m_listUrgent = m_listTraces;
-                while ((m_listUrgent < candidates.Count) && (candidates[m_listUrgent].Overdue || candidates[m_listUrgent].Stale)) { m_listUrgent++; }
+                while ((m_listUrgent < candidates.Count) && (candidates[m_listUrgent].Seen || candidates[m_listUrgent].Overdue || candidates[m_listUrgent].Stale)) { m_listUrgent++; }
                 var seen = m_listTraces;
                 while ((seen < candidates.Count) && candidates[seen].Seen) { seen++; }
                 m_listTraceCursor = 0;
@@ -2652,11 +2676,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         }
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
                         var required = trace || rebase || !Holds(records.Words[(slot * SdfMeshIrradianceProbe.ProbeWords)..], (x, y, z));
-                        if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, ProbePhase(x, y, z), now, ref stale)) { continue; }
-                        var visible = InAnyView(center, in snapshot);
+                        var owed = (!all && OwedAfterJump(center: center, present: present, probe: in probe, snapshot: in snapshot, spacing: spacing));
+                        if (!required && !owed && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, ProbePhase(x, y, z), now, ref stale)) { continue; }
+                        var visible = InAnyView(center: center, reach: 0f, snapshot: in snapshot, spacing: spacing);
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace,
-                            Overdue: ((bound > 0) && (age >= bound)), Stale: (present && !current), Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible,
-                            Seen: (visible && present && (change == InputChange.Due) && (probe.Lighting < lighting.Jump))));
+                            Overdue: ((bound > 0) && (age >= bound)), Stale: (present && !current), Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible, Seen: owed));
                     }
                 }
             }
@@ -2945,10 +2969,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         var passes = ((probe.Lighting == lighting.Version) ? (probe.Passes + 1) : 1);
+        // A probe never relit before (a fresh trace) owes no jump anything: it read no light from before one.
+        var jumpRelights = ((probe.Epoch == lighting.Epoch) ? Math.Min(val1: (probe.JumpRelights + 1), val2: JumpRelights) : ((probe.Lighting == 0) ? JumpRelights : 1));
         var previous = probe;
 
         // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
-        probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, ShadingBlock = lights.Index });
+        probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, ShadingBlock = lights.Index,
+            Epoch = lighting.Epoch, JumpRelights = jumpRelights });
         if (!probe.Invalid && (GpuTrace is null)) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
@@ -3154,7 +3181,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var open = Vector3.Zero;
 
         if (feedback && (reflected != Vector3.Zero)) {
-            if (TryIncoming(layout: layout, lows: lows, normal: normal, point: point, hold: in hold, light: out var incoming)) {
+            if (TryIncoming(epoch: lighting.Epoch, layout: layout, lows: lows, normal: normal, point: point, hold: in hold, light: out var incoming)) {
                 varying += ((reflected * incoming) * lighting.Gains.Feedback);
             } else {
                 open = (reflected * lighting.Gains.Feedback);
@@ -3165,22 +3192,23 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // The light a surface receives from the cached probes about it, as the views pass reads the volume
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the probes Select chooses, each weighted as Gather weighs it.
-    // It reads each probe's own cubes, exactly as the published volume does.
-    private bool TryIncoming(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows, in ReaderEpochs<Reclaimable>.Hold hold, out Vector3 light) {
-        var (sky, bounce, answers) = IncomingParts(layout: layout, lows: lows, normal: normal, point: point, hold: in hold);
+    // It reads each probe's own cubes, exactly as the published volume does, taking only the probes relit under `epoch`.
+    private bool TryIncoming(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows, int epoch, in ReaderEpochs<Reclaimable>.Hold hold, out Vector3 light) {
+        var (sky, bounce, answers) = IncomingParts(epoch: epoch, layout: layout, lows: lows, normal: normal, point: point, hold: in hold);
 
         light = (sky + bounce);
         return answers;
     }
     // TryIncoming's two terms apart: the sky light and the surfaces' radiance the probes' cubes hold, and whether any probe
-    // answers the receiver (sdfMeshAnswers), both terms zero where none does.
-    private (Vector3 Sky, Vector3 Bounce, bool Answers) IncomingParts(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows, in ReaderEpochs<Reclaimable>.Hold hold) {
+    // answers the receiver (sdfMeshAnswers), both terms zero where none does. A probe of another epoch than `epoch`
+    // answers nothing, as an unwritten one does; AnyEpoch takes every probe, as the views do.
+    private (Vector3 Sky, Vector3 Bounce, bool Answers) IncomingParts(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows, int epoch, in ReaderEpochs<Reclaimable>.Hold hold) {
         var squared = (normal * normal);
         Span<float> cornerWeights = stackalloc float[GatherSlots];
         Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[GatherSlots];
         var cornerProbes = new Corners();
 
-        _ = Select(cells: cornerCells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, layout: layout, lows: lows, normal: normal, point: point, hold: in hold);
+        _ = Select(cells: cornerCells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, epoch: epoch, layout: layout, lows: lows, normal: normal, point: point, hold: in hold);
 
         var sky = Vector3.Zero;
         var bounce = Vector3.Zero;
@@ -3312,7 +3340,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             var level = selection.Level;
 
-            var (sky, bounce, _) = IncomingParts(layout: layout, lows: Lows(), normal: normal, point: point, hold: in hold);
+            var (sky, bounce, _) = IncomingParts(epoch: AnyEpoch, layout: layout, lows: Lows(), normal: normal, point: point, hold: in hold);
 
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
                 $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)} indirect-sky=({sky.X:0.#}, {sky.Y:0.#}, {sky.Z:0.#}) indirect-bounce=({bounce.X:0.#}, {bounce.Y:0.#}, {bounce.Z:0.#})]"));
@@ -3352,8 +3380,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // stage's weights are normalized to the whole, the finest level's reads within its window among them. A finer level's
     // stage past its window answers in its share times its reach share (ReachShareOf), so the next stage takes over across
     // the outer half of its reach. Each slot's weight is pre-scaled by its stage's share, so the slots' weights sum to one.
+    // A probe of another epoch than `epoch` reads as missing (Current), so a relight's bounce takes none relit before the
+    // latest jump; the views' readings pass AnyEpoch.
     private SdfMeshProbeSelection Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
-        Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, in ReaderEpochs<Reclaimable>.Hold hold, Span<SdfMeshProbeReport> reports = default) {
+        Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, in ReaderEpochs<Reclaimable>.Hold hold, Span<SdfMeshProbeReport> reports = default, int epoch = AnyEpoch) {
         var held = (m_levels.Length - 1);
 
         for (var level = layout.Finest; (level < held); level++) {
@@ -3393,7 +3423,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if ((chosen >= 0) && (level == chosen)) { continue; }
 
             var slot = ((chosen >= 0) ? 8 : 0);
-            var total = Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: bounded, front: out var front, missing: out var missing, layout: layout, level: level,
+            var total = Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: bounded, epoch: epoch, front: out var front, missing: out var missing, layout: layout, level: level,
                 low: lows[level], normal: normal, point: point, reports: reports, slot: slot, hold: in hold);
             if (bounded && level >= held) { cold = missing > 0f; }
             front += missing;
@@ -3424,6 +3454,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
         }
     }
+
+    // The epoch a reading that takes every probe passes: the views' gather and its diagnostics.
+    private const int AnyEpoch = -1;
+    // Whether a reading of `epoch` takes a probe: every probe for AnyEpoch, else one relit under that epoch, compared in the
+    // key word's bits. KEEP IN SYNC with sdfMeshIrradianceHolds under SDF_MESH_IRRADIANCE_EPOCH (shade/sdf-probe-lighting.hlsli).
+    private static bool Current(in ProbeData probe, int epoch) =>
+        ((epoch == AnyEpoch) || (((((uint)probe.Epoch) ^ ((uint)epoch)) & SdfMeshIrradianceProbe.EpochMask) == 0u));
 
     /// <summary>Returns the farthest receiver from a probe its surface map measured, in metres: its reach
     /// (<see cref="SdfMeshIrradianceProbe.SurfaceReach"/> cell diagonals) plus the receiver's normal bias.</summary>
@@ -3466,7 +3503,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // corner does not answer. Returns the corners' total weight, and in `front` the same cage's weight before visibility
     // with the facing fade alone (no behind floor), over every present probe, invalid ones included: the support a share
     // is measured against. A nonempty `reports` receives each corner's record and the terms of its weight.
-    private float Gather(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, int slot, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, out float front, out float missing, in ReaderEpochs<Reclaimable>.Hold hold, Span<SdfMeshProbeReport> reports = default) {
+    private float Gather(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, int slot, int epoch, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, out float front, out float missing, in ReaderEpochs<Reclaimable>.Hold hold, Span<SdfMeshProbeReport> reports = default) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
         var cache = m_levels[level].Cache;
@@ -3504,7 +3541,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 z: ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z))
             );
             var trilinear = ((weights.X * weights.Y) * weights.Z);
-            if (!cache.TryGetValue(key: cell, value: out var probe, hold: in hold)) { missing += trilinear; continue; }
+            if (!cache.TryGetValue(key: cell, value: out var probe, hold: in hold) || !Current(epoch: epoch, probe: in probe)) { missing += trilinear; continue; }
             // KEEP IN SYNC with sdfMeshProbesAt: continuous positive-hemisphere weight, then depth visibility.
             var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing) + probe.Offset);
             var toward = (probePoint - point);
@@ -3572,20 +3609,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
-    // and its radial priority band and Morton cell order within that band. Seen: a view sees it and a lighting change past
-    // its bound replaced what it shows (InputChange.Due), which the views are owed (OwesSeenRelight).
+    // and its radial priority band and Morton cell order within that band. Seen: a view may read it, or the probes about
+    // its hits, and a lighting jump left it owing the views a relight (OwedAfterJump, OwesSeenRelight).
     private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, bool Stale, int Urgency, bool Visible, bool Seen = false);
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, its hit buffer, sky shares and surface map
     // in a trace batch's ProbeBlock, and the farthest its rays travelled, which every hit lies within), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
-    // version, the sweep it was last relit in and whether that relight moved it past the convergence bound). A batch
+    // version, the sweep it was last relit in and whether that relight moved it past the convergence bound, and the
+    // lighting epoch it was relit under with how many relights it holds under that epoch, at most JumpRelights). A batch
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
     // readers outside the gate read it whole. The blocks are named by their registry indices (ProbeStorage.Index), so a
     // probe holds no reference and the probe cache keeps its entries natively.
     private readonly record struct ProbeData(int Geometry, int HitsBlock, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
         int ShadingBlock = 0, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0,
-        float Reach = 0f, bool ReceivesSurface = false, ulong OpenSkyGroups = 0) {
+        float Reach = 0f, bool ReceivesSurface = false, ulong OpenSkyGroups = 0, int Epoch = 0, int JumpRelights = 0) {
         public ProbeBlock? Hits => ProbeStorage.Find<ProbeBlock>(index: HitsBlock);
         public LightBlock? Shading => ProbeStorage.Find<LightBlock>(index: ShadingBlock);
         public ReadOnlySpan<float> Sky => Hits!.Sky(index: HitIndex);
@@ -4126,9 +4164,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
         // that part changes, so a relight reuses each probe's local cube across a moving sun.
         public required int LocalVersion { get; init; }
-        // The version of the latest capture, this one or an earlier, that replaced the one before it in a jump (Jumps): a
-        // probe relit before it and due shows the views light they are owed (OwesSeenRelight). Zero for none.
-        public int Jump { get; init; }
+        // How many captures replaced the one before them in a jump (Jumps), this one included; zero for none. A probe relit
+        // under another epoch holds light from before the latest jump: it is due (ChangeOf), the views are owed it where
+        // they may read it (OwedAfterJump, OwesSeenRelight), and no relight's bounce or camera sample reads it
+        // (SdfMeshIrradianceProbe.EpochMask, Current).
+        public int Epoch { get; init; }
         public required long CapturedAt { get; init; }
         public bool Direct { get; init; }
         public bool Emission { get; init; }
@@ -4236,11 +4276,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid);
+            var jumps = ((previous is not null) && Jumps(after: inputs, localVersion: localVersion, previous: previous));
 
             return new Lighting {
                 Version = version,
                 LocalVersion = localVersion,
-                Jump = ((previous is null) ? 0 : (Jumps(after: inputs, localVersion: localVersion, previous: previous) ? version : previous.Jump)),
+                Epoch = (jumps ? (previous!.Epoch + 1) : (previous?.Epoch ?? 0)),
                 CapturedAt = capturedAt,
                 SkyPeak = skyPeak,
                 Direct = ((sources & SdfIndirectSources.Direct) != 0),

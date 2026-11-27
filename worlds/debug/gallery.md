@@ -543,7 +543,7 @@ are four kinds:
 |---|---|---|
 | The sun | The world's sun, with its moon and the companion star ([day.puck](day.puck)) | Through the windows and skylights |
 | The flaw | The glowing tube that weaves through every floor ([flaw.puck](gallery/flaw.puck)) | A chain of tube lights along it, each in one storey, on that storey's switch |
-| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face, and the irradiance volume bounces it |
+| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face. The irradiance volume does not trace screens yet, so their light reaches only the surfaces before them and bounces nowhere ([open items](../../docs/plans/open-items.md#lighting-and-gi)) |
 | Lamps | The lift car's luminous ceiling and the south-west stair's pendant, hung from the soffit of level 2's half landing (the standard's `pendantLamp`) | A spot at the lamp's glowing face, in that face's colour, giving what the face shows (`glowSpotPower`); the pendant follows level 1's switch and goes dark with it |
 
 Glowing marquees, indicators and the display consoles' interfaces are emissive
