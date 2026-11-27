@@ -533,14 +533,17 @@ A lambda parameter shadows a constant of the same name for the length of one app
 Folds, searches and reshapes over a compile-time array. A name a rule also spells (`any`, `all`, `count`, `sum`) is
 the document builtin in a value position and the rule's fold in a rule body; a call that names an argument
 (`all(predicates: [...])`) is a vocabulary arm's, never the builtin. Arithmetic folds through the operators' own
-evaluation, so numbers add exactly and numeric arrays add element by element.
+evaluation, so numbers add exactly and numeric arrays add element by element. The first rows are the lambda-free
+folds; a fold written with a lambda (`sum`, `count`, `any`, `all`, `minimum`, `maximum` or `first`) is a
+[list fold](#folds-over-a-list), the one mechanism both languages share, so the library evaluates none of them a
+second way.
 
 | Builtin | Yields |
 |---|---|
-| `any(array, lambda)` | 1 when some item's lambda is truthy, else 0, stopping at the first. Without a lambda, tests the items themselves |
-| `all(array, lambda)` | 1 when every item's lambda is truthy (1 for an empty array), stopping at the first miss |
-| `count(array, lambda)` | how many items' lambdas are truthy |
-| `sum(array)` / `sum(array, lambda)` | the items, or the lambda's values, added (0 for an empty array) |
+| `any(array)` | 1 when some item is truthy, else 0, stopping at the first |
+| `all(array)` | 1 when every item is truthy (1 for an empty array), stopping at the first miss |
+| `count(array)` | how many items are truthy |
+| `sum(array)` | the items added (0 for an empty array) |
 | `scan(array)` / `scan(array, lambda)` | the running totals in one pass: one more value than the array, starting at 0 and ending at the total, so `scan([3, 4, 5])` is `[0, 3, 7, 12]` and element `i` is the sum of the first `i` items. `scan(lengths)[i]` is where item `i` of a list of lengths starts |
 | `dot(a, b)` | the dot product of two numeric arrays of one length |
 | `contains(array, value)` | 1 when an item equals the value, as `==` compares, else 0 |
@@ -568,7 +571,8 @@ let total = sum(range(1, 5), k => k * k)                                        
 freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)  // four reads, in a rule
 ```
 
-The lambda is what makes a call a list fold: `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its
+The lambda is what makes a call a list fold: `any(array)` and `sum(array)` are [the list library's](#the-list-library)
+own, `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its
 construct, and a rule's `count(hand)` or `any(row, x -> x > 0)` over a row stays the row fold.
 
 ## `let … in`, a name for one expression
