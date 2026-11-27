@@ -1515,7 +1515,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Nothing a view's signature reads moves while those copies wait, so a frame whose views all stand opens an upload for
   them anyway (`SdfWorldPasses.StageOwedCopies`, counted in `sdf.captures.copies-staged`); without it a still view left
   the volume `settling=worker` for good. A volume's `settling=worker-device:<why>` names why its head query was last
-  refused (`SdfMeshProbeGpuWork.DescribeWait`). The
+  refused (`SdfMeshProbeGpuWork.DescribeWait`). A trace scene holds only meshes whose words stand in the region when it
+  is built (`SdfMeshIrradiance.TraceDraws`; a floor that does not stand gives way to the drawn mesh), and one that left
+  a mesh out is built again once it stands (`scene-omitted=` on `world.probe`); a scene the region took a mesh of back
+  since is refused as `scene-placement`, its head cancelled after `AdmissionWait`, and built again whatever the draws'
+  key says (`NoteScenePlacement`). `region-copies` is the region's copies in flight, and `scene-upload-stalled` the end
+  stop of a scene upload the store moved nothing of for `AdmissionWait` (`UploadStalled`). The answers a probe call
+  reads (`SdfMeshProbeGpuWork.Answers`) are the volume's, disposed only after its worker stops, and a fault of the
+  worker or camera sample is contained (`SdfMeshIrradiance.ContainFault`: reported, counted in `sdf.mesh-gi.faults`,
+  the volume rebuilt), never thrown at the frame. The
   region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
   ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through

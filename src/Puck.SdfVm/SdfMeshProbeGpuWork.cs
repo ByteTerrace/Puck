@@ -31,13 +31,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         new(priorSecondsPerUnit: 1e-8, rise: SdfGpuWorkRate.Fall),
         new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
     ];
-    // The coordinator's window (Run): the parts of one call it has submitted and not yet read, oldest
-    // first, at most SdfGpuWork.SlotCount, and the answer arrays the parts answer into, a ring of SlotCount. Part k answers
-    // into ring entry k mod SlotCount, which part k + SlotCount reuses only after the coordinator has read part k, since
-    // the window holds at most SlotCount parts. The coordinator's alone: one coordinator calls Trace, Select and Relight
-    // at a time.
+    // The coordinator's window (Run): the parts of one call it has submitted and not yet read, oldest first, at most
+    // SdfGpuWork.SlotCount. The arrays the parts answer into are the caller's (Answers), never this client's: the
+    // coordinator reads them on its own thread after a job's answer, so they live as long as the coordinator does, and a
+    // client the tables' retirement disposes (a park, a device loss) frees nothing the coordinator still reads. The
+    // coordinator's alone: one coordinator calls Trace, Select and Relight at a time.
     private readonly Queue<Job> m_window = new();
-    private readonly OwnedBuffer<uint>[] m_partAnswers = new OwnedBuffer<uint>[SdfGpuWork.SlotCount];
     private long m_parts;
     // The selection's changes by geometry, ascending, each with the hierarchy walks of it and of every later one
     // (SelectTestsOf).
@@ -71,7 +70,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // own recording orders after earlier submissions on the one queue.
     private int m_inFlight;
     private bool m_exclusive;
-    // The head job waiting for its scene's meshes to be resident, and since when.
+    // The head job waiting for its scene's meshes to be resident, and since when; AdmissionWait also bounds a scene
+    // upload that makes no progress (UploadStalled).
     private static readonly TimeSpan AdmissionWait = TimeSpan.FromSeconds(2);
     private Job? m_waiting;
     private long m_waitingSince;
@@ -81,6 +81,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         get {
             lock (m_gate) {
                 if (m_feedbackRefusedAt is { } refused) { return SdfGpuWork.DeferralRetry - m_volume.Time.GetElapsedTime(refused); }
+                if (m_sceneUpload is { Rooted: false, Withdrawn: false }) { return AdmissionWait - m_volume.Time.GetElapsedTime(m_uploadProgressAt); }
                 return m_waiting is null ? null : AdmissionWait - m_volume.Time.GetElapsedTime(m_waitingSince);
             }
         }
@@ -100,7 +101,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
 
     internal SdfMeshProbeGpuWork(SdfWorldTables tables, SdfMeshIrradiance volume) {
-        for (var ring = 0; (ring < m_partAnswers.Length); ring++) { m_partAnswers[ring] = new OwnedBuffer<uint>(allocator: null); }
         m_volume = volume;
         m_gpu = tables.Gpu;
         m_batchOutput = new(m_gpu.BufferFactory, Name("batch-output"));
@@ -146,7 +146,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // its own cache slots or batch output rows.
     // A trace also copies each origin's hits into the device hit cache at its slot, so a relight reads them there and the
     // host never uploads hits it read back.
-    internal ReadOnlySpan<uint> Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> cacheSlots, uint hitCapacity, OwnedBuffer<uint> answer) =>
+    internal ReadOnlySpan<uint> Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> cacheSlots, uint hitCapacity, Answers answer) =>
         Run(count: origins.Length, rowWords: SdfMeshProbeDepth.HitWords, answer: answer, next: start => {
             var count = Math.Min(val1: TraceOriginsPerJob, val2: (origins.Length - start));
 
@@ -177,7 +177,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // Returns each probe's SdfMeshProbeRelight.ResultWords words, the probes in order.
     internal ReadOnlySpan<uint> Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
         int volumeWords, Deltas updates, uint hitCapacity, ReadOnlyMemory<long> rays, ReadOnlyMemory<int> destinations, int geometry, int window,
-        OwnedBuffer<uint> answer) {
+        Answers answer) {
         var batch = new RelightBatch(Probes: origins.Length);
 
         return Run(count: origins.Length, rowWords: SdfMeshProbeRelight.ResultWords, answer: answer, next: start => {
@@ -205,7 +205,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // job a frame waits on. The rate is read again for every job, so a job measured costlier than its estimate shortens
     // the ones submitted after it, and the tests left are shared evenly among the jobs left, since a short last job would
     // measure its fixed cost as a high rate.
-    internal ReadOnlySpan<uint> Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, OwnedBuffer<uint> answer) {
+    internal ReadOnlySpan<uint> Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, Answers answer) {
         // Each remembered change, oldest first, as SdfMeshIrradiance.SelectionRows packs it: its geometry and the rays'
         // walks of it a probe older than it pays, one a hierarchy level, summed with every later change's.
         var count = (int)changes[1].X;
@@ -256,15 +256,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // Runs one call of `count` rows, `rowWords` words each, as the jobs `next` cuts from the row it is handed, keeping up
     // to SdfGpuWork.SlotCount of them in flight, so a call of many jobs waits about one round trip per SlotCount jobs
     // rather than one a job. The coordinator's window holds a call's parts submitted and not yet read, oldest first, and
-    // part k answers into ring entry k mod SlotCount, which part k + SlotCount reuses only once part k was read. Returns
-    // the rows in order, in `answer`, the caller's native buffer, resized to the call: the caller keeps the buffer for its
-    // next call and frees it once it stops calling (SdfMeshIrradiance's batches end), so no answer is an array on the
-    // large object heap, and the borrow this returns ends at the caller's next call. Every job has been answered or
+    // part k answers into the caller's part k mod SlotCount (Answers.Parts), which part k + SlotCount reuses only once
+    // part k was read. Returns the rows in order, in the caller's rows (Answers.Rows), resized to the call: the caller keeps
+    // its answers for its next call and frees them once it stops calling (SdfMeshIrradiance's batches end), so no answer is
+    // an array on the large object heap, and the borrow this returns ends at the caller's next call. Every job has been answered or
     // cancelled before this returns or throws, so the caller may then overwrite the arrays its jobs' memories view. One
     // coordinator calls this at a time.
-    private ReadOnlySpan<uint> Run(int count, int rowWords, OwnedBuffer<uint> answer, Func<int, Job> next) {
-        answer.Resize(clear: false, length: ((count * rowWords) + 1), preserve: false);
+    private ReadOnlySpan<uint> Run(int count, int rowWords, Answers answer, Func<int, Job> next) {
+        var rows = answer.Rows;
 
+        rows.Resize(clear: false, length: ((count * rowWords) + 1), preserve: false);
         try {
             for (var start = 0; ((start < count) || (m_window.Count > 0));) {
                 while ((start < count) && (m_window.Count < SdfGpuWork.SlotCount)) {
@@ -272,18 +273,20 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     var ring = (int)(m_parts++ % SdfGpuWork.SlotCount);
 
                     job.First = start;
-                    m_partAnswers[ring].Resize(clear: false, length: ((job.Origins.Length * rowWords) + 1), preserve: false);
-                    job.Result = m_partAnswers[ring].Memory;
+                    var part = answer.Parts[ring];
+
+                    part.Resize(clear: false, length: ((job.Origins.Length * rowWords) + 1), preserve: false);
+                    job.Result = part.Memory;
                     m_window.Enqueue(item: job);
                     _ = SubmitAsync(job: job);
                     start += job.Origins.Length;
                 }
 
                 var done = m_window.Peek();
-                var part = Await(answer: done.Answer.Task);
+                var answered = Await(answer: done.Answer.Task);
 
                 _ = m_window.Dequeue();
-                part.Span.Slice(start: 0, length: (done.Origins.Length * rowWords)).CopyTo(destination: answer.GetSpan().Slice(start: (done.First * rowWords)));
+                answered.Span.Slice(start: 0, length: (done.Origins.Length * rowWords)).CopyTo(destination: rows.GetSpan().Slice(start: (done.First * rowWords)));
             }
         } catch {
             // Whatever failed (a part's answer, or cutting the next part), every part already submitted is waited out, so
@@ -293,7 +296,34 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             throw;
         }
-        return answer.GetSpan();
+        return rows.GetSpan();
+    }
+    /// <summary>The native buffers one coordinator's calls answer into: the rows a call returns and the ring of
+    /// <see cref="SdfGpuWork.SlotCount"/> arrays its parts answer into. They belong to the coordinator's owner (the volume),
+    /// which disposes them only once its coordinator has stopped, never to the probe client, whose retirement can run
+    /// while the coordinator still reads a part a job answered.</summary>
+    internal sealed class Answers : IDisposable {
+        /// <summary>Initializes a new instance of the <see cref="Answers"/> class, holding no storage until a call sizes it.</summary>
+        /// <param name="allocator">The native allocator the buffers take their storage from, or <see langword="null"/> for the process's.</param>
+        internal Answers(IAllocator? allocator) {
+            Rows = new OwnedBuffer<uint>(allocator: allocator);
+            Parts = new OwnedBuffer<uint>[SdfGpuWork.SlotCount];
+            for (var ring = 0; (ring < Parts.Length); ring++) { Parts[ring] = new OwnedBuffer<uint>(allocator: allocator); }
+        }
+        /// <summary>Gets the rows a call returns, in order.</summary>
+        internal OwnedBuffer<uint> Rows { get; }
+        /// <summary>Gets the arrays a call's parts answer into, part k into entry k mod <see cref="SdfGpuWork.SlotCount"/>.</summary>
+        internal OwnedBuffer<uint>[] Parts { get; }
+        /// <summary>Frees every buffer's storage, keeping each usable for a later call.</summary>
+        internal void Free() {
+            Rows.Free();
+            foreach (var part in Parts) { part.Free(); }
+        }
+        /// <inheritdoc/>
+        public void Dispose() {
+            Rows.Dispose();
+            foreach (var part in Parts) { part.Dispose(); }
+        }
     }
     // Blocks the coordinator on a part's answer, marked as waiting for the device (AwaitsDevice) while it blocks.
     private Memory<uint> Await(Task<Memory<uint>> answer) {
@@ -371,7 +401,17 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             m_takeAsks++;
             if (m_exclusive) { return Refused(reason: "exclusive"); }
             if (!tables.BindsBackgroundWork) { return Refused(reason: "unbound"); }
-            if (ServeSceneUpload()) { return Refused(reason: "scene-upload"); }
+            if (ServeSceneUpload()) {
+                if (!m_uploadStalled) { return Refused(reason: "scene-upload"); }
+                // The upload's end stop (UploadStalled): the head that began it is cancelled, so its coordinator lists
+                // again and the next head begins the upload afresh once the withdrawn one has stopped.
+                m_uploadStalled = false;
+                if (m_pending.TryDequeue(out var stalled)) {
+                    m_waiting = null;
+                    Cancel(job: stalled);
+                }
+                return Refused(reason: "scene-upload-stalled");
+            }
             if (m_sceneStore?.Carrying ?? false) { return Refused(reason: "scene-carry"); }
             if (TryTakeStructures(allowance: (allowance with { Seconds = Math.Min(val1: allowance.Seconds, val2: FrameAllowanceSeconds) }), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
             if (!m_pending.TryPeek(out var pending)) { return Refused(reason: "none"); }
@@ -385,23 +425,25 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 return Refused(reason: "cancelled");
             }
-            if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version)) {
+            if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version, out var unplaced)) {
                 m_feedbackRefusedAt = null;
-                // The scene's meshes normally land within an upload or two. A head that waits past AdmissionWait is
-                // cancelled like any obsolete job, so its coordinator and the camera sample behind it are never held without
-                // bound; the coordinator lists again on its next grant and asks for the scene as it then stands.
+                // The volume builds a scene only from meshes whose words stand (SdfMeshIrradiance.TraceDraws), so a scene
+                // that names one that does not stand names one the region took back since, and the region's copies in
+                // flight settle at its next upload. A head that waits past AdmissionWait is cancelled like any obsolete
+                // job, so its coordinator and the camera sample behind it are never held without bound; the coordinator
+                // lists again on its next grant and asks for the scene as it then stands.
                 if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = m_volume.Time.GetTimestamp(); }
                 else if (m_volume.Time.GetElapsedTime(m_waitingSince) >= AdmissionWait) {
                     m_pending.Dequeue();
                     m_waiting = null;
                     m_feedbackRefusedAt = null;
-                    // A scene that stayed unbound this long names a mesh the residency dropped, not one about to land:
-                    // the volume then builds the scene its draws now name rather than waiting on this one's traces.
-                    m_volume.NoteScenePlacement(scene: pending.Scene, placed: false);
+                    // A scene whose own meshes stayed unbound this long makes the volume build it again from the meshes
+                    // that stand now, whatever its draws' key says, so the next head names a scene the region holds.
+                    if (unplaced) { m_volume.NoteScenePlacement(scene: pending.Scene, placed: false); }
                     Cancel(job: pending);
                     if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 }
-                return Refused(reason: "scene-placement");
+                return Refused(reason: (unplaced ? "scene-placement" : "region-copies"));
             }
             m_waiting = null;
             m_volume.NoteScenePlacement(scene: pending.Scene, placed: true);
@@ -882,7 +924,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
     internal string DescribeMemory() {
         var feedback = m_feedback?.OwnedBytes ?? default;
-        return FormattableString.Invariant($"trace-scene-root={m_sceneExport?.Prefix ?? -1} trace-scene-prefix-words={((m_sceneExport is { } export) ? (export.Changed[^1].Count + SdfMeshProbeTrace.RootWords) : 0)} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache.Buffer?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput.Buffer?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
+        return FormattableString.Invariant($"trace-scene-root={m_sceneExport?.Prefix ?? -1} trace-scene-prefix-words={((m_sceneExport is { } export) ? (export.Changed[^1].Count + SdfMeshProbeTrace.RootWords) : 0)} trace-scene-changes={m_sceneUploads} trace-scene-stalls={m_uploadStalls} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache.Buffer?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput.Buffer?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
     }
     public void Stop() {
         lock (m_gate) {
@@ -902,7 +944,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_batchOutput.Dispose();
         m_scene?.Dispose();
         m_directions.Dispose();
-        foreach (var part in m_partAnswers) { part.Dispose(); }
         m_zero.Dispose();
         DisposeStructures();
         m_gpu.Bindings.DestroyPool(m_pool);
