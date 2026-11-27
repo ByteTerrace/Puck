@@ -358,6 +358,15 @@ presence claim (`size == 1`). The instance must outlive the visit
 the `.puck` source directly and runs the worlds its tests generated — see
 [Testing a world](../../../../docs/authoring/testing-a-world.md).
 
+A `when` step `seat1: route.play <route>` plays a `routes` row on that seat as
+`world.benchmark run` does (`WorldBenchmarkCommandModule`, its route path): the
+route's seat program works the seat's own controls, so a test whose path no
+fixed tick program can follow (a spiral stair, a branch) still drives the body
+as a player does. Put the step last and a `ticks` bound after it: a run refuses
+while other pinned lines are armed, and the expectations read at the export
+tick, so a test latches what it gates on in rules of its own as the walk goes
+(`worlds/debug/tree-walk-tests.puck`).
+
 ## The noninterference harness
 
 `puck disclosure <world>` reuses the test worker: one batch of legs, one per

@@ -170,6 +170,8 @@ public enum WorldRuleRefusal : byte {
     SpatialChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'pose' effect names a 'spawnPoint' the document's 'spawnPoints' section does not declare", kind: RefusalKind.Verdict)]
     SpawnPointUnknown,
+    [Refusal(door: "world.rule.compile", condition: "a '$kinematics:' channel does not spell '$kinematics:<bodyRef>:<witness>' with a witness name WorldKinematicsVocabulary declares", kind: RefusalKind.Verdict)]
+    KinematicsMalformed,
 }
 /// <summary>The runtime refusals only a world-owned effect arm can draw; the state-neutral ones are
 /// <see cref="RuleEffectRefusal"/>'s, and both share the evaluator's ledger.</summary>

@@ -270,6 +270,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ref FixedVector3 groundNormal,
         ref FixedQ4816 requiredStepHeight,
         ref ContactUncertainty uncertain,
+        ref FixedQ4816 deepest,
         int volumeIndex
     ) {
         var pushed = false;
@@ -370,6 +371,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 }
                 if (displaces) {
                     pushed = true;
+                    deepest = FixedQ4816.Max(x: deepest, y: push.Penetration);
                     if (culls) {
                         bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
                         reach = bounds.Grow(margin: skin);
@@ -725,12 +727,15 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         );
 
         var uncertain = default(ContactUncertainty);
+        var residual = FixedQ4816.Zero;
 
         for (var iteration = 0; (iteration < iterations); iteration++) {
             var pushed = false;
 
-            // Only the last pass, at the pose the body keeps, says whether that pose is proved.
+            // Only the last pass, at the pose the body keeps, says whether that pose is proved and how deep it still
+            // pushed.
             uncertain = default;
+            residual = FixedQ4816.Zero;
 
             for (var volumeIndex = 0; (volumeIndex < volumes.Length); volumeIndex++) {
                 ref readonly var volume = ref volumes[volumeIndex];
@@ -753,6 +758,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity,
                     uncertain: ref uncertain,
+                    deepest: ref residual,
                     volume: in volume,
                     volumeIndex: volumeIndex
                 );
@@ -774,6 +780,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity,
                     uncertain: ref uncertain,
+                    deepest: ref residual,
                     volume: in volume,
                     volumeIndex: volumeIndex
                 );
@@ -789,7 +796,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal,
-            Uncertainty: uncertain
+            Uncertainty: uncertain,
+            Residual: residual
         ) { Support = support };
     }
 }

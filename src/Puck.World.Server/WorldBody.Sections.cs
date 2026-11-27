@@ -72,6 +72,7 @@ public sealed partial class WorldBody {
             Tether: m_tether?.CaptureState(),
             TetherAnchorBodyIndex: m_tetherAnchorBodyIndex,
             TetherAnchorPointOrLocalOffset: m_tetherAnchorPointOrLocalOffset,
+            Kinematics: m_kinematics,
             VerticalFollowerPositionRaw: m_verticalFollower.PositionRaw,
             VerticalFollowerPreviousTarget: m_verticalPreviousTarget,
             VerticalFollowerSeeded: m_verticalFollowerSeeded,
@@ -346,6 +347,7 @@ public sealed partial class WorldBody {
         );
         m_tetherAnchorBodyIndex = motion.TetherAnchorBodyIndex;
         m_tetherAnchorPointOrLocalOffset = motion.TetherAnchorPointOrLocalOffset;
+        m_kinematics = motion.Kinematics;
 
         ref readonly var clocks = ref sections.Clocks;
 

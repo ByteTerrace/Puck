@@ -1,0 +1,113 @@
+// The gallery tree's walkway walked end to end (gallery/tree.puck): from the nave floor to the trunk's foot, up the
+// spiral of treads round the trunk, out along each branch to its landing on a balcony and back to the trunk, and on up
+// to the last branch, which ends the walk on level 3. A module library: it hands its importers the walk's waypoints and
+// emits no document. The benchmark route `tree-walk` (benchmark-route.puck) plays them as a player does, through seat
+// 1's own controls, and tree-walk-tests.puck plays that route headless and gates every waypoint.
+//
+// Every point is derived from the tree's own plan (gallery/layout.puck's `treeTreadPlan`, `treeBranchAt`,
+// `treeLimbs`, `galleryFloor`), in the building's frame and stood where the world stands the building
+// (`galleryWorld`), so the walk follows the tree when the tree changes.
+
+import "gallery/layout"
+import "../standard/paths"
+
+// How far out from the bark, in metres, the walk crosses each tread: inside the narrowest shelf's reach (a shelf reaches
+// 1.4 m less its wander), so a straight step from one waypoint to the next, which cuts the spiral's curve inward by
+// about 0.14 m over two treads, keeps the walker's 0.35 m radius clear of the bark.
+let treeWalkOut = 0.75
+// The walk takes a waypoint every `treeWalkTreadStride` treads: each step between two is still one riser at a time, and
+// every branch leaves from an even tread (`treeLimbs`), so each junction is a waypoint.
+let treeWalkTreadStride = 2
+// The samples along a branch's walking line, out to its landing.
+let treeWalkBranchSamples = 8
+// How near, in metres, the walker must come to a waypoint to have reached it: on a tread, along a branch, and at a
+// landing on a balcony.
+let treeWalkTreadWithin = 0.35
+let treeWalkBranchWithin = 0.5
+let treeWalkLandingWithin = 0.4
+// The pace the walker plays the route at, a word of the standard's `walker` program.
+let treeWalkPace = "walk"
+// The slowest average speed, in metres a second, a segment may be walked at before it is late, and the time every
+// segment is allowed on top of its distance for the turn onto it.
+let treeWalkSlowest = 1.5
+let treeWalkTurnSeconds = 1.5
+
+function treeWalkWorld(p) = galleryWorld(p[0], p[1], p[2])
+function treeWalkPoint(name, kind, plan, within, level = -1) = {
+  name: name
+  kind: kind
+  point: treeWalkWorld(plan)
+  within: within
+  level: level
+}
+// A tread's waypoint, and a junction: the tread a branch leaves the spiral from.
+function treeWalkTread(k) = treeWalkPoint(
+  $"tread {k}",
+  ((length(filter(treeLimbs, b => (b.tread == k))) > 0) ? "junction" : "tread"),
+  treeTreadPlan(k, treeWalkOut),
+  treeWalkTreadWithin
+)
+// A branch's waypoints out from its junction to its landing on its balcony, and back.
+function treeWalkOutAlong(b) = map(
+  range(1, (treeWalkBranchSamples + 1)),
+  n => ((n == treeWalkBranchSamples)
+    ? treeWalkPoint($"level {b.level} {b.side} landing", "landing", treeBranchAt(b, 1), treeWalkLandingWithin, b.level)
+    : treeWalkPoint($"level {b.level} {b.side} branch out {n}", "branch", treeBranchAt(b, (n / treeWalkBranchSamples)), treeWalkBranchWithin, b.level))
+)
+function treeWalkBackAlong(b) = map(
+  range(1, treeWalkBranchSamples),
+  n => treeWalkPoint(
+    $"level {b.level} {b.side} branch back {n}",
+    "branch",
+    treeBranchAt(b, ((treeWalkBranchSamples - n) / treeWalkBranchSamples)),
+    treeWalkBranchWithin,
+    b.level
+  )
+)
+// The treads from one tread (excluded) up to another (included), at the walk's stride.
+function treeWalkTreads(from, to) = map(
+  filter(range((from + 1), (to + 1)), k => ((k % treeWalkTreadStride) == 0)),
+  k => treeWalkTread(k)
+)
+
+// The bearing the walk comes in to the trunk on: half a tread round before the first, which runs between the roots
+// either side of the spiral's foot (tree.puck's `treeRootRows`), and a point on the nave floor that far out from the
+// bark on it. The walk starts three and a half metres out, facing the trunk (a heading of 90 degrees less the bearing:
+// heading 0 faces -z, the bearing turns from +x toward +z), and comes in to the trunk's foot.
+let treeWalkFootBearing = treeTreadAngle(-0.5)
+function treeWalkFloor(out) = ([treeX, galleryFloor[0], treeZ] + polarPoint((treeTrunk.base + out), treeWalkFootBearing, 0))
+let treeWalkStart = treeWalkWorld(treeWalkFloor(3.5))
+let treeWalkStartYaw = (90 - treeWalkFootBearing)
+
+// The walk in sections, each a route chapter: the foot, then for each branch the climb to its junction and the branch
+// out to its landing and back (the last branch's only out, ending the walk on its balcony).
+let treeWalkLast = treeLimbs[(length(treeLimbs) - 1)]
+let treeWalkSections = concat(
+  [
+    {
+      name: "the nave floor to the trunk's foot"
+      points [treeWalkPoint("trunk foot", "foot", treeWalkFloor(treeWalkOut), treeWalkTreadWithin)]
+    }
+  ],
+  flatMap(range(0, length(treeLimbs)), i => [
+    {
+      name: $"the treads up to the level {treeLimbs[i].level} {treeLimbs[i].side} branch"
+      points: treeWalkTreads(((i == 0) ? -1 : treeLimbs[(i - 1)].tread), treeLimbs[i].tread)
+    }
+    {
+      name: $"the level {treeLimbs[i].level} {treeLimbs[i].side} branch"
+      points: ((treeLimbs[i].tread == treeWalkLast.tread)
+        ? treeWalkOutAlong(treeLimbs[i])
+        : concat(treeWalkOutAlong(treeLimbs[i]), treeWalkBackAlong(treeLimbs[i]), [treeWalkTread(treeLimbs[i].tread)]))
+    }
+  ])
+)
+// Every waypoint in walking order, each with the time it may take to reach from the one before: its distance at the
+// slowest pace, plus the turn.
+let treeWalkPlain = flatMap(treeWalkSections, s => s.points)
+let treeWalk = map(
+  range(0, length(treeWalkPlain)),
+  k => (treeWalkPlain[k] with {
+    seconds: (treeWalkTurnSeconds + (vectorLength((((k == 0) ? treeWalkStart : treeWalkPlain[(k - 1)].point) - treeWalkPlain[k].point) * [1, 0, 1]) / treeWalkSlowest))
+  })
+)

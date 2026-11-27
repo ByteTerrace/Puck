@@ -38,6 +38,35 @@ public interface IFixedContactStep {
 /// <param name="Velocity">The velocity after the step-up's moves, projected onto the landing support.</param>
 /// <param name="Resolution">The landing move's resolution, grounded on a walkable surface.</param>
 public readonly record struct FixedStepUpResult(FixedVector3 Position, FixedVector3 Velocity, ContactResolution Resolution);
+/// <summary>What one <see cref="FixedStepUp.Attempt{TStep}"/> decided, in the order its checks run.</summary>
+public enum FixedStepUpOutcome : byte {
+    /// <summary>The step was accepted: the body stands on the riser's top.</summary>
+    Taken = 0,
+    /// <summary>Nothing to step: no step height, or no planar displacement to carry over a riser.</summary>
+    NotAttempted,
+    /// <summary>The blocked sweep reported an edge taller than the step height, so the face is a wall.</summary>
+    OverHeight,
+    /// <summary>The raise was refused or gained no height: a ceiling lower than any lift.</summary>
+    Ceiling,
+    /// <summary>A face still stood in the way at the raised height, or the raised move got no further than the blocked
+    /// step: a wall, or a riser taller than the step height.</summary>
+    Wall,
+    /// <summary>The body cleared the riser at the step height but the lowering found no walkable support it proves within
+    /// reach: a refused step.</summary>
+    NoLanding,
+    /// <summary>The body cleared the riser and landed, but on nothing it may stand on as a step: above the step height,
+    /// no higher than the blocked step, or not grounded. A refused step.</summary>
+    Unstandable,
+}
+/// <summary>Reads a <see cref="FixedStepUpOutcome"/>.</summary>
+public static class FixedStepUpOutcomes {
+    /// <summary>Returns whether an outcome is a refused step: the body cleared the riser at the step height and could not
+    /// stand on what lay beyond it, as opposed to a wall, a riser taller than the step height or nothing to step.</summary>
+    /// <param name="outcome">The outcome.</param>
+    /// <returns><see langword="true"/> for <see cref="FixedStepUpOutcome.NoLanding"/> and
+    /// <see cref="FixedStepUpOutcome.Unstandable"/>.</returns>
+    public static bool IsRefusal(this FixedStepUpOutcome outcome) => (outcome is FixedStepUpOutcome.NoLanding or FixedStepUpOutcome.Unstandable);
+}
 /// <summary>Lifts a grounded body over a riser its ordinary step met as a wall: raise by the step height, move the
 /// step's planar displacement, and lower onto what lies beneath, each through the caller's own sweep.</summary>
 /// <remarks>
@@ -191,6 +220,25 @@ public static class FixedStepUp {
     /// <param name="requiredStepHeight">The edge clearance reported by the blocked sweep.</param>
     /// <returns><see langword="true"/> when the step-up is accepted.</returns>
     public static bool TryStep<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 intended, in FixedVector3 velocity,
+        in FixedVector3 up, FixedQ4816 stepHeight, in FixedVector3 blocked, out FixedStepUpResult result, FixedQ4816 requiredStepHeight = default) where TStep : IFixedContactStep, allows ref struct =>
+        (Attempt(blocked: in blocked, intended: in intended, requiredStepHeight: requiredStepHeight, result: out result, start: in start,
+            step: ref step, stepHeight: stepHeight, up: in up, velocity: in velocity) == FixedStepUpOutcome.Taken);
+
+    /// <summary>Tries the step-up for one blocked step and says what decided it, as <see cref="TryStep{TStep}"/> does
+    /// with its answer; a caller that counts refused steps (<see cref="FixedStepUpOutcomes.IsRefusal"/>) reads the
+    /// outcome.</summary>
+    /// <typeparam name="TStep">The caller's sweep.</typeparam>
+    /// <param name="step">The sweep every move and probe runs through.</param>
+    /// <param name="start">The foot point the step started from.</param>
+    /// <param name="intended">The foot point the step aimed for, before contact resolution.</param>
+    /// <param name="velocity">The velocity the step integrated, before contact resolution.</param>
+    /// <param name="up">The body's up axis, a unit vector.</param>
+    /// <param name="stepHeight">The tallest riser, in world units, the body steps onto; zero or less never steps.</param>
+    /// <param name="blocked">The foot point the ordinary, blocked step resolved to.</param>
+    /// <param name="result">The accepted step, or <see langword="default"/> when the blocked step stands.</param>
+    /// <param name="requiredStepHeight">The edge clearance reported by the blocked sweep.</param>
+    /// <returns><see cref="FixedStepUpOutcome.Taken"/> when the step-up is accepted, else the check that refused it.</returns>
+    public static FixedStepUpOutcome Attempt<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 intended, in FixedVector3 velocity,
         in FixedVector3 up, FixedQ4816 stepHeight, in FixedVector3 blocked, out FixedStepUpResult result, FixedQ4816 requiredStepHeight = default) where TStep : IFixedContactStep, allows ref struct {
         result = default;
 
@@ -203,10 +251,12 @@ public static class FixedStepUp {
 
         if (
             (stepHeight <= FixedQ4816.Zero) ||
-            (stepHeight < requiredStepHeight) ||
             (planar == FixedVector3.Zero)
         ) {
-            return false;
+            return FixedStepUpOutcome.NotAttempted;
+        }
+        if (stepHeight < requiredStepHeight) {
+            return FixedStepUpOutcome.OverHeight;
         }
 
         var blockedOffset = (blocked - start);
@@ -223,7 +273,7 @@ public static class FixedStepUp {
             previousPosition: in start,
             velocity: ref moved
         ).Refusal != ContactRefusal.None) {
-            return false;
+            return FixedStepUpOutcome.Ceiling;
         }
 
         var lift = FixedVector3.Dot(
@@ -232,7 +282,7 @@ public static class FixedStepUp {
         );
 
         if (lift <= FixedQ4816.Zero) {
-            return false;
+            return FixedStepUpOutcome.Ceiling;
         }
 
         // Carry the planar displacement over the riser. A face still in the way at the raised height is a wall.
@@ -247,14 +297,14 @@ public static class FixedStepUp {
                 right: planar
             ) <= blockedProgress)
         ) {
-            return false;
+            return FixedStepUpOutcome.Wall;
         }
 
         // Lower onto the support, down to where the original step would have ended along up. Nothing met in that range
         // leaves the body in the air, which is not a step.
         if (!TrySnap(distance: (lift - vertical), result: out var landingResult, start: in across, step: ref step,
             up: in up, velocity: in moved, responseOrigin: intended)) {
-            return false;
+            return FixedStepUpOutcome.NoLanding;
         }
         var landed = landingResult.Position;
         var landing = landingResult.Resolution;
@@ -274,7 +324,7 @@ public static class FixedStepUp {
                 right: up
             ))
         ) {
-            return false;
+            return FixedStepUpOutcome.Unstandable;
         }
 
         result = new FixedStepUpResult(
@@ -283,6 +333,6 @@ public static class FixedStepUp {
             Velocity: moved
         );
 
-        return true;
+        return FixedStepUpOutcome.Taken;
     }
 }

@@ -179,7 +179,11 @@ public enum ContactRefusal {
 /// body keeps only the ground it proved, and nothing may treat the result as a contact's correction or as clear.</param>
 /// <param name="RequiredStepHeight">The lift needed to clear the local approached edge, including its fillet and
 /// skin, measured from the pre-move body's bottom. A step must buy this whole clearance.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, ContactUncertainty Uncertainty = default, FixedQ4816 RequiredStepHeight = default) {
+/// <param name="Residual">The deepest displacing push, in metres past the skin's resting band, that the solve's last
+/// relaxation pass at the endpoint the body keeps still applied: zero when that pass found the pose clear of every
+/// push, so the body ends within the skin of every surface; above zero when the solve ran out of passes still pushing,
+/// the depth it last measured. A provider that measures none reports zero.</param>
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, ContactUncertainty Uncertainty = default, FixedQ4816 RequiredStepHeight = default, FixedQ4816 Residual = default) {
     /// <summary>Gets whether the solve left any pair uncertain (<see cref="Uncertainty"/>).</summary>
     public bool Unproved => !Uncertainty.IsEmpty;
     /// <summary>The actual walkable analytic solve, retained for diagnostics only; absent for providers that do not publish it.</summary>

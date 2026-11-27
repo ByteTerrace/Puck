@@ -257,7 +257,7 @@ internal sealed partial class PlayerCommandModule {
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.motion: body:{index} is {player.BodyMotionProgram}{planarTarget} stepHeight={((double)player.StepHeight):0.###}]"
+            handler: $"[body.motion: body:{index} is {player.BodyMotionProgram}{planarTarget} stepHeight={((double)player.StepHeight):0.###} kinematics: {player.Kinematics.Describe()}]"
         ));
     }
     private CommandResult PoseHandler(CommandContext context, WireArgs args) {
