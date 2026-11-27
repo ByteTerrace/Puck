@@ -343,14 +343,15 @@ surrounding block's.
 An `Int` expression widens to `Fixed` wherever a destination expects it: a rule write, a record field,
 a function argument or an arm of a numeric expression. This includes body-state writes such as
 `setBodyState(...)` and copies from an `Int` cell into a `Fixed` cell. The shared rule compiler inserts
-`toFixed` at the typed boundary. Conversion shifts the integer left by 16 bits exactly, without floating point;
+`toFixed` on Int reads before the numeric operations that consume them. Conversion shifts the integer left by 16 bits exactly, without floating point;
 a value outside Q48.16's representable range faults instead of wrapping.
 
 `Fixed` never narrows to `Int` implicitly. Write `toInt(value)` explicitly to truncate toward zero; the
 compiler's kind error names this conversion. `toFixed(value)` is also available explicitly. Conversions
-preserve values already in the requested kind. Reads keep their declared kinds, so an integer quotient
-computed from `Int` cells still truncates before its result is promoted. Literals use their expression's
-numeric context, so `1 / 2` in a `Fixed` expression remains one half.
+preserve values already in the requested kind. A Fixed destination, comparison operand or arithmetic
+operand gives its numeric subexpressions Fixed context too. Thus `clock >= (h / 24)` keeps the fraction
+when `clock` is Fixed and `h` is Int: the compiler widens the division's operands before dividing.
+Division truncates only in Int context; an explicit `toInt(...)` keeps its truncation boundary.
 
 ## Indexing
 
@@ -557,12 +558,14 @@ propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
 kind; an unconstrained integer expression is Int, while an unconstrained decimal expression selects
-Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. There is no implicit conversion between Int and Fixed state reads. A gate needs no
+Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. Mixed numeric reads use Fixed context. A gate needs no
 `: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
 `compareState` or `compareValue` from the expression; source gates refuse these call spellings
 and name an ordinary comparison such as `left == right` as their replacement.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so
-`cleared + (row > 0)` means the same thing on both sides of the compiler. `filter`'s lambda, a conditional's
+`cleared + (row > 0)` means the same thing on both sides of the compiler. A field the document types as a
+boolean reads that number as a gate does, so `holdable: (k == 0)` is the boolean, with no `? true : false`
+around it; a field that takes a number keeps the `1` or `0`. `filter`'s lambda, a conditional's
 condition, and a `for`'s own reads are all read back through the same truth test: a number is true when non-zero, a string
 when non-empty, a present container is true, and an absent value is false.
 
@@ -644,6 +647,33 @@ keeps its place in the composed order
 
 A render-lane member written with a quote offers the composed document's lane names in the language server
 (`WorldRenderLaneLanguageServices`), and hovering a name shows its lane and index.
+
+## Text runs: alignment and anchors
+
+A creation's text run (`textRuns`) is laid out on its own plane and placed by one point, its `position`. Two
+members say which point of the text block that is, as a layout tool's text box does.
+
+`align` places the block across: `left` (the default) puts the start of each line at the point, `right` puts the
+end of each line there, and `center` centres each line on it. It matches CSS `text-align` and the horizontal
+alignment buttons of Figma or Illustrator.
+
+`anchor` places the block up and down, by one of the lines type is designed on. Every height is the font's own,
+read from the font file, and scales with `emHeight`:
+
+| `anchor` | The point is |
+|---|---|
+| `baseline` (the default) | the first line's baseline, the line the letters stand on and descenders hang below |
+| `capTop` | the top of the first line's capitals (the font's cap height above its baseline) |
+| `capMiddle` | halfway between the top of the first line's capitals and the last line's baseline: where a label of capitals or figures reads as centred on the point |
+| `top` | the first line's ascent, the top of the text's box |
+| `middle` | halfway between the top and the bottom of the text's box |
+| `bottom` | the last line's descent, the bottom of the text's box, below every descender |
+
+`top`, `middle` and `bottom` are the box a layout tool draws round text, as Figma's vertical alignment and CSS
+`vertical-align: text-top` and `text-bottom` use it; their middle sits a little high on a line of capitals, because
+the box keeps room for descenders. `capTop` and `capMiddle` measure the capitals themselves, as a sign painter centres
+lettering, so a marquee's title written at the panel's centre with `anchor: "capMiddle"` sits optically centred on
+it. `baseline` lines text up with other text on one line.
 
 ## A section written twice composes
 

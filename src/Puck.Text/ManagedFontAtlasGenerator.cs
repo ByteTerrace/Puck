@@ -244,7 +244,8 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             Ascender: (font.Ascender / unitsPerEm),
             Descender: (font.Descender / unitsPerEm),
             UnderlineY: (font.UnderlinePosition / unitsPerEm),
-            UnderlineThickness: (font.UnderlineThickness / unitsPerEm)
+            UnderlineThickness: (font.UnderlineThickness / unitsPerEm),
+            CapHeight: (font.CapHeight / unitsPerEm)
         );
     }
     private static IReadOnlyList<GlyphRaster> GetGlyphs(OpenTypeFontFace font, IReadOnlyList<int> codePoints, int fontPixelSize, FontGenerationBudget budget) {

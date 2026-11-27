@@ -3365,6 +3365,10 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
+- [high] The chess opponent's search is unbounded: on the RTX 2060 partner's machine, chess-tests'
+  World peaked at 8.7 GB working set and 10.4 GB private over 28 minutes, never moved, and kept the turn
+  (verdict 0, turn White at tick 601). The one-ply opponent's search needs a hard node and memory bound
+  and an answer within a tick budget; a game's AI must never hold a world's memory.
 - [med] The endless fall's opening in level 1's floor is tabled (the owner,
   live): `fallOpen` (layout.puck) closes the hole and its rails while the wing's
   fall paintings below stand. Revisit the fall as a whole before turning it on.
@@ -5701,18 +5705,14 @@ confirming its site in the debug world and its work-budget share.
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the windowed look at the game table's
-chess, Klondike and FreeCell, close and wide, with the script in
-`worlds/debug/cardtable.md`; then Spider.
+chess, Klondike and FreeCell, close and wide, on `worlds/debug/game-station-root.puck` (`worlds/debug/game-station.md`);
+then Spider.
 
-- The game table is a display table (`worlds/standard/display-table.puck`)
-  whose glass draws chess from the chess table's own `board` row and plays it
-  through that game's display door (`chessPut`). Its cards are still the
-  standard deck's physical card creations lying on the glass: a card face the
-  display draws (flat, glowing like the chess icons) would read as the glass's
-  content. The chess icons (`worlds/standard/chess-icons.puck`) are a first
-  pass of convex silhouettes; the knight wants a curved neck and mane once a
-  look pass has judged them on the glass.
-
+- The game station (`worlds/standard/game-station.puck`) plays one game instance per world: chess's and the patience
+  collection's rows are not namespaced, and a world holds one deck, so two stations would share one chess game and only
+  one could lay out patience. Per-station games want the rules as modules a world instantiates per station (`use … as`).
+- A chess station has no NEW GAME: the chess library has no door that starts a fresh game, so the list's NEW GAME does
+  nothing while chess is shown.
 - [medium] The standard's deck departs from the true-size ruling:
   `cards.puck` authors a card 1.76 wide and the table's look scales it
   (`cardScale`), so the card bakes at the resolution of a 1.76 m object and

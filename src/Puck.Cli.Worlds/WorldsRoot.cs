@@ -20,7 +20,7 @@ public static class WorldsRoot {
     public const string CompilerAssembly = "Puck.Cli.Worlds.dll";
 
     /// <summary>Creates this assembly's verbs.</summary>
-    /// <returns>compile, creation, decompile, disclosure, embed, lint, lsp, mesh, migrate, registry, test, verbs and vocabulary.</returns>
+    /// <returns>compile, creation, decompile, disclosure, embed, eval, lint, lsp, mesh, migrate, registry, test, verbs and vocabulary.</returns>
     public static IEnumerable<Command> Verbs() => [
         CompileCommand.Create(),
         CreationCommand.Create(),
@@ -30,6 +30,7 @@ public static class WorldsRoot {
         LintCommand.Create(),
         LspCommand.Create(),
         MeshCommand.Create(),
+        EvalCommand.Create(),
         PuckMigrateCommand.Create(),
         RegistryCommand.Create(),
         TestCommand.Create(),

@@ -433,14 +433,25 @@ public static partial class WorldDocumentEmitter {
 
         return true;
     }
+    // Set while a prototype row lowers, so a construct of the creation document it holds (a shape group) is read as one.
+    private const string PrototypeRowKey = "WorldPrototypeRow";
+
     // `WorldPrototype.Id` is the block's quoted name, the same way `WorldPlacement.Id` is; `document` is an
     // ordinary nested block reached through `LowerBlockToObject` -> `ProcessStatement` -> `LowerBlock`, so a `shape`
     // statement inside it hits `LowerShapeBlock` the same way one at document root does.
     private static JsonObject LowerPrototypeRow(BlockNode row, DocumentScope scope) {
-        var rowObj = LowerBlockToObject(
-            block: row,
-            scope: scope
-        );
+        var outer = scope.Annotations.GetValueOrDefault(key: PrototypeRowKey);
+
+        scope.Annotations[PrototypeRowKey] = true;
+        JsonObject rowObj;
+        try {
+            rowObj = LowerBlockToObject(
+                block: row,
+                scope: scope
+            );
+        } finally {
+            scope.Annotations[PrototypeRowKey] = outer;
+        }
 
         if (
             !rowObj.ContainsKey(propertyName: "id") &&

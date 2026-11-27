@@ -1,0 +1,88 @@
+// The patience collection: the games a game station's glass plays (patience-station.puck), one at a time.
+// `solitaire.table` names the game in play (1 Klondike, 2 FreeCell; 0 pauses them all) and each game's rules are gated
+// on it, so a game kept mid-deal keeps its piles while another is on the table. The table writes it from the game its
+// glass shows, which is chess, and so none of these, until a player picks one.
+import "klondike"
+import "freecell"
+
+export action solitaire, solitaireKlondike, solitaireFreecell
+export read solitaire, solitaireKlondike, solitaireKlondikeCards, solitaireKlondikeFace, solitaireKlondikeRank, solitaireKlondikeSuit, solitaireKlondikeLength
+export read solitaireKlondikePile0, solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6
+export read solitaireKlondikePile7, solitaireKlondikePile8, solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13
+export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellRank, solitaireFreecellSuit, solitaireFreecellLength, solitaireFreecellDeck
+export read solitaireFreecellPile0, solitaireFreecellPile1, solitaireFreecellPile2, solitaireFreecellPile3, solitaireFreecellPile4, solitaireFreecellPile5
+export read solitaireFreecellPile6, solitaireFreecellPile7, solitaireFreecellPile8, solitaireFreecellPile9, solitaireFreecellPile10, solitaireFreecellPile11
+export read solitaireFreecellPile12, solitaireFreecellPile13, solitaireFreecellPile14, solitaireFreecellPile15
+
+state {
+  world {
+    table solitaire capacity(1) {
+      table = 0
+    }
+  }
+}
+
+// The console plays the games' mailboxes directly (`world.state.cell.set solitaireKlondike ...`); these lines are the same
+// requests a table's seat makes.
+commands [
+  {
+    name: "klondike.deal"
+    help: "Deals a new game of Klondike on the table that lays it out: draw one card (1) or three (3) from the stock."
+    parameters [
+      { name: "draw", kind: Choice, values ["1", "3"], default: "1" }
+    ]
+    lines [
+      "world.state.cell.set solitaireKlondike option {draw}"
+      "world.state.cell.set solitaireKlondike action 1"
+      "world.state.cell.set solitaireKlondike request 1 add"
+    ]
+  }
+  {
+    name: "klondike.draw"
+    help: "Draws from the Klondike stock, or turns the waste over once the stock is empty."
+    lines [
+      "world.state.cell.set solitaireKlondike action 3"
+      "world.state.cell.set solitaireKlondike request 1 add"
+    ]
+  }
+  {
+    name: "freecell.deal"
+    help: "Deals a new game of FreeCell on the table that lays it out."
+    lines [
+      "world.state.cell.set solitaireFreecell action 1"
+      "world.state.cell.set solitaireFreecell request 1 add"
+    ]
+  }
+  {
+    name: "freecell.move"
+    help: "Moves the run led by a card (0 to 51, suit * 13 + rank - 1) from one pile to another: piles 0 to 3 free cells, 4 to 7 foundations (suits spades, hearts, clubs, diamonds), 8 to 15 columns."
+    parameters [
+      { name: "from", kind: Number }
+      { name: "to", kind: Number }
+      { name: "card", kind: Number }
+    ]
+    lines [
+      "world.state.cell.set solitaireFreecell from {from}"
+      "world.state.cell.set solitaireFreecell to {to}"
+      "world.state.cell.set solitaireFreecell card {card}"
+      "world.state.cell.set solitaireFreecell action 2"
+      "world.state.cell.set solitaireFreecell request 1 add"
+    ]
+  }
+  {
+    name: "klondike.move"
+    help: "Moves the run led by a card (0 to 51, suit * 13 + rank - 1) from one pile to another: piles 1 waste, 2 to 8 tableau, 10 to 13 foundations."
+    parameters [
+      { name: "from", kind: Number }
+      { name: "to", kind: Number }
+      { name: "card", kind: Number }
+    ]
+    lines [
+      "world.state.cell.set solitaireKlondike from {from}"
+      "world.state.cell.set solitaireKlondike to {to}"
+      "world.state.cell.set solitaireKlondike card {card}"
+      "world.state.cell.set solitaireKlondike action 2"
+      "world.state.cell.set solitaireKlondike request 1 add"
+    ]
+  }
+]

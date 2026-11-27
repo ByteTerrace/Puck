@@ -750,7 +750,7 @@ template shellPrototypes() {
           landing: switchbackLanding,
           rise: galleryStorey,
           risers: stairRisers,
-          guard: ((k == (length(shellStairStoreys) - 1)) ? 1 : 0),
+          guard: (k == (length(shellStairStoreys) - 1)),
           size0: shellLevelSize(k),
           size1: shellLevelSize((k + 1))
         )
@@ -997,7 +997,7 @@ template shellPlacements() {
       parent: "gallery"
       position [0, 0, 0]
       grip {
-        holdable: ((k == 0) ? true : false)
+        holdable: (k == 0)
       }
       solid
     }

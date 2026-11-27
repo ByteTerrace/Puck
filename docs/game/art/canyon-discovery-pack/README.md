@@ -184,7 +184,7 @@ loose pieces cluttering the public route.
 | [Reversi](../../../../worlds/debug/reversi.md) | Distinct disc board and side trays. |
 | [Alchemy](../../../../worlds/debug/alchemy.md) | Discovery cauldron, two ingredient wells, element medallions and recipe-book readout. |
 | [Granary board](../../../../worlds/debug/granaries.md) | A four-by-four physical resource board with timber stores, water/power providers and a readout lectern. It demonstrates observed provider state as a small living model. |
-| [Patience](../../../../worlds/debug/cardtable.md) | The game table: a display table whose glass plays chess (the chess table's game), Klondike and FreeCell, with columns, stock/waste and foundations; one playing seat. |
+| [Patience](../../../../worlds/debug/game-station.md) | The game station: a table whose glass plays chess, Klondike and FreeCell, with columns, stock/waste and foundations; one playing seat. |
 
 Actual board topology, piece identities and game positions come from the
 authored games. The scenes establish furniture, approach and shared-room

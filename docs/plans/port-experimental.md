@@ -42,7 +42,7 @@ Not ported again:
 | Quarantined | Debug world |
 |---|---|
 | `modules/granaries.puck` (the storage court) | `worlds/debug/granaries.puck` |
-| Klondike, FreeCell, the solitaire collection (`games/freecell.puck`, `games/README.md`) | `klondike.puck`, `freecell.puck`, `solitaire.puck` behind `cardtable.puck` |
+| Klondike, FreeCell, the solitaire collection (`games/freecell.puck`, `games/README.md`) | `klondike.puck`, `freecell.puck`, `solitaire.puck` in `worlds/games/`, on the game station (`patience-station.puck`` |
 | Physical chess, Go, Reversi, Alchemy (the parlor and market) | `chess.puck`, `go.puck`, `reversi.puck`, `alchemy.puck` |
 | `modules/arcade.puck` (cabinets and a handheld), `tools/hgb-mirror.puck` | `devices.puck`, `desktop.puck`, `machine-debugger.puck`, `cartridges/` (the tetromino, light-gun and hgb-mirror cartridges) |
 | `modules/studio.puck` (a stage, a turntable) | `studio.puck` (the avatar studio) |

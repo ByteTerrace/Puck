@@ -1,0 +1,40 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "wall" {
+    document {
+      name: "wall"
+      schema: "puck.creation.v2"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+placements {
+  placement "wall-0" {
+    prototype: "wall"
+    position [0, 1, 0]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "wall-1" {
+    prototype: "wall"
+    position [4, 1, 0]
+    grip {
+      holdable: false
+    }
+    solid
+  }
+}
+
+state {
+  world {
+    slot open = 1
+  }
+}

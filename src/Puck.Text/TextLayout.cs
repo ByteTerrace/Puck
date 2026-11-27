@@ -56,25 +56,39 @@ public sealed class TextLayout {
             }
 
             for (var index = startIndex; (index < endIndex); index++) {
-                var placement = placements[index];
-                var bounds = placement.PlaneBounds;
-
-                placements[index] = placement with {
-                    BaselineOrigin = new Vector2(
-                    x: (placement.BaselineOrigin.X + shift),
-                    y: placement.BaselineOrigin.Y
-                ),
-                    PlaneBounds = new FontAtlasBounds(
-                    Bottom: bounds.Bottom,
-                    Left: (bounds.Left + shift),
-                    Right: (bounds.Right + shift),
-                    Top: bounds.Top
-                ),
-                };
+                placements[index] = Shifted(placement: placements[index], x: shift, y: 0f);
             }
         }
 
         return blockWidth;
+    }
+    // Moves every line so the anchor's line sits at y = 0: the first baseline is at 0 and the last at `lastBaseline`, so
+    // the capitals' top, the ascent and the descent are measured from them.
+    private static void Anchor(TextVerticalAnchor anchor, float lastBaseline, FontAtlasMetrics metrics, List<TextGlyphPlacement> placements, float scale) {
+        var capTop = (metrics.EffectiveCapHeight * scale);
+        var top = (metrics.Ascender * scale);
+        var bottom = (lastBaseline + (metrics.Descender * scale));
+        var shift = -(anchor switch {
+            TextVerticalAnchor.CapTop => capTop,
+            TextVerticalAnchor.CapMiddle => ((capTop + lastBaseline) * 0.5f),
+            TextVerticalAnchor.Top => top,
+            TextVerticalAnchor.Middle => ((top + bottom) * 0.5f),
+            TextVerticalAnchor.Bottom => bottom,
+            _ => 0f,
+        });
+
+        for (var index = 0; (index < placements.Count); index++) {
+            placements[index] = Shifted(placement: placements[index], x: 0f, y: shift);
+        }
+    }
+    // A placement moved by (x, y): its pen origin and its plane bounds alike.
+    private static TextGlyphPlacement Shifted(TextGlyphPlacement placement, float x, float y) {
+        var bounds = placement.PlaneBounds;
+
+        return placement with {
+            BaselineOrigin = new Vector2(x: (placement.BaselineOrigin.X + x), y: (placement.BaselineOrigin.Y + y)),
+            PlaneBounds = new FontAtlasBounds(Bottom: (bounds.Bottom + y), Left: (bounds.Left + x), Right: (bounds.Right + x), Top: (bounds.Top + y)),
+        };
     }
     private static TextLayoutResult LayoutRunes<TEnumerator>(FontAtlas atlas, TEnumerator runes, float scale, TextLayoutOptions options, int placementCapacity) where TEnumerator : IEnumerator<TextEffectRune> {
         // Arguments are validated by ValidateArguments in every public entry point before an enumerator is
@@ -254,6 +268,10 @@ public sealed class TextLayout {
 
         var metrics = atlas.Metrics;
 
+        if (options.VerticalAnchor != TextVerticalAnchor.Baseline) {
+            Anchor(anchor: options.VerticalAnchor, lastBaseline: baselineY, metrics: metrics, placements: placements, scale: scale);
+        }
+
         return new TextLayoutResult(
             height: (((metrics.Ascender - metrics.Descender) * scale) + ((lineCount - 1) * lineStep)),
             placements: placements,
@@ -314,6 +332,9 @@ public sealed class TextLayout {
                 message: "Text alignment must be a defined alignment value.",
                 paramName: nameof(options)
             );
+        }
+        if (!Enum.IsDefined(value: options.VerticalAnchor)) {
+            throw new ArgumentOutOfRangeException(message: "Text vertical anchor must be a defined anchor value.", paramName: nameof(options));
         }
     }
 

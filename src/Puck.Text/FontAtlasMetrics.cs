@@ -19,10 +19,17 @@ namespace Puck.Text;
 /// The vertical position of the underline relative to the baseline, in em units.
 /// </param>
 /// <param name="UnderlineThickness">The stroke thickness of the underline, in em units.</param>
+/// <param name="CapHeight">The height of the font's flat capitals above the baseline, in em units (positive), or zero
+/// when the atlas records none; <see cref="EffectiveCapHeight"/> reads it.</param>
 public readonly record struct FontAtlasMetrics(
     float LineHeight,
     float Ascender,
     float Descender,
     float UnderlineY,
-    float UnderlineThickness
-);
+    float UnderlineThickness,
+    float CapHeight = 0f
+) {
+    /// <summary>Gets the capitals' height in em units: <see cref="CapHeight"/>, or seven tenths of the ascender for an
+    /// atlas that records none.</summary>
+    public float EffectiveCapHeight => ((CapHeight > 0f) ? CapHeight : (Ascender * 0.7f));
+}

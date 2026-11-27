@@ -209,6 +209,8 @@ public static partial class CreationCanonicalizer {
             }
 
             normalized.Add(item: run with {
+                // The baseline is the absent anchor's meaning, so it is written by leaving the anchor out.
+                Anchor = ((run.Anchor == TextRunDocument.AnchorNames[0]) ? null : run.Anchor),
                 Align = (string.Equals(
                 a: run.Align,
                 b: TextRunDocument.AlignCenter,
@@ -1839,6 +1841,12 @@ public static partial class CreationCanonicalizer {
                 errors.Add(item: new(
                     Message: "lineSpacing is non-finite.",
                     Path: $"textRuns[{i}].lineSpacing"
+                ));
+            }
+            if (TextRunDocument.AnchorOf(anchor: run.Anchor) is null) {
+                errors.Add(item: new(
+                    Message: $"anchor '{run.Anchor}' names no line of a text block; write one of {string.Join(separator: ", ", values: TextRunDocument.AnchorNames)}.",
+                    Path: $"textRuns[{i}].anchor"
                 ));
             }
         }

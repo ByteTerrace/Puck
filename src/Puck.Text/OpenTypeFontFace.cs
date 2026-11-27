@@ -75,6 +75,9 @@ public sealed class OpenTypeFontFace {
     public short UnderlinePosition { get; }
     public short UnderlineThickness { get; }
     public ushort UnitsPerEm { get; }
+    /// <summary>Gets the height of the font's flat capitals above the baseline, in font units: the OS/2 table's
+    /// <c>sCapHeight</c> (version 2 and later), or seven tenths of the ascender for a font that records none.</summary>
+    public short CapHeight { get; private init; }
 
     internal static void EnsureRange(ReadOnlySpan<byte> bytes, int offset, int length, string context) {
         if (
@@ -1414,12 +1417,24 @@ public sealed class OpenTypeFontFace {
             : ReadOnlyMemory<byte>.Empty
         );
 
+        var ascender = ReadInt16(
+            bytes: hhea.Span,
+            offset: 4,
+            context: "font ascender"
+        );
+        // OS/2 version 2 and later records the capitals' height at byte 88 (the OpenType specification's sCapHeight).
+        var capHeight = ((short)((ascender * 7) / 10));
+
+        if (tables.TryGetValue(key: Tag(value: "OS/2"), value: out var os2Record) && (os2Record.Length >= 90)) {
+            var os2 = fontBytes.Span.Slice(start: os2Record.Offset, length: os2Record.Length);
+
+            if ((ReadUInt16(bytes: os2, offset: 0, context: "OS/2 version") >= 2) && (ReadInt16(bytes: os2, offset: 88, context: "cap height") is var recorded and > 0)) {
+                capHeight = recorded;
+            }
+        }
+
         return new OpenTypeFontFace(
-            ascender: ReadInt16(
-                bytes: hhea.Span,
-                offset: 4,
-                context: "font ascender"
-            ),
+            ascender: ascender,
             cffOutlines: cffOutlines,
             cmap: cmapSelection.Table,
             cmapFormat: cmapSelection.Format,
@@ -1444,7 +1459,7 @@ public sealed class OpenTypeFontFace {
             underlinePosition: underlinePosition,
             underlineThickness: underlineThickness,
             unitsPerEm: unitsPerEm
-        ) { m_budget = budget };
+        ) { m_budget = budget, CapHeight = capHeight };
     }
 
     private readonly record struct TableRecord(int Length, int Offset);

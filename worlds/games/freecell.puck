@@ -1,5 +1,5 @@
 // FreeCell patience, as rules over piles of physical cards (solitaire.puck switches between the patience games and
-// cardtable.puck lays the cards out on a table). The console and the seated player play it through one mailbox: a
+// patience-station.puck lays the cards out on a game station's glass). The console and the seated player play it through one mailbox: a
 // request names an `action` (1 deal, 2 move a run from pile `from` to pile `to` led by card `card`) and bumps `request`;
 // the door answers `applied`, `result` (1 played, -1 refused) and the rest of the cells below, and the cards follow.
 //
@@ -9,7 +9,7 @@
 // moves as the free cells and empty columns would let it be moved a card at a time: at most (empty cells + 1) times two
 // to the power of the empty columns, not counting a target column that is itself empty.
 
-// The surface the table (cardtable.puck) reads and the mailbox it writes.
+// The surface a station (patience-station.puck) reads and the mailbox it writes.
 export action solitaireFreecell
 export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellRank, solitaireFreecellSuit, solitaireFreecellLength
 export read solitaireFreecellDeck, solitaireFreecellPile0, solitaireFreecellPile1, solitaireFreecellPile2, solitaireFreecellPile3

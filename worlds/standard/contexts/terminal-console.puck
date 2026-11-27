@@ -237,7 +237,7 @@ template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep =
         capacity: length(commands)
         cells: map(
           range(0, length(commands)),
-          c => { key: $"{c + 1}", value: ((commands[c].terminals == null) ? 1 : 0) }
+          c => { key: $"{c + 1}", value: (commands[c].terminals == null) }
         )
       }
       // The terminals a restricted command is offered at, keyed `terminal * stride + command`.

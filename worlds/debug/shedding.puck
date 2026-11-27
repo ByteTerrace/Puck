@@ -3,7 +3,7 @@ import "gametable"
 
 // The shedding table: a card game for four seats (../games/shedding.puck) with 24 cards of the standard deck, at the
 // board game room's south table on level 2, east of the auction table. The debug world imports this file whole, and
-// cardtable.puck's `cardDeckPrototypes` gives it the faces; shedding-tests.puck boots it on its own as the disclosure
+// game-station-deck.puck's deck (patienceStationCards) gives it the faces; shedding-tests.puck boots it on its own as the disclosure
 // harness's fixture for piles under `Count` and `Placeholder`. The table deals at boot; a seat plays with
 // `shedding.play <seat> <card>` (card 0 to 23, suit * 6 + rank - 1, suits spades, hearts, clubs, diamonds) or draws with
 // `shedding.draw <seat>`, and `shedding.deal` gathers the cards and deals again.
