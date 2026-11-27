@@ -115,7 +115,7 @@
             "default": null
           },
           "shape": {
-            "description": "Which solid is fitted: a sphere, a capsule along the long axis, the box itself, or by default the one the box\u0027s proportions suggest.",
+            "description": "Which solid is fitted to the rest box: a sphere, a capsule along the long axis, the box itself, or by default the one the box\u0027s proportions suggest. A body whose kit\u0027s collider stands for it casts that collider\u0027s solid whatever this says.",
             "enum": [
               "Auto",
               "Sphere",

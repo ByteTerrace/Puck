@@ -46,13 +46,18 @@ public sealed partial class WorldBody {
             // STEP-UP. A grounded body (m_grounded is still last tick's verdict here) whose step met a non-walkable
             // face retries it over the face, through the same sweep; FixedStepUp keeps the retry only when it lands
             // walkable within the kit's step height.
-            if (
+            var attemptedStep = (
                 m_grounded &&
                 (contactResolution.ObstructionNormal != FixedVector3.Zero) &&
                 (m_tuning.StepHeight > FixedQ4816.Zero) &&
                 m_bodyMotionProgram.OwnsVerticalContactState &&
-                !HoldOwnsVerticalChannel &&
-                FixedStepUp.TryStep(
+                !HoldOwnsVerticalChannel
+            );
+            var stepOutcome = FixedStepUpOutcome.NotAttempted;
+            var stepRise = FixedQ4816.Zero;
+
+            if (attemptedStep) {
+                stepOutcome = FixedStepUp.Attempt(
                     requiredStepHeight: contactResolution.RequiredStepHeight,
                     blocked: in scratch.NextPosition,
                     intended: in intended,
@@ -62,11 +67,13 @@ public sealed partial class WorldBody {
                     stepHeight: StepHeight,
                     up: in scratch.Up,
                     velocity: in scratch.Velocity
-                )
-            ) {
-                scratch.NextPosition = stepped.Position;
-                resolvedVelocity = stepped.Velocity;
-                contactResolution = stepped.Resolution;
+                );
+                if (stepOutcome == FixedStepUpOutcome.Taken) {
+                    stepRise = FixedVector3.Dot(left: (stepped.Position - m_position), right: scratch.Up);
+                    scratch.NextPosition = stepped.Position;
+                    resolvedVelocity = stepped.Velocity;
+                    contactResolution = stepped.Resolution;
+                }
             }
 
             // Keep walking contact across crests and descending slopes. A jump or deliberate launch clears
@@ -74,6 +81,8 @@ public sealed partial class WorldBody {
             // too, onto support the snap proves: a step that leaves its ground by less than a field's box bounds can
             // prove clear is unproved by construction, which is the pose a snap exists to settle, and its landing may
             // leave uncertain only the pairs the step already did.
+            var snappedDown = false;
+
             if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel && !HoldIsMedium &&
                 (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) && !contactResolution.Grounded &&
                 FixedStepUp.TrySnap(step: ref step, start: in scratch.NextPosition, velocity: in resolvedVelocity,
@@ -81,6 +90,7 @@ public sealed partial class WorldBody {
                 scratch.NextPosition = snapped.Position;
                 resolvedVelocity = snapped.Velocity;
                 contactResolution = snapped.Resolution with { ObstructionNormal = contactResolution.ObstructionNormal };
+                snappedDown = true;
             }
 
             // The contact measured walkability against the body's own up; ground is also what the field presses the
@@ -161,6 +171,8 @@ public sealed partial class WorldBody {
                 position: scratch.NextPosition,
                 stepTicks: scratch.StepTicks
             );
+            WitnessKinematics(attemptedStep: attemptedStep, resolution: in contactResolution, scratch: in scratch, snapped: snappedDown,
+                stepOutcome: stepOutcome, stepRise: stepRise);
 
             if (
                 !m_bodyMotionProgram.OwnsVerticalContactState ||

@@ -2418,7 +2418,16 @@ check; this packet holds the defects beside it.
 - [medium] The lighting's device memory (the trace scene's region, the
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
-  (`SdfGpuWorkHold`).
+  (`SdfGpuWorkHold`). Most of it is allocated after the bake settles (a first
+  light, the trace scene over the standing meshes), and the selector's elastic
+  budget is what the pool's limit leaves after everything held
+  (`SdfResidencySelector`'s `UsableOf`), so the bake is granted room mid-bake
+  that the lighting then takes back: the region's budget falls once the bake
+  has filled it, and the bias rises to coarsen what was already placed. The
+  fix is a reservation the lighting makes before the bake fills the region,
+  sized from its indirect tier (`SdfMeshIrradiance.LevelsOf`) for the volume
+  tables and hit cache, with the trace scene's words reserved as the region's
+  meshes stand.
 - [high] A volume's words stand three times: the host's copy
   (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
   which the relights read and commit into (`SdfMeshProbeGpuWork`), and the

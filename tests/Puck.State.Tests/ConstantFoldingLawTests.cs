@@ -55,10 +55,17 @@ public sealed class ConstantFoldingLawTests {
     [Fact]
     public void FoldingCannotHideInvalidNamesKindsOrOversizedAuthoredPrograms() {
         Assert.Throws<RuleException>(testCode: () => Compile("1 ? 7 : missing"));
+        // An Int result widens into a Fixed destination (RuleCompiler.ImplicitConversion), so the invalid kind is a
+        // Fixed result narrowed into an Int one, which only an explicit toInt converts. A widening that overflows is a
+        // domain fault the folder leaves in the program.
         Assert.Throws<RuleException>(testCode: () => Compile(
+            kind: CellKind.Int,
+            text: "sine(0)"
+        ));
+        Assert.True(condition: (Compile(
             kind: CellKind.Fixed,
             text: "replicationMask(8)"
-        ));
+        ).Length > 1));
         var tokens = new List<Instruction> { Instruction.Constant(value: 0) };
 
         for (var i = 0; (i < RuleCapacity.MaxExpressionTokens); i++) { tokens.Add(item: Instruction.Of(operation: ExpressionOp.BitNot)); }
