@@ -13,12 +13,11 @@ public sealed partial class StateArena {
         ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (!UsesLinks(layout: layout)) { position = (slot - layout.CellStart); return true; }
-        var count = ((int)m_memberCounts[rowOrdinal]);
-
-        for (var index = 0; (index < count); index++) {
-            if (CellSlotAt(layout: layout, position: index) == slot) { position = index; return true; }
-        }
-        return false;
+        // The ends answer from the links; any other slot reads the inverse the row's position view carries.
+        if (slot == ((layout.CellStart + m_headSlots[rowOrdinal]) - 1)) { position = 0; return true; }
+        if (slot == ((layout.CellStart + m_tailSlots[rowOrdinal]) - 1)) { position = (((int)m_memberCounts[rowOrdinal]) - 1); return true; }
+        position = PositionView(layout: layout)[(layout.CellCapacity + (slot - layout.CellStart))];
+        return true;
     }
 
     private static bool UsesLinks(in ArenaRowLayout layout) => layout.HasColumn(column: ArenaColumn.NextSlot);
@@ -32,24 +31,36 @@ public sealed partial class StateArena {
 
         if (position == 0) { return ((layout.CellStart + m_headSlots[row]) - 1); }
         if (position == (count - 1)) { return ((layout.CellStart + m_tailSlots[row]) - 1); }
-        var positions = m_positions[row];
+        return PositionView(layout: layout)[position];
+    }
+    // The row's position view, derived from its links by one walk per row generation: the first CellCapacity entries
+    // answer a position's slot, and the CellCapacity after them a slot's position (indexed by its offset in the row),
+    // so a key's position and a position's key are both one read. The walk that fills one fills the other.
+    private int[] PositionView(in ArenaRowLayout layout) {
+        var row = layout.Ordinal;
+        var capacity = layout.CellCapacity;
+        var view = m_positions[row];
 
-        if ((positions is null) || (positions.Length < layout.CellCapacity)) {
-            positions = new int[layout.CellCapacity];
-            m_positions[row] = positions;
+        if ((view is null) || (view.Length != (2 * capacity))) {
+            view = new int[(2 * capacity)];
+            m_positions[row] = view;
             m_positionVersions[row] = ulong.MaxValue;
         }
         if (m_positionVersions[row] != m_rowGenerations[row]) {
+            var count = ((int)m_memberCounts[row]);
             var slot = m_headSlots[row];
 
             for (var index = 0; (index < count); index++) {
-                positions[index] = ((layout.CellStart + slot) - 1);
-                slot = m_nextSlots[positions[index]];
+                var at = ((layout.CellStart + slot) - 1);
+
+                view[index] = at;
+                view[(capacity + (at - layout.CellStart))] = index;
+                slot = m_nextSlots[at];
             }
             m_positionVersions[row] = m_rowGenerations[row];
             Visit(lanes: count);
         }
-        return positions[position];
+        return view;
     }
     private void InitializeMemberLinks(int rowOrdinal, int count, IReadOnlyList<int>? slots = null) {
         ref readonly var layout = ref m_layout[rowOrdinal];

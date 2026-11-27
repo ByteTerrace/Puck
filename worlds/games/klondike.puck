@@ -128,6 +128,11 @@ template klondikeState(count) {
   pile klondikeDown7Of[count] of solitaireCards capacity(6)
   pile klondikeDown8Of[count] of solitaireCards capacity(7)
 
+  // Whether each card lies face down (1), a cell a card in each table's member: the stock and the face-down piles hold
+  // theirs face down and every other pile face up. The rules that turn a card over write it, as they move the card: a
+  // gather and a recycle put it in the stock, a draw and a reveal take it out.
+  table klondikeFaceDownOf[count] capacity(52) = map(range(0, 52), k => 1)
+
   row {
     name: "solitaireKlondikeStream"
     kind: "Int"
@@ -151,6 +156,7 @@ template klondikeReveal(z) {
       count($zones[z]) == 0 and
       count($zones[z + kdDown]) > 0)
     transaction {
+      klondikeFaceDownOf[$each][zone($zones[z + kdDown], last)] = 0
       transform transfer(from: $zones[z + kdDown], to: $zones[z], selector: Last)
       klondikeBusy[$each] = 1
     }
@@ -179,6 +185,7 @@ template klondikeGame() {
     when (solitaireTable[$each] == 1 and
       klondikeStage[$each] == 1 and
       count($zones[klondikeGatherStep[$each]]) > 0)
+    klondikeFaceDownOf[$each][zone($zones[klondikeGatherStep[$each]], first)] = 1
     draw $zones[klondikeGatherStep[$each]] to klondikeStockOf[$each]
   }
 
@@ -346,6 +353,7 @@ template klondikeGame() {
     forEach: solitaireTable
     when solitaireTable[$each] == 1 and klondikeStage[$each] == 4 and klondikeDrawLeft[$each] > 0
     transaction {
+      klondikeFaceDownOf[$each][zone(klondikeStockOf[$each], first)] = 0
       draw klondikeStockOf[$each] to klondikeWasteOf[$each]
       klondikeDrawLeft[$each] = klondikeDrawLeft[$each] - 1
     }
@@ -373,6 +381,7 @@ template klondikeGame() {
   rule "solitaireKlondike-recycle-card" {
     forEach: solitaireTable
     when solitaireTable[$each] == 1 and klondikeStage[$each] == 2 and count(klondikeWasteOf[$each]) > 0
+    klondikeFaceDownOf[$each][zone(klondikeWasteOf[$each], first)] = 1
     draw klondikeWasteOf[$each] to klondikeStockOf[$each]
   }
 

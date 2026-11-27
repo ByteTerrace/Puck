@@ -154,7 +154,11 @@ its wrong answers would look exactly like right ones.
   CPU bake. It lifts the warp refusals: it interprets a non-uniform `Scale` as
   the interpreter's minimum-axis lower bound, every strand of a `Sweep`, and
   every op in `SdfFieldEvaluator.RenderWarpOps`. It still refuses
-  `TransformDynamic`.
+  `TransformDynamic`. Its point walk reads each parameter as its nearest raw,
+  but its bounds, certificates and region drops read each as the enclosure of
+  the packed float the kernels read (`FixedInterval.Enclosing`), so a bound the
+  mesh bake trusts in place of samples holds the field the kernels evaluate,
+  not only the raws' field.
 - **Both readings** refuse the shapes whose exact cores need runtime
   trigonometry or texture sampling: regular polygon and star (`atan2`), glyph
   (a texture sample) and a sampled field, whose values travel beside the program

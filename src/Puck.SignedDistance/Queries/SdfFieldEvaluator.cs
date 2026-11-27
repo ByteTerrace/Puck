@@ -37,6 +37,9 @@ namespace Puck.SignedDistance.Queries;
 // AxialProfile and RotatePlane, SdfFieldEvaluator.RenderOps.cs for the rest), so their mapCore cases are a sync pair
 // with this evaluator too. A LaneErode reads every lane as zero, the value a static placement's bake reads. A contact
 // reading admits RotatePlane through the same point and interval rules; the remaining RenderWarpOps stay render-only.
+// Its point walk reads each parameter as the nearest raw, as the contact reading does, but its box walk, certificates
+// and region drops read each as the enclosure of the float the kernels read (CompiledInstruction's THE PARAMETER
+// ENCLOSURES), since the mesh bake and its material cut trust them in place of the kernels' samples.
 //
 // THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
 // certificate (SdfFieldEvaluator.Certificates.cs), derived from the compiled fixed-point stream, proves it cannot move
@@ -355,7 +358,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     )
                 : null),
                 ReliefMasks: ((SdfFieldOps.StreamOf(value: instruction.Op) == SdfReliefStreamRole.ReliefOwner) && (program.ReliefMasksAt(instructionIndex: index) is { Count: > 0 } masks)
-                    ? CompileReliefMasks(masks: masks)
+                    ? CompileReliefMasks(masks: masks, reading: reading)
                     : null),
                 ScopeScale: (instruction.Op switch {
                     SdfOp.PopField when !deferred[index] => CompileScopeScale(scale: instruction.Data1.Y),
@@ -363,13 +366,94 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     _ => 0L,
                 })
             );
+
+            if (reading == SdfFieldReading.Render) {
+                ref readonly var lanes = ref compiled[index];
+                var scopeScale = (instruction.Op switch {
+                    SdfOp.PopField => instruction.Data1.Y,
+                    SdfOp.ShapeBlend => program.ShapeStepScaleAt(instructionIndex: index),
+                    _ => 0f,
+                });
+
+                compiled[index] = (lanes with {
+                    Sides = (DataSides(data0: instruction.Data0, data1: instruction.Data1, lanes: in lanes, table: (isConvexPolygon || isSweep || isPath)) |
+                        ((instruction.Op == SdfOp.GaussianPush) ? LaneSide(lane: AuxLane, nearest: lanes.Aux, value: BitConverter.UInt32BitsToSingle(value: instruction.Shape)) : 0u) |
+                        ScopeScaleSide(compiled: lanes.ScopeScale, scale: scopeScale) |
+                        ((isConvexPolygon || isSweep || isPath) ? TableSides(index: index, isConvexPolygon: isConvexPolygon, isSweep: isSweep, program: program) : 0u)),
+                });
+            }
         }
 
         return compiled;
     }
+    // The lanes a parameter enclosure reads (CompiledInstruction's THE PARAMETER ENCLOSURES): the eight data lanes, then
+    // GaussianPush's Aux, then the scope scale on its own grid, and one bit for every side table.
+    private const int AuxLane = 8;
+    private const int ScopeScaleLane = 9;
+    private const uint TableSide = (1u << 20);
+
+    // Where a float lies against its nearest raw, as a lane's two side bits: none on the grid, one above, two below, both
+    // when its enclosure leaves the carrier (FixedInterval.Enclosing, the one conversion every enclosure rests on).
+    private static uint LaneSide(int lane, double value, FixedQ4816 nearest) {
+        var enclosure = FixedInterval.Enclosing(value: value);
+        var side = ((enclosure.IsUnbounded || !enclosure.Contains(value: nearest))
+            ? 3u
+            : (((enclosure.Upper > nearest) ? 1u : 0u) | ((enclosure.Lower < nearest) ? 2u : 0u)));
+
+        return (side << (2 * lane));
+    }
+    // The data lanes' sides; a table offset reinterpreted in Data0.x carries no parameter.
+    private static uint DataSides(Vector4 data0, Vector4 data1, in CompiledInstruction lanes, bool table) =>
+        ((table ? 0u : LaneSide(lane: 0, nearest: lanes.Data0X, value: data0.X)) |
+            LaneSide(lane: 1, nearest: lanes.Data0Y, value: data0.Y) |
+            LaneSide(lane: 2, nearest: lanes.Data0Z, value: data0.Z) |
+            LaneSide(lane: 3, nearest: lanes.Data0W, value: data0.W) |
+            LaneSide(lane: 4, nearest: lanes.Data1X, value: data1.X) |
+            LaneSide(lane: 5, nearest: lanes.Data1Y, value: data1.Y) |
+            LaneSide(lane: 6, nearest: lanes.Data1Z, value: data1.Z) |
+            LaneSide(lane: 7, nearest: lanes.Data1W, value: data1.W));
+    // A scope scale's side on its 2⁻³² grid (CompileScopeScale floors it, and lifts a scale under one tick to one), both
+    // bits for a float past the grid's one.
+    private static uint ScopeScaleSide(long compiled, float scale) {
+        if (compiled <= 0L) {
+            return 0u;
+        }
+
+        var exact = (((double)scale) * ScopeScaleOne);
+        var side = ((exact > ScopeScaleOne)
+            ? 3u
+            : (((exact > compiled) ? 1u : 0u) | ((exact < compiled) ? 2u : 0u)));
+
+        return (side << (2 * ScopeScaleLane));
+    }
+    // Whether a float lies off the raw grid, so a bound reads it as its enclosure rather than its nearest raw.
+    private static bool OffGrid(double value) =>
+        (FixedInterval.Enclosing(value: value) is var enclosure && (enclosure.IsUnbounded || (enclosure.Lower != enclosure.Upper)));
+    // Whether a shape's side table holds a float off the raw grid.
+    private static uint TableSides(SdfProgram program, int index, bool isConvexPolygon, bool isSweep) {
+        static bool OffGrid3(Vector3 value) => (OffGrid(value: value.X) || OffGrid(value: value.Y) || OffGrid(value: value.Z));
+
+        if (isConvexPolygon) {
+            foreach (var (instruction, vertices) in program.ConvexPolygonProfiles) {
+                if ((instruction == index) && vertices.Any(predicate: vertex => (OffGrid(value: vertex.X) || OffGrid(value: vertex.Y)))) { return TableSide; }
+            }
+
+            return 0u;
+        }
+
+        if (isSweep) {
+            foreach (var curve in program.SweepCurves) {
+                if ((curve.InstructionIndex == index) && (OffGrid3(value: curve.A) || OffGrid3(value: curve.B) || OffGrid3(value: curve.C) || OffGrid(value: curve.RadiusStart) || OffGrid(value: curve.RadiusEnd) || OffGrid(value: curve.Bulge))) { return TableSide; }
+            }
+
+            return 0u;
+        }
+
+        return (PathTableOffGrid(paths: program.Paths, instructionIndex: index) ? TableSide : 0u);
+    }
     // A relief's masks in fixed point, each region's primitive compiled as a shape instruction's lanes are compiled, so
     // EvaluateShape and ShapeBounds read it as they read any shape, and its turn's interval constants built once.
-    private static ReliefMaskFixed[] CompileReliefMasks(IReadOnlyList<SdfReliefMask> masks) {
+    private static ReliefMaskFixed[] CompileReliefMasks(IReadOnlyList<SdfReliefMask> masks, SdfFieldReading reading) {
         var compiled = new ReliefMaskFixed[masks.Count];
 
         for (var index = 0; (index < masks.Count); index++) {
@@ -384,12 +468,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     Z: FixedQ4816.FromDouble(value: region.Rotation.Z),
                     W: FixedQ4816.FromDouble(value: region.Rotation.W)
                 );
-
-                regions[at] = new ReliefRegionFixed(
-                    Bounds: RotationBounds.Of(quaternion: rotation),
-                    Identity: ((rotation.X == FixedQ4816.Zero) && (rotation.Y == FixedQ4816.Zero) && (rotation.Z == FixedQ4816.Zero) && (FixedQ4816.Abs(value: rotation.W) == FixedQ4816.One)),
-                    Origin: FixedVector3.FromVector3(value: region.Origin),
-                    Primitive: new CompiledInstruction(
+                // Under the render reading a pose off the raw grid is read as its enclosure (CompiledInstruction's THE
+                // PARAMETER ENCLOSURES): the turn's constants over each component's, and the origin within a raw.
+                var inexact = ((reading == SdfFieldReading.Render) && (
+                    OffGrid(value: region.Origin.X) || OffGrid(value: region.Origin.Y) || OffGrid(value: region.Origin.Z) ||
+                    OffGrid(value: region.Rotation.X) || OffGrid(value: region.Rotation.Y) || OffGrid(value: region.Rotation.Z) || OffGrid(value: region.Rotation.W)));
+                var primitive = new CompiledInstruction(
                         Blend: 0u,
                         Data0W: FixedQ4816.FromDouble(value: region.Data0.W),
                         Data0X: FixedQ4816.FromDouble(value: region.Data0.X),
@@ -402,7 +486,18 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         Material: 0,
                         Op: SdfOp.ReliefRow,
                         Shape: ((uint)region.Shape)
-                    ),
+                    );
+
+                if (reading == SdfFieldReading.Render) {
+                    primitive = (primitive with { Sides = DataSides(data0: region.Data0, data1: region.Data1, lanes: in primitive, table: false) });
+                }
+
+                regions[at] = new ReliefRegionFixed(
+                    Bounds: (inexact ? RotationBounds.Of(x: Widened(value: rotation.X), y: Widened(value: rotation.Y), z: Widened(value: rotation.Z), w: Widened(value: rotation.W)) : RotationBounds.Of(quaternion: rotation)),
+                    Identity: ((rotation.X == FixedQ4816.Zero) && (rotation.Y == FixedQ4816.Zero) && (rotation.Z == FixedQ4816.Zero) && (FixedQ4816.Abs(value: rotation.W) == FixedQ4816.One)),
+                    Inexact: inexact,
+                    Origin: FixedVector3.FromVector3(value: region.Origin),
+                    Primitive: primitive,
                     Rotation: rotation
                 );
             }
@@ -1087,8 +1182,47 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // scale the certified step scale carries instead (DefersScope).
         long ScopeScale = 0L,
         // Only for a masked SdfOp.NoiseDisplace: its masks, decoded by the program's door from the rows before it.
-        ReliefMaskFixed[]? ReliefMasks = null
+        ReliefMaskFixed[]? ReliefMasks = null,
+        // Under the render reading, where each lane's float lies against the raw the lane holds (LaneSides): zero under
+        // the contact reading, and for every lane the raw holds exactly.
+        uint Sides = 0u
     ) {
+        // THE PARAMETER ENCLOSURES: every box rule reads an instruction's parameters through these, never through the raw
+        // lanes above, so a bound encloses the field whose parameters are the packed floats the kernels read, not only
+        // the nearest raws the point walk reads. Each float lies within a raw of its nearest raw, so a lane's enclosure is
+        // that raw or the raw and its neighbour on the float's side (LaneSides); the contact reading's are its raws.
+        public bool Exact => (Sides == 0u);
+        public FixedInterval Bounds0X => Enclose(lane: 0, value: Data0X);
+        public FixedInterval Bounds0Y => Enclose(lane: 1, value: Data0Y);
+        public FixedInterval Bounds0Z => Enclose(lane: 2, value: Data0Z);
+        public FixedInterval Bounds0W => Enclose(lane: 3, value: Data0W);
+        public FixedInterval Bounds1X => Enclose(lane: 4, value: Data1X);
+        public FixedInterval Bounds1Y => Enclose(lane: 5, value: Data1Y);
+        public FixedInterval Bounds1Z => Enclose(lane: 6, value: Data1Z);
+        public FixedInterval Bounds1W => Enclose(lane: 7, value: Data1W);
+        public FixedInterval BoundsAux => Enclose(lane: AuxLane, value: Aux);
+        public IntervalVector3 BoundsVector => new(X: Bounds0X, Y: Bounds0Y, Z: Bounds0Z);
+        public IntervalVector3 BoundsVector1 => new(X: Bounds1X, Y: Bounds1Y, Z: Bounds1Z);
+        // Whether the four Data0 lanes are their floats exactly, as a Rotate's quaternion or a Scale's axes must be for a
+        // rule that tests their values.
+        public bool ExactData0 => ((Sides & 0xFFu) == 0u);
+        // Whether the smooth radius a join reads (Data1.x) is its float exactly.
+        public bool ExactData1X => (((Sides >> 8) & 3u) == 0u);
+        // Whether a side table's floats (polygon vertices, a sweep's curve, a path's edges, relief regions' poses) each
+        // lie on the raw grid; when not, each coordinate lies within a raw of the raw it compiled to.
+        public bool TableInexact => ((Sides & TableSide) != 0u);
+        // The scope scale's enclosure on its 2⁻³² grid: the compiled tick and its neighbour on the float's side, or
+        // unbounded (Low above High) where the float exceeds the grid's one.
+        public long ScopeScaleLow => ((((Sides >> (2 * ScopeScaleLane)) & 3u) == 3u) ? long.MaxValue : (ScopeScale - ((Sides >> ((2 * ScopeScaleLane) + 1)) & 1u)));
+        public long ScopeScaleHigh => ((((Sides >> (2 * ScopeScaleLane)) & 3u) == 3u) ? 0L : (ScopeScale + ((Sides >> (2 * ScopeScaleLane)) & 1u)));
+
+        private FixedInterval Enclose(int lane, FixedQ4816 value) => (((Sides >> (2 * lane)) & 3u) switch {
+            0u => FixedInterval.FromPoint(value: value),
+            1u => new FixedInterval(lower: value, upper: (value + FixedQ4816.Epsilon)),
+            2u => new FixedInterval(lower: (value - FixedQ4816.Epsilon), upper: value),
+            _ => FixedInterval.Entire,
+        });
+
         public SdfPointAction PointAction { get; } = SdfFieldOps.PointOf(value: Op);
         public SdfIntervalAction IntervalAction { get; } = SdfFieldOps.IntervalOf(value: Op);
         public SdfShapePointAction ShapePointAction { get; } = SdfFieldShapes.Contains(value: ((SdfShapeType)Shape))
@@ -1099,7 +1233,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // A relief mask in fixed point: its band on the grids both carriers hold exactly (SdfReliefBand), and its regions.
     private sealed record ReliefMaskFixed(FixedQ4816 Start, FixedQ4816 End, FixedQ4816 Inside, FixedQ4816 Outside, ReliefRegionFixed[] Regions);
     // One region in fixed point: its pose (the turn's interval constants built once, for the box walk) and its primitive.
-    private sealed record ReliefRegionFixed(FixedVector3 Origin, FixedQuaternion Rotation, bool Identity, RotationBounds Bounds, CompiledInstruction Primitive);
+    // Inexact marks a pose off the raw grid under the render reading, whose origin a bound reads within a raw.
+    private sealed record ReliefRegionFixed(FixedVector3 Origin, FixedQuaternion Rotation, bool Identity, bool Inexact, RotationBounds Bounds, CompiledInstruction Primitive);
     // The compiled, fixed-point form of one SdfSweepCurve.
     private sealed record SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);
 }

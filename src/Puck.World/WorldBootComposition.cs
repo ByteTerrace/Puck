@@ -1231,6 +1231,10 @@ public static class WorldBootComposition {
         // onto (the container disposes it, joining its threads).
         services.AddSingleton(implementationInstance: inputs.Workers);
         services.AddSingleton<Puck.Hosting.Jobs.JobPool>();
+        // The process's command vocabulary is this container's registry for exactly the container's life: resolving
+        // the installation installs it (WorldPostBuildWiring), and the container disposes it with the host, so the
+        // static never keeps a disposed host's registry, and every service its modules hold, reachable.
+        services.AddSingleton(implementationFactory: static sp => WorldAffordances.Install(registry: sp.GetRequiredService<CommandRegistry>()));
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         if (worldSource.DrawKeys is WorldPrivateDrawKeys drawKeys) {

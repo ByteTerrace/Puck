@@ -19,14 +19,22 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private void BeginSceneUpload(SdfMeshIrradianceScene scene, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, long version) {
         if ((m_sceneStore ??= m_tables.ProbeScenes) is not { } store) { return; }
         m_sceneUpload = store.Begin(claimant: this, placementVersion: version, placements: placements, rooted: m_tables.GpuWork.Wake, scene: scene);
+        (m_uploadProgress, m_uploadProgressAt) = (store.Progress, m_volume.Time.GetTimestamp());
     }
+    // The store's progress (SdfMeshProbeScenes.Progress) as the upload under way last saw it move, and when.
+    private long m_uploadProgress;
+    private long m_uploadProgressAt;
+    // Whether the latest upload was withdrawn for making no progress (UploadStalled), which the take reports and answers
+    // by cancelling its head; and how many were.
+    private bool m_uploadStalled;
+    private long m_uploadStalls;
     // Serves the upload under way: publishes it once its root words have landed, the one door a scene is published
-    // through, or withdraws one the volume no longer keeps. True while it is still under way, when no query is taken.
-    // Under the gate.
+    // through, or withdraws one the volume no longer keeps or that made no progress for AdmissionWait (UploadStalled).
+    // True while it is still under way, when no query is taken. Under the gate.
     private bool ServeSceneUpload() {
         if (m_sceneUpload is not { } upload) { return false; }
         if (upload.Work.IsFaulted && !upload.Withdrawn) { upload.Work.GetAwaiter().GetResult(); }
-        if (!upload.Withdrawn && !upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene)) {
+        if (!upload.Withdrawn && !upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene) && !UploadStalled()) {
             if (!upload.Rooted) { return true; }
             // No query is in flight (a scene upload begins only then, and none is taken while it runs), so the prefix
             // the store frees as it publishes is read by nothing.
@@ -50,6 +58,25 @@ internal sealed partial class SdfMeshProbeGpuWork {
         upload.Dispose();
         m_sceneUpload = null;
         return false;
+    }
+    // Whether the upload under way has waited AdmissionWait with the store making no progress (no chunk recorded, no
+    // upload's slot completed), the end stop of a scene upload: an upload behind others' chunks still sees the store move,
+    // so only one no residency's upload carries or completes is stopped. It is withdrawn like a scene the volume no longer
+    // keeps, keeping the geometry it wrote, and the take cancels its head (m_uploadStalled), so the coordinator and the
+    // camera sample waiting behind it are released and the next head begins the upload again. Under the gate.
+    private bool UploadStalled() {
+        if (m_sceneUpload is not { Rooted: false } || (m_sceneStore is not { } store)) { return false; }
+
+        var progress = store.Progress;
+
+        if (progress != m_uploadProgress) {
+            (m_uploadProgress, m_uploadProgressAt) = (progress, m_volume.Time.GetTimestamp());
+            return false;
+        }
+        if (m_volume.Time.GetElapsedTime(startingTimestamp: m_uploadProgressAt) < AdmissionWait) { return false; }
+        m_uploadStalled = true;
+        m_uploadStalls++;
+        return true;
     }
     // Lets go of the store's words once the client's submissions have completed (Dispose).
     private void ReleaseScene() {

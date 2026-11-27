@@ -146,7 +146,7 @@ public sealed partial class SdfFieldEvaluator {
                         scoped = true;
                         scopeStart = lowering.Count;
                         (quarterRaws, radiusRaws, roundingRaws) = (0L, 0L, 0L);
-                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PushField, Scale: 0.0, Shape: default, Smooth: 0.0));
+                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PushField, ScaleLow: 0.0, ScaleHigh: 0.0, Shape: default, Smooth: 0.0));
                         continue;
                     }
                 case SdfCullChainAction.PopField: {
@@ -154,19 +154,26 @@ public sealed partial class SdfFieldEvaluator {
                             return false;
                         }
 
-                        var scale = ((instruction.ScopeScale > 0L) ? (instruction.ScopeScale / ScopeScaleOne) : 0.0);
+                        // The candidate scale's enclosure (ScopeScaleLow, ScopeScaleHigh): a gain is charged its least
+                        // scale and a radius its greatest. One that reaches zero or leaves the grid certifies nothing.
+                        var (scaleLow, scaleHigh) = ((instruction.ScopeScale > 0L) ? ((instruction.ScopeScaleLow / ScopeScaleOne), (instruction.ScopeScaleHigh / ScopeScaleOne)) : (0.0, 0.0));
+
+                        if ((instruction.ScopeScale > 0L) && ((scaleLow <= 0.0) || (scaleLow > scaleHigh))) {
+                            return false;
+                        }
+
                         // A stream has at most Int32.MaxValue instructions, each adding at most Int64.MaxValue raws:
                         // the certificate sum fits Int128 even when no useful bound fits the point carrier.
                         var slack = (((double)(Int128.Min(x: quarterRaws, y: radiusRaws) + roundingRaws)) * RawUnit);
 
-                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(scale: scale, slack: slack));
+                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(scale: scaleLow, slack: slack));
 
                         for (var member = scopeStart; (member < lowering.Count); member++) {
-                            lowering[member] = lowering[member].Scaled(scale: scale, slack: slack);
+                            lowering[member] = lowering[member].Scaled(high: scaleHigh, low: scaleLow, slack: slack);
                         }
 
                         depth = 0;
-                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PopField, Scale: scale, Shape: default, Smooth: 0.0));
+                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PopField, ScaleLow: scaleLow, ScaleHigh: scaleHigh, Shape: default, Smooth: 0.0));
                         continue;
                     }
                 case SdfCullChainAction.ShapeBlend: {
@@ -190,7 +197,7 @@ public sealed partial class SdfFieldEvaluator {
                                         break;
                                     }
                                 case SdfCullBoundAction.SmoothUnion: {
-                                        var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
+                                        var k = FixedQ4816.Max(x: SmoothRadiusReach(instruction: in instruction), y: SmoothRadiusMin);
 
                                         quarterRaws += ((((Int128)k.Value) + 3L) >> 2);
                                         radiusRaws = Math.Max(val1: radiusRaws, val2: k.Value);
@@ -203,7 +210,7 @@ public sealed partial class SdfFieldEvaluator {
                                     }
                                 case SdfCullBoundAction.LocalWithRadius: {
                                         lowers = false;
-                                        roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin));
+                                        roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: SmoothRadiusReach(instruction: in instruction), y: SmoothRadiusMin));
                                         break;
                                     }
                                 case SdfCullBoundAction.Disable: {
@@ -219,7 +226,7 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         boxed &= shape.Boxed;
-                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Structure: SdfFieldStructureAction.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
+                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Structure: SdfFieldStructureAction.ShapeBlend, ScaleLow: 0.0, ScaleHigh: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: SmoothRadiusReach(instruction: in instruction), y: SmoothRadiusMin))));
                         continue;
                     }
                 case SdfCullChainAction.Relief: {
@@ -306,15 +313,16 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfFieldStructureAction.PopField: {
-                        var scale = ((step.Scale > 0.0) ? step.Scale : 1.0);
-                        var rounding = ((step.Scale > 0.0) ? RawUnit : 0.0);
+                        var scaled = (step.ScaleHigh > 0.0);
+                        var (low, high) = (scaled ? (step.ScaleLow, step.ScaleHigh) : (1.0, 1.0));
+                        var rounding = (scaled ? RawUnit : 0.0);
                         var drop = (Math.Min(val1: quarters, val2: widest) + roundings);
 
-                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(slack: drop, scale: step.Scale));
+                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(slack: drop, scale: step.ScaleLow));
 
-                        gain = Math.Min(val1: gain, val2: (all.BoxGain * scale));
-                        radius = Math.Max(val1: radius, val2: (((all.BoxRadius + drop) * scale) + rounding));
-                        spread = Math.Max(val1: spread, val2: (all.BoxSpread * scale));
+                        gain = Math.Min(val1: gain, val2: (all.BoxGain * low));
+                        radius = Math.Max(val1: radius, val2: (((all.BoxRadius + drop) * high) + rounding));
+                        spread = Math.Max(val1: spread, val2: (all.BoxSpread * high));
                         break;
                     }
                 case SdfFieldStructureAction.ShapeBlend: {
@@ -456,7 +464,7 @@ public sealed partial class SdfFieldEvaluator {
                                 break;
                             }
                         case SdfCullGuardAction.SmoothUnion: {
-                                var required = SmoothUnionIdentityMargin(smoothRadius: instruction.Data1X);
+                                var required = SmoothUnionIdentityMargin(smoothRadius: SmoothRadiusReach(instruction: in instruction));
 
                                 // The radius can fit while its exact-identity margin does not. Such a chain has no
                                 // representable certificate; never wrap its margin into a smaller threshold.
@@ -624,7 +632,7 @@ public sealed partial class SdfFieldEvaluator {
     }
     // One step of a cullable instance in stream order: a scope's push, a shape with its blend, smooth radius in units and
     // certificate, or a pop with its candidate scale (zero for none).
-    private readonly record struct ScopeStep(SdfFieldStructureAction Structure, SdfBlendOp Blend, double Smooth, double Scale, ShapeReach Shape);
+    private readonly record struct ScopeStep(SdfFieldStructureAction Structure, SdfBlendOp Blend, double Smooth, double ScaleLow, double ScaleHigh, ShapeReach Shape);
     // One skippable chain: the instruction after its last, its certificate, the margin a smooth union in it needs above
     // the running answer to leave it bitwise, and whether a subtraction in it also needs its candidates past the answer's
     // negation.

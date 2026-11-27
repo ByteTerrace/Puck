@@ -2430,13 +2430,14 @@ ADDRESS one. A `compareState` may instead name a reserved
 channel—`$tick` (the completed-tick counter), `$population` (the live
 active-entry count), `$region:<placementId>` (that region's live occupant count),
 `$machine:<screen>:<address>` (one live byte off a screen's booted machine),
-`$reduce:<max|min|sum|count|arrangementRank>:<row>` (an aggregate over a row's cells; append
+`$reduce:<max|min|sum|count|arrangementRank|position>:<row>` (an aggregate over a row's cells; append
 `:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero, or
 `:between:<lower>:<upper>` to filter live values by inclusive bounds; both compose
 on the [state reduction contract](../../docs/reference/state/expressions.md#reductions), and neither applies to `arrangementRank`;
 `arrangementRank` is an ordered zone's order as one integer—the Lehmer rank
 relative to its token domain's order, over k! for k ≤ 20 tokens, -1 past that—
-and the `arrange` transform is its inverse),
+and the `arrange` transform is its inverse; `position` takes the operand's key and reads
+its zero-based position among the row's cells, -1 when the row does not hold it),
 `$symmetry:<function>[:<argument>]:<row>` (a cell holding a symmetry-lattice
 node 0..239 read through `ring`, `antipode`, `canonicalRay`, `cycle:<steps>`,
 `reflect:<node|cell:<row>[.<key>]>`, `orthogonal:<node|cell:…>` (1/0),

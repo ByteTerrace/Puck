@@ -22,14 +22,9 @@ public sealed partial class StateArena {
 
         Visit(lanes: layout.CellCapacity);
         for (var cell = 0; (cell < layout.CellCapacity); cell++) {
-            var slot = (layout.CellStart + cell);
-
-            values[cell] = (BitWords.Contains(
-                index: slot,
-                words: m_presence
-            )
-                ? m_numbers[slot]
-                : layout.Empty
+            values[cell] = LatticeValue(
+                layout: in layout,
+                slot: (layout.CellStart + cell)
             );
         }
 
@@ -50,15 +45,10 @@ public sealed partial class StateArena {
             (layout.Shape == RowShape.Lattice) &&
             (((uint)cell) < ((uint)layout.CellCapacity))
         ) {
-            var slot = (layout.CellStart + cell);
-
             Visit(lanes: 1L);
-            value = (BitWords.Contains(
-                index: slot,
-                words: m_presence
-            )
-                ? m_numbers[slot]
-                : layout.Empty
+            value = LatticeValue(
+                layout: in layout,
+                slot: (layout.CellStart + cell)
             );
 
             return true;
@@ -68,6 +58,14 @@ public sealed partial class StateArena {
 
         return false;
     }
+    // What a lattice cell reads as: its stored number while present, else the row's declared empty value.
+    private long LatticeValue(in ArenaRowLayout layout, int slot) => (BitWords.Contains(
+        index: slot,
+        words: m_presence
+    )
+        ? m_numbers[slot]
+        : layout.Empty
+    );
     /// <summary>Attempts to write one lattice cell by topology cell ordinal, against the row's declared
     /// envelope.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
