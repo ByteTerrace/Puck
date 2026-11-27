@@ -110,6 +110,7 @@ half of these rules on every command, with no exemptions.
 | [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
+| [`puck eval`](#the-puck-dsl-verbs) | evaluates a compile-time expression in a `.puck` source's scope (its `let`s, functions and imports) and prints its value as JSON. |
 | [`puck evals`](#puck-evalsskill-evaluation) | the skill evaluation family over `claude plugin eval`: `evals run` runs a skill's suite on a frozen worktree with the rules-file fixture, `evals compare` compares two results on the comparable score, and `evals graders` lists the graders to hand-label. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds the HGB boot ROMs and AGB BIOS from their maintained sources; no mode verifies them. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
@@ -4461,10 +4462,20 @@ puck compile [<source.puck|document.world.json>...] [--output <out.json-or-direc
 puck decompile <source.json> [--output <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed lock <path> [--check] [--provider <installed-type>] [--settings <json-file>] [--batch-size <n>]
 puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <installed-type>] [--settings <json-file>]
+puck eval <source.puck> <expression>
 puck lint <path> [--strict]
 puck lsp
 puck migrate <name> <path> [--check] [--keep]
 ```
+
+`eval` evaluates one expression in a source's scope and prints its value as JSON on one line:
+`puck eval worlds/debug/gallery/layout.puck "galleryEast"` prints `62.8`, and
+`puck eval worlds/debug/gallery/layout.puck "map(range(0, 3), b => pierX(b))"` prints `[-2.825,2.175,7.175]`. The
+expression reads what a value written at the end of the file reads (the file's `let`s and functions and those its
+imports hand over), compiled through the same session `compile` uses, so a library source works as well as a
+document. A diagnostic about the expression names it as "the expression"; a bare name nothing declares is refused
+rather than printed as a word. Exit codes: **0** a value, **1** no value (its diagnostics on stderr), **2** an
+unreadable source.
 
 `compile` requires source paths unless `--tree <root>` is supplied. With
 `--tree` and no source paths, it selects every world `.puck` source (one whose

@@ -516,16 +516,17 @@ function rentalArmPoint(arm, u, y, v) = ((arm == 0) ? [(0 - v), y, (0 - u)] : [u
 function rentalArmScale(arm, hu, hy, hv) = ((arm == 0) ? [hv, hy, hu] : [hu, hy, hv])
 // The turn about +Y that carries a text run's face (its local +Z) onto the arm's customers.
 function rentalArmTurn(arm) = ((arm == 0) ? 270 : 0)
-// A line of lettering on an arm's customer side, centred on (u, y) at depth v.
+// A line of lettering on an arm's customer side, its capitals centred on (u, y) at depth v.
 function rentalArmLetters(arm, u, y, v, text, em, width) = {
   text: text
-  position: rentalArmPoint(arm, u, (y - ((textCapHeight * em) / 2)), v)
+  position: rentalArmPoint(arm, u, y, v)
   rotation: rotate([0, 1, 0], rentalArmTurn(arm))
   emHeight: em
   depth: 0.004
   mode: "emboss"
   material: rentalKiosk.ink
   align: "center"
+  anchor: "capMiddle"
   maxWidth: width
 }
 // The corner's blade sign, its face (local +Z) turned to the diagonal the corner's customers come from (the stall's -x,
@@ -837,13 +838,14 @@ prototypes {
         }
         {
           text: "HANDHELD RENTALS"
-          position: rentalBladePoint(0.05, (rentalBladeAt[1] - ((textCapHeight * 0.14) / 2)))
+          position: rentalBladePoint(0.05, rentalBladeAt[1])
           rotation: rotate([0, 1, 0], rentalBladeTurn)
           emHeight: 0.14
           depth: 0.004
           mode: "emboss"
           material: rentalKiosk.ink
           align: "center"
+          anchor: "capMiddle"
           maxWidth: 1.34
         }
       ]

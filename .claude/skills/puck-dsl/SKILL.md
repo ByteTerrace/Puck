@@ -270,6 +270,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
   `&`/`|` bind above comparisons. `compareState(...)` and `compareValue(...)`
   in a source gate are refused by name; write a comparison such as `left == right`.
+  A comparison in a document value is `1` or `0` too, and a member the model
+  types `bool` reads it as truth (`WorldDocumentMembers`), so `holdable: (k == 0)`
+  needs no `? true : false` and a counted flag needs no `? 1 : 0`.
 - **One bracket rule.** `row.key` names a literal key; `row[expression]`
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
   an error. A key compile-time constants decide (`slot[k + 1]` with
@@ -368,6 +371,7 @@ puck lint <file> --strict
 puck compile <file>                   # writes <source>.world.json (and its .puckb) or <source>.cartridge.json beside the source; all derived, never committed
 puck compile <file> --validate        # checks only: writes nothing without --output
 puck test <path-or-dir>               # boots each test block headless, one verdict a line
+puck eval <file> "<expression>"       # a compile-time value in the file's scope (lets, functions, imports), as JSON
 ```
 
 - Compilation refuses unknown document members by name, including members

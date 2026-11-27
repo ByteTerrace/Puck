@@ -354,7 +354,8 @@
                     "int",
                     "int2",
                     "int3",
-                    "int4"
+                    "int4",
+                    "uint64"
                   ],
                   "title": "ShaderValueType"
                 },
@@ -649,7 +650,8 @@
                     "int",
                     "int2",
                     "int3",
-                    "int4"
+                    "int4",
+                    "uint64"
                   ],
                   "title": "ShaderValueType"
                 },

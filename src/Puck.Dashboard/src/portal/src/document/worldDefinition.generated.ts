@@ -5717,6 +5717,10 @@ export type TextRunDocument = {
    * The shape the run rides, or null for a run placed in creation space. A riding run's Position/Rotation are in that shape's unit-local frame: scaled by the shape's scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.
    */
   shapeId?: number | null;
+  /**
+   * Which line of the block Position marks, one of AnchorNames: baseline (the first line's baseline, the default), capTop, capMiddle (the middle of the capitals, first line's cap top to last line's baseline), top, middle or bottom (the text box's ascent and descent), from the font's own metrics.
+   */
+  anchor?: string | null;
 };
 
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";

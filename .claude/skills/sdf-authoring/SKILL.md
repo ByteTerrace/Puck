@@ -194,8 +194,13 @@ In pooled emission, `group` collects interacting shapes into one instance and
 forwards their authored blends; ungrouped shapes use Union defaults, and PUCK131
 warns on an ungrouped shape whose authored blend is not `Union`. A group
 opens a shared scope when needed, and grouped shapes cannot carry panel, trims,
-or cells. Static emission ignores `group` and walks the list in order, so a
-group cannot keep a subtraction off its siblings on a static placement. The VM
+or cells. Static and contact emission compose a group the same way
+(`CreationStampEmitter.GroupRuns`): at its first member, in a scope of its own
+that unions into the creation, so a subtraction in a group carves only that
+group. Name a group instead of numbering it with a block,
+`group "door" { shape …; shape … { blend: Subtraction } }`, which joins every
+shape it writes and takes the next number above the creation's own; it replaces
+splitting a creation to keep a cut local. The VM
 admits four scope levels. [composition](references/composition.md) has the
 formulas, folds, groups, panels, trims and shared-clamp diagnostics.
 

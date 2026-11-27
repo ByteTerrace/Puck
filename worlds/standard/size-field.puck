@@ -69,12 +69,12 @@ function sizeFieldPrepared(zone) = sizeFieldFolded(
 function sizeFieldFolded(zone, span) = sizeFieldSpanned(zone, span, ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2])))
 function sizeFieldSpanned(zone, span, spanSquared) = zone with {
   span: span
-  boxed: ((zone.box.x1 > zone.box.x0) ? 1 : 0)
-  capsule: ((zone.reach > 0) ? 1 : 0)
-  ax: (((spanSquared > 0) and (span[0] != 0)) ? 1 : 0)
-  ay: (((spanSquared > 0) and (span[1] != 0)) ? 1 : 0)
-  az: (((spanSquared > 0) and (span[2] != 0)) ? 1 : 0)
-  moving: ((spanSquared > 0) ? 1 : 0)
+  boxed: (zone.box.x1 > zone.box.x0)
+  capsule: (zone.reach > 0)
+  ax: ((spanSquared > 0) and (span[0] != 0))
+  ay: ((spanSquared > 0) and (span[1] != 0))
+  az: ((spanSquared > 0) and (span[2] != 0))
+  moving: (spanSquared > 0)
   spanSquared: ((spanSquared > 0) ? spanSquared : 1)
 }
 

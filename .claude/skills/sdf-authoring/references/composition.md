@@ -196,12 +196,18 @@ affect convergence and the apparent hit threshold.
 The creation emitter does not lower `panel`, `trims`, or `cells` as grouped
 members, so those combinations remain refused by name.
 
-Only the articulated body path reads `group` at all. Static and rigid template emission walk the shape
-list in declaration order and never looks at it, so on a static placement a group
-isolates nothing and every `Subtraction` composes against the whole creation
-accumulator — order each cut to be spatially local instead. `creation stats`
-shows the difference directly: its `static:` line reports one scope over all
-shapes where `pooled:` reports one per group.
+Static and contact emission read `group` too (`CreationStampEmitter.GroupRuns`):
+an ungrouped shape composes where it stands, and a group composes at its first
+member, its members in list order inside a scope of their own that unions into
+the creation, so a `Subtraction` in a group carves only that group, on every
+placement and in contact alike. A group whose members all hard-union takes no
+scope, since its union is the same either way. `group "name" { … }` in a creation
+names a group: every shape the block writes joins it unless it names its own,
+and the creation numbers it above its highest numbered group
+(`WorldDocumentMembers.NumberNamedGroups`). One creation with a group costs one
+instance, bake group and draw where the split creations it replaces cost two,
+and two encoded instructions more than their sum (the group's push and pop,
+inside the creation scope a carve still opens).
 Text-bearing pooled creations wrap those groups and their text in one outer
 scope and one dynamic instance. Engraving therefore cuts the creation, never
 another placement, and a group's cutter still affects only that group.

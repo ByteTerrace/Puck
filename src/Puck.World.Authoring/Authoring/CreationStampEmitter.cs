@@ -320,7 +320,8 @@ public static partial class CreationStampEmitter {
             (run.MaxWidth is null) &&
             (run.Align is null) &&
             (run.Tracking is null) &&
-            (run.LineSpacing is null)
+            (run.LineSpacing is null) &&
+            (run.Anchor is null)
         ) {
             return null;
         }
@@ -329,7 +330,8 @@ public static partial class CreationStampEmitter {
             MaxLineWidth: (run.MaxWidth * scale),
             Alignment: TextRunDocument.AlignmentOf(align: run.Align),
             Tracking: (run.Tracking ?? 0f),
-            LineHeightScale: (run.LineSpacing ?? 1f)
+            LineHeightScale: (run.LineSpacing ?? 1f),
+            VerticalAnchor: (TextRunDocument.AnchorOf(anchor: run.Anchor) ?? TextVerticalAnchor.Baseline)
         );
     }
 
@@ -375,14 +377,48 @@ public static partial class CreationStampEmitter {
         var frame = new StampShapeFrame(frame: StampFrame.Of(transform: transform), materialFor: materialFor, paletteIds: null);
         var shapes = (document.Shapes ?? []);
 
-        for (var index = 0; (index < shapes.Count); index++) {
-            var shape = shapes[index];
+        foreach (var (scoped, members) in GroupRuns(shapes: shapes, blendOf: static shape => (shape.Blend ?? SdfBlendOp.Union), includes: index => ((hidden is null) || !hidden[index]))) {
+            if (scoped) { _ = builder.PushField(compose: SdfBlendOp.Union); }
+            foreach (var index in members) {
+                ShapeEmission.Emit(builder: builder, frame: in frame, inScope: inScope, material: materialFor(arg: shapes[index]), shape: shapes[index], shapes: shapes);
+            }
+            if (scoped) { _ = builder.PopField(); }
+        }
+    }
+    /// <summary>Returns the order a creation's shapes compose in: an ungrouped shape where it stands, and each group, at
+    /// its first member, as one run of its members. A run whose members blend other than by a hard union composes in a
+    /// field scope of its own that unions into the creation, as a pooled group's instance does, so a carve or a smooth
+    /// blend in a group reaches only that group's members.</summary>
+    /// <param name="shapes">The creation's shapes.</param>
+    /// <param name="blendOf">The blend each shape composes by.</param>
+    /// <param name="includes">Whether the shape at an index is emitted.</param>
+    /// <returns>Each run, with whether it takes a scope of its own and its members' indices in list order; a run holds at
+    /// least one member.</returns>
+    public static IEnumerable<(bool Scoped, List<int> Members)> GroupRuns(IReadOnlyList<ShapeDocument> shapes, Func<ShapeDocument, SdfBlendOp> blendOf, Func<int, bool> includes) {
+        ArgumentNullException.ThrowIfNull(argument: shapes);
+        ArgumentNullException.ThrowIfNull(argument: blendOf);
+        ArgumentNullException.ThrowIfNull(argument: includes);
 
-            if ((hidden is not null) && hidden[index]) {
+        var opened = new HashSet<int>();
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (!includes(arg: index)) { continue; }
+
+            var group = (shapes[index].Group ?? 0);
+
+            if (group == 0) {
+                yield return (false, [index]);
                 continue;
             }
+            if (!opened.Add(item: group)) { continue; }
 
-            ShapeEmission.Emit(builder: builder, frame: in frame, inScope: inScope, material: materialFor(arg: shape), shape: shape, shapes: shapes);
+            var members = new List<int>();
+
+            for (var member = index; (member < shapes.Count); member++) {
+                if (((shapes[member].Group ?? 0) == group) && includes(arg: member)) { members.Add(item: member); }
+            }
+
+            yield return (members.Any(predicate: member => (blendOf(arg: shapes[member]) != SdfBlendOp.Union)), members);
         }
     }
     /// <summary>Returns whether a shape reaches contact geometry: neither a detail shape, which never reaches the contact
@@ -416,12 +452,19 @@ public static partial class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(materialFor);
 
         var frame = StampFrame.Of(transform: transform);
+        var shapes = (document.Shapes ?? []);
 
-        foreach (var shape in (document.Shapes ?? [])) {
-            if (!EmitsContact(shape: shape)) {
-                continue;
+        // A group composes in its own scope here as it draws (GroupRuns), so a carve in a group carves only that group.
+        foreach (var (scoped, members) in GroupRuns(shapes: shapes, blendOf: shape => ContactBlend(document: document, shape: shape), includes: index => EmitsContact(shape: shapes[index]))) {
+            if (scoped) { _ = builder.PushField(compose: SdfBlendOp.Union); }
+            foreach (var index in members) {
+                EmitFixedShape(builder: builder, contactMargin: contactMargin, document: document, frame: frame, materialFor: materialFor, shape: shapes[index]);
             }
-
+            if (scoped) { _ = builder.PopField(); }
+        }
+    }
+    private static void EmitFixedShape(SdfProgramBuilder builder, CreationDocument document, in StampFrame frame, Func<ShapeDocument, int> materialFor, float? contactMargin, ShapeDocument shape) {
+        {
             if (!ShapeDomainOps.TryExpand(
                 domain: shape.Domain,
                 subject: shape.Position,

@@ -188,7 +188,8 @@ public sealed partial class FontAtlasLoader {
                 Ascender: metrics.Ascender,
                 Descender: metrics.Descender,
                 UnderlineY: metrics.UnderlineY,
-                UnderlineThickness: metrics.UnderlineThickness
+                UnderlineThickness: metrics.UnderlineThickness,
+                CapHeight: metrics.CapHeight
             ),
             glyphs: glyphs.Select(selector: glyph => CreateGlyph(
                 glyph: glyph,
@@ -328,6 +329,7 @@ public sealed partial class FontAtlasLoader {
         public float LineHeight { get; set; }
         public float UnderlineThickness { get; set; }
         public float UnderlineY { get; set; }
+        public float CapHeight { get; set; }
     }
     private sealed class FontAtlasGlyphDocument {
         public float Advance { get; set; }

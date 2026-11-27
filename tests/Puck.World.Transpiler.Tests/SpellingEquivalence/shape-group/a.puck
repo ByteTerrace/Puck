@@ -1,0 +1,30 @@
+// A named group is the next group number above every group the creation numbers, and its members are the shapes its
+// block writes, in place: the door's cut reaches only the door, not the wall written before it.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "wall-with-door" {
+    document {
+      name: "wall-with-door"
+      schema: "puck.creation.v2"
+      palette [{ color: "#8A7F72" }, { color: "#5A3F22" }]
+      shape Box "wall" {
+        scale [2, 1.5, 0.1]
+        group: 2
+      }
+      group "door" {
+        shape Box "door" {
+          material: 1
+          position [0, -0.4, -0.1]
+          scale [0.5, 1, 0.05]
+        }
+        shape Box "window" {
+          blend: Subtraction
+          position [0, -0.1, -0.1]
+          scale [0.2, 0.2, 0.2]
+        }
+      }
+    }
+  }
+}

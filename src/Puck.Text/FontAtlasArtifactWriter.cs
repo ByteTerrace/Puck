@@ -160,6 +160,10 @@ public static class FontAtlasArtifactWriter {
             propertyName: "underlineThickness",
             value: atlas.Metrics.UnderlineThickness
         );
+        writer.WriteNumber(
+            propertyName: "capHeight",
+            value: atlas.Metrics.CapHeight
+        );
         writer.WriteEndObject();
         writer.WriteStartArray(propertyName: "glyphs");
 

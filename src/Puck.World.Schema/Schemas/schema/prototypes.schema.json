@@ -1123,6 +1123,14 @@
                     "null"
                   ],
                   "default": null
+                },
+                "anchor": {
+                  "description": "Which line of the block Position marks, one of AnchorNames: baseline (the first line\u0027s baseline, the default), capTop, capMiddle (the middle of the capitals, first line\u0027s cap top to last line\u0027s baseline), top, middle or bottom (the text box\u0027s ascent and descent), from the font\u0027s own metrics.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

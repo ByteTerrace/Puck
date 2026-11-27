@@ -455,6 +455,10 @@ public sealed record CreationReliefMaskDocument(
 /// <param name="ShapeId">The shape the run rides, or null for a run placed in creation space. A riding run's
 /// <paramref name="Position"/>/<paramref name="Rotation"/> are in that shape's unit-local frame: scaled by the shape's
 /// scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.</param>
+/// <param name="Anchor">Which line of the block <paramref name="Position"/> marks, one of <see cref="AnchorNames"/>:
+/// <c>baseline</c> (the first line's baseline, the default), <c>capTop</c>, <c>capMiddle</c> (the middle of the
+/// capitals, first line's cap top to last line's baseline), <c>top</c>, <c>middle</c> or <c>bottom</c> (the text box's
+/// ascent and descent), from the font's own metrics.</param>
 public sealed record TextRunDocument(
     string Text,
     DocumentVector3 Position,
@@ -474,8 +478,13 @@ public sealed record TextRunDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     float? LineSpacing = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    int? ShapeId = null
+    int? ShapeId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? Anchor = null
 ) {
+    /// <summary>The anchor names, each the typographic line of the block <see cref="Position"/> marks
+    /// (<see cref="Puck.Text.TextVerticalAnchor"/>), in the order of that enum.</summary>
+    public static IReadOnlyList<string> AnchorNames { get; } = ["baseline", "capTop", "capMiddle", "top", "middle", "bottom"];
     /// <summary>The center alignment name.</summary>
     public const string AlignCenter = "center";
     /// <summary>The left alignment name (the default).</summary>
@@ -506,6 +515,18 @@ public sealed record TextRunDocument(
         AlignLeft => Puck.Text.TextAlignment.Left,
         _ => fallback,
     };
+    /// <summary>Returns the vertical anchor an authored name selects, or <see langword="null"/> for a name that is not
+    /// one of <see cref="AnchorNames"/>; an absent name is the baseline.</summary>
+    /// <param name="anchor">The authored name, or <see langword="null"/>.</param>
+    /// <returns>The anchor, or <see langword="null"/>.</returns>
+    public static Puck.Text.TextVerticalAnchor? AnchorOf(string? anchor) {
+        if (anchor is null) { return Puck.Text.TextVerticalAnchor.Baseline; }
+        for (var index = 0; (index < AnchorNames.Count); index++) {
+            if (string.Equals(a: AnchorNames[index], b: anchor, comparisonType: StringComparison.Ordinal)) { return (Puck.Text.TextVerticalAnchor)index; }
+        }
+
+        return null;
+    }
     /// <summary>Gets the run's relief, the half depth its glyph slab straddles its surface by, in the creation's own
     /// units.</summary>
     [System.Text.Json.Serialization.JsonIgnore]

@@ -1,0 +1,38 @@
+// A comparison is 1 or 0, and a member the model types bool reads it as truth: the comparison is the boolean, with no
+// `? true : false` around it, and a number field keeps the 1 or 0.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let ground = 0
+
+prototypes {
+  prototype "wall" {
+    document {
+      name: "wall"
+      schema: "puck.creation.v2"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+placements {
+  for k in range(0, 2) {
+    placement $"wall-{k}" {
+      prototype: "wall"
+      position [(k * 4), 1, 0]
+      grip {
+        holdable: (k == ground)
+      }
+      solid
+    }
+  }
+}
+
+state {
+  world {
+    slot open = (ground == 0)
+  }
+}
