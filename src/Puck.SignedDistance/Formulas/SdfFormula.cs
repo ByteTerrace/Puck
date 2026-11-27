@@ -620,7 +620,10 @@ internal class SdfFormula {
             SdfFormulaOp.Select => Function("Select", AffineTruth(node.Inputs[0], names, written, output), Lifted(1), Lifted(2)),
             SdfFormulaOp.Smoothstep => Covered(!ActiveAt(0) && !ActiveAt(1), () => Function("Smoothstep", Value(0), Value(1), Lifted(2))),
             SdfFormulaOp.RotateInverse => Covered(!ActiveAt(1), () => Function("RotateInverse", Lifted(0), Value(1))),
-            SdfFormulaOp.Ellipse2D or SdfFormulaOp.Fbm3 or SdfFormulaOp.CellDistance => throw new AffineUncovered(node.Op),
+            // Detaching drops a value's derivative, never its enclosure: the bounds reader carries the operand's form.
+            SdfFormulaOp.Detach => Lifted(0),
+            SdfFormulaOp.Sqrt => Function("Sqrt", Lifted(0)),
+            SdfFormulaOp.Ellipse2D or SdfFormulaOp.Fbm3 or SdfFormulaOp.CellDistance or SdfFormulaOp.SweepSearch => throw new AffineUncovered(node.Op),
             SdfFormulaOp.Call => AffineCall(node, names, written, output),
             _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no affine lowering."),
         };

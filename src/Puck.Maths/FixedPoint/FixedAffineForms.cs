@@ -343,6 +343,14 @@ public static class FixedAffineForms {
     /// <returns>The interpolation.</returns>
     public static FixedAffineForm Lerp(FixedAffineForm a, FixedAffineForm b, FixedAffineForm t) =>
         AddError(form: Add(a: a, b: Product(a: Subtract(a: b, b: a), b: t, pad: 0L)), raws: 1);
+    /// <summary>Returns the component-wise <c>a + (b − a)·t</c> of two vector forms at one fraction, each component
+    /// rounded once as the scalar <see cref="Lerp(FixedAffineForm, FixedAffineForm, FixedAffineForm)"/> rounds it.</summary>
+    /// <param name="a">The vector at zero.</param>
+    /// <param name="b">The vector at one.</param>
+    /// <param name="t">The fraction.</param>
+    /// <returns>The interpolation.</returns>
+    public static FixedAffineForm3 Lerp(FixedAffineForm3 a, FixedAffineForm3 b, FixedAffineForm t) =>
+        new(X: Lerp(a: a.X, b: b.X, t: t), Y: Lerp(a: a.Y, b: b.Y, t: t), Z: Lerp(a: a.Z, b: b.Z, t: t));
     /// <summary>Returns the smoothstep of a form between two constant edges, through the hull of the carrier's
     /// monotone <see cref="FixedQ4816.Smoothstep"/> at the ends of the form's range: fresh noise.</summary>
     /// <param name="edge0">The edge where the step is zero.</param>
