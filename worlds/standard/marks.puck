@@ -1,0 +1,225 @@
+// Players mark the world (docs/decisions/play.md, "Players mark the world" and "Marks are shared with the group"): a
+// ping is a short-lived mark the player's group sees at once, and a placed mark is the player's own, kept on their
+// character (the `marks` crossing pool of identity.puck) so it lasts across sessions and travels with them, shown in the
+// world it was left in. A module library: it hands its importers templates and emits no document.
+//
+//   import "../standard/marks"
+//   playerMarks(place: "debug")                 // the world's own name, which a mark records
+//   companionMarks(owner: 0)                    // beside each `companion(owner: 0, …)`: it flies to the group's pings
+//
+// Who sees a mark is authored: `audience: "group"` (the default) lets only the group's seats read the marks rows, and
+// `audience: "public"` lets every observer. The group is `members`, the body indices of the seats that share marks
+// (every local seat by default); its readers are those seats' principals. A party system that forms groups at run time
+// writes `pingGroup` and widens the rows' readers in its own place; nothing here names a group kind.
+//
+// The rows:
+//
+//   pingOn, pingX/Y/Z, pingUntil   keyed by body: a body's current ping, where it is, and the tick it lapses at
+//   pingGroup                       keyed by body: 1 for a body in the group, whose pings the group's companions follow
+//   markOn<s>, markX<s>/Y<s>/Z<s>   keyed by slot: seat s's marks left in this world, read from its character's records
+//   markSlots                       the slots each seat's marks are read from, 0 to `slots` - 1
+//
+// A ping lands `reach` metres ahead of the body at `height` above its root, where it faces, so a body locked on a target
+// pings toward it. A placed mark lands where a ping would and pings there too. A seat's clear key releases every mark it
+// left in this world. A seat playing under no identity has nowhere to keep a mark: the claim is refused for it by name,
+// and its pings still work.
+
+import "pad-kit"
+
+// The parts every world with marks shares. `place` is the world's name a mark records, so a character's marks show only
+// in the world they were left in; `seats` the local seats, each with its own mirror rows; `slots` how many of a seat's
+// marks a world shows; `pingSeconds` how long a ping lasts. The sources are the keys bound to `ping`, `mark` and
+// `markClear` on the play page.
+template playerMarks(place, seats = 4, members = null, audience = "group", capacity = 16, slots = 8, pingSeconds = 6s, reach = 5, height = 1, pingSources = [
+  "keyboard.g"
+], markSources = ["keyboard.h"], clearSources = ["keyboard.backspace"]) {
+  let group = ((members == null) ? range(0, seats) : members)
+  let markVisibility = ((audience == "public") ? null : { readers: map(group, m => $"seat{m + 1}") })
+
+  channels [
+    { composition: true, name: "ping", shape: Binary }
+    { composition: true, name: "mark", shape: Binary }
+    { composition: true, name: "markClear", shape: Binary }
+  ]
+
+  state {
+    world {
+      row {
+        name: "pingOn"
+        kind: "Int"
+        capacity: capacity
+        cells: map(group, m => { key: $"{m}", value: 0 })
+        visibility: markVisibility
+      }
+      for axis in ["pingX", "pingY", "pingZ"] {
+        row {
+          name: axis
+          kind: "Fixed"
+          capacity: capacity
+          cells: map(group, m => { key: $"{m}", value: 0 })
+          visibility: markVisibility
+        }
+      }
+      row {
+        name: "pingUntil"
+        kind: "Int"
+        capacity: capacity
+        cells: map(group, m => { key: $"{m}", value: 0 })
+        visibility: markVisibility
+      }
+      table pingGroup capacity(capacity) {
+        for m in group {
+          [$"{m}"] = 1
+        }
+      }
+      table markSlots capacity(slots) {
+        for i in range(0, slots) {
+          [$"{i}"] = i
+        }
+      }
+      for s in range(0, seats) {
+        row {
+          name: $"markOn{s}"
+          kind: "Int"
+          capacity: slots
+          cells: map(range(0, slots), i => { key: $"{i}", value: 0 })
+          visibility: markVisibility
+        }
+        for axis in ["markX", "markY", "markZ"] {
+          row {
+            name: $"{axis}{s}"
+            kind: "Fixed"
+            capacity: slots
+            cells: map(range(0, slots), i => { key: $"{i}", value: 0 })
+            visibility: markVisibility
+          }
+        }
+      }
+    }
+  }
+
+  // A press pings where the body faces; the ping lapses `pingSeconds` later.
+  rule "ping-press" {
+    local px = bodyPosition(each, x) + bodyForward(each, x) * reach
+    local py = bodyPosition(each, y) + height
+    local pz = bodyPosition(each, z) + bodyForward(each, z) * reach
+    when channel(each, ping) >= 1
+    mode: Edge
+    forEach: $players
+    pingOn[$each] = 1
+    pingX[$each] = px
+    pingY[$each] = py
+    pingZ[$each] = pz
+    schedule pingUntil[$each] in pingSeconds
+  }
+
+  rule "ping-lapse" {
+    when pingOn[$each] == 1 and $tick >= pingUntil[$each]
+    mode: Level
+    forEach: pingOn
+    pingOn[$each] = 0
+  }
+
+  // A press of the mark key leaves a mark on the player's character where a ping would land, and pings it for the
+  // group.
+  rule "mark-press" {
+    local px = bodyPosition(each, x) + bodyForward(each, x) * reach
+    local py = bodyPosition(each, y) + height
+    local pz = bodyPosition(each, z) + bodyForward(each, z) * reach
+    when channel(each, mark) >= 1
+    mode: Edge
+    forEach: $players
+    claimIdentityRecord(
+      key: $each,
+      pool: "marks",
+      fields: [
+        { field: "kind", value: 1 }
+        { field: "world", text: place }
+        { field: "x", expression: px }
+        { field: "y", expression: py }
+        { field: "z", expression: pz }
+      ]
+    )
+    pingOn[$each] = 1
+    pingX[$each] = px
+    pingY[$each] = py
+    pingZ[$each] = pz
+    schedule pingUntil[$each] in pingSeconds
+  }
+
+  // Each seat's marks in this world, read from its character's records into rows the group reads, and its clear key,
+  // which releases every one of them.
+  for s in range(0, seats) {
+    rule $"marks-{s}" {
+      local here = toInt(record(body, s, marks, $each, world, place) ?? 0)
+      local mx = record(body, s, marks, $each, x) ?? 0
+      local my = record(body, s, marks, $each, y) ?? 0
+      local mz = record(body, s, marks, $each, z) ?? 0
+      when ($"markOn{s}"[$each] != here) or ((here == 1) and (($"markX{s}"[$each] != mx) or ($"markY{s}"[$each] != my) or ($"markZ{s}"[$each] != mz)))
+      mode: Level
+      forEach: markSlots
+      $"markOn{s}"[$each] = here
+      $"markX{s}"[$each] = mx
+      $"markY{s}"[$each] = my
+      $"markZ{s}"[$each] = mz
+    }
+
+    rule $"marks-clear-{s}" {
+      local index = markSlots[$each]
+      when channel(body, s, markClear) >= 1 and $"markOn{s}"[$each] == 1
+      mode: Edge
+      forEach: markSlots
+      releaseIdentityRecord(key: s, pool: "marks", slot: index)
+    }
+  }
+
+  bindingOverlays [
+    {
+      id: "marks-keys"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers: padModifiers
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                { channel: "ping", id: "ping", label: "Ping", scale: 1, sources: pingSources }
+                { channel: "mark", id: "mark", label: "Mark", scale: 1, sources: markSources }
+                { channel: "markClear", id: "markClear", label: "Clear marks", scale: 1, sources: clearSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+// An owner's companion follows its group's pings: it flies to each new ping of a body in `pingGroup` and hovers there,
+// pulsing, until the ping lapses (companion.puck's guide, ping mode). Expand it beside `companion(owner: …)` in a world
+// that expands `playerMarks`. A lock-on guide outranks it (lockon.puck's `companionLock`).
+template companionMarks(owner, capacity = 16) {
+  // The array form, as companion.puck's own rows are written, so it composes into the document beside the companion.
+  state {
+    world [
+      { name: $"companionPingSeen{owner}", kind: "Int", capacity: capacity, cells: [] }
+    ]
+  }
+
+  rule $"companion{owner}-pings" {
+    when pingOn[$each] == 1 and (pingGroup[$each] ?? 0) == 1 and ($"companionPingSeen{owner}"[$each] ?? -1) != pingUntil[$each]
+    mode: Level
+    forEach: pingOn
+    $"companionPingSeen{owner}"[$each] = pingUntil[$each]
+    $"companionGuide{owner}"["x"] = pingX[$each]
+    $"companionGuide{owner}"["y"] = pingY[$each]
+    $"companionGuide{owner}"["z"] = pingZ[$each]
+    $"companionGuiding{owner}"["body"] = -1
+    $"companionGuiding{owner}"["mode"] = 2
+    $"companionGuiding{owner}"["ping"] = 1
+    $"companionGuiding{owner}"["until"] = pingUntil[$each]
+  }
+}

@@ -1,0 +1,19 @@
+// Lock-on and marks in the debug world: the standard's lock-on (../standard/lockon.puck) over every seat and visitor
+// body, and the standard's marks (../standard/marks.puck) under this world's name, shared with the four local seats. The
+// Moth's companion follows both (companion.puck expands `companionLock` and `companionMarks` beside her companion), and
+// the keys are offered in every form she walks or flies in (input-modes.puck's `controls`).
+//
+// B locks onto the most central body ahead of her (another seat, a visitor) and lets go on a second press; V steps to the
+// next one to her right. G pings where she faces, H leaves a mark there on her character, Backspace clears the marks she
+// left in this world.
+import "../standard/lockon"
+import "../standard/marks"
+import "shapes"
+
+// The rows the companion's guide reads (companion.puck).
+exports {
+  reads [lockTarget, pingOn, pingGroup, pingUntil, pingX, pingY, pingZ]
+}
+
+lockOn(targets: range(0, (seatPopulation + visitorPopulation)), seats: seatPopulation)
+playerMarks(place: "debug", seats: seatPopulation)

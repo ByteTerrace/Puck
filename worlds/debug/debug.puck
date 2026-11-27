@@ -52,6 +52,7 @@ import "reversi"
 import "fuzzer"
 import "traversal"
 import "kinematics-scope"
+import "targeting"
 import "companion"
 // The camera's exposure, which the gallery's inspection lever drives (exposure.puck), and the gallery itself, a module
 // under one root placement (gallery/gallery.puck): this world stands it at layout.puck's `gallerySite`.

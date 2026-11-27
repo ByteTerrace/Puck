@@ -205,11 +205,16 @@ public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale =
 /// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
 /// <param name="FaceFrame">The frame the seat's movement resolves in while its body holds a face it cannot stand
 /// on.</param>
+/// <param name="HeadingFrame">A literal or <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding (a <c>$body</c> key reads the
+/// seat's body) that, while it reads nonzero, resolves the seat's movement in its body's heading and lets no travel turn
+/// that heading, as a held face under <see cref="WorldSeatFaceFrame.Body"/> does: a body the rules keep facing a locked
+/// target then strafes round it whichever way the camera looks. <see langword="null"/> never does.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraAutoFirstPerson? AutoFirstPerson = null,
     WorldCameraBoom? Boom = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] WorldSeatFaceFrame FaceFrame = WorldSeatFaceFrame.Camera);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] WorldSeatFaceFrame FaceFrame = WorldSeatFaceFrame.Camera,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] BindableScalar? HeadingFrame = null);
 /// <summary>The frame a seat's camera-framed movement resolves in while its body holds a face it cannot stand on (the
 /// <c>HoldingUnwalkable</c> body fact).</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldSeatFaceFrame>))]

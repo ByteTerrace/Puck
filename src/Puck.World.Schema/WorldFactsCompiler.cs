@@ -485,7 +485,7 @@ public static partial class WorldFactsCompiler {
             compiled.Add(item: new WorldIdentityRecordField(
                 Field: fieldName,
                 Literal: field.Value,
-                Source: ((field.Expression is { } expression) ? Integer(context: context, expression: expression, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L)),
+                Source: ((field.Expression is { } expression) ? Number(context: context, expression: expression, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L)),
                 Text: field.Text
             ));
         }
@@ -505,6 +505,12 @@ public static partial class WorldFactsCompiler {
         static CompiledValueSource Integer(WorldFactsCompileContext context, ExpressionProgram expression, string ruleName, string verb) => CompiledValueSource.FromExpression(
             expression: RuleCompiler.CompileExpression(context: context, expression: expression, kind: CellKind.Int, ruleName: ruleName, verb: verb),
             kind: CellKind.Int
+        );
+        // A field's expression is read in fixed point, which holds every integer a record field bounds exactly, so a
+        // Fixed field keeps its fraction and an Int field takes the whole value (WorldIdentityRecordInput.TryValue).
+        static CompiledValueSource Number(WorldFactsCompileContext context, ExpressionProgram expression, string ruleName, string verb) => CompiledValueSource.FromExpression(
+            expression: RuleCompiler.CompileExpression(context: context, expression: expression, kind: CellKind.Fixed, ruleName: ruleName, verb: verb),
+            kind: CellKind.Fixed
         );
     }
     internal static IRuleEffect ResolveIdentityFact(WorldEffect.SetIdentityFact effect, string ruleName, WorldFactsCompileContext context) {

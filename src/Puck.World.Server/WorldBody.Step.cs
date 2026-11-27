@@ -1815,6 +1815,16 @@ public sealed partial class WorldBody {
     // from it.
     private void SnapYawToPlanarIntent(ref BodyMotionScratch scratch) {
         if (HasTimedYaw || HoldOwnsHeading) { return; }
+        if (TryFacedPoint(direction: out var faced)) {
+            if (m_continuity.Kind != EntityContinuityKind.Teleport) {
+                SnapYaw(
+                    scratch: ref scratch,
+                    yaw: faced.Yaw()
+                );
+            }
+
+            return;
+        }
 
         var faceX = Role(
             intent: in scratch.Intent,
@@ -1878,6 +1888,49 @@ public sealed partial class WorldBody {
             )).Yaw()
         );
     }
+    // The planar direction from the body to the point its program's face counters name, while their active counter reads
+    // nonzero and the point is not straight above or below the body (BodyFaceSlots).
+    private bool TryFacedPoint(out FixedVector3 direction) {
+        direction = FixedVector3.Zero;
+
+        if (m_bodyMotionProgram.Face is null) {
+            return false;
+        }
+
+        var slots = FaceSlots();
+
+        if ((slots.Active < 0) || (StateCounter(slot: slots.Active) == FixedQ4816.Zero)) {
+            return false;
+        }
+
+        direction = new FixedVector3(
+            X: (StateCounter(slot: slots.X) - m_position.X),
+            Y: FixedQ4816.Zero,
+            Z: (StateCounter(slot: slots.Z) - m_position.Z)
+        );
+
+        return ((direction.X != FixedQ4816.Zero) || (direction.Z != FixedQ4816.Zero));
+    }
+    // The face counters' slots, derived from the program and the slot definitions, both replaced whole and never written
+    // in place, so the pair of references it was resolved against is its version (the rule HoldSlots keeps).
+    private (int Active, int X, int Z) FaceSlots() {
+        if (!ReferenceEquals(objA: m_faceSlotsFor, objB: m_bodyMotionProgram) || !ReferenceEquals(objA: m_faceSlotsAgainst, objB: m_actionStateDefinitions)) {
+            var face = m_bodyMotionProgram.Face;
+            var active = StateSlotNamed(name: face?.Active);
+            var x = StateSlotNamed(name: face?.X);
+            var z = StateSlotNamed(name: face?.Z);
+
+            m_faceSlots = (((active < 0) || (x < 0) || (z < 0)) ? (-1, -1, -1) : (active, x, z));
+            m_faceSlotsFor = m_bodyMotionProgram;
+            m_faceSlotsAgainst = m_actionStateDefinitions;
+        }
+        return m_faceSlots;
+    }
+
+    private (int Active, int X, int Z) m_faceSlots = (-1, -1, -1);
+    private CompiledBodyMotionProgram? m_faceSlotsFor;
+    private CompiledActionStateSlot[]? m_faceSlotsAgainst;
+
     private void SnapYaw(ref BodyMotionScratch scratch, FixedQ4816 yaw) {
         m_yaw = yaw;
         SnapFacing(

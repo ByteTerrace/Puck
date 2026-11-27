@@ -270,6 +270,14 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case WorldCameraSubject.BoundPoint bound:
+                foreach (var (axis, scalar) in (ReadOnlySpan<(string, BindableScalar)>)[("x", bound.X), ("y", bound.Y), ("z", bound.Z)]) {
+                    if ((scalar.State is null) && (scalar.Keys is null) && !((scalar.Literal is { } literal) && float.IsFinite(f: literal))) {
+                        errors.Add(item: $"{path}.{axis} must be a finite literal or a state binding.");
+                    }
+                }
+
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown camera subject kind.");
 

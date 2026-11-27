@@ -82,7 +82,9 @@ public enum CompiledBodyRefKind : byte {
 /// <param name="Key">The cell key for a cell read.</param>
 /// <param name="Handle">The compiled handle of <paramref name="Row"/>.</param>
 /// <param name="PlacementOrdinals">For <c>placement:$each</c>, the placement ordinal per <c>forEach</c> cell, in cell order.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
+/// <param name="KeyBinding">For a cell read whose key is a binding (<c>cell:&lt;row&gt;:$each</c>), the binding the key
+/// is read through at each evaluation; <see cref="BoundKey.None"/> for a literal <paramref name="Key"/>.</param>
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null, BoundKey KeyBinding = BoundKey.None);
 /// <summary>The co-occurrence an interaction evaluates.</summary>
 /// <param name="Left">The left property.</param>
 /// <param name="Right">The right property, or the region placement.</param>

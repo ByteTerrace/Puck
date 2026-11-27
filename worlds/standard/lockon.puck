@@ -1,0 +1,242 @@
+// Lock-on targeting (docs/decisions/play.md, "Lock-on targeting is a must-have"): a player focuses a target, the camera
+// frames it, movement strafes round it, a press cycles to the next target in view, and the companion flies to it. A
+// module library: it hands its importers templates and emits no document.
+//
+// The mechanism is the engine's and every choice is authored here:
+//
+//   what can be targeted   the keyed `lockable` row, one cell per body index (nonzero: targetable), which the world
+//                          seeds (`targets`) and its rules may change;
+//   the target query       `target(each, lockable, reach, halfAngle)` picks the most central, nearest candidate within
+//                          `reach` metres and `halfAngle` degrees of the body's forward axis, and
+//                          `target(…, cell:lockTarget:$each)` the next one to its right (WorldTargetEnvelope);
+//   hold or toggle         `hold: false` toggles the lock on a press of `lock`; `hold: true` keeps it while held;
+//   the camera             a seat framing row takes the seat's camera while `lockOn` reads 1, behind the body on the far
+//                          side from its target (`lockYaw`) and aimed at the point `share` of the way to it (`lockAtX`,
+//                          `lockAtY`, `lockAtZ`), and the seat moves in its body's heading (`seatControl.headingFrame`);
+//   strafing               the standard walker faces the point its `faceAt` counters name (motion.puck), which the lock
+//                          keeps on the target, so a sideways push circles it;
+//   the companion          `companionLock` (companion.puck) sends an owner's companion to its locked target.
+//
+// A lock lapses when its target leaves `keep` metres or stops being a body.
+//
+//   import "../standard/lockon"
+//   lockOn(targets: [12, 13, 14])
+//
+// The rows, each keyed by body index:
+//
+//   lockable    Int, nonzero for a body that can be targeted
+//   lockOn      Int, 1 while the body holds a lock
+//   lockTarget  Int, the locked body, -1 for none
+//   lockYaw     Fixed, the camera's yaw behind the body, facing the target, in radians
+//   lockAtX/Y/Z Fixed, where the lock framing aims, in metres
+
+import "pad-kit"
+
+// The parts every lock-on in a world shares: its rows, channels, bindings and rules. `targets` are the body indices the
+// world starts targetable; `seats` the bodies players hold that may lock (their cells exist from boot); `reach` and
+// `halfAngle` the query's reach and cone, `keep` how far a lock holds once taken, `share` how far toward the target the
+// camera aims, `aimHeight` how high above each root it aims; `distance`, `pitch`, `pivotOffset` and `fieldOfView` the lock
+// framing's boom and lens. `lockSources` and `cycleSources` are the keys bound to `lock` and `lockCycle` on the play
+// page. The framing eases on the seat rig's own response, as every seat framing without one does.
+template lockOn(targets = [], seats = 4, capacity = 16, reach = 14, halfAngle = 50, keep = 20, share = 0.4, aimHeight = 1.2, hold = false, distance = 4.8, pitch = 0.3, pivotOffset = [
+  0, 1.2, 0
+], fieldOfView = 0.96, lockSources = ["keyboard.b"], cycleSources = ["keyboard.v"]) {
+  channels [
+    { composition: true, name: "lock", shape: Binary }
+    { composition: true, name: "lockCycle", shape: Binary }
+  ]
+
+  state {
+    world {
+      table lockable capacity(capacity) {
+        for t in targets {
+          [$"{t}"] = 1
+        }
+      }
+      table lockOn capacity(capacity) {
+        for s in range(0, seats) {
+          [$"{s}"] = 0
+        }
+      }
+      table lockTarget capacity(capacity) {
+        for s in range(0, seats) {
+          [$"{s}"] = -1
+        }
+      }
+      row {
+        name: "lockYaw"
+        kind: "Fixed"
+        capacity: capacity
+        cells: map(range(0, seats), s => { key: $"{s}", value: 0 })
+      }
+      row {
+        name: "lockAtX"
+        kind: "Fixed"
+        capacity: capacity
+        cells: map(range(0, seats), s => { key: $"{s}", value: 0 })
+      }
+      row {
+        name: "lockAtY"
+        kind: "Fixed"
+        capacity: capacity
+        cells: map(range(0, seats), s => { key: $"{s}", value: 0 })
+      }
+      row {
+        name: "lockAtZ"
+        kind: "Fixed"
+        capacity: capacity
+        cells: map(range(0, seats), s => { key: $"{s}", value: 0 })
+      }
+    }
+  }
+
+  // A press takes the target the query picks when the body holds no lock. Toggled, a press while locked lets go;
+  // held, letting go of the key does (`lock-release`).
+  rule "lock-press" {
+    local picked = target(each, lockable, reach, halfAngle)
+    when channel(each, lock) >= 1
+    mode: Edge
+    forEach: $players
+    if (lockOn[$each] ?? 0) == 0 {
+      if picked >= 0 {
+        lockTarget[$each] = picked
+        lockOn[$each] = 1
+      }
+    } else {
+      if not hold {
+        lockOn[$each] = 0
+        lockTarget[$each] = -1
+        setBodyState(key: $each, state: "faceAt", expression: 0)
+      }
+    }
+  }
+
+  if hold {
+    rule "lock-release" {
+      when lockOn[$each] == 1 and channel(each, lock) == 0
+      mode: Level
+      forEach: $players
+      lockOn[$each] = 0
+      lockTarget[$each] = -1
+      setBodyState(key: $each, state: "faceAt", expression: 0)
+    }
+  }
+
+  // A press of the cycle key steps to the next target to the body's right, wrapping to the leftmost.
+  rule "lock-cycle" {
+    local next = target(each, lockable, reach, halfAngle, cell, lockTarget, $each)
+    when channel(each, lockCycle) >= 1 and lockOn[$each] == 1
+    mode: Edge
+    forEach: $players
+    if next >= 0 {
+      lockTarget[$each] = next
+    }
+  }
+
+  // While locked: the lock lapses once its target is gone or past `keep`; otherwise the body faces it, and the camera's
+  // yaw and aim follow both bodies.
+  rule "lock-follow" {
+    local tx = bodyPosition(cell, lockTarget, $each, x)
+    local ty = bodyPosition(cell, lockTarget, $each, y)
+    local tz = bodyPosition(cell, lockTarget, $each, z)
+    local bx = bodyPosition(each, x)
+    local by = bodyPosition(each, y)
+    local bz = bodyPosition(each, z)
+    local far = distance(each, cell, lockTarget, $each)
+    when lockOn[$each] == 1
+    mode: Level
+    forEach: $players
+    if far > keep {
+      lockOn[$each] = 0
+      lockTarget[$each] = -1
+      setBodyState(key: $each, state: "faceAt", expression: 0)
+    } else {
+      setBodyState(key: $each, state: "faceAt", expression: 1)
+      setBodyState(key: $each, state: "faceAtX", expression: tx)
+      setBodyState(key: $each, state: "faceAtZ", expression: tz)
+      lockYaw[$each] = atan2(bx - tx, bz - tz)
+      lockAtX[$each] = bx + (tx - bx) * share
+      lockAtY[$each] = by + (ty - by) * share + aimHeight
+      lockAtZ[$each] = bz + (tz - bz) * share
+    }
+  }
+
+  // The lock framing: a seat framing row (views.framings) that takes the seat's camera while its body is locked on and
+  // eases back to the seat's own chase rig when it lets go. The boom stands `distance` metres behind the body on the far
+  // side from its target at `pitch` radians, the player's look turning nothing (`lockYaw`), aimed at the point the
+  // follow rule places between the two. While locked the seat moves in its body's heading, which the walker keeps on
+  // the target, so a sideways push strafes round it whichever way the player last looked.
+  views {
+    seatControl {
+      headingFrame: "state.lockOn.$body"
+    }
+    framings [
+      { id: "lock", program: "lock-view", when: "state.lockOn.$body" }
+    ]
+    programs [
+      {
+        name: "lock-view"
+        version: "puck.camera.program.v1"
+        operations [
+          orbit(distance: distance, pitch: pitch, pivotOffset: pivotOffset, yaw: "state.lockYaw.$body", look: false)
+          lookAt(focusDistance: distance, subject: boundPoint(x: "state.lockAtX.$body", y: "state.lockAtY.$body", z: "state.lockAtZ.$body"), worldAxes: true)
+          fieldOfView(fieldOfViewRadians: fieldOfView)
+        ]
+      }
+    ]
+  }
+
+  bindingOverlays [
+    {
+      id: "lock-on-keys"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers: padModifiers
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                { channel: "lock", id: "lock", label: "Lock on", scale: 1, sources: lockSources }
+                { channel: "lockCycle", id: "lockCycle", label: "Next target", scale: 1, sources: cycleSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+// An owner's companion flies to the target its owner locks onto and hovers over it, pulsing, until the lock ends, when it
+// returns to its owner (companion.puck's guide). The lock outranks every other guide while it holds: a ping or a mark
+// that sends the companion elsewhere is taken back on the next tick. Expand it beside `companion(owner: …)` in a world
+// that expands `lockOn`.
+template companionLock(owner) {
+  // The array form, as companion.puck's own rows are written, so it composes into the document beside the companion.
+  state {
+    world [
+      { name: $"companionLocked{owner}", kind: "Int", value: 0 }
+    ]
+  }
+
+  rule $"companion{owner}-lock" {
+    local held = lockTarget[$"{owner}"] ?? -1
+    when held >= 0 and (($"companionGuiding{owner}"["body"] != held) or ($"companionGuiding{owner}"["mode"] != 2))
+    mode: Level
+    $"companionGuiding{owner}"["body"] = held
+    $"companionGuiding{owner}"["mode"] = 2
+    $"companionGuiding{owner}"["ping"] = 0
+    $"companionLocked{owner}" = 1
+  }
+
+  rule $"companion{owner}-unlock" {
+    when $"companionLocked{owner}" == 1 and (lockTarget[$"{owner}"] ?? -1) < 0
+    mode: Level
+    $"companionGuiding{owner}"["mode"] = 0
+    $"companionGuiding{owner}"["body"] = -1
+    $"companionLocked{owner}" = 0
+  }
+}

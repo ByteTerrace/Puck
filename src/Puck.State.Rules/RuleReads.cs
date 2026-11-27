@@ -555,17 +555,35 @@ public static class RuleReads {
         );
     }
 
-    private static CellKey BoundKeyOf(ref EvaluationFrame frame, BoundKey binding) => (binding switch {
-        BoundKey.Write => frame.Reader.Scratch.WriteKey,
-        BoundKey.Each => frame.Reader.BoundEachKey,
-        BoundKey.Member => frame.Reader.BoundMemberKey,
-        BoundKey.Token => frame.Reader.BoundTokenKey,
-        BoundKey.Previous => frame.Reader.BoundPreviousKey,
-        _ => IndexKey(
+    private static CellKey BoundKeyOf(ref EvaluationFrame frame, BoundKey binding) => KeyOf(
+        binding: binding,
         keys: frame.Arena.Keys,
-        index: frame.Reader.BoundIndex(key: binding)
-    ),
-    });
+        reader: frame.Reader
+    );
+
+    /// <summary>Returns the cell key a binding names for the evaluation in flight: the key the sweep, member, token or
+    /// write binds, or a bound participant's index spelled as a key. The one resolution every inner-key read takes, a
+    /// host's body references included.</summary>
+    /// <param name="reader">The reader whose bindings are in flight.</param>
+    /// <param name="keys">The arena's key table.</param>
+    /// <param name="binding">The binding.</param>
+    /// <returns>The key, or the invalid default when the binding names none.</returns>
+    public static CellKey KeyOf(IStateReader reader, CellKeyTable keys, BoundKey binding) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+        ArgumentNullException.ThrowIfNull(argument: keys);
+
+        return (binding switch {
+            BoundKey.Write => reader.Scratch.WriteKey,
+            BoundKey.Each => reader.BoundEachKey,
+            BoundKey.Member => reader.BoundMemberKey,
+            BoundKey.Token => reader.BoundTokenKey,
+            BoundKey.Previous => reader.BoundPreviousKey,
+            _ => IndexKey(
+            keys: keys,
+            index: reader.BoundIndex(key: binding)
+        ),
+        });
+    }
     private static CellKey IndexKey(CellKeyTable keys, long index) => (keys.TryResolveIndex(
         index: index,
         key: out var key

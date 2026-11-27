@@ -109,7 +109,7 @@ public static partial class WorldDefinitionValidator {
     // instruction state, so the checks over it read the row rather than the compiled program.
     private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) =>
         FirstRowsByName(rows: programs, name: static program => program.Name);
-    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> navigationProfileNames, ISet<string> curveNames, List<string> errors) {
+    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> navigationProfileNames, ISet<string> curveNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < programs.Count); index++) {
@@ -139,6 +139,15 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".planarTarget.backward", Path: path),
                     errors: errors
                 );
+            }
+            if (program.Face is { } face) {
+                foreach (var (member, slotName) in (ReadOnlySpan<(string, string)>)[("active", face.Active), ("x", face.X), ("z", face.Z)]) {
+                    if (string.IsNullOrWhiteSpace(value: slotName) || !stateSlots.TryGetValue(key: slotName, value: out var faceSlot)) {
+                        errors.Add(item: $"{path}.face.{member} '{slotName}' names no declared body or identity state slot.");
+                    } else if (faceSlot.Kind != ActionStateKind.Counter) {
+                        errors.Add(item: $"{path}.face.{member} '{slotName}' is a {faceSlot.Kind} slot — a facing reads a Counter.");
+                    }
+                }
             }
 
             try {

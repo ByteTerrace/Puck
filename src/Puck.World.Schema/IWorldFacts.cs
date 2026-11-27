@@ -88,10 +88,14 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact; absent when no contact event is bound.</returns>
     Fact Read(ContactOperand operand);
-    /// <summary>Returns the nearest body carrying a tag-row cell.</summary>
+    /// <summary>Returns the body a tag-row walk chooses: the nearest tagged body, or a target query's pick.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(NearestOperand operand);
+    /// <summary>Returns one field of a record on the identity a body drives under.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact; absent when the body has no identity or the slot holds no live instance with the field.</returns>
+    Fact Read(IdentityRecordOperand operand);
     /// <summary>Returns one facet of a body's navigation state.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
