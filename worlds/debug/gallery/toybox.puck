@@ -111,12 +111,12 @@ state {
 // the building, which sees no picture of that gallery.
 let toyboxAttention = 40
 let toyboxBehind = 2
-// An arcade cabinet boots its library's folder default (the owner's local deck folder's `folder.json`, written by
+// Every deck boots its library's folder default (the owner's local deck folder's `folder.json`, written by
 // `machine.default`) when that folder is present and names one, and its shipped program otherwise, as in a clean
-// checkout; the televisions boot their shipped programs.
+// checkout.
 machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
   contentFolders: toyboxLibrary
-  preferFolderDefault: ((s.kind == "cabinet") ? true : false)
+  preferFolderDefault: true
   contentBy { state: toyboxTitle, key: s.id }
   attention { within: toyboxAttention, behind: toyboxBehind }
 }))
