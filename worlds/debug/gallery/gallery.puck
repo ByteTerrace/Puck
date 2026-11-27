@@ -35,6 +35,7 @@ import "../../standard/contexts/terminal"
 import "../../standard/place"
 import "../../standard/reach"
 import "../shapes"
+import "../shape-station"
 import "layout"
 import "shell"
 import "look"
@@ -1243,22 +1244,8 @@ rule "gallery-inspect-off" {
 }
 
 // One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed from the building's site when the
-// document compiles; `gallery.shot` selects one.
-// The station view: one camera per display, a terminal's desk view anchored on its plinth placement
-// (`display-<id>-plinth`, which stays put while an exhibit is lifted or swapped) and placed in that placement's own
-// axes, so it frames the exhibit and the whole console from the same vantage whichever way the display faces and
-// wherever it stands, and follows the display when it moves. The vantage is look.puck's lookStation: the aim in the
-// plinth's axes (+Y up, -Z toward a viewer before the console), how much of the view the framed height fills and how
-// far the eye is raised over it.
-cameras: concat(map(galleryDisplays, display => terminalCamera(
-  name: $"gallery-station-{display.id}",
-  anchor: { $type: "placement", placementId: $"display-{display.id}-plinth" },
-  centre: (lookStation.aim * displayScale),
-  halfHeight: (lookStation.halfHeight * displayScale),
-  fill: lookStation.fill,
-  tilt: lookStation.tilt,
-  fieldOfView: lookStation.fov
-)), map(lookShots, view => {
+// document compiles; `gallery.shot` selects one. The displays' station views are the station's own (shapeStation).
+cameras: map(lookShots, view => {
   name: $"gallery-shot-{view.name}"
   rig {
     name: $"gallery-shot-{view.name}"
@@ -1271,99 +1258,12 @@ cameras: concat(map(galleryDisplays, display => terminalCamera(
   }
   renderWidth: 1672
   renderHeight: 941
-}))
+})
 
-// Every display is a terminal (../../standard/contexts/terminal.puck): a player standing before its console presses the context
-// button (E, or the pad's RB) to use it, and stands at the display's spawn point while the seat's camera eases to the
-// display's station view above, the hero angle every display shares. Engaged, the left mouse button is the console's
-// tap and nothing turns the camera, E or Backspace (the pad's RB or B) steps back, and the camera eases back to the chase
-// camera. The station view's eye stands behind her at the spawn point, so its near plane cuts her away: along the view,
-// her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
-//
-// Engaged, the backtick turns the display's own screen into its hidden console (../../standard/contexts/terminal-console.puck;
-// the screen's terminal mode is shapes.puck's terminalScreenPaints), a secret of the station rather than a menu: nothing
-// on screen hints at it, and everyone looking at that glass sees the line as it is typed and the replies it draws. The
-// backtick again returns the screen to its interface. The typed line works the display as its screen does: `show
-// <exhibit>` (or `shape <exhibit>`, its prototype name) shows
-// an exhibit on its turntable, `list` names the groups and `list <group>` a group's exhibits, `turntable on` and
-// `turntable off` set it turning or stop it, `speed <-3..3>` sets its pace and the way it turns (0 stops it), and `help`
-// says so. A command posts its action to the display's terminal mailbox, which the gallery-console-command rules below
-// carry into the same cells a tap on the screen writes (gallerySelect, and the turntable's mailbox), so a typed command
-// and a press leave the same state.
-let galleryConsoleActions = { show: 1, turn: 2, pace: 3 }
-let galleryConsoleSpeeds = filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0))
-let galleryConsole = {
-  greeting ["type help for the commands this display answers"]
-  unknown ["not a command this display answers; type help"]
-  commands: concat(
-    [
-      {
-        line: "help"
-        reply [
-          "show <exhibit>     show an exhibit on this turntable"
-          "                   (shape <exhibit> too; list names them)"
-          "list               name the groups"
-          "list <group>       name a group's exhibits"
-          "turntable on|off   set the turntable turning, or stop it"
-          $"speed <-{turntableSpeeds}..{turntableSpeeds}>      its pace and way round; 0 stops it"
-        ]
-      }
-      { line: "list", reply: concat(["groups (list <group> names its exhibits):"], terminalWrap(map(galleryDisplays, display => display.id))) }
-    ],
-    map(galleryDisplays, display => { line: $"list {display.id}", reply: terminalWrap(display.names) }),
-    flatMap(galleryCatalog, entry => map(["show", "shape"], verb => {
-      line: $"{verb} {entry.name}"
-      action: galleryConsoleActions.show
-      value: entry.index
-      reply [$"showing {galleryCopy[entry.name].title}"]
-    })),
-    [
-      { line: "turntable on", action: galleryConsoleActions.turn, value: 1, reply ["the turntable turns"] }
-      { line: "turntable off", action: galleryConsoleActions.turn, value: 0, reply ["the turntable stops"] }
-      { line: "speed 0", action: galleryConsoleActions.pace, value: 0, reply ["the turntable stops"] }
-    ],
-    map(galleryConsoleSpeeds, speed => {
-      line: $"speed {speed}"
-      action: galleryConsoleActions.pace
-      value: speed
-      reply [$"pace {turntablePace(speed)}"]
-    })
-  )
-}
-terminalPlay(
-  terminals: map(galleryDisplays, display => {
-    at: displayWorld(display, displayStand)
-    camera: $"gallery-station-{display.id}"
-    spawn: $"display-{display.id}"
-  }),
-  near: 2.6,
-  console: galleryConsole
-)
-
-// A display's terminal mailbox (terminalAction and terminalValue, keyed by its terminal number, its place in
-// galleryDisplays from 1) carried into the cells its screen writes: show selects the exhibit as a tap on its row does,
-// and turn and pace post to the turntable's mailbox as its buttons do.
-for (display, index) in galleryDisplays {
-  let key = display.id
-  let number = $"{index + 1}"
-  rule $"gallery-console-command-{key}" {
-    local action = terminalAction[number]
-    local value = terminalValue[number]
-    when action != 0
-    mode: Level
-    if action == galleryConsoleActions.show {
-      gallerySelect[key] = clamp(value, 0, galleryLast)
-    }
-    if action == galleryConsoleActions.turn {
-      galleryTurnAt[key] = (value == 1) ? galleryTurnCodes.on : galleryTurnCodes.off
-    }
-    if action == galleryConsoleActions.pace {
-      galleryTurnTo[key] = value
-      galleryTurnAt[key] = galleryTurnCodes.pace
-    }
-    terminalAction[number] = 0
-  }
-}
+// The twelve display stations (shape-station.puck): their station views, terminals, console rules and commands, over the
+// state and placements shapes.puck gives them. Every display is a terminal, and the backtick turns its screen into its
+// hidden console.
+shapeStation()
 
 commands [
   {
@@ -1385,16 +1285,6 @@ commands [
     ]
     lines [
       "world.state.cell.set hallLights level{level} {state}"
-    ]
-  }
-  {
-    name: "gallery.station"
-    help: "Films a display from the station view (look.puck's lookStation): the exhibit and the whole console framed from the same vantage at every display, riding the display's own placement. view.override camera auto returns to the chase camera."
-    parameters [
-      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id), default: "primitives" }
-    ]
-    lines [
-      "view.override camera gallery-station-{display}"
     ]
   }
   {
@@ -1479,161 +1369,8 @@ for entry in galleryCatalog {
     when galleryStop == entry.index
     mode: Edge
     pose(key: 0, spawnPoint: entry.name)
-    gallerySelect[$"{galleryDisplays[entry.display].id}"] = entry.index
+    gallerySelect[$"{galleryGroupOf(entry).id}"] = entry.index
   }
-}
-
-// The display consoles (shapes.puck's console interface). Each console's screen placement carries a pointer surface,
-// and its rules sweep the contacts that land on the glass (forEach: contacts(<screen>)): a finger or a pen tip touching
-// it, or a mouse click, which is the mouse's contact while its primary button is held, cast through the reticle when the
-// seat looks in first person. Mouse and touch take this one door, so a click and a tap answer alike and neither is read
-// twice. A touch on the list records the row it landed on; while it stays down, each row it passes scrolls the list a
-// row the other way, as a finger drags a page; and a lift that never left its row is a tap, which shows that row's
-// exhibit on the turntable. A lift on PREV or NEXT turns the list a page, and one on the turntable's buttons posts to
-// its mailbox. A display's selection holds a catalog index, any of the catalog's. One sweep a console reads every
-// contact on its glass once, so a tick of many contacts costs one walk of them, not one a gesture. While the display's
-// terminal console is open the glass shows it instead of the interface, so a tap on it does nothing.
-for (display, index) in galleryDisplays {
-  let key = display.id
-  let screen = $"display-{display.id}-screen"
-  let number = $"{index + 1}"
-  rule $"gallery-console-{key}" {
-    forEach: contacts(screen)
-    when contact(each, phase) > 0 and terminalConsoleOpen[number] == 0
-    mode: Level
-    // A touch down on the list holds its row and the scroll it started from.
-    if galleryPress[key] == 0 and contact(each, phase) == 1 and contact(each, region, list) == 1 {
-      galleryPress[key] = 1
-      galleryPressRow[key] = contact(each, row, list)
-      galleryDragRow[key] = contact(each, row, list)
-      galleryPressScroll[key] = galleryScroll[key]
-      galleryDragged[key] = 0
-    }
-    // A move onto another row drags the list.
-    if galleryPress[key] == 1 and contact(each, phase) == 2 and contact(each, row, list) >= 0 and contact(each, row, list) != galleryDragRow[key] {
-      galleryDragRow[key] = contact(each, row, list)
-      galleryDragged[key] = 1
-      galleryScroll[key] = clamp(galleryPressScroll[key] + galleryPressRow[key] - contact(each, row, list), 0, consoleScrollLast)
-    }
-    // A lift (phase 3) that never left its row selects it; a cancel (phase 4) ends the press and selects nothing.
-    if galleryPress[key] == 1 and contact(each, phase) >= 3 {
-      if galleryDragged[key] == 0 and contact(each, phase) == 3 {
-        gallerySelect[key] = minimum(galleryPressScroll[key] + galleryPressRow[key], galleryLast)
-      }
-      galleryPress[key] = 0
-    }
-    // A lift on a button: PREV and NEXT turn the list a page, the turntable's buttons post to its mailbox
-    // (galleryTurnCodes: slower, hold or release, faster).
-    if contact(each, phase) == 3 and (contact(each, region, prev) + contact(each, region, next) + contact(each, region, slower) + contact(each, region, hold) + contact(each, region, faster)) > 0 {
-      galleryScroll[key] = clamp(galleryScroll[key] + (consoleRows * (contact(each, region, next) - contact(each, region, prev))), 0, consoleScrollLast)
-      galleryTurnAt[key] = (galleryTurnCodes.slower * contact(each, region, slower)) + (galleryTurnCodes.hold * contact(each, region, hold)) + (galleryTurnCodes.faster * contact(each, region, faster))
-    }
-  }
-  // The turntable's mailbox (galleryTurnCodes): slower and faster step the signed speed, passing from the slowest pace
-  // one way to the slowest the other way round, and set it turning; hold stops or restarts it where it stands; on and off
-  // set it turning or stop it; and pace sets the signed speed galleryTurnTo holds, a speed of 0 stopping it. The rate its
-  // turn facet reads changes with the phase rebased by the same write (phase += (rate - new rate) × clock), so the angle
-  // the facet computes from the gallery clock carries on from where it stood.
-  rule $"gallery-turn-{key}" {
-    local code = galleryTurnAt[key]
-    local to = galleryTurnTo[key]
-    when code != 0
-    mode: Level
-    if code == galleryTurnCodes.hold {
-      galleryTurnPlay[key] = 1 - galleryTurnPlay[key]
-    }
-    if code == galleryTurnCodes.on {
-      galleryTurnPlay[key] = 1
-    }
-    if code == galleryTurnCodes.off {
-      galleryTurnPlay[key] = 0
-    }
-    if code == galleryTurnCodes.slower or code == galleryTurnCodes.faster {
-      galleryTurnSpeed[key] = clamp(galleryTurnSpeed[key] + code - 2, 0 - turntableSpeeds, turntableSpeeds)
-      if galleryTurnSpeed[key] == 0 {
-        galleryTurnSpeed[key] = code - 2
-      }
-      galleryTurnPlay[key] = 1
-    }
-    if code == galleryTurnCodes.pace {
-      if to == 0 {
-        galleryTurnPlay[key] = 0
-      } else {
-        galleryTurnSpeed[key] = clamp(to, 0 - turntableSpeeds, turntableSpeeds)
-        galleryTurnPlay[key] = 1
-      }
-    }
-    setState(state: galleryTurnNext, key: $"{key}", fromState: galleryTurnRates, fromKey: $"$cell:galleryTurnSpeed:{key}")
-    if galleryTurnPlay[key] == 0 {
-      galleryTurnNext[key] = 0
-    }
-    galleryTurnPhase[key] = galleryTurnPhase[key] + ((galleryTurnRate[key] - galleryTurnNext[key]) * galleryClock)
-    galleryTurnRate[key] = galleryTurnNext[key]
-    setState(state: galleryTurnHold, key: $"{key}", fromState: galleryTurnHolds, fromKey: $"$cell:galleryTurnPlay:{key}")
-    setState(state: galleryTurnPace, key: $"{key}", fromState: galleryTurnPaces, fromKey: $"$cell:galleryTurnSpeed:{key}")
-    galleryTurnAt[key] = 0
-  }
-  // gallery.step's mailbox: the display shows the next or the previous exhibit of the catalog, wrapping round.
-  rule $"gallery-console-{key}-step" {
-    when galleryStepAt[key] != 0
-    mode: Level
-    gallerySelect[key] = (gallerySelect[key] + galleryStepAt[key] + galleryCount) % galleryCount
-    galleryStepAt[key] = 0
-  }
-  // The screen follows the selection, however it moved (the list, gallery.go, gallery.step, the tour, a console write):
-  // its place in the catalog and its copy by its index (a `$cell:` key reads the index a cell holds), and the list
-  // scrolls just far enough to show it.
-  rule $"gallery-screen-{key}" {
-    when gallerySelect[key] != galleryShownAt[key]
-    mode: Level
-    galleryPlace[key] = gallerySelect[key] + 1
-    setState(state: galleryScreenTitle, key: $"{key}", fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{key}")
-    setState(state: galleryScreenNote, key: $"{key}", fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{key}")
-    setState(state: galleryScreenGroup, key: $"{key}", fromState: galleryGroups, fromKey: $"$cell:gallerySelect:{key}")
-    if gallerySelect[key] < galleryScroll[key] {
-      galleryScroll[key] = gallerySelect[key]
-    }
-    if gallerySelect[key] >= galleryScroll[key] + consoleRows {
-      galleryScroll[key] = gallerySelect[key] - consoleRows + 1
-    }
-    galleryShownAt[key] = gallerySelect[key]
-  }
-  // The list's rows follow the scroll and the selection: each row's catalog index, its title and group copied from the
-  // catalog by that index, and its ink from the console's inks, the chosen row lit. The scroll and the choice pack into
-  // one view that the gate and the write share, so a firing closes its own gate and the rows are written only when the
-  // view moves.
-  rule $"gallery-rows-{key}" {
-    local view = galleryScroll[key] * consoleViewStride + gallerySelect[key]
-    when galleryRowsView[key] != view
-    mode: Level
-    for row in range(0, consoleRows) {
-      galleryRowIndex[$"{key}-{row}"] = galleryScroll[key] + row
-      setState(state: galleryRowName, key: $"{key}-{row}", fromState: galleryTitles, fromKey: $"$cell:galleryRowIndex:{key}-{row}")
-      setState(state: galleryRowGroup, key: $"{key}-{row}", fromState: galleryGroups, fromKey: $"$cell:galleryRowIndex:{key}-{row}")
-      if galleryScroll[key] + row == gallerySelect[key] {
-        setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: lit)
-      } else {
-        setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: dim)
-      }
-    }
-    galleryRowsView[key] = view
-  }
-}
-
-// gallery.go and gallery.show name an exhibit: its display shows it.
-for entry in galleryCatalog {
-  rule $"gallery-pick-{entry.index}" {
-    when galleryPick[$"{entry.name}"] == 1
-    mode: Level
-    gallerySelect[$"{galleryDisplays[entry.display].id}"] = entry.index
-    galleryPick[$"{entry.name}"] = 0
-  }
-}
-rule "gallery-pick-entrance" {
-  when (galleryPick.gallery + galleryPick.toybox) > 0
-  mode: Level
-  galleryPick.gallery = 0
-  galleryPick.toybox = 0
 }
 
 commands [
@@ -1649,47 +1386,6 @@ commands [
     help: "Stands body 0 at the previous exhibit of the tour; before the first it wraps to the last."
     lines [
       "world.state.cell.set galleryStep $value -1"
-    ]
-  }
-  {
-    name: "gallery.step"
-    help: "Shows the next exhibit of the catalog on a display's turntable (step -1 for the previous one), wrapping round, without moving anyone; its console's list follows."
-    parameters [
-      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
-      { name: "step", kind: Choice, values ["1", "-1"], default: "1" }
-    ]
-    lines [
-      "world.state.cell.set galleryStepAt {display} {step}"
-    ]
-  }
-  {
-    name: "gallery.turn.hold"
-    help: "Stops a display's turntable where it stands, or sets it turning again from there, as its console's pause and play button does."
-    parameters [
-      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
-    ]
-    lines [
-      "world.state.cell.set galleryTurnAt {display} 2"
-    ]
-  }
-  {
-    name: "gallery.turn.slower"
-    help: "Steps a display's turntable a pace slower, past the slowest into turning the other way round, as its console's < button does."
-    parameters [
-      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
-    ]
-    lines [
-      "world.state.cell.set galleryTurnAt {display} 1"
-    ]
-  }
-  {
-    name: "gallery.turn.faster"
-    help: "Steps a display's turntable a pace faster, as its console's > button does."
-    parameters [
-      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
-    ]
-    lines [
-      "world.state.cell.set galleryTurnAt {display} 3"
     ]
   }
 ]

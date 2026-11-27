@@ -415,13 +415,14 @@ cursor, in first person or third.
 The owner's ruling: a player walks up to a display, uses it, and ends up at
 the hero angle every display shares, and while using it the inputs go to the
 display, as a result of Puck code rather than an engine special case. So every
-display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expanded in
-[gallery/gallery.puck](gallery/gallery.puck)):
+display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expanded for
+the displays by [shape-station.puck](shape-station.puck)'s `shapeStation`, which
+[gallery/gallery.puck](gallery/gallery.puck) calls):
 
 - Standing before a console (within 1.6 m of the display's spawn point), the
   context button (E, or the pad's RB) uses it: she stands at the display's
   spawn point and the seat's camera eases to the display's station view
-  (`gallery-station-<id>`, look.puck's `lookStation`), whose near plane cuts
+  (`gallery-station-<id>`, shape-station.puck's `lookStation`), whose near plane cuts
   her away where she stands between the camera and the console. In the debug
   world the E key's lamp lights while she is in reach.
 - While she uses it, the left mouse button is the console's tap and nothing
