@@ -2244,7 +2244,7 @@ public static partial class CreationCanonicalizer {
     private static IEnumerable<string> RefusedMaskFacets(ShapeDocument shape) {
         if (shape.Material is { } material and not 0) { yield return "material"; }
         if (shape.Blend is { } blend and not SdfBlendOp.Union) { yield return "blend"; }
-        if (shape.Smooth is { } smooth and not 0f) { yield return "smooth"; }
+        if (shape.Smooth is { } smooth && ((smooth.Reference is not null) || (smooth.Value != 0f))) { yield return "smooth"; }
         if (shape.Group is { } group and not 0) { yield return "group"; }
         if (shape.Twist is { } twist and not 0f) { yield return "twist"; }
         if (shape.Bend is { } bend and not 0f) { yield return "bend"; }
@@ -2499,11 +2499,10 @@ public static partial class CreationCanonicalizer {
                 Scale = ((shape.Scale == default)
                 ? Vector3.One
                 : shape.Scale),
-                Smooth = Math.Clamp(
-                value: (shape.Smooth ?? 0f),
-                max: ShapeDocument.MaxSmooth,
-                min: 0f
-            ),
+                // A bound radius keeps its reference and is clamped where it is read (ShapeDocument.SmoothRadius).
+                Smooth = ((shape.Smooth is { Reference: not null } boundSmooth)
+                ? boundSmooth
+                : new DocumentScalar(value: shape.SmoothRadius)),
                 Twist = Math.Clamp(
                 value: (shape.Twist ?? 0f),
                 max: ShapeDocument.MaxTwist,
@@ -2692,7 +2691,7 @@ public static partial class CreationCanonicalizer {
             } else if (shape.Blend is SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
                 // A stairs seam needs a radius to step over. Four field levels admit the shape's scope
                 // inside a group's and a text-bearing creation's enclosing scopes.
-                if (!((shape.Smooth ?? 0f) > 0f)) {
+                if (!(shape.SmoothRadius > 0f)) {
                     errors.Add(item: new(Message: $"blend '{shape.Blend}' needs a smooth radius above zero to step over.", Path: $"shapes[{i}].smooth"));
                 }
                 if ((shape.Steps is { } steps) && ((steps < 1) || (steps > ShapeScope.MaxSteps))) {

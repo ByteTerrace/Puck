@@ -2876,6 +2876,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <inheritdoc/>
     /// <remarks>The boot world's text paints', laid out through its own font catalog (<see cref="WorldSurfaceTexts"/>).</remarks>
     public Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => m_surfaceTexts.Provider;
+    /// <summary>Describes the boot world's math texts as the latest frame laid them out
+    /// (<see cref="WorldSurfaceTexts.DescribeMath"/>).</summary>
+    /// <returns>One line a math text slot.</returns>
+    public IReadOnlyList<string> DescribeMathTexts() => m_surfaceTexts.DescribeMath();
     /// <inheritdoc/>
     /// <remarks>A carried screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at this frame
     /// (<see cref="WorldCreationInstances.ScreenSurfaceTransforms"/>).</remarks>

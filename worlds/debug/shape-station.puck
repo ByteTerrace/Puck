@@ -25,6 +25,7 @@
 
 import "../standard/contexts/terminal"
 import "../standard/contexts/terminal-console"
+import "../standard/learn-panel"
 import "shapes"
 
 // The station view every display shares (`gallery.station`), a terminal's desk view (the standard's `terminalCamera`): it
@@ -152,7 +153,7 @@ template shapeStation(displays = galleryDisplays) {
     let number = $"{index + 1}"
     rule $"gallery-console-{key}" {
       forEach: contacts(screen)
-      when contact(each, phase) > 0 and terminalConsoleOpen[number] == 0
+      when contact(each, phase) > 0 and terminalConsoleOpen[number] == 0 and learnOpen[key] == 0
       mode: Level
       // A touch down on the list holds its row and the scroll it started from.
       if galleryPress[key] == 0 and contact(each, phase) == 1 and contact(each, region, list) == 1 {
@@ -328,6 +329,25 @@ template shapeStation(displays = galleryDisplays) {
       }
       galleryRowsView[key] = view
     }
+  }
+
+  // Each display's learn panel (../standard/learn-panel.puck, drawn by shapes.puck's learnPaints): its LEARN button opens
+  // the maths of the exhibit on its turntable, whatever chose it, and its scrub sizes that exhibit.
+  for (display, index) in displays {
+    let key = display.id
+    rule $"gallery-learn-subject-{key}" {
+      when learnSubject[key] != gallerySelect[key]
+      mode: Level
+      learnSubject[key] = gallerySelect[key]
+    }
+    learnPanel(
+      key: key,
+      surface: $"display-{display.id}-screen",
+      terminal: (index + 1),
+      drag: learnDrag,
+      scrubFrom: consoleRegion("scrub", learnScrub).left,
+      scrubTo: consoleRegion("scrub", learnScrub).right
+    )
   }
 
   // gallery.go and gallery.show name an exhibit: the display it is home to shows it.
