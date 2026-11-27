@@ -585,6 +585,9 @@ public static partial class RuleCompiler {
             if (context.FindRow(name: fold.Family) is not { } family) {
                 throw Malformed(detail: $"folds '{fold.Family}', which the section does not declare");
             }
+            if (family.EffectiveDomain is StateDomain.Tally) {
+                throw Malformed(detail: $"folds tally '{fold.Family}', whose cells are the engine's table — read a count by key");
+            }
 
             var member = family.Kind;
 

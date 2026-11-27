@@ -7,6 +7,7 @@ public sealed partial class SdfProgram {
     private SdfAppearance? m_appearance;
     private bool? m_hasGlass;
     private bool? m_hasGlassShadows;
+    private bool? m_hasColoredGlassShadows;
     private SdfPaint[]? m_slotPaints;
 
     /// <summary>Returns the program of a field joined to an appearance: the field is derived from its own inputs and
@@ -132,8 +133,12 @@ public sealed partial class SdfProgram {
         return [.. paints];
     }
 
-    /// <summary>Gets whether a drawn glass shape has positive shadow extinction; only these programs need optical cascades.</summary>
-    public bool HasGlassShadows => (m_hasGlassShadows ??= MeasureGlass(shadows: true));
+    /// <summary>Gets whether a drawn glass shape dims the light it passes (<see cref="SdfGlass.CastsShadow"/>); only these
+    /// programs need optical cascades.</summary>
+    public bool HasGlassShadows => (m_hasGlassShadows ??= MeasureGlass(cast: GlassCast.Shadow));
+    /// <summary>Gets whether a drawn glass shape colours the light it passes (<see cref="SdfGlass.CastsColorShadow"/>);
+    /// only these programs need the optical cascades' colour plane.</summary>
+    public bool HasColoredGlassShadows => (m_hasColoredGlassShadows ??= MeasureGlass(cast: GlassCast.Color));
 
     /// <summary>Returns whether a material id names a glass material of the program's palette; a screen sentinel or an
     /// id past the palette is opaque.</summary>
@@ -181,15 +186,21 @@ public sealed partial class SdfProgram {
     // Measures what the attached appearance asks of the instructions while the maker's claim stands, so a holder that
     // keeps the program for identity reads the answers without reading its storage.
     private void MeasureAppearance() {
-        m_hasGlass = MeasureGlass();
-        m_hasGlassShadows = MeasureGlass(shadows: true);
+        m_hasGlass = MeasureGlass(cast: GlassCast.Any);
+        m_hasGlassShadows = MeasureGlass(cast: GlassCast.Shadow);
+        m_hasColoredGlassShadows = MeasureGlass(cast: GlassCast.Color);
     }
-    private bool MeasureGlass(bool shadows = false) {
+    // What a drawn glass shape must cast to count: anything, a shadow, or colour.
+    private enum GlassCast { Any, Shadow, Color }
+    private bool MeasureGlass(GlassCast cast = GlassCast.Any) {
         for (var index = 0; (index < InstructionRows.Length); index++) {
             var instruction = InstructionRows[index];
 
-            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
-                (!shadows || Appearance.Materials[(int)instruction.Material].Glass is { ShadowDensity: > 0f })) {
+            if ((instruction.Op != SdfOp.ShapeBlend) || !IsGlassMaterial(material: unchecked((int)instruction.Material))) { continue; }
+            var material = Appearance.Materials[(int)instruction.Material];
+
+            if ((cast == GlassCast.Any) || ((material.Glass is { } glass) &&
+                ((cast == GlassCast.Shadow) ? glass.CastsShadow(tint: material.Albedo) : glass.CastsColorShadow(tint: material.Albedo)))) {
                 return true;
             }
         }

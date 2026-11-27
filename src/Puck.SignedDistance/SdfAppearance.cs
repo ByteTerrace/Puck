@@ -468,7 +468,9 @@ public sealed class SdfAppearance {
             if (m.Glass is { } glass) {
                 Row(words: section, row: 21, value: new(value: glass.Absorption(tint: m.Albedo), w: glass.Ior));
                 Row(words: section, row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
-                Row(words: section, row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity));
+                // The shadow raster's extinction (sdfMaterialShadowExtinction): the colour it casts in xyz, the grey
+                // density in w.
+                Row(words: section, row: 25, value: new Vector4(value: glass.ShadowColorExtinction(tint: m.Albedo), w: glass.ShadowDensity));
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;

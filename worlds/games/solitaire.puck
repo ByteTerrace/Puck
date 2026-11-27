@@ -11,12 +11,7 @@ import "freecell"
 // The collection's state for `count` tables: the deck's constants once (a card is keyed 0 to 51 by suit * 13 + rank -
 // 1, suits spades, hearts, clubs, diamonds), the game each table plays, and each game's own.
 template solitaireState(count) {
-  row {
-    name: "solitaireCards"
-    kind: "Int"
-    capacity: 52
-    cells: map(range(0, 52), i => { key: $"{i}", value: i })
-  }
+  table solitaireCards capacity(52) = range(0, 52)
 
   row {
     name: "solitaireRank"
@@ -64,12 +59,7 @@ template solitaireGame() {
 
 // One cell a table, keyed 0 to `count - 1`, each starting at `value`.
 template solitaireCells(name, count, value) {
-  row {
-    name: name
-    kind: "Int"
-    capacity: count
-    cells: map(range(0, count), i => { key: $"{i}", value: value })
-  }
+  table name capacity(count) = map(range(0, count), i => value)
 }
 
 // The console's lines into the tables' games, the same requests a seat makes through each game's mailbox. Every command

@@ -356,6 +356,46 @@ public static partial class PuckPrinter {
             }
             Trailing(trivia: step.Trivia);
         }
+        private void TestExpectItems(IReadOnlyList<TestExpectItemNode> items, int level) {
+            foreach (var item in items) {
+                switch (item) {
+                    case TestExpectationNode expectation:
+                        TestExpectation(
+                            expectation: expectation,
+                            level: level
+                        );
+
+                        break;
+                    case TestExpectWorldNode addressed:
+                        TestWorldBlock(
+                            level: level,
+                            trivia: addressed.Trivia,
+                            world: addressed.World,
+                            write: () => {
+                                foreach (var expectation in addressed.Expectations) {
+                                    TestExpectation(
+                                        expectation: expectation,
+                                        level: (level + 1)
+                                    );
+                                }
+                            }
+                        );
+
+                        break;
+                    case TestExpectForNode loop:
+                        TestBlock(
+                            keyword: TestLoopHead(item: loop.Item, index: loop.Index, level: level, sequence: loop.Sequence),
+                            level: level,
+                            trivia: loop.Trivia,
+                            write: () => TestExpectItems(items: loop.Body, level: (level + 1))
+                        );
+
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
         private void TestExpectation(TestExpectationNode expectation, int level) {
             Leading(
                 level: level,
@@ -658,6 +698,10 @@ public static partial class PuckPrinter {
                     }
                 case ConditionalStatementNode branch:
                     ConditionalRows(branch: branch, level: level);
+
+                    break;
+                case StateCellEntryNode cell:
+                    CellEntry(cell: cell, level: level);
 
                     break;
                 case BlockNode block: {
@@ -1084,37 +1128,7 @@ public static partial class PuckPrinter {
                                 keyword: "expect",
                                 level: (level + 1),
                                 trivia: expect.Trivia,
-                                write: () => {
-                                    foreach (var item in expect.Expectations) {
-                                        switch (item) {
-                                            case TestExpectationNode expectation:
-                                                TestExpectation(
-                                                    expectation: expectation,
-                                                    level: (level + 2)
-                                                );
-
-                                                break;
-                                            case TestExpectWorldNode addressed:
-                                                TestWorldBlock(
-                                                    level: (level + 2),
-                                                    trivia: addressed.Trivia,
-                                                    world: addressed.World,
-                                                    write: () => {
-                                                        foreach (var expectation in addressed.Expectations) {
-                                                            TestExpectation(
-                                                                expectation: expectation,
-                                                                level: (level + 3)
-                                                            );
-                                                        }
-                                                    }
-                                                );
-
-                                                break;
-                                            default:
-                                                break;
-                                        }
-                                    }
-                                }
+                                write: () => TestExpectItems(items: expect.Expectations, level: (level + 2))
                             );
                         }
                         Inner(
@@ -1142,8 +1156,9 @@ public static partial class PuckPrinter {
                 case StateTableDeclarationNode table: {
                         m_builder.Append(value: "table");
                         InlineHeader(trivia: table.Trivia);
-                        m_builder.Append(value: ' ').Append(value: table.Name);
+                        DeclarationName(expression: table.NameExpression, level: level, name: table.Name);
                         Family(
+                            index: table.MemberIndex,
                             level: level,
                             members: table.FamilyMembers,
                             size: table.FamilySize
@@ -1173,8 +1188,9 @@ public static partial class PuckPrinter {
                 case StateGridDeclarationNode grid: {
                         m_builder.Append(value: "grid");
                         InlineHeader(trivia: grid.Trivia);
-                        m_builder.Append(value: ' ').Append(value: grid.Name);
+                        DeclarationName(expression: grid.NameExpression, level: level, name: grid.Name);
                         Family(
+                            index: grid.MemberIndex,
                             level: level,
                             members: grid.FamilyMembers,
                             size: grid.FamilySize
@@ -1195,8 +1211,10 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case StateSlotDeclarationNode slot: {
-                        m_builder.Append(value: "slot ").Append(value: slot.Name);
+                        m_builder.Append(value: "slot");
+                        DeclarationName(expression: slot.NameExpression, level: level, name: slot.Name);
                         Family(
+                            index: slot.MemberIndex,
                             level: level,
                             members: slot.FamilyMembers,
                             size: slot.FamilySize
@@ -1219,8 +1237,9 @@ public static partial class PuckPrinter {
                 case StatePileDeclarationNode pile: {
                         m_builder.Append(value: "pile");
                         InlineHeader(trivia: pile.Trivia);
-                        m_builder.Append(value: ' ').Append(value: pile.Name);
+                        DeclarationName(expression: pile.NameExpression, level: level, name: pile.Name);
                         Family(
+                            index: pile.MemberIndex,
                             level: level,
                             members: pile.FamilyMembers,
                             size: pile.FamilySize
@@ -1550,7 +1569,30 @@ public static partial class PuckPrinter {
                     }
             }
         }
-        private void Family(ExpressionNode? size, IReadOnlyList<FamilyMemberNode>? members, int level) {
+        // A row declaration's name, after its keyword: the name written out, or the interpolation that computes it.
+        private void DeclarationName(string name, ExpressionNode? expression, int level) {
+            m_builder.Append(value: ' ');
+            if (expression is null) {
+                m_builder.Append(value: name);
+
+                return;
+            }
+            Expression(
+                expression: expression,
+                level: level
+            );
+        }
+        private void Family(ExpressionNode? size, IReadOnlyList<FamilyMemberNode>? members, string? index, int level) {
+            FamilyBracket(
+                level: level,
+                members: members,
+                size: size
+            );
+            if ((index is not null) && ((size is not null) || (members is not null))) {
+                m_builder.Append(value: " as ").Append(value: index);
+            }
+        }
+        private void FamilyBracket(ExpressionNode? size, IReadOnlyList<FamilyMemberNode>? members, int level) {
             if (size is { } count) {
                 m_builder.Append(value: '[');
                 Expression(
@@ -1606,7 +1648,9 @@ public static partial class PuckPrinter {
                 );
             }
         }
-        private void Cells(IReadOnlyList<StateCellEntryNode> cells, SyntaxTrivia trivia, int level) {
+        // A table's or grid's cell body: each cell entry and each `let`, `for` and `if` producing more prints as the
+        // statement it is.
+        private void Cells(IReadOnlyList<StatementNode> cells, SyntaxTrivia trivia, int level) {
             if (
                 (cells.Count == 0) &&
                 (trivia.Inner.Count == 0)
@@ -1615,29 +1659,44 @@ public static partial class PuckPrinter {
             }
             m_builder.Append(value: " {");
             EndLine();
-            foreach (var cell in cells) {
-                Leading(
-                    level: (level + 1),
-                    trivia: cell.Trivia
-                );
-                Indent(level: (level + 1));
-                m_builder.Append(value: PrintName(name: cell.Key)).Append(value: " = ");
-                Expression(
-                    expression: cell.Value,
-                    level: (level + 1)
-                );
-                Modifiers(
-                    level: (level + 1),
-                    modifiers: cell.Modifiers
-                );
-                Trailing(trivia: cell.Trivia);
-            }
+            Statements(
+                level: (level + 1),
+                statements: cells
+            );
             Inner(
                 level: (level + 1),
                 trivia: trivia
             );
             Indent(level: level);
             m_builder.Append(value: '}');
+        }
+        // One cell entry: its key written out, interpolated (`$"…"`) or computed in brackets, then its value and modifiers.
+        private void CellEntry(StateCellEntryNode cell, int level) {
+            switch (cell.KeyExpression) {
+                case null:
+                    m_builder.Append(value: PrintName(name: cell.Key));
+
+                    break;
+                case InterpolatedStringNode interpolation:
+                    Expression(expression: interpolation, level: level);
+
+                    break;
+                case { } computed:
+                    m_builder.Append(value: '[');
+                    Expression(expression: computed, level: level);
+                    m_builder.Append(value: ']');
+
+                    break;
+            }
+            m_builder.Append(value: " = ");
+            Expression(
+                expression: cell.Value,
+                level: level
+            );
+            Modifiers(
+                level: level,
+                modifiers: cell.Modifiers
+            );
         }
         private void Pattern(PatternDeclarationNode pattern, int level) {
             m_builder.Append(value: "pattern ").Append(value: pattern.Name).Append(value: ": ").Append(value: pattern.Kind).Append(value: " {");

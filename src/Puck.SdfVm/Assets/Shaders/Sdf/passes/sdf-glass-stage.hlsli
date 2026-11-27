@@ -137,6 +137,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.material = material;
     surface.ambientOcclusion = 1.0;
     surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
+    surface.shadowTint = float3(1.0, 1.0, 1.0);
     surface.shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
     surface.cascaded = false;
     surface.probed = sdfMeshAnswers(probes);

@@ -85,10 +85,21 @@ A document's `schema:` field selects its vocabulary, never the filename.
   as its function is in an expression. An import's export surface is explicit,
   never transitive across nested imports. `table` and `pile` admit
   `capacity(auto)` to lower to their authored entries' count.
-- **A template body's block or rule name is a parameter reference only when
-  bare.** `shape Box base { }` takes the value bound to `base`; `shape Box "base" { }`
-  is the literal name, whatever the template's parameters are called. Only a
-  statement directly in the template body is renamed (`DocumentLowering.Rename`).
+- **A template body's block, rule or row-declaration name is a parameter
+  reference only when bare.** `shape Box base { }` takes the value bound to `base`;
+  `shape Box "base" { }` is the literal name, whatever the template's parameters
+  are called. Only a statement directly in the template body is renamed
+  (`DocumentLowering.Rename`); a `table`/`slot`/`pile`/`grid` renames only to a
+  text binding.
+- **A row declaration's name may be computed, and its body may loop.**
+  `table`/`slot`/`pile`/`grid` take an interpolated name (`pile $"down{z}Of"[n] of
+  cards capacity(z - 1)` in a `for`), a family bracket takes `as i` binding each
+  member's index (`table markOf[n] as s { $"{ids[s]}-held" = 1 }`), and a cell body
+  takes `let`/`for`/`if` and computed keys (`$"…" = v`, `[expr] = v`). A table's
+  `= value` is an array or an object (keys in order); another value is PUCK053.
+  So a hand-built `row { name: $"…" kind: … cells: map(…) }` or a raw `families [ ]`
+  list is a defect in waiting: write the declaration
+  ([dsl reference](../../../docs/reference/dsl.md#row-declarations-tableslotpilegrid)).
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
   module library (a source emitting no document) hands over its `let`s and
@@ -96,6 +107,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   own `let`s stay its own. A library importing a document is refused (PUCK017).
   A source of imports alone hands over nothing of its own, so it is a document
   fragment that composes what it imports, not a library (`worlds/standard/standard.puck`).
+- **A compile-time list library exists**: `any`, `all`, `count`, `sum`, `scan` (running totals, one more than the list),
+  `dot`, `contains`, `indexOf`, `find`, `zip`, `reverse`, `slice`, `join`, and `minimum(list)`/`maximum(list)`
+  (`DocumentBuiltins.Lists.cs`; `DocumentBuiltins.Collections` lists each with its signature). Reach for them before a
+  `length(filter(…))` or a `reduce` prefix sum. `scan(lengths)[i]` is where item `i` starts. A shade program reads `fraction`,
+  `clamp` and `pi` too (`WorldShadeLowering`), so none is written by hand.
 - **Compile-time `for` generates rows and list elements; builtins transform values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time — both in statement/section position (emitting rows) and directly
@@ -232,7 +248,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
-  A block naming a document no reference of the world reaches is `PUCK105` in
+  `given`, `when` and `expect` each take a compile-time `for` (`for i in range(0, 12) { lakeAt[i] > 0.399 }` is twelve
+  expectations), and a `test` stands inside a `template` a document calls, so worlds running one scenario share one set of
+  claims (`worlds/debug/water-arc-claims.puck`). A block naming a document no reference of the world reaches is `PUCK105` in
   every compile (`puck compile`, `puck lint`, the language server), checked by
   the reference walk `puck test` stages with (`WorldCompileSession.ReachDocuments`).
   `puck lint <dir>` reports a library `let` or template no linted source reads.

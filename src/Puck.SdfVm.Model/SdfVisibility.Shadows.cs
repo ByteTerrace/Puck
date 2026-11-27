@@ -7,4 +7,8 @@ public static partial class SdfVisibility {
     /// and queried visibilities take the codes below it (<c>SDF_SHADOW_UNQUERIED</c> and <c>SDF_SHADOW_SCALE</c> in
     /// <c>frame/sdf-shadow-visibility.hlsli</c>, which alone packs and reads the word).</summary>
     public const uint ShadowMask = ((1u << ShadowBits) - 1u);
+    /// <summary>The bits of one channel of the key light's transmitted colour in the visibility record's tint plane and in
+    /// the views filter's record: each channel stores the share the glass took, so a cleared or unwritten word reads
+    /// white (<c>sdfPackShadowTint</c> in <c>frame/sdf-shadow-visibility.hlsli</c>).</summary>
+    public const int ShadowTintBits = 10;
 }

@@ -98,7 +98,9 @@ record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`
 `SdfWorldPackage.VisibilityRecordByteLength`, 32 bytes): the ray parameter, the
 identity, the material, the triangle, the draw's frame slot, the octahedral
 normal, curvature and ambient occlusion as halves, and K, four eight-bit stable
-shadow-slot visibilities. The surface pass writes every record of the render
+shadow-slot visibilities; past every record, the tint plane holds a word a pixel,
+the key light's colour after coloured glass
+(`SdfWorldPackage.VisibilityPixelByteLength`). The surface pass writes every record of the render
 extent each frame it runs, misses included, so every in-extent record is the
 frame's own; views, the resolve and the composite read them. Each light shades
 from its own visibility, and a shadow handoff fades its outgoing light from that

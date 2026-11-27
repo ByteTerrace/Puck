@@ -166,7 +166,9 @@ public static class PuckDiagnosticCodes {
     public const string StateDeclarationDuplicateName = "PUCK051";
     /// <summary>PUCK052: a declared row name or cell key carrying the reserved <c>$</c> prefix.</summary>
     public const string StateDeclarationReservedKey = "PUCK052";
-    /// <summary>PUCK053: a default value or a <c>bounds</c> argument that does not fit the row's declared kind.</summary>
+    /// <summary>PUCK053: a default value or a <c>bounds</c> argument that does not fit the row's declared kind, or a
+    /// <c>table</c>'s <c>= value</c> that is neither an array nor an object, or a <c>pile</c>'s that is not an
+    /// array.</summary>
     public const string StateDeclarationInvalidDefault = "PUCK053";
     /// <summary>PUCK054: a <c>table</c>'s <c>capacity(...)</c> smaller than its own authored cell count.</summary>
     public const string StateDeclarationCapacityTooSmall = "PUCK054";

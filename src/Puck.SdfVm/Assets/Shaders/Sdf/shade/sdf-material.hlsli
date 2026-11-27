@@ -43,7 +43,6 @@ struct SdfMaterialData {
     float scattering;
     float contactReach;
     float contactCoverage;
-    float shadowDensity;
     // The material's own style mode (SdfToon, row 22): zero inherits the world's default (sdfToonStyled).
     float toonMode;
     // The flow layer (SdfFlow, rows 27 to 30; sdfApplyFlow): the velocity and the pattern's frequency (a zero frequency
@@ -103,10 +102,19 @@ float sdfMaterialShadowDemand(int material) {
 }
 #endif
 
-// The shadow raster needs only density, before any fragment side effect or receiver fetch.
-float sdfMaterialShadowDensity(int material) {
+// A glass's shadow extinction per world unit in each channel (row 25, SdfAppearance.Pack): its grey density (w) plus the
+// colour it casts (xyz, SdfGlass.ShadowColorExtinction); zero for every other material. The shadow raster reads it alone,
+// before any fragment side effect or receiver fetch.
+float3 sdfMaterialShadowExtinction(int material) {
     uint materialBase;
-    return sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 25u]).w : 0.0;
+
+    if (!sdfMaterialBase(material, materialBase)) {
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    float4 row = asfloat(sdfWords[materialBase + 25u]);
+
+    return (row.w + row.xyz);
 }
 
 // The ONE material decode point (KEEP IN SYNC with SdfAppearance.Pack and the stream layout in SdfProgram.cs).
@@ -158,7 +166,6 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.scattering = asfloat(sdfWords[materialBase + 31u]).w;
     data.contactReach = f16tof32(sdfWords[materialBase + 20u].w & 0xFFFFu);
     data.contactCoverage = f16tof32(sdfWords[materialBase + 20u].w >> 16u);
-    data.shadowDensity = sdfMaterialShadowDensity(material);
     data.toonMode = asfloat(sdfWords[materialBase + 22u]).x;
     data.flowVelocity = asfloat(sdfWords[materialBase + 27u]);
     data.flowShape = asfloat(sdfWords[materialBase + 28u]);

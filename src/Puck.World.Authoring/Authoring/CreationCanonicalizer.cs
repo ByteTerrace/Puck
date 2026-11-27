@@ -1652,6 +1652,9 @@ public static partial class CreationCanonicalizer {
                 if ((glass.ShadowDensity is { } shadowDensity) && (!float.IsFinite(f: shadowDensity) || (shadowDensity < 0f))) {
                     errors.Add(item: new(Message: "glass shadowDensity must be finite and non-negative: shadow extinction per creation unit.", Path: $"palette[{i}].glass.shadowDensity"));
                 }
+                if ((glass.CastsColor is { } castsColor) && (!float.IsFinite(f: castsColor) || (castsColor < 0f))) {
+                    errors.Add(item: new(Message: "glass castsColor must be finite and non-negative: how much of the glass's colour the light it passes carries.", Path: $"palette[{i}].glass.castsColor"));
+                }
                 if (glass.Contact is { } contact) {
                     if (!float.IsFinite(f: contact.Reach) || (contact.Reach <= 0f) || (contact.Reach > SdfGlass.MaxContactReach)) {
                         errors.Add(item: new(Message: $"glass contact reach must be positive and at most {SdfGlass.MaxContactReach}.", Path: $"palette[{i}].glass.contact.reach"));

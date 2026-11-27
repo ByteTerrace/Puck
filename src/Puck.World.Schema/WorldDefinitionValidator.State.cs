@@ -1553,6 +1553,9 @@ public static partial class WorldDefinitionValidator {
             path: path,
             row: row
         );
+        if ((row.EffectiveDomain is StateDomain.Tally) && !StateTally.TryValidate(reason: out var tallyRefusal, row: row)) {
+            errors.Add(item: $"{path} ('{row.Name}') {tallyRefusal}.");
+        }
         ValidateAdvance(
             errors: errors,
             numeric: numeric,

@@ -2622,25 +2622,23 @@ The air's in-scatter:
 
 Light through coloured glass:
 
-- [high] Light through coloured glass is not coloured. Stained glass (the
-  gallery's east window, `architecture.puck`'s `stainedGlass`) tints what is seen
-  through it, but the light it passes reaches the floor and walls only as the
-  cascades carry it, and a cascade's glass extinction is one density
-  (`glass.shadowDensity`, `sdf-mesh-shadow-glass.frag.hlsl` accumulating one
-  64-bit optical depth a texel), so a pane casts at most a grey shadow and its
-  came the dark grid; the irradiance volume traces no glass at all. The plan:
-  (1) let a cascade's optical buffer carry RGB optical depth, three 64-bit sums a
-  texel from the material's absorption scaled by a transmitted-light opt-in on
-  the glass (an authored `glass.castsColor`, zero by default, so water and
-  windows keep their grey or no shadow), through the same
-  `sdfOpticalDepthAccumulate`; (2) have the surface pass resolve the key light's
-  transmitted colour beside its scalar visibility (`sdfMeshShadowGap` already
-  reads the optical term per tap) and write it as a chroma word of the
-  visibility record, so views multiplies the directional's colour by it with no
-  new tap; (3) carry the same RGB through the probe trace's visibility bits
-  later, so the irradiance volume bounces the coloured patch. Step 1 and 2
-  decide the record's layout; the forcing case is the east window's patch on the
-  nave floor on a morning sun.
+- [high] The irradiance volume does not bounce light that coloured glass
+  coloured. The key light's cascades carry it: a glass that opts in with
+  `glass.castsColor` adds that share of its absorption to each channel of the
+  cascade's optical buffer (`SdfGlass.ShadowColorExtinction`, the buffer's
+  colour plane in `frame/sdf-shadow-optical.hlsli`), the surface pass resolves
+  the transmitted colour beside the primary role's visibility into the
+  visibility record's tint plane (`sdfMeshShadow`, `sdfVisibilityTintWord`), and
+  the light phase's door multiplies the directional's colour by it
+  (`sdfLightTransmission`), so the stained glass (`stainedGlassPalette`) casts
+  its colours on the nave floor. The probe trace still traces no glass, so the
+  coloured patch bounces as white light and the volume lights the room as
+  though the window were clear. The remaining step carries the same RGB through
+  the probe trace's visibility bits (`SdfMeshIrradiance`'s capture,
+  `shade/sdf-probe-trace.hlsli`), so the volume's indirect light takes the
+  patch's colour. A narrower gap sits beside it: only the primary role keeps a
+  colour, and the second role's visibility through coloured glass is its
+  brightest channel.
 
 The volume's cost and convergence:
 
@@ -5427,6 +5425,12 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
+  (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
+  (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer
+  (`PuckPrinter.Writer.TestGivenItems`, `TestWhenItems`, `TestExpectItems`), a trivia case and an expansion
+  (`WorldDocumentEmitter.GivenLines`, `WhenLines`, `ExpectLines`). One generic loop node over the block's item type,
+  with one parser and one expansion, replaces the three.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)
@@ -5797,7 +5801,7 @@ then Spider.
   station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
   job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
   `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
+  position key in the tally row `positionCounts`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,

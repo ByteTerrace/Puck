@@ -42,7 +42,7 @@ let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30
 let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 
 // A golden-ratio fraction of k, in [0, 1): a scatter that places the stones without a seed.
-function siteScatter(k, ratio) = shadeFrac(k * ratio)
+function siteScatter(k, ratio) = fraction(k * ratio)
 
 // The stones in the lake's bowl and on its bank, in the lake's own frame (its placement turns by the wall's yaw, so +z is out
 // from the ring's centre, toward the glacier's trough, and -z toward the outlet): cobbles that collect in clusters over the
@@ -148,12 +148,13 @@ let riverLegs = [
 ]
 let riverRadians = pi / 180
 // The course's vertices [x, z]: where each leg starts, and the last leg's end.
-let riverPoints = map(range(0, length(riverLegs) + 1), i => [
-  riverStart[0] +
-    reduce(range(0, i), 0, (sum, k) => sum + sine(riverLegs[k].bearing * riverRadians) * riverLegs[k].length),
-  riverStart[1] +
-    reduce(range(0, i), 0, (sum, k) => sum + cosine(riverLegs[k].bearing * riverRadians) * riverLegs[k].length)
-])
+let riverPoints = map(
+  scan(riverLegs, leg => [
+    sine(leg.bearing * riverRadians) * leg.length,
+    cosine(leg.bearing * riverRadians) * leg.length
+  ]),
+  offset => riverStart + offset
+)
 let riverSpan = [
   riverPoints[length(riverLegs)][0] - riverPoints[0][0]
   riverPoints[length(riverLegs)][1] - riverPoints[0][1]

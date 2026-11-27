@@ -5478,7 +5478,8 @@
         "Member",
         "And",
         "Or",
-        "Not"
+        "Not",
+        "Hash"
       ]
     },
     "ShapeNonNullable10": {
@@ -11306,6 +11307,15 @@
         },
         "shadowDensity": {
           "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0
+        },
+        "castsColor": {
+          "description": "How much of the glass\u0027s colour the light it passes carries onto what it lights, finite and non-negative: at 1 a pane colours the sunlit patch it casts as it colours what is seen through it (null = 0, no colour).",
           "type": [
             "number",
             "null"

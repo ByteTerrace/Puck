@@ -717,6 +717,12 @@ public static partial class RuleCompiler {
             refusal: RuleRefusal.StateRowUnknown,
             ruleName: ruleName
         )));
+        if (row.EffectiveDomain is StateDomain.Tally tally) {
+            return ResolveTallyWrite(context: context, expression: expression, fromKey: fromKey, fromState: fromState, key: key, liveRow: liveRow,
+                row: row, rowName: rowName, ruleName: ruleName, tally: tally, text: text, value: value, valueSeconds: valueSeconds, vector: vector,
+                verb: verb, write: write);
+        }
+
         var hasText = (text is not null);
         var isTextRow = (row.Kind == CellKind.Text);
 
@@ -1006,42 +1012,7 @@ public static partial class RuleCompiler {
                 name: rowName.Spelling
             )
             : -1);
-        CompiledValueSource source;
-
-        if (value is { } literal) {
-            source = CompiledValueSource.Constant(rawValue: LiteralToRaw(
-                kind: CellKind.Int,
-                literal: literal,
-                ruleName: ruleName,
-                verb: verb
-            ));
-        } else if (expression is not null) {
-            source = CompiledValueSource.FromExpression(
-                expression: CompileExpression(
-                    context: context,
-                    expression: expression,
-                    kind: CellKind.Int,
-                    ruleName: ruleName,
-                    verb: verb
-                ),
-                kind: CellKind.Int
-            );
-        } else {
-            var operand = ResolveOperand(
-                context: context,
-                cell: fromKey,
-                operand: fromState!,
-                site: new OperandSite(
-                    AllowText: false,
-                    FieldLabel: "fromState",
-                    KeyFieldLabel: "fromKey",
-                    RuleName: ruleName,
-                    Verb: verb
-                )
-            );
-
-            source = ConvertOperand(operand.Operand, CellKind.Int, ruleName, verb);
-        }
+        var source = ResolveWholeNumberSource(context: context, expression: expression, fromKey: fromKey, fromState: fromState, ruleName: ruleName, value: value, verb: verb);
 
         return new WriteEffect(
             describe: $"{verb} {rowName}.{destination.Spelling} edits text",

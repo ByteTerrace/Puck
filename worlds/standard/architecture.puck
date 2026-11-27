@@ -418,10 +418,12 @@ template stainedGlass(lead, glass, cells, width, height, foot = 0, pane = 0.008,
   }
 }
 // A stained glass light's palette: the lead came, then a pane a colour of `colors`, each glass `depth` deep for its
-// tint (a pane as thick as its depth passes its colour) and frosted by `frost`.
-function stainedGlassPalette(colors, lead = "#2B2C30", depth = 0.008, frost = 0.06) = concat(
+// tint (a pane as thick as its depth passes its colour) and frosted by `frost`. The light a pane passes carries
+// `castsColor` of its colour onto what it lights: at 1 the sunlit patch on the floor takes the pane's colour as a view
+// through the pane does.
+function stainedGlassPalette(colors, lead = "#2B2C30", depth = 0.008, frost = 0.06, castsColor = 1) = concat(
   [{ color: lead, roughness: 0.45, metal: 0.7 }],
-  map(colors, c => { color: c, roughness: frost, glass { depth: depth, ior: 1.52 } })
+  map(colors, c => { color: c, roughness: frost, glass { depth: depth, ior: 1.52, castsColor: castsColor } })
 )
 // A window bay glazed with stained glass instead of the kit's frame and pane: the surround (windowSurround, whose kit
 // palette starts at `base`) about a leaded light filling the opening (stainedGlass, whose palette starts at `stained`).
@@ -1840,7 +1842,7 @@ function pendantGlowArea(glow = 0.17) = (pi * glow * glow)
 // hemisphere (angle 90deg), in lumens: such a spot's intensity is its power over 2 pi, and the face's own along its axis
 // is its luminance times its area, so the two agree straight below it and the light reads as the face it stands at.
 // Rounded to whole lumens, since a state cell carrying it is an integer.
-function glowSpotPower(luminance, area) = round(6.283185307179586 * luminance * area)
+function glowSpotPower(luminance, area) = round(2 * pi * luminance * area)
 template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
   let cord = ((drop - pendantShadeHeight) - 0.03)
   shape Cylinder "pendant-rose" {

@@ -585,16 +585,17 @@ public sealed partial class DocumentScope {
             switch (statement) {
                 case StatePoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
                 case StatePairPoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
-                case StateTableDeclarationNode row:
+                // A computed name is known only once a lowering scope evaluates it, so the catalog holds written names.
+                case StateTableDeclarationNode { NameExpression: null } row:
                     rows.Add(item: row.Name);
-                    if ((row.Kind == "Bool") || ((row.Cells.Count > 0) && row.Cells.All(predicate: static cell => IsBoolean(value: cell.Value)))) { gates.Add(item: row.Name); }
+                    if ((row.Kind == "Bool") || ((row.Cells.Count > 0) && row.Cells.All(predicate: static cell => (cell is StateCellEntryNode entry) && IsBoolean(value: entry.Value)))) { gates.Add(item: row.Name); }
                     break;
-                case StateSlotDeclarationNode row:
+                case StateSlotDeclarationNode { NameExpression: null } row:
                     rows.Add(item: row.Name);
                     if ((row.Kind == "Bool") || IsBoolean(value: row.Value)) { gates.Add(item: row.Name); }
                     break;
-                case StatePileDeclarationNode row: rows.Add(item: row.Name); break;
-                case StateGridDeclarationNode row: rows.Add(item: row.Name); break;
+                case StatePileDeclarationNode { NameExpression: null } row: rows.Add(item: row.Name); break;
+                case StateGridDeclarationNode { NameExpression: null } row: rows.Add(item: row.Name); break;
                 case BlockNode block: IndexStructuralNames(block.Statements, rows, pools, gates); break;
                 case ForStatementNode loop: IndexStructuralNames(loop.Body, rows, pools, gates); break;
                 case ConditionalStatementNode branch:

@@ -625,7 +625,7 @@ let shellPlanterBlocked = concat(
   [[entranceWest, entranceEast], [(courtFin + galleryWall), ((courtFin + galleryWall) + 1)]],
   map(courtWallDoors, door => [(door - 0.6), (door + 0.6)])
 )
-function shellPlanterClear(x) = (length(filter(shellPlanterBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span))) == 0)
+function shellPlanterClear(x) = (count(shellPlanterBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span)) == 0)
 let shellPlanters = filter(concat(
   map(filter(shellPlanterBays, x => shellPlanterClear(x)), x => { x: x, y: 0, z: tileZ(wallRowSouth), yaw: 0 }),
   map(shellPlanterBays, x => { x: x, y: 0, z: tileZ(wallRowNorth), yaw: 0 }),
@@ -643,7 +643,7 @@ let shellPlanters = filter(concat(
 // a fin of the painting wing.
 let shellBenchBays = map(restBays, b => bayX(b))
 let shellBenchBlocked = [[liftDoorway.a0, liftDoorway.a1], [courtWest, (courtWest + galleryWall)], [courtFin, (courtFin + galleryWall)]]
-function shellBenchClear(x) = (length(filter(shellBenchBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span))) == 0)
+function shellBenchClear(x) = (count(shellBenchBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span)) == 0)
 let shellBenches = filter(concat(
   map(filter(shellBenchBays, x => shellBenchClear(x)), x => { x: x, y: 0, z: tileZ(wallRowSouth), yaw: 0 }),
   map(shellBenchBays, x => { x: x, y: 0, z: tileZ(wallRowNorth), yaw: 0 }),

@@ -1,3 +1,5 @@
+using System.Numerics;
+
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -73,11 +75,13 @@ public sealed partial class SdfWorldTables {
 
         return hash.Value;
     }
-    // Cascades read density; the surface pass reads their optical term. Palette-only uploads must invalidate both.
+    // Cascades read each glass's extinction (its density and the colour it casts, material row 25); the surface pass reads
+    // their optical terms. Palette-only uploads must invalidate both.
     private static ulong ShadowDensitySignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
         foreach (var material in program.Appearance.Materials) {
             hash.AddBits(value: material.Glass?.ShadowDensity ?? 0f);
+            hash.AddBits(value: (material.Glass?.ShadowColorExtinction(tint: material.Albedo) ?? Vector3.Zero));
         }
         return hash.Value;
     }

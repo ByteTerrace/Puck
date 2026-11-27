@@ -27,6 +27,7 @@ namespace Puck.State;
 [JsonDerivedType(typeof(KeysOf), "keysOf")]
 [JsonDerivedType(typeof(CellsOf), "cellsOf")]
 [JsonDerivedType(typeof(Ring), "ring")]
+[JsonDerivedType(typeof(Tally), "tally")]
 [Union]
 public abstract record StateDomain {
     private StateDomain() { }
@@ -78,4 +79,13 @@ public abstract record StateDomain {
     /// <param name="Empty">The value read for an age older than the ring holds.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record Ring(int Capacity, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0) : StateDomain;
+    /// <summary>A keyed count: any 64-bit integer is a key, and the row counts each key it has met since its last
+    /// reset, holding at most <see cref="Capacity"/> distinct keys. A rule increments a count with <c>row[key] += n</c>,
+    /// reads it with <c>row[key]</c> (zero for a key the row has not met), and empties the row with <c>row = 0</c>. The
+    /// engine owns the storage, the probing and the reset (<see cref="StateTally"/>); a key past the capacity is
+    /// refused by name, never dropped.</summary>
+    /// <param name="Capacity">The most distinct keys the row holds between resets, from 1 to
+    /// <see cref="StateTally.MaxCapacity"/>.</param>
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed record Tally(int Capacity) : StateDomain;
 }
