@@ -5769,10 +5769,10 @@ then Spider.
   `seatAtSide`; `BoardSeat` matches its anchor by topology, WorldFactsVocabulary.Operands.cs, so stations sharing one
   pick grid need it found by occupancy row) and per-binding channel versions, so a `$each` channel read is due only
   when that station's seat input moves. (2) chess.puck's digital form and chess-station.puck as family sweeps (a
-  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, the history
-  rows (`tabletop-history-count` sweeps 75 ages for 40 thousand units; a count over the ages cannot read
-  `history(row, age)` through a fold member, ExpressionSpelling.ParseChannel), and one search job per station whose
-  key rows are that station's cells only, with no clock-reading rules (`world.search` prints `lastRestart=`). (3) The
+  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
+  job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
+  `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
+  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,
