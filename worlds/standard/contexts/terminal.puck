@@ -173,7 +173,6 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
   "gamepad.rightShoulder"
 ], backSources = [
   "keyboard.backspace"
-  "mouse.button2"
   "gamepad.buttonEast"
 ], restingPage = "base") {
   let count = length(terminals)
