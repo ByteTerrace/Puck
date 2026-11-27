@@ -279,7 +279,7 @@ There are two forms, tried in this order:
 
 - **Exact.** When every read's declared values are a finite set and their
   product is at most `RuleBounds.MaxAssignments`, the program is evaluated once
-  per assignment by the one interpreter, with each read replaced by its value.
+  per assignment by the one evaluator, with each read replaced by its value.
   Two reads of the same thing (the same cell under the same key, the same
   register of the same body) are one variable, and a local's program is
   evaluated under the same assignment, so correlated terms stay correlated:
