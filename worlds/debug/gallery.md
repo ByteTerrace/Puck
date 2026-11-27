@@ -221,8 +221,11 @@ the devices' loans do. `body.where` shows the body; `world.state rentalKeyShown`
 reads every key.
 
 **The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
-L-shaped counter round the open corner of each spiral stair (south-east and
-north-west), so the plan reads the same turned half round. Each counter lends
+L-shaped kiosk round the open corner of each spiral stair (south-east and
+north-west), so the plan reads the same turned half round: a cobalt counter
+under a sunflower lip, each device standing in its own lit cubby with a number
+plate below it, a lit header naming the arm over a candy-pink canopy, and a
+blade sign at the corner over the returns tray. Each counter lends
 12 Humble Gaming Bricks on one arm and 12 Advanced Gaming Bricks on the other,
 one colourway each, 48 devices in the world. The context button before a
 device rents it: the device leaves the counter and rides the renter's hip. The

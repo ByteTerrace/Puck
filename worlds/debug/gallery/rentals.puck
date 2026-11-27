@@ -140,7 +140,11 @@ let rentalDevices = flatMap(
 )
 function rentalPrototype(d) = $"rental-{rentalModels[d.model].id}-{rentalColours[d.model][d.colour].name}"
 // Where a device stands in the plan, its counter's top under it.
-function rentalDeviceAt(d) = rentalPlan(rentalStalls[d.stall], rentalSpot(rentalModels[d.model].arm, d.colour)[0], rentalSpot(rentalModels[d.model].arm, d.colour)[1])
+function rentalDeviceAt(d) = rentalPlan(
+  rentalStalls[d.stall],
+  rentalSpot(rentalModels[d.model].arm, d.colour)[0],
+  rentalSpot(rentalModels[d.model].arm, d.colour)[1]
+)
 
 // A reach in the plan from two corners of a stall's frame, on level 1's floor, in world coordinates.
 function rentalReachBox(stall, lx0, lz0, lx1, lz1) = {
@@ -152,13 +156,27 @@ function rentalReachBox(stall, lx0, lz0, lx1, lz1) = {
   y1: (galleryFloor[toyboxLevel] + 1)
 }
 // The floor before a device: its 0.19 m along the arm, the 0.95 m before the counter.
-function rentalDeviceReach(d) = (
-  (rentalModels[d.model].arm == 0)
-    ? rentalReachBox(rentalStalls[d.stall], (0 - rentalReachDepth), ((0 - rentalAlong(d.colour)) - (rentalPitch / 2)), (0 - rentalCounterHalfDepth), ((rentalPitch / 2) - rentalAlong(d.colour)))
-    : rentalReachBox(rentalStalls[d.stall], (rentalAlong(d.colour) - (rentalPitch / 2)), rentalCounterHalfDepth, (rentalAlong(d.colour) + (rentalPitch / 2)), rentalReachDepth)
-)
+function rentalDeviceReach(d) = ((rentalModels[d.model].arm == 0) ? rentalReachBox(
+  rentalStalls[d.stall],
+  (0 - rentalReachDepth),
+  ((0 - rentalAlong(d.colour)) - (rentalPitch / 2)),
+  (0 - rentalCounterHalfDepth),
+  ((rentalPitch / 2) - rentalAlong(d.colour))
+) : rentalReachBox(
+  rentalStalls[d.stall],
+  (rentalAlong(d.colour) - (rentalPitch / 2)),
+  rentalCounterHalfDepth,
+  (rentalAlong(d.colour) + (rentalPitch / 2)),
+  rentalReachDepth
+))
 // The returns tray's floor: the square before the counter's outer corner.
-function rentalReturnReach(stall) = rentalReachBox(stall, (0 - rentalReachDepth), rentalCounterHalfDepth, (0 - rentalCounterHalfDepth), rentalReachDepth)
+function rentalReturnReach(stall) = rentalReachBox(
+  stall,
+  (0 - rentalReachDepth),
+  rentalCounterHalfDepth,
+  (0 - rentalCounterHalfDepth),
+  rentalReachDepth
+)
 
 // Whether a body may rent or return: one of the seats' bodies. A size or pass condition joins here.
 function rentalCanRent() = (rentalHolder[$each] > 0)
@@ -207,7 +225,10 @@ function rentalCartridgePrototype(slot) = $"rental-cartridge-{slot}"
 
 // The wonder keys, each by its loan ordinal, which follows the cartridges' in the one loan row.
 let rentalKeyCount = 4
-let rentalKeyItems = map(range(0, rentalKeyCount), n => { ordinal: (length(rentalDevices) + length(rentalCartridgeItems) + n + 1), place: n })
+let rentalKeyItems = map(
+  range(0, rentalKeyCount),
+  n => { ordinal: (length(rentalDevices) + length(rentalCartridgeItems) + n + 1), place: n }
+)
 // The key stand stands on level 3's south gallery 3.4 m in from the balcony edge where the tree's south branch lands,
 // its front toward the nave (+z); its keys stand on its top `rentalKeyPitch` apart from its west end, and its east end
 // is the returns tray.
@@ -244,7 +265,10 @@ state {
       name: "rentalLoan"
       kind: Int
       capacity: ((length(rentalDevices) + length(rentalCartridgeItems)) + length(rentalKeyItems))
-      cells: map(flatMap([rentalDevices, rentalCartridgeItems, rentalKeyItems], items => items), d => { key: $"{d.ordinal}", value: 0 })
+      cells: map(
+        flatMap([rentalDevices, rentalCartridgeItems, rentalKeyItems], items => items),
+        d => { key: $"{d.ordinal}", value: 0 }
+      )
     }
     // The key a seat's body holds (its loan ordinal), 0 for none, and how it shows: 0 none, 1 switched on, 2 off.
     row {
@@ -341,36 +365,123 @@ function rentalPalette(c) = [
 // Each glass is its model's picture box: the box a carried device's screen shows its game on (`screen-hgb`,
 // `screen-agb`, named by the screens below), its half-extents the picture's, 160 by 144 and 240 by 160 pixels.
 template rentalBrick(c) {
-  shape Box "shell" { material: 0, position [0, 0.0665, 0], scale [0.0375, 0.0665, 0.01375], rounding: 0.006 }
-  shape Box "bezel" { material: 1, position [0, 0.095, -0.0135], scale [0.031, 0.026, 0.0015], rounding: 0.0012 }
-  shape Box "screen-hgb" { material: 2, position [0, 0.096, -0.0146], scale [0.022, 0.0198, 0.0008] }
-  shape Box "pad-x" { material: 3, position [0.019, 0.042, -0.0142], scale [0.0095, 0.003, 0.0015], rounding: 0.001 }
-  shape Box "pad-y" { material: 3, position [0.019, 0.042, -0.0142], scale [0.003, 0.0095, 0.0015], rounding: 0.001 }
-  shape Cylinder "a" { material: 3, position [-0.024, 0.046, -0.0142], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
-  shape Cylinder "b" { material: 3, position [-0.012, 0.04, -0.0142], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+  shape Box "shell" {
+    material: 0
+    position [0, 0.0665, 0]
+    scale [0.0375, 0.0665, 0.01375]
+    rounding: 0.006
+  }
+  shape Box "bezel" {
+    material: 1
+    position [0, 0.095, -0.0135]
+    scale [0.031, 0.026, 0.0015]
+    rounding: 0.0012
+  }
+  shape Box "screen-hgb" {
+    material: 2
+    position [0, 0.096, -0.0146]
+    scale [0.022, 0.0198, 0.0008]
+  }
+  shape Box "pad-x" {
+    material: 3
+    position [0.019, 0.042, -0.0142]
+    scale [0.0095, 0.003, 0.0015]
+    rounding: 0.001
+  }
+  shape Box "pad-y" {
+    material: 3
+    position [0.019, 0.042, -0.0142]
+    scale [0.003, 0.0095, 0.0015]
+    rounding: 0.001
+  }
+  shape Cylinder "a" {
+    material: 3
+    position [-0.024, 0.046, -0.0142]
+    rotation [0.7071, 0, 0, 0.7071]
+    scale [0.0045, 0.0015, 0.0045]
+  }
+  shape Cylinder "b" {
+    material: 3
+    position [-0.012, 0.04, -0.0142]
+    rotation [0.7071, 0, 0, 0.7071]
+    scale [0.0045, 0.0015, 0.0045]
+  }
 }
 template rentalAdvanced(c) {
-  shape Box "shell" { material: 0, position [0, 0.041, 0], scale [0.072, 0.041, 0.0125], rounding: 0.012 }
-  shape Box "bezel" { material: 1, position [0, 0.043, -0.0122], scale [0.038, 0.027, 0.0015], rounding: 0.0012 }
-  shape Box "screen-agb" { material: 2, position [0, 0.043, -0.0133], scale [0.0306, 0.0204, 0.0008] }
-  shape Box "pad-x" { material: 3, position [0.054, 0.045, -0.0128], scale [0.009, 0.003, 0.0015], rounding: 0.001 }
-  shape Box "pad-y" { material: 3, position [0.054, 0.045, -0.0128], scale [0.003, 0.009, 0.0015], rounding: 0.001 }
-  shape Cylinder "a" { material: 3, position [-0.058, 0.049, -0.0128], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
-  shape Cylinder "b" { material: 3, position [-0.048, 0.042, -0.0128], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+  shape Box "shell" {
+    material: 0
+    position [0, 0.041, 0]
+    scale [0.072, 0.041, 0.0125]
+    rounding: 0.012
+  }
+  shape Box "bezel" {
+    material: 1
+    position [0, 0.043, -0.0122]
+    scale [0.038, 0.027, 0.0015]
+    rounding: 0.0012
+  }
+  shape Box "screen-agb" {
+    material: 2
+    position [0, 0.043, -0.0133]
+    scale [0.0306, 0.0204, 0.0008]
+  }
+  shape Box "pad-x" {
+    material: 3
+    position [0.054, 0.045, -0.0128]
+    scale [0.009, 0.003, 0.0015]
+    rounding: 0.001
+  }
+  shape Box "pad-y" {
+    material: 3
+    position [0.054, 0.045, -0.0128]
+    scale [0.003, 0.009, 0.0015]
+    rounding: 0.001
+  }
+  shape Cylinder "a" {
+    material: 3
+    position [-0.058, 0.049, -0.0128]
+    rotation [0.7071, 0, 0, 0.7071]
+    scale [0.0045, 0.0015, 0.0045]
+  }
+  shape Cylinder "b" {
+    material: 3
+    position [-0.048, 0.042, -0.0128]
+    rotation [0.7071, 0, 0, 0.7071]
+    scale [0.0045, 0.0015, 0.0045]
+  }
 }
 
 // A wonder key, 15 cm long, standing on its bit with its bow up: a brass shank and bow, the bow ringing a gem in the
 // barrier's violet (look.puck's lookBarrier), dark glass while the key is off and glowing while it is on.
 let rentalKeyBrass = { color: "#D9A441", roughness: 0.25, metal: 1 }
 let rentalKeyKinds = [
-  { id: "rental-key", name: "WONDER KEY (off)", gem: { color: "#2E2A44", roughness: 0.08, specular: 0.06, coat: 0.6 } }
-  { id: "rental-key-lit", name: "WONDER KEY", gem: { color: lookBarrier.colors[5], roughness: 0.08, emissive: 320nit } }
+  { id: "rental-key", name: "WONDER KEY (off)", gem { color: "#2E2A44", roughness: 0.08, specular: 0.06, coat: 0.6 } }
+  { id: "rental-key-lit", name: "WONDER KEY", gem { color: lookBarrier.colors[5], roughness: 0.08, emissive: 320nit } }
 ]
 template rentalKey() {
-  shape Cylinder "shank" { material: 0, position [0, 0.06, 0], scale [0.006, 0.05, 0.006] }
-  shape Box "bit" { material: 0, position [-0.012, 0.022, 0], scale [0.01, 0.012, 0.003], rounding: 0.002 }
-  shape Torus "bow" { material: 0, position [0, 0.14, 0], rotation [0.7071068, 0, 0, 0.7071068], scale [0.028, 0.028, 0.028] }
-  shape Cylinder "gem" { material: 1, position [0, 0.14, 0], rotation [0.7071068, 0, 0, 0.7071068], scale [0.019, 0.004, 0.019] }
+  shape Cylinder "shank" {
+    material: 0
+    position [0, 0.06, 0]
+    scale [0.006, 0.05, 0.006]
+  }
+  shape Box "bit" {
+    material: 0
+    position [-0.012, 0.022, 0]
+    scale [0.01, 0.012, 0.003]
+    rounding: 0.002
+  }
+  shape Torus "bow" {
+    material: 0
+    position [0, 0.14, 0]
+    rotation [0.7071068, 0, 0, 0.7071068]
+    scale [0.028, 0.028, 0.028]
+  }
+  shape Cylinder "gem" {
+    material: 1
+    position [0, 0.14, 0]
+    rotation [0.7071068, 0, 0, 0.7071068]
+    scale [0.019, 0.004, 0.019]
+  }
 }
 
 // The stand and the rack share a plain counter palette: the level's sunflower, cobalt and candy pink, and cream.
@@ -447,25 +558,164 @@ template rentalKioskArm(arm) {
   let neon = (rentalKiosk.neon + arm)
   let mid = (rentalFirst + ((rentalPitch * (rentalPerModel - 1)) / 2))
   let shelfHalf = ((rentalPitch * rentalPerModel) / 2)
-  rentalKioskBox(label: $"kick-{arm}", arm: arm, material: rentalKiosk.bezel, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.06, v: 0, hu: ((rentalArmLength + rentalCounterHalfDepth) / 2), hy: 0.06, hv: 0.2, rounding: 0.02, detail: false)
-  rentalKioskBox(label: $"underglow-{arm}", arm: arm, material: neon, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.135, v: 0.2, hu: 1.35, hy: 0.008, hv: 0.008, rounding: 0.006)
-  rentalKioskBox(label: $"body-{arm}", arm: arm, material: rentalKiosk.body, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.47, v: 0, hu: ((rentalArmLength + rentalCounterHalfDepth) / 2), hy: 0.35, hv: rentalCounterHalfDepth, rounding: 0.03, detail: false)
-  rentalKioskBox(label: $"reveal-{arm}", arm: arm, material: neon, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.83, v: rentalCounterHalfDepth, hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) - 0.03), hy: 0.01, hv: 0.012, rounding: 0.008)
-  rentalKioskBox(label: $"lip-{arm}", arm: arm, material: rentalKiosk.trim, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: (top - 0.055), v: 0, hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) + 0.03), hy: 0.055, hv: (rentalCounterHalfDepth + 0.02), rounding: 0.02, detail: false)
-  rentalKioskBox(label: $"plate-returns-{arm}", arm: arm, material: rentalKiosk.plate, u: 0, y: 0.47, v: rentalCounterHalfDepth, hu: 0.21, hy: 0.04, hv: 0.004)
+  rentalKioskBox(
+    label: $"kick-{arm}",
+    arm: arm,
+    material: rentalKiosk.bezel,
+    u: ((rentalArmLength - rentalCounterHalfDepth) / 2),
+    y: 0.06,
+    v: 0,
+    hu: ((rentalArmLength + rentalCounterHalfDepth) / 2),
+    hy: 0.06,
+    hv: 0.2,
+    rounding: 0.012,
+    detail: false
+  )
+  rentalKioskBox(
+    label: $"underglow-{arm}",
+    arm: arm,
+    material: neon,
+    u: ((rentalArmLength - rentalCounterHalfDepth) / 2),
+    y: 0.135,
+    v: 0.2,
+    hu: 1.35,
+    hy: 0.008,
+    hv: 0.008
+  )
+  rentalKioskBox(
+    label: $"body-{arm}",
+    arm: arm,
+    material: rentalKiosk.body,
+    u: ((rentalArmLength - rentalCounterHalfDepth) / 2),
+    y: 0.47,
+    v: 0,
+    hu: ((rentalArmLength + rentalCounterHalfDepth) / 2),
+    hy: 0.35,
+    hv: rentalCounterHalfDepth,
+    rounding: 0.012,
+    detail: false
+  )
+  rentalKioskBox(
+    label: $"reveal-{arm}",
+    arm: arm,
+    material: neon,
+    u: ((rentalArmLength - rentalCounterHalfDepth) / 2),
+    y: 0.83,
+    v: rentalCounterHalfDepth,
+    hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) - 0.03),
+    hy: 0.01,
+    hv: 0.012
+  )
+  rentalKioskBox(
+    label: $"lip-{arm}",
+    arm: arm,
+    material: rentalKiosk.trim,
+    u: ((rentalArmLength - rentalCounterHalfDepth) / 2),
+    y: (top - 0.055),
+    v: 0,
+    hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) + 0.03),
+    hy: 0.055,
+    hv: (rentalCounterHalfDepth + 0.02),
+    rounding: 0.012,
+    detail: false
+  )
+  rentalKioskBox(
+    label: $"plate-returns-{arm}",
+    arm: arm,
+    material: rentalKiosk.plate,
+    u: 0,
+    y: 0.47,
+    v: rentalCounterHalfDepth,
+    hu: 0.21,
+    hy: 0.04,
+    hv: 0.004
+  )
   for n in range(0, rentalPerModel) {
-    rentalKioskBox(label: $"plate-{arm}-{n}", arm: arm, material: rentalKiosk.plate, u: rentalAlong(n), y: 0.47, v: rentalCounterHalfDepth, hu: 0.05, hy: 0.035, hv: 0.004)
+    rentalKioskBox(
+      label: $"plate-{arm}-{n}",
+      arm: arm,
+      material: rentalKiosk.plate,
+      u: rentalAlong(n),
+      y: 0.47,
+      v: rentalCounterHalfDepth,
+      hu: 0.05,
+      hy: 0.035,
+      hv: 0.004
+    )
   }
   // The shelf behind the devices (their backs stand 0.086 m out of the arm's centre line).
-  rentalKioskBox(label: $"back-{arm}", arm: arm, material: (rentalKiosk.back + arm), u: mid, y: (top + (h / 2)), v: 0.051, hu: (shelfHalf + 0.006), hy: (h / 2), hv: 0.021)
+  rentalKioskBox(
+    label: $"back-{arm}",
+    arm: arm,
+    material: (rentalKiosk.back + arm),
+    u: mid,
+    y: (top + (h / 2)),
+    v: 0.051,
+    hu: (shelfHalf + 0.006),
+    hy: (h / 2),
+    hv: 0.021
+  )
   for k in range(0, rentalPerModel + 1) {
-    rentalKioskBox(label: $"post-{arm}-{k}", arm: arm, material: rentalKiosk.bezel, u: (rentalFirst - (rentalPitch / 2) + (rentalPitch * k)), y: (top + (h / 2)), v: 0.135, hu: 0.006, hy: (h / 2), hv: 0.105, rounding: 0.003)
+    rentalKioskBox(
+      label: $"post-{arm}-{k}",
+      arm: arm,
+      material: rentalKiosk.bezel,
+      u: (rentalFirst - (rentalPitch / 2) + (rentalPitch * k)),
+      y: (top + (h / 2)),
+      v: 0.135,
+      hu: 0.006,
+      hy: (h / 2),
+      hv: 0.105
+    )
   }
-  rentalKioskBox(label: $"lintel-{arm}", arm: arm, material: rentalKiosk.canopy, u: mid, y: (top + h + 0.02), v: 0.135, hu: (shelfHalf + 0.03), hy: 0.02, hv: 0.115, rounding: 0.012)
-  rentalKioskBox(label: $"lintel-light-{arm}", arm: arm, material: neon, u: mid, y: (top + h - 0.004), v: 0.14, hu: shelfHalf, hy: 0.004, hv: 0.09)
+  rentalKioskBox(
+    label: $"lintel-{arm}",
+    arm: arm,
+    material: rentalKiosk.canopy,
+    u: mid,
+    y: (top + h + 0.02),
+    v: 0.135,
+    hu: (shelfHalf + 0.03),
+    hy: 0.02,
+    hv: 0.115,
+    rounding: 0.01
+  )
+  rentalKioskBox(
+    label: $"lintel-light-{arm}",
+    arm: arm,
+    material: neon,
+    u: mid,
+    y: (top + h - 0.004),
+    v: 0.14,
+    hu: shelfHalf,
+    hy: 0.004,
+    hv: 0.09
+  )
   // The header and its posts, and the canopy over them reaching out over the customers.
-  rentalKioskBox(label: $"mast-{arm}", arm: arm, material: rentalKiosk.bezel, u: 2.52, y: 1.7, v: -0.2, hu: 0.03, hy: 0.75, hv: 0.03, rounding: 0.01)
-  rentalKioskBox(label: $"header-{arm}", arm: arm, material: rentalKiosk.trim, u: 1.45, y: 2.12, v: -0.05, hu: 1.15, hy: 0.2, hv: 0.15, rounding: 0.03)
+  rentalKioskBox(
+    label: $"mast-{arm}",
+    arm: arm,
+    material: rentalKiosk.bezel,
+    u: 2.52,
+    y: 1.7,
+    v: -0.2,
+    hu: 0.03,
+    hy: 0.75,
+    hv: 0.03,
+    rounding: 0.01
+  )
+  rentalKioskBox(
+    label: $"header-{arm}",
+    arm: arm,
+    material: rentalKiosk.trim,
+    u: 1.45,
+    y: 2.12,
+    v: -0.05,
+    hu: 1.15,
+    hy: 0.2,
+    hv: 0.15,
+    rounding: 0.015
+  )
   shape Box $"header-sign-{arm}" {
     material: rentalKiosk.sign
     position: rentalArmAuthor(arm, 1.45, 2.12, 0.104)
@@ -473,9 +723,41 @@ template rentalKioskArm(arm) {
     lightsAs: Face
     detail: true
   }
-  rentalKioskBox(label: $"canopy-{arm}", arm: arm, material: rentalKiosk.canopy, u: 1.05, y: 2.47, v: 0.15, hu: 1.65, hy: 0.03, hv: 0.45, rounding: 0.015)
-  rentalKioskBox(label: $"canopy-lip-{arm}", arm: arm, material: rentalKiosk.trim, u: 1.05, y: 2.43, v: 0.6, hu: 1.65, hy: 0.06, hv: 0.02, rounding: 0.012)
-  rentalKioskBox(label: $"canopy-light-{arm}", arm: arm, material: neon, u: 1.05, y: 2.43, v: 0.625, hu: 1.6, hy: 0.01, hv: 0.008, rounding: 0.006)
+  rentalKioskBox(
+    label: $"canopy-{arm}",
+    arm: arm,
+    material: rentalKiosk.canopy,
+    u: 1.05,
+    y: 2.47,
+    v: 0.15,
+    hu: 1.65,
+    hy: 0.03,
+    hv: 0.45,
+    rounding: 0.012
+  )
+  rentalKioskBox(
+    label: $"canopy-lip-{arm}",
+    arm: arm,
+    material: rentalKiosk.trim,
+    u: 1.05,
+    y: 2.43,
+    v: 0.6,
+    hu: 1.65,
+    hy: 0.06,
+    hv: 0.02,
+    rounding: 0.01
+  )
+  rentalKioskBox(
+    label: $"canopy-light-{arm}",
+    arm: arm,
+    material: neon,
+    u: 1.05,
+    y: 2.43,
+    v: 0.625,
+    hu: 1.6,
+    hy: 0.01,
+    hv: 0.008
+  )
 }
 
 prototypes {
@@ -493,7 +775,6 @@ prototypes {
         material: rentalKiosk.neon
         position [0, (rentalCounterTop + 0.002), 0]
         scale [0.2, 0.004, 0.2]
-        rounding: 0.003
         detail: true
       }
       shape Box "tray" {
@@ -503,8 +784,30 @@ prototypes {
         rounding: 0.006
         detail: true
       }
-      rentalKioskBox(label: "mast-corner", arm: 1, material: rentalKiosk.bezel, u: 0.2, y: 1.7, v: -0.2, hu: 0.03, hy: 0.75, hv: 0.03, rounding: 0.01)
-      rentalKioskBox(label: "blade-mast", arm: 1, material: rentalKiosk.bezel, u: 0.05, y: 2.65, v: -0.05, hu: 0.04, hy: 0.2, hv: 0.04, rounding: 0.012)
+      rentalKioskBox(
+        label: "mast-corner",
+        arm: 1,
+        material: rentalKiosk.bezel,
+        u: 0.2,
+        y: 1.7,
+        v: -0.2,
+        hu: 0.03,
+        hy: 0.75,
+        hv: 0.03,
+        rounding: 0.01
+      )
+      rentalKioskBox(
+        label: "blade-mast",
+        arm: 1,
+        material: rentalKiosk.bezel,
+        u: 0.05,
+        y: 2.65,
+        v: -0.05,
+        hu: 0.04,
+        hy: 0.2,
+        hv: 0.04,
+        rounding: 0.012
+      )
       shape Box "blade" {
         material: rentalKiosk.trim
         position: rentalBladePoint(0, rentalBladeAt[1])
@@ -622,8 +925,17 @@ prototypes {
           { color: "#EDE6D3", roughness: 0.6, specular: 0.03 }
           { color: "#1C1C1E", roughness: 0.5, specular: 0.04 }
         ]
-        shape Box "shell" { material: 0, position [0, 0.0675, 0], scale [0.06, 0.0675, 0.01], rounding: 0.003 }
-        shape Box "label" { material: 1, position [0, 0.08, 0.0098], scale [0.048, 0.04, 0.0006] }
+        shape Box "shell" {
+          material: 0
+          position [0, 0.0675, 0]
+          scale [0.06, 0.0675, 0.01]
+          rounding: 0.003
+        }
+        shape Box "label" {
+          material: 1
+          position [0, 0.08, 0.0098]
+          scale [0.048, 0.04, 0.0006]
+        }
         textRuns [
           {
             text: slot.label
@@ -684,7 +996,10 @@ placements {
       position [rentalDeviceAt(d)[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalDeviceAt(d)[1]]
       yawDegrees: ((rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm)) % 360)
       respond [
-        { when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
+        {
+          when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0)
+          prototypeId: "rental-device-empty"
+        }
       ]
     }
     reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
@@ -696,17 +1011,26 @@ placements {
     position [rentalRackAt[0], galleryFloor[toyboxLevel], rentalRackAt[1]]
     solid
   }
-  reach(id: "rental-cartridge-return", box: rentalRackReach((rentalRackAt[0] + rentalRackHalfWidth - 0.2), (rentalRackAt[0] + rentalRackHalfWidth)))
+  reach(
+    id: "rental-cartridge-return",
+    box: rentalRackReach((rentalRackAt[0] + rentalRackHalfWidth - 0.2), (rentalRackAt[0] + rentalRackHalfWidth))
+  )
   for c in rentalCartridgeItems {
     placement $"rental-cartridge-{c.ordinal}" {
       prototype: rentalCartridgePrototype(c.slot)
       parent: "gallery"
       position [rentalRackX(c.place), (galleryFloor[toyboxLevel] + rentalRackTop), (rentalRackAt[1] + 0.05)]
       respond [
-        { when: state(state: rentalLoan, key: $"{c.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
+        {
+          when: state(state: rentalLoan, key: $"{c.ordinal}", comparison: NotEqual, value: 0)
+          prototypeId: "rental-device-empty"
+        }
       ]
     }
-    reach(id: $"rental-cartridge-reach-{c.ordinal}", box: rentalRackReach((rentalRackX(c.place) - 0.07), (rentalRackX(c.place) + 0.07)))
+    reach(
+      id: $"rental-cartridge-reach-{c.ordinal}",
+      box: rentalRackReach((rentalRackX(c.place) - 0.07), (rentalRackX(c.place) + 0.07))
+    )
   }
   // The cartridge a seat's body holds rides its right hip, its label out.
   for b in rentalBodies {
@@ -717,7 +1041,13 @@ placements {
         bodyIndex: b
         localOffset [0.3, 0.92, -0.38]
       }
-      respond: map(rentalCartridgeItems, c => { when: state(state: rentalCartridgeHeld, key: $"{b}", comparison: Equal, value: c.ordinal), prototypeId: rentalCartridgePrototype(c.slot) })
+      respond: map(
+        rentalCartridgeItems,
+        c => {
+          when: state(state: rentalCartridgeHeld, key: $"{b}", comparison: Equal, value: c.ordinal)
+          prototypeId: rentalCartridgePrototype(c.slot)
+        }
+      )
     }
   }
   // The key stand on level 3, each key on it until it is on loan, the floor before each, and the returns tray's floor.
@@ -727,17 +1057,26 @@ placements {
     position [rentalKeyAt[0], galleryFloor[3], rentalKeyAt[1]]
     solid
   }
-  reach(id: "rental-key-return", box: rentalKeyReach(((rentalKeyAt[0] + rentalKeyHalfWidth) - 0.25), (rentalKeyAt[0] + rentalKeyHalfWidth)))
+  reach(
+    id: "rental-key-return",
+    box: rentalKeyReach(((rentalKeyAt[0] + rentalKeyHalfWidth) - 0.25), (rentalKeyAt[0] + rentalKeyHalfWidth))
+  )
   for k in rentalKeyItems {
     placement $"rental-key-{k.ordinal}" {
       prototype: "rental-key-lit"
       parent: "gallery"
       position [rentalKeyX(k.place), (galleryFloor[3] + rentalKeyTop), (rentalKeyAt[1] + 0.05)]
       respond [
-        { when: state(state: rentalLoan, key: $"{k.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
+        {
+          when: state(state: rentalLoan, key: $"{k.ordinal}", comparison: NotEqual, value: 0)
+          prototypeId: "rental-device-empty"
+        }
       ]
     }
-    reach(id: $"rental-key-reach-{k.ordinal}", box: rentalKeyReach((rentalKeyX(k.place) - (rentalKeyPitch / 2)), (rentalKeyX(k.place) + (rentalKeyPitch / 2))))
+    reach(
+      id: $"rental-key-reach-{k.ordinal}",
+      box: rentalKeyReach((rentalKeyX(k.place) - (rentalKeyPitch / 2)), (rentalKeyX(k.place) + (rentalKeyPitch / 2)))
+    )
   }
   // The key a seat's body holds hangs on a cord at its chest, a little right of centre, its face out: lit while it is
   // switched on, dull while it is off.
@@ -767,7 +1106,13 @@ placements {
         localOffset [-0.3, 0.92, -0.38]
         localYawDegrees: 180
       }
-      respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal), prototypeId: rentalPrototype(d) })
+      respond: map(
+        rentalDevices,
+        d => {
+          when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal)
+          prototypeId: rentalPrototype(d)
+        }
+      )
     }
     placement $"rental-played-{b}" {
       prototype: "rental-device-empty"
@@ -776,7 +1121,13 @@ placements {
         bodyIndex: b
         localOffset [0, 1.3, -0.5]
       }
-      respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed)), prototypeId: rentalPrototype(d) })
+      respond: map(
+        rentalDevices,
+        d => {
+          when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed))
+          prototypeId: rentalPrototype(d)
+        }
+      )
     }
   }
 }
@@ -894,11 +1245,12 @@ rule "rental-key-toggle" {
 
 // A key whose holder leaves the gallery, or the world, goes back to its stand.
 rule "rental-key-leave" {
-  when rentalKeyHeld[$each] > 0 and (
-    bodyPosition(each, x) < rentalKeyBounds.x0 or bodyPosition(each, x) > rentalKeyBounds.x1 or
-      bodyPosition(each, y) < rentalKeyBounds.y0 or bodyPosition(each, y) > rentalKeyBounds.y1 or
-      bodyPosition(each, z) < rentalKeyBounds.z0 or bodyPosition(each, z) > rentalKeyBounds.z1
-  )
+  when rentalKeyHeld[$each] > 0 and (bodyPosition(each, x) < rentalKeyBounds.x0 or
+      bodyPosition(each, x) > rentalKeyBounds.x1 or
+      bodyPosition(each, y) < rentalKeyBounds.y0 or
+      bodyPosition(each, y) > rentalKeyBounds.y1 or
+      bodyPosition(each, z) < rentalKeyBounds.z0 or
+      bodyPosition(each, z) > rentalKeyBounds.z1)
   mode: Level
   forEach: rentalKeyHeld
   rentalLoan[rentalKeyHeld[$each]] = 0
@@ -983,7 +1335,11 @@ function toyboxConsoleReach(s) = {
   y1: (galleryFloor[toyboxLevel] + 1)
 }
 // Where an inserted cartridge stands out of its deck: the console's top beside the station.
-function toyboxSlotAt(s) = [(toyboxAt(s)[0] + (toyboxConsoleOffset / 2)), (galleryFloor[toyboxLevel] + ((s.kind == "cabinet") ? 0.95 : 0.68)), (toyboxAt(s)[2] + (0.15 * s.facing))]
+function toyboxSlotAt(s) = [
+  (toyboxAt(s)[0] + (toyboxConsoleOffset / 2)),
+  (galleryFloor[toyboxLevel] + ((s.kind == "cabinet") ? 0.95 : 0.68)),
+  (toyboxAt(s)[2] + (0.15 * s.facing))
+]
 
 placements {
   for s in toyboxStations {
@@ -993,7 +1349,13 @@ placements {
       parent: "gallery"
       position: toyboxSlotAt(s)
       yawDegrees: s.yaw
-      respond: map(rentalCartridgeItems, c => { when: state(state: toyboxCartridge, key: s.id, comparison: Equal, value: c.ordinal), prototypeId: rentalCartridgePrototype(c.slot) })
+      respond: map(
+        rentalCartridgeItems,
+        c => {
+          when: state(state: toyboxCartridge, key: s.id, comparison: Equal, value: c.ordinal)
+          prototypeId: rentalCartridgePrototype(c.slot)
+        }
+      )
     }
   }
 }
@@ -1019,7 +1381,9 @@ for (s, i) in toyboxStations {
 
 // Leaving level 1, or the world (an absent body stands at the origin), returns the device.
 rule "rental-leave" {
-  when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (galleryFloor[toyboxLevel] + 3))
+  when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (
+        galleryFloor[toyboxLevel] + 3
+      ))
   mode: Level
   forEach: rentalHeld
   rentalLoan[rentalHeld[$each]] = 0
@@ -1027,7 +1391,10 @@ rule "rental-leave" {
   rentalModel[$each] = 0
 }
 rule "rental-cartridge-leave" {
-  when rentalCartridgeHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (galleryFloor[toyboxLevel] + 3))
+  when rentalCartridgeHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(
+        each,
+        y
+      ) > (galleryFloor[toyboxLevel] + 3))
   mode: Level
   forEach: rentalCartridgeHeld
   rentalLoan[rentalCartridgeHeld[$each]] = 0
@@ -1038,7 +1405,8 @@ rule "rental-cartridge-leave" {
 // the device it holds, which moves from its hip to its hands; leaving puts it back on the hip. One rule a body, which
 // writes only when where the device shows moves.
 let rentalPlayed = 64
-function rentalShows(b) = (rentalHeld[$"{b}"] + (rentalPlayed * (engaged($"body:{b}", $"{rentalScreenOf(b, 1)}") + engaged($"body:{b}", $"{rentalScreenOf(b, 2)}"))))
+function rentalShows(b) = (rentalHeld[$"{b}"] +
+  (rentalPlayed * (engaged($"body:{b}", $"{rentalScreenOf(b, 1)}") + engaged($"body:{b}", $"{rentalScreenOf(b, 2)}"))))
 for b in rentalBodies {
   rule $"rental-shown-{b}" {
     when rentalShown[$"{b}"] != rentalShows(b)
@@ -1055,7 +1423,7 @@ machines: flatMap(
   b => [
     (brickMachine($"rental-hgb-{b}", "../cartridges/cgb/tetromino.cgb.puck") with {
       runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 1 }
-    })
+    }),
     (advancedBrickMachine($"rental-agb-{b}", "../cartridges/agb/pip.agb.puck") with {
       runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 2 }
     })

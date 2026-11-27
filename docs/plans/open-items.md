@@ -3326,13 +3326,6 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
-- [high] The toybox's handheld rental counters fail the visual bar (the
-  owner, live: "clearly lame"): each is a flat L of an ochre box under a pink
-  top with the 48 handhelds stood along it, reading as an out-of-place desk,
-  not a shop stall. A rebuild gives it a stall's form and character in the
-  gallery's direction (a lit, branded rental kiosk with cubbies the devices sit
-  in), keeping `rentals.puck`'s renting rules, cubby positions and counts.
-  Briefed only once the owner has walked the floor.
 - [med] The endless fall's opening in level 1's floor is tabled (the owner,
   live): `fallOpen` (layout.puck) closes the hole and its rails while the wing's
   fall paintings below stand. Revisit the fall as a whole before turning it on.
