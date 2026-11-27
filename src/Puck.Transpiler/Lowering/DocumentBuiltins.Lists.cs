@@ -73,7 +73,7 @@ public static partial class DocumentBuiltins {
 
         var wanted = DocumentLowering.EvaluateValue(expr: args[1].Value, scope: scope, fieldKey: fieldKey);
 
-        return JsonValue.Create(value: ((IndexOfValue(list: list, value: wanted) >= 0) ? 1L : 0L));
+        return JsonValue.Create(value: ((IndexOfValue(list: new Lent(list: list, owned: false), value: wanted) >= 0) ? 1L : 0L));
     }
     private static JsonNode? Dot(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
         if (args.Count != 2) {
@@ -114,7 +114,7 @@ public static partial class DocumentBuiltins {
     private static JsonNode? Find(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
         var usage = ((call.Name == "find") ? "find(array, item => condition)" : "indexOf(array, value) or indexOf(array, item => condition)");
 
-        if (!TryReadList(args: args, call: call, fieldKey: fieldKey, maximum: 2, list: out var list, scope: scope, usage: usage)) {
+        if (!TryLendList(args: args, call: call, fieldKey: fieldKey, maximum: 2, list: out var list, scope: scope, usage: usage)) {
             return null;
         }
         if (args.Count != 2) {
@@ -143,11 +143,11 @@ public static partial class DocumentBuiltins {
         }
 
         return ((call.Name == "find")
-            ? ((position < 0) ? null : scope.Budget.Copy(value: list[position], span: call.Span))
+            ? ((position < 0) ? null : list.Take(budget: scope.Budget, index: position, span: call.Span))
             : JsonValue.Create(value: ((long)position))
         );
     }
-    private static int IndexOfValue(JsonArray list, JsonNode? value) {
+    private static int IndexOfValue(Lent list, JsonNode? value) {
         for (var index = 0; (index < list.Count); ++index) {
             if (DocumentValueEqualityComparer.Instance.Equals(x: list[index], y: value)) {
                 return index;
@@ -226,14 +226,14 @@ public static partial class DocumentBuiltins {
         );
     }
     private static JsonNode? Reverse(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadList(args: args, call: call, fieldKey: fieldKey, maximum: 1, list: out var list, scope: scope, usage: "reverse(array)")) {
+        if (!TryLendList(args: args, call: call, fieldKey: fieldKey, maximum: 1, list: out var list, scope: scope, usage: "reverse(array)")) {
             return null;
         }
 
         var reversed = new JsonArray();
 
         for (var index = (list.Count - 1); (index >= 0); --index) {
-            reversed.AppendNode(item: scope.Budget.Copy(value: list[index], span: call.Span));
+            reversed.AppendNode(item: list.Take(budget: scope.Budget, index: index, span: call.Span));
         }
 
         return reversed;
@@ -283,7 +283,7 @@ public static partial class DocumentBuiltins {
         if (args.Count < 2) {
             return Refuse(call: call, message: "slice(array, start, end) takes an array, a start and optionally an end", scope: scope);
         }
-        if (!TryReadList(args: args, call: call, fieldKey: fieldKey, maximum: 3, list: out var list, scope: scope, usage: "slice(array, start, end)")) {
+        if (!TryLendList(args: args, call: call, fieldKey: fieldKey, maximum: 3, list: out var list, scope: scope, usage: "slice(array, start, end)")) {
             return null;
         }
 
@@ -301,7 +301,7 @@ public static partial class DocumentBuiltins {
         var slice = new JsonArray();
 
         for (var index = bounds[0]; (index < bounds[1]); ++index) {
-            slice.AppendNode(item: scope.Budget.Copy(value: list[((int)index)], span: call.Span));
+            slice.AppendNode(item: list.Take(budget: scope.Budget, index: ((int)index), span: call.Span));
         }
 
         return slice;
@@ -333,10 +333,10 @@ public static partial class DocumentBuiltins {
             return Refuse(call: call, message: "zip(a, b, ...) takes at least two arrays", scope: scope);
         }
 
-        var lists = new List<JsonArray>(capacity: args.Count);
+        var lists = new List<Lent>(capacity: args.Count);
 
         foreach (var arg in args) {
-            if (DocumentLowering.EvaluateValue(expr: arg.Value, scope: scope, fieldKey: fieldKey) is not JsonArray list) {
+            if (!TryLend(expr: arg.Value, fieldKey: fieldKey, list: out var list, scope: scope)) {
                 return Refuse(call: call, message: "zip reads arrays", scope: scope);
             }
             if ((lists.Count > 0) && (list.Count != lists[0].Count)) {
@@ -354,7 +354,7 @@ public static partial class DocumentBuiltins {
             var tuple = new JsonArray();
 
             foreach (var list in lists) {
-                tuple.AppendNode(item: scope.Budget.Copy(value: list[index], span: call.Span));
+                tuple.AppendNode(item: list.Take(budget: scope.Budget, index: index, span: call.Span));
             }
 
             zipped.Add(item: tuple);
@@ -402,6 +402,23 @@ public static partial class DocumentBuiltins {
             lambda = ReadItemLambda(arg: args[1], call: call, scope: scope);
 
             return (lambda is not null);
+        }
+
+        return true;
+    }
+    // The array a list builtin reads, first in its arguments, lent (Lent) to a builtin whose result holds its elements.
+    private static bool TryLendList(IReadOnlyList<ArgumentNode> args, CallExpressionNode call, string? fieldKey, int maximum, out Lent list, DocumentScope scope, string usage) {
+        list = default;
+
+        if ((args.Count < 1) || (args.Count > maximum)) {
+            Refuse(call: call, message: $"{call.Name} is called as {usage}", scope: scope);
+
+            return false;
+        }
+        if (!TryLend(expr: args[0].Value, fieldKey: fieldKey, list: out list, scope: scope)) {
+            Refuse(call: call, message: $"{call.Name}'s first argument is an array", scope: scope);
+
+            return false;
         }
 
         return true;

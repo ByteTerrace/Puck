@@ -45,24 +45,27 @@ public sealed class DocumentEvaluationBudget {
             span: span
         );
     }
-    /// <summary>Copies a borrowed value into owned output, charging every copied node and string before allocation.</summary>
+    /// <summary>Copies a borrowed value into owned output, charging every copied node and string as it is copied.</summary>
     /// <param name="value">The borrowed value.</param>
     /// <param name="span">The expression requesting a copy.</param>
     /// <returns>An independently owned JSON value.</returns>
-    public JsonNode? Copy(JsonNode? value, SourceSpan span) {
-        Charge(
-            depth: 0,
-            node: value,
-            span: span
-        );
-        var copy = value?.DeepClone();
-
-        if ((m_writtenBeside is not null) && (value is not null)) {
-            CarryWrittenBeside(copy: copy!, source: value);
-        }
-
-        return copy;
-    }
+    /// <remarks>One walk charges, copies and carries each string's <see cref="NoteWrittenBeside"/> record, visiting the
+    /// nodes in the order <see cref="Adopt"/> charges them, so a refusal names the same node either way.</remarks>
+    public JsonNode? Copy(JsonNode? value, SourceSpan span) => CopyCharged(
+        depth: 0,
+        node: value,
+        span: span
+    );
+    /// <summary>Takes a value into output: an owned one as it stands (<see cref="Adopt"/>), a borrowed one as a copy
+    /// (<see cref="Copy"/>). The one door through which an evaluated value enters a container.</summary>
+    /// <param name="value">The value.</param>
+    /// <param name="owned">Whether nothing but the caller holds <paramref name="value"/> or any node beneath it.</param>
+    /// <param name="span">The expression that produced it.</param>
+    /// <returns>The value to place, charged the same whichever way it came.</returns>
+    public JsonNode? Take(JsonNode? value, bool owned, SourceSpan span) => (owned
+        ? Adopt(value: value, span: span)
+        : Copy(value: value, span: span)
+    );
     /// <summary>Records the directory of the source whose literal produced a string node, so the record follows the
     /// node and every copy <see cref="Copy"/> makes of it, whatever expression carries it.</summary>
     /// <param name="value">The string node, as the evaluation produced it.</param>
@@ -83,31 +86,6 @@ public sealed class DocumentEvaluationBudget {
         return ((value is not null) && (m_writtenBeside?.TryGetValue(key: value, value: out directory!) == true));
     }
 
-    // DeepClone keeps the shape and member order, so the copy is walked beside its source.
-    private void CarryWrittenBeside(JsonNode source, JsonNode copy) {
-        switch (source) {
-            case JsonValue:
-                if (m_writtenBeside!.TryGetValue(key: source, value: out var directory)) {
-                    m_writtenBeside.AddOrUpdate(key: copy, value: directory);
-                }
-                break;
-            case JsonArray array:
-                for (var index = 0; (index < array.Count); index++) {
-                    if (array[index] is { } element) {
-                        CarryWrittenBeside(copy: ((JsonArray)copy)[index]!, source: element);
-                    }
-                }
-                break;
-            case JsonObject obj:
-                foreach (var (key, member) in obj) {
-                    if (member is not null) {
-                        CarryWrittenBeside(copy: ((JsonObject)copy)[key]!, source: member);
-                    }
-                }
-                break;
-        }
-    }
-
     /// <summary>Takes a value the evaluation built itself into output, charging it exactly as <see cref="Copy"/>
     /// charges a borrowed one.</summary>
     /// <param name="value">A value no binding, cache or other container holds.</param>
@@ -124,25 +102,29 @@ public sealed class DocumentEvaluationBudget {
         return value;
     }
 
-    private void Charge(JsonNode? node, int depth, SourceSpan span) {
+    // Charges one node before anything beneath it: the order Charge and CopyCharged share.
+    private void ChargeNode(int depth, SourceSpan span) {
         if (depth >= DepthLimit) {
             throw new DocumentEvaluationException(
-            "Generated JSON exceeds 64 levels of nesting.",
-            span
-        );
+                "Generated JSON exceeds 64 levels of nesting.",
+                span
+            );
         }
         Spend(
             count: 1,
             span: span
         );
+    }
+    private void Charge(JsonNode? node, int depth, SourceSpan span) {
+        ChargeNode(depth: depth, span: span);
         switch (node) {
             case JsonArray array:
                 for (var index = 0; (index < array.Count); index++) {
                     Charge(
-                    depth: (depth + 1),
-                    node: array[index],
-                    span: span
-                );
+                        depth: (depth + 1),
+                        node: array[index],
+                        span: span
+                    );
                 }
                 break;
             case JsonObject obj:
@@ -160,13 +142,69 @@ public sealed class DocumentEvaluationBudget {
                     );
                 }
                 break;
-            // Asking a number for text boxes it, so only a value that is text is asked.
-            case JsonValue scalar when ((scalar.GetValueKind() == JsonValueKind.String) && scalar.TryGetValue<string>(value: out var text)):
-                Spend(
-                    count: text.Length,
-                    span: span
-                );
+            case JsonValue scalar:
+                ChargeText(scalar: scalar, span: span);
                 break;
+        }
+    }
+    // Asking a number for text boxes it, so only a value that is text is asked.
+    private void ChargeText(JsonValue scalar, SourceSpan span) {
+        if ((scalar.GetValueKind() == JsonValueKind.String) && scalar.TryGetValue<string>(value: out var text)) {
+            Spend(
+                count: text.Length,
+                span: span
+            );
+        }
+    }
+    // Charge and copy in one walk: each node is charged before it is copied and before anything beneath it, so the
+    // charges and any refusal fall exactly where Charge's would.
+    private JsonNode? CopyCharged(JsonNode? node, int depth, SourceSpan span) {
+        ChargeNode(depth: depth, span: span);
+        switch (node) {
+            case JsonArray array: {
+                    var items = new JsonNode?[array.Count];
+
+                    for (var index = 0; (index < items.Length); index++) {
+                        items[index] = CopyCharged(
+                            depth: (depth + 1),
+                            node: array[index],
+                            span: span
+                        );
+                    }
+                    return ((array.Options is { } options) ? new JsonArray(options: options, items: items) : new JsonArray(items: items));
+                }
+            case JsonObject obj: {
+                    var copy = new JsonObject(options: obj.Options);
+
+                    for (var index = 0; (index < obj.Count); index++) {
+                        var pair = obj.GetAt(index: index);
+
+                        Spend(
+                            count: pair.Key.Length,
+                            span: span
+                        );
+                        copy.Add(
+                            propertyName: pair.Key,
+                            value: CopyCharged(
+                                depth: (depth + 1),
+                                node: pair.Value,
+                                span: span
+                            )
+                        );
+                    }
+                    return copy;
+                }
+            case JsonValue scalar: {
+                    ChargeText(scalar: scalar, span: span);
+                    var copy = scalar.DeepClone();
+
+                    if ((m_writtenBeside is not null) && m_writtenBeside.TryGetValue(key: scalar, value: out var directory)) {
+                        m_writtenBeside.AddOrUpdate(key: copy, value: directory);
+                    }
+                    return copy;
+                }
+            default:
+                return null;
         }
     }
 
