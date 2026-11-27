@@ -1085,9 +1085,9 @@ template gamePad(base, at, label) {
 }
 
 // A pad's cable from `from` (a console's port, leaving it toward +Z) to `to` (the pad's cable end): it drops to lie
-// `lie` up (on the floor, or on a rug over it) a third of the way out and runs straight along it to the pad. Visual
-// only: a body steps over it.
-template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
+// `lie` up (on the floor, or on a rug over it) a third of the way out and runs along it to the pad with `slack` metres
+// of lazy sideways bow, outward on the pad's own side, so two cables never cross. Visual only: a body steps over it.
+template padCable(base, label, from, to, lie = 0.024, radius = 0.012, slack = 0.22) {
   let drop = [(from[0] + ((to[0] - from[0]) * 0.3)), lie, (from[2] + ((to[2] - from[2]) * 0.35))]
   shape Sweep $"{label}-drop" {
     material: (base + setDark)
@@ -1106,7 +1106,7 @@ template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
     position: drop
     curve {
       a [0, 0, 0]
-      b: (((to - drop) * 0.5))
+      b: (((to - drop) * 0.5) + [((to[0] >= from[0]) ? slack : (0 - slack)), 0, 0])
       c: (to - drop)
       radiusStart: radius
       radiusEnd: radius
@@ -1122,7 +1122,8 @@ let setStandHeight = 0.42
 let setTelevisionAt = [0, setStandHeight, -0.05]
 let setConsoleAt = [0, 0.08, 0.05]
 let televisionSetPicture = (setTelevisionAt + televisionPicture)
-let setPads = [[0.45, 0.012, 1.25], [-0.45, 0.012, 1.25]]
+// Each pad lies on its own port's side (consolePort: player 0 on -X), so the cables run apart.
+let setPads = [[-0.45, 0.012, 1.25], [0.45, 0.012, 1.25]]
 template televisionSet(base, players = 2) {
   lowStand(base: base, at: [0, 0, 0], height: setStandHeight)
   television(base: base, at: setTelevisionAt)
