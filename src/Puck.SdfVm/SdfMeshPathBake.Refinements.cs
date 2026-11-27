@@ -3,10 +3,12 @@ using System.Diagnostics;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshPathBake {
-    // The refinement queue. A group's admission promises only what its final lattice holds while its slabs are sampled
-    // (SampledPeakOf), which is frames of GPU work; its refinement (Prepare) is the stage that allocates the fine samples,
-    // whose bound (PeakOf) is many times more, so a sampled lattice waits here, holding its lattice and no worker, until the
-    // account has room for that bound. A refinement finishes a group the account admitted and gives its room back, so it
+    // The refinement queue. A group's admission promises what its final lattice holds while its slabs are sampled and what
+    // planning its refinement holds (AdmissionPeakOf), which is frames of GPU work; the last slab's answer plans the
+    // refinement (PlanRefinement), counting the fine samples it will measure before any storage for them exists, and the
+    // group narrows to what it holds. Its refinement (Prepare) is the stage that allocates the fine samples, so a planned
+    // lattice waits here, holding its lattice, its plan and no worker, until the account has room for that exact peak
+    // (PeakOf, with the plan's count). A refinement finishes a group the account admitted and gives its room back, so it
     // comes before any new group: no group is admitted while a refinement waits here (Refinement.Waiting, read by the
     // take), and the room the account gives back reaches this queue's head before any admission can take it.
     //
@@ -136,6 +138,7 @@ public sealed partial class SdfMeshPathBake {
                     }
                     Queue.RemoveAt(index: 0);
                     RefiningCount++;
+                    group.HoldRefinement();
                     next.Started = true;
                     (started ??= []).Add(item: next);
                 }

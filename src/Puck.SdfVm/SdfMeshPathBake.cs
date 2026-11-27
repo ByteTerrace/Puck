@@ -384,6 +384,11 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Gets the memory account the bake's groups, readback and parked copies reserve their host storage in: the
     /// process's (<see cref="MemoryAccount.Shared"/>) unless the bake is given one of its own.</summary>
     public MemoryAccount HostAccount { get; init; } = MemoryAccount.Shared;
+    /// <summary>Gets how many groups, every bake's in the process, hold the reservation the refinement queue's door gave
+    /// them: refinements in flight from their door to their group's end. Read from any thread.</summary>
+    public static int RefinementsHeld => Volatile.Read(location: ref RefinementsHeldCount);
+
+    private static int RefinementsHeldCount;
     /// <summary>Gets this residency's process-local diagnostic identity, independent of its display name and program.</summary>
     public string ResidencyId { get; } = Guid.NewGuid().ToString(format: "N");
 
@@ -1228,11 +1233,14 @@ public sealed partial class SdfMeshPathBake {
                         continue;
                     }
 
-                    var peak = SampledPeakOf(final: group.Final!);
+                    var peak = AdmissionPeakOf(final: group.Final!);
 
                     // The account's host pool paces admission: its budget, and the machine's free memory as the
-                    // account reads it.
-                    if (!group.Memory.TryReserve(peak: peak)) {
+                    // account reads it. A group is admitted only while the room left after it still holds what it needs
+                    // to finish past its admission, at least its lattice's share of its refinement (its fine samples are
+                    // not known until it is planned), and a readback window, so the groups in flight never hold the
+                    // room their own refinements and answers need (FinishSpareOf).
+                    if (!group.Memory.TryReserve(peak: peak, spare: FinishSpareOf(final: group.Final!))) {
                         // With nothing of the bake admitted, the group is admitted whatever the pool holds, as the
                         // process's one forced job, so the bake always progresses; while another bake holds that
                         // allowance this one waits for it, as it waits for room. The library's cache stays: the
@@ -2425,19 +2433,18 @@ public sealed partial class SdfMeshPathBake {
             }
         }
         emptied?.Dispose();
-        // The refinement waits in the queue for room for its peak, holding the lattice and no worker (Refinement).
-        if (refines) { Refinement.Enqueue(bake: this, final: final, group: group); }
+        if (!refines) { return; }
+        // The refinement is planned here, within the admission (AdmissionPeakOf), so the queue's door reserves the fine
+        // samples it will measure, not their bound; it then waits in the queue for room for that peak, holding the lattice,
+        // the plan's masks and no worker (Refinement).
+        PlanRefinement(group: group, final: final);
+        Refinement.Enqueue(bake: this, final: final, group: group);
     }
-    // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
-    // measured next, or, with none, the gradients the contour reads. Runs only as a refinement the queue's door started,
-    // which reserved the refinement's peak (Refinement.Start).
-    private void Prepare(Refinement refinement) {
-        if (!refinement.Started) { throw new InvalidOperationException(message: "A refinement runs only once the refinement queue has reserved its peak."); }
-
-        var group = refinement.Group;
-        var final = refinement.Final;
-        ReadOnlyMemory<Vector4> points = default;
-        string? refusal = null;
+    // Builds a group's sampled lattice from its final lattice and chooses the cells it refines (SdfSampledLattice.Plan),
+    // recording how many fine samples the choice measures at most (FinalLattice.PlannedFine) or why the lattice was
+    // refused, and narrows the group's reservation to what it now holds: the trials of the choice are gone, and the
+    // refinement's door reserves the rest. On the worker that answered the last slab, off the gate.
+    private void PlanRefinement(Group group, FinalLattice final) {
         var started = Stopwatch.GetTimestamp();
 
         try {
@@ -2457,16 +2464,37 @@ public sealed partial class SdfMeshPathBake {
 
             var factor = FactorOf(final: final);
 
-            if (factor >= 2) {
-                points = final.Sampled.Refine(factor: factor, regions: final.Regions, thinFactor: ThinSplit(final: final, factor: factor));
-            }
-            if (points.Length == 0) {
-                points = ChooseCrossingPoints(final: final);
-            } else {
-                final.Stage = FinalStage.Refinement;
-            }
+            final.PlannedFine = ((factor >= 2) ? final.Sampled.Plan(factor: factor, regions: final.Regions, thinFactor: ThinSplit(final: final, factor: factor)) : 0L);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
-            refusal = exception.Message;
+            final.PlanRefusal = exception.Message;
+            final.PlannedFine = 0L;
+        }
+        Account(detail: new(Count: ((int)(final.PlannedFine ?? 0L)), Dims: final.Lattice.Dims, Factor: null, Measured: null), group: group, since: started, stage: BakeStage.Prepare);
+        _ = group.Memory.TryReserve(peak: group.Memory.Bytes);
+    }
+    // Carries out a group's planned refinement (PlanRefinement): its fine samples are measured next, or, with none, the
+    // gradients the contour reads. Runs only as a refinement the queue's door started, which reserved the refinement's
+    // peak (Refinement.Start).
+    private void Prepare(Refinement refinement) {
+        if (!refinement.Started) { throw new InvalidOperationException(message: "A refinement runs only once the refinement queue has reserved its peak."); }
+
+        var group = refinement.Group;
+        var final = refinement.Final;
+        ReadOnlyMemory<Vector4> points = default;
+        var refusal = final.PlanRefusal;
+        var started = Stopwatch.GetTimestamp();
+
+        if (refusal is null) {
+            try {
+                if (final.PlannedFine > 0L) { points = final.Sampled!.RefinePlanned(); }
+                if (points.Length == 0) {
+                    points = ChooseCrossingPoints(final: final);
+                } else {
+                    final.Stage = FinalStage.Refinement;
+                }
+            } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
+                refusal = exception.Message;
+            }
         }
         Account(detail: new(Count: points.Length, Dims: final.Lattice.Dims, Factor: final.Sampled?.Refinement, Measured: final.Sampled?.MeasuredCells), group: group, since: started, stage: BakeStage.Prepare);
 
@@ -2475,8 +2503,8 @@ public sealed partial class SdfMeshPathBake {
         if (empty) {
             if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { StoreEmpty(group); }
         } else {
-            // The refinement now names its fine samples, so the reservation the queue's door took narrows from their bound
-            // to their count.
+            // The refinement now names its fine samples, so the reservation the queue's door took narrows from the plan's
+            // bound of them to their count.
             _ = group.Memory.TryReserve(peak: Math.Max(val1: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)), val2: group.PeakFloor));
             final.Points = points;
         }
@@ -2537,14 +2565,25 @@ public sealed partial class SdfMeshPathBake {
     // The share of its tier's cell a lattice past its group's floor splits a sheet's cells to at the finest.
     private const float PastFloorThinShare = 0.25f;
 
-    // A final lattice's simultaneous peak: its own samples, and the fine samples its refinement measures, at most the
-    // bound its spacing and factor allow (SdfSampledLattice.FineSampleBound) until the refinement names them.
-    private static long PeakOf(FinalLattice final, int? fineSamples = null) {
+    // A final lattice's simultaneous peak: its own samples, and the fine samples its refinement measures: the count given,
+    // else the plan's bound of them (FinalLattice.PlannedFine, which bounds what RefinePlanned measures), else the bound
+    // its spacing and factor allow (SdfSampledLattice.FineSampleBound).
+    private static long PeakOf(FinalLattice final, long? fineSamples = null) {
         var (x, y, z) = final.Lattice.Dims;
-        var factor = FactorOf(final: final);
-        var fine = (fineSamples ?? SdfSampledLattice.FineSampleBound(factor: ThinSplit(final: final, factor: factor), samplesX: x, samplesY: y, samplesZ: z));
+        var fine = (fineSamples ?? final.PlannedFine ?? SdfSampledLattice.FineSampleBound(factor: ThinSplit(final: final, factor: FactorOf(final: final)), samplesX: x, samplesY: y, samplesZ: z));
 
         return checked(((((long)final.Lattice.Samples) + fine) * WorkspaceBytesPerSample));
+    }
+    // The room a group's admission must leave beside it: its refinement's peak with no fine sample past what the admission
+    // holds, the least its refinement asks of the door, and one readback window for the answers of the groups in flight.
+    private static long FinishSpareOf(FinalLattice final) => (Math.Max(val1: 0L, val2: (PeakOf(final: final, fineSamples: 0L) - AdmissionPeakOf(final: final))) + ReadbackBytes);
+    // What a group's admission reserves for its final lattice: the lattice's values and materials while its slabs are
+    // sampled (SampledPeakOf), and the sampled lattice and its plan's masks (SdfSampledLattice.PlanBytes), since the
+    // refinement is planned as the last slab lands, before the queue's door reserves the refinement's peak.
+    private static long AdmissionPeakOf(FinalLattice final) {
+        var (x, y, z) = final.Lattice.Dims;
+
+        return checked(SampledPeakOf(final: final) + SdfSampledLattice.PlanBytes(samplesX: x, samplesY: y, samplesZ: z));
     }
     // The next chunk of a group's fine, crossing-root or gradient samples, as many as a frame's share of field evaluations
     // takes. A crossing trial measures its gradient with its value, from which its search takes its next Newton estimate
@@ -3359,6 +3398,7 @@ public sealed partial class SdfMeshPathBake {
                     // One that meshed nothing past its floor owes a finer rung, which the next tier decision reads.
                     if ((m_mesh is null) && (Tier > FloorTier)) { Owner?.Attend(group: this); }
                     AwaitResidency();
+                    EndRefinement();
                     Memory.ReleaseReservation();
                     EndShare();
                     // Its followers are finished at the next Follow, which visits only the leaders done since it last ran.
@@ -3567,7 +3607,17 @@ public sealed partial class SdfMeshPathBake {
         // pool drops its queued work. Written under the bake's gate, read under the pool's.
         public bool Retired {
             get => Volatile.Read(location: ref m_retired);
-            set { Volatile.Write(location: ref m_retired, value: value); if (value) { Memory.Classify(category: MemoryCategory.Retirement); EndShare(); } TryRelease(); }
+            set { Volatile.Write(location: ref m_retired, value: value); if (value) { EndRefinement(); Memory.Classify(category: MemoryCategory.Retirement); EndShare(); } TryRelease(); }
+        }
+        // Whether the group holds the refinement reservation the queue's door gave it (RefinementsHeld counts them), from
+        // that door until it is done, retired or readmitted.
+        private int m_holdsRefinement;
+
+        public void HoldRefinement() {
+            if (Interlocked.Exchange(location1: ref m_holdsRefinement, value: 1) == 0) { _ = Interlocked.Increment(location: ref RefinementsHeldCount); }
+        }
+        public void EndRefinement() {
+            if (Interlocked.Exchange(location1: ref m_holdsRefinement, value: 0) == 1) { _ = Interlocked.Decrement(location: ref RefinementsHeldCount); }
         }
 
         private bool m_retired;
@@ -3928,6 +3978,10 @@ public sealed partial class SdfMeshPathBake {
 
         // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
         public float TierCell { get; init; }
+        // The plan's bound of the fine samples the refinement measures (SdfSampledLattice.Plan), null until the last slab
+        // lands; and why the lattice was refused, when it was.
+        public long? PlannedFine { get; set; }
+        public string? PlanRefusal { get; set; }
         // Whether the group bakes past its floor tier, where the tier coarsened the lattice itself.
         public bool PastFloor { get; init; }
     }

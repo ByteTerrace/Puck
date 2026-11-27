@@ -46,7 +46,7 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// alone on unified memory). Each pool has a spend limit, the bytes it holds and the bytes it has promised, and one
 /// arithmetic admits against it: an admission is granted when what the pool holds and has promised, with the admission
 /// added, stays under the limit. Three doors ask it, and nothing else adds a promise: a host owner's
-/// <see cref="Owner.TryReserve"/>, a device reservation's <see cref="DeviceReservation.TryReserve"/>, and the device
+/// <see cref="Owner.TryReserve(long)"/>, a device reservation's <see cref="DeviceReservation.TryReserve"/>, and the device
 /// memory ledger's grant before each native allocation (<see cref="DeviceOwners"/>,
 /// <see cref="IGpuMemoryOwners.Admit"/>), which also holds the allocation to its segment's own limit. Two admissions
 /// pass a limit, and both are counted: the process's one forced job (<see cref="Owner.TryReserveForced"/>), so work
@@ -1445,6 +1445,17 @@ public sealed class MemoryAccount {
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
         public bool TryReserve(long peak) => Reserve(peak: peak, progress: false, forced: false);
+        /// <summary>Reserves the owner's simultaneous peak only while the pool's room, after the rise, still holds
+        /// <paramref name="spare"/> bytes more, for work that must follow this owner's to finish what the account already
+        /// admitted; lowering a reservation always succeeds, as <see cref="TryReserve(long)"/>.</summary>
+        /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
+        /// <param name="spare">The bytes the room must still hold after the rise.</param>
+        /// <returns><see langword="true"/> when the reservation is held.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> or <paramref name="spare"/> is
+        /// negative.</exception>
+        /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
+        public bool TryReserve(long peak, long spare) => Reserve(peak: peak, progress: false, forced: false, spare: spare);
         // The one door of TryReserve, TryReserveProgress and TryReserveForced: a reservation within the pool's room; for a
         // progress floor, past it within the host bar on what the owners hold and are promised, counted as an over-limit
         // grant; for the forced job, within the host bar whatever the room, one owner at a time. Work past the room is
@@ -1463,8 +1474,8 @@ public sealed class MemoryAccount {
                 if (forced && (m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
 
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
-                var pastRoom = (forced || !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host));
                 var floor = ((extra > 0L) ? (extra + spare) : extra);
+                var pastRoom = (forced || !m_account.Fits(allowance: m_allowance, extra: floor, pool: PhysicalMemory.Host));
 
                 if (pastRoom && (!(forced || progress) || !m_account.FitsMachine(extra: floor) || !m_account.FitsHostBar(allowance: m_allowance, extra: floor, pool: PhysicalMemory.Host))) { return RefusePeak(peak); }
                 if (forced) {
@@ -1496,7 +1507,7 @@ public sealed class MemoryAccount {
         /// while every other admission waits for room. The machine's floor still holds: no forced job is admitted while
         /// the system signals low memory or past the machine's free physical memory less the headroom, and an authoring
         /// owner refused there makes the process give back what it no longer uses and asks once more, as
-        /// <see cref="TryReserve"/> does. One owner in the
+        /// <see cref="TryReserve(long)"/> does. One owner in the
         /// process holds the allowance at a time, from this call until it hands the allowance on (<see cref="PassForced"/>),
         /// its reservation is released (<see cref="ReleaseReservation"/>) or it is disposed; the bytes forced are counted
         /// (<see cref="MemoryAdmissionReading.Forced"/>).</summary>
@@ -1514,7 +1525,7 @@ public sealed class MemoryAccount {
         public bool TryReserveForced(long peak, long spare = 0L) => Reserve(peak: peak, progress: false, forced: true, spare: spare);
         /// <summary>Reserves storage that work the account admitted needs to progress at all, such as a mesh bake's
         /// readback, which answers the groups it admitted: granted when it fits the pool's room
-        /// (<see cref="TryReserve"/>), and otherwise when it fits the authored host bar counting only what the owners hold
+        /// (<see cref="TryReserve(long)"/>), and otherwise when it fits the authored host bar counting only what the owners hold
         /// and are promised, as the forced job is judged (<see cref="TryReserveForced"/>). A grant past the room is
         /// counted as an over-limit grant and asks the caches to release their claims, and no owner holds an allowance:
         /// any number of owners may hold a progress floor.</summary>
@@ -1568,7 +1579,7 @@ public sealed class MemoryAccount {
         internal bool PassWanted => m_passWanted;
         internal long ReservationPeakLocked => m_reservationPeak;
         /// <summary>Reserves the owner's simultaneous peak for transient work that holds nothing else, waiting for room
-        /// when the pool has none: it is admitted when the reservation fits (<see cref="TryReserve"/>) or, with no other
+        /// when the pool has none: it is admitted when the reservation fits (<see cref="TryReserve(long)"/>) or, with no other
         /// forced job in the process, as the forced job (<see cref="TryReserveForced"/>), and otherwise sleeps on the
         /// host until a pool gains room or <paramref name="patience"/> runs out, asking again at least every
         /// <see cref="RoomSlice"/>. A caller that is refused does without: its work is a cache's, and a miss is derived
