@@ -1019,6 +1019,20 @@ public sealed partial class WorldColliderSet : IContactField {
         RefreshExcluded();
     }
 
+    /// <summary>Collects the active bodies that carry an attached solid row (<see cref="WorldPlacementAttachment"/>),
+    /// ascending and each once: the bodies whose poses <see cref="RefreshAttached"/> reads.</summary>
+    /// <param name="population">The population the rows' carriers resolve in.</param>
+    /// <param name="carriers">Receives the carriers' indices, after it is cleared.</param>
+    internal void CollectCarriers(WorldPopulation population, List<int> carriers) {
+        carriers.Clear();
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            if ((m_attachedRows[row].Placement.Attach is { } attach) && attach.TryCarrier(inhabitants: population, index: out var carrier) &&
+                population.IsActive(index: carrier) && !carriers.Contains(item: carrier)) {
+                carriers.Add(item: carrier);
+            }
+        }
+        carriers.Sort();
+    }
     /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
     /// colliders before and after each move, empty when no row moved.</summary>
     /// <returns>The box; a body whose bounds miss it cannot meet any collider that moved.</returns>

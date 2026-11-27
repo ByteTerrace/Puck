@@ -171,16 +171,18 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
 
     /// <summary>Encodes the exact continuation of one body a remote owner restores its prediction from
-    /// (<see cref="Puck.World.Protocol.WorldOwnBody"/>): its population entry and the poses of the moving solids its step
-    /// reads, each in the encoding a checkpoint holds them in.</summary>
+    /// (<see cref="Puck.World.Protocol.WorldOwnBody"/>): its population entry, the poses of the attached solids its step
+    /// reads, and the entries of the bodies that carry those solids, each in the encoding a checkpoint holds them in.</summary>
     /// <param name="entry">The captured entry.</param>
     /// <param name="attached">The world's attached solid rows as the step left them.</param>
+    /// <param name="carriers">The captured entries of the bodies carrying attached solid rows, ascending by index.</param>
     /// <returns>The encoded continuation.</returns>
-    public static byte[] EncodeOwnBody(in WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+    public static byte[] EncodeOwnBody(in WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, IReadOnlyList<WorldPopulationEntryCheckpoint> carriers) {
         var writer = new WireWriter();
 
         WritePopulationEntry(entry: entry, writer: writer);
         WriteAttachedSolids(rows: attached, writer: writer);
+        writer.WriteArray(items: carriers, writeItem: static (w, carrier) => WritePopulationEntry(entry: carrier, writer: w));
         return writer.ToArray();
     }
     /// <summary>Decodes a continuation <see cref="EncodeOwnBody"/> encoded, checking every section as a checkpoint's
@@ -188,16 +190,19 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="bytes">The encoded continuation.</param>
     /// <param name="entry">The entry, on success.</param>
     /// <param name="attached">The attached solid rows, on success.</param>
+    /// <param name="carriers">The carrying bodies' entries, on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the bytes decode to one whole continuation.</returns>
-    public static bool TryDecodeOwnBody(ReadOnlySpan<byte> bytes, out WorldPopulationEntryCheckpoint entry, out WorldAttachedSolidCheckpoint[] attached, out string reason) {
+    public static bool TryDecodeOwnBody(ReadOnlySpan<byte> bytes, out WorldPopulationEntryCheckpoint entry, out WorldAttachedSolidCheckpoint[] attached, out WorldPopulationEntryCheckpoint[] carriers, out string reason) {
         var reader = new WireReader(bytes: bytes);
 
         entry = ReadPopulationEntry(reader: ref reader);
         attached = ReadAttachedSolids(reader: ref reader);
+        carriers = reader.ReadArray(field: "attached solid carriers", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r));
         if (!reader.TryFinish(failure: out var failure)) {
             entry = default;
             attached = [];
+            carriers = [];
             reason = $"own body: {failure}";
             return false;
         }
@@ -207,10 +212,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // The parts of one body's continuation a prediction compares, in order: a digest per section (by section kind; zero
     // for a section the fold leaves out), then the tail's contact-field observation, profile and registers, then the
-    // attached solid rows. Two images whose parts agree restore to one body with the same attached rows, and the first
-    // part that differs names what diverged.
+    // attached solid rows, then the bodies carrying them. Two images whose parts agree restore to one body among the same
+    // carriers with the same attached rows, and the parts that differ name what diverged.
     private static readonly int SectionKindCount = Enum.GetValues<WorldContinuationSectionKind>().Length;
-    private static readonly string[] PredictedBodyPartNames = [.. Enum.GetNames<WorldContinuationSectionKind>(), "contact observation", "profile", "registers", "attached rows"];
+    private static readonly int EntryPartCount = (SectionKindCount + 3);
+    private static readonly string[] PredictedBodyPartNames = [.. Enum.GetNames<WorldContinuationSectionKind>(), "contact observation", "profile", "registers", "attached rows", "carriers"];
 
     internal static int PredictedBodyPartCount => PredictedBodyPartNames.Length;
 
@@ -219,9 +225,26 @@ public static partial class WorldAuthorityCheckpointCodec {
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: part, other: PredictedBodyPartNames.Length);
         return PredictedBodyPartNames[part];
     }
-    internal static void PredictedBodyParts(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, Span<ulong> parts) {
+    // Fills a body's parts: its entry's, the attached rows' and the carriers' digest (CarrierDigests).
+    internal static void PredictedBodyParts(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, ulong carriers, Span<ulong> parts) {
         ArgumentOutOfRangeException.ThrowIfNotEqual(value: parts.Length, other: PredictedBodyPartNames.Length);
+        EntryParts(entry: ref entry, parts: parts[..EntryPartCount], writer: writer);
+        writer.Reset();
+        WriteAttachedSolids(rows: attached, writer: writer);
+        parts[EntryPartCount] = Fnv1aHash.Compute(values: writer.WrittenSpan);
+        parts[EntryPartCount + 1] = carriers;
+    }
+    // Folds one carrying body's whole entry, its index first, into the carriers' digest a caller started with their count.
+    [System.Runtime.CompilerServices.SkipLocalsInit]
+    internal static void AddCarrier(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, ref Fnv1aHash carriers) {
+        Span<ulong> parts = stackalloc ulong[EntryPartCount];
 
+        EntryParts(entry: ref entry, parts: parts, writer: writer);
+        carriers.Add(value: ((uint)entry.Index));
+        foreach (var part in parts) { carriers.Add(value: part); }
+    }
+    // An entry's parts: a digest per section by kind, then its contact observation, profile and registers.
+    private static void EntryParts(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, Span<ulong> parts) {
         var sections = new SectionPartDigester(parts: parts[..SectionKindCount], writer: writer);
 
         WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref sections);
@@ -232,9 +255,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.Reset();
         WriteLongs(values: entry.Tail.Registers.Span, writer: writer);
         parts[SectionKindCount + 2] = Fnv1aHash.Compute(values: writer.WrittenSpan);
-        writer.Reset();
-        WriteAttachedSolids(rows: attached, writer: writer);
-        parts[SectionKindCount + 3] = Fnv1aHash.Compute(values: writer.WrittenSpan);
     }
     // Digests each folded section into its kind's place.
     private ref struct SectionPartDigester(Span<ulong> parts, WireWriter writer) : IContinuationSectionVisitor {

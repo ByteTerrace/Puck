@@ -189,6 +189,7 @@ public sealed partial class WorldPopulation {
 
         var bodies = new List<Puck.World.Protocol.WorldOwnBody>();
         WorldAttachedSolidCheckpoint[]? attached = null;
+        WorldPopulationEntryCheckpoint[]? carriers = null;
 
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
@@ -199,10 +200,11 @@ public sealed partial class WorldPopulation {
 
             EntryCheckpoint(alias: false, body: body, entry: entry, held: false, image: out var image, index: index);
             attached ??= (MovingSolids?.CaptureAttached() ?? []);
+            carriers ??= CaptureCarriers();
             bodies.Add(item: new(
                 Body: index,
                 EngineTick: engineTick,
-                Entry: WorldAuthorityCheckpointCodec.EncodeOwnBody(attached: attached, entry: in image),
+                Entry: WorldAuthorityCheckpointCodec.EncodeOwnBody(attached: attached, carriers: carriers, entry: in image),
                 Generation: entry.Generation,
                 Owner: PeerPrincipal(index: index),
                 Tick: tick
@@ -210,6 +212,28 @@ public sealed partial class WorldPopulation {
         }
 
         return [.. bodies];
+    }
+    // The entries of the bodies carrying attached solid rows, which a prediction steps beside its own body so the rows
+    // move as they do here. A body a human occupies is never one of them: its entry is its owner's alone to receive.
+    private WorldPopulationEntryCheckpoint[] CaptureCarriers() {
+        if (MovingSolids is not { } moving) {
+            return [];
+        }
+
+        var indices = new List<int>();
+
+        moving.CollectCarriers(carriers: indices, population: this);
+        indices.RemoveAll(match: index => (IsHumanOccupied(bodyIndex: index) || (m_entries[index].Body is null)));
+
+        var carriers = new WorldPopulationEntryCheckpoint[indices.Count];
+
+        for (var position = 0; (position < indices.Count); position++) {
+            var index = indices[position];
+
+            EntryCheckpoint(alias: false, body: m_entries[index].Body!, entry: m_entries[index], held: false, image: out carriers[position], index: index);
+        }
+
+        return carriers;
     }
     private void RequireCapturePoint() {
         if (
@@ -561,24 +585,36 @@ public sealed partial class WorldPopulation {
         return body;
     }
     /// <summary>Restores the body another authority captured, at its own index and with its whole entry (admission,
-    /// producer, cadence, route and the rest), for a client's prediction of that body: the population then holds that
-    /// body alone, as the capturing authority held it, so the authority's own step (<see cref="StepBodies"/>) steps it
-    /// down the same path. Every other slot is released. The population must be one no authority steps.</summary>
+    /// producer, cadence, route and the rest), together with the bodies that carry the world's attached solids, for a
+    /// client's prediction of that body: the population then holds those bodies alone, as the capturing authority held
+    /// them, so the authority's own step (<see cref="StepBodies"/>) steps the body and moves the attached solids down the
+    /// same path. Every other slot is released. The population must be one no authority steps.</summary>
     /// <param name="captured">The captured entry, in this population's document, whose index names a slot of this
     /// population.</param>
-    /// <param name="defaults">The document's player defaults, which an identity projection resolves against.</param>
+    /// <param name="definition">The document this population was built from, whose player defaults an identity
+    /// projection resolves against and whose placements the carriers inhabit.</param>
     /// <param name="attached">The world's attached solid rows as the capturing authority's step left them, which the
     /// body's step reads where it stands on or against one.</param>
+    /// <param name="carriers">The captured entries of the bodies carrying attached solid rows, each at another index.</param>
     /// <returns>The restored body.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="defaults"/> or <paramref name="attached"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The captured index names no slot of this population.</exception>
-    /// <exception cref="InvalidOperationException">The captured entry or attached rows do not fit this population.</exception>
-    public WorldBody RestorePredicted(in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
-        ArgumentNullException.ThrowIfNull(argument: defaults);
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/>, <paramref name="attached"/> or
+    /// <paramref name="carriers"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A captured index names no slot of this population.</exception>
+    /// <exception cref="InvalidOperationException">Two captured entries share an index, or an entry or the attached rows
+    /// do not fit this population.</exception>
+    public WorldBody RestorePredicted(in WorldPopulationEntryCheckpoint captured, WorldDefinition definition, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, IReadOnlyList<WorldPopulationEntryCheckpoint> carriers) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: attached);
+        ArgumentNullException.ThrowIfNull(argument: carriers);
         ArgumentOutOfRangeException.ThrowIfNegative(value: captured.Index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: captured.Index, other: Capacity);
+        for (var position = 0; (position < carriers.Count); position++) {
+            ArgumentOutOfRangeException.ThrowIfNegative(value: carriers[position].Index);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: carriers[position].Index, other: Capacity);
+            if ((carriers[position].Index == captured.Index) || ((position > 0) && (carriers[position].Index <= carriers[position - 1].Index))) {
+                throw new InvalidOperationException(message: "a predicted body's carriers must stand at distinct ascending indices other than the body's.");
+            }
+        }
         if ((MovingSolids is { } moving) && (attached.Count != 0)) {
             moving.ValidateAttached(rows: attached);
             moving.RestoreAttached(rows: attached);
@@ -586,65 +622,107 @@ public sealed partial class WorldPopulation {
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index].Active || (m_entries[index].Body is not null)) { m_entries[index].Retire(clearAdmission: true); }
         }
+        foreach (var carrier in carriers) {
+            _ = RestoreEntryBody(captured: in carrier, defaults: definition.PlayerDefaults, index: carrier.Index, seatKit: m_seatKit);
+            RestoreEntrySections(captured: in carrier, entry: m_entries[carrier.Index], seatKit: m_seatKit);
+        }
 
-        var body = RestoreEntryBody(captured: in captured, defaults: defaults, index: captured.Index, seatKit: m_seatKit);
+        var body = RestoreEntryBody(captured: in captured, defaults: definition.PlayerDefaults, index: captured.Index, seatKit: m_seatKit);
 
         RestoreEntrySections(captured: in captured, entry: m_entries[captured.Index], seatKit: m_seatKit);
+        RebuildPlacementOrdinalTable(definition: definition);
+        RebuildCarryRelationships();
+        foreach (var carrier in carriers) {
+            AdoptRestoredIsland(index: carrier.Index, rootPlusOne: carrier.Body.Clocks.RigidSleepRootPlusOne);
+        }
         AdoptRestoredIsland(index: captured.Index, rootPlusOne: captured.Body.Clocks.RigidSleepRootPlusOne);
         return body;
     }
 
-    /// <summary>Gets the parts of a body's continuation a prediction compares (<see cref="PredictedBodyParts(int, Span{ulong})"/>):
-    /// one digest per continuation section, by <see cref="WorldContinuationSectionKind"/>, then the tail's contact-field
-    /// observation, its profile and its registers, then the attached solid rows.</summary>
+    /// <summary>Gets the parts of a body's continuation a prediction compares
+    /// (<see cref="PredictedBodyParts(int, ReadOnlySpan{int}, Span{ulong})"/>): one digest per continuation section, by
+    /// <see cref="WorldContinuationSectionKind"/>, then the tail's contact-field observation, its profile and its
+    /// registers, then the attached solid rows, then the bodies carrying them.</summary>
     public static int PredictedBodyPartCount => WorldAuthorityCheckpointCodec.PredictedBodyPartCount;
 
     /// <summary>Returns the name of one part of a body's continuation (<see cref="PredictedBodyPartCount"/>): a section
-    /// kind's name, <c>contact observation</c>, <c>profile</c>, <c>registers</c> or <c>attached rows</c>.</summary>
+    /// kind's name, <c>contact observation</c>, <c>profile</c>, <c>registers</c>, <c>attached rows</c> or
+    /// <c>carriers</c>.</summary>
     /// <param name="part">The 0-based part.</param>
     /// <returns>The part's name.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="part"/> names no part.</exception>
     public static string PredictedBodyPartName(int part) => WorldAuthorityCheckpointCodec.PredictedBodyPartName(part: part);
 
-    /// <summary>Digests, part by part, the body a slot holds now (<see cref="PredictedBodyPartCount"/>), as
-    /// <see cref="PredictedBodyParts(in WorldPopulationEntryCheckpoint, IReadOnlyList{WorldAttachedSolidCheckpoint}, Span{ulong})"/>
-    /// digests a continuation: equal parts mean the slot holds the body <see cref="RestorePredicted"/> restores from that
-    /// continuation. What the population holds outside the slot and the attached rows is not digested. Taken between a
-    /// completed step and the next.</summary>
+    /// <summary>Digests, part by part, the body a slot holds now and the bodies at the carrier slots
+    /// (<see cref="PredictedBodyPartCount"/>), as
+    /// <see cref="PredictedBodyParts(in WorldPopulationEntryCheckpoint, IReadOnlyList{WorldAttachedSolidCheckpoint}, IReadOnlyList{WorldPopulationEntryCheckpoint}, Span{ulong})"/>
+    /// digests a continuation: equal parts mean the slots hold the bodies <see cref="RestorePredicted"/> restores from
+    /// that continuation. What the population holds outside those slots and the attached rows is not digested. Taken
+    /// between a completed step and the next.</summary>
     /// <param name="index">The slot's 0-based population index.</param>
+    /// <param name="carriers">The carrier slots, ascending, as <see cref="RestorePredicted"/> filled them.</param>
     /// <param name="parts">The destination, one digest per part.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no slot, or <paramref name="parts"/>
-    /// holds other than <see cref="PredictedBodyPartCount"/> values.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> or a carrier names no slot, or
+    /// <paramref name="parts"/> holds other than <see cref="PredictedBodyPartCount"/> values.</exception>
     /// <exception cref="InvalidOperationException">The slot holds no active body.</exception>
-    public void PredictedBodyParts(int index, Span<ulong> parts) {
+    public void PredictedBodyParts(int index, ReadOnlySpan<int> carriers, Span<ulong> parts) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: Capacity);
         if (m_entries[index] is not { Active: true, Body: { } body } entry) {
             throw new InvalidOperationException(message: $"slot {index} holds no active body.");
         }
 
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var folded = Fnv1aHash.Create();
+
+        folded.Add(value: ((uint)carriers.Length));
+        foreach (var carrier in carriers) {
+            ArgumentOutOfRangeException.ThrowIfNegative(value: carrier);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: carrier, other: Capacity);
+            if (m_entries[carrier] is { Active: true, Body: { } carried } carrierEntry) {
+                EntryCheckpoint(alias: true, body: carried, entry: carrierEntry, held: false, image: out var carrierImage, index: carrier);
+                WorldAuthorityCheckpointCodec.AddCarrier(carriers: ref folded, entry: ref carrierImage, writer: writer);
+            } else {
+                folded.Add(value: ((uint)carrier));
+            }
+        }
         EntryCheckpoint(alias: true, body: body, entry: entry, held: false, image: out var image, index: index);
         WorldAuthorityCheckpointCodec.PredictedBodyParts(
             attached: (MovingSolids?.CaptureAttached() ?? []),
+            carriers: folded.Value,
             entry: ref image,
             parts: parts,
-            writer: (m_continuationWriter ??= new WireWriter())
+            writer: writer
         );
     }
     /// <summary>Digests a captured continuation part by part (<see cref="PredictedBodyPartCount"/>), as
-    /// <see cref="PredictedBodyParts(int, Span{ulong})"/> digests the slot <see cref="RestorePredicted"/> fills from it.</summary>
+    /// <see cref="PredictedBodyParts(int, ReadOnlySpan{int}, Span{ulong})"/> digests the slots
+    /// <see cref="RestorePredicted"/> fills from it.</summary>
     /// <param name="captured">The captured entry.</param>
     /// <param name="attached">The attached solid rows the continuation carries.</param>
+    /// <param name="carriers">The carrying bodies' entries the continuation carries, ascending by index.</param>
     /// <param name="parts">The destination, one digest per part.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="attached"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="attached"/> or <paramref name="carriers"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="parts"/> holds other than
     /// <see cref="PredictedBodyPartCount"/> values.</exception>
-    public void PredictedBodyParts(in WorldPopulationEntryCheckpoint captured, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, Span<ulong> parts) {
+    public void PredictedBodyParts(in WorldPopulationEntryCheckpoint captured, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, IReadOnlyList<WorldPopulationEntryCheckpoint> carriers, Span<ulong> parts) {
         ArgumentNullException.ThrowIfNull(argument: attached);
+        ArgumentNullException.ThrowIfNull(argument: carriers);
+
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var folded = Fnv1aHash.Create();
+
+        folded.Add(value: ((uint)carriers.Count));
+        foreach (var carrier in carriers) {
+            var carrierImage = carrier;
+
+            WorldAuthorityCheckpointCodec.AddCarrier(carriers: ref folded, entry: ref carrierImage, writer: writer);
+        }
 
         var image = captured;
 
-        WorldAuthorityCheckpointCodec.PredictedBodyParts(attached: attached, entry: ref image, parts: parts, writer: (m_continuationWriter ??= new WireWriter()));
+        WorldAuthorityCheckpointCodec.PredictedBodyParts(attached: attached, carriers: folded.Value, entry: ref image, parts: parts, writer: writer);
     }
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Collections;
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -25,8 +26,9 @@ namespace Puck.World;
 /// <para>The path's invariant: the body a seat's path holds at its tip is the body a replay from the latest
 /// continuation would reach, restored and stepped through the same batches on the same ticks. The path is kept only
 /// while the latest continuation agrees with it at its tick, part by part
-/// (<see cref="WorldPopulation.PredictedBodyParts(int, Span{ulong})"/>: every continuation section of the body and its
-/// entry, its contact observation, profile and registers, and the attached solid rows) and in its engine tick, and
+/// (<see cref="WorldPopulation.PredictedBodyParts(int, ReadOnlySpan{int}, Span{ulong})"/>: every continuation section of the
+/// body and its entry, its contact observation, profile and registers, the attached solid rows and the bodies carrying
+/// them) and in its engine tick, and
 /// while every batch the path took on every tick from there to its tip is the one a replay takes now (one schedule
 /// rule, which the step and the check both read). What enforces it: one private door decides on every prediction
 /// whether the path stands, and the population is this type's own, written only by a restore and the step. A state
@@ -59,9 +61,19 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     private const long NoBatch = long.MinValue;
 
     // One tick of a seat's predicted path, after its step: the engine tick it completed at, the last batch taken by its
-    // serial (WorldSeatSentInput.FirstSerial) and the body's pose. Its parts (WorldPopulation.PredictedBodyParts) are kept
-    // beside it, in the seat's PathParts at the same place.
-    private readonly record struct PathTick(ulong Tick, ulong EngineTick, long Applied, FixedVector3 Position, FixedQuaternion Orientation);
+    // serial (WorldSeatSentInput.FirstSerial), the lead its batches were scheduled under and the body's pose. Its parts
+    // (WorldPopulation.PredictedBodyParts) are kept beside it, in the seat's PathParts at the same place.
+    private readonly record struct PathTick(ulong Tick, ulong EngineTick, long Applied, long Lead, FixedVector3 Position, FixedQuaternion Orientation);
+
+    // Why a path's batches disagree with a replay's, counted against every correction whose batches differ.
+    private enum InputCause : byte {
+        // The authority's answer names another batch held at the continuation's tick than the path held there.
+        AnsweredBatch,
+        // The path took its batches on some tick under another lead than the one a replay takes them under now.
+        Lead,
+        // Under the same lead, a batch's sent tick puts it on another tick than the path took it (a re-anchored clock).
+        Schedule,
+    }
 
     // Why a path does not stand for the latest continuation.
     private enum PathCause : byte {
@@ -80,6 +92,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public ReadOnlyMemory<byte> EntryBytes;
         public WorldPopulationEntryCheckpoint Entry;
         public WorldAttachedSolidCheckpoint[] Attached = [];
+        public WorldPopulationEntryCheckpoint[] Carriers = [];
         public bool Decoded;
         // The decoded continuation's parts, taken when first compared.
         public readonly ulong[] EntryParts = new ulong[WorldPopulation.PredictedBodyPartCount];
@@ -112,6 +125,10 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public WorldDefinition? PathSource;
         public WorldBody? PathBody;
         public int PathBodyIndex;
+        // The slots of the bodies carrying attached solids, restored beside PathBody, and the owner the body's input is
+        // admitted under.
+        public int[] PathCarriers = [];
+        public Principal PathOwner;
         // Each field region's travel resistance, which a prediction cannot read from its authority: zero.
         public FixedQ4816[] Resistance = [];
         public ulong BaseTick;
@@ -126,6 +143,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     // The state corrections each part took part in (WorldPopulation.PredictedBodyPartName), then those whose engine tick
     // differed; and the parts a replay check holds the path's tip in while it replays.
     private readonly long[] m_partCorrections = new long[WorldPopulation.PredictedBodyPartCount + 1];
+    private readonly long[] m_inputCauses = new long[Enum.GetValues<InputCause>().Length];
     private readonly ulong[] m_checkParts = new ulong[WorldPopulation.PredictedBodyPartCount];
 
     /// <summary>Gets the predictions made since boot.</summary>
@@ -141,8 +159,9 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     /// <summary>Gets the restores since boot whose continuation disagreed with the path's own body at its tick; each is
     /// also counted against every part that differed (<see cref="StateCorrectionsOf"/>).</summary>
     public long StateCorrections { get; private set; }
-    /// <summary>Gets the restores since boot whose path took, on some tick from the continuation to its tip, another batch
-    /// than a replay takes: a lead that moved, a clock that re-anchored, or a batch the authority took on another tick.</summary>
+    /// <summary>Gets the restores since boot whose body agreed with the continuation but whose path took, on some tick from
+    /// the continuation to its tip, another batch than a replay takes. Every correction whose batches differ, a state
+    /// correction among them, is also counted by its cause (<see cref="InputCorrectionsOf"/>).</summary>
     public long InputCorrections { get; private set; }
     /// <summary>Gets the restores since boot whose restored body digested otherwise than the continuation it was restored
     /// from: a restore that is not exact makes every later delivery a correction.</summary>
@@ -163,6 +182,13 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     /// <returns>The corrections.</returns>
     /// <exception cref="IndexOutOfRangeException"><paramref name="part"/> names no part.</exception>
     public long StateCorrectionsOf(int part) => m_partCorrections[part];
+    /// <summary>Returns the corrections since boot whose batches differed from a replay's for one cause, whether or not
+    /// the body also differed: 0, the authority's answer named another batch held at the continuation's tick; 1, the
+    /// path scheduled a tick under another lead; 2, under the same lead a batch fell on another tick.</summary>
+    /// <param name="cause">The 0-based cause.</param>
+    /// <returns>The corrections.</returns>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="cause"/> names no cause.</exception>
+    public long InputCorrectionsOf(int cause) => m_inputCauses[cause];
 
     /// <inheritdoc/>
     public bool TryPredict(int slot, out WorldPredictedBody body) {
@@ -182,7 +208,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     /// <inheritdoc/>
     public string Describe(int slot) {
         var seat = m_seats[slot];
-        var counts = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Predictions} prediction(s), {StepsTaken} step(s), {Restores} restore(s), {(StateCorrections + InputCorrections)} correction(s) ({StateCorrections} of state{DescribeParts()}, {InputCorrections} of input), {InexactRestores} inexact restore(s), {PopulationsBuilt} population(s)");
+        var counts = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Predictions} prediction(s), {StepsTaken} step(s), {Restores} restore(s), {(StateCorrections + InputCorrections)} correction(s) ({StateCorrections} of state{DescribeParts()}, {InputCorrections} of input; batches differed: answered batch {m_inputCauses[(int)InputCause.AnsweredBatch]}, lead {m_inputCauses[(int)InputCause.Lead]}, schedule {m_inputCauses[(int)InputCause.Schedule]}), {InexactRestores} inexact restore(s), {PopulationsBuilt} population(s)");
 
         if (CheckReplays || (ReplayChecks != 0L)) {
             counts = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{counts}; {ReplayChecks} replay check(s), {ReplayMismatches} mismatch(es){(CheckReplays ? string.Empty : ", checks off")}");
@@ -333,6 +359,9 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         }
 
         var start = ((applied >= 0) ? (sent.FirstSerial + applied) : NoBatch);
+        var startAnswered = ((answeredBatch >= 0) && (answer.Tick <= own.Tick));
+
+        seat.PathOwner = owner;
 
         // Batches recorded since the continuation's held one may have pushed it out of the history: past that, which batch
         // the body holds is unknown, and the prediction stops rather than guess.
@@ -344,14 +373,14 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         // The doors the authority's own portal scan tests, from the one derivation both read (built once per document).
         var doors = WorldFaceCatalog.For(definition: source).PortalDoors(definition: source);
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
-        var cause = Disagreement(lead: lead, own: in own, population: population, seat: seat, sent: sent, source: source, start: start);
+        var cause = Disagreement(lead: lead, own: in own, population: population, seat: seat, sent: sent, source: source, start: start, startAnswered: startAnswered);
 
         if (cause == PathCause.State) {
             StateCorrections++;
         } else if (cause == PathCause.Input) {
             InputCorrections++;
         }
-        if ((cause != PathCause.Agrees) && (Restore(counted: true, own: in own, population: population, seat: seat, source: source, start: start) is { } restoreRefusal)) {
+        if ((cause != PathCause.Agrees) && (Restore(counted: true, lead: lead, own: in own, population: population, seat: seat, source: source, start: start) is { } restoreRefusal)) {
             return restoreRefusal;
         }
 
@@ -412,7 +441,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     // The decoded continuation's parts, taken once per decoded continuation.
     private static ReadOnlySpan<ulong> EntryParts(Seat seat, WorldPopulation population) {
         if (!seat.EntryPartsTaken) {
-            population.PredictedBodyParts(attached: seat.Attached, captured: in seat.Entry, parts: seat.EntryParts);
+            population.PredictedBodyParts(attached: seat.Attached, captured: in seat.Entry, carriers: seat.Carriers, parts: seat.EntryParts);
             seat.EntryPartsTaken = true;
         }
 
@@ -422,7 +451,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     // there agrees with the continuation part by part at the same engine tick, and on every tick from there to its tip it
     // took the batch a replay from the continuation takes now. The one door every prediction passes before stepping on;
     // a state disagreement is counted against each part that differed.
-    private PathCause Disagreement(Seat seat, in WorldOwnBody own, long start, long lead, WorldSeatSentInput sent, WorldDefinition source, WorldPopulation population) {
+    private PathCause Disagreement(Seat seat, in WorldOwnBody own, long start, bool startAnswered, long lead, WorldSeatSentInput sent, WorldDefinition source, WorldPopulation population) {
         if (!seat.PathLive || !ReferenceEquals(objA: seat.PathSource, objB: source) || (seat.PathBodyIndex != seat.Entry.Index) ||
             (own.Tick < seat.BaseTick) || (own.Tick > seat.TipTick) || ((seat.TipTick - own.Tick) >= PathTicks) ||
             !Holds(applied: seat.Path[PathIndex(tick: seat.TipTick)].Applied, sent: sent)) {
@@ -437,37 +466,52 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
         var expected = EntryParts(seat: seat, population: population);
         var held = PartsAt(seat: seat, tick: own.Tick);
+        var stateDiffers = ((at.EngineTick != own.EngineTick) || !expected.SequenceEqual(other: held));
+        var inputCause = BatchDisagreement(lead: lead, own: in own, seat: seat, sent: sent, start: start, startAnswered: startAnswered);
 
-        if ((at.EngineTick != own.EngineTick) || !expected.SequenceEqual(other: held)) {
+        if (inputCause is { } differs) {
+            m_inputCauses[(int)differs]++;
+        }
+        if (stateDiffers) {
             for (var part = 0; (part < expected.Length); part++) {
                 if (expected[part] != held[part]) { m_partCorrections[part]++; }
             }
             if (at.EngineTick != own.EngineTick) { m_partCorrections[^1]++; }
             return PathCause.State;
         }
+
+        return ((inputCause is null) ? PathCause.Agrees : PathCause.Input);
+    }
+    // Whether the batches the path took, from the continuation's tick to its tip, are the ones a replay takes now, and if
+    // not, why: the first tick that differs names the cause.
+    private static InputCause? BatchDisagreement(Seat seat, in WorldOwnBody own, long start, bool startAnswered, long lead, WorldSeatSentInput sent) {
+        var at = seat.Path[PathIndex(tick: own.Tick)];
+
         if (at.Applied != start) {
-            return PathCause.Input;
+            return (startAnswered ? InputCause.AnsweredBatch : ((at.Lead != lead) ? InputCause.Lead : InputCause.Schedule));
         }
 
         var applied = start;
 
         for (var tick = (own.Tick + 1UL); (tick <= seat.TipTick); tick++) {
+            var path = seat.Path[PathIndex(tick: tick)];
+
             applied = Schedule(applied: applied, lead: lead, sent: sent, tick: tick);
-            if (seat.Path[PathIndex(tick: tick)].Applied != applied) {
-                return PathCause.Input;
+            if (path.Applied != applied) {
+                return ((path.Lead != lead) ? InputCause.Lead : InputCause.Schedule);
             }
         }
 
-        return PathCause.Agrees;
+        return null;
     }
     // Starts the seat's path afresh from the continuation, answering null, or why it does not restore. The path's first
     // tick holds the continuation's own parts, which are the restored body's by construction; a restore whose body
     // digests otherwise is counted.
-    private string? Restore(Seat seat, in WorldOwnBody own, long start, WorldDefinition source, WorldPopulation population, bool counted) {
+    private string? Restore(Seat seat, in WorldOwnBody own, long start, long lead, WorldDefinition source, WorldPopulation population, bool counted) {
         WorldBody predicted;
 
         try {
-            predicted = population.RestorePredicted(attached: seat.Attached, captured: in seat.Entry, defaults: source.PlayerDefaults);
+            predicted = population.RestorePredicted(attached: seat.Attached, captured: in seat.Entry, carriers: seat.Carriers, definition: source);
         } catch (Exception failure) when (failure is InvalidOperationException or ArgumentOutOfRangeException) {
             seat.PathLive = false;
             return $"the continuation does not restore: {failure.Message}";
@@ -476,15 +520,21 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var expected = EntryParts(seat: seat, population: population);
         var parts = PartsAt(seat: seat, tick: own.Tick);
 
+        if (seat.PathCarriers.Length != seat.Carriers.Length) {
+            seat.PathCarriers = new int[seat.Carriers.Length];
+        }
+        for (var position = 0; (position < seat.Carriers.Length); position++) {
+            seat.PathCarriers[position] = seat.Carriers[position].Index;
+        }
         if (counted) {
             Restores++;
-            population.PredictedBodyParts(index: seat.Entry.Index, parts: parts);
+            population.PredictedBodyParts(carriers: seat.PathCarriers, index: seat.Entry.Index, parts: parts);
             if (!expected.SequenceEqual(other: parts)) {
                 InexactRestores++;
             }
         }
         expected.CopyTo(destination: parts);
-        seat.Path[PathIndex(tick: own.Tick)] = new PathTick(Applied: start, EngineTick: own.EngineTick, Orientation: predicted.FixedOrientation, Position: predicted.FixedPosition, Tick: own.Tick);
+        seat.Path[PathIndex(tick: own.Tick)] = new PathTick(Applied: start, EngineTick: own.EngineTick, Lead: lead, Orientation: predicted.FixedOrientation, Position: predicted.FixedPosition, Tick: own.Tick);
         seat.PathLive = true;
         seat.PathSource = source;
         seat.PathBody = predicted;
@@ -519,10 +569,10 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
             if (taken != applied) {
                 for (var serial = ((applied == NoBatch) ? sent.ForgottenSerial : (applied + 1L)); (serial <= taken); serial++) {
-                    TakeInput(body: predicted, held: false, population: population, submission: sent.At(position: (int)(serial - sent.FirstSerial)).Submission, tick: tick);
+                    TakeInput(body: predicted, held: false, index: seat.PathBodyIndex, owner: seat.PathOwner, population: population, submission: sent.At(position: (int)(serial - sent.FirstSerial)).Submission, tick: tick);
                 }
             } else if (applied != NoBatch) {
-                TakeInput(body: predicted, held: true, population: population, submission: sent.At(position: (int)(applied - sent.FirstSerial)).Submission, tick: tick);
+                TakeInput(body: predicted, held: true, index: seat.PathBodyIndex, owner: seat.PathOwner, population: population, submission: sent.At(position: (int)(applied - sent.FirstSerial)).Submission, tick: tick);
             }
             applied = taken;
 
@@ -554,8 +604,8 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
                 }
             }
             position = predicted.FixedPosition;
-            population.PredictedBodyParts(index: seat.PathBodyIndex, parts: PartsAt(seat: seat, tick: tick));
-            seat.Path[PathIndex(tick: tick)] = new PathTick(Applied: applied, EngineTick: engineTick, Orientation: predicted.FixedOrientation, Position: position, Tick: tick);
+            population.PredictedBodyParts(carriers: seat.PathCarriers, index: seat.PathBodyIndex, parts: PartsAt(seat: seat, tick: tick));
+            seat.Path[PathIndex(tick: tick)] = new PathTick(Applied: applied, EngineTick: engineTick, Lead: lead, Orientation: predicted.FixedOrientation, Position: position, Tick: tick);
             seat.TipTick = tick;
         }
 
@@ -568,7 +618,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var path = seat.Path[PathIndex(tick: target)];
 
         PartsAt(seat: seat, tick: target).CopyTo(array: m_checkParts, index: 0);
-        if (Restore(counted: false, own: in own, population: population, seat: seat, source: source, start: start) is { } refusal) {
+        if (Restore(counted: false, lead: lead, own: in own, population: population, seat: seat, source: source, start: start) is { } refusal) {
             ReplayChecks++;
             ReplayMismatches++;
             return refusal;
@@ -585,20 +635,25 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
         return replayed;
     }
-    // Takes one sent batch as the authority takes an admitted batch of the body's owner: folded onto the body's channels
-    // and written through the body's one owner-input door. A held batch, taken again on a tick no newer one arrived,
-    // carries no relative movement.
-    private static void TakeInput(WorldBody body, WorldPopulation population, IntentSubmission submission, ulong tick, bool held) {
+    // Takes one sent batch as the authority takes a federated packet of the body's owner (WorldTick's federated intents):
+    // admitted on the tick for the body and its owner, taken again with its movement and presses spent on a tick no newer
+    // one arrives, folded onto the body's channels and written through the body's one owner-input door.
+    private static void TakeInput(WorldBody body, WorldPopulation population, IntentSubmission submission, ulong tick, int index, Principal owner, bool held) {
         var mappings = population.InputCatalog.Mappings;
 
         if (submission.Input.Mapping >= mappings.Length) {
             return;
         }
 
-        var admitted = submission with { Tick = tick, Input = submission.Input with { Tick = tick } };
-        var applied = WorldAcceptedInput.Fold(mapping: mappings[submission.Input.Mapping].Channels, submission: in admitted, target: body.Channels);
+        var admitted = WorldAcceptedInput.Admitted(entityIndex: index, packet: in submission, principal: owner, tick: tick);
 
-        _ = body.TakeOwnerInput(applied: (held ? applied.WithoutRelative(target: body.Channels) : applied));
+        if (held) {
+            admitted = WorldAcceptedInput.HeldRepeat(admitted: in admitted, catalog: population.InputCatalog);
+        }
+
+        var applied = WorldAcceptedInput.Fold(mapping: mappings[admitted.Input.Mapping].Channels, submission: in admitted, target: body.Channels);
+
+        _ = body.TakeOwnerInput(applied: in applied);
     }
     // The private population of the delivered document: built once for each document whose contact, kits or motion
     // differ, never for a delivery that moved only state.
@@ -640,7 +695,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             return true;
         }
 
-        seat.Decoded = WorldAuthorityCheckpointCodec.TryDecodeOwnBody(attached: out seat.Attached, bytes: own.Entry.Span, entry: out seat.Entry, reason: out _);
+        seat.Decoded = WorldAuthorityCheckpointCodec.TryDecodeOwnBody(attached: out seat.Attached, bytes: own.Entry.Span, carriers: out seat.Carriers, entry: out seat.Entry, reason: out _);
         seat.EntryBytes = own.Entry;
         seat.EntryPartsTaken = false;
         return seat.Decoded;
