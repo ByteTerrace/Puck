@@ -65,6 +65,8 @@ internal static partial class Subjects {
                 ("(a, b, c)·w", FixedAffineForms.Dot(a: vector, b: weights), AffineDot(left: point, right: weights)),
                 ("(a, b, c)·(a, b, c)", FixedAffineForms.Dot(a: vector, b: vector), AffineDot(left: point, right: point)),
                 ("segment((a, b, c), w)", FixedAffineForms.SegmentParameter(p: vector, segment: weights), FixedVector3.SegmentParameter(point: point, segment: weights)),
+                ("segment((a, b, c), (c, t, a))", FixedAffineForms.SegmentParameter(p: vector, segment: new FixedAffineForm3(X: c, Y: t, Z: a)), FixedVector3.SegmentParameter(point: point, segment: new FixedVector3(X: z, Y: u, Z: x))),
+                ("segment((a, b), (t, c))", FixedAffineForms.SegmentParameter(p: new FixedAffineForm2(X: a, Y: b), segment: new FixedAffineForm2(X: t, Y: c)), FixedVector2.SegmentParameter(point: new FixedVector2(X: x, Y: y), segment: new FixedVector2(X: u, Y: z))),
                 ("round a", FixedAffineForms.Round(a: a), (RoundStaysInCarrier(value: x) ? FixedQ4816.Round(value: x) : null)),
                 ("floor a", FixedAffineForms.Floor(a: a), FixedQ4816.Floor(value: x)),
                 ("smoothstep(k, d, a)", FixedAffineForms.Smoothstep(edge0: constant, edge1: divisor, x: a), FixedQ4816.Smoothstep(edge0: constant, edge1: divisor, value: x)),

@@ -135,6 +135,13 @@ public sealed partial class SdfFieldEvaluator {
             }
 
             var width = EntryWidth(rotation: RotationBounds.Of(instruction: in instruction));
+
+            // An entry no enclosure bounds leaves the turn unbounded, as an unbounded translation does.
+            if (double.IsInfinity(d: width)) {
+                Known = false;
+
+                return;
+            }
             // ‖M − R̂‖ for the raws' map, and, for a quaternion off the grid, what any map of its enclosure adds: each entry
             // of such a map and of the raws' lies in the enclosed entry (RotationBounds over the enclosure), so their
             // difference's spectral norm is at most its Frobenius norm, three times the widest entry's width.
@@ -613,11 +620,16 @@ public sealed partial class SdfFieldEvaluator {
 
         return ((low * (1.0 - DoublePadding)), (high * (1.0 + DoublePadding)));
     }
-    // The widest entry of a rotation's enclosed linear map, in units.
+    // The widest entry of a rotation's enclosed linear map, in units; infinite where an entry is unbounded, whose ends hold
+    // no width.
     private static double EntryWidth(in RotationBounds rotation) {
         var widest = 0L;
 
-        foreach (var entry in ((FixedInterval[])[rotation.M00, rotation.M01, rotation.M02, rotation.M10, rotation.M11, rotation.M12, rotation.M20, rotation.M21, rotation.M22,])) {
+        foreach (var entry in ((ReadOnlySpan<FixedInterval>)[rotation.M00, rotation.M01, rotation.M02, rotation.M10, rotation.M11, rotation.M12, rotation.M20, rotation.M21, rotation.M22,])) {
+            if (entry.IsUnbounded) {
+                return double.PositiveInfinity;
+            }
+
             widest = Math.Max(val1: widest, val2: (entry.Upper.Value - entry.Lower.Value));
         }
 
