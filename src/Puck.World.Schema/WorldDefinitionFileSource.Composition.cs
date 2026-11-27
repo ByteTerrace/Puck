@@ -183,7 +183,7 @@ public static partial class WorldDefinitionFileSource {
         }
 
         if (!members.Any(predicate: static member => member.Name is WorldDocumentBasis.BasisMemberName or WorldDocumentBasis.ImportsMemberName)) {
-            if ((origins is not null) && (JsonNode.Parse(json: DecodeJson(bytes: rootBytes)) is JsonObject root)) {
+            if ((origins is not null) && (ParseJson(bytes: rootBytes) is JsonObject root)) {
                 origins.Capture(node: root, documentPath: rootResolvedName);
                 composed = root;
             }

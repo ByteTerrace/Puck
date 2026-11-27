@@ -111,7 +111,7 @@ public static partial class WorldDocumentEmitter {
             var name = QualifiedName.Parse(text: qualified.Name);
 
             if (!name.IsQualified || (name.Head.Length == 0) || (name.Tail.Length == 0)) { return false; }
-            world = (scope.TryLowerBinding(name.Head, out var binding) ? (DocumentLowering.KeyText(node: binding) ?? "") : name.Head);
+            world = (scope.TryReadBinding(name.Head, out var binding) ? (DocumentLowering.KeyText(node: binding) ?? "") : name.Head);
             endpoint = name.Tail;
             return (world.Length > 0);
         }
@@ -130,7 +130,7 @@ public static partial class WorldDocumentEmitter {
             var name = QualifiedName.Parse(text: call.Name);
 
             if ((name.Segments.Count != 2) || (name.Head.Length == 0) || (call.Arguments.Count != 1) || (call.Arguments[0].Name is not null)) { return false; }
-            world = (scope.TryLowerBinding(name.Head, out var binding) ? (DocumentLowering.KeyText(node: binding) ?? "") : name.Head);
+            world = (scope.TryReadBinding(name.Head, out var binding) ? (DocumentLowering.KeyText(node: binding) ?? "") : name.Head);
             var argument = DocumentLowering.KeyText(node: DocumentLowering.LowerValue(call.Arguments[0].Value, scope));
 
             endpoint = $"{name.Last}{argument}";

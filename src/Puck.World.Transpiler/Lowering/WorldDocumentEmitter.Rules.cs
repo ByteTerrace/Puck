@@ -1457,7 +1457,7 @@ public static partial class WorldDocumentEmitter {
         if ((operand.Form == DocumentValueForm.Name) &&
             (operand.Syntax is ExpressionSpelling.SourceName { Quoted: false } name) &&
             scope.TryLowerBinding(name.Name, out var bound) && (bound is JsonArray names)) {
-            return names.DeepClone();
+            return names;
         }
         var text = BindOperand(operand: operand, scope: scope);
 
@@ -1593,7 +1593,7 @@ public static partial class WorldDocumentEmitter {
         // A row named by a binding that holds a name (a template parameter, a loop variable) is that row, as the same
         // name read in an expression is.
         if (!GetPoolBindings(scope: scope).Contains(item: target.Name) && IdentifierSpelling.IsName(text: target.Name) &&
-            scope.TryLowerBinding(target.Name, out var boundRow) && (boundRow is JsonValue rowName) && rowName.TryGetValue<string>(value: out var named) &&
+            scope.TryReadBinding(target.Name, out var boundRow) && (boundRow is JsonValue rowName) && rowName.TryGetValue<string>(value: out var named) &&
             !scope.TryRefuseRead(name: target.Name, span: target.Span)) {
             target = target with { Name = named };
         }
@@ -1702,7 +1702,7 @@ public static partial class WorldDocumentEmitter {
     // is that pool, as the same name is the row it holds in every other effect.
     private static string ResolvePoolName(string name, DocumentScope scope, SourceSpan span) => ((
         !GetPoolBindings(scope: scope).Contains(item: name) &&
-        scope.TryLowerBinding(name, out var bound) && (bound is JsonValue value) && value.TryGetValue<string>(value: out var named) &&
+        scope.TryReadBinding(name, out var bound) && (bound is JsonValue value) && value.TryGetValue<string>(value: out var named) &&
         !scope.TryRefuseRead(name: name, span: span)
     ) ? named : name);
     private static JsonObject LowerTransaction(TransactionStatementNode transaction, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {

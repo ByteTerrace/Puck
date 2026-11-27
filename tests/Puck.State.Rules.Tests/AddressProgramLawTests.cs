@@ -3,8 +3,8 @@ using Xunit;
 namespace Puck.State.Rules.Tests;
 
 /// <summary>CONTRACT UNDER TEST: a read through a computed address is one program: the tokens that compute the key
-/// stand in front of the operand's own, so evaluating it leases one evaluation frame's stack and marks (two arrays of
-/// the program's length) and runs no frame of its own for the key.</summary>
+/// stand in front of the operand's own, so evaluating it runs on the evaluation's own machine-stack block, leases
+/// nothing from the arena's scratch, and runs no frame of its own for the key.</summary>
 public sealed class AddressProgramLawTests {
     private static long Leased(StateArena arena) {
         Assert.True(condition: ((Puck.Abstractions.Counting.IWorkCounterSource)arena).TryRead(
@@ -16,7 +16,7 @@ public sealed class AddressProgramLawTests {
     }
 
     [Fact]
-    public void AComputedKeyIsTokensOfTheProgramThatReadsItAndLeasesOneFrame() {
+    public void AComputedKeyIsTokensOfTheProgramThatReadsItAndLeasesNothing() {
         var section = TransformFixture.Section();
         var context = TransformFixture.Context(section: section);
         var host = TransformFixture.Host(
@@ -51,7 +51,7 @@ public sealed class AddressProgramLawTests {
         ).TryFinite(raw: out _));
         Assert.Equal(
             actual: (Leased(arena: host.Arena) - before),
-            expected: (2L * program.Length)
+            expected: 0L
         );
     }
 }

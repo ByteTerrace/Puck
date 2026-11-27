@@ -62,11 +62,16 @@ public sealed class ArenaSlotMap {
 
     /// <summary>Gets a value indicating whether the map has left its array for a dictionary.</summary>
     public bool IsSparse => (m_sparse is not null);
+    /// <summary>Gets a count that moves on every change to the map (a set, a removal, a clear) and on nothing else, so
+    /// while it stands every key maps to the slot it mapped to when it was read: what a <see cref="CellReadPlan"/>
+    /// is validated against.</summary>
+    internal ulong Version { get; private set; }
 
     /// <summary>Sets the slot a key's ordinal maps to.</summary>
     /// <param name="key">The key's ordinal in the owning arena's key table.</param>
     public int this[int key] {
         set {
+            Version++;
             if (m_sparse is { } sparse) {
                 sparse[key] = value;
 
@@ -108,6 +113,7 @@ public sealed class ArenaSlotMap {
 
     /// <summary>Forgets every mapping, keeping its backing storage for the row's next keys.</summary>
     public void Clear() {
+        Version++;
         m_count = 0;
         m_sparse?.Clear();
         Array.Clear(array: m_dense);
@@ -122,6 +128,7 @@ public sealed class ArenaSlotMap {
     /// <summary>Removes a key without changing any other cell's address.</summary>
     /// <param name="key">The key ordinal.</param>
     public void Remove(int key) {
+        Version++;
         var index = ((long)key) - m_first;
         if (((ulong)index) < ((ulong)m_dense.Length)) {
             if (m_dense[index] != 0) { m_dense[index] = 0; m_count--; }

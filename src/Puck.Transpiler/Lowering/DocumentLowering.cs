@@ -50,11 +50,18 @@ public static partial class DocumentLowering {
     [ThreadStatic]
     private static string? EvaluatedField;
 
-    // Evaluates an expression and says whether the result is owned: a value this evaluation built from nothing any
-    // binding, cache, builtin or vocabulary holds, so it can go into output as it stands. Everything else is
-    // borrowed, and output takes a copy. An expression entered for another field than the one being evaluated (the
-    // value a field receives, not a part of it) has its dimension checked first, once (DocumentDimensions.CheckField).
-    private static JsonNode? Evaluate(ExpressionNode expr, DocumentScope scope, string? fieldKey, out bool owned) {
+    /// <summary>Evaluates an expression and says whether the result is owned: a value this evaluation built from
+    /// nothing any binding, cache or vocabulary holds, every node beneath it included, so it can go into a container
+    /// as it stands. Everything else is borrowed, and a container takes a copy
+    /// (<see cref="DocumentEvaluationBudget.Take"/>).</summary>
+    /// <param name="expr">The expression.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="fieldKey">The key a unit on the value is classified by.</param>
+    /// <param name="owned">Whether the caller alone holds the result.</param>
+    /// <returns>The value, or <see langword="null"/> for a null literal or an unrecognized expression.</returns>
+    /// <remarks>An expression entered for another field than the one being evaluated (the value a field receives, not
+    /// a part of it) has its dimension checked first, once (<see cref="DocumentDimensions.CheckField"/>).</remarks>
+    internal static JsonNode? Evaluate(ExpressionNode expr, DocumentScope scope, string? fieldKey, out bool owned) {
         ArgumentNullException.ThrowIfNull(expr);
         ArgumentNullException.ThrowIfNull(scope);
 
@@ -336,7 +343,7 @@ public static partial class DocumentLowering {
             // The base's object with the overrides' members in place of its own, the ones it lacks added: the object
             // written out, lowered at this value's position like any object literal.
             case WithExpressionNode derived: {
-                    if (EvaluateValue(expr: derived.Base, fieldKey: fieldKey, scope: scope) is not JsonObject based) {
+                    if (Evaluate(expr: derived.Base, fieldKey: fieldKey, owned: out var baseOwned, scope: scope) is not JsonObject based) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.InvalidValue,
                             message: DiagnosticText.Compose(
@@ -348,11 +355,15 @@ public static partial class DocumentLowering {
 
                         return null;
                     }
-                    var result = ((JsonObject)based.DeepClone());
+                    var result = (baseOwned ? based : ((JsonObject)based.DeepClone()));
 
-                    if (Evaluate(expr: derived.Overrides, fieldKey: fieldKey, owned: out _, scope: scope) is JsonObject overrides) {
-                        foreach (var (key, value) in overrides.ToArray()) {
-                            result[key] = value?.DeepClone();
+                    if (Evaluate(expr: derived.Overrides, fieldKey: fieldKey, owned: out var overridesOwned, scope: scope) is JsonObject overrides) {
+                        var written = overrides.ToArray();
+
+                        // Overrides the evaluation alone holds give their members up; borrowed ones lend copies.
+                        if (overridesOwned) { overrides.Clear(); }
+                        foreach (var (key, value) in written) {
+                            result[key] = (overridesOwned ? value : value?.DeepClone());
                         }
                     } else {
                         scope.Diagnostics.ReportError(
@@ -410,9 +421,10 @@ public static partial class DocumentLowering {
                         call: call,
                         fieldKey: fieldKey,
                         result: out var builtin,
+                        owned: out var builtinOwned,
                         scope: scope
                     )) {
-                        owned = false;
+                        owned = builtinOwned;
 
                         return builtin;
                     }
@@ -1558,7 +1570,7 @@ public static partial class DocumentLowering {
                 _ => string.Empty,
             });
 
-            return (((declared.Length > 0) && scope.TryLowerBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
+            return (((declared.Length > 0) && scope.TryReadBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
                 ? NamedDeclaration(name: renamed, statement: statement)
                 : statement
             );
@@ -1572,7 +1584,7 @@ public static partial class DocumentLowering {
 
         if (
             string.IsNullOrEmpty(value: written) ||
-            !scope.TryLowerBinding(
+            !scope.TryReadBinding(
             written,
             out var nameValue
         )
@@ -2004,7 +2016,7 @@ public static partial class DocumentLowering {
 
         var templateName = call.Name;
 
-        if (scope.TryLowerBinding(call.Name, out var indirectName) && (indirectName is JsonValue indirectValue) && indirectValue.TryGetValue<string>(value: out var boundName)) {
+        if (scope.TryReadBinding(call.Name, out var indirectName) && (indirectName is JsonValue indirectValue) && indirectValue.TryGetValue<string>(value: out var boundName)) {
             templateName = boundName;
         }
 
@@ -2419,10 +2431,7 @@ public static partial class DocumentLowering {
             scope: scope
         );
 
-        return (owned
-            ? scope.Budget.Adopt(value: value, span: expr.Span)
-            : scope.Budget.Copy(value: value, span: expr.Span)
-        );
+        return scope.Budget.Take(value: value, owned: owned, span: expr.Span);
     }
     /// <summary>Narrows an integral result back to a long, so arithmetic and a written literal reach the document as
     /// the same JSON kind.</summary>

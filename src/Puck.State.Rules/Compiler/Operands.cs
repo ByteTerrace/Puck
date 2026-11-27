@@ -6,6 +6,8 @@ namespace Puck.State.Rules;
 /// this evaluation (the absent fact when it selects none).</summary>
 public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     private readonly OperandAddress[] m_addresses;
+    // The arena's cached slot for a literal key of a fixed row; only the arena's planned read makes or reads it.
+    private CellReadPlan? m_plan;
 
     /// <summary>Initializes the operand.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> when <paramref name="rowFrom"/> applies.</param>
@@ -13,18 +15,28 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal key.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
     /// <param name="rowFrom">The live row, or <see langword="null"/> for a fixed row.</param>
-    public StateCellOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CellKind valueKind, LiveRow? rowFrom = null) : base(valueKind: valueKind) {
+    /// <param name="positional">Whether the fixed row is one the arena stores by position, a lattice or a ring whose
+    /// every in-range position's decimal spelling the catalog interns, so an integer key reads the cell at that
+    /// position.</param>
+    public StateCellOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CellKind valueKind, LiveRow? rowFrom = null, bool positional = false) : base(valueKind: valueKind) {
         Key = key;
         KeyFrom = keyFrom;
         RowFrom = rowFrom;
         RowOrdinal = rowOrdinal;
+        ReadsByPosition = (positional && (rowFrom is null) && (keyFrom is { } reference) && SpellsPosition(reference: in reference));
         m_addresses = OperandAddress.List(
             first: rowFrom?.Index,
             second: keyFrom,
-            secondUse: AddressUse.Key,
+            secondUse: (ReadsByPosition ? AddressUse.Index : AddressUse.Key),
             use: AddressUse.Index
         );
     }
+
+    // An address whose key is an integer it computes or a pointer cell carries: resolved as that integer, it names
+    // nothing exactly when resolved as a key it does, so reading the integer's position answers what reading the key
+    // its spelling interns would, without the key table.
+    private static bool SpellsPosition(in CompiledCellRef reference) => ((reference.Custom is null) && ((reference.Program is not null) ||
+        ((reference.Binding == BoundKey.None) && (reference.RowOrdinal >= 0) && (reference.Kind != CellKind.Text))));
 
     /// <inheritdoc/>
     public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
@@ -32,6 +44,9 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     public CellKey Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets a value indicating whether the key address is read as the position of a lattice or ring cell
+    /// (<see cref="StateArena.TryReadLiveNumberAt"/>) rather than resolved through the key table.</summary>
+    public bool ReadsByPosition { get; }
     /// <summary>Gets the live row, or <see langword="null"/> for a fixed row.</summary>
     public LiveRow? RowFrom { get; }
     /// <inheritdoc/>
@@ -61,21 +76,43 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        if (ReadsByPosition) {
+            return RuleReads.ReadPosition(
+                frame: ref frame,
+                kind: ValueKind,
+                position: in keys[0],
+                rowOrdinal: RowOrdinal
+            );
+        }
 
         var next = 0;
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: frame.Reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
                 return Fact.Absent(kind: ValueKind);
             }
+        } else if ((KeyFrom is null) && Key.IsValid && (ordinal >= 0)) {
+            var time = frame.Time;
+
+            return Fact.Finite(
+                kind: ValueKind,
+                value: (frame.Arena.TryReadPlannedNumber(
+                    key: Key,
+                    plan: ref m_plan,
+                    rowOrdinal: ordinal,
+                    time: in time,
+                    value: out var value
+                )
+                    ? value
+                    : 0L)
+            );
         }
 
         return RuleReads.ReadCell(
+            frame: ref frame,
             kind: ValueKind,
-            reader: reader,
             resolved: ((KeyFrom is null)
                 ? RuleReads.Literal(literal: Key)
                 : RuleReads.Named(key: in keys[next])),
@@ -133,14 +170,10 @@ public sealed class LocalOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        return Fact.Finite(
-            kind: ValueKind,
-            value: reader.LocalValue(ordinal: Ordinal)
-        );
-    }
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+        kind: ValueKind,
+        value: frame.Reader.LocalValue(ordinal: Ordinal)
+    );
 }
 /// <summary>A static table entry (<see cref="RuleFacts.TablePrefix"/>). A key the table does not carry names no
 /// entry and reads as the absent fact: an expression over it refuses and a gate over it never holds.</summary>
@@ -192,9 +225,7 @@ public sealed class TableOperand : RuleOperand {
         val2: 1
     ))));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
         var key = Key;
 
         if (KeyFrom is not null) {
@@ -229,14 +260,10 @@ public sealed class TickOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        return Fact.Finite(
-            kind: CellKind.Int,
-            value: unchecked((long)reader.Tick)
-        );
-    }
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+        kind: CellKind.Int,
+        value: unchecked((long)frame.Reader.Tick)
+    );
 }
 /// <summary>A numeric aggregate over a row's cells (<see cref="RuleFacts.ReducePrefix"/>). Count is always integer
 /// regardless of the row's declared kind; Max/Min/Sum preserve the row's kind. An empty row reads as zero for every
@@ -306,13 +333,11 @@ public sealed class ReductionOperand : RuleOperand {
             : 3L
         )));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[0]).TryNamed(value: out ordinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: frame.Reader) : null), index: in keys[0]).TryNamed(value: out ordinal)) {
                 return Fact.Absent(kind: ValueKind);
             }
         }
@@ -327,7 +352,7 @@ public sealed class ReductionOperand : RuleOperand {
                 kind: ValueKind,
                 value: RuleReads.ArrangementRank(
                     domainOrdinal: DomainOrdinal,
-                    reader: reader,
+                    reader: frame.Reader,
                     rowOrdinal: ordinal
                 )
             );
@@ -337,9 +362,9 @@ public sealed class ReductionOperand : RuleOperand {
             kind: ValueKind,
             value: RuleReads.Reduce(
                 filterOrdinal: FilterOrdinal,
+                frame: ref frame,
                 op: Reduce,
                 range: Range,
-                reader: reader,
                 rowOrdinal: ordinal
             )
         );
@@ -401,14 +426,12 @@ public sealed class PositionOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
         var next = 0;
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: frame.Reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
                 return Fact.Absent(kind: ValueKind);
             }
         }
@@ -425,7 +448,7 @@ public sealed class PositionOperand : RuleOperand, IStateAddressedOperand {
 
         return Fact.Finite(
             kind: ValueKind,
-            value: (((ordinal >= 0) && key.IsValid && reader.Arena.TryPositionOf(
+            value: (((ordinal >= 0) && key.IsValid && frame.Arena.TryPositionOf(
                 key: key,
                 position: out var position,
                 rowOrdinal: ordinal
@@ -528,9 +551,7 @@ public sealed class HistoryOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
         var age = Age;
 
         // An age that names nothing selects no slot, which the ring answers with its empty value the same way an age
@@ -545,7 +566,7 @@ public sealed class HistoryOperand : RuleOperand {
             kind: ValueKind,
             value: ReadSlot(
                 age: age,
-                arena: reader.Arena,
+                arena: frame.Arena,
                 ring: Ring,
                 rowOrdinal: RowOrdinal
             )
@@ -574,14 +595,10 @@ public sealed class PhaseOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        return Fact.Finite(
-            kind: CellKind.Int,
-            value: reader.Arena.PhaseSequence(rowOrdinal: RowOrdinal)
-        );
-    }
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+        kind: CellKind.Int,
+        value: frame.Arena.PhaseSequence(rowOrdinal: RowOrdinal)
+    );
 }
 /// <summary>A bounded discrete topology query over a board row (the <c>$board:</c> channel).</summary>
 public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
@@ -644,9 +661,9 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
     public override RuleWork Cost(IRuleCostContext context) =>
         Board.Visits + (Board.ReadsWholeBoard ? Board.Topology.CellCount : 0L);
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var reader = frame.Reader;
+        var arena = frame.Arena;
         var key = ((KeyFrom is null)
             ? Key
             : keys[0].Key);
@@ -654,7 +671,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
         if (
             key.IsValid &&
-            reader.Arena.Keys.TryGetName(
+            arena.Keys.TryGetName(
             key: key,
             name: out var name
         )
@@ -683,9 +700,9 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
         if (TargetFrom is { } targetFrom) {
             if (Board is BoardJumpDistanceQuery) {
-                var time = reader.Time;
+                var time = frame.Time;
 
-                if (!reader.Arena.TryReadLiveNumber(
+                if (!arena.TryReadLiveNumber(
                     key: targetFrom.Key,
                     rowOrdinal: targetFrom.RowOrdinal,
                     time: in time,
@@ -711,7 +728,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         return Fact.Finite(
             kind: CellKind.Int,
             value: (ArenaBoards.TryQuery(
-                arena: reader.Arena,
+                arena: arena,
                 dynamicTarget: dynamicTarget,
                 query: Board,
                 reason: out _,
@@ -851,22 +868,18 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        return Fact.Finite(
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+        kind: ValueKind,
+        value: Fact.RawOf(
             kind: ValueKind,
-            value: Fact.RawOf(
-                kind: ValueKind,
-                value: ReadFixed(
-                    key: ((KeyFrom is null)
-                        ? Key
-                        : keys[0].Key),
-                    reader: reader
-                )
+            value: ReadFixed(
+                key: ((KeyFrom is null)
+                    ? Key
+                    : keys[0].Key),
+                reader: frame.Reader
             )
-        );
-    }
+        )
+    );
 }
 /// <summary>The candidate depth supplied by a search host, or zero on a live host.</summary>
 public sealed class SearchPlyOperand : RuleOperand {
@@ -878,5 +891,5 @@ public sealed class SearchPlyOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(kind: CellKind.Int, value: reader.SearchPly);
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(kind: CellKind.Int, value: frame.Reader.SearchPly);
 }

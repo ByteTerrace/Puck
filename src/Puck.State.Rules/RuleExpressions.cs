@@ -1,15 +1,22 @@
+using System.Runtime.CompilerServices;
+
 namespace Puck.State.Rules;
 
 /// <summary>The one operator dispatch for a compiled postfix program: the walk a gate, a binding, an effect source,
 /// and the compiler's own constant folder all evaluate through, so a folded constant and a live evaluation of the
 /// same operation agree bit for bit.</summary>
-/// <remarks>Evaluation allocates nothing once it has run: the value stack and the absence marks are leased from
-/// the reader's <see cref="ArenaScratch"/> at the program's own length, a call's argument frame is a fixed few
-/// words of machine stack, and a fold reads its family's cells straight off the arena.</remarks>
+/// <remarks>Evaluation allocates nothing: the value stack and its absence marks are one block of machine stack per
+/// evaluation, and a call's arguments, a fold's member body and a short-circuit body run on that same stack above the
+/// values below them. A program nested deeper than the block holds leases its stack from the reader's
+/// <see cref="ArenaScratch"/>, and a fold reads its family's cells straight off the arena.</remarks>
 public static partial class RuleExpressions {
-    /// <summary>The most arguments one shared function takes: a call's argument frame is this many eight-byte
-    /// words of machine stack in every evaluator frame.</summary>
+    /// <summary>The most arguments one shared function takes.</summary>
     public const int MaxArguments = 16;
+
+    // The machine-stack block one evaluation's values occupy: a token pushes at most one value, so this is the deepest
+    // a program at the token cap reaches, and a body nested on top of it runs on the same block while it fits.
+    private const int InlineDepth = RuleCapacity.MaxExpressionTokens;
+    private const int MarkBits = 64;
 
     // The compiler folds constants with no evaluation in flight, so it has no host to borrow from.
     [ThreadStatic]
@@ -24,13 +31,15 @@ public static partial class RuleExpressions {
     /// <param name="kind">The kind to evaluate in.</param>
     /// <returns>What the program answered.</returns>
     /// <exception cref="InvalidOperationException">The frame names no reader.</exception>
-    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) => Run(
-        arguments: [],
-        kind: kind,
-        member: null,
-        program: program,
-        reader: frame.Reader
-    );
+    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        _ = frame.Reader;
+
+        return Enter(
+            frame: ref frame,
+            kind: kind,
+            program: program
+        );
+    }
     /// <summary>Evaluates a compiled postfix program for a caller that is not a firing and decides what a fault means
     /// where it sits: the compiler's constant folder (no reader), the search score, a flock's affinity, the console's
     /// read-back and the browser's.</summary>
@@ -39,377 +48,458 @@ public static partial class RuleExpressions {
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <returns>What the program answered.</returns>
-    public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) => Run(
-        arguments: [],
-        kind: kind,
-        member: null,
-        program: program,
-        reader: reader
-    );
+    public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        var frame = ((reader is null) ? default : new EvaluationFrame(reader: reader));
 
-    // Every evaluation of authored tokens runs here, and answers an Outcome: a nested call, fold member or short-circuit
-    // body is a local the caller combines, so no variable is shared between a program and the programs it calls.
-    private static Outcome Run(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, long? member, ReadOnlySpan<long> arguments) {
-        // A token pushes at most one value, so a program's own length bounds its stack: the lease is as deep as
-        // this program can reach, and a nested call or fold takes the next one down rather than more machine stack.
-        var scratch = (reader?.Scratch ?? (FoldScratch ??= new ArenaScratch()));
+        return Enter(
+            frame: ref frame,
+            kind: kind,
+            program: program
+        );
+    }
 
-        using var stackLease = scratch.Rent<long>(length: program.Length);
-        // An operand whose dynamic key named no cell pushes a marked slot rather than failing at once, so
-        // `isAbsent` and `??` can answer it. Any other operation consuming a marked slot fails as it always has.
-        using var absentLease = scratch.Rent<bool>(length: program.Length);
-
-        var stack = stackLease.Span;
-        var absent = absentLease.Span;
-        // One frame serves every call site: a call evaluates its body before the next call site is reached.
-        Span<long> frame = stackalloc long[MaxArguments];
-        // The values the programs computing an operand's addresses left, which the operand token consumes.
-        Span<AddressFeed> feeds = stackalloc AddressFeed[MaxAddresses];
-        var top = 0;
+    // Every evaluation of authored tokens enters here: one block of machine stack holds the value stack and its
+    // absence marks for the program and every body nested on top of it. A data-dependent overflow anywhere in the
+    // walk is the evaluation's domain fault, the same answer each nested body's outcome would have carried out.
+    [SkipLocalsInit]
+    private static Outcome Enter(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        Span<long> values = stackalloc long[InlineDepth];
+        Span<ulong> marks = stackalloc ulong[(InlineDepth / MarkBits)];
 
         try {
-            foreach (var token in program) {
-                if (token.Operation == ExpressionOp.Constant) {
-                    absent[top] = false;
-                    stack[top++] = token.Constant;
+            return Run(
+                arguments: [],
+                bottom: 0,
+                frame: ref frame,
+                hasMember: false,
+                kind: kind,
+                marks: marks,
+                member: 0L,
+                program: program,
+                values: values
+            );
+        } catch (ArithmeticException) {
+            return Outcome.Faulted(why: ExpressionFault.Domain);
+        }
+    }
+
+    // An operand whose dynamic key named no cell pushes a marked slot rather than failing at once, so `isAbsent` and
+    // `??` can answer it. Any other operation consuming a marked slot fails as it always has. Slots index the whole
+    // block, so a nested body's marks sit above its caller's.
+    private static bool Marked(scoped ReadOnlySpan<ulong> marks, int slot) => ((marks[(slot / MarkBits)] & (1UL << slot)) != 0UL);
+    private static void Mark(scoped Span<ulong> marks, int slot, bool absent) {
+        ref var word = ref marks[(slot / MarkBits)];
+
+        word = ((word & ~(1UL << slot)) | ((absent ? 1UL : 0UL) << slot));
+    }
+
+    // Runs one program whose values start at `bottom` of the block: the program a caller entered with, or a call's
+    // subprogram, a fold's member body or a short-circuit body evaluated above the values its caller holds. A token
+    // pushes at most one value, so a program's own length bounds its stack.
+    [SkipLocalsInit]
+    private static Outcome Run(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, bool hasMember, long member, scoped ReadOnlySpan<long> arguments, scoped Span<long> values, scoped Span<ulong> marks, int bottom) {
+        if ((values.Length - bottom) < program.Length) {
+            var scratch = (frame.IsLive ? frame.Reader.Scratch : (FoldScratch ??= new ArenaScratch()));
+
+            using var valueLease = scratch.Rent<long>(length: program.Length);
+            using var markLease = scratch.Rent<ulong>(length: (((program.Length + MarkBits) - 1) / MarkBits));
+
+            return Run(
+                arguments: arguments,
+                bottom: 0,
+                frame: ref frame,
+                hasMember: hasMember,
+                kind: kind,
+                marks: markLease.Span,
+                member: member,
+                program: program,
+                values: valueLease.Span
+            );
+        }
+
+        // The values the programs computing an operand's addresses left, which the operand token consumes.
+        var feedFrame = default(FeedFrame);
+        Span<AddressFeed> feeds = feedFrame;
+        var top = bottom;
+
+        foreach (ref readonly var token in program) {
+            switch (token.Step) {
+                case ExpressionStep.Constant:
+                    Mark(marks: marks, slot: top, absent: false);
+                    values[top++] = token.Constant;
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.Argument) {
+                case ExpressionStep.Argument:
                     if (((ulong)token.Constant) >= ((ulong)arguments.Length)) {
                         return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
-                    absent[top] = false;
-                    stack[top++] = arguments[((int)token.Constant)];
+                    Mark(marks: marks, slot: top, absent: false);
+                    values[top++] = arguments[((int)token.Constant)];
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.Member) {
-                    if (member is not { } bound) {
+                case ExpressionStep.Member:
+                    if (!hasMember) {
                         return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
-                    absent[top] = false;
-                    stack[top++] = bound;
+                    Mark(marks: marks, slot: top, absent: false);
+                    values[top++] = member;
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.Operand) {
-                    if (reader is null) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
-                    }
+                case ExpressionStep.Read:
+                case ExpressionStep.ReadAddressed: {
+                        if (!frame.IsLive) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
 
-                    var operand = token.Operand!;
-                    var fed = FeedCount(operand: operand);
+                        Fact fact;
 
-                    top -= fed;
-                    for (var slot = 0; (slot < fed); slot++) {
-                        feeds[slot] = new AddressFeed(
-                            Absent: absent[(top + slot)],
-                            Value: stack[(top + slot)]
+                        if (token.Step == ExpressionStep.Read) {
+                            fact = token.Operand!.Read(
+                                frame: ref frame,
+                                keys: default
+                            );
+                        } else {
+                            var fed = token.Consumes;
+
+                            top -= fed;
+                            for (var slot = 0; (slot < fed); slot++) {
+                                feeds[slot] = new AddressFeed(
+                                    Absent: Marked(marks: marks, slot: (top + slot)),
+                                    Value: values[(top + slot)]
+                                );
+                            }
+
+                            fact = ReadAddressed(
+                                feeds: feeds[..fed],
+                                frame: ref frame,
+                                operand: token.Operand!
+                            );
+                        }
+                        if (fact.Outcome.Case is FaultCase.Forever or FaultCase.Faulted) {
+                            return Outcome.Faulted(why: ((fact.Outcome.Case == FaultCase.Faulted)
+                                ? ExpressionFault.Domain
+                                : ExpressionFault.Forever));
+                        }
+
+                        var factAbsent = (fact.Outcome.Case == FaultCase.Absent);
+
+                        Mark(marks: marks, slot: top, absent: factAbsent);
+                        values[top++] = (factAbsent
+                            ? 0L
+                            : fact.ToRaw(kind: (token.CarrierKind ?? kind))
                         );
+
+                        continue;
                     }
-
-                    var fact = ReadOperand(
-                        feeds: feeds[..fed],
-                        operand: operand,
-                        reader: reader
-                    );
-
-                    if (fact.Outcome.Case is FaultCase.Forever or FaultCase.Faulted) {
-                        return Outcome.Faulted(why: ((fact.Outcome.Case == FaultCase.Faulted)
-                            ? ExpressionFault.Domain
-                            : ExpressionFault.Forever));
-                    }
-
-                    var factAbsent = (fact.Outcome.Case == FaultCase.Absent);
-
-                    absent[top] = factAbsent;
-                    stack[top++] = (factAbsent
-                        ? 0L
-                        : fact.ToRaw(kind: (token.CarrierKind ?? kind))
-                    );
-
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.IsAbsent) {
-                    stack[(top - 1)] = (absent[(top - 1)]
+                case ExpressionStep.IsAbsent:
+                    values[(top - 1)] = (Marked(marks: marks, slot: (top - 1))
                         ? 1L
                         : 0L
                     );
-                    absent[(top - 1)] = false;
+                    Mark(marks: marks, slot: (top - 1), absent: false);
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.Not) {
-                    if (token.Call is { } truthBody) {
-                        var truthOutcome = Run(reader, truthBody.Body, kind, member, arguments);
+                case ExpressionStep.NotBody: {
+                        var truthOutcome = Run(
+                            arguments: arguments,
+                            bottom: top,
+                            frame: ref frame,
+                            hasMember: hasMember,
+                            kind: kind,
+                            marks: marks,
+                            member: member,
+                            program: token.Call!.Body,
+                            values: values
+                        );
 
                         if (truthOutcome.Case == FaultCase.Faulted) {
                             return truthOutcome;
                         }
 
                         // An absent body is false.
-                        stack[top] = (truthOutcome.TryFinite(raw: out var truthValue)
+                        values[top] = (truthOutcome.TryFinite(raw: out var truthValue)
                             ? truthValue
                             : 0L);
-                        absent[top++] = false;
+                        Mark(marks: marks, slot: top++, absent: false);
+                        goto case ExpressionStep.Not;
                     }
-                    stack[(top - 1)] = ((absent[(top - 1)] || (stack[(top - 1)] == 0L)) ? 1L : 0L);
-                    absent[(top - 1)] = false;
+                case ExpressionStep.Not:
+                    values[(top - 1)] = ((Marked(marks: marks, slot: (top - 1)) || (values[(top - 1)] == 0L)) ? 1L : 0L);
+                    Mark(marks: marks, slot: (top - 1), absent: false);
+
                     continue;
-                }
-                if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
-                    var truth = (!absent[(top - 1)] && (stack[(top - 1)] != 0L));
+                case ExpressionStep.And:
+                case ExpressionStep.Or: {
+                        var truth = (!Marked(marks: marks, slot: (top - 1)) && (values[(top - 1)] != 0L));
 
-                    if (((token.Operation == ExpressionOp.And) && truth) || ((token.Operation == ExpressionOp.Or) && !truth)) {
-                        var rightOutcome = Run(reader, token.Call!.Body, kind, member, arguments);
+                        if ((token.Step == ExpressionStep.And) == truth) {
+                            var rightOutcome = Run(
+                                arguments: arguments,
+                                bottom: top,
+                                frame: ref frame,
+                                hasMember: hasMember,
+                                kind: kind,
+                                marks: marks,
+                                member: member,
+                                program: token.Call!.Body,
+                                values: values
+                            );
 
-                        if (rightOutcome.Case == FaultCase.Faulted) {
-                            return rightOutcome;
+                            if (rightOutcome.Case == FaultCase.Faulted) {
+                                return rightOutcome;
+                            }
+
+                            // An absent right side is false.
+                            truth = (rightOutcome.TryFinite(raw: out var rightTruth) && (rightTruth != 0L));
                         }
 
-                        // An absent right side is false.
-                        truth = (rightOutcome.TryFinite(raw: out var rightTruth) && (rightTruth != 0L));
+                        values[(top - 1)] = (truth ? 1L : 0L);
+                        Mark(marks: marks, slot: (top - 1), absent: false);
+
+                        continue;
                     }
-                    stack[(top - 1)] = (truth ? 1L : 0L);
-                    absent[(top - 1)] = false;
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.Coalesce) {
-                    var fallback = stack[--top];
-                    var fallbackAbsent = absent[top];
+                case ExpressionStep.Coalesce: {
+                        var fallback = values[--top];
+                        var fallbackAbsent = Marked(marks: marks, slot: top);
 
-                    if (absent[(top - 1)]) {
-                        absent[(top - 1)] = fallbackAbsent;
-                        stack[(top - 1)] = fallback;
-                    }
-
-                    continue;
-                }
-                if (token.Fold is { } fold) {
-                    var foldOutcome = Fold(
-                        arguments: arguments,
-                        fold: fold,
-                        reader: reader
-                    );
-
-                    if (!foldOutcome.TryFinite(raw: out var folded)) {
-                        return foldOutcome;
-                    }
-
-                    absent[top] = false;
-                    stack[top++] = folded;
-
-                    continue;
-                }
-                if (token.Call is { } call) {
-                    if (call.Arity > MaxArguments) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
-                    }
-
-                    top -= call.Arity;
-                    for (var slot = 0; (slot < call.Arity); slot++) {
-                        if (absent[(top + slot)]) {
-                            return Outcome.Absent;
+                        if (Marked(marks: marks, slot: (top - 1))) {
+                            Mark(marks: marks, slot: (top - 1), absent: fallbackAbsent);
+                            values[(top - 1)] = fallback;
                         }
 
-                        frame[slot] = stack[(top + slot)];
+                        continue;
                     }
-                    var calledOutcome = Run(
-                        arguments: frame[..call.Arity],
-                        kind: kind,
-                        member: member,
-                        program: call.Body,
-                        reader: reader
-                    );
+                case ExpressionStep.Fold: {
+                        var foldOutcome = Fold(
+                            arguments: arguments,
+                            bottom: top,
+                            fold: token.Fold!,
+                            frame: ref frame,
+                            marks: marks,
+                            values: values
+                        );
 
-                    if (!calledOutcome.TryFinite(raw: out var called)) {
-                        return calledOutcome;
+                        if (!foldOutcome.TryFinite(raw: out var folded)) {
+                            return foldOutcome;
+                        }
+
+                        Mark(marks: marks, slot: top, absent: false);
+                        values[top++] = folded;
+
+                        continue;
                     }
+                case ExpressionStep.Call: {
+                        var call = token.Call!;
 
-                    absent[top] = false;
-                    stack[top++] = called;
+                        if (call.Arity > MaxArguments) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
 
-                    continue;
-                }
+                        top -= call.Arity;
+                        for (var slot = top; (slot < (top + call.Arity)); slot++) {
+                            if (Marked(marks: marks, slot: slot)) {
+                                return Outcome.Absent;
+                            }
+                        }
 
-                var arity = ExpressionOperators.Arity(operation: token.Operation);
+                        // The arguments stay where the caller left them, and the body's own values start above them.
+                        var calledOutcome = Run(
+                            arguments: values.Slice(
+                                length: call.Arity,
+                                start: top
+                            ),
+                            bottom: (top + call.Arity),
+                            frame: ref frame,
+                            hasMember: hasMember,
+                            kind: kind,
+                            marks: marks,
+                            member: member,
+                            program: call.Body,
+                            values: values
+                        );
 
-                for (var slot = (top - arity); (slot < top); slot++) {
-                    if (absent[slot]) {
-                        return Outcome.Absent;
+                        if (!calledOutcome.TryFinite(raw: out var called)) {
+                            return calledOutcome;
+                        }
+
+                        Mark(marks: marks, slot: top, absent: false);
+                        values[top++] = called;
+
+                        continue;
                     }
+            }
+
+            // Every operator consumes its operands, and an absent one answers the program's absence.
+            var arity = token.Consumes;
+
+            for (var slot = (top - arity); (slot < top); slot++) {
+                if (Marked(marks: marks, slot: slot)) {
+                    return Outcome.Absent;
                 }
+            }
 
-                absent[(top - arity)] = false;
-                if (token.Operation == ExpressionOp.Clamp) {
-                    var maximum = stack[--top];
-                    var minimum = stack[--top];
-                    var input = stack[--top];
+            Mark(marks: marks, slot: (top - arity), absent: false);
+            switch (token.Step) {
+                case ExpressionStep.Clamp: {
+                        var maximum = values[--top];
+                        var minimum = values[--top];
+                        var input = values[--top];
 
-                    if (!ExpressionArithmetic.TryClamp(input, minimum, maximum, out var clamped)) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
+                        if (!ExpressionArithmetic.TryClamp(input, minimum, maximum, out var clamped)) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
+
+                        values[top++] = clamped;
+
+                        continue;
                     }
+                case ExpressionStep.Select: {
+                        var whenFalse = values[--top];
+                        var whenTrue = values[--top];
+                        var condition = values[--top];
 
-                    stack[top++] = clamped;
+                        values[top++] = ((condition != 0L)
+                            ? whenTrue
+                            : whenFalse
+                        );
 
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.Select) {
-                    var whenFalse = stack[--top];
-                    var whenTrue = stack[--top];
-                    var condition = stack[--top];
-
-                    stack[top++] = ((condition != 0L)
-                        ? whenTrue
-                        : whenFalse
-                    );
-
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.BitField) {
-                    var width = stack[--top];
-                    var offset = stack[--top];
-                    var input = stack[--top];
-
-                    if (!ExpressionArithmetic.TryBitField(
-                        field: out var field,
-                        offset: offset,
-                        value: input,
-                        width: width
-                    )) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
+                        continue;
                     }
+                case ExpressionStep.BitField: {
+                        var width = values[--top];
+                        var offset = values[--top];
+                        var input = values[--top];
 
-                    stack[top++] = field;
+                        if (!ExpressionArithmetic.TryBitField(
+                            field: out var field,
+                            offset: offset,
+                            value: input,
+                            width: width
+                        )) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
 
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.BitInsert) {
-                    var width = stack[--top];
-                    var offset = stack[--top];
-                    var field = stack[--top];
-                    var input = stack[--top];
+                        values[top++] = field;
 
-                    if (!ExpressionArithmetic.TryBitInsert(
-                        field: field,
-                        inserted: out var inserted,
-                        offset: offset,
-                        value: input,
-                        width: width
-                    )) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
+                        continue;
                     }
+                case ExpressionStep.BitInsert: {
+                        var width = values[--top];
+                        var offset = values[--top];
+                        var field = values[--top];
+                        var input = values[--top];
 
-                    stack[top++] = inserted;
+                        if (!ExpressionArithmetic.TryBitInsert(
+                            field: field,
+                            inserted: out var inserted,
+                            offset: offset,
+                            value: input,
+                            width: width
+                        )) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
 
-                    continue;
-                }
-                if (token.Operation == ExpressionOp.BoardShift) {
-                    stack[(top - 1)] = BoardQueries.ShiftMask(
+                        values[top++] = inserted;
+
+                        continue;
+                    }
+                case ExpressionStep.BoardShift:
+                    values[(top - 1)] = BoardQueries.ShiftMask(
                         ((BoardNeighbourQuery)token.Board!),
-                        stack[(top - 1)]
+                        values[(top - 1)]
                     );
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.BoardRay) {
-                    stack[(top - 1)] = BoardQueries.RayMask(
+                case ExpressionStep.BoardRay:
+                    values[(top - 1)] = BoardQueries.RayMask(
                         ((BoardNeighbourQuery)token.Board!),
-                        stack[(top - 1)]
+                        values[(top - 1)]
                     );
 
                     continue;
-                }
-                if (token.Operation == ExpressionOp.BoardImage) {
-                    var image = ((BoardNeighbourQuery)token.Board!);
+                case ExpressionStep.BoardImage: {
+                        var image = ((BoardNeighbourQuery)token.Board!);
 
-                    stack[(top - 1)] = BoardQueries.ImageOfMask(
-                        image.Topology,
-                        image.Direction,
-                        stack[(top - 1)]
-                    );
+                        values[(top - 1)] = BoardQueries.ImageOfMask(
+                            image.Topology,
+                            image.Direction,
+                            values[(top - 1)]
+                        );
 
-                    continue;
-                }
-                if (ExpressionArithmetic.FunctionArity(operation: token.Operation) is > 0 and var functionArity) {
-                    top -= functionArity;
-                    if (
-                        !ExpressionArithmetic.FunctionAdmits(
-                        token.Operation,
-                        (token.CarrierKind ?? kind)
-                    ) ||
-                        !ExpressionArithmetic.TryValidatedFunction(
-                        arguments: stack.Slice(
-                            length: functionArity,
-                            start: top
-                        ),
-                        kind: (token.CarrierKind ?? kind),
-                        operation: token.Operation,
-                        value: out var applied
-                    )
-                    ) {
-                        return Outcome.Faulted(why: ExpressionFault.Domain);
+                        continue;
                     }
+                case ExpressionStep.Function: {
+                        var carrier = (token.CarrierKind ?? kind);
 
-                    stack[top++] = applied;
+                        top -= arity;
+                        if (
+                            !ExpressionArithmetic.FunctionAdmits(token.Operation, carrier) ||
+                            !ExpressionArithmetic.TryValidatedFunction(
+                            arguments: values.Slice(
+                                length: arity,
+                                start: top
+                            ),
+                            kind: carrier,
+                            operation: token.Operation,
+                            value: out var applied
+                        )
+                        ) {
+                            return Outcome.Faulted(why: ExpressionFault.Domain);
+                        }
 
-                    continue;
-                }
-                if (ExpressionArithmetic.IsUnary(operation: token.Operation)) {
+                        values[top++] = applied;
+
+                        continue;
+                    }
+                case ExpressionStep.Unary:
                     if (!ExpressionArithmetic.TryUnary(
                         token.Operation,
                         (token.CarrierKind ?? kind),
-                        stack[(top - 1)],
+                        values[(top - 1)],
                         out var unary
                     )) {
                         return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
-                    stack[(top - 1)] = unary;
+                    values[(top - 1)] = unary;
 
                     continue;
-                }
-
-                var right = stack[--top];
-                var left = stack[--top];
-
-                // Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked
-                // semantics are preserved without allocating an exception per evaluation.
-                if (!ExpressionArithmetic.TryBinary(
-                    token.Operation,
-                    (token.CarrierKind ?? kind),
-                    left,
-                    right,
-                    out var result
-                )) {
-                    return Outcome.Faulted(why: ExpressionFault.Domain);
-                }
-
-                stack[top++] = result;
             }
-        } catch (ArithmeticException) {
+
+            var right = values[--top];
+            var left = values[--top];
+
+            // Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked
+            // semantics are preserved without allocating an exception per evaluation.
+            if (!ExpressionArithmetic.TryBinary(
+                token.Operation,
+                (token.CarrierKind ?? kind),
+                left,
+                right,
+                out var result
+            )) {
+                return Outcome.Faulted(why: ExpressionFault.Domain);
+            }
+
+            values[top++] = result;
+        }
+
+        if (top != (bottom + 1)) {
             return Outcome.Faulted(why: ExpressionFault.Domain);
         }
 
-        if (
-            (top == 1) &&
-            absent[0]
-        ) {
-            return Outcome.Absent;
-        }
-
-        return ((top == 1)
-            ? Outcome.Finite(raw: stack[0])
-            : Outcome.Faulted(why: ExpressionFault.Domain));
+        return (Marked(marks: marks, slot: bottom)
+            ? Outcome.Absent
+            : Outcome.Finite(raw: values[bottom]));
     }
     // Every cell the family's member row holds is visited once, in the arena's own member order, so the reduction
-    // is deterministic. A member's own outcome that is not a number is the fold's.
-    private static Outcome Fold(CompiledFold fold, IStateReader? reader, ReadOnlySpan<long> arguments) {
+    // is deterministic. A member's own outcome that is not a number is the fold's. Each member's body runs on the
+    // block above the values its caller holds.
+    private static Outcome Fold(ref EvaluationFrame frame, CompiledFold fold, scoped ReadOnlySpan<long> arguments, scoped Span<long> values, scoped Span<ulong> marks, int bottom) {
         if (
-            (reader is null) ||
+            !frame.IsLive ||
             (fold.RowOrdinal < 0)
         ) {
             return Outcome.Faulted(why: ExpressionFault.Domain);
@@ -419,8 +509,8 @@ public static partial class RuleExpressions {
             ? 1L
             : 0L
         );
-        var arena = reader.Arena;
-        var time = reader.Time;
+        var arena = frame.Arena;
+        var time = frame.Time;
         var cursor = 0;
 
         while (arena.TryNextLiveNumber(
@@ -432,10 +522,14 @@ public static partial class RuleExpressions {
         )) {
             var memberOutcome = Run(
                 arguments: arguments,
+                bottom: bottom,
+                frame: ref frame,
+                hasMember: true,
                 kind: fold.MemberKind,
+                marks: marks,
                 member: member,
                 program: fold.Body,
-                reader: reader
+                values: values
             );
 
             if (!memberOutcome.TryFinite(raw: out var applied)) {
@@ -478,5 +572,11 @@ public static partial class RuleExpressions {
         }
 
         return Outcome.Finite(raw: accumulator);
+    }
+
+    // The operand feeds of one address-reading token, on the machine stack beside the block.
+    [InlineArray(length: MaxAddresses)]
+    private struct FeedFrame {
+        private AddressFeed m_first;
     }
 }

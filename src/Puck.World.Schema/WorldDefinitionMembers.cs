@@ -495,7 +495,7 @@ public sealed class WorldDefinitionMembers {
         try {
             if (type is null) {
                 return ((DocumentExtensionsPolicy.IsReservedKey(key: name))
-                    ? JsonSerializer.Deserialize<JsonElement>(utf8Json: value)
+                    ? JsonElement.Parse(utf8Json: value)
                     : throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));
             }
             return JsonSerializer.Deserialize(utf8Json: value, jsonTypeInfo: (context ?? WorldJsonContext.Authored).Options.GetTypeInfo(type: type));
@@ -510,7 +510,7 @@ public sealed class WorldDefinitionMembers {
     /// <exception cref="InvalidDataException">No root member has the name.</exception>
     public static JsonNode? Write(string name, object? value) {
         if (value is null) { return null; }
-        if (value is JsonElement element) { return JsonNode.Parse(json: element.GetRawText()); }
+        if (value is JsonElement element) { return JsonNode.Parse(utf8Json: System.Runtime.InteropServices.JsonMarshal.GetRawUtf8Value(element: element)); }
 
         var type = (WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition))
             ?? throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));

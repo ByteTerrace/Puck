@@ -136,14 +136,22 @@ public sealed partial class StateArena {
     /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
     public bool TryReadLiveNumberAt(int rowOrdinal, int position, in ArenaTime time, out long value) {
         RequirePositionalRow(rowOrdinal: rowOrdinal);
-        if (
-            TryRowLayout(layout: out var layout, rowOrdinal: rowOrdinal) &&
-            (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
-            (layout.Kind is not (CellKind.Text or CellKind.Vector)) &&
-            BitWords.Contains(index: CellSlotAt(layout: layout, position: position), words: m_presence)
-        ) {
-            value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: CellSlotAt(layout: layout, position: position), time: in time);
-            return true;
+        if (((uint)rowOrdinal) < ((uint)m_layout.RowCount)) {
+            // Read in place: a row's layout is wide, and a positional read is a rule's per-cell path.
+            ref readonly var layout = ref m_layout[rowOrdinal];
+
+            if (
+                layout.IsStored &&
+                (((uint)position) < ((uint)HashCellExtent(layout: in layout))) &&
+                (layout.Kind is not (CellKind.Text or CellKind.Vector))
+            ) {
+                var slot = CellSlotAt(layout: in layout, position: position);
+
+                if (BitWords.Contains(index: slot, words: m_presence)) {
+                    value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: slot, time: in time);
+                    return true;
+                }
+            }
         }
         value = 0L;
         return false;
