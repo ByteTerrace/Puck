@@ -55,7 +55,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
     private static readonly CommandForms WorldSliceForms = CommandForms.Of(verb: Verb, "<x|y|z> <offset> <u> <v> <half> <path.png> [bands <m>] [res <n>]", "<placement> <x|y|z> <path.png> [offset <m>] [bands <m>] [res <n>]");
     private static readonly CommandForms WorldSliceSaveForms = CommandForms.Of(verb: SaveVerb, SaveForm);
-    private static readonly CommandForms WorldSliceLiveForms = CommandForms.Of(verb: LiveVerb, "off", "<x|y|z> <offset> <u> <v> <half> [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]", "<placement> <x|y|z> [offset <m>] [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]");
+    private static readonly CommandForms WorldSliceLiveForms = CommandForms.Of(verb: LiveVerb, "off", "<x|y|z> <offset> <u> <v> <half> [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]", "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]");
 
     /// <summary>Parses a <c>world.slice</c> line's arguments: an explicit plane and square
     /// (<c>&lt;x|y|z&gt; &lt;offset&gt; &lt;u&gt; &lt;v&gt; &lt;half&gt; &lt;path.png&gt;</c>) or a placement's (<c>&lt;placement&gt;
@@ -222,17 +222,8 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
                 var placement = args[0].ToString();
 
-                if (string.Equals(a: placement, b: NearToken, comparisonType: StringComparison.Ordinal)) {
-                    var seat = ((context.Principal.Kind == PrincipalKind.Seat)
-                        ? context.Principal.Index
-                        : context.Slot
-                    );
-
-                    if (NearestSpawnedPlacement(context, body: seat) is not { } nearest) {
-                        return CommandResult.Error(output: $"[{SaveVerb}: 'near' names the placement of the spawn point nearest seat {(seat + 1)}'s body, and none stands there]");
-                    }
-
-                    placement = nearest;
+                if (!TryResolveNear(context: context, placement: ref placement, refusal: out var nearRefusal, verb: SaveVerb)) {
+                    return nearRefusal;
                 }
                 var axis = args[1].ToString().ToLowerInvariant();
 
@@ -258,6 +249,21 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         );
     }
 
+    // Replaces the near token with the placement of the spawn point nearest the calling seat's body; any other placement
+    // stands. False, with the refusal, when the token names none.
+    private bool TryResolveNear(CommandContext context, string verb, ref string placement, out CommandResult refusal) {
+        refusal = default;
+        if (!string.Equals(a: placement, b: NearToken, comparisonType: StringComparison.Ordinal)) { return true; }
+
+        var seat = ((context.Principal.Kind == PrincipalKind.Seat) ? context.Principal.Index : context.Slot);
+
+        if (NearestSpawnedPlacement(context, body: seat) is not { } nearest) {
+            refusal = CommandResult.Error(output: $"[{verb}: 'near' names the placement of the spawn point nearest seat {(seat + 1)}'s body, and none stands there]");
+            return false;
+        }
+        placement = nearest;
+        return true;
+    }
     // The placement sharing its id with the spawn point nearest the body (a world that names a spawn point after the
     // placement it stands before), or null when the body is inactive or no such spawn point names a placement.
     private string? NearestSpawnedPlacement(CommandContext context, int body) {

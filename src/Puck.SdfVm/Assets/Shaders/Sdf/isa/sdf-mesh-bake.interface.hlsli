@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/71ce51fb57b899dd7c0bfd3985130fd28b42320d23ee24a0efd37dfc0a464756). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/940dcb8126233592001c82f7c4f8ff0b25f3085d76053b89edc756074c4535a6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -124,6 +124,7 @@ struct SdfMeshBakeFrame {
 [[vk::binding(22, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t22, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
+[[vk::binding(24, 1)]] StructuredBuffer<uint> sdfFieldSliceWords : register(t24, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfMeshBakePass {

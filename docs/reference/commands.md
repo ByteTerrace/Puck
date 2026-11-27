@@ -910,6 +910,57 @@ contact seen at a grazing angle reads deeper than it is; look again from
 another side before calling it a flaw. An overlap wholly behind another
 object's back face is not seen from that side.
 
+## Live field slice
+
+`world.slice` writes a cut through the field to a PNG; `world.slice.live`
+draws the same cut in the world, as a translucent square on the plane over
+every view of the World's own residency, so an author can walk around a
+creation and read its field where it stands:
+
+```text
+world.slice.live <x|y|z> <offset> <u> <v> <half> [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]
+world.slice.live <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]
+world.slice.live off
+```
+
+The plane and square read as `world.slice`'s: the explicit form names the
+plane (`x`, `y` or `z` equal to `offset`) and the square by its centre `(u, v)`
+and half side, where `(u, v)` is `(Z, Y)` on an `x` cut, `(X, Z)` on a `y` cut
+and `(X, Y)` on a `z` cut; the placement form cuts through a placement's
+position, plus `offset` along the axis, over a square reaching 1.25 times its
+creation's reach. `near` names the placement of the spawn point nearest the
+calling seat's body, as `world.slice.save near` does, so standing at a gallery
+display and slicing `near` cuts the exhibit on its turntable. `mode` picks which of the PNG's two panels the square shows,
+in the same colours (`SdfFieldSlice.RenderPlane` and the PNG draw through one
+colour mapping):
+
+- `distance` (the default): warm outside, cool inside, a dark line every
+  `bands` metres of field and a white line on the surface. Bands that bunch or
+  spread show a field that is not the distance.
+- `gradient`: the gradient's magnitude, white within two percent of one (an
+  exact distance), blue below it (a bound, which underestimates) and red above
+  it (an overestimate), with the surface black.
+- `both`: the distance on the square's `-u` half and the gradient on its `+u`
+  half.
+
+Grey answers no shape and dull magenta marks clipped samples, as in the PNG.
+`opacity` (0.85 unless given) is how much the square covers where it lies in
+front of a surface; behind a surface it keeps a fifth of that, enough to place
+the plane by. `res` sets the samples a side, 128 unless given.
+
+The field is sampled by the mesh bake's own sampler, the one field walk, as
+`world.slice` samples it, a frame's bake share at a time; the colours are drawn
+on the CPU and uploaded as one table the composite reads
+(`SdfLiveFieldSlice`, `SdfWorldTables.StageFieldSlice`). The plane samples once
+for each placement and program: a plane that stands over a document that stands
+costs nothing, moving the plane or reloading the document samples again, and
+until the new answer lands the square keeps its last image where that image was
+sampled. A `world.slice` still sampling defers the live plane until it lands.
+With `off`, nothing is sampled, uploaded or drawn. The square is drawn after
+the view's image meter, so it never moves the exposure, and like every
+display-referred overlay it passes the view's tone curve, so its colours read
+slightly flatter than the PNG's.
+
 ## Scene diagnostics
 
 Scene diagnostics are operator commands: their authority-wide counters,

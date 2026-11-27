@@ -35,6 +35,9 @@ public sealed partial class WorldSliceCommandModule {
             var tokens = new string[args.Count];
 
             for (var index = 0; (index < tokens.Length); index++) { tokens[index] = args[index].ToString(); }
+            if ((tokens.Length > 0) && !TryResolveNear(context: context, placement: ref tokens[0], refusal: out var nearRefusal, verb: LiveVerb)) {
+                return nearRefusal;
+            }
 
             var options = new LiveOptions();
 
