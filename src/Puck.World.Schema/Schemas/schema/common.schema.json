@@ -5344,6 +5344,8 @@
     },
     "ShapeNonNullable9": {
       "enum": [
+        "ToFixed",
+        "ToInt",
         "Add",
         "Subtract",
         "Multiply",

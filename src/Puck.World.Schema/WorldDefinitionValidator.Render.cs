@@ -194,7 +194,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            foreach (var prototypeId in ((IEnumerable<string?>)[placement.PrototypeId, .. (placement.Respond ?? []).Select(selector: static response => response?.PrototypeId)])) {
+            foreach (var prototypeId in WorldPlacementResponse.Showable(placement: placement)) {
                 if ((prototypeId is not null) && (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId)?.Lights is { Count: > 0 })) {
                     errors.Add(item: $"placement '{placement.Id}' shows '{prototypeId}', which carries lights, but expands into many copies (a deal, mirror, distribution or several inhabitants) that no one light rides; place the lit creation in a row of its own.");
 

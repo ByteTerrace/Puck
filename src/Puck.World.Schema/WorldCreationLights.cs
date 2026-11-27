@@ -63,7 +63,7 @@ public static class WorldCreationLights {
 
             var scale = (placement.HasStaticFrame ? WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement).Scale : placement.Scale);
 
-            foreach (var prototypeId in Shows(placement: placement)) {
+            foreach (var prototypeId in WorldPlacementResponse.Showable(placement: placement).Distinct(comparer: StringComparer.Ordinal)) {
                 if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId)?.Lights is not { Count: > 0 } lights) {
                     continue;
                 }
@@ -103,29 +103,6 @@ public static class WorldCreationLights {
     /// <returns><see langword="true"/> for a point, spot or tube light.</returns>
     public static bool IsCarriable(WorldRenderLight? light) => (light is WorldRenderLight.Point or WorldRenderLight.Spot or WorldRenderLight.Tube);
 
-    // The prototypes a row can show: its own and each response's, each once, in authored order.
-    private static IEnumerable<string> Shows(WorldPlacement placement) {
-        yield return placement.PrototypeId;
-
-        if (placement.Respond is not { } responses) {
-            yield break;
-        }
-
-        for (var index = 0; (index < responses.Count); index++) {
-            if ((responses[index]?.PrototypeId is not { } prototypeId) || string.Equals(a: prototypeId, b: placement.PrototypeId, comparisonType: StringComparison.Ordinal)) {
-                continue;
-            }
-
-            var seen = false;
-
-            for (var earlier = 0; (earlier < index); earlier++) {
-                seen |= string.Equals(a: responses[earlier]?.PrototypeId, b: prototypeId, comparisonType: StringComparison.Ordinal);
-            }
-            if (!seen) {
-                yield return prototypeId;
-            }
-        }
-    }
     // A creation's light as the world's: anchored to the row, its place in the creation's frame at the row's scale.
     private static WorldRenderLight Place(WorldRenderLight light, WorldAnchor anchor, string name, float scale) => (light switch {
         WorldRenderLight.Point point => (point with { Anchor = anchor, Name = name, Position = Scaled(position: point.Position, scale: scale) }),
