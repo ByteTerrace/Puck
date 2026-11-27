@@ -166,8 +166,23 @@ let galleryDisplayRows = [
     x: bayX(showcaseBays[0]), z: tileZ(showcaseRowSouth), yaw: 180
   }
 ]
-// Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.
-let galleryDisplays = map(galleryDisplayRows, display => (display with { x: galleryTileX(display.x), z: galleryTileZ(display.z) }))
+// Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles. A display is
+// the station a console and a turntable make, wherever a world stands it, so each row carries the frame it stands in:
+// `floor` the height of its floor in that frame, `site` where the frame stands in the world (a static creation's paints and
+// a terminal's reach are in world coordinates), `parent` the placement that frame is (null for none), and `homes` the groups
+// whose exhibits it is home to (the exhibits whose paints, or whose reach, name the place the exhibit stands at). A world
+// that stands one station of its own gives the station templates its own row (shape-station-root.puck).
+let galleryDisplays = map(
+  galleryDisplayRows,
+  display => (display with {
+    x: galleryTileX(display.x)
+    z: galleryTileZ(display.z)
+    floor: galleryFloor[display.level]
+    site: gallerySite
+    parent: "gallery"
+    homes [display.id]
+  })
+)
 // Every display's exhibit turns as on a turntable. At speed 1 it turns once in turntableSecondsPerTurn gallery seconds;
 // its console steps the speed one at a time up to turntableSpeeds either way, through the slowest pace into turning the
 // other way round, and holds and releases it. `turntableHolds` labels the hold button with what a tap does, by whether
@@ -183,34 +198,37 @@ let turntableHolds = ["PLAY", "PAUSE"]
 let galleryTurnCodes = { slower: 1, hold: 2, faster: 3, on: 4, off: 5, pace: 6 }
 function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / speed} S  >" : $"<  {turntableSecondsPerTurn / (0 - speed)} S")
 
-// Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
-// the display that shows it (its index in galleryDisplays), its place in that display's list (`slot`) and in the
-// catalog (`index`). An exhibit's catalog index is its identity: a display's selection cell (`gallerySelect`) holds it.
+// Where each group's list starts in the catalog, and every exhibit in walking order, group by group: its name, the group
+// it belongs to (its index in galleryDisplayRows), its place in that group's list (`slot`) and in the catalog (`index`).
+// An exhibit's catalog index is its identity: a display's selection cell (`gallerySelect`) holds it. Every display's console
+// lists the whole catalog, whichever groups its world stands a display for.
 let galleryDisplayFirsts = map(
-  range(0, length(galleryDisplays)),
-  i => reduce(map(range(0, i), j => length(galleryDisplays[j].names)), 0, (sum, count) => (sum + count))
+  range(0, length(galleryDisplayRows)),
+  i => reduce(map(range(0, i), j => length(galleryDisplayRows[j].names)), 0, (sum, count) => (sum + count))
 )
 let galleryCatalog = flatMap(
-  range(0, length(galleryDisplays)),
-  i => map(galleryDisplays[i].names, (name, slot) => { name: name, display: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) })
+  range(0, length(galleryDisplayRows)),
+  i => map(galleryDisplayRows[i].names, (name, slot) => { name: name, group: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) })
 )
 let galleryLast = (length(galleryCatalog) - 1)
-// Each display's default exhibit, by its catalog index: the one its cells, its list and its turntable hold at boot.
-let galleryDisplayDefaults = map(galleryDisplays, display => filter(galleryCatalog, entry => (entry.name == display.default))[0].index)
+function galleryGroupOf(entry) = galleryDisplayRows[entry.group]
+function exhibitEntry(name) = filter(galleryCatalog, entry => (entry.name == name))[0]
+// A display's default exhibit, by its catalog index: the one its cells, its list and its turntable hold at boot.
+function displayDefault(display) = exhibitEntry(display.default).index
 
 // A display's floor height, and `front`, the sign of z its console faces along (1 at yaw 180, -1 at yaw 0).
-function displayFloor(display) = galleryFloor[display.level]
+function displayFloor(display) = display.floor
 function displayFront(display) = ((display.yaw == 0) ? -1 : 1)
 // A point given in the display plinth's own author frame (architecture.puck's: +X to the right of a viewer facing the
-// console, +Y up, +Z toward that viewer), placed in the building's frame: the plinth stands at `displayScale`, a yaw-180
-// display's author axes are the building's, and a yaw-0 display's turn x and z about.
+// console, +Y up, +Z toward that viewer), placed in the display's frame: the plinth stands at `displayScale`, a yaw-180
+// display's author axes are the frame's, and a yaw-0 display's turn x and z about.
 function displayPoint(display, p) = [
   (display.x + (displayFront(display) * displayScale * p[0])),
   (displayFloor(display) + (displayScale * p[1])),
   (display.z + (displayFront(display) * displayScale * p[2]))
 ]
-// The same point in the world, where the debug world stands the building: a static creation's paints stand there.
-function displayWorld(display, p) = galleryWorld(displayPoint(display, p)[0], displayPoint(display, p)[1], displayPoint(display, p)[2])
+// The same point in the world, where the display's frame stands: a static creation's paints stand there.
+function displayWorld(display, p) = (display.site + displayPoint(display, p))
 // The turn that carries a paint's +X along the console's face to the viewer's right, its +Y up the face and its +Z out
 // of it, in the world: the plinth's own face turn (`plinthFace`) at yaw 180, and the same turned half round at yaw 0.
 function displayFaceTurn(display) = ((display.yaw == 0) ? [0, plinthFace[3], (0 - plinthFace[0]), 0] : plinthFace)
@@ -221,51 +239,52 @@ let displayStand = [0, 0, 1.75]
 // exhibits' own frame puts the plinth's cap at 0.75, and the display's cap stands at plinthCapTop times displayScale.
 let displayExhibitDrop = (((plinthCapTop * displayScale) - (0.75 * displayExhibitScale)) + displayExhibitLift)
 
-// Every exhibit's station: its name, its catalog index and slot, and its display's place (the turntable's centre, its
-// level and floor height, the yaw it stands at and `front`).
-let galleryStations = map(
-  galleryCatalog,
-  entry => {
-    name: entry.name
-    index: entry.index
-    slot: entry.slot
-    display: galleryDisplays[entry.display].id
-    level: galleryDisplays[entry.display].level
-    x: galleryDisplays[entry.display].x
-    y: displayFloor(galleryDisplays[entry.display])
-    z: galleryDisplays[entry.display].z
-    yaw: galleryDisplays[entry.display].yaw
-    front: displayFront(galleryDisplays[entry.display])
-  }
-)
-function galleryStation(name) = filter(galleryStations, station => (station.name == name))[0]
-// Where a point an exhibit authors in its own frame stands in the building: its display's turntable, set down by
-// displayExhibitDrop, the point scaled by `displayExhibitScale` and turned as the display is.
+// The display an exhibit is home to, among `displays`: the first whose `homes` name the exhibit's group.
+function stationHome(displays, entry) = filter(displays, display => (length(filter(display.homes, home => (home == galleryGroupOf(entry).id))) > 0))[0]
+// An exhibit's station: its name, its catalog index and slot, and its home display's place (the turntable's centre, its
+// level and floor height, the yaw it stands at, `front` and the `site` of its frame).
+function stationRow(entry, display) = {
+  name: entry.name
+  index: entry.index
+  slot: entry.slot
+  display: display.id
+  level: display.level
+  x: display.x
+  y: displayFloor(display)
+  z: display.z
+  yaw: display.yaw
+  front: displayFront(display)
+  site: display.site
+}
+function stationOf(displays, name) = stationRow(exhibitEntry(name), stationHome(displays, exhibitEntry(name)))
+// Where a point an exhibit authors in its own frame stands in its display's frame: its display's turntable, set down by
+// displayExhibitDrop, the point scaled by `displayExhibitScale` and turned as the display is; `exhibitWorld` in the world.
 function exhibitPoint(station, p) = [
   (station.x + (station.front * displayExhibitScale * p[0])),
   (station.y + displayExhibitDrop + (displayExhibitScale * p[1])),
   (station.z + (station.front * displayExhibitScale * p[2]))
 ]
+function exhibitWorld(station, p) = (station.site + exhibitPoint(station, p))
 
 // A spawn point per display before its console, named after its turntable's placement (`display-<id>`), then one per
-// exhibit at its display's, named after the exhibit, so `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to
+// exhibit at its home display's, named after the exhibit, so `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to
 // any exhibit by name. The display's own comes first, so a verb that takes the spawn point nearest a body
 // (`gallery.flag near`) names the display, and a slice of the one at hand (`gallery.slice near`) cuts its turntable.
 // She stands turned `gallerySpawnTurn` degrees past facing the display, because the chase camera keeps its place behind
 // her: square to it, her body stands between the camera and the console and hides it. Turned, the camera (4 m back
 // along her heading, 1.2 m over her pivot) sees the exhibit and the console beside her. The points are authored in the
-// building's frame, under its root placement.
+// display's frame, under its parent placement.
 let gallerySpawnTurn = 40
-function displaySpawn(id, display) = {
+function displaySpawn(id, display) = ({
   id: id
-  parent: gallery
   position: displayPoint(display, displayStand)
   yawDegrees: (((display.yaw + 180) % 360) + gallerySpawnTurn)
-}
-let gallerySpawns = concat(
-  map(galleryDisplays, display => displaySpawn($"display-{display.id}", display)),
-  map(galleryCatalog, entry => displaySpawn(entry.name, galleryDisplays[entry.display]))
+} with ((display.parent == null) ? {} : { parent: display.parent }))
+function stationSpawns(displays) = concat(
+  map(displays, display => displaySpawn($"display-{display.id}", display)),
+  map(galleryCatalog, entry => displaySpawn(entry.name, stationHome(displays, entry)))
 )
+let gallerySpawns = stationSpawns(galleryDisplays)
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
 // The hex wallpapers' clip: a clockwise pointy-top hexagon of inradius 0.45 (circumradius 0.45 / cos 30 degrees).
@@ -643,8 +662,9 @@ let consolePointer = {
 }
 // A display's screen in terminal mode: the hidden console its terminal opens (../standard/contexts/terminal-console.puck,
 // gallery/gallery.puck's galleryConsole), which the screen placement responds with while the display's
-// `terminalConsoleOpen` cell holds 1. It is the same dark glass in the console's own palette: faint scanlines across the
-// field, an ochre rule over and under the text, the display's group and terminal number small in the top corner, the
+// `terminalConsoleOpen` cell holds 1. It is the same glass in the console's own palette under a deep-teal field lit as the
+// interface's controls are (consoleLook.terminal), with scanlines across it, an ochre rule over and under the text, the
+// display's group and terminal number small in the top corner, the
 // last line run in teal over its reply in cream, and the line being typed in amber behind its prompt. Its type is about
 // half again the list's, so someone standing a step or two behind the one typing reads along.
 let terminalScreenText = { x0: -0.7, x1: 0.7, y0: -0.105, y1: 0.143 }
@@ -655,6 +675,7 @@ let terminalScreenPromptEm = 0.03
 let terminalScanHalf = 0.0009
 let terminalScanPitch = 0.006
 function terminalScreenPaints(display, number) = [
+  consoleFill(display, { x0: (0 - plinthGlassHalf[0]), x1: plinthGlassHalf[0], y0: (0 - plinthGlassHalf[1]), y1: plinthGlassHalf[1] }, consoleLook.terminal)
   {
     type: "Box"
     position: displayWorld(display, plinthOnFace(0, 0, displayGlassFront))
@@ -664,12 +685,12 @@ function terminalScreenPaints(display, number) = [
   }
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: 0.15, y1: 0.156 }, consoleLook.frame, 0.003)
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: -0.117, y1: -0.111 }, consoleLook.frame, 0.003)
-  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.quiet, 0.012, "right")
+  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.teal, 0.012, "right")
   consoleText(
     display,
     terminalScreenText,
-    terminalConsoleScreen(number, echo: consoleLook.quiet),
-    consoleLook.dim,
+    terminalConsoleScreen(number, echo: consoleLook.teal),
+    consoleLook.cream,
     terminalScreenEm,
     "left",
     markup: true,
@@ -786,15 +807,18 @@ let galleryCommands = [
   }
 ]
 
-// Each display, which gallery/gallery.puck places beside the rules that work it: its plinth, solid, and its screen over
-// the console's glass, both at `displayScale`, the screen carrying the console's pointer surface (consolePointer); and
-// the exhibit on its turntable, which shows the display's first exhibit and, through its response facet, whichever
-// exhibit of the whole catalog the display's `gallerySelect` cell holds, so any display can show any exhibit.
-template displayPlacements() {
-  for (display, index) in galleryDisplays {
+// Each of `displays`, which its world places beside the rules that work it (shape-station.puck): its plinth, solid, and
+// its screen over the console's glass, both at `displayScale`, the screen carrying the console's pointer surface
+// (consolePointer); and the exhibit on its turntable, which shows the display's first exhibit and, through its response
+// facet, whichever exhibit of the whole catalog the display's `gallerySelect` cell holds, so any display can show any
+// exhibit.
+template displayPlacements(displays = galleryDisplays) {
+  for (display, index) in displays {
     placement $"display-{display.id}-plinth" {
       prototype: "gallery-display"
-      parent: "gallery"
+      if display.parent != null {
+        parent: display.parent
+      }
       position [display.x, displayFloor(display), display.z]
       yawDegrees: display.yaw
       scale: displayScale
@@ -802,12 +826,14 @@ template displayPlacements() {
     }
     placement $"display-{display.id}-screen" {
       prototype: $"gallery-screen-{display.id}"
-      parent: "gallery"
+      if display.parent != null {
+        parent: display.parent
+      }
       position [display.x, displayFloor(display), display.z]
       yawDegrees: display.yaw
       scale: displayScale
       pointer: consolePointer
-      // The display's terminal (its place in galleryDisplays from 1) turns the screen into its hidden console.
+      // The display's terminal (its place in `displays` from 1) turns the screen into its hidden console.
       respond [
         {
           when: state(state: terminalConsoleOpen, key: $"{index + 1}", comparison: Equal, value: 1)
@@ -816,10 +842,12 @@ template displayPlacements() {
       ]
     }
   }
-  for (display, index) in galleryDisplays {
+  for display in displays {
     placement $"display-{display.id}" {
-      prototype: galleryCatalog[galleryDisplayDefaults[index]].name
-      parent: "gallery"
+      prototype: galleryCatalog[displayDefault(display)].name
+      if display.parent != null {
+        parent: display.parent
+      }
       position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
       yawDegrees: display.yaw
       scale: displayExhibitScale
@@ -831,7 +859,7 @@ template displayPlacements() {
         phase: $"state.galleryTurnPhase.{display.id}"
       }
       respond: map(
-        filter(galleryCatalog, entry => (entry.index != galleryDisplayDefaults[index])),
+        filter(galleryCatalog, entry => (entry.index != displayDefault(display))),
         entry => {
           when: state(state: gallerySelect, key: display.id, comparison: Equal, value: entry.index)
           prototypeId: entry.name
@@ -860,60 +888,59 @@ template displayPlacements() {
 // `galleryInputs` holds text cells three exhibits read: `probe` places motion-state-blend's sphere, `reach` is the world
 // point motion-ik's arm reaches for (before its turntable), and `tint` colours shape-state-color. shapes.md gives the
 // console lines.
-let reachStation = galleryStation("motion-ik")
-let reachPoint = exhibitPoint(reachStation, [-0.35, 1.45, 0.25])
-// A display's default exhibit, which its cells hold at boot, and the scroll its list boots at: that exhibit on the top row,
-// unless the catalog's end comes first.
-function displayFirst(index) = galleryCatalog[galleryDisplayDefaults[index]]
+
+// The scroll a display's list boots at: its default exhibit on the top row, unless the catalog's end comes first.
+function displayScroll(display) = minimum(displayDefault(display), consoleScrollLast)
 // A console's scroll and choice packed as one number, so one cell says what its rows were written for.
 let consoleViewStride = 4096
 function consoleView(scroll, chosen) = ((scroll * consoleViewStride) + chosen)
-function consoleScrollAt(index) = minimum(galleryDisplayDefaults[index], consoleScrollLast)
 // Every row of every console's list as it boots: its cells' key, and the catalog entry it shows.
-let consoleSlots = flatMap(
-  range(0, length(galleryDisplays)),
-  index => map(range(0, consoleRows), row => {
-    key: $"{galleryDisplays[index].id}-{row}"
-    entry: galleryCatalog[(consoleScrollAt(index) + row)]
-    chosen: ((consoleScrollAt(index) + row) == galleryDisplayDefaults[index])
+function consoleSlotsOf(displays) = flatMap(
+  displays,
+  display => map(range(0, consoleRows), row => {
+    key: $"{display.id}-{row}"
+    entry: galleryCatalog[(displayScroll(display) + row)]
+    chosen: ((displayScroll(display) + row) == displayDefault(display))
   })
 )
 
-// One cell a display (Int unless `kind` says otherwise), keyed by its id and seeded from `values`, a value a display in
-// galleryDisplays' order.
-template displayCells(name, values, kind = "Int") {
+// One cell a display of `displays` (Int unless `kind` says otherwise), keyed by its id and seeded from `values`, a value a
+// display in `displays`' order.
+template displayCells(displays, name, values, kind = "Int") {
   row {
     name: name
     kind: kind
-    capacity: length(galleryDisplays)
-    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: values[index] })
+    capacity: length(displays)
+    cells: map(range(0, length(displays)), index => { key: displays[index].id, value: values[index] })
   }
 }
 
-template displayState() {
-  displayCells(name: "gallerySelect", values: galleryDisplayDefaults)
-  displayCells(name: "galleryShownAt", values: galleryDisplayDefaults)
-  displayCells(name: "galleryPlace", values: map(galleryDisplayDefaults, shown => (shown + 1)))
-  displayCells(name: "galleryScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
-  displayCells(name: "galleryRowsView", values: map(range(0, length(galleryDisplays)), index => consoleView(consoleScrollAt(index), galleryDisplayDefaults[index])))
-  displayCells(name: "galleryPress", values: map(galleryDisplays, display => 0))
-  displayCells(name: "galleryPressRow", values: map(galleryDisplays, display => -1))
-  displayCells(name: "galleryPressScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
-  displayCells(name: "galleryDragRow", values: map(galleryDisplays, display => -1))
-  displayCells(name: "galleryDragged", values: map(galleryDisplays, display => 0))
-  displayCells(name: "galleryStepAt", values: map(galleryDisplays, display => 0))
+// The state of `displays` and of the catalog their consoles list: the stations' rows, then every exhibit's copy.
+template displayState(displays = galleryDisplays) {
+  let consoleSlots = consoleSlotsOf(displays)
+  displayCells(displays: displays, name: "gallerySelect", values: map(displays, display => displayDefault(display)))
+  displayCells(displays: displays, name: "galleryShownAt", values: map(displays, display => displayDefault(display)))
+  displayCells(displays: displays, name: "galleryPlace", values: map(displays, display => (displayDefault(display) + 1)))
+  displayCells(displays: displays, name: "galleryScroll", values: map(displays, display => displayScroll(display)))
+  displayCells(displays: displays, name: "galleryRowsView", values: map(displays, display => consoleView(displayScroll(display), displayDefault(display))))
+  displayCells(displays: displays, name: "galleryPress", values: map(displays, display => 0))
+  displayCells(displays: displays, name: "galleryPressRow", values: map(displays, display => -1))
+  displayCells(displays: displays, name: "galleryPressScroll", values: map(displays, display => displayScroll(display)))
+  displayCells(displays: displays, name: "galleryDragRow", values: map(displays, display => -1))
+  displayCells(displays: displays, name: "galleryDragged", values: map(displays, display => 0))
+  displayCells(displays: displays, name: "galleryStepAt", values: map(displays, display => 0))
   // The turntable: its signed pace (turntableSpeeds either way), whether it turns, the rate and phase its turn facet
   // reads, the mailbox its buttons, the gallery.turn commands and the display console write (galleryTurnCodes) with the
   // pace a pace request asks for, and the two labels its console shows.
-  displayCells(name: "galleryTurnSpeed", values: map(galleryDisplays, display => turntableSpeed))
-  displayCells(name: "galleryTurnPlay", values: map(galleryDisplays, display => 1))
-  displayCells(name: "galleryTurnRate", kind: "Fixed", values: map(galleryDisplays, display => $"{turntableSpeed * turntableRate}"))
-  displayCells(name: "galleryTurnPhase", kind: "Fixed", values: map(galleryDisplays, display => "0"))
-  displayCells(name: "galleryTurnNext", kind: "Fixed", values: map(galleryDisplays, display => "0"))
-  displayCells(name: "galleryTurnAt", values: map(galleryDisplays, display => 0))
-  displayCells(name: "galleryTurnTo", values: map(galleryDisplays, display => 0))
-  displayCells(name: "galleryTurnHold", kind: "Text", values: map(galleryDisplays, display => turntableHolds[1]))
-  displayCells(name: "galleryTurnPace", kind: "Text", values: map(galleryDisplays, display => turntablePace(turntableSpeed)))
+  displayCells(displays: displays, name: "galleryTurnSpeed", values: map(displays, display => turntableSpeed))
+  displayCells(displays: displays, name: "galleryTurnPlay", values: map(displays, display => 1))
+  displayCells(displays: displays, name: "galleryTurnRate", kind: "Fixed", values: map(displays, display => $"{turntableSpeed * turntableRate}"))
+  displayCells(displays: displays, name: "galleryTurnPhase", kind: "Fixed", values: map(displays, display => "0"))
+  displayCells(displays: displays, name: "galleryTurnNext", kind: "Fixed", values: map(displays, display => "0"))
+  displayCells(displays: displays, name: "galleryTurnAt", values: map(displays, display => 0))
+  displayCells(displays: displays, name: "galleryTurnTo", values: map(displays, display => 0))
+  displayCells(displays: displays, name: "galleryTurnHold", kind: "Text", values: map(displays, display => turntableHolds[1]))
+  displayCells(displays: displays, name: "galleryTurnPace", kind: "Text", values: map(displays, display => turntablePace(turntableSpeed)))
   row {
     name: "galleryTurnHolds"
     kind: Text
@@ -950,7 +977,7 @@ template displayState() {
     name: "galleryRowGroup"
     kind: Text
     capacity: length(consoleSlots)
-    cells: map(consoleSlots, slot => { key: slot.key, value: galleryDisplays[slot.entry.display].title })
+    cells: map(consoleSlots, slot => { key: slot.key, value: galleryGroupOf(slot.entry).title })
   }
   row {
     name: "galleryRowInk"
@@ -981,25 +1008,25 @@ template displayState() {
     name: "galleryGroups"
     kind: Text
     capacity: length(galleryCatalog)
-    cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryDisplays[entry.display].title })
+    cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryGroupOf(entry).title })
   }
   row {
     name: "galleryScreenTitle"
     kind: Text
-    capacity: length(galleryDisplays)
-    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayFirst(index).name].title })
+    capacity: length(displays)
+    cells: map(displays, display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].title })
   }
   row {
     name: "galleryScreenNote"
     kind: Text
-    capacity: length(galleryDisplays)
-    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayFirst(index).name].note })
+    capacity: length(displays)
+    cells: map(displays, display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].note })
   }
   row {
     name: "galleryScreenGroup"
     kind: Text
-    capacity: length(galleryDisplays)
-    cells: map(galleryDisplays, display => { key: display.id, value: display.title })
+    capacity: length(displays)
+    cells: map(displays, display => { key: display.id, value: galleryGroupOf(galleryCatalog[displayDefault(display)]).title })
   }
   row {
     name: "galleryPick"
@@ -1009,7 +1036,10 @@ template displayState() {
   }
 }
 
-template galleryState() {
+// The motion exhibits' controls and the cells they read. The reach target is a point in the world before the turntable
+// motion-ik is home to, among `displays`.
+template galleryState(displays = galleryDisplays) {
+  let reachPoint = exhibitWorld(stationOf(displays, "motion-ik"), [-0.35, 1.45, 0.25])
 
   slot galleryClock = 0.5 advance(perSecond: 1)
 
@@ -1038,7 +1068,7 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{gallerySite[0] + reachPoint[0]}, {gallerySite[1] + reachPoint[1]}, {gallerySite[2] + reachPoint[2]}]"
+    reach = $"[{reachPoint[0]}, {reachPoint[1]}, {reachPoint[2]}]"
     tint = "#D9822B"
   }
 }
@@ -1889,14 +1919,13 @@ template formPrototypes() {
   }
 }
 
-// The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
-// space, so the stripe names the place its exhibit stands at, the middle of its display's turntable exhibit.
-let paintStation = galleryStation("shape-paint-world")
-let paintCentre = exhibitPoint(paintStation, [0, 1.2, 0])
-
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
-// colour, each on slot 3.
-template surfacePrototypes() {
+// colour, each on slot 3. The static paints stand in the world: a static placement shares one palette and draws an
+// unparented paint in world space, so the stripe names the place its exhibit stands at, the middle of its home display's
+// turntable exhibit, among `displays`.
+template surfacePrototypes(displays = galleryDisplays) {
+  let paintCentre = exhibitWorld(stationOf(displays, "shape-paint-world"), [0, 1.2, 0])
+  let tilesZ = stationOf(displays, "shape-paint-tiles").site[2] + stationOf(displays, "shape-paint-tiles").z
   prototype "shape-metal" {
     document {
       shape Sphere "subject" {
@@ -2112,7 +2141,7 @@ template surfacePrototypes() {
               // about the exhibit's z in the world, where the panel is.
               {
                 type: "Box"
-                position [0, 0, (gallerySite[2] + galleryStation("shape-paint-tiles").z)]
+                position [0, 0, tilesZ]
                 scale [0.145, 0.145, 1]
                 color: "#B4553A"
                 repeat { cell [0.3, 0.3, 0], tone: "#C86E48", seed: 7 }
@@ -2273,7 +2302,7 @@ template surfacePrototypes() {
             paints [
               {
                 type: "Plane"
-                position: galleryWorld(paintCentre[0], paintCentre[1], paintCentre[2])
+                position: paintCentre
                 rotation [0, 0, 0.258819, 0.965926]
                 stroke: 0.035
                 color: "#1F4E79"
@@ -3193,7 +3222,8 @@ template motionPrototypesB() {
   }
 }
 
-template galleryPrototypes() {
+// Every creation a world needs for `displays`: the plinth and each display's screens, and the whole catalog's exhibits.
+template galleryPrototypes(displays = galleryDisplays) {
   // The display plinth (architecture.puck), one creation every display's plinth placement stamps, and each display's
   // screen over its console.
   prototype "gallery-display" {
@@ -3204,7 +3234,7 @@ template galleryPrototypes() {
       displayPlinth(base: 0)
     }
   }
-  for (display, index) in galleryDisplays {
+  for (display, index) in displays {
     displayScreen(display: display, number: index + 1)
   }
   // Each primitive at a uniform scale.
@@ -3997,7 +4027,7 @@ template galleryPrototypes() {
   blendPrototypes()
   foldPrototypes()
   formPrototypes()
-  surfacePrototypes()
+  surfacePrototypes(displays: displays)
   motionPrototypes()
   motionPrototypesB()
   warpPrototypes()

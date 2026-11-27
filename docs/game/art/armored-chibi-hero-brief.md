@@ -106,7 +106,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Subsystem or concept | Canonical source |
 |---|---|
 | Author a body-worn creation instead of expanding the procedural catalog | [WorldLook](../../../src/Puck.World.Schema/WorldLook.cs) |
-| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs), [CreationFrame](../../../src/Puck.World.Authoring/Authoring/CreationFrame.cs) |
+| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs) |
 | Motion signals, gated drivers, swings and slides | [CreationAnimation](../../../src/Puck.World.Authoring/Authoring/CreationAnimation.cs) |
 | Foot and hand constraints | [CreationEffector](../../../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
 | Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldCreationInstances](../../../src/Puck.World.Client/WorldCreationInstances.cs) |

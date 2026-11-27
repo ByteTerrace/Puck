@@ -212,11 +212,10 @@ public sealed partial class WorldBody {
             var sweptVelocity = (desiredPosition - previousPosition);
 
             var resolution = ((field is IEntityContactField entityField)
-                ? entityField.ResolveCarriedSweep(entityIndex: EntityIndex, carrier: carrier,
+                ? entityField.ResolveCarriedSweep(body: this, carrier: carrier,
                     previousPosition: in previousPosition, position: ref sweptPosition, velocity: ref sweptVelocity,
                     orientation: in m_orientation, volumes: volumes, up: FixedVector3.UnitY)
                 : SweepContact(
-                entityIndex: EntityIndex,
                 field: field,
                 orientation: in m_orientation,
                 position: ref sweptPosition,
@@ -261,12 +260,16 @@ public sealed partial class WorldBody {
 
     internal int EntityIndex => ((m_population is null) ? m_entityIndex : m_populationIndex);
 
+    // The two doors through which one body's sweep moves another, its carrier: a carried body's block and a
+    // neighbour's admitted response. A kit partition steps only its own bodies, so both refuse there.
     internal void ApplyCarryBlock(FixedVector3 correction, FixedQ4816 ceiling) {
+        m_population?.ThrowIfPartitioned();
         if (m_sweepRefusedThisTick) { return; }
         if (ceiling > FixedQ4816.Zero) { correction = correction.ClampLength(maximum: ceiling); }
         if (IsRigid) { ApplyAdmittedContactResponse(position: (m_position + correction), velocity: ApproximateWorldVelocity()); } else { ApplyDynamicContact(correction: correction); }
     }
     internal void ApplyAdmittedContactResponse(FixedVector3 position, FixedVector3 velocity) {
+        m_population?.ThrowIfPartitioned();
         if ((position == m_position) && (velocity == ApproximateWorldVelocity())) { return; }
         WakeUp();
         m_position = position;

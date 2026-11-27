@@ -1,0 +1,10 @@
+// A clear, neutral midday for a root that stands one place alone (shape-station-root.puck): the standard's day cycle
+// (skies.puck) at the sun's noon height with a day a hundred times the debug world's length, so the light a change is
+// judged under does not move while it is iterated on. It owns no clock beyond the cycle's `day`, and no moon, planet or
+// companion: day.puck is the debug world's whole sky, and day-alone.puck its sky for a root that keeps those.
+// A document fragment of its own, since the cycle's template authors `render` and an array-form `state.world`, which a
+// document that declares `world { }` blocks cannot share.
+
+import "../standard/skies"
+
+dayCycle(daySeconds: 86400, start: 11.5, noonElevation: 60, heading: 37, cloudiness: 0.15)

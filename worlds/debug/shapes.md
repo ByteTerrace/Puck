@@ -7,14 +7,20 @@ shows on every construct at once, and the building itself exercises stairs, a
 lift, floors, walls, windows and indoor light. Two displays move: their
 exhibits run through the dynamic stamp path on one console-controlled clock, so
 motion, skinning and motion vectors can be inspected, paused and scrubbed.
-[`shapes.puck`](shapes.puck) holds the exhibits and the displays; `debug.puck`
-imports it, expands `galleryPrototypes()` in its `prototypes` block
+[`shapes.puck`](shapes.puck) holds the exhibits and the display stations' look,
+state and placements, and [`shape-station.puck`](shape-station.puck) a station's
+rules and terminal; both take the list of displays a world stands, which is the
+gallery's twelve unless a world gives its own. `debug.puck`
+imports them, expands `galleryPrototypes()` in its `prototypes` block
 and `galleryState()` in its `state.world` block, concatenates `gallerySpawns`
 into its `spawnPoints` and `galleryCommands` into its `commands`, and declares
 the font its lettering embosses in. [`gallery/gallery.puck`](gallery/gallery.puck) is
 the building, a module under one root placement: its shell, floors, stairs,
-lift, lights, level boards, the displays and their rules, tour and keys.
+lift, lights, level boards, the displays (it expands `displayPlacements()`,
+`displayState()` and `shapeStation()` for them), tour and keys.
 [gallery.md](gallery.md) draws its plan and says what stands where.
+[`shape-station-root.puck`](shape-station-root.puck) boots one station alone
+([a station on its own](#a-station-on-its-own)).
 
 Each exhibit stands on a display station's turntable, one of a group the
 display's console steps through, and the console's screen names it and says
@@ -179,7 +185,7 @@ refuses them when they run.
 
 Prototype names are `shape-<exhibit>` for the still exhibits and
 `motion-<exhibit>` for the moving ones. `galleryDisplays` in `shapes.puck` lists
-the displays in walking order, each with its group's exhibits in order, and
+the gallery's displays in walking order, each with its group's exhibits in order, and
 places each on its level ([gallery.md](gallery.md#what-stands-where)). A
 display's id names its placements (`display-<id>` the turntable,
 `display-<id>-plinth`, and `-screen`, which carries the console's pointer
@@ -227,6 +233,48 @@ back:
 each exhibit's display title, for the console rules to copy. The note wraps in
 its box and shrinks to fit, so a note of up to about 180 characters reads at its
 full size.
+
+## A station on its own
+
+[`shape-station-root.puck`](shape-station-root.puck) boots one display station
+on a bare floor under a still midday sky ([`still-noon.puck`](still-noon.puck)),
+for iterating on the station, its console or an exhibit without the building. It
+is the same station the gallery stands twelve of, expanded by the same
+templates from one display row:
+
+- `shapes.puck`'s `galleryPrototypes`, `galleryState`, `displayState` and
+  `displayPlacements` and `shape-station.puck`'s `shapeStation` each take a
+  `displays` list that defaults to the gallery's `galleryDisplays`. The root
+  passes `[station]`, a row with the same members (`id`, `title`, `default`,
+  `x`, `z`, `yaw`, `level`) and the frame it stands in: `floor` (its floor's
+  height), `site` (where that frame stands in the world, which a terminal's reach
+  and a static creation's paints need) and `parent` (the placement that frame is,
+  or null for the world's own). `homes` names the groups whose exhibits the display
+  is home to: the root's is every group, so the paint and IK exhibits, which stand
+  a paint or a reach at the place they are shown, stand it at its one turntable.
+- The console lists the whole catalog, so swapping shapes is one tap: the groups
+  (`galleryDisplayRows`) are the catalog, and a display is only where one stands.
+  A display's `gallerySelect` cell holds any exhibit of it.
+- The seat boots before the console at the `hero` spawn point (`gallery` and
+  `display-shapes` are the same place, and every exhibit has one named after
+  it for `gallery.go <exhibit>`). Press the context button (E, or the pad's RB)
+  there: the camera eases to the station view (`gallery-station-shapes`, also
+  `gallery.station`), the left mouse button taps the glass, and the backtick
+  turns the screen into its hidden console as in the gallery.
+
+Boot it with the `puck` server's `puck_world_start` (`document: "worlds/debug/shape-station-root.puck"`, windowed for
+the console), or
+`dotnet run --project src/Puck.World -c Release -- --world worlds/debug/shape-station-root.puck --devices none`.
+A saved `.puck` edit reloads live (`world.reload`, or the World's source watch):
+an exhibit's shapes and the console's rows and rules take effect without a
+restart, and the exhibit's mesh bakes again where it changed. An edit under
+`../standard/` reloads the same way. `puck compile worlds/debug/shape-station-root.puck --validate`
+checks it without booting. The station's own pieces live in `shapes.puck` (the
+console's geometry, paints and state, from `consoleRows` on), `shape-station.puck`
+(the rules, terminal and station view) and the standard's
+[`architecture.puck`](../standard/architecture.puck) (the plinth and the face
+paints); an exhibit is a `prototype` in `shapes.puck`, and a new one joins a
+group's name list at the top of the file.
 
 ## Coverage
 
