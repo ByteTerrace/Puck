@@ -102,12 +102,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     internal bool KeepsGpuPublication(SdfMeshIrradianceScene scene, int geometry, int window) {
         lock (m_gate) { return (!m_disposed && SdfMeshIrradianceScene.SameGpuContent(first: m_scene, second: scene) && (m_geometry == geometry) && (m_windowVersion == window)); }
     }
-    // Whether the installed scene names a mesh its residency no longer places, so no query of it can be admitted
-    // (SdfWorldTables.TryProbeScene): a group that traces the tier it draws leaves the scene when the view retiers it and
-    // the region forgets the tier it drew. The probe service is the one writer (NoteScenePlacement), since only an
-    // admission reads the placements; Install clears it with the scene. ScenePendingDue is the one reader: the trace's
-    // progress paces a rebuild only while the installed scene can be traced, so a scene that cannot never holds back
-    // the build that replaces it.
+    // Whether the installed scene names a mesh its residency no longer places or whose words no longer stand, so no query
+    // of it can be admitted (SdfWorldTables.TryProbeScene): a scene is built only from meshes that stand (TraceDraws), and
+    // the region can take one back after (a retier, a refusal under its limit, a forgotten floor). The probe service is
+    // the one writer (NoteScenePlacement), since only an admission reads the placements; Install clears it with the
+    // scene. ScenePendingDue and RefreshScene read it: the trace's progress paces a rebuild only while the installed scene
+    // can be traced, and the rebuild runs even when the draws' key is unchanged, so it leaves out what no longer stands
+    // and a head is never cancelled and listed again on the same scene for good.
     private volatile bool m_sceneUnplaced;
     /// <summary>Records whether a query's scene could be bound when the probe service last tried to admit it, for the
     /// scene the volume holds installed: a scene that stayed unbound past the service's admission wait makes the next
@@ -325,6 +326,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>The times the probe service found the installed scene naming a mesh its residency no longer places
     /// (<see cref="NoteScenePlacement"/>), each of which makes the next scene build due.</summary>
     public static readonly WorkKind SceneUnplaced = Registry.Declare(name: "sdf.mesh-gi.scene-unplaced", unit: "scenes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the faults of the volume's background work (its trace worker, its camera sample) the volume
+    /// contained: each ended that work, was reported on the error stream and made the volume rebuild.</summary>
+    public static readonly WorkKind Faults = Registry.Declare(name: "sdf.mesh-gi.faults", unit: "faults", workClass: WorkClass.Pacing);
     /// <summary>Counts background admission checks that walk a scene's mesh placements.</summary>
     public static readonly WorkKind PlacementChecks = Registry.Declare(name: "sdf.mesh-gi.placement-checks", unit: "checks", workClass: WorkClass.Pacing);
     /// <summary>Counts admissions that reuse a successful check of the scene's current placements and backing.</summary>
@@ -777,6 +781,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_gpuCameraSampleTask, name: "camera-sample"));
         Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: (((names is not null) && (m_gpuTrace?.DescribeWait() is { } wait)) ? $"worker-{wait}" : "worker")));
         Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_build, name: "build"));
+        Term(holds: RecoveringFromFault, name: ((names is null) ? "recovering" : $"recovering-from-{m_fault}"));
         Term(holds: ((m_scene is not null) && m_owed), name: "owed");
         Term(holds: m_refillOwed, name: "refill");
         Term(holds: Dirty, name: (m_republishOwed ? "unpublished-republish-owed" : "unpublished"));
@@ -1006,17 +1011,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             if (m_worker is { IsFaulted: true } faulted) {
                 m_worker = null;
-                throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
+                ContainFault(part: "trace", exception: faulted.Exception!);
             }
             if (m_gpuCameraSampleTask is { IsFaulted: true } cameraSampleFault) {
                 m_gpuCameraSampleTask = null;
-                throw new InvalidOperationException(message: "The GPU exposure meter failed.", innerException: cameraSampleFault.Exception);
+                m_gpuCameraSampleAskedOf = null;
+                ContainFault(part: "camera-sample", exception: cameraSampleFault.Exception!);
             }
+            Rebuild();
             // A converging frame still waiting for its refill or the yield starts no worker: the drain takes over the
             // background trace's work, and starts only from the windows it renders.
             if (!converging || (stage == SdfMeshConvergenceStage.None)) {
                 if (drain && !m_draining) { m_yield = true; }
-                if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
+                if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain) && !RecoveringFromFault && !m_sceneUnplaced) {
                     m_yield = false;
                     m_draining = drain;
                     if (drain) { (m_drainPass, m_drainDone, m_drainTotal) = (0, 0, 0); }
@@ -1037,6 +1044,34 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // A frame that does not converge lighting ends any convergence one left behind.
         return Converging(stage: stage);
     }
+
+    // Contains a fault of the volume's background work (its trace worker or camera sample): the work it was doing ends,
+    // the fault is reported by name and counted (Faults), and the volume rebuilds what the device holds of it once
+    // nothing of its work still runs (Rebuild), after FaultRetry, rather than failing the frame that finds it and with it
+    // the host. Under the gate.
+    private void ContainFault(string part, Exception exception) {
+        Counters.Count(kind: Faults);
+        m_fault = part;
+        m_faultAt = Time.GetTimestamp();
+        m_rebuildOwed = true;
+        Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] {part} failed; the volume's work stops and rebuilds in {FaultRetry.TotalSeconds:0} s: {exception.GetBaseException()}"));
+    }
+    // Forgets what the device holds of the volume once a contained fault left it owed and neither the worker nor a camera
+    // sample still runs, as a new probe service's attach does, so the next listing measures and publishes from the
+    // volume's words alone. Under the gate.
+    private void Rebuild() {
+        if (!m_rebuildOwed || (m_worker is { IsCompleted: false }) || (m_gpuCameraSampleTask is { IsCompleted: false })) { return; }
+        m_rebuildOwed = false;
+        ForgetPublication();
+    }
+    // Whether a contained fault still holds the worker back: its rebuild is owed or FaultRetry has not passed since it.
+    private bool RecoveringFromFault => (m_rebuildOwed || ((m_faultAt != 0L) && (Time.GetElapsedTime(startingTimestamp: m_faultAt) < FaultRetry)));
+    // The wall time a contained fault holds the worker back, so a fault that recurs on every listing reports once a retry.
+    private static readonly TimeSpan FaultRetry = TimeSpan.FromSeconds(value: 4d);
+    // The part whose fault was last contained, when, and whether the rebuild it owes is still to run. Under the gate.
+    private string? m_fault;
+    private long m_faultAt;
+    private bool m_rebuildOwed;
 
     // Under the volume gate. Keep the published table until its complete replacement fits.
     // Under the gate: forgets what the device holds of the volume (its hit slots, its snapshot, the published levels),
@@ -1137,7 +1172,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             lock (m_gate) {
                 if (m_disposed) { return true; }
                 build = RefreshScene(frame: frame);
-                if (build is null) { return !WaitingForMemory(m_sceneRefusedAt); }
+                // A converging frame traces the scene its draws name, so a mesh its scene left out while it lands holds the
+                // frame until it stands and the scene that holds it is built; a mesh the region refuses holds nothing.
+                if (build is null) { return (!WaitingForMemory(m_sceneRefusedAt) && !OmittedStands(landing: true)); }
             }
             if (HostWaits.Wait(deadline: deadline, reason: in SceneWait, task: build) == WaitOutcome.DeadlinePassed) { return false; }
         }
@@ -1660,7 +1697,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} lighting-epoch={(m_lighting?.Epoch ?? 0)} seen-relights-owed={(OwesSeenRelight ? "yes" : "no")} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} scene-omitted={m_sceneOmitted.Length} faults={Counters.Read(kind: Faults)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} lighting-epoch={(m_lighting?.Epoch ?? 0)} seen-relights-owed={(OwesSeenRelight ? "yes" : "no")} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -1801,7 +1838,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
         // the scene while this frame traces it. The lockstep caller resolves this frame again after it lands.
         if (m_build is { IsCompleted: false }) { return m_build; }
-        if (key == m_sceneKey) { m_sceneRefusedAt = null; return null; }
+        // The draws' key alone does not decide: a scene the probe service could not bind (m_sceneUnplaced) is built again
+        // from the meshes that stand now, and so is one that left out a mesh that has come to stand since.
+        if ((key == m_sceneKey) && !m_sceneUnplaced && !OmittedStands()) { m_sceneRefusedAt = null; return null; }
         if (WaitingForMemory(m_sceneRefusedAt)) { return null; }
         if (key == m_buildingKey) { return m_build; }
         if (bakePending && (draws == 0)) { return null; }
@@ -1862,23 +1901,60 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return hash.Value;
     }
     // Appends what the trace scene holds for one static row: its drawn mesh, or where the row's placement traces its
-    // group's floor (SdfMeshDraw.Trace), every piece of that floor once, at the placement's first piece.
-    private static int TraceDraws(in SdfMeshDraw draw, ref SdfMeshDraw[] into, int count) {
-        if (draw.Trace is not { } trace) {
-            if (count == into.Length) { into = RentedArrays.Grow(array: into, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
-            into[count++] = draw;
+    // group's floor (SdfMeshDraw.Trace), every piece of that floor once, at the placement's first piece. With a region
+    // (`region`, the residency's mesh store) it appends only meshes whose words stand there, which is all a probe job can
+    // bind (SdfMeshRegionStore.TryProbeScene): a floor with a piece that does not stand gives way to the row's drawn mesh,
+    // and a mesh left out is added to `omitted`, whose standing later makes the next scene build due (OmittedStands).
+    private static int TraceDraws(in SdfMeshDraw draw, SdfMeshRegionStore? region, List<SdfMesh> omitted, ref SdfMeshDraw[] into, int count) {
+        if ((draw.Trace is { } trace) && ((region is null) || FloorStands(trace: trace, region: region, omitted: omitted, first: (draw.Piece == 0)))) {
+            if (draw.Piece != 0) { return count; }
+            for (var piece = 0; (piece < trace.PieceCount); piece++) {
+                var traced = (draw with { Mesh = trace.Piece(index: piece), Piece = 0, Trace = null });
+
+                if (!traced.IsStatic) { continue; }
+                Append(draw: in traced, into: ref into, count: ref count);
+            }
             return count;
         }
-        if (draw.Piece != 0) { return count; }
-        for (var piece = 0; (piece < trace.PieceCount); piece++) {
-            var traced = (draw with { Mesh = trace.Piece(index: piece), Piece = 0, Trace = null });
-
-            if (!traced.IsStatic) { continue; }
-            if (count == into.Length) { into = RentedArrays.Grow(array: into, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
-            into[count++] = traced;
+        if ((region is not null) && !region.Stands(mesh: draw.Mesh)) {
+            omitted.Add(item: draw.Mesh);
+            return count;
         }
+        Append(draw: (draw with { Trace = null }), into: ref into, count: ref count);
         return count;
+
+        static void Append(in SdfMeshDraw draw, ref SdfMeshDraw[] into, ref int count) {
+            if (count == into.Length) { into = RentedArrays.Grow(array: into, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
+            into[count++] = draw;
+        }
     }
+    // Whether every static piece of a floor stands in the region; the placement's first row records the pieces that do not.
+    private static bool FloorStands(SdfMesh trace, SdfMeshRegionStore region, List<SdfMesh> omitted, bool first) {
+        var stands = true;
+
+        for (var piece = 0; (piece < trace.PieceCount); piece++) {
+            var mesh = trace.Piece(index: piece);
+
+            if (region.Stands(mesh: mesh)) { continue; }
+            stands = false;
+            if (!first) { break; }
+            omitted.Add(item: mesh);
+        }
+        return stands;
+    }
+    // Whether a mesh the installed scene left out (m_sceneOmitted) now stands, or, for a converging frame's own scene
+    // (`landing`), is still landing; under the gate.
+    private bool OmittedStands(bool landing = false) {
+        if ((m_sceneOmitted.Length == 0) || (m_writeTables?.MeshStore is not { } region)) { return false; }
+        foreach (var mesh in m_sceneOmitted) {
+            if (region.Stands(mesh: mesh) || (landing && region.Lands(mesh: mesh))) { return true; }
+        }
+        return false;
+    }
+    // The meshes the installed scene left out because their words did not stand when it was built (TraceDraws), and the
+    // list a build being started fills. Under the gate.
+    private SdfMesh[] m_sceneOmitted = [];
+    private readonly List<SdfMesh> m_omitting = [];
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
     private Task StartSceneBuild(SdfFrame frame, MultisetDigest key, int draws) {
@@ -1892,14 +1968,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var snapshot = ((m_snapshotDraws.Length < draws) ? RentedArrays.Grow(array: m_snapshotDraws, keep: 0, minimumLength: draws) : m_snapshotDraws);
         var count = 0;
         var floors = 0;
+        // A volume that publishes into a residency's tables traces only what that residency's mesh region holds standing.
+        var region = m_writeTables?.MeshStore;
 
+        m_omitting.Clear();
         foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
             if (!draw.InStaticScene) { continue; }
             if ((draw.Trace is not null) && (draw.Piece == 0)) { floors++; }
-            count = TraceDraws(count: count, draw: in draw, into: ref snapshot);
+            count = TraceDraws(count: count, draw: in draw, into: ref snapshot, omitted: m_omitting, region: region);
         }
+        var omitted = m_omitting.ToArray();
+
         snapshot.AsSpan(start: count).Clear();
         m_snapshotDraws = snapshot;
 
@@ -1941,7 +2022,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Counters.Add(amount: scene.EntryCount, kind: Entries);
             Counters.Raise(kind: PeakEntries, value: scene.EntryCount);
 
-            var install = new SceneInstall(Changed: changed, Count: count, Draws: snapshot, Key: key, Scene: scene);
+            var install = new SceneInstall(Changed: changed, Count: count, Draws: snapshot, Key: key, Omitted: omitted, Scene: scene);
             var held = false;
 
             lock (m_gate) {
@@ -1957,7 +2038,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var built = clock.Elapsed.TotalSeconds;
 
             if (held) { await install.Done.Task.ConfigureAwait(continueOnCapturedContext: false); }
-            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
+            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} omitted={omitted.Length} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
         });
         return m_build;
     }
@@ -1968,9 +2049,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError, allocator: m_allocator); }
         catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
-    // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
-    // once it is installed, or dropped by a disposed volume.
-    private sealed record SceneInstall(SdfMeshIrradianceScene Scene, MultisetDigest Key, SdfMeshDraw[] Draws, int Count, ChangeTree? Changed) {
+    // A built scene waiting to replace the installed one: its input, its key, the meshes it left out for not standing
+    // and the change it makes; Done completes once it is installed, or dropped by a disposed volume.
+    private sealed record SceneInstall(SdfMeshIrradianceScene Scene, MultisetDigest Key, SdfMeshDraw[] Draws, int Count, SdfMesh[] Omitted, ChangeTree? Changed) {
         public TaskCompletionSource Done { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     }
     // The trace units in flight (BeginUnit): a listing or a batch the worker runs on the snapshot it took. A scene built
@@ -2001,6 +2082,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The replaced draws' array becomes the next snapshot's.
         (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, install.Draws, install.Count);
         m_sceneKey = install.Key;
+        m_sceneOmitted = install.Omitted;
         m_sceneRefusedAt = null;
         m_buildingKey = null;
         m_tracedSinceScene = 0L;

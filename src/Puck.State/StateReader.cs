@@ -13,6 +13,9 @@ public enum StateReduceOp : byte {
 
     Count,
     ArrangementRank,
+    /// <summary>A named key's zero-based position among the row's cells in their order. It reads one key, so it is
+    /// compiled to its own operand and no aggregate over a row's cells answers it.</summary>
+    Position,
 }
 public static partial class StateReader {
     public static long ArrangementRank(ReadOnlySpan<int> domainOrdinals) {
