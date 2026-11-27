@@ -21,7 +21,7 @@
 //   chessPutJudged()
 //   chessPutSettled()
 //
-// A world whose board is drawn rather than stood with pieces (chess-game.puck) passes `digital: true` to the judge: its
+// A world whose board is drawn rather than stood with pieces passes `digital: true` to the judge: its
 // pieces are their cells alone and the board is always at rest. A world whose pieces are bodies (a game station's
 // holodeck, chess-station.puck) leaves the judge physical: each piece's cell is read from where its body settled, once
 // the board has rested and nothing holds the game (`chessHold`). Either may start its pieces on their squares

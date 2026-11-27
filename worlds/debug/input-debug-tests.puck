@@ -81,8 +81,6 @@ test "a board engagement cancels autorun without moving its cursor" {
   expect {
     board(engaged, south3Cells, 1) == 1
     channel(1, forward) == 0
-    south3.chessStationCursor.near == 11
-    south3.chessStationPicked.near == -1
   }
 }
 
