@@ -168,9 +168,29 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <see cref="FinestTier"/> and <see cref="CoarsestTier"/>, whose cell floors every spacing its refinement aims for.
     /// Part of the sealed geometry.</summary>
     public int Tier { get; private set; }
-    /// <summary>Gets the finest tier that changes the group's mesh: the rung at or under the finest spacing any member
-    /// asks (<see cref="SdfMeshTier.Finest"/>).</summary>
+    /// <summary>Gets the finest tier that changes the group's mesh as sealed: the rung at or under the finest spacing any
+    /// member asks (<see cref="SdfMeshTier.Finest"/>), at the group's <see cref="ScaleRungs"/>
+    /// (<see cref="FinestTierAt"/>).</summary>
     public int FinestTier { get; private set; }
+    /// <summary>Gets the rungs the group's slot scale moved the bake's metre spacings by when it was sealed
+    /// (<see cref="SdfMeshTier.ScaleRungs"/>): a dynamic group's slot's, zero for any other. Part of the sealed geometry
+    /// and form where it is not zero.</summary>
+    public int ScaleRungs { get; private set; }
+    /// <summary>Gets the length, in the group's lattice units, of a metre the bake states a spacing in, at its
+    /// <see cref="ScaleRungs"/> (<see cref="SdfMeshTier.Metre"/>).</summary>
+    public float Metre => SdfMeshTier.Metre(scaleRungs: ScaleRungs);
+    // The finest spacing the group's instances declare (Detail, a member's detail, its glyphs'), in its lattice units;
+    // infinity for none. Set when sealed.
+    private float m_declaredFinest = float.PositiveInfinity;
+
+    /// <summary>Returns the finest tier that would change the group's mesh were it sealed at a scale's rungs: the rung at
+    /// or under the finer of the spacing its instances declare and <see cref="SdfMeshPathBake.FineCell"/> at those rungs'
+    /// metre. The demand asks it at the rungs the group's slot stands at now, so a body scaled up can be asked a tier
+    /// finer than the one it was sealed with.</summary>
+    /// <param name="scaleRungs">The rungs (<see cref="SdfMeshTier.ScaleRungs"/>).</param>
+    /// <returns>The tier.</returns>
+    public int FinestTierAt(int scaleRungs) =>
+        SdfMeshTier.Finest(spacing: MathF.Min(x: (SdfMeshPathBake.FineCell * SdfMeshTier.Metre(scaleRungs: scaleRungs)), y: m_declaredFinest));
     /// <summary>Gets the coarsest tier that changes the group's mesh: the last rung whose cell still fits a few times
     /// along its planned box (<see cref="SdfMeshTier.Coarsest"/>), at or past <see cref="FloorTier"/>.</summary>
     public int CoarsestTier { get; private set; }
@@ -554,19 +574,24 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         // A glass group lands whole and uncollapsed, so its mesh differs from the same shapes' opaque mesh.
         if (Glass) { Geometry.AppendGlass(); }
 
-        var finest = ((Detail > 0f) ? MathF.Min(x: SdfMeshPathBake.FineCell, y: Detail) : SdfMeshPathBake.FineCell);
+        var declared = ((Detail > 0f) ? Detail : float.PositiveInfinity);
 
         foreach (var (_, _, detail, _, _) in Members) {
-            if (detail > 0f) { finest = MathF.Min(x: finest, y: detail); }
+            if (detail > 0f) { declared = MathF.Min(x: declared, y: detail); }
         }
-        if (Glyphs is { Detail: > 0f } glyphs) { finest = MathF.Min(x: finest, y: glyphs.Detail); }
+        if (Glyphs is { Detail: > 0f } glyphs) { declared = MathF.Min(x: declared, y: glyphs.Detail); }
 
         var extent = (High - Low);
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
 
-        FinestTier = SdfMeshTier.Finest(spacing: finest);
-        FloorTier = SdfMeshTier.Floor(longestExtent: longest);
-        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: longest);
+        m_declaredFinest = declared;
+        ScaleRungs = ((Dynamic && (Slot >= 0) && (Slot < transforms.Count)) ? SdfMeshTier.ScaleRungs(units: SdfMeshGeometryBuilder.UnitsOf(transform: transforms[Slot])) : 0);
+        // The rungs change what every spacing stated in metres is in the group's units, so the lattice and the ladder
+        // with them: a group of another scale's rungs is another shape.
+        if (ScaleRungs != 0) { Geometry.AppendScaleRungs(rungs: ScaleRungs); }
+        FinestTier = FinestTierAt(scaleRungs: ScaleRungs);
+        FloorTier = SdfMeshTier.Floor(longestExtent: longest, metre: Metre);
+        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: longest, metre: Metre);
         // Read before the tier is asked: the planner decides a group's first tier by whether its shape is new.
         Shape = Geometry.Form;
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));

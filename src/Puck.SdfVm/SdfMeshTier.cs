@@ -110,14 +110,30 @@ public static class SdfMeshTier {
     /// <see cref="CoarsestCells"/> cells.</summary>
     public const int CoarsestSamples = (CoarsestCells + 1);
 
+    /// <summary>Returns the whole rungs a lattice's units move the spacings the bake states in metres by
+    /// (<see cref="SdfMeshPathBake.FineCell"/>, <see cref="SdfMeshPathBake.MinimumCell"/>): the nearest whole power of
+    /// two of a dynamic group's slot scale (<see cref="SdfMeshGeometryBuilder.UnitsOf"/>). A body twice its size takes one
+    /// rung, so those spacings are half as long in its own units and as long in the world as at its own size, and the
+    /// demand can ask it a tier finer than its own size's finest; a body within a square root of two of its size takes
+    /// none. Zero for units that are not a positive finite number.</summary>
+    /// <param name="units">The units the group's lattice is in: its slot's scale for a dynamic group, one for any other.</param>
+    /// <returns>The rungs, from minus <see cref="Last"/> to <see cref="Last"/>.</returns>
+    public static int ScaleRungs(float units) =>
+        ((float.IsFinite(f: units) && (units > 0f)) ? Math.Clamp(value: ((int)MathF.Round(x: MathF.Log2(x: units))), min: -Last, max: Last) : 0);
+    /// <summary>Returns the length, in a lattice's units, of a metre the bake states a spacing in, at a scale's rungs
+    /// (<see cref="ScaleRungs"/>): two to the minus rungs, exactly.</summary>
+    /// <param name="scaleRungs">The rungs.</param>
+    /// <returns>The length.</returns>
+    public static float Metre(int scaleRungs) => MathF.ScaleB(x: 1f, n: -Math.Clamp(value: scaleRungs, min: -Last, max: Last));
     /// <summary>Returns a group's floor tier: the first rung at or past its unrefined final lattice's own cell, where
     /// every refinement factor is one. A group arriving with nothing to draw plans it first and keeps it beside a finer
     /// one (<see cref="SdfMeshPathBake"/>'s floor). It is the last rung the group's refinement decides: past it a tier
     /// coarsens the lattice itself (<see cref="LatticeSamples"/>), down to <see cref="Coarsest"/>.</summary>
-    /// <param name="longestExtent">The longest extent of the group's planned box, in metres.</param>
+    /// <param name="longestExtent">The longest extent of the group's planned box, in its lattice's units.</param>
+    /// <param name="metre">A metre in the lattice's units (<see cref="Metre"/>), which the least cell is stated in.</param>
     /// <returns>The tier.</returns>
-    public static int Floor(float longestExtent) {
-        var cell = MathF.Max(x: SdfMeshPathBake.MinimumCell, y: (longestExtent / (SdfWorldPackage.MeshBakeMaxSamplesPerAxis - 1)));
+    public static int Floor(float longestExtent, float metre) {
+        var cell = MathF.Max(x: (SdfMeshPathBake.MinimumCell * metre), y: (longestExtent / (SdfWorldPackage.MeshBakeMaxSamplesPerAxis - 1)));
 
         return Math.Clamp(value: ((int)MathF.Ceiling(x: MathF.Log2(x: (cell / BaseCell)))), min: 0, max: Last);
     }
@@ -125,10 +141,11 @@ public static class SdfMeshTier {
     /// <see cref="CoarsestCells"/> times along the group's longest extent, never finer than its floor
     /// (<see cref="Floor"/>). Each rung between the two halves the lattice's samples along every axis, so a group a view
     /// resolves at a few pixels holds a few cells, and the one bias has a rung to coarsen to at any distance.</summary>
-    /// <param name="longestExtent">The longest extent of the group's planned box, in metres.</param>
+    /// <param name="longestExtent">The longest extent of the group's planned box, in its lattice's units.</param>
+    /// <param name="metre">A metre in the lattice's units (<see cref="Metre"/>).</param>
     /// <returns>The tier.</returns>
-    public static int Coarsest(float longestExtent) =>
-        Math.Max(val1: Floor(longestExtent: longestExtent), val2: SpacingFloor(spacing: (longestExtent / CoarsestCells)));
+    public static int Coarsest(float longestExtent, float metre) =>
+        Math.Max(val1: Floor(longestExtent: longestExtent, metre: metre), val2: SpacingFloor(spacing: (longestExtent / CoarsestCells)));
     /// <summary>Returns the samples a group's final lattice takes along its longest axis at a tier: the unrefined
     /// lattice's own (<paramref name="most"/>) at or under the group's floor, and past it the corners of the cells the
     /// tier's cell fits along the extent, never fewer than <see cref="CoarsestSamples"/>.</summary>

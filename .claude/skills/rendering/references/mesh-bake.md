@@ -748,7 +748,14 @@ laws exercise that boundary.
   a demand as far as the floor and no further (`SdfMeshTier.Demanded`, the one
   rule `DemandedTierOf` asks, with `DemandedSlack` and `DemandedCoarsestEdge`
   as its watch's bounds); a tier past the floor comes only from the unbiased
-  pixel. With no demand point a
+  pixel. A dynamic group's lattice is in its slot's units, and the spacings the
+  bake states in metres (`FineCell`, `MinimumCell`) are taken at its slot scale's
+  nearest whole power of two (`SdfMeshTier.ScaleRungs`, `SdfMeshBakeGroup.Metre`,
+  in the sealed geometry and form as `Fact.ScaleRungs`), with the fine split's
+  most refinement doubled per rung up (`MostRefinementOf`): a body twice its size
+  is asked a tier finer than its own size's finest (`FinestTierAt`, read live by
+  `FinestTierNow`), and a slot whose scale crosses a rung is measured and read by
+  the next decision (`Moved`, `KeepReading`). With no demand point a
   group plans at its coarsest, and a plan made before any view was observed
   asks the floor (`Tiers`); an offline bake
   (`MeshCpuBake`, `puck mesh audit --cpu`) sets `SdfMeshPathBake.PlannedTier`
@@ -1023,8 +1030,8 @@ laws exercise that boundary.
   are the full-size body's; the group's draw matrix takes the scale
   (`SdfMeshDresser.Dress`, kept in the record of a draw riding its slot), and a member's vertex takes the draw's scale
   (`sdfMeshPoseScale`, the current and previous positions). A body crossing a
-  portal pair of two sizes (Wonderland) bakes nothing and draws its full-size
-  mesh scaled. Its material layers stay in world units at its scale, since the
+  portal pair of two sizes (Wonderland) draws its full-size mesh scaled and
+  bakes only the tier its scaled pixel then demands (see the tier bullet above). Its material layers stay in world units at its scale, since the
   shading reads the slots' world poses. Never fold a body's scale back into its
   emitted geometry: a quarter-size body then keys new geometry and bakes four
   times coarser relative to itself. A slice (`world.slice`) walks the field
