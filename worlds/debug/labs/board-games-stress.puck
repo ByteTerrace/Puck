@@ -1,5 +1,6 @@
-// Twelve physical chess tables playing at once: the stress scenario for the board games under real use. Each table is the
-// debug world's own table (chess-table.puck's module, the one chess.puck stands once), instanced here under its own
+// The board games lab's stress mode: twelve physical chess tables playing at once, the stress scenario for the board games
+// under real use (board-games.puck beside it is the lab itself). Each table is the
+// debug world's own table (../chess-table.puck's module, the one ../chess.puck stands once), instanced here under its own
 // alias, so every table has its own rows, rules, placements, topology and search job, and a move at one table never
 // restarts another's search (a search job restarts when a row its judge's rules read changes, and no table's rules read
 // another's rows). Every table's computer plays both sides from its own opening, so all twelve move pieces, settle and
@@ -7,25 +8,25 @@
 // afresh by posing every piece back over its square, all 32 dropping onto the board at once. The tables open in four
 // groups of three, eight ticks apart, so the worst tick sees three tables changing together.
 //
-// Boot it with `--world worlds/debug/chess-stress.puck`; the seat starts in front of the grid. What to read while it
+// Boot it with `--world worlds/debug/labs/board-games-stress.puck`; the seat starts in front of the grid. What to read while it
 // plays: `world.budget.rules --spent` (the sheet's total against the tick's ceiling and the top rules), `world.counters
 // physics` (contacts, bodies awake, solver work), `world.search` (each table's job: restarts, lastRestart, spent and
 // peak tick), `host.frames` (the tick's parts: rules, motion, contact) and `world.status` (bodies against capacity).
 // `world.state t0$selfPlies` reads one table's turns played and `t0$selfGames` its games set up afresh;
-// `stress.chess t3 11 27` plays e2-e4 at table t3 through its move door. `puck test worlds/debug/chess-stress.puck
+// `stress.chess t3 11 27` plays e2-e4 at table t3 through its move door. `puck test worlds/debug/labs/board-games-stress.puck
 // --reproduce` plays every table's first turns twice and compares the runs.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
-documentId: "chess-stress"
+basis: "../avatars/moth"
+documentId: "board-games-stress"
 
-import "set-controls"
-import "../standard/skies"
-import "../standard/inputs"
-import "chess-table"
+import "../set-controls"
+import "../../standard/skies"
+import "../../standard/inputs"
+import "../chess-table"
 
 metadata {
-  title: "Chess stress"
+  title: "Board games stress lab"
   description: "Twelve physical chess tables, each playing itself, for measuring the board games under load."
 }
 
@@ -93,7 +94,7 @@ use physicalChessTable as t10(at: stressTableAt(10), search: "chessAI-t10", auto
 use physicalChessTable as t11(at: stressTableAt(11), search: "chessAI-t11", autoplay: stressAutoplay(11))
 
 state {
-  // The chess game's vocabularies (chess-table.puck's header).
+  // The chess game's vocabularies (../chess-table.puck's header).
   enum PieceKind {
     None
     Pawn

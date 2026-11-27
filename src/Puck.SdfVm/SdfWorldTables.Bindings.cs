@@ -121,7 +121,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_meshStore.Buffer, member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshDrawRecords, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
-        WriteWorldBuffer(buffer: m_meshIrradiance.Buffer ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
+        WriteWorldBuffer(buffer: m_meshIrradiance ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
         WriteWorldBuffer(buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
         WriteWorldBuffer(buffer: m_fieldEntriesRegion.Buffer(slot: slot), member: SdfWorldPackage.FieldEntries, set: set);

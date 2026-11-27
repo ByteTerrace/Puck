@@ -88,7 +88,7 @@ reads the same written before its `use` as after it. A JSON document and the con
 an inhabited placement the instance declares: a placement roster's key names that placement (`placement:$each`,
 `physics(quiescent, <row>)`), so it is qualified with it (`left$piece0`) in the rows' declared cells and at every key
 read alike, and the instance's roster still names its own bodies (`WorldModuleNamespace`;
-`worlds/debug/chess-stress.puck` stands twelve chess tables this way). A document that imports another under an alias (`imports: [{"as": "dive", ...}]`)
+`worlds/debug/labs/board-games-stress.puck` stands twelve chess tables this way). A document that imports another under an alias (`imports: [{"as": "dive", ...}]`)
 restates or reads that import's names in the same spelling (`dive$diveCourt`); the compiler admits a declaration
 headed by one of the document's own import aliases, and the decompiler prints those names as written.
 

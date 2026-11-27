@@ -31,7 +31,7 @@ public static class CartridgeDecompiler {
     // The order sections are written in: the cartridge's own identity first, then its data, then its behaviour.
     // Any key not named here follows in ordinal order, so a section added to the document still round-trips.
     private static readonly string[] SectionOrder = [
-        "target", "title", "gameCode", "palettes", "tiles", "map", "variables", "arrays",
+        "target", "board", "title", "gameCode", "palettes", "tiles", "map", "variables", "arrays",
         "screens", "sprites", "layers", "raster", "sounds", "save", "scrollX", "scrollY",
     ];
 

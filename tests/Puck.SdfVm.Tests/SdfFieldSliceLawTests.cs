@@ -135,12 +135,13 @@ public sealed class SdfFieldSliceLawTests {
         _ = dresser.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
         Assert.True(condition: bake.TryTake(batch: out var first, field: bake.Program));
-        // Every slice lattice precedes the box's group, even when the whole slice fits in one batch.
+        // Every slice lattice precedes the box's group, even when the whole slice fits in one batch. The group's first
+        // lattice is a coarse search's grid, which the take hands to the pool to be bounded before it samples
+        // (QueueBounds), so the first batch holds the slice's lattices alone.
         var lattice = first.Lattices[0];
 
-        Assert.Equal((2 * slice.Chunks) + 1, first.Lattices.Length);
-        Assert.All(first.Lattices[..^1], request => Assert.True(request.Gradients));
-        Assert.False(first.Lattices[^1].Gradients);
+        Assert.Equal((2 * slice.Chunks), first.Lattices.Length);
+        Assert.All(first.Lattices, request => Assert.True(request.Gradients));
         Assert.Equal(expected: -1, actual: lattice.Selector);
         Assert.Equal(expected: 1, actual: lattice.Instances);
         Assert.True(condition: lattice.Gradients);

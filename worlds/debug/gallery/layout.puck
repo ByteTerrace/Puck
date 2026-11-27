@@ -379,6 +379,50 @@ let galleryGameStations = flatMap(gameStationSides, side => map(side.bays, b => 
 let rentalBodies = range(0, 12)
 let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb-{b}"])
 
+// The visitor every small door is sized for: the Moth's capsule, 0.35 m round and 2.06 m tall at full size
+// (avatars/moth.puck's kit collider; a change there moves these).
+let galleryVisitorRadius = 0.35
+let galleryVisitorHeight = 2.06
+
+// The stewards (stewards.puck): four of the Moth's crew who stand in the gallery and, asked, give a visitor its normal
+// size back. Each stands on level 0, where a visitor that left level 1 small comes down (the tree's walkway ends at its
+// foot) or goes looking for help: at the tree's foot, east of the trunk where the walkway comes in; in the lobby, beside
+// the way in from the entrance; in the north aisle under the toybox's north gallery; and in the painting wing, against
+// its south wall between its first two paintings, before a small visitor walks into one and clear of the way along the
+// wing past its fins. Each keeps its reach clear of a display's terminal reach, and of the holiday firs on the nave's axis
+// (holiday.puck). None stands on level 1's floor: there the toybox's stairs and lift give a body
+// its size back as it leaves, and its games stay a pass holder's (gallery.md, "The size of level 1"). A steward faces
+// its heading `yaw` (0 faces -z, 90 -x, 180 +z, 270 +x) with its slate `stewardSlateOut` before it, and is talked to
+// from within `stewardReach` of the slate; `crew` is the crew member it is (stewards.puck's `stewardCrew`).
+let stewardPlan = [
+  { id: "tree", crew: "vector", x: (treeX + 6.5), z: treeZ, yaw: 90 }
+  { id: "lobby", crew: "skylark", x: tileX(20), z: tileZ(3), yaw: 270 }
+  { id: "north", crew: "bulwark", x: bayX(treeBay), z: tileZ((wallRowNorth - 2)), yaw: 0 }
+  { id: "wing", crew: "forge", x: ((courtWallDoors[0] + courtWallDoors[1]) / 2), z: tileZ((wallRowSouth + 1)), yaw: 180 }
+]
+let stewardSlateOut = 0.85
+let stewardReach = 1.5
+// The way a steward faces, and its slate's place, in the plan on level 0's floor.
+function stewardFacing(s) = rotatePoint(rotate([0, 1, 0], s.yaw), [0, 0, -1])
+function stewardSlate(s) = ([s.x, galleryFloor[0], s.z] + (stewardFacing(s) * stewardSlateOut))
+
+// The little house (mouse-house.puck): a toy house standing free on level 1's north gallery in bay 10, its front toward
+// the nave (-z), whose door only a body the toybox has made small fits through, and inside it the cake that grants the
+// full-size pass. Its door admits the visitor up to `admits` of its full size, with `room` to spare (the standard's
+// sizedDoorway). Points in it are given in its own frame (x across its front, y up from level 1's floor, z from front
+// to back) and stood in the world by `mouseHousePoint`.
+let mouseHouse = { x: bayX(10), z: tileZ((wallRowNorth - 2)), width: 1.8, depth: 1.4, admits: 0.2, room: 1.4 }
+function mouseHousePoint(p) = galleryWorld(
+  (mouseHouse.x + p[0]),
+  (galleryFloor[toyboxLevel] + p[1]),
+  (mouseHouse.z + p[2])
+)
+// Before its door, in its doorway, inside it, and at the cake's table at its back.
+let mouseHouseBefore = [0, 0, ((0 - (mouseHouse.depth / 2)) - 0.6)]
+let mouseHouseDoorway = [0, 0, (0 - (mouseHouse.depth / 2))]
+let mouseHouseInside = [0, 0, ((0 - (mouseHouse.depth / 2)) + 0.3)]
+let mouseHouseCake = [0, 0, ((mouseHouse.depth / 2) - 0.3)]
+
 // Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void,
 // standing on the floor and reaching into the fascia (or the slab) above, so no body flies or jumps into the toybox
 // from the void or drops out of it. Its uprights stand a

@@ -515,7 +515,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The volume's slot words. A reader outside the gate takes the reference under the gate inside an open hold of
     // m_blocks, which a replacement retires the old words to (RetireVolume), so they are freed only once it ends.
     private VolumeWords m_volume = VolumeWords.None;
-    private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
     // When the latest scene build began, a timestamp of Time; zero before the first.
     private long m_sceneStartedAt;
@@ -844,31 +843,43 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// it holds for the static draws changed (each draw's trace mesh, <see cref="SdfMeshDraw.Trace"/>, else its drawn
     /// mesh), paced by the installed scene's trace progress and installed between the worker's batches, captures a
     /// changed lighting, grants the frame's budget, moves each level's window with the views' cameras, starts the worker
-    /// on the probes the windows lack or whose lighting is stale, and writes the probes that landed into the tables'
-    /// volume table.</summary>
+    /// on the probes the windows lack or whose lighting is stale, and publishes the probes that landed: the tables bind
+    /// the probe service's feedback table they were committed into. First it sizes the residency's lighting reservation
+    /// (<see cref="SdfWorldTables.Lighting"/>) from the layout the frame asks for and the trace words its static draws
+    /// need, so the reservation stands before the bake fills the mesh region.</summary>
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tables">The residency's tables.</param>
     /// <param name="tier">The indirect tier the views asked for: High measures the fine volume, Medium and Off the coarse
     /// one (Off applies none of its light, <see cref="SdfIndirectTier.Off"/>).</param>
     /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes: a lighting-converged frame then builds no
     /// scene, and a frame whose bake has landed nothing builds none.</param>
-    /// <returns>The parameters the views pass reads.</returns>
+    /// <returns>The parameters the views pass reads, disabled while the tables bind no table.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="tables"/> is
+    /// <see langword="null"/>.</exception>
     public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfWorldTables tables, SdfIndirectTier tier, bool bakePending) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: tables);
 
         // The writer is one delegate to a method of this instance, so a steady frame allocates nothing here.
         m_writeTables = tables;
         m_write ??= WriteToTables;
+        // A table the probe service retired since the last preparation stops being bound before anything stages.
+        tables.SettleMeshIrradiance();
+        Reserve(frame: frame, hold: tables.Lighting, tier: tier);
 
-        return Stage(bakePending: bakePending, frame: frame, tier: tier, write: m_write);
+        var parameters = Stage(bakePending: bakePending, frame: frame, tier: tier, write: m_write);
+
+        // The views read the volume only through a bound table, which none is while a relayout replaces the feedback.
+        return (tables.BindsMeshIrradiance ? parameters : (parameters with { Enabled = false }));
     }
 
-    // The residency attaches its probe service before it stages (EnsureTables, then Stage's reattach), so a volume that
-    // publishes into tables copies the published slots from the service's feedback table on the device.
+    // The residency attaches its probe service before it stages (EnsureTables, then Stage's reattach), so the slots a
+    // volume publishes into tables lie in the service's feedback table, which a publication binds. A relayout leaves the
+    // service no table until its next relight makes one, and publishes nothing meanwhile.
     private void WriteToTables(ReadOnlyMemory<uint> words) {
         var gpu = (GpuTrace ?? throw new InvalidOperationException(message: "The irradiance volume publishes into a residency's tables only through its probe service."));
 
-        m_writeTables!.PublishMeshIrradiance(gpu.FeedbackBuffer, words.Length, m_changedSlots);
+        if (gpu.FeedbackBuffer is { } feedback) { m_writeTables!.PublishMeshIrradiance(feedback: feedback); }
     }
     // The camera the window follows: the first view's. While another residency renders that view
     // (SdfViewSnapshot.Elsewhere: its seat is presented in another world, its camera in that world's coordinates) the
@@ -957,7 +968,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             if (resizing) {
-                m_changedSlots.Clear();
                 foreach (var level in m_levels) {
                     level.Cache.Clear();
                     level.Changed.Clear();
@@ -1086,7 +1096,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_gpuDirty.Clear();
         m_listed = false;
         m_drained = default;
-        m_changedSlots.Clear();
         foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
         m_published = default;
         m_republishOwed = (m_gpuTrace is not null);
@@ -1317,6 +1326,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // After a device reattach nothing publishes until RepublishAll has owed every slot.
     // A level the frame's views do not read (Layout.Measures) is withdrawn: its slots stay, and the views stop reading it.
     private void Publish(Layout layout, Action<ReadOnlyMemory<uint>> write) {
+        var copied = false;
+
         foreach (var level in m_levels) {
             if (!layout.Measures(level: level.Index)) {
                 level.Changed.Clear();
@@ -1331,17 +1342,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (m_republishOwed || ((level.Changed.Count == 0) && (!level.Published.Present || (level.Published == window)))) { continue; }
             m_geometryWrote |= (m_tracedLanded || (level.Published != window));
-            m_changedSlots.AddRange(source: level.Changed.Members);
+            copied |= (level.Changed.Count > 0);
             level.Changed.Clear();
             level.Published = window;
             m_wrote = true;
         }
-        var copied = (m_changedSlots.Count > 0);
-
         if (copied) {
             m_tracedLanded = false;
             write(obj: m_volume.Memory[..(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)]);
-            m_changedSlots.Clear();
         }
 
         var enabled = false;

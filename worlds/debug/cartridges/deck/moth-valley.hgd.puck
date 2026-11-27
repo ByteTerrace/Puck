@@ -1,0 +1,1438 @@
+// Moth Valley, the first scene of an original edutainment game for the Humble Gaming Deck. The Moth walks the floor of
+// the valley's caldera, under the ochre canyon walls, the great gallery tree and the two moons, one lighter and one
+// darker. A dragonfly from the garden pond wanders the meadow; meet it and it asks a question in a box drawn over the
+// sky, the answers picked with the pad and A. A right answer chimes, earns a star the cartridge keeps on its battery,
+// and sends the dragonfly off; it comes back later to ask again.
+//
+// The background is 32 columns, 256 pixels, so it wraps as the camera follows her and her world x wraps with it.
+schema: "puck.cartridge.v1"
+
+target: "hgd"
+
+// MMC3: banked PRG ROM, and battery-backed PRG-RAM for the star count.
+board: "mmc3"
+
+title: "MOTH VALLEY"
+
+gameCode: "MTHV"
+
+// Master-palette indices. Colour zero of every palette is the sky, the backdrop.
+palettes {
+  background [
+    // Sky and moons: white, grey, dark grey.
+    [33, 48, 16, 0]
+    // Canyon walls: ochre, rust, dark brown.
+    [33, 39, 23, 7]
+    // The tree and the meadow: light green, green, bark.
+    [33, 42, 26, 7]
+    // The question box: cream paper, lavender border, ink.
+    [33, 55, 19, 15]
+  ]
+  object [
+    // The Moth: lavender plates, ivory, charcoal joints.
+    [33, 36, 55, 45]
+    // The dragonfly: wing shimmer, teal body, highlight.
+    [33, 44, 27, 48]
+    // The star count: gold, pale gold, orange.
+    [33, 40, 56, 22]
+    [33, 36, 55, 45]
+  ]
+}
+
+let tileList = [
+  {
+    name: "blank"
+    pixels [
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+    ]
+  }
+  {
+    name: "star"
+    pixels [
+      "00000000"
+      "00000000"
+      "00010000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000000"
+    ]
+  }
+  {
+    name: "moon-light-tl"
+    pixels [
+      "00000111"
+      "00011111"
+      "00111111"
+      "01111122"
+      "01111222"
+      "11111222"
+      "11111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "moon-light-tr"
+    pixels [
+      "11100000"
+      "11111000"
+      "11111100"
+      "11111110"
+      "21111110"
+      "11111111"
+      "11122111"
+      "11222211"
+    ]
+  }
+  {
+    name: "moon-light-bl"
+    pixels [
+      "11122111"
+      "11222211"
+      "01122111"
+      "01111111"
+      "00111111"
+      "00011111"
+      "00000111"
+      "00000000"
+    ]
+  }
+  {
+    name: "moon-light-br"
+    pixels [
+      "11122111"
+      "11111111"
+      "11111110"
+      "12211110"
+      "22221100"
+      "12211000"
+      "11100000"
+      "00000000"
+    ]
+  }
+  {
+    name: "moon-dark-tl"
+    pixels [
+      "00000222"
+      "00022222"
+      "00222222"
+      "02222233"
+      "02222333"
+      "22222333"
+      "22222222"
+      "22222222"
+    ]
+  }
+  {
+    name: "moon-dark-tr"
+    pixels [
+      "22200000"
+      "22222000"
+      "22222200"
+      "22222220"
+      "32222220"
+      "22222222"
+      "22233222"
+      "22333322"
+    ]
+  }
+  {
+    name: "moon-dark-bl"
+    pixels [
+      "22233222"
+      "22333322"
+      "02233222"
+      "02222222"
+      "00222222"
+      "00022222"
+      "00000222"
+      "00000000"
+    ]
+  }
+  {
+    name: "moon-dark-br"
+    pixels [
+      "22233222"
+      "22222222"
+      "22222220"
+      "23322220"
+      "33332200"
+      "23322000"
+      "22200000"
+      "00000000"
+    ]
+  }
+  {
+    name: "ledge"
+    pixels [
+      "00000000"
+      "00000000"
+      "00011000"
+      "00111110"
+      "11111111"
+      "11111111"
+      "22222222"
+      "22222222"
+    ]
+  }
+  {
+    name: "strata-a"
+    pixels [
+      "11111111"
+      "11111111"
+      "11111111"
+      "21111121"
+      "22222222"
+      "22222222"
+      "22322222"
+      "22222222"
+    ]
+  }
+  {
+    name: "strata-b"
+    pixels [
+      "22222222"
+      "22222222"
+      "33333333"
+      "32333323"
+      "33333333"
+      "11111111"
+      "11111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "canopy-top-l"
+    pixels [
+      "00000000"
+      "00000011"
+      "00001112"
+      "00011121"
+      "00111211"
+      "01112111"
+      "01121112"
+      "11211121"
+    ]
+  }
+  {
+    name: "canopy-top"
+    pixels [
+      "00000000"
+      "11000011"
+      "12111112"
+      "21211121"
+      "11121211"
+      "12111112"
+      "21112121"
+      "11211211"
+    ]
+  }
+  {
+    name: "canopy-top-r"
+    pixels [
+      "00000000"
+      "11000000"
+      "21110000"
+      "12111000"
+      "11211100"
+      "11121110"
+      "21112110"
+      "12111211"
+    ]
+  }
+  {
+    name: "canopy-l"
+    pixels [
+      "01121112"
+      "01211121"
+      "11112111"
+      "12111211"
+      "11211112"
+      "12112121"
+      "11121211"
+      "12211121"
+    ]
+  }
+  {
+    name: "canopy-r"
+    pixels [
+      "21112110"
+      "12111210"
+      "11211111"
+      "21121121"
+      "11211211"
+      "12111211"
+      "21121111"
+      "11211221"
+    ]
+  }
+  {
+    name: "canopy-a"
+    pixels [
+      "11211121"
+      "12112111"
+      "21121112"
+      "12111121"
+      "11212111"
+      "21121211"
+      "12111211"
+      "11211121"
+    ]
+  }
+  {
+    name: "canopy-b"
+    pixels [
+      "21112111"
+      "11211211"
+      "12121121"
+      "21111212"
+      "11211121"
+      "12112111"
+      "21211211"
+      "11121112"
+    ]
+  }
+  {
+    name: "canopy-under"
+    pixels [
+      "12112121"
+      "21221212"
+      "22212222"
+      "22222222"
+      "23222322"
+      "22232222"
+      "22322232"
+      "32223223"
+    ]
+  }
+  {
+    name: "trunk-l"
+    pixels [
+      "33333323"
+      "33323333"
+      "32333332"
+      "33333233"
+      "33233333"
+      "33333323"
+      "32333333"
+      "33332333"
+    ]
+  }
+  {
+    name: "trunk-r"
+    pixels [
+      "33233333"
+      "33333233"
+      "23333333"
+      "33323332"
+      "33333333"
+      "23332333"
+      "33333323"
+      "33233333"
+    ]
+  }
+  {
+    name: "grass-edge"
+    pixels [
+      "12121212"
+      "11111111"
+      "21111211"
+      "11121111"
+      "22222222"
+      "21222122"
+      "22222222"
+      "22122222"
+    ]
+  }
+  {
+    name: "grass"
+    pixels [
+      "22222222"
+      "22212222"
+      "22222222"
+      "22222122"
+      "22222222"
+      "21222222"
+      "22222222"
+      "22222212"
+    ]
+  }
+  {
+    name: "tuft"
+    pixels [
+      "22222222"
+      "22122122"
+      "22121212"
+      "21212122"
+      "22222222"
+      "22222222"
+      "22222222"
+      "22222222"
+    ]
+  }
+  {
+    name: "pebble"
+    pixels [
+      "22222222"
+      "22222222"
+      "22233222"
+      "22333322"
+      "22233222"
+      "22222222"
+      "22222222"
+      "22222222"
+    ]
+  }
+  {
+    name: "box-fill"
+    pixels [
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "box-tl"
+    pixels [
+      "00022222"
+      "02222222"
+      "02211111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+    ]
+  }
+  {
+    name: "box-t"
+    pixels [
+      "22222222"
+      "22222222"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "box-tr"
+    pixels [
+      "22222000"
+      "22222220"
+      "11111220"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+    ]
+  }
+  {
+    name: "box-l"
+    pixels [
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+    ]
+  }
+  {
+    name: "box-r"
+    pixels [
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+    ]
+  }
+  {
+    name: "box-bl"
+    pixels [
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "22111111"
+      "02211111"
+      "02222222"
+      "00022222"
+    ]
+  }
+  {
+    name: "box-b"
+    pixels [
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "11111111"
+      "22222222"
+      "22222222"
+    ]
+  }
+  {
+    name: "box-br"
+    pixels [
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111122"
+      "11111220"
+      "22222220"
+      "22222000"
+    ]
+  }
+  {
+    name: "cursor"
+    pixels [
+      "11111111"
+      "13311111"
+      "13333111"
+      "13333311"
+      "13333111"
+      "13311111"
+      "11111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-a"
+    pixels [
+      "11333111"
+      "13111311"
+      "13111311"
+      "13333311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-d"
+    pixels [
+      "13333111"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-e"
+    pixels [
+      "13333311"
+      "13111111"
+      "13111111"
+      "13333111"
+      "13111111"
+      "13111111"
+      "13333311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-f"
+    pixels [
+      "13333311"
+      "13111111"
+      "13111111"
+      "13333111"
+      "13111111"
+      "13111111"
+      "13111111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-g"
+    pixels [
+      "11333111"
+      "13111311"
+      "13111111"
+      "13133311"
+      "13111311"
+      "13111311"
+      "11333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-h"
+    pixels [
+      "13111311"
+      "13111311"
+      "13111311"
+      "13333311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-l"
+    pixels [
+      "13111111"
+      "13111111"
+      "13111111"
+      "13111111"
+      "13111111"
+      "13111111"
+      "13333311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-m"
+    pixels [
+      "13111311"
+      "13313311"
+      "13131311"
+      "13131311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-n"
+    pixels [
+      "13111311"
+      "13311311"
+      "13131311"
+      "13113311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-o"
+    pixels [
+      "11333111"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-r"
+    pixels [
+      "13333111"
+      "13111311"
+      "13111311"
+      "13333111"
+      "13131111"
+      "13113111"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-s"
+    pixels [
+      "11333311"
+      "13111111"
+      "13111111"
+      "11333111"
+      "11111311"
+      "11111311"
+      "13333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-v"
+    pixels [
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "13111311"
+      "11313111"
+      "11131111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-w"
+    pixels [
+      "13111311"
+      "13111311"
+      "13111311"
+      "13131311"
+      "13131311"
+      "13313311"
+      "13111311"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-y"
+    pixels [
+      "13111311"
+      "13111311"
+      "11313111"
+      "11131111"
+      "11131111"
+      "11131111"
+      "11131111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-qm"
+    pixels [
+      "11333111"
+      "13111311"
+      "11111311"
+      "11113111"
+      "11131111"
+      "11111111"
+      "11131111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-4"
+    pixels [
+      "11113111"
+      "11133111"
+      "11313111"
+      "13113111"
+      "13333311"
+      "11113111"
+      "11113111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-6"
+    pixels [
+      "11333111"
+      "13111111"
+      "13111111"
+      "13333111"
+      "13111311"
+      "13111311"
+      "11333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "glyph-8"
+    pixels [
+      "11333111"
+      "13111311"
+      "13111311"
+      "11333111"
+      "13111311"
+      "13111311"
+      "11333111"
+      "11111111"
+    ]
+  }
+  {
+    name: "moth-tl"
+    pixels [
+      "00000111"
+      "00011111"
+      "00111111"
+      "00111111"
+      "00111111"
+      "00011111"
+      "01113331"
+      "11113222"
+    ]
+  }
+  {
+    name: "moth-tr"
+    pixels [
+      "11000000"
+      "11110000"
+      "12221000"
+      "22322100"
+      "22222100"
+      "12221000"
+      "11110000"
+      "22213000"
+    ]
+  }
+  {
+    name: "moth-bl-a"
+    pixels [
+      "12113222"
+      "12113222"
+      "11113333"
+      "01113111"
+      "00033110"
+      "00031100"
+      "00111100"
+      "00333300"
+    ]
+  }
+  {
+    name: "moth-br-a"
+    pixels [
+      "22213300"
+      "22213300"
+      "33310000"
+      "11130000"
+      "03310000"
+      "00110000"
+      "01111000"
+      "03333000"
+    ]
+  }
+  {
+    name: "moth-bl-b"
+    pixels [
+      "12113222"
+      "12113222"
+      "11113333"
+      "01113111"
+      "00331100"
+      "00311000"
+      "01111000"
+      "03333000"
+    ]
+  }
+  {
+    name: "moth-br-b"
+    pixels [
+      "22213300"
+      "22213300"
+      "33310000"
+      "11130000"
+      "00331000"
+      "00011000"
+      "00111100"
+      "00333300"
+    ]
+  }
+  {
+    name: "fly-up-l"
+    pixels [
+      "00000110"
+      "00001111"
+      "00001133"
+      "00000111"
+      "22222222"
+      "00000000"
+      "00000000"
+      "00000000"
+    ]
+  }
+  {
+    name: "fly-up-r"
+    pixels [
+      "00110000"
+      "01111000"
+      "11331000"
+      "11110000"
+      "22222200"
+      "02222320"
+      "00222200"
+      "00000000"
+    ]
+  }
+  {
+    name: "fly-down-l"
+    pixels [
+      "00000000"
+      "00000000"
+      "00000000"
+      "00000111"
+      "22222222"
+      "00001133"
+      "00001111"
+      "00000110"
+    ]
+  }
+  {
+    name: "fly-down-r"
+    pixels [
+      "00000000"
+      "00000000"
+      "00000000"
+      "11110000"
+      "22222200"
+      "11332320"
+      "01112200"
+      "00110000"
+    ]
+  }
+  {
+    name: "star-icon"
+    pixels [
+      "00033000"
+      "00312300"
+      "33122133"
+      "31222213"
+      "03122130"
+      "03133130"
+      "33300333"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-0"
+    pixels [
+      "00222000"
+      "02000200"
+      "02002200"
+      "02020200"
+      "02200200"
+      "02000200"
+      "00222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-1"
+    pixels [
+      "00020000"
+      "00220000"
+      "00020000"
+      "00020000"
+      "00020000"
+      "00020000"
+      "00222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-2"
+    pixels [
+      "00222000"
+      "02000200"
+      "00000200"
+      "00002000"
+      "00020000"
+      "00200000"
+      "02222200"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-3"
+    pixels [
+      "02222000"
+      "00000200"
+      "00000200"
+      "00222000"
+      "00000200"
+      "00000200"
+      "02222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-4"
+    pixels [
+      "00002000"
+      "00022000"
+      "00202000"
+      "02002000"
+      "02222200"
+      "00002000"
+      "00002000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-5"
+    pixels [
+      "02222200"
+      "02000000"
+      "02222000"
+      "00000200"
+      "00000200"
+      "02000200"
+      "00222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-6"
+    pixels [
+      "00222000"
+      "02000000"
+      "02000000"
+      "02222000"
+      "02000200"
+      "02000200"
+      "00222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-7"
+    pixels [
+      "02222200"
+      "00000200"
+      "00002000"
+      "00020000"
+      "00200000"
+      "00200000"
+      "00200000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-8"
+    pixels [
+      "00222000"
+      "02000200"
+      "02000200"
+      "00222000"
+      "02000200"
+      "02000200"
+      "00222000"
+      "00000000"
+    ]
+  }
+  {
+    name: "digit-9"
+    pixels [
+      "00222000"
+      "02000200"
+      "02000200"
+      "00222200"
+      "00000200"
+      "00000200"
+      "00222000"
+      "00000000"
+    ]
+  }
+]
+
+let names = map(tileList, entry => entry.name)
+
+tiles: tileList
+
+// Each cell's place in the valley: 0 sky, 1 lighter moon, 2 darker moon, 3 star, 4 cliff ledge, 5 cliff strata,
+// 6 canopy, 7 trunk, 8 meadow edge, 9 meadow, 10 below the picture. The wall's top changes only on even rows and
+// columns, so no 16-pixel attribute quadrant straddles the sky and the rock.
+let wallTop = [12, 12, 10, 10, 12, 12, 14, 14, 12, 12, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 12, 12, 10, 10, 12, 12, 14, 14, 12, 12, 10, 10]
+let places = flatMap(range(0, 32), r => map(range(0, 32), c =>
+  r >= 30 ? 10
+  : r >= 21 ? 9
+  : r == 20 ? 8
+  : (r >= 12 and r <= 15 and c >= 10 and c <= 19) ? 6
+  : (r >= 16 and c >= 14 and c <= 15) ? 7
+  : r > wallTop[c] ? 5
+  : r == wallTop[c] ? 4
+  : (r >= 2 and r <= 3 and c >= 4 and c <= 5) ? 1
+  : (r >= 4 and r <= 5 and c >= 22 and c <= 23) ? 2
+  : (r < 9 and (r * 7 + c * 13) % 23 == 0) ? 3
+  : 0
+))
+
+let cells = map(places, (place, i) =>
+  let r = floor(i / 32) in
+  let c = i % 32 in
+  place == 1 ? indexOf(names, "moon-light-tl") + (r - 2) * 2 + (c - 4)
+  : place == 2 ? indexOf(names, "moon-dark-tl") + (r - 4) * 2 + (c - 22)
+  : place == 3 ? indexOf(names, "star")
+  : place == 4 ? indexOf(names, "ledge")
+  : place == 5 ? indexOf(names, r % 2 == 0 ? "strata-a" : "strata-b")
+  : place == 6 ? indexOf(names,
+      r == 12 ? (c == 10 ? "canopy-top-l" : c == 19 ? "canopy-top-r" : "canopy-top")
+      : r == 13 ? (c == 10 ? "canopy-l" : c == 19 ? "canopy-r" : (c % 2 == 0 ? "canopy-a" : "canopy-b"))
+      : r == 15 ? "canopy-under"
+      : (c % 2 == 1 ? "canopy-a" : "canopy-b"))
+  : place == 7 ? indexOf(names, c == 14 ? "trunk-l" : "trunk-r")
+  : place == 8 ? indexOf(names, "grass-edge")
+  : place == 9 ? indexOf(names, (r * 5 + c * 3) % 7 == 0 ? "tuft" : (r * 3 + c * 7) % 11 == 0 ? "pebble" : "grass")
+  : 0
+)
+
+map: cells
+
+mapPalettes: map(places, place => [0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 0][place])
+
+// The question box: six rows of 22 cells over the sky, rows 2 to 7. Its text is glyph names; a space is the paper.
+let lines = [
+  [" ", "h", "o", "w", " ", "m", "a", "n", "y", " ", "l", "e", "g", "s", " ", "d", "o", "e", "s", " "]
+  [" ", "a", " ", "d", "r", "a", "g", "o", "n", "f", "l", "y", " ", "h", "a", "v", "e", "qm", " ", " "]
+  [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "]
+  [" ", " ", " ", "4", " ", " ", " ", " ", " ", "6", " ", " ", " ", " ", " ", "8", " ", " ", " ", " "]
+]
+let boxTiles = concat(
+  [indexOf(names, "box-tl")], map(range(0, 20), i => indexOf(names, "box-t")), [indexOf(names, "box-tr")],
+  flatMap(lines, line => concat(
+    [indexOf(names, "box-l")],
+    map(line, ch => ch == " " ? indexOf(names, "box-fill") : indexOf(names, $"glyph-{ch}")),
+    [indexOf(names, "box-r")]
+  )),
+  [indexOf(names, "box-bl")], map(range(0, 20), i => indexOf(names, "box-b")), [indexOf(names, "box-br")]
+)
+
+let mothTop = indexOf(names, "moth-tl")
+let mothLegs = indexOf(names, "moth-bl-a")
+let fly = indexOf(names, "fly-up-l")
+let paper = indexOf(names, "box-fill")
+let pointer = indexOf(names, "cursor")
+let starIcon = indexOf(names, "star-icon")
+let digitZero = indexOf(names, "digit-0")
+
+variables [
+  // 0 walking, 1 drawing the box, 2 asking, 3 clearing the box, 4 starting, 5 fading in.
+  { name: "phase", initial: 4 }
+  { name: "fadeamt", initial: 16 }
+  { name: "prow", initial: 0 }
+  { name: "base", initial: 0 }
+  { name: "k", initial: 0 }
+  { name: "idx", initial: 0 }
+  { name: "tv", initial: 0 }
+  { name: "col", initial: 0 }
+  // The Moth: world x, screen y, the camera, her screen x, facing (1 left), stride and leg frame.
+  { name: "mx", initial: 120 }
+  { name: "my", initial: 184 }
+  { name: "cam", initial: 0 }
+  { name: "sx", initial: 120 }
+  { name: "face", initial: 0 }
+  { name: "step", initial: 0 }
+  { name: "legs", initial: 0 }
+  { name: "moved", initial: 0 }
+  { name: "t", initial: 0 }
+  // The dragonfly: world x, flight height, bobbed y, heading (1 left), turn timer, screen x, shown, fleeing, return
+  // timer and wing frame.
+  { name: "dx", initial: 210 }
+  { name: "dy", initial: 168 }
+  { name: "dyy", initial: 168 }
+  { name: "ddir", initial: 1 }
+  { name: "dturn", initial: 90 }
+  { name: "dsx", initial: 90 }
+  { name: "dvis", initial: 1 }
+  { name: "away", initial: 0 }
+  { name: "respawn", initial: 0 }
+  { name: "wings", initial: 0 }
+  { name: "ex", initial: 0 }
+  { name: "ey", initial: 0 }
+  { name: "pick", initial: 0 }
+  { name: "redraw", initial: 0 }
+  { name: "stars", initial: 0 }
+]
+
+scene: "phase"
+
+arrays [
+  { name: "box", initial: boxTiles }
+  // The sky the box covers, to put back when it closes.
+  { name: "under", initial: slice(cells, 64, 256) }
+  // The dragonfly's hover, one height a step.
+  { name: "bob", initial: [0, 1, 2, 3, 3, 4, 4, 4, 3, 3, 2, 1, 0, 0, 0, 0] }
+]
+
+screens []
+
+save {
+  version: 1
+  variables ["stars"]
+  arrays []
+}
+
+sprites [
+  // The Moth, 16 by 16 in four sprites; facing left mirrors each and swaps the columns.
+  { name: "moth-tl", tile: "mothTop + face", x: "sx", y: "my", visible: "1", palette: "0", flipX: "face" }
+  { name: "moth-tr", tile: "mothTop + 1 - face", x: "sx + 8", y: "my", visible: "1", palette: "0", flipX: "face" }
+  { name: "moth-bl", tile: "mothLegs + legs + face", x: "sx", y: "my + 8", visible: "1", palette: "0", flipX: "face" }
+  { name: "moth-br", tile: "mothLegs + legs + 1 - face", x: "sx + 8", y: "my + 8", visible: "1", palette: "0", flipX: "face" }
+  // The dragonfly, 16 by 8, its wings beating between two frames.
+  { name: "fly-l", tile: "fly + wings + ddir", x: "dsx", y: "dyy", visible: "dvis & (dsx < 240)", palette: "1", flipX: "ddir" }
+  { name: "fly-r", tile: "fly + wings + 1 - ddir", x: "dsx + 8", y: "dyy", visible: "dvis & (dsx < 232)", palette: "1", flipX: "ddir" }
+  // The star count.
+  { name: "star", tile: "starIcon", x: "8", y: "8", visible: "1", palette: "2" }
+  { name: "count", tile: "digitZero + stars", x: "18", y: "8", visible: "1", palette: "2" }
+]
+
+layers []
+
+raster []
+
+sounds [
+  {
+    name: "valley"
+    music [
+      {
+        voice: "pulse2"
+        part {
+          schema: "puck.tune.v1"
+          name: "valley-lead"
+          tempo: 10
+          effects: null
+          order [0, 1, 2, 3]
+          patterns: map(
+            [
+              ["E4", "---", "G4", "---", "A4", "---", "G4", "E4", "D4", "---", "E4", "---", "G4", "---", "---", "---"]
+              ["A4", "---", "C5", "---", "D5", "---", "C5", "A4", "G4", "---", "E4", "---", "D4", "---", "---", "---"]
+              ["E4", "G4", "A4", "C5", "D5", "---", "C5", "---", "A4", "---", "G4", "A4", "E4", "---", "---", "---"]
+              ["D4", "---", "E4", "G4", "A4", "---", "G4", "---", "E4", "D4", "C4", "---", "---", "---", "---", "---"]
+            ],
+            pattern => map(pattern, note => { duty: 2, envelope: 147, note: note })
+          )
+        }
+      }
+      {
+        voice: "wave"
+        part {
+          schema: "puck.tune.v1"
+          name: "valley-bass"
+          tempo: 10
+          effects: null
+          order [0, 1, 2, 3]
+          patterns: map(
+            [
+              ["C3", "---", "G3", "---", "C3", "---", "G3", "---", "A3", "---", "E3", "---", "A3", "---", "E3", "---"]
+              ["F3", "---", "C4", "---", "F3", "---", "C4", "---", "C3", "---", "G3", "---", "C3", "---", "G3", "---"]
+              ["A3", "---", "E3", "---", "F3", "---", "C4", "---", "C3", "---", "G3", "---", "E3", "---", "G3", "---"]
+              ["G3", "---", "D4", "---", "G3", "---", "D4", "---", "C3", "---", "G3", "---", "C3", "---", "---", "---"]
+            ],
+            pattern => map(pattern, note => { duty: null, envelope: 1, note: note })
+          )
+        }
+      }
+    ]
+  }
+  {
+    name: "chime"
+    frames: 5
+    effect {
+      voice: "pulse1"
+      rows: map(["C5", "E5", "G5", "C6", "OFF"], note => { duty: 2, envelope: 194, note: note })
+    }
+  }
+  {
+    name: "buzz"
+    frames: 4
+    effect {
+      voice: "noise"
+      rows: map(["C3", "C3", "OFF"], note => { duty: null, envelope: 161, note: note })
+    }
+  }
+]
+
+scrollX: "cam"
+
+scrollY: "0"
+
+// Starting: the kept star count comes back, the music starts, and the valley fades in from black.
+rule "start" {
+  when phase == 4
+  load()
+  play(sound: "valley")
+  phase = 5
+}
+
+rule "fade-in" {
+  when phase == 5
+  fade(amount: "fadeamt", toward: "black")
+  if fadeamt == 0 {
+    phase = 0
+  } else {
+    fadeamt -= 1
+  }
+}
+
+rule "clock" {
+  t += 1
+}
+
+// The pad walks her across the meadow; the camera follows once she leaves the middle of the picture.
+rule "walk" {
+  when phase == 0
+  moved = 0
+  if key(left, held) {
+    mx -= 1
+    face = 1
+    moved = 1
+  }
+  if key(right, held) {
+    mx += 1
+    face = 0
+    moved = 1
+  }
+  if key(up, held) and my > 152 {
+    my -= 1
+    moved = 1
+  }
+  if key(down, held) and my < 212 {
+    my += 1
+    moved = 1
+  }
+  if moved {
+    step += 1
+  }
+  legs = ((step >> 3) & 1) * 2
+  sx = mx - cam
+  if sx < 64 {
+    cam = mx - 64
+  }
+  if sx > 176 {
+    cam = mx - 176
+  }
+  sx = mx - cam
+}
+
+// The dragonfly drifts back and forth over the meadow, bobbing, until a right answer sends it up and away.
+rule "dragonfly" {
+  wings = ((t >> 2) & 1) * 2
+  if away {
+    dy -= 2
+    if dy < 24 {
+      away = 0
+      dvis = 0
+      respawn = 240
+    }
+  } else {
+    if (t & 1) == 1 {
+      if ddir {
+        dx -= 1
+      } else {
+        dx += 1
+      }
+    }
+    dturn -= 1
+    if dturn == 0 {
+      ddir ^= 1
+      dturn = 120
+    }
+  }
+  if respawn {
+    respawn -= 1
+    if respawn == 0 {
+      dvis = 1
+      dx = mx + 128
+      dy = 168
+    }
+  }
+  dyy = dy + bob[(t >> 2) & 15]
+  dsx = dx - cam
+}
+
+// Close enough, and the question opens.
+rule "meet" {
+  when phase == 0
+  ex = sx - dsx
+  if ex >= 128 {
+    ex = 0 - ex
+  }
+  ey = my - dyy
+  if ey >= 128 {
+    ey = 0 - ey
+  }
+  if dvis and away == 0 and ex < 14 and ey < 14 {
+    phase = 1
+    prow = 0
+    pick = 0
+    base = ((cam >> 3) + 5) & 30
+  }
+}
+
+// The box draws a row a frame, over whatever the camera shows.
+rule "draw-box" {
+  when phase == 1
+  idx = prow * 22
+  repeat 22 as k {
+    tv = box[idx]
+    col = base + k
+    map(row: "2 + prow", column: "col", tile: "tv", palette: "3")
+    idx += 1
+  }
+  prow += 1
+  if prow == 6 {
+    phase = 2
+    redraw = 1
+  }
+}
+
+// Left and right move the pointer between the answers; A answers. Six is right.
+rule "ask" {
+  when phase == 2
+  if key(left, pressed) and pick > 0 {
+    pick -= 1
+    redraw = 1
+  }
+  if key(right, pressed) and pick < 2 {
+    pick += 1
+    redraw = 1
+  }
+  if redraw {
+    repeat 3 as k {
+      col = base + 3 + k * 6
+      tv = paper
+      if k == pick {
+        tv = pointer
+      }
+      map(row: "6", column: "col", tile: "tv", palette: "3")
+    }
+    redraw = 0
+  }
+  if key(a, pressed) {
+    if pick == 1 {
+      play(sound: "chime")
+      if stars < 9 {
+        stars += 1
+      }
+      save()
+      away = 1
+      prow = 0
+      phase = 3
+    } else {
+      play(sound: "buzz")
+    }
+  }
+}
+
+// The box clears a row a frame, the sky put back under it.
+rule "clear-box" {
+  when phase == 3
+  repeat 22 as k {
+    col = (base + k) & 31
+    idx = prow * 32 + col
+    tv = under[idx]
+    map(row: "2 + prow", column: "col", tile: "tv", palette: "0")
+  }
+  prow += 1
+  if prow == 6 {
+    phase = 0
+  }
+}
