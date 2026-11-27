@@ -35,14 +35,12 @@ public sealed partial class SdfWorldPassesLawTests {
                 copies++;
             }
         };
-        gpu.OnReadback = bytes => {
-            if (bytes == PickRecordBytes) {
-                reads++;
-            }
-        };
-        gpu.WriteReadback = (_, bytes) => {
-            if (bytes.Length == PickRecordBytes) {
+        // The pick's readback is told by its name: the world's shadows read back a timestamp pair of the same length.
+        gpu.WriteReadback = (name, bytes) => {
+            if (name.Detail == "pick") {
+                Assert.Equal(expected: PickRecordBytes, actual: bytes.Length);
                 BinaryPrimitives.WriteInt32LittleEndian(destination: bytes[8..], value: 173);
+                reads++;
             }
         };
         _ = view.Produce(context: in context);

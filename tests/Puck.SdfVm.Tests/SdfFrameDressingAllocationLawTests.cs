@@ -60,12 +60,18 @@ public sealed class SdfFrameDressingAllocationLawTests {
         Assert.Equal(expected: 0L, actual: dressed.MeshDrawsRevision);
         Assert.Null(@object: dressed.MeshDrawChanges);
 
-        // Another dresser's rows are its own: the frame is copied before it is answered with this one's.
+        // A frame is dressed by one dresser, which answers it in place: a consumer that keeps a dressed frame copies it
+        // through a writer of its own, whose copy carries no dressing, so another dresser answers the copy with its own
+        // rows and leaves the first frame's as they were.
+        var copy = new SdfFrame.Writer().CopyFrom(source: dressed);
+
+        Assert.NotSame(expected: dressed, actual: copy);
+        Assert.Null(@object: copy.MeshRows);
         using var other = new SdfMeshDresser(bake: new SdfMeshPathBake());
 
-        var answered = other.Dress(frame: dressed);
+        var answered = other.Dress(frame: copy);
 
-        Assert.NotSame(expected: dressed, actual: answered);
+        Assert.Same(expected: copy, actual: answered);
         Assert.NotSame(expected: dressed.MeshRows, actual: answered.MeshRows);
         Assert.Same(expected: dresser.Dress(frame: dressed).MeshRows, actual: dressed.MeshRows);
     }

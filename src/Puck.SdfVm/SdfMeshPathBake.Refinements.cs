@@ -71,7 +71,12 @@ public sealed partial class SdfMeshPathBake {
         // clears the bake's mark. Under the bake's gate, at the end of every take.
         public static void NoteReadback(SdfMeshPathBake bake, bool starved) {
             lock (MarkGate) {
-                var at = Starved.FindIndex(match: entry => ReferenceEquals(objA: entry.Bake, objB: bake));
+                // A loop rather than FindIndex: a predicate over this bake would allocate its closure on every take.
+                var at = -1;
+
+                for (var index = 0; ((index < Starved.Count) && (at < 0)); index++) {
+                    if (ReferenceEquals(objA: Starved[index].Bake, objB: bake)) { at = index; }
+                }
 
                 if (starved) {
                     var entry = (bake, Stopwatch.GetTimestamp());
