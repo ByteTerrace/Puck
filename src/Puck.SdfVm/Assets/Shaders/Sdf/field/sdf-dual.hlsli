@@ -102,11 +102,13 @@ SdfDual sdfdMin(float a, SdfDual b) { return sdfdSelect(b.v < a, b, sdfdLift(a))
 SdfDual sdfdMax(SdfDual a, SdfDual b) { return sdfdSelect(b.v > a.v, b, a); }
 SdfDual sdfdMax(SdfDual a, float b) { return sdfdSelect(b > a.v, sdfdLift(b), a); }
 SdfDual sdfdMax(float a, SdfDual b) { return sdfdSelect(b.v > a, b, sdfdLift(a)); }
-SdfDual sdfdClamp(SdfDual a, float low, float high) { return sdfdMin(sdfdMax(a, low), high); }
-SdfDual sdfdClamp(SdfDual a, SdfDual low, SdfDual high) { return sdfdMin(sdfdMax(a, low), high); }
+// A clamp passes the operand's derivative only strictly between its bounds and takes a bound's on a tie, so a clamp to
+// a degenerate interval is constant and an Elongate's zero extent stays the identity at zero (FixedGradients.Clamp).
+SdfDual sdfdClamp(SdfDual a, float low, float high) { return sdfdMin(high, sdfdMax(low, a)); }
+SdfDual sdfdClamp(SdfDual a, SdfDual low, SdfDual high) { return sdfdMin(high, sdfdMax(low, a)); }
 SdfDual3 sdfdClamp(SdfDual3 a, float3 low, float3 high) {
     float3 v = clamp(a.v, low, high);
-    return sdfdMake(v, sdfdRows(a.d, float3((v.x == a.v.x) ? 1.0 : 0.0, (v.y == a.v.y) ? 1.0 : 0.0, (v.z == a.v.z) ? 1.0 : 0.0)));
+    return sdfdMake(v, sdfdRows(a.d, float3(((a.v.x > low.x) && (a.v.x < high.x)) ? 1.0 : 0.0, ((a.v.y > low.y) && (a.v.y < high.y)) ? 1.0 : 0.0, ((a.v.z > low.z) && (a.v.z < high.z)) ? 1.0 : 0.0)));
 }
 SdfDual3 sdfdClamp(SdfDual3 a, SdfDual3 low, SdfDual3 high) {
     SdfDual x = sdfdClamp(sdfdX(a), sdfdX(low), sdfdX(high));
