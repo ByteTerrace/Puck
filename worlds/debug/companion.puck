@@ -39,8 +39,8 @@ prototypes {
           bulge: 0.005
         }
         swings [
-          swing("bank", [0, 0, 1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
-          swing("pitch", [1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
+          swing("bank", [0, 0, -1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
+          swing("pitch", [-1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
         ]
       }
       shape Sweep "husk-right" {

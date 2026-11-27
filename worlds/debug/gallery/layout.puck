@@ -133,7 +133,8 @@ function stairCentreZ(stair) = ((stair.well.z0 + stair.well.z1) / 2)
 // planters on every level yield to.
 function galleryStairClear(x, z, halfX, halfZ) = (length(filter(
   galleryStairWells,
-  well => ((((x + halfX) > well.x0) and ((x - halfX) < well.x1)) and (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
+  well => ((((x + halfX) > well.x0) and ((x - halfX) < well.x1)) and
+    (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
 )) == 0)
 
 // The core, against the south wall: the lift tower outside the wall and the entrance east of it.
@@ -207,9 +208,6 @@ let fallHole = 1
 // Whether level 1's floor opens over the fall, railed round: tabled by the owner until the fall is revisited, so the
 // floor is whole over it and the wing's fall paintings below stand as they are.
 let fallOpen = false
-// The same axis in the debug world, for the paintings' and the exhibits' documents.
-let fallX = (gallerySite[0] + fallPlan[0])
-let fallZ = (gallerySite[2] + fallPlan[1])
 
 // The flaw's route (flaw.puck): the corners of one closed polyline in the building's frame, metres, which the flaw
 // follows with each corner rounded (look.puck's `lookFlaw.bend`). It is one loop that rises through the building and
@@ -259,12 +257,15 @@ let flawInlay = 0.03
 let flawTreadOut = 0.95
 let flawTreadStep = 4
 function flawBranchAt(b, t) = [
-  (treeX - quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[0])
-  ((quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[1] + galleryFloor[0]) + flawInlay)
+  (treeX - quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[0]),
+  ((quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[1] + galleryFloor[0]) + flawInlay),
   (treeZ - quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t)[2])
 ]
 function flawTreadAt(k) = (treeTreadPlan(k, flawTreadOut) + [0, flawInlay, 0])
-let flawWalkway = map(range(0, (floor((flawExit.tread / flawTreadStep)) + 1)), n => flawTreadAt((flawExit.tread - (n * flawTreadStep))))
+let flawWalkway = map(
+  range(0, (floor((flawExit.tread / flawTreadStep)) + 1)),
+  n => flawTreadAt((flawExit.tread - (n * flawTreadStep)))
+)
 let flawRoute = concat(
   [
     (flawTreadAt(0) + [0, -0.02, 0])
@@ -289,12 +290,13 @@ let flawRoute = concat(
 // slab (`flawCrossings`, each { point, height, segment }: `height` 0 is level 1's slab) is opened and collared; the nave
 // has no slabs, so the tree's riser crosses none.
 let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
-let flawCrossings = filter(loopCrossings(flawRoute, flawCuts), c => ((c.point[2] < naveSouth) or (c.point[2] > naveNorth)))
+let flawCrossings = filter(
+  loopCrossings(flawRoute, flawCuts),
+  c => ((c.point[2] < naveSouth) or (c.point[2] > naveNorth))
+)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
-let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
-let displaySouth = 4.4
 // A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, so its cap spans about four
 // fifths of its pad's width (look.puck's lookPadTiles) with a cream margin round it, and the exhibit on its turntable
 // stands at `displayExhibitScale`, in proportion, set down so the plinth's cap of the exhibits' own frame (0.75 m) meets
@@ -440,15 +442,16 @@ let treeLandingLift = 0.08
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
 // middle line `out` metres from the bark.
 function treeTreadAngle(k) = (treeTreadStart + (treeTreadStep * k))
-function treeTreadTop(k) = (treeTreadRise * (k + 1))
-function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
-  (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + out),
-  treeTreadAngle(k),
-  treeTreadTop(k)
-))
+function treeTreadTop(k) = treadTop(treeTreadRise, k)
+function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] +
+  treadPoint(treeTreadStart, treeTreadStep, treeTreadRise, treeTrunk.base, treeTrunk.apex, k, out))
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
-function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))]
+function treeBranchTo(b) = [
+  b.x,
+  (galleryFloor[b.level] + treeLandingLift),
+  ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))
+]
 // The tree creation (tree.puck) is authored in a frame turned a half turn about up from the plan's, its origin at the
 // trunk's foot; the flaw (flaw.puck) reads the branches' walking lines too, so they live here.
 // A plan point as the creation's author-frame point.
@@ -473,4 +476,8 @@ function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
 ))
 // A branch that meets a doorway (levels 2 and 3) puts its control point straight back from the landing, so its last run
 // crosses the doorway square, through the middle of the opening.
-function treeBranchB(b) = ((b.level >= 2) ? [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
+function treeBranchB(b) = ((b.level >= 2) ? [
+  treeBranchC(b)[0]
+  treeBranchOut(b)[1],
+  ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)
+] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))

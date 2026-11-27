@@ -7,8 +7,8 @@
 // shape, and leaf masses stay in separate, non-solid creations (foliage.puck's groupedTree, leafyClump and
 // canopySurface).
 //
-// Every point is in the creation's author frame (sdf-authoring: +Z the front, +X the subject's left), the frame shape
-// rows are written in.
+// Every point is in the tree frame, a half turn about up from the creation's (foliage.puck's treePoint): each shape
+// carries its point into the creation with `* [-1, 1, -1]`, and its turn conjugated by the half turn.
 
 import "rig"
 import "paths"
@@ -23,10 +23,13 @@ function turnAfterLevel(d, level) = compose(
 
 // A limb's full width or thickness a share `s` along it: `span[0]` at its root tapering to `span[1]` at its tip, swelled
 // at the root by a collar that adds `collar` of the span where the limb leaves its parent and fades as (1 - s)^4.
-function limbTaper(span, collar, s) = ((span[0] + ((span[1] - span[0]) * s)) * (1 + (collar * ((((1 - s) * (1 - s)) * (1 - s)) * (1 - s)))))
+function limbTaper(span, collar, s) = ((span[0] + ((span[1] - span[0]) * s)) *
+  (1 + (collar * ((((1 - s) * (1 - s)) * (1 - s)) * (1 - s)))))
 // A limb's level heading a share `t` along the quadratic Bezier `a`, `b`, `c` (a unit vector, its y zero), and the level
 // direction to its left, round +Y from the heading.
-function limbHeading(a, b, c, t) = vectorUnit(((quadraticPoint(a, b, c, minimum((t + 0.02), 1)) - quadraticPoint(a, b, c, maximum((t - 0.02), 0))) * [1, 0, 1]))
+function limbHeading(a, b, c, t) = vectorUnit(
+  ((quadraticPoint(a, b, c, minimum((t + 0.02), 1)) - quadraticPoint(a, b, c, maximum((t - 0.02), 0))) * [1, 0, 1])
+)
 function limbLeft(a, b, c, t) = [limbHeading(a, b, c, t)[2], 0, (0 - limbHeading(a, b, c, t)[0])]
 
 // A walkable limb: `segments` flattened superellipsoids whose tops follow the quadratic Bezier `a`, `b`, `c` (the line a
@@ -57,12 +60,14 @@ template limb(label, a, b, c, width, thickness, material, segments = 7, exponent
 // Where a fork leaves limb `a`, `b`, `c`: a share `at` along it, `drop` metres under its walking line, and where it ends,
 // `reach` metres out to the limb's left (`side` 1) or right (`side` -1) and `rise` metres up.
 function limbForkBase(a, b, c, at, drop) = (quadraticPoint(a, b, c, at) - [0, drop, 0])
-function limbForkTip(a, b, c, at, side, reach, rise, drop) = ((limbForkBase(a, b, c, at, drop) + (limbLeft(a, b, c, at) * (side * reach))) + [0, rise, 0])
+function limbForkTip(a, b, c, at, side, reach, rise, drop) = ((limbForkBase(a, b, c, at, drop) +
+  (limbLeft(a, b, c, at) * (side * reach))) +
+  [0, rise, 0])
 
 // A fork off a limb: a sweep from inside the limb, under its walking line, out to one side and up, tapering from
 // `radius[0]` to `radius[1]`, smooth-blended into the limb so it reads as grown from it. A sweep never collides, and the
-// fork leaves the limb's flank sideways, so it stands clear of the line a foot walks. Its curve is local to the shape,
-// whose pose crosses the author frame (sdf-authoring), so its points are carried there by `* [-1, 1, -1]`.
+// fork leaves the limb's flank sideways, so it stands clear of the line a foot walks. Its curve is in the shape's own
+// frame, which the shape's half turn carries into the creation as treePoint carries a point.
 template limbFork(label, a, b, c, at, side, reach, rise, radius, material, drop = 0.35, smooth = 0.22) {
   let base = limbForkBase(a, b, c, at, drop)
   let tip = limbForkTip(a, b, c, at, side, reach, rise, drop)
@@ -89,7 +94,9 @@ template limbKnot(label, a, b, c, at, side, width, size, material, depth = 0.35)
   shape Superellipsoid $"{label}" {
     detail: true
     exponent: 2.2
-    position: (((quadraticPoint(a, b, c, at) - [0, depth, 0]) + (limbLeft(a, b, c, at) * (side * ((width / 2) - (0.25 * size))))) * [-1, 1, -1])
+    position: (((quadraticPoint(a, b, c, at) - [0, depth, 0]) +
+      (limbLeft(a, b, c, at) * (side * ((width / 2) - (0.25 * size))))) *
+      [-1, 1, -1])
     scale [(0.5 * size), (0.42 * size), (0.5 * size)]
     material: material
     blend: SmoothUnion
@@ -150,8 +157,8 @@ function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
 )
 
 // Bark grain frames for foliage.puck's landscapeSurface (`grain: 1`): the turn whose local +X runs along a direction.
-// A static placement's surface pattern stands in the world, a half turn about up from the author frame, so a direction
-// `d` authored in the creation's frame is carried there first; `barkUpright` is the frame of grain that climbs.
+// A direction `d` in the tree frame is carried into the creation first, where the surface pattern of a static
+// placement at yaw 0 stands; `barkUpright` is the frame of grain that climbs.
 function barkAlong(d) = turnAlong((d * [-1, 1, -1]))
 let barkUpright = rotate([0, 0, 1], 90)
 
@@ -161,7 +168,11 @@ let barkUpright = rotate([0, 0, 1], 90)
 // degrees from `foot` (its height at the base) to `top`, its axis `out[0]` metres off the core at the foot and `out[1]`
 // at the top, tapering from `radius[0]` to `radius[1]`; each sweep bows `bow` metres outward at its middle so the
 // strands swell between their crossings. Drawn only: whatever the trunk collides as is the author's own core.
-function braidPoint(k, count, t, foot, top, out, turn) = polarPoint(((out[0] * (1 - t)) + (out[1] * t)), (((360 * k) / count) + (turn * t)), ((foot * (1 - t)) + (top * t)))
+function braidPoint(k, count, t, foot, top, out, turn) = polarPoint(
+  ((out[0] * (1 - t)) + (out[1] * t)),
+  (((360 * k) / count) + (turn * t)),
+  ((foot * (1 - t)) + (top * t))
+)
 template braidedTrunk(label, count, foot, top, out, radius, material, turn = 150, segments = 3, bow = 0.25, smooth = 0.35) {
   for k in range(0, count) {
     for s in range(0, segments) {

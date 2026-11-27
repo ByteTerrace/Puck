@@ -143,9 +143,9 @@ function moraineHeap(label, k, r, x, radii, exponent = 2) = {
   position [x, ridgeGround(r, x) - 0.45 * radii[1], r]
   radii: radii
   exponent: exponent
-  rotation: turnAfter(
+  rotation: compose(
     onSlope(ridgeClimbCosine(r, x), 50 * (siteScatter(k, 0.430159) - 0.5)),
-    turnAbout([0, 0, 1], 24 * (siteScatter(k, 0.896491) - 0.5))
+    rotate([0, 0, 1], 24 * (siteScatter(k, 0.896491) - 0.5))
   )
   material: 2
 }
@@ -247,9 +247,9 @@ let stripeX = -3.4
 let iceFrameTurn = [-0.5, -0.5, -0.5, 0.5]
 // A segment's turn: rolled across by the tangent `rollTangent` (its top following the section's crown), yawed by the
 // tangent `yawTangent` (its length following its row's arc) and tipped back so its top climbs at `tilt` degrees.
-function segmentTurn(tilt, yawTangent, rollTangent) = turnAfter(
-  turnAbout([1, 0, 0], 0 - tilt),
-  turnAfter(turnByTangent([0, 1, 0], yawTangent), turnAfter(turnByTangent([0, 0, 1], rollTangent), iceFrameTurn))
+function segmentTurn(tilt, yawTangent, rollTangent) = compose(
+  rotate([1, 0, 0], 0 - tilt),
+  compose(turnByTangent([0, 1, 0], yawTangent), compose(turnByTangent([0, 0, 1], rollTangent), iceFrameTurn))
 )
 
 // The rows across the flow, from the toe to the head of the icefall. Each is { s, hz, tilt, sag, cuts, core, band, snow,
@@ -378,9 +378,9 @@ function iceSegmentBanded(row, k, xc, hx, s, hz, bend, top, q, band) = {
   band: band
   round: minimum(row.round, minimum(band / 2 - 0.05, minimum(hz, hx) - 0.05))
   point: rampPoint(s, xc, top)
-  up: turnedBy(q, [0, 0, 1])
-  along: turnedBy(q, [1, 0, 0])
-  across: turnedBy(q, [0, 1, 0])
+  up: rotatePoint(q, [0, 0, 1])
+  along: rotatePoint(q, [1, 0, 0])
+  across: rotatePoint(q, [0, 1, 0])
 }
 let iceSegments = flatMap(
   range(0, length(iceRows)),

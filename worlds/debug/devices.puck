@@ -62,9 +62,9 @@ let labelDepth = 0.002
 // the text sits on that lower part; a turn of -35 degrees about x (the quaternion below) tips the face normal up, and
 // the text run shares the placard's turn, its origin on the placard's front face a little above the placard's middle
 // (a run's origin is its first line's middle, the rest running down).
-let placardTilt = [-0.300706, 0, 0, 0.953717]
-let placardCentre = [0, (plinthTop - 0.17), 0.235]
-let placardFront = [0, (plinthTop - 0.17 + 0.0274), 0.2304]
+let placardTilt = [0.300706, 0, 0, 0.953717]
+let placardCentre = [0, (plinthTop - 0.17), -0.235]
+let placardFront = [0, (plinthTop - 0.17 + 0.0274), -0.2304]
 template plinth(label, model) {
   name: label
   schema: "puck.creation.v2"
@@ -81,15 +81,15 @@ template plinth(label, model) {
   }
   shape Box "placard" {
     material: 2
-    position: (placardCentre * [-1, 1, -1])
-    rotation: (placardTilt * [-1, 1, -1, 1])
+    position: placardCentre
+    rotation: placardTilt
     scale [0.19, 0.1, 0.012]
   }
   textRuns [
     {
       text: $"{model}\nGAMING BRICK"
-      position: (placardFront * [-1, 1, -1])
-      rotation: compose(rotate([0, 1, 0], 180), placardTilt)
+      position: placardFront
+      rotation: compose(placardTilt, rotate([0, 1, 0], 180))
       emHeight: labelEm
       depth: labelDepth
       mode: "emboss"
@@ -179,7 +179,6 @@ let pictureHalfHeight = ((deckVideo.rows * deckPitchY) / 2)
 let tubeHalfWidth = (pictureHalfWidth + 0.009)
 let tubeHalfHeight = (pictureHalfHeight + 0.008)
 let tubeTop = (pictureY + tubeHalfHeight)
-let tubeBottom = (pictureY - tubeHalfHeight)
 let tvCabinet = 0
 let tvTrim = 1
 let tvTube = 2
@@ -1178,11 +1177,11 @@ machines [
   (brickMachine("humble-gaming-brick", "cartridges/cgb/tetromino.cgb.puck") with {
     contentFolders ["cartridges/cgb", "cartridges/dmg", "../../roms/hgb"]
     preferFolderDefault: true
-  })
+  }),
   (advancedBrickMachine("advanced-gaming-brick", "cartridges/agb/pip.agb.puck") with {
     contentFolders ["cartridges/agb", "../../roms/agb"]
     preferFolderDefault: true
-  })
+  }),
   (deckMachine("humble-gaming-deck", "cartridges/deck/colour-bars.deck") with {
     contentFolders ["cartridges/deck", "../../roms/hgd"]
     preferFolderDefault: true

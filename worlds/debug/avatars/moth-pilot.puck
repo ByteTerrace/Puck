@@ -24,22 +24,22 @@ exports {
 
 let pilotHeadScale = 0.68
 // Her eyes sit 1.527 m up: the suited Moth's eye line less the 0.208 m footbed of sheet 05.
-let pilotHeadAt = [0, 1.527, 0.095]
+let pilotHeadAt = [0, 1.527, -0.095]
 
 let pilotSoftness = 2.2
 // The plait's lobes down her braid's core, alternating either side of it, and the half-angle each leans by.
 let braidLobes = [
-  [-0.112, 1.335, 0.0904]
-  [-0.1278, 1.313, 0.0951]
-  [-0.102, 1.291, 0.0994]
-  [-0.1187, 1.269, 0.1032]
-  [-0.0938, 1.247, 0.1065]
-  [-0.1113, 1.225, 0.1094]
-  [-0.089, 1.203, 0.1104]
-  [-0.1095, 1.181, 0.1107]
-  [-0.0881, 1.159, 0.1106]
-  [-0.1088, 1.137, 0.1102]
-  [-0.0876, 1.115, 0.1095]
+  [0.112, 1.335, -0.0904]
+  [0.1278, 1.313, -0.0951]
+  [0.102, 1.291, -0.0994]
+  [0.1187, 1.269, -0.1032]
+  [0.0938, 1.247, -0.1065]
+  [0.1113, 1.225, -0.1094]
+  [0.089, 1.203, -0.1104]
+  [0.1095, 1.181, -0.1107]
+  [0.0881, 1.159, -0.1106]
+  [0.1088, 1.137, -0.1102]
+  [0.0876, 1.115, -0.1095]
 ]
 let braidTwist = 0.247404
 let braidUntwist = 0.9689124
@@ -131,17 +131,17 @@ template pilotArm(name, side, baseId, handGroup) {
       bulge: 0.005
     }
     swings [
-      swing("run", [0, 0, 1], -0.06 * side, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
-      swing("gait", [0.990, side * 0.138, 0], 0.5, [side * 0.172, 1.355, -0.015]) with {
+      swing("run", [0, 0, -1], -0.06 * side, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
+      swing("gait", [-0.990, side * 0.138, 0], 0.5, [side * -0.172, 1.355, 0.015]) with {
         wave: "sine"
         phase: pi * (1 + side) / 2
       }
       // The arms open 0.45 rad from the sides at the jump's peak, 0.6 on the way up and 0.3 coming down.
-      swing("air", [0, 0, 1], 0.03 * side, [side * 0.172, 1.355, -0.015]) with { wave: "linear", phase: 15 }
-      swing("air", [0.990, side * 0.138, 0], -0.015, [side * 0.172, 1.355, -0.015]) with { wave: "linear", phase: 8 }
+      swing("air", [0, 0, -1], 0.03 * side, [side * -0.172, 1.355, 0.015]) with { wave: "linear", phase: 15 }
+      swing("air", [-0.990, side * 0.138, 0], -0.015, [side * -0.172, 1.355, 0.015]) with { wave: "linear", phase: 8 }
       // Holding the handheld: the upper arm forward a little and turned in, so the bent forearm points to her middle.
-      swing("hold", [1, 0, 0], -0.25, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
-      swing("hold", [0, 1, 0], -0.5 * side, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
+      swing("hold", [-1, 0, 0], -0.25, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
+      swing("hold", [0, 1, 0], -0.5 * side, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
     ]
   }
 
@@ -171,19 +171,19 @@ template pilotArm(name, side, baseId, handGroup) {
       bulge: 0.005
     }
     swings [
-      swing("run", [1, 0, 0], -1.1, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
-      swing("gait", [1, 0, 0], 0.18, [side * 0.212, 1.068, -0.032]) with {
+      swing("run", [-1, 0, 0], -1.1, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
+      swing("gait", [-1, 0, 0], 0.18, [side * -0.212, 1.068, 0.032]) with {
         wave: "sine"
         phase: 0.5 + pi * (1 + side) / 2
       }
       // The elbows bend 0.36 rad at the jump's peak, 0.51 rising and 0.21 falling, and a little further on landing.
-      swing("air", [1, 0, 0], -0.03, [side * 0.212, 1.068, -0.032]) with { wave: "linear", phase: 12 }
-      swing("land", [1, 0, 0], 0.05, [side * 0.212, 1.068, -0.032]) with { wave: "linear" }
+      swing("air", [-1, 0, 0], -0.03, [side * -0.212, 1.068, 0.032]) with { wave: "linear", phase: 12 }
+      swing("land", [-1, 0, 0], 0.05, [side * -0.212, 1.068, 0.032]) with { wave: "linear" }
       // Holding: the forearm turns a little palm-up, then the elbow bends, so the palms face each other in front of
       // her chest with the thumbs up, 11 cm apart round the handheld's 75 mm. Swings compose in list order, then the
       // parent's delta.
-      swing("hold", [0, 1, 0], 0.15 * side, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
-      swing("hold", [1, 0, 0], -1.5, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
+      swing("hold", [0, 1, 0], 0.15 * side, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
+      swing("hold", [-1, 0, 0], -1.5, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
     ]
   }
 
@@ -333,15 +333,15 @@ template pilotLeg(name, side, baseId) {
       bulge: 0.004
     }
     swings [
-      swing("heading", [0, 1, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
-      swing("heading", [0, 1, 0], -0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
-      swing("gait", [1, 0, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine", phase: pi * (1 - side) / 2 }
-      swing("heading", [0, 1, 0], 0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
-      swing("heading", [0, 1, 0], -0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
+      swing("heading", [0, 1, 0], 0.7, [side * -0.09, 0.86, 0]) with { wave: "sine" }
+      swing("heading", [0, 1, 0], -0.5, [side * -0.09, 0.86, 0]) with { wave: "linear" }
+      swing("gait", [-1, 0, 0], 0.7, [side * -0.09, 0.86, 0]) with { wave: "sine", phase: pi * (1 - side) / 2 }
+      swing("heading", [0, 1, 0], 0.5, [side * -0.09, 0.86, 0]) with { wave: "linear" }
+      swing("heading", [0, 1, 0], -0.7, [side * -0.09, 0.86, 0]) with { wave: "sine" }
       // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
-      swing("air", [1, 0, 0], -0.06, [side * 0.09, 0.86, 0]) with { wave: "linear", phase: 13.3 }
+      swing("air", [-1, 0, 0], -0.06, [side * -0.09, 0.86, 0]) with { wave: "linear", phase: 13.3 }
       // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
-      swing("land", [1, 0, 0], 0.1, [side * 0.09, 0.86, 0]) with { wave: "linear" }
+      swing("land", [-1, 0, 0], 0.1, [side * -0.09, 0.86, 0]) with { wave: "linear" }
     ]
   }
 
@@ -359,13 +359,13 @@ template pilotLeg(name, side, baseId) {
       radiusEnd: 0.063
     }
     swings [
-      swing("gait", [1, 0, 0], 1.25, [side * 0.1, 0.475, 0.012]) with {
+      swing("gait", [-1, 0, 0], 1.25, [side * -0.1, 0.475, -0.012]) with {
         wave: "halfSine"
         phase: 2.0424 + pi * (1 + side) / 2
       }
       // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, and takes twice the hip's fold on landing.
-      swing("air", [1, 0, 0], 0.05, [side * 0.1, 0.475, 0.012]) with { wave: "linear", phase: 24 }
-      swing("land", [1, 0, 0], -0.2, [side * 0.1, 0.475, 0.012]) with { wave: "linear" }
+      swing("air", [-1, 0, 0], 0.05, [side * -0.1, 0.475, -0.012]) with { wave: "linear", phase: 24 }
+      swing("land", [-1, 0, 0], -0.2, [side * -0.1, 0.475, -0.012]) with { wave: "linear" }
     ]
   }
 
@@ -395,16 +395,16 @@ template pilotLeg(name, side, baseId) {
       vertices [[-1, 0], [-1, 0.62], [-0.4, 0.78], [0.35, 0.55], [0.78, 0.41], [1, 0.24], [1, 0]]
     }
     swings [
-      swing("gait", [1, 0, 0], 0.2, [side * 0.105, 0.085, -0.005]) with {
+      swing("gait", [-1, 0, 0], 0.2, [side * -0.105, 0.085, 0.005]) with {
         wave: "sine"
         phase: pi * (1 - side) / 2
       }
-      swing("gait", [1, 0, 0], -0.25, [side * 0.105, 0.085, -0.005]) with {
+      swing("gait", [-1, 0, 0], -0.25, [side * -0.105, 0.085, 0.005]) with {
         wave: "halfSine"
         phase: 2.0424 + pi * (1 + side) / 2
       }
-      swing("air", [1, 0, 0], 0.02, [side * 0.105, 0.085, -0.005]) with { wave: "linear", phase: 12.5 }
-      swing("land", [1, 0, 0], 0.1, [side * 0.105, 0.085, -0.005]) with { wave: "linear" }
+      swing("air", [-1, 0, 0], 0.02, [side * -0.105, 0.085, 0.005]) with { wave: "linear", phase: 12.5 }
+      swing("land", [-1, 0, 0], 0.1, [side * -0.105, 0.085, 0.005]) with { wave: "linear" }
     ]
   }
 
@@ -743,13 +743,13 @@ prototypes {
         exponent: 2.4
         swings [
           swing("gait", [0, 1, 0], 0.08, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
-          swing("run", [1, 0, 0], 0.1, [0, 0, 0]) with { wave: "constant", phase: 0 }
-          swing("gait", [0, 0, 1], 0.05, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
+          swing("run", [-1, 0, 0], 0.1, [0, 0, 0]) with { wave: "constant", phase: 0 }
+          swing("gait", [0, 0, -1], 0.05, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
           swing("heading", [0, 1, 0], 0.7, [0, 0.96, 0]) with { wave: "sine" }
           swing("trail", [0, 1, 0], -0.12, [0, 0.96, 0]) with { wave: "linear" }
-          swing("lean", [0, 0, 1], -0.016, [0, 0, 0]) with { wave: "linear" }
-          swing("surge", [1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
-          swing("land", [1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
+          swing("lean", [0, 0, -1], -0.016, [0, 0, 0]) with { wave: "linear" }
+          swing("surge", [-1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
+          swing("land", [-1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
         ]
         slides [
           { driver: "bob", axis [0, 1, 0], amplitude: 0.018, phase: -1.5708, wave: "sine" }
@@ -833,7 +833,7 @@ prototypes {
         exponent: 2.3
         swings [
           swing("gait", [0, 1, 0], -0.16, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
-          swing("bob", [1, 0, 0], -0.025, [0, 0.96, 0]) with { wave: "sine", phase: -1.0708 }
+          swing("bob", [-1, 0, 0], -0.025, [0, 0.96, 0]) with { wave: "sine", phase: -1.0708 }
           swing("heading", [0, 1, 0], -0.4, [0, 0.96, 0]) with { wave: "sine" }
           swing("trail", [0, 1, 0], 0.08, [0, 0.96, 0]) with { wave: "linear" }
         ]
@@ -937,11 +937,11 @@ prototypes {
         parent: "torso"
         exponent: 2.6
         swings [
-          swing("gait", [0, 1, 0], 0.08, [0, 1.36, -0.005]) with { wave: "sine", phase: 0.3 }
-          swing("heading", [0, 1, 0], -0.3, [0, 1.36, -0.005]) with { wave: "sine" }
-          swing("trail", [0, 1, 0], 0.07, [0, 1.36, -0.005]) with { wave: "linear" }
+          swing("gait", [0, 1, 0], 0.08, [0, 1.36, 0.005]) with { wave: "sine", phase: 0.3 }
+          swing("heading", [0, 1, 0], -0.3, [0, 1.36, 0.005]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.07, [0, 1.36, 0.005]) with { wave: "linear" }
           // Holding the handheld, she looks down at it.
-          swing("hold", [1, 0, 0], 0.3, [0, 1.36, -0.005]) with { wave: "constant" }
+          swing("hold", [-1, 0, 0], 0.3, [0, 1.36, 0.005]) with { wave: "constant" }
         ]
       }
 
@@ -998,7 +998,7 @@ prototypes {
       for (lobe, i) in braidLobes {
         shape Superellipsoid $"braidLobe-{i}" {
           id: 231 + i
-          position: (lobe * [-1, 1, -1])
+          position: lobe
           rotation: ((i % 2) == 0) ? [0, 0, -braidTwist, braidUntwist] : [0, 0, braidTwist, braidUntwist]
           scale [0.0125, 0.02, 0.0135]
           material: hair

@@ -408,7 +408,7 @@ prototypes {
       schema: "puck.creation.v2"
       shape Sphere "ball" {
         material: 0
-        position: (homeCentre * [-1, 1, -1])
+        position: homeCentre
         scale [homeRadius, homeRadius, homeRadius]
       }
       shape Cylinder "pad" {

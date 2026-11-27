@@ -123,7 +123,7 @@ placements {
     placement $"valley-{sector.name}" {
       prototype: $"valley-{sector.name}"
       position [0, 0, 0]
-      yawDegrees: (sector.compass + terrainYaw)
+      yawDegrees: sectorYaw(sector.compass)
       solid
     }
   }
@@ -131,7 +131,7 @@ placements {
   placement "valley-overlook" {
     prototype: "valley-overlook"
     position [0, 0, 0]
-    yawDegrees: (overlookSector.compass + terrainYaw)
+    yawDegrees: sectorYaw(overlookSector.compass)
     solid
   }
 }

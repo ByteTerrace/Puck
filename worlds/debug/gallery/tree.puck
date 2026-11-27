@@ -16,9 +16,9 @@
 // turn, and shades as one soft volume, so a change to the leaves bakes one clump.
 //
 // Every dimension is layout.puck's (the trunk, the shelves, the branches and where they land), every colour and look
-// value look.puck's (lookTree). Shapes are authored in the creation's frame, a half turn about up from the plan's, so a
-// plan offset (dx, y, dz) from the tree's centre stands at author (-dx, y, -dz), and a plan angle a round the trunk is
-// author angle a + 180.
+// value look.puck's (lookTree). Its points are written in the tree frame (limbs.puck, foliage.puck's treePoint), a half
+// turn about up from the plan's, so a plan offset (dx, y, dz) from the tree's centre is tree-frame (-dx, y, -dz)
+// (layout.puck's treeAuthor), and a plan angle a round the trunk is tree-frame angle a + 180.
 
 import "../../standard/foliage"
 import "../../standard/limbs"
@@ -36,7 +36,16 @@ let treeBranchSegments = 8
 // `reach` metres out and `rise` up, `radius` thick at its root and tip, and ends in a spray of leaves `spray` in radii.
 let treeFork = { at: 0.5, reach: 2.4, rise: 2.6, radius [0.34, 0.1], spray [1.2, 0.62, 1.05] }
 function treeForkSide(i) = (((i % 2) == 0) ? 1 : -1)
-function treeForkTip(b, i) = limbForkTip(treeBranchA(b), treeBranchB(b), treeBranchC(b), treeFork.at, treeForkSide(i), treeFork.reach, treeFork.rise, 0.35)
+function treeForkTip(b, i) = limbForkTip(
+  treeBranchA(b),
+  treeBranchB(b),
+  treeBranchC(b),
+  treeFork.at,
+  treeForkSide(i),
+  treeFork.reach,
+  treeFork.rise,
+  0.35
+)
 // Two knots on each branch's flanks, `size` metres across, a share `at` along it and on the side `side` names relative to
 // its fork.
 let treeKnots = [{ at: 0.27, side: -1, size: 0.55 }, { at: 0.8, side: 1, size: 0.42 }]
@@ -134,7 +143,15 @@ prototypes {
           treeBarkSurface(lookTree.tread, lookTree.treadUnder, 6114, barkUpright, lookTree.twist)
           galleryCel(canopySurface(lookTree.fungus, 6118))
         ],
-        map(treeLimbs, (b, i) => treeBarkSurface(lookTree.branch, lookTree.branchUnder, (6120 + i), barkAlong((treeBranchC(b) - treeBranchA(b)))))
+        map(
+          treeLimbs,
+          (b, i) => treeBarkSurface(
+            lookTree.branch,
+            lookTree.branchUnder,
+            (6120 + i),
+            barkAlong((treeBranchC(b) - treeBranchA(b)))
+          )
+        )
       )
       // No creation relief: a relief can carry the surface inside the shapes, so it would collide as drawn, a field solve
       // over the whole tree. The bark's texture is its grain (treeBarkSurface) and its form the burls, knots, forks and
@@ -154,7 +171,14 @@ prototypes {
         scale [(treeTrunk.base + 0.5), ((treeTrunk.top + treeBuried) / 2), (treeTrunk.base + 0.5)]
         blend: Intersection
       }
-      trunkCore(label: "core", base: treeTrunk.base, apex: treeTrunk.apex, top: treeTrunk.top, count: treeCoreCount, material: treeBark)
+      trunkCore(
+        label: "core",
+        base: treeTrunk.base,
+        apex: treeTrunk.apex,
+        top: treeTrunk.top,
+        count: treeCoreCount,
+        material: treeBark
+      )
       braidedTrunk(
         label: "stem",
         count: treeStems.count,
@@ -216,10 +240,10 @@ prototypes {
             material: treeFungus
             exponent: 2.4
             position: (polarPoint(
-  (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + 0.1),
-  ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6)),
-  (treeTreadTop(k) - (0.85 + (0.45 * j)))
-) * [-1, 1, -1])
+              (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + 0.1),
+              ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6)),
+              (treeTreadTop(k) - (0.85 + (0.45 * j)))
+            ) * [-1, 1, -1])
             rotation: rotate([0, 1, 0], (0 - ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6))))
             scale [(0.42 - (0.1 * j)), 0.07, (0.5 - (0.12 * j))]
             blend: SmoothUnion
@@ -235,8 +259,16 @@ prototypes {
           detail: true
           material: treeBark
           exponent: 2.1
-          position: (polarPoint(trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)), (treeTreadAngle(k) + treeAuthorTurn), (treeTreadTop(k) - 2)) * [-1, 1, -1])
-          scale [(0.42 + (0.2 * weylShare(n, 0.7548776662))), (0.55 + (0.2 * weylShare(n))), (0.42 + (0.2 * weylShare(n, 0.7548776662)))]
+          position: (polarPoint(
+            trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)),
+            (treeTreadAngle(k) + treeAuthorTurn),
+            (treeTreadTop(k) - 2)
+          ) * [-1, 1, -1])
+          scale [
+            (0.42 + (0.2 * weylShare(n, 0.7548776662))),
+            (0.55 + (0.2 * weylShare(n))),
+            (0.42 + (0.2 * weylShare(n, 0.7548776662)))
+          ]
           blend: SmoothUnion
           smooth: 0.35
         }
@@ -300,16 +332,22 @@ prototypes {
       // straight line and swings to one side (treeBough), alternating, so the limbs curve up into their clumps like a
       // tree's rather than standing out as straight spokes.
       for n in range(0, floor((treeCrown.count / treeCrownLimbEvery))) {
-        let into = leafClusterAt(treeCrown.centre, treeCrown.radius, treeCrown.height, treeCrown.count, ((n * treeCrownLimbEvery) + 2), treeCrown.turn)
+        let into = leafClusterAt(
+          treeCrown.centre,
+          treeCrown.radius,
+          treeCrown.height,
+          treeCrown.count,
+          ((n * treeCrownLimbEvery) + 2),
+          treeCrown.turn
+        )
         shape Sweep $"crown-limb-{n}" {
-          rotation: rotate([0, 1, 0], 180)
           material: treeTwig
           blend: SmoothUnion
           smooth: 0.3
           curve {
-            a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
-            b: leanLocal(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
-            c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
+            a: treePoint([0, (treeTrunk.top - 1.6), 0], 0)
+            b: treePoint(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
+            c: treePoint([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
             radiusStart: 0.36
             radiusEnd: 0.08
           }
@@ -322,14 +360,16 @@ prototypes {
           let n = (m * treeTierLimbEvery)
           let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
           shape Sweep $"tier-limb-{k}-{n}" {
-            rotation: rotate([0, 1, 0], 180)
             material: treeTwig
             blend: SmoothUnion
             smooth: 0.2
             curve {
-              a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
-              b: leanLocal(treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)), 0)
-              c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
+              a: treePoint([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
+              b: treePoint(
+                treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)),
+                0
+              )
+              c: treePoint([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
               radiusStart: 0.2
               radiusEnd: 0.05
             }
@@ -340,7 +380,14 @@ prototypes {
       for (b, i) in treeLimbs {
         for m in range(0, floor((treeForkFoliage.count / treeTierLimbEvery))) {
           let n = (m * treeTierLimbEvery)
-          let into = leafClusterAt((treeForkTip(b, i) + [0, 0.3, 0]), treeForkFoliage.radius, treeForkFoliage.height, treeForkFoliage.count, n, (31 * i))
+          let into = leafClusterAt(
+            (treeForkTip(b, i) + [0, 0.3, 0]),
+            treeForkFoliage.radius,
+            treeForkFoliage.height,
+            treeForkFoliage.count,
+            n,
+            (31 * i)
+          )
           shape Sweep $"fork-twig-{i}-{n}" {
             rotation: rotate([0, 1, 0], 180)
             material: treeTwig
@@ -348,7 +395,7 @@ prototypes {
             smooth: 0.1
             curve {
               a: (treeForkTip(b, i) - [0, 0.2, 0])
-              b: ((((treeForkTip(b, i) * 0.55) + (into * 0.45)) + [0, 0.35, 0]))
+              b: (((treeForkTip(b, i) * 0.55) + (into * 0.45)) + [0, 0.35, 0])
               c: (into - [0, 0.15, 0])
               radiusStart: 0.12
               radiusEnd: 0.04
@@ -361,7 +408,10 @@ prototypes {
   for (family, k) in treeFamilies {
     leafyClump(
       id: treeClump(family),
-      tones: map(lookTree.foliage[family].tones, (leaves, j) => galleryCel(leafySurface(leaves, ((6130 + (10 * k)) + j), soft: lookTree.soft))),
+      tones: map(
+        lookTree.foliage[family].tones,
+        (leaves, j) => galleryCel(leafySurface(leaves, ((6130 + (10 * k)) + j), soft: lookTree.soft))
+      ),
       inner: galleryCel(leafySurface(lookTree.foliage[family].inner, (6139 + (10 * k)), soft: lookTree.soft))
     )
   }
