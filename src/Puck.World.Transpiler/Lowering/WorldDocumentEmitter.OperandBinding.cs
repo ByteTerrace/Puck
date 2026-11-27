@@ -584,17 +584,7 @@ public static partial class WorldDocumentEmitter {
         // locals, so they win over a local of the same name.
         private bool IsRuntimeName(string name) => ((name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name) ||
             ((Syntax.CurrentLocals?.Contains(item: name) == true) && !scope.RuleBinders.Contains(item: name)));
-        private bool HasRuntimeRoot(Syntax.SyntaxNode node) {
-            while (true) {
-                switch (node) {
-                    case Syntax.SourceAccess access: node = access.Target; break;
-                    case Syntax.SourceIndex index: node = index.Target; break;
-                    default:
-                        return ((node is Syntax.SourceName { Quoted: false } name) &&
-                        IsRuntimeName(name: name.Name));
-                }
-            }
-        }
+        private bool HasRuntimeRoot(Syntax.SyntaxNode node) => ((Root(node: node) is Syntax.SourceName { Quoted: false } name) && IsRuntimeName(name: name.Name));
         private bool HasBoundRoot(Syntax.SyntaxNode node) {
             if (HasRuntimeRoot(node: node)) { return false; }
             // A binding a key or member is read through that holds a name (a template parameter or loop variable
