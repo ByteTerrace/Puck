@@ -839,7 +839,7 @@ template cabinetSideSlab(label, x, material, z0, z1, y0, y1, points, half = 0.06
 // the back, the glass leaning back in a deep dark well; a control deck that slopes out below the screen; a plain lower
 // section with a kick plate under it; and side panels in the trim colour, a lit T-molding down each front edge and a
 // neon underglow. Each of its `players` (one or two) has a cream control panel on the deck: a ball-top stick on the
-// left, six buttons in two curved rows and a neon start button on the right, marked 1P or 2P; a two-player cabinet is
+// left, six buttons in two curved rows and a neon start button on the right, marked P1 or P2 at its outer front corner; a two-player cabinet is
 // wider, its panels side by side under one picture. A one-player cabinet is about 2.0 m
 // wide, a two-player one 2.6 m; both are 1.2 m deep and 2.94 m tall, the deck 1.03 to 1.19 m up, at a standing
 // player's hands. The picture is a screen row of the world's (`cabinetPicture`), 1.76 m up and 0.13 m out of the front
@@ -1225,8 +1225,8 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     for (c, p) in ((players == 2) ? panels : []) {
       {
-        text: $"{p + 1}P"
-        position: cabinetDeckAt((c - 0.32), 0.45, 0.015)
+        text: $"P{p + 1}"
+        position: cabinetDeckAt((c + (((p * 2) - 1) * 0.42)), 0.46, 0.015)
         rotation: rotate([1, 0, 0], -72.54)
         emHeight: 0.075
         depth: 0.008
