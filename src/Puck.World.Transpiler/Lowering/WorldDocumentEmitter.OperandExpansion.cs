@@ -36,11 +36,12 @@ public static partial class WorldDocumentEmitter {
                 _ => current,
             };
         }
-        // Whether anything in the tree is a let or a call a list fold could be, so an operand with neither is left as
-        // it is, the same object.
+        // Whether anything in the tree is a let or a call shaped as a list fold, so an operand with neither (a row's
+        // `count(pile)` included) is left as it is, the same object.
         private static bool Expands(Syntax.SyntaxNode node) => node switch {
             Syntax.SourceLet => true,
-            Syntax.SourceCall call => (ListFolds.Names.Contains(item: call.Name) || call.Arguments.Any(predicate: argument => Expands(node: argument.Value))),
+            Syntax.SourceCall call => (FoldShaped(call: call) ||
+                call.Arguments.Any(predicate: argument => Expands(node: argument.Value))),
             Syntax.SourceGroup group => Expands(node: group.Value),
             Syntax.SourceIndex index => (Expands(node: index.Target) || Expands(node: index.Index)),
             Syntax.SourceAccess access => Expands(node: access.Target),
@@ -52,12 +53,17 @@ public static partial class WorldDocumentEmitter {
             _ => false,
         };
 
+        private static bool FoldShaped(Syntax.SourceCall call) => ListFolds.Shaped(
+            arguments: call.Arguments.Count,
+            name: call.Name,
+            secondIsLambda: ((call.Arguments.Count > 1) && (call.Arguments[1].Value is Syntax.SourceLambda))
+        );
         // A fold of ListFolds' shape whose list the compiler knows, unrolled; null for any other call, which a rule's
         // own fold over a row's cells (`count(pile)`, `any(row, x -> x > 0)`) is.
         private Syntax.SyntaxNode? TryExpandFold(Syntax.SourceCall call, OperandExpressionNode operand) {
             var arguments = call.Arguments;
 
-            if (!ListFolds.Shaped(arguments: arguments.Count, name: call.Name, secondIsLambda: ((arguments.Count > 1) && (arguments[1].Value is Syntax.SourceLambda))) ||
+            if (!FoldShaped(call: call) ||
                 arguments.Any(predicate: static argument => (argument.Name is not null))) {
                 return null;
             }
