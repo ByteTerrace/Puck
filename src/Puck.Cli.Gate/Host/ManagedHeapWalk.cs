@@ -54,6 +54,7 @@ public static class ManagedHeapWalk {
         var nodes = new List<(ulong Address, ulong Size, ulong Type, int FirstEdge, int Edges)>();
         var edges = new List<ulong>();
         var roots = new Dictionary<ulong, string>();
+        var dependents = new List<(ulong Key, ulong Value)>();
         var dumpCollection = -1;
         var done = false;
 
@@ -89,7 +90,19 @@ public static class ManagedHeapWalk {
             for (var index = 0; (index < data.Count); index++) {
                 var root = data.Values(index: index);
 
+                // A weak handle keeps nothing alive: naming it a root would end a retention path at the weak
+                // reference that observes an object instead of the strong path that keeps it.
+                if ((root.GCRootFlag & GCRootFlags.WeakRef) != 0) { continue; }
                 _ = roots.TryAdd(key: root.RootedNodeAddress, value: $"root:{root.GCRootKind}");
+            }
+        };
+        // A conditional weak table's entry keeps its value alive exactly while its key is reachable; the dump writes the
+        // pair apart from both objects' own edges.
+        source.Clr.GCBulkRootConditionalWeakTableElementEdge += data => {
+            for (var index = 0; (index < data.Count); index++) {
+                var entry = data.Values(index: index);
+
+                dependents.Add(item: (entry.GCKeyNodeID, entry.GCValueNodeID));
             }
         };
         source.Process();
@@ -221,7 +234,7 @@ public static class ManagedHeapWalk {
             .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
             .ToArray();
 
-        var paths = ((pathType is null) ? [] : RetentionPaths(edges: edges, index: index, nodes: nodes, pathType: pathType, roots: roots, typeName: TypeName));
+        var paths = ((pathType is null) ? [] : RetentionPaths(dependents: dependents, edges: edges, index: index, nodes: nodes, pathType: pathType, roots: roots, typeName: TypeName));
 
         return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants) { LiveBytes = liveBytes, Paths = paths, SmallBytes = smallBytes, SmallTenants = smallTenants };
     }
@@ -230,15 +243,23 @@ public static class ManagedHeapWalk {
     // the dump's edges gives each object a referrer on one of its shortest paths from a root, so the chain read back
     // from an object is a real retention path, not merely its first referrer: the link a first-referrer chain cannot
     // reach when an object graph refers to itself all the way up. Objects whose chains name the same types are counted
-    // together; an object no root the dump named reaches reads as unreached.
-    private static HeapPath[] RetentionPaths(List<(ulong Address, ulong Size, ulong Type, int FirstEdge, int Edges)> nodes, List<ulong> edges, Dictionary<ulong, int> index, Dictionary<ulong, string> roots, string pathType, Func<ulong, string> typeName) {
+    // together; an object no root the dump named reaches reads as unreached. A conditional weak table's value is reached
+    // from its key, as the collector reaches it, so its chain names the key that keeps it.
+    private static HeapPath[] RetentionPaths(List<(ulong Address, ulong Size, ulong Type, int FirstEdge, int Edges)> nodes, List<ulong> edges, Dictionary<ulong, int> index, Dictionary<ulong, string> roots, List<(ulong Key, ulong Value)> dependents, string pathType, Func<ulong, string> typeName) {
         const int Unvisited = -2;
         const int Root = -1;
         var parent = new int[nodes.Count];
         var queue = new int[nodes.Count];
         var head = 0;
         var tail = 0;
+        var valuesOf = new Dictionary<int, List<int>>();
 
+        foreach (var (key, value) in dependents) {
+            if (index.TryGetValue(key: key, value: out var keyAt) && index.TryGetValue(key: value, value: out var valueAt)) {
+                if (!valuesOf.TryGetValue(key: keyAt, value: out var values)) { valuesOf[keyAt] = values = []; }
+                values.Add(item: valueAt);
+            }
+        }
         Array.Fill(array: parent, value: Unvisited);
         foreach (var address in roots.Keys) {
             if (index.TryGetValue(key: address, value: out var at) && (parent[at] == Unvisited)) {
@@ -254,6 +275,14 @@ public static class ManagedHeapWalk {
                 if (index.TryGetValue(key: edges[edge], value: out var target) && (parent[target] == Unvisited)) {
                     parent[target] = at;
                     queue[tail++] = target;
+                }
+            }
+            if (valuesOf.TryGetValue(key: at, value: out var held)) {
+                foreach (var target in held) {
+                    if (parent[target] == Unvisited) {
+                        parent[target] = at;
+                        queue[tail++] = target;
+                    }
                 }
             }
         }
