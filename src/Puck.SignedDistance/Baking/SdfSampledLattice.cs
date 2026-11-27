@@ -689,6 +689,19 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // The factor Refine was last asked for, zero until it is: a lattice Refine scanned and left whole has m_factor one all
     // the same.
     private int m_asked;
+    // A plan's choice (Plan), kept for RefinePlanned: whether one was made, the essential cells, each region cell's wanted
+    // split, the thin split's reach, the two masks its splits traded (the chosen one named by m_planMeasured, null with no
+    // choice), the split chosen and the ordinary split, and its count of fine samples.
+    private bool m_planned;
+    private readonly OwnedBuffer<bool> m_planEssential;
+    private readonly OwnedBuffer<int> m_planWanted;
+    private readonly OwnedBuffer<bool> m_planThinSplit;
+    private readonly OwnedBuffer<bool> m_planTrial;
+    private readonly OwnedBuffer<bool> m_planChosen;
+    private OwnedBuffer<bool>? m_planMeasured;
+    private int m_planFactor;
+    private int m_planOrdinary;
+    private long m_planFine;
     // Division by the fine lattice's row length, its rows per slab and m_factor (FineCoordinates, FineCell), set with
     // m_factor: the fine-sample scans divide every key they read.
     private ReciprocalDivisor32 m_byFineRow;
@@ -831,6 +844,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
         m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
         m_fineMaterials = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_planEssential = new(allocator: allocator, observer: observer);
+        m_planWanted = new(allocator: allocator, observer: observer);
+        m_planThinSplit = new(allocator: allocator, observer: observer);
+        m_planTrial = new(allocator: allocator, observer: observer);
+        m_planChosen = new(allocator: allocator, observer: observer);
         m_gradients.Resize(count);
     }
 
@@ -848,6 +866,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_blockSlots.Dispose();
         m_signInside.Dispose();
         m_fineMaterials.Dispose();
+        m_planEssential.Dispose();
+        m_planWanted.Dispose();
+        m_planThinSplit.Dispose();
+        m_planTrial.Dispose();
+        m_planChosen.Dispose();
     }
 
     /// <summary>Gets the fine cells along each axis of a coarse cell: one until <see cref="Refine"/> refines the
@@ -911,16 +934,34 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// side would measure too many, and the lattice then contours at its own spacing. The memory is the lattice's, valid
     /// until the next round of points is asked for or the lattice is disposed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
-    /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
+    /// <exception cref="InvalidOperationException">The lattice is already refined or planned.</exception>
     public ReadOnlyMemory<Vector4> Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default, int? thinFactor = null) {
+        _ = Plan(factor: factor, regions: regions, thinFactor: thinFactor);
+        return RefinePlanned();
+    }
+    /// <summary>Chooses the cells and the split <see cref="Refine"/> would, and returns how many fine samples the choice
+    /// measures at most, before any storage for them is allocated, so a caller can reserve them exactly first. The choice
+    /// stays with the lattice, holding its per-cell masks (<see cref="PlanBytes"/>), until <see cref="RefinePlanned"/>
+    /// carries it out or the lattice is disposed.</summary>
+    /// <param name="factor">The fine cells along each axis of a coarse cell, at least two, as <see cref="Refine"/> takes
+    /// it.</param>
+    /// <param name="regions">The boxes whose turning surface is contoured finer, as <see cref="Refine"/> takes them.</param>
+    /// <param name="thinFactor">An optional finer split for detected sheets and gaps, as <see cref="Refine"/> takes
+    /// it.</param>
+    /// <returns>An upper bound of the fine samples <see cref="RefinePlanned"/> measures (a sample two cells of different
+    /// splits share is counted for each), at most <see cref="MaxFineSamples"/>; zero when nothing refines.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
+    /// <exception cref="InvalidOperationException">The lattice is already refined or planned.</exception>
+    public long Plan(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default, int? thinFactor = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
         if (thinFactor is int finer && ((finer % factor != 0) || !BitOperations.IsPow2(finer / factor))) {
             throw new ArgumentOutOfRangeException(nameof(thinFactor), "The thin split must be a power-of-two multiple of the ordinary split.");
         }
 
-        if (m_factor != 1) {
-            throw new InvalidOperationException(message: "The lattice is already refined.");
+        if ((m_factor != 1) || m_planned) {
+            throw new InvalidOperationException(message: "The lattice is already refined or planned.");
         }
+        m_planned = true;
 
         m_asked = factor;
         // The split every cell but a thin one takes at most; `factor` becomes the finest split chosen below.
@@ -930,12 +971,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
         var cellCount = ((cellsX * cellsY) * cellsZ);
-        // The per-cell masks are native: a lattice's cells run to millions, and each mask a split tries is one more.
-        using var measuredFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
-        // An alias, since the chosen split's flags take its place; every buffer goes at the method's end.
+        // The per-cell masks are native: a lattice's cells run to millions, and each mask a split tries is one more. The
+        // essential cells, the regions' wanted splits, the thin split's reach and the chosen split's mask are the plan's,
+        // kept for RefinePlanned; the rest go at the method's end.
+        var measuredFlags = m_planEssential;
+
+        measuredFlags.Resize(length: cellCount, clear: true, preserve: false);
+        // An alias, since the chosen split's flags take its place.
         var measured = measuredFlags;
 
-        measured.AsSpan(length: cellCount, start: 0).Clear();
         m_thin.Resize(length: cellCount, clear: true, preserve: false);
         int[] samples = [m_samplesX, m_samplesY, m_samplesZ];
         int[] cells = [cellsX, cellsY, cellsZ];
@@ -1096,9 +1140,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var regionCells = new List<int>[regions.Length];
         // Each region cell's own factor: the most any region over it asks for, each no more than its surface's turn needs
         // (CurvedSplit). Zero for a cell no region holds.
-        using var wanted = OwnedBuffer<int>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        var wanted = m_planWanted;
 
-        wanted.AsSpan(length: cellCount, start: 0).Clear();
+        wanted.Resize(length: cellCount, clear: true, preserve: false);
 
         if (!regions.IsEmpty) {
             var reach = (0.5f * m_cell.Length());
@@ -1231,8 +1275,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         if (!any) {
-            m_thin.Free();
-            return ReadOnlyMemory<Vector4>.Empty;
+            FreePlan();
+            return 0L;
         }
 
         // The split and the regions the fine-sample budget serves. The cells the samples cannot resolve (a sheet, a gap, two
@@ -1252,13 +1296,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         // The mask each split tries and the best one so far: two native masks that trade places when a split serves more
         // regions, so no split's mask is a copy of its own.
-        using var trialFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
-        using var chosenFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
-        // Aliases the search swaps; the buffers themselves go at the method's end.
-        var (trial, chosen) = (trialFlags, chosenFlags);
+        m_planTrial.Resize(length: cellCount, clear: false, preserve: false);
+        m_planChosen.Resize(length: cellCount, clear: false, preserve: false);
+        // Aliases the search swaps; the one left chosen is kept for RefinePlanned and the other freed.
+        var (trial, chosen) = (m_planTrial, m_planChosen);
         var hasChosen = false;
         var chosenSplit = 0;
         var chosenServed = -1;
+        var chosenCounted = 0L;
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
         using var countedCells = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
@@ -1274,9 +1319,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // stride beside a thin cell reads the thin cell's fine samples on the face or edge they share while it interpolates
         // its own from its stride's grid, which steps over the sheet: the sheet ends in a false cap at the shared face,
         // inside the solid, and the stride cell's merged vertex takes the mean of the sheet's two faces.
-        using var thinSplit = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        var thinSplit = m_planThinSplit;
 
-        thinSplit.AsSpan(length: cellCount, start: 0).Clear();
+        thinSplit.Resize(length: cellCount, clear: true, preserve: false);
         if (finest > ordinary) {
             for (var z = 0; (z < cellsZ); z++) {
                 for (var y = 0; (y < cellsY); y++) {
@@ -1341,7 +1386,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             if (served > chosenServed) {
                 (trial, chosen) = (chosen, trial);
-                (hasChosen, chosenSplit, chosenServed) = (true, split, served);
+                (hasChosen, chosenSplit, chosenServed, chosenCounted) = (true, split, served, counted);
             }
             if (served == order.Count) { break; }
         }
@@ -1381,20 +1426,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             return (counted <= MaxFineSamples);
         }
-        // The fine cells along each axis a cell splits into under a refinement of `refinement`: the refinement's own for a
-        // cell an essential test measures or no region holds, else the fewest `refinement` divides into by a power of two
-        // that still reach the most its regions ask for (wanted), so every split a lattice holds divides the next finer.
-        int CellSplit(int cell, int refinement) {
-            if ((refinement > ordinary) && thinSplit[cell]) { return refinement; }
-            if (essential[cell] || (wanted[cell] == 0)) { return Math.Min(val1: ordinary, val2: refinement); }
-
-            var reach = Math.Min(val1: wanted[cell], val2: refinement);
-            var stride = 1;
-
-            while (((refinement % (2 * stride)) == 0) && ((refinement / (2 * stride)) >= reach)) { stride *= 2; }
-
-            return (refinement / stride);
-        }
+        int CellSplit(int cell, int refinement) => SplitOf(cell: cell, essential: essential, ordinary: ordinary, refinement: refinement, thinSplit: thinSplit, wanted: wanted);
         // Whether a counted cell besides cell (x, y, z) holds its fine sample (lx, ly, lz): a neighbour across each face the
         // sample lies on.
         bool HeldByCounted(int x, int y, int z, int lx, int ly, int lz, int split) {
@@ -1414,11 +1446,40 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         if (!hasChosen) {
-            m_thin.Free();
-            return ReadOnlyMemory<Vector4>.Empty;
+            FreePlan();
+            return 0L;
         }
-        measured = chosen;
-        factor = chosenSplit;
+        trial.Free();
+        m_planMeasured = chosen;
+        m_planFactor = chosenSplit;
+        m_planOrdinary = ordinary;
+        m_planFine = chosenCounted;
+
+        return chosenCounted;
+    }
+    /// <summary>Carries out the choice <see cref="Plan"/> made and returns the fine samples that resolve the cells it
+    /// chose, as <see cref="Refine"/> does; the plan's masks are freed once the samples are numbered.</summary>
+    /// <returns>The fine samples to measure, as <see cref="Refine"/> returns them; empty when the plan refines nothing or
+    /// there is no plan.</returns>
+    /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
+    public ReadOnlyMemory<Vector4> RefinePlanned() {
+        if (m_factor != 1) {
+            throw new InvalidOperationException(message: "The lattice is already refined.");
+        }
+        if (m_planMeasured is not { } measured) { return ReadOnlyMemory<Vector4>.Empty; }
+
+        var factor = m_planFactor;
+        var ordinary = m_planOrdinary;
+        var essential = m_planEssential;
+        var wanted = m_planWanted;
+        var thinSplit = m_planThinSplit;
+        var cellsX = (m_samplesX - 1);
+        var cellsY = (m_samplesY - 1);
+        var cellsZ = (m_samplesZ - 1);
+        var cellCount = ((cellsX * cellsY) * cellsZ);
+
+        int CellIndex(int x, int y, int z) => (x + (cellsX * (y + (cellsY * z))));
+        int CellSplit(int cell, int refinement) => SplitOf(cell: cell, essential: essential, ordinary: ordinary, refinement: refinement, thinSplit: thinSplit, wanted: wanted);
 
         // Every cell touching a measured cell contours at the fine spacing too, from its coarse corners, so no cell that
         // contours whole meets a measured fine sample.
@@ -1571,9 +1632,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_factor = factor;
         Divide(factor: factor);
         m_measured.CopyFrom(source: measured.AsSpan(length: cellCount, start: 0));
+        // The plan's masks have done their work; they go before the fine samples' storage is made.
+        FreePlan(thin: false);
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
         var fineSamples = m_fineKeys.Length;
+
+        System.Diagnostics.Debug.Assert(condition: (fineSamples <= m_planFine), message: "The plan's count bounds the fine samples it measures.");
 
         m_fineValues.Resize(fineSamples);
         m_fineMaterials.Resize(fineSamples);
@@ -1591,6 +1656,47 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return m_points.Memory;
     }
+    // The fine cells along each axis a cell splits into under a refinement of `refinement`: the refinement's own for a
+    // cell an essential test measures or no region holds, else the fewest `refinement` divides into by a power of two
+    // that still reach the most its regions ask for (wanted), so every split a lattice holds divides the next finer.
+    private static int SplitOf(int cell, int refinement, int ordinary, OwnedBuffer<bool> thinSplit, OwnedBuffer<bool> essential, OwnedBuffer<int> wanted) {
+        if ((refinement > ordinary) && thinSplit[cell]) { return refinement; }
+        if (essential[cell] || (wanted[cell] == 0)) { return Math.Min(val1: ordinary, val2: refinement); }
+
+        var reach = Math.Min(val1: wanted[cell], val2: refinement);
+        var stride = 1;
+
+        while (((refinement % (2 * stride)) == 0) && ((refinement / (2 * stride)) >= reach)) { stride *= 2; }
+
+        return (refinement / stride);
+    }
+    // Frees the plan's masks, and with `thin` the thin cells' map, which a lattice that refines nothing has no use for.
+    private void FreePlan(bool thin = true) {
+        m_planEssential.Free();
+        m_planWanted.Free();
+        m_planThinSplit.Free();
+        m_planTrial.Free();
+        m_planChosen.Free();
+        m_planMeasured = null;
+        if (thin) { m_thin.Free(); }
+    }
+    /// <summary>Returns the most bytes a lattice of the given size holds from its construction through its
+    /// <see cref="Plan"/>: its gradients, made with it, and the per-cell masks the plan's choice reads and keeps. A
+    /// region's cell list adds four bytes a cell it covers, counted once here; regions that overlap may hold more.</summary>
+    /// <param name="samplesX">The samples along X, at least two.</param>
+    /// <param name="samplesY">The samples along Y, at least two.</param>
+    /// <param name="samplesZ">The samples along Z, at least two.</param>
+    /// <returns>The bytes.</returns>
+    public static long PlanBytes(int samplesX, int samplesY, int samplesZ) {
+        var samples = ((((long)samplesX) * samplesY) * samplesZ);
+        var cells = ((((long)Math.Max(val1: 1, val2: (samplesX - 1))) * Math.Max(val1: 1, val2: (samplesY - 1))) * Math.Max(val1: 1, val2: (samplesZ - 1)));
+
+        return ((samples * System.Runtime.CompilerServices.Unsafe.SizeOf<Vector3>()) + (cells * PlanBytesPerCell));
+    }
+    // The bytes a cell's masks take while a plan chooses: the essential, thin, thin-split, trial and chosen flags and the
+    // counted flag (a byte each), the wanted split, the counted split and the cell's counted samples (an int each), and a
+    // region list's entry.
+    private const int PlanBytesPerCell = ((6 * sizeof(bool)) + (4 * sizeof(int)));
     /// <summary>Returns the most fine samples <see cref="Refine"/> measures in a lattice: every cell split
     /// <paramref name="factor"/> times along each axis, less its coarse corners, at most <see cref="MaxFineSamples"/>; zero
     /// for a factor that refines nothing.</summary>

@@ -39,4 +39,27 @@ public sealed class SdfMeshPathBakeRoomLawTests {
         // Done gives every reservation back, the forced allowance and the passed total with it.
         Assert.Equal(expected: (0L, 0L, 0L), actual: (after.Forced, after.Passed, after.AuthoringPromised));
     }
+    // Six lone boxes, six groups, on a 16 GB machine's margin with a gibibyte of authoring room past it: each refinement
+    // reserves the fine samples its plan counts, not their bound, so several fit the room side by side, and admission
+    // leaves each the room its refinement and the answers need, so none goes through the forced allowance.
+    [Fact]
+    public void RefinementsReservingWhatTheirPlansCountRunSideBySideWithoutTheForcedAllowance() {
+        var account = new MemoryAccount(availablePhysicalBytes: static () => (3L << 30), clock: static () => 1L, installedPhysicalBytes: (16L << 30), reclaim: static () => { });
+        Shape[] boxes = [.. Enumerable.Range(count: 7, start: 0).Select(selector: static index => new Shape(Center: new System.Numerics.Vector3(x: (index * 6f), y: 0.6f, z: 0f), Half: new System.Numerics.Vector3(x: 0.6f, y: 0.5f, z: 0.4f), Rotation: System.Numerics.Quaternion.CreateFromAxisAngle(angle: (0.3f * index), axis: System.Numerics.Vector3.UnitY), Material: (index % 2)))];
+        var (program, materials) = Program(shapes: boxes);
+        using var run = new MeshBakeTestRun(new SdfMeshPathBake { HostAccount = account, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "roomy" });
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
+        var mostHeld = 0;
+
+        _ = run.Dresser.Dress(frame: frame);
+        Drive(bake: run.Bake, dresser: run.Dresser, frame: frame, materials: materials, shapes: boxes, afterStep: () => mostHeld = Math.Max(val1: mostHeld, val2: SdfMeshPathBake.RefinementsHeld));
+
+        var description = run.Bake.Describe();
+        var after = account.ReadAdmission(pool: PhysicalMemory.Host);
+
+        Assert.Contains(expectedSubstring: "groups=6 meshes=6", actualString: description);
+        Assert.True(condition: (mostHeld > 1), userMessage: $"at most {mostHeld} refinement held at once: {description}");
+        Assert.Equal(expected: 0L, actual: after.ForcedJobs);
+        Assert.Equal(expected: (0L, 0L, 0), actual: (after.AuthoringPromised, after.Passed, SdfMeshPathBake.RefinementsHeld));
+    }
 }

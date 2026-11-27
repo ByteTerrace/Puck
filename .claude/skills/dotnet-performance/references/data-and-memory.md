@@ -290,8 +290,14 @@ the limit and counted, so a full device coarsens detail before it ends a
 World. A
 group also waits while the bake pool's queue holds a round of every worker's
 stages (`Backlogged`): admitted beyond that, it would only hold its lattice in
-the queue. A group's peak comes from its own final lattice and the most fine samples its
-refinement factor can measure (`SdfSampledLattice.FineSampleBound`), and
+the queue. A group's admission reserves its final lattice and what planning its
+refinement holds (`SdfMeshPathBake.AdmissionPeakOf`, `SdfSampledLattice.PlanBytes`),
+and only while the room left still holds its lattice's share of its refinement
+and a readback window (`MemoryAccount.Owner.TryReserve(long, long)`'s `spare`).
+The last slab's answer plans the refinement (`SdfSampledLattice.Plan`), which
+counts the fine samples it will measure before any storage for them exists; the
+group narrows to what it holds, and the refinement's door reserves the lattice
+and that count, never the bound (`SdfSampledLattice.FineSampleBound`), then
 narrows to the measured count once the refinement names it. Only charged
 storage counts: the mesh library's retained meshes are charged once as cached
 bytes, and the library evicts by those charges (`SdfMesh.StorageBytes`); no
