@@ -191,12 +191,12 @@ public static class HostCommand {
         return command;
     }
 
-    private static int Heap(int processId, int minimumMebibytes, int depth) {
+    private static int Heap(int processId, int minimumMebibytes, int depth, string? pathType) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         HeapWalk walk;
 
         try {
-            walk = ManagedHeapWalk.Run(depth: depth, minimumBytes: (((long)minimumMebibytes) << 20), processId: processId);
+            walk = ManagedHeapWalk.Run(depth: depth, minimumBytes: (((long)minimumMebibytes) << 20), pathType: pathType, processId: processId);
         } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
             return CliExit.Refuse(verb: HeapVerb, what: $"--pid {processId}", why: exception.Message);
         }
@@ -211,6 +211,12 @@ public static class HostCommand {
         foreach (var tenant in walk.SmallTenants) {
             Console.Out.WriteLine(value: FormattableString.Invariant($"small {System.Text.Json.JsonSerializer.Serialize(tenant.Type)} held-by={System.Text.Json.JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes}"));
         }
+        if (pathType is not null) {
+            Console.Out.WriteLine(value: FormattableString.Invariant($"retention paths of {System.Text.Json.JsonSerializer.Serialize(pathType)}: {walk.Paths.Sum(selector: static path => path.Objects)} objects along {walk.Paths.Count} paths"));
+            foreach (var path in walk.Paths) {
+                Console.Out.WriteLine(value: FormattableString.Invariant($"path objects={path.Objects} links={path.Links} chain={System.Text.Json.JsonSerializer.Serialize(path.Chain)}"));
+            }
+        }
         Console.Out.WriteLine(value: "The runtime wrote the heap during one blocking full collection with every managed thread suspended; the holder is the type of the first referrer found, or the kind of root, followed by that referrer's own first referrers to --depth.]");
 
         return CliExit.Success;
@@ -219,10 +225,11 @@ public static class HostCommand {
         var pidOption = new Option<int>(name: "--pid") { Description = "The .NET process to walk, such as a World's process id from puck_world_start.", Required = true };
         var minimumOption = CliOptions.Count(defaultValue: 4, description: "The smallest large-object-heap tenant to name, in MiB; smaller large objects count only in the totals.", minimum: 0, name: "--min-mib");
         var depthOption = CliOptions.Count(defaultValue: 1, description: "How many first referrers to name above each tenant: 1 names its holder, 2 the holder's holder too, and so on.", minimum: 1, name: "--depth");
+        var pathOption = new Option<string?>(name: "--path") { Description = "The full name of a type (such as Puck.World.Server.WorldServer) whose every live object is traced back to the root that keeps it." };
         var command = new Command(
             description: "Name the large object heap's tenants of another .NET process from the runtime's own heap dump.",
             name: "heap"
-        ) { pidOption, minimumOption, depthOption };
+        ) { pidOption, minimumOption, depthOption, pathOption };
 
         command.Detail(detail: """
             Opens an EventPipe session on the process's diagnostics port with the runtime provider's heap-collect and
@@ -235,6 +242,11 @@ public static class HostCommand {
             small objects of at least --min-mib MiB summed by type and chain of first referrers (to --depth, at most
             three), so the bytes the large tenants miss are named too. --depth names that holder's own first referrers too, as a chain
             (`A <- B <- C`), so an array a list or a dictionary holds is traced to the type that keeps the list.
+            --path traces every live object of one type to the root that keeps it: one breadth-first pass from the
+            dump's roots gives each object a referrer on a shortest path from a root, and each object's chain is
+            printed root first (`root:Handle -> System.Object[] -> ... -> T`), objects sharing a chain of types counted
+            together. A first-referrer chain stops inside a graph that refers to itself; this one reaches the root, so
+            it names what keeps an object graph alive that should have been collected (a disposed host's server).
             Reading the stream takes seconds on a heap of a few gigabytes. Never attach during a frame-time reading:
             the pause is one long frame in the target's host.frames.
 
@@ -243,6 +255,7 @@ public static class HostCommand {
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Heap(
             depth: parseResult.GetValue(option: depthOption),
             minimumMebibytes: parseResult.GetValue(option: minimumOption),
+            pathType: parseResult.GetValue(option: pathOption),
             processId: parseResult.GetValue(option: pidOption)
         ), cancellationToken: cancellationToken));
 

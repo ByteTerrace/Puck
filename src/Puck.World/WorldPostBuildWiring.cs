@@ -88,7 +88,7 @@ public static class WorldPostBuildWiring {
         // overlays), so a dead reference in them prints loudly at boot instead of resolving to a silent dead key.
         // Commands only: a channel table belongs to the document that declares it, so every caller supplies its own
         // (WorldSeatBindings holds the boot instance's; the document validator compiles the candidate's).
-        WorldAffordances.Install(registry: consoleRegistry);
+        _ = services.GetRequiredService<WorldAffordances.Installation>();
 
         // The first collect, so a frame or a key press before the first host step reads published values.
         var presentation = services.GetRequiredService<WorldPresentationCollect>();
