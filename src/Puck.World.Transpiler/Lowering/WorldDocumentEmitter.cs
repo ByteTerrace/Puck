@@ -648,6 +648,10 @@ public static partial class WorldDocumentEmitter {
         var id = block.Identifier;
 
         if (TryLowerCompositionEndpointBlock(block: block, parent: parent, scope: scope)) { return; }
+        if ((id == "group") && (block.Target is null) && (scope.Annotations.GetValueOrDefault(key: PrototypeRowKey) is true)) {
+            LowerShapeGroup(block: block, parent: parent, scope: scope);
+            return;
+        }
 
         var blockPointer = DocumentJsonPointer.Child(name: id, pointer: scope.CurrentPointer);
 
@@ -1035,6 +1039,35 @@ public static partial class WorldDocumentEmitter {
         return true;
     }
 
+    // `group "door" { shape …; shape … }` in a creation: its statements lower into the creation as if written in its
+    // place, and every shape they write joins the group by its name, which the creation numbers when its document is
+    // canonicalized (WorldDocumentMembers.NumberNamedGroups). A group composes in a scope of its own, so its booleans
+    // reach only its own members (CreationStampEmitter.GroupRuns). A shape that names a group of its own keeps it.
+    private static void LowerShapeGroup(BlockNode block, JsonObject parent, DocumentScope scope) {
+        var name = DocumentLowering.ResolveBlockName(block: block, scope: scope);
+
+        if (name is not { Length: > 0 }) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "A shape group is named: write 'group \"name\" { … }'.", span: block.Span);
+            return;
+        }
+
+        var start = ((parent["shapes"] as JsonArray)?.Count ?? 0);
+        var active = scope;
+
+        foreach (var statement in block.Statements) {
+            if (statement is LetNode binding) {
+                active = DocumentLowering.BindLocalLet(binding: binding, scope: active);
+                continue;
+            }
+            ProcessStatement(scope: active, statement: statement, target: parent);
+        }
+        if (parent["shapes"] is not JsonArray shapes) { return; }
+        for (var index = start; (index < shapes.Count); index++) {
+            if ((shapes[index] is JsonObject shape) && !shape.ContainsKey(propertyName: "group")) {
+                shape["group"] = name;
+            }
+        }
+    }
     private static JsonObject LowerBlockToObject(BlockNode block, DocumentScope scope) {
         if (
             block.Statements.All(predicate: static statement => (statement is PropertyNode)) &&

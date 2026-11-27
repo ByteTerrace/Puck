@@ -146,6 +146,9 @@ internal static class WorldDocumentMembers {
                 return WorldDocumentRowDefaults.CanonicalFloat(value: node);
             }
             if (node is JsonArray array) {
+                if (type == typeof(ShapeDocument)) {
+                    NumberNamedGroups(shapes: array);
+                }
                 if (whole && (type == typeof(ShapeDocument))) {
                     WorldDocumentRowDefaults.CompleteShapes(shapes: array);
                 }
@@ -274,6 +277,26 @@ internal static class WorldDocumentMembers {
         }
     }
 
+    // A group named rather than numbered (`group "door" { … }`, or `group: "door"` on a shape) takes the next number above
+    // every group the creation numbers, the names in the order they first appear, so a name never joins a numbered group.
+    private static void NumberNamedGroups(JsonArray shapes) {
+        var highest = 0L;
+        var named = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+
+        foreach (var shape in shapes) {
+            if ((shape?["group"] is JsonValue value) && Puck.Transpiler.Lowering.DocumentLowering.TryReadNumber(node: value, number: out var number)) {
+                highest = Math.Max(val1: highest, val2: (long)number);
+            }
+        }
+        foreach (var shape in shapes) {
+            if ((shape is JsonObject row) && (row["group"] is JsonValue value) && value.TryGetValue<string>(value: out var name)) {
+                if (!named.TryGetValue(key: name, value: out var group)) {
+                    named[name] = group = (highest + named.Count + 1);
+                }
+                row["group"] = group;
+            }
+        }
+    }
     // An object's members in another order are the same object, so a typed object writes its discriminator first, then
     // its members in the model's declared order, then anything else (an extension key, a basis merge's $replace) as it
     // came. A dictionary's keys are data and keep their order.
