@@ -128,23 +128,35 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.Contains(actualString: (refused ?? string.Empty), expectedSubstring: "timeline.clocks[0].anchor is what a projection carries for a state clock it discloses");
     }
     [Fact]
-    public void The_prediction_is_exact_at_every_authoritative_tick_through_the_wrap_and_refuses_a_tick_before_its_anchor() {
-        const ulong Step = 1680UL;
+    public void The_prediction_reads_the_base_plus_the_curve_truncated_at_every_tick_through_the_wrap_and_refuses_a_tick_before_its_anchor() {
+        // A slope in raw units per engine tick, whole or not, rising or falling, and a curved accumulation: the
+        // prediction is the base plus the curve truncated toward zero, the authority's own read, at every tick.
+        var curves = new[] {
+            new RationalPolynomial(coefficients: [Rational.Zero, new Rational(Numerator: 1024, Denominator: 1)]),
+            new RationalPolynomial(coefficients: [Rational.Zero, new Rational(Numerator: -3001, Denominator: 7)]),
+            new RationalPolynomial(coefficients: [Rational.Zero, new Rational(Numerator: 1, Denominator: 3), new Rational(Numerator: 5, Denominator: 11)]),
+        };
 
-        foreach (var rate in new[] { (1L << 56), -(3L << 50), long.MaxValue, (long.MinValue + 1L) }) {
-            var anchor = new WorldClockAnchor(Phase: 0xFEDC_BA98_7654_3210UL, Rate: rate, Step: Step, Tick: 1_000_000UL);
+        foreach (var curve in curves) {
+            const long Base = 0x7654_3210L;
+            var anchor = new WorldClockAnchor(Base: Base, Curve: WorldClockAnchor.Spell(curve: curve), Phase: WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: Base), Tick: 1_000_000UL);
 
-            foreach (var k in new long[] { 0L, 1L, 2L, 255L, 65_537L }) {
+            Assert.True(condition: anchor.IsWellFormed);
+
+            foreach (var k in new ulong[] { 0UL, 1UL, 2UL, 255UL, 65_537UL }) {
                 Assert.Equal(
-                    expected: unchecked((anchor.Phase + (((ulong)rate) * ((ulong)k)))),
-                    actual: anchor.Predict(engineTick: ((ulong)(((long)anchor.Tick) + (k * ((long)Step)))))
+                    expected: WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: ((long)(Base + curve.Evaluate(x: new Rational(Numerator: k, Denominator: 1)).Truncate()))),
+                    actual: anchor.Predict(engineTick: (anchor.Tick + k))
                 );
             }
 
-            foreach (var k in new long[] { -1L, -40L }) {
-                _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => anchor.Predict(engineTick: ((ulong)(((long)anchor.Tick) + (k * ((long)Step))))));
+            foreach (var k in new ulong[] { 1UL, 40UL }) {
+                _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => anchor.Predict(engineTick: (anchor.Tick - k)));
             }
         }
+
+        // A curve whose value at its own tick is not the anchor's phase is malformed.
+        Assert.False(condition: new WorldClockAnchor(Base: 3L, Curve: ["1"], Phase: 0UL, Tick: 0UL).IsWellFormed);
 
         var still = new WorldClockAnchor(Phase: 42UL, Tick: 7UL);
 
@@ -175,7 +187,7 @@ public sealed partial class ProjectionAnchorLawTests {
             [8] = Row(advance: PerTick(raw: 1024L), raw: 0L),
             // A rate change, downward.
             [24] = Row(advance: PerTick(raw: -3001L), raw: FixedQ4816.FromDouble(value: 0.5d).Value),
-            // A quantized advance: a third of a unit a second never sums to whole raw units a tick.
+            // A third of a unit a second, which never sums to whole raw units a tick: its curve still predicts it.
             [40] = Row(advance: new StateAdvance(PerSecondDenominator: 3L, PerSecondNumerator: 1L), raw: 0L),
             // A staircase: a turn in steps that each hold three ticks.
             [56] = Row(cycle: new StateCycle(Output: CycleOutput.Turns, TicksPerStep: 3L), raw: 0L),
@@ -212,7 +224,7 @@ public sealed partial class ProjectionAnchorLawTests {
                 Assert.Equal(actual: after, expected: before);
             }
 
-            if (after.Rate != 0L) {
+            if (after.Curve is not null) {
                 moving++;
             }
         }
@@ -221,17 +233,18 @@ public sealed partial class ProjectionAnchorLawTests {
 
         int Anchors(int from, int to) => anchored[from..to].Count(predicate: static sent => sent);
 
-        // Each affine span anchors once, where it starts, with the rate it was proved to hold; a quantized advance and
-        // an eased row re-anchor at every tick they move, a staircase at every step, a seek once, and a still row never.
+        // Each advancing span anchors once, where it starts, with the curve it was proved to follow, whether or not its
+        // rate sums to whole raw units a tick; an eased row re-anchors at every tick it moves, a staircase at every step,
+        // a seek once, and a still row never.
         Assert.Equal(expected: 0, actual: Anchors(from: 0, to: 8));
-        Assert.True(condition: (anchored[8] && anchored[24]));
+        Assert.True(condition: (anchored[8] && anchored[24] && anchored[40]));
         Assert.Equal(expected: 2, actual: Anchors(from: 8, to: 40));
-        Assert.Equal(expected: 16, actual: Anchors(from: 40, to: 56));
+        Assert.Equal(expected: 1, actual: Anchors(from: 40, to: 56));
         Assert.InRange(actual: Anchors(from: 57, to: 80), high: 8, low: 7);
         Assert.InRange(actual: Anchors(from: 80, to: 110), high: 30, low: 25);
         Assert.Equal(expected: 2, actual: Anchors(from: 110, to: 130));
-        // Every tick of the two affine spans, and no other, presents a moving anchor.
-        Assert.Equal(actual: moving, expected: 32);
+        // Every tick of the three advancing spans, and no other, presents a moving anchor.
+        Assert.Equal(actual: moving, expected: 48);
         observation.Dispose();
     }
     [Fact]
@@ -264,7 +277,8 @@ public sealed partial class ProjectionAnchorLawTests {
     }
     [Fact]
     public void A_late_join_hydrates_the_exact_current_phase() {
-        // A quantized advance moves the phase every tick along no proved span, so no anchor composed earlier holds.
+        // A rate of three sevenths of a unit a second moves the phase every tick, so no anchor composed before the join
+        // stands at its tick.
         using var fixture = Fixtures.FreshServer(definition: Document(row: Row(advance: new StateAdvance(PerSecondDenominator: 7L, PerSecondNumerator: 3L), raw: 0L)));
 
         for (var index = 0; (index < 47); index++) {

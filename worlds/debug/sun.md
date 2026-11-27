@@ -22,7 +22,8 @@ past the moon, a seam over it hands the ship to this world.
 |---|---|
 | Stand on the pad | The star as a disc across the void, as wide as it looks from there: it grows as it comes. The frame's posts shadow the pad, hard while the star is far and blurred as it nears; the star's own ball casts no shadow. |
 | `world.state.cell.set day $value 0.59` in the valley, then wait | The star arriving: a white ball in its own glow, 3 km out. It passes the rock at three in the afternoon (`day` 0.625), 380 m of void between its surface and the pad, and the camera stops down as it comes, so the pad stays a lit grey under it. |
-| Hold the day near the pass (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}` in the valley) | The star standing beside the rock, its surface churning. |
+| Hold the day near the pass (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}` in the valley) | The star standing beside the rock, its surface churning, and the beacon flashing slower than once a second, at the pace the star's nearness gives the outpost's time. |
+| Watch the beacon over the pad's back corner, then `world.state perihelionTime` and `world.state day` across the pass | The beacon flashes once a second of the outpost's own time. For an hour either side of the pass that time runs slow, down to half the day's pace at three in the afternoon, so the flashes slow as the star nears and quicken as it leaves, and the outpost ends the pass thirty of its seconds behind the valley. |
 | Step off the rock's far side during the pass | The star's pull takes whatever the rock's does not hold. |
 | Fly toward it | Within 300 m of its centre a body is burned and wakes on the pad (`world.state sunBurned` counts them, `world.state sunHeat` reads how near the first seat is to that). |
 | Fly the ship there: board it on the launch field, climb through the sky seam, on past the moon's reach and through the seam over the moon (`sunSeamHeight`, [moon-frame.puck](moon-frame.puck)) | The sun's world takes the ship and its pilot over the moon, and the star ahead is the one the valley and the moon saw. Fly at it and its heat burns the ship back onto the pad; `world.benchmark run sun` flies the whole trip ([sun-route.puck](sun-route.puck)). |
@@ -48,3 +49,10 @@ worlds, since the moon's and the sun's `day` rows follow the valley's.
   disc is the ball's own outline wherever the ball is too far to draw.
 - **Its dangers.** `starHeat` and `starPull` are rules and a gravity area of
   this world, not engine code.
+- **Its time.** The outpost's own time is a clock that runs on the `day` row
+  (an advance's `by`) at a pace that follows the day's phase, a piecewise
+  polynomial `starWellTime` writes. It reads in closed form at any tick, and a
+  remote viewer predicts it from the polynomial its anchor carries. It follows
+  the day's motion, never its jumps, so this world's `day`, which adopts the
+  valley's value whenever the two read apart, moves it only as far as the day
+  ran here.

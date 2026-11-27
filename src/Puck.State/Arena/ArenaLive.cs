@@ -163,7 +163,7 @@ public sealed partial class StateArena {
             return false;
         }
         if (m_layout[rowOrdinal].HasTraits && m_keys.TryGetName(key: key, name: out var name) && (BehaviorAt(name: name, rowOrdinal: rowOrdinal, slot: slot).Advance is { } advance)) {
-            turn = advance.TurnAt(baseValue: m_numbers[slot], currentEngineTick: time.EngineTick,
+            turn = advance.TurnAt(baseValue: m_numbers[slot], cells: this, currentEngineTick: time.EngineTick,
                 epochEngineTick: ReadNumberRaw(column: ArenaColumn.ClockEpochEngineTick, index: slot), row: DocumentRow(rowOrdinal: rowOrdinal));
             return true;
         }
@@ -323,6 +323,12 @@ public sealed partial class StateArena {
             y0: out kickedY0
         ));
 
+        // The rows nested on this one read its line from their own epochs, so they settle on its old line before the
+        // write moves it.
+        if ((name == StateRow.SlotKey) && !m_catalog.NestedClocks(rowOrdinal: rowOrdinal).IsEmpty) {
+            SettleNested(cells: this, parentOrdinal: rowOrdinal, time: in time);
+        }
+
         StoreNumber(
             next: next,
             previous: stored,
@@ -403,6 +409,7 @@ public sealed partial class StateArena {
         if (behavior.Advance is { } advance) {
             return advance.ComputeCurrentValue(
                 baseValue: baseValue,
+                cells: this,
                 currentEngineTick: time.EngineTick,
                 epochEngineTick: ReadNumberRaw(
                     column: ArenaColumn.ClockEpochEngineTick,

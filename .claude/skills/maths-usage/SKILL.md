@@ -36,6 +36,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A hex colour (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) | `HexColor` (`TryParse` for opaque, `TryParseRgba`, `TryCanonicalize` for the long uppercase form a compiled document holds) | `int.TryParse(..., NumberStyles.HexNumber)`, which admits whitespace; a second length check |
 | A world position beyond a small scene | `FixedPosition` (cell indices plus a local offset) | A bare `FixedVector3`, which is a displacement |
 | A rate integrated over ticks | `FixedRateAccumulator` / `FixedVector3RateAccumulator` | A per-second velocity pre-rounded into one per-tick delta |
+| A rate that follows another clock's phase, read at any tick; an exact polynomial composed with another | `PeriodicPiecewisePolynomial.Integral` over `RationalPolynomial` (a state row's `StateAdvance.By`) | Stepping the rate tick by tick; a private polynomial helper |
 | A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower3` and `SecondOrderFollower4`, the presentation-only float twins |
 | Lerp or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector3.Lerp`, `FixedQuaternion.Slerp` | A hand-rolled `a + (b - a) * t` |
 | Sequential random draws | `Pcg32XshRr` | `System.Random`, `Random.Shared` |

@@ -48,6 +48,12 @@ public static partial class WorldDefinitionValidator {
         if (advance.PerSecondDenominator <= 0) {
             errors.Add(item: $"{path}.advance.perSecondDenominator {advance.PerSecondDenominator} must be positive.");
         }
+        if ((advance.Rate is not null) && !advance.IsNested) {
+            errors.Add(item: $"{path}.advance.rate shapes a rate over a parent clock's phase; name the parent with 'by'.");
+        }
+        if (!StateAdvance.TryCompileShape(pieces: advance.Rate, reason: out var reason, shape: out _)) {
+            errors.Add(item: $"{path}.advance.{reason}.");
+        }
     }
     private static void ValidateDynamicsFields(StateDynamics dynamics, ISet<string> names, string path, List<string> errors) {
         RequireDeclared(
@@ -121,6 +127,9 @@ public static partial class WorldDefinitionValidator {
 
         if (!numeric) {
             errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
+        }
+        if (advance.IsNested) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') nests a keyed cell's advance on '{advance.By}'; a nested advance runs a slot row's one value.");
         }
 
         ValidateAdvanceFields(
@@ -1327,7 +1336,53 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state declares {distinctKeys.Count} distinct cell keys, more than the {StateCapacity.MaxCellKeys} one catalog interns.");
         }
 
+        ValidateNestedAdvances(
+            byName: byName,
+            errors: errors,
+            rows: rows
+        );
+
         return byName;
+    }
+    // A nested advance (StateAdvance.By) reads its parent's slot in closed form, so the parent is another numeric slot
+    // row that advances itself, the nesting is a slot's, and no chain returns to a row it left or runs deeper than the
+    // read follows.
+    private static void ValidateNestedAdvances(IReadOnlyList<WorldStateRow> rows, IReadOnlyDictionary<string, WorldStateRow> byName, List<string> errors) {
+        for (var index = 0; (index < rows.Count); index++) {
+            if (rows[index] is not { Advance.By: { } parentName } row) {
+                continue;
+            }
+
+            var path = $"{StateRowPath(index: index)}.advance.by";
+
+            if (!row.IsSlot) {
+                errors.Add(item: $"{path} ('{row.Name}') nests a keyed row's advance; a nested advance runs a slot row's one value.");
+            }
+            if (!byName.TryGetValue(key: parentName, value: out var parent)) {
+                errors.Add(item: $"{path} names state row '{parentName}', which the document does not declare.");
+
+                continue;
+            }
+            if ((parent.Kind is not (CellKind.Fixed or CellKind.Int)) || !parent.IsSlot || (parent.Advance is null)) {
+                errors.Add(item: $"{path} names state row '{parentName}', which must be an int or fixed slot row that advances itself (a held clock declares a rate of zero).");
+
+                continue;
+            }
+
+            var depth = 0;
+            var seen = new HashSet<string>(comparer: StringComparer.Ordinal) { row.Name.Value };
+
+            for (var link = parent; (link is not null); link = ((link.Advance?.By is { } next) ? byName.GetValueOrDefault(key: next) : null)) {
+                if (!seen.Add(item: link.Name.Value)) {
+                    errors.Add(item: $"{path} ('{row.Name}') nests on a chain that returns to '{link.Name}'; a clock cannot run on itself.");
+                    break;
+                }
+                if (++depth > StateAdvance.MaxNestingDepth) {
+                    errors.Add(item: $"{path} ('{row.Name}') nests deeper than {StateAdvance.MaxNestingDepth} clocks.");
+                    break;
+                }
+            }
+        }
     }
     // Every check a single state row (and its own cells) can fail on its own terms — the field trait shape, the
     // reserved-name prefix, the range/overflow/gatesDrive/evicts/capacity envelope, the draw/history/advance/

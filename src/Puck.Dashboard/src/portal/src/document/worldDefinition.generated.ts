@@ -4853,13 +4853,40 @@ export type SourceFit = "Cover" | "Contain" | "Stretch";
  */
 export type StateAdvance = {
   /**
-   * The per-second rate's signed numerator, in the row's own displayed unit (see this type's remarks). Negative accumulates downward (decay); zero is declared but inert.
+   * The rate's signed numerator, in the row's own displayed unit per second, or per unit of the parent for a nested advance (see this type's remarks). Negative accumulates downward (decay); zero is declared but inert, which holds a clock still.
    */
   perSecondNumerator: number;
   /**
-   * The per-second rate's denominator. Refused at zero or below.
+   * The rate's denominator. Refused at zero or below.
    */
   perSecondDenominator: number;
+  /**
+   * The parent row a nested advance runs on: a document row whose slot advances. Absent, the advance runs on the engine's seconds.
+   */
+  by?: string | null;
+  /**
+   * The shape of a nested advance's rate over its parent's phase: pieces of a polynomial, each starting at a share of the parent's turn. Absent, the shape is one everywhere. Refused without By.
+   */
+  rate?: StateRatePiece[] | null;
+};
+
+export type StateAdvanceVariant2 = {
+  /**
+   * The rate's signed numerator, in the row's own displayed unit per second, or per unit of the parent for a nested advance (see this type's remarks). Negative accumulates downward (decay); zero is declared but inert, which holds a clock still.
+   */
+  perSecondNumerator: number;
+  /**
+   * The rate's denominator. Refused at zero or below.
+   */
+  perSecondDenominator: number;
+  /**
+   * The parent row a nested advance runs on: a document row whose slot advances. Absent, the advance runs on the engine's seconds.
+   */
+  by?: string | null;
+  /**
+   * The shape of a nested advance's rate over its parent's phase: pieces of a polynomial, each starting at a share of the parent's turn. Absent, the shape is one everywhere. Refused without By.
+   */
+  rate?: (StateRatePieceVariant2 | null)[] | null;
 };
 
 /**
@@ -5151,7 +5178,7 @@ export type StatePoolField = {
   enum?: CellName | null;
   space?: CellName | null;
   dimensions?: number | null;
-  advance?: StateAdvance | null;
+  advance?: StateAdvanceVariant2 | null;
   /**
    * Gets an immutable snapshot of the declared default.
    */
@@ -5197,6 +5224,31 @@ export type StatePoolValue = {
    * Gets an immutable snapshot of the field value.
    */
   value: CellValue | null;
+};
+
+/**
+ * One piece of a nested advance's rate shape (Rate): a polynomial in the parent's phase that holds from From to the next piece's start, or to the end of the turn.
+ */
+export type StateRatePiece = {
+  /**
+   * Where the piece starts, as an exact share of the parent's turn: digits with an optional decimal fraction, or a quotient such as 5/8. The first piece starts at zero, and each later one after the one before and below one.
+   */
+  from: string;
+  /**
+   * The polynomial's exact coefficients in the parent's phase, constant term first, each spelled as From is.
+   */
+  coefficients: string[];
+};
+
+export type StateRatePieceVariant2 = {
+  /**
+   * Where the piece starts, as an exact share of the parent's turn: digits with an optional decimal fraction, or a quotient such as 5/8. The first piece starts at zero, and each later one after the one before and below one.
+   */
+  from: string;
+  /**
+   * The polynomial's exact coefficients in the parent's phase, constant term first, each spelled as From is.
+   */
+  coefficients: (string | null)[];
 };
 
 export type StateRecord = {
@@ -7126,13 +7178,13 @@ export type WorldClockAnchor = {
    */
   phase: number;
   /**
-   * The phase one authoritative tick adds, wrapping; zero for a clock held still.
+   * The row's stored raw base the curve accumulates over; zero for a clock held still.
    */
-  rate?: number;
+  base?: number;
   /**
-   * The engine ticks one authoritative tick spans; zero exactly when Rate is.
+   * The accumulation over Base, in raw units, as exact rational coefficients of a polynomial in the engine ticks elapsed since Tick, constant term first; absent for a clock held still.
    */
-  step?: number;
+  curve?: (string | null)[] | null;
 };
 
 export type WorldClockView = {
