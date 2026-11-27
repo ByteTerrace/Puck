@@ -325,9 +325,8 @@ public static class CreationWave {
 /// </summary>
 /// <param name="Driver">The <see cref="CreationDriverDocument.Name"/> supplying (φ, w). An unresolvable name is
 /// refused at canonicalization.</param>
-/// <param name="Pivot">The joint the shape turns about, in the creation's author frame (see
-/// <see cref="CreationFrame"/>) — a shoulder or a hip, not the shape's own centre.</param>
-/// <param name="Axis">The rotation axis, in the creation's author frame; normalized at canonicalization. A positive
+/// <param name="Pivot">The joint the shape turns about, in the creation's frame — a shoulder or a hip, not the shape's own centre.</param>
+/// <param name="Axis">The rotation axis, in the creation's frame; normalized at canonicalization. A positive
 /// angle turns right-handed about it.</param>
 /// <param name="Amplitude">The peak angle in radians, magnitude at most <see cref="MaxAmplitude"/>. A negative
 /// amplitude mirrors the swing, which is how a limb on the body's other side reads.</param>
@@ -375,7 +374,7 @@ public sealed record ShapeSwingDocument(
 /// </summary>
 /// <param name="Driver">The <see cref="CreationDriverDocument.Name"/> supplying (φ, w). An unresolvable name is
 /// refused at canonicalization.</param>
-/// <param name="Axis">The slide direction, in the creation's author frame; normalized at canonicalization.</param>
+/// <param name="Axis">The slide direction, in the creation's frame; normalized at canonicalization.</param>
 /// <param name="Amplitude">The peak offset in creation units, magnitude at most <see cref="MaxAmplitude"/>.</param>
 /// <param name="Phase">The phase offset added to the driver's phase, radians (null = 0).</param>
 /// <param name="Wave">The waveform name (null = <see cref="CreationWave.Sine"/>); see

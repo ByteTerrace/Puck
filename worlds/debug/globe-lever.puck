@@ -93,7 +93,7 @@ prototypes {
     prototype $"globe-lever-{i}" {
       document {
         name: $"globe-lever-{i}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette [
           { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }

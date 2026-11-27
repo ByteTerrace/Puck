@@ -86,7 +86,7 @@ public enum WorldSection : byte {
     /// <c>WorldMutation.RemoveBindingOverlay</c> mutations.</summary>
     Bindings,
 
-    /// <summary>The creation asset rows — inline-canonical <c>puck.creation.v1</c> documents with pinned hashes.</summary>
+    /// <summary>The creation asset rows — inline-canonical <c>puck.creation.v2</c> documents with pinned hashes.</summary>
     Creations,
 
     /// <summary>The placement instance rows — creations stamped into the world by reference.</summary>

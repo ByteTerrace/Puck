@@ -44,12 +44,12 @@ namespace Puck.World.Server;
 //   for the whole tick: the pinned projections (AdjacencyProjections, an immutable array whose neighbours each hold one
 //   delivered image and a solid field built before the tick) and the ownership faces, derived before a fork starts
 //   (ForkKitPartitions) and never inside one (OwnershipFaces throws there). It writes one thing, the correction budget
-//   of the body it names (AdmitAdjacencyResponse), and every moving sweep names its own body (WorldBody.SweepContact).
-//   The one sweep that writes another body, a carried body's block onto its carrier, throws in a partition
-//   (WorldAdjacencyContactField.ResolveCarriedSweep).
+//   of the body the sweep moves: the body hands itself to the field (WorldBody.SweepContact takes no index), and
+//   while a fork runs AdmitAdjacencyResponse throws for any body but the one its thread is stepping (MoveBody's
+//   MovingBody). A write to another body, a carried body's block onto its carrier, throws in a partition at the
+//   carrier's own doors (WorldBody.ApplyCarryBlock, ApplyAdmittedContactResponse).
 // Where it stops: a body whose step can write state, reach another body or emit outputs steps in the serial partition;
-// a per-partition kit transaction for those is the open item the engine job system plan names. Nothing but
-// SweepContact's own argument keeps a sweep from naming another body's budget.
+// a per-partition kit transaction for those is the open item the engine job system plan names.
 public sealed partial class WorldPopulation {
     /// <summary>The bodies one kit partition holds: a run of this many along the tick's curve order, whose slot notes
     /// the plan assigns to one slot-notes partition, so a partition's section writes append only to its own notes. It is
@@ -532,6 +532,7 @@ public sealed partial class WorldPopulation {
             } else {
                 run.Plan(jobs: (jobs.Workers.Count * KitJobsPerWorker));
                 jobs.Fork(body: run, jobClass: JobClass.Tick, partitions: run.Jobs);
+                WorldBodyWork.Process.Add(amount: ((run.Jobs > 1) ? 1 : 0), kind: WorldBodyWork.KitForks);
             }
         } finally {
             m_partitioned = false;
@@ -581,6 +582,11 @@ public sealed partial class WorldPopulation {
             partition.Moved++;
         }
     }
+    // The body the calling thread is moving (MoveBody): what the seam's door checks a reported response against while a
+    // fork runs (AdmitAdjacencyResponse).
+    [ThreadStatic]
+    private static WorldBody? MovingBody;
+
     // One body's move, the same for every body a tick steps (WorldBody.Advance). A forked partition's body reports
     // through the partition's log and steps outside the kit transaction; any other steps inside it, with the body's
     // passes open on the contact set. Answers whether the step's engage edge fired.
@@ -589,12 +595,14 @@ public sealed partial class WorldPopulation {
         bool engaged;
 
         body.BindStepLog(log: (partition.Forked ? partition.Log : null));
+        MovingBody = body;
         try {
             using (partition.Forked ? default : HoldPasses(index: index)) {
                 engaged = body.Advance(contactFieldVersion: contactFieldVersion, effectTargets: targets, engageProbeOrdinal: engageProbeOrdinal, entityIndex: index, outputs: partition.Outputs,
                     scratch: partition.Scratch, sleepAfterTicks: sleepAfterTicks, stepTicks: stepTicks, tick: tick, transactional: !partition.Forked);
             }
         } finally {
+            MovingBody = null;
             body.BindStepLog(log: null);
         }
         RecordFlockMotion(body: body, work: partition.Work);

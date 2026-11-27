@@ -246,7 +246,7 @@ prototypes {
         ],
         goFaceSlots
       )
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       twoPedestalTable(goWood, [1.75, 0.05, 0.92])
       // Rectangular prisms have sharp edges, so their flush union has no Box fillet grooves.
       // Paints draw the grid without contact ridges on this one flat supporting face.
@@ -254,7 +254,7 @@ prototypes {
         for c in range(0, 4) {
           shape Prism $"face-{r}-{c}" {
             material: 3 + r * 4 + c
-            position [(0.6 - c * 0.4), (goSurface - 0.0275), (0.6 - r * 0.4)]
+            position [(c * 0.4 - 0.6), (goSurface - 0.0275), (r * 0.4 - 0.6)]
             scale [0.2, 0.0275, 0.2]
             taper: 1
           }
@@ -263,12 +263,12 @@ prototypes {
       // The trays: a walnut lid under each side's stones.
       shape Box "lid-west" {
         material: goLid
-        position [-1.28, 1.302, 0]
+        position [1.28, 1.302, 0]
         scale [0.42, 0.002, 0.78]
       }
       shape Box "lid-east" {
         material: goLid
-        position [1.28, 1.302, 0]
+        position [-1.28, 1.302, 0]
         scale [0.42, 0.002, 0.78]
       }
     }
@@ -283,7 +283,7 @@ prototypes {
       document {
         name: stone.name
         palette [{ color: stone.color, roughness: stone.roughness, specular: stone.specular }]
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         shape Sphere "lens" {
           material: 0
           position [0, 0.010, 0]
@@ -298,25 +298,25 @@ prototypes {
     document {
       name: "goCursor"
       palette [{ color: "#3FA9F5", roughness: 0.4, specular: 0.3 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "near" {
-        material: 0
-        position [0, 0, -0.038]
-        scale [0.04, 0.008, 0.008]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0, 0.038]
         scale [0.04, 0.008, 0.008]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0, -0.038]
+        scale [0.04, 0.008, 0.008]
+      }
       shape Box "left" {
         material: 0
-        position [-0.038, 0, 0]
+        position [0.038, 0, 0]
         scale [0.008, 0.008, 0.04]
       }
       shape Box "right" {
         material: 0
-        position [0.038, 0, 0]
+        position [-0.038, 0, 0]
         scale [0.008, 0.008, 0.04]
       }
     }

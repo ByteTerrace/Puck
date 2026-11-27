@@ -9,7 +9,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
     internal static readonly WorldPrototype Plaque = new(
         "plaque",
         new(
-            "puck.creation.v1",
+            "puck.creation.v2",
             "plaque",
             [new(
                     "#AA7755",
@@ -50,7 +50,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
     internal static readonly WorldPrototype Seam = new(
         "seam",
         new(
-            "puck.creation.v1",
+            "puck.creation.v2",
             "seam",
             [new(
                     "#AA7755",
@@ -99,7 +99,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
     internal static readonly WorldPrototype Store = new(
         "store",
         new(
-            "puck.creation.v1",
+            "puck.creation.v2",
             "store",
             [new(
                     "#AA7755",

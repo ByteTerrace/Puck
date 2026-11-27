@@ -115,7 +115,7 @@ public sealed class WorldSchemaCompletenessLawTests {
     // so a $ref node itself never needs
     // recursing into. Cycle-safe by construction: a genuinely recursive shape's own self-reference is exactly such
     // a $ref, never dereferenced here. A node carrying its own "$id" opens a self-contained embedded document
-    // schema (e.g. puck.creation.v1 — see WorldSchema.Bundle) the bundle leaves untouched; visited once but never
+    // schema (e.g. puck.creation.v2 — see WorldSchema.Bundle) the bundle leaves untouched; visited once but never
     // recursed into, matching that.
     private static void Walk(JsonNode? node, string pointer, HashSet<JsonNode> visited, Action<JsonObject, string> visit) {
         if (node is JsonObject obj) {
@@ -380,7 +380,7 @@ public sealed class WorldSchemaCompletenessLawTests {
                 }
 
                 // A node carrying its own "$id" IS its own schema root (a self-contained embedded document, e.g.
-                // puck.creation.v1 — see WorldSchema.Bundle and Walk's own "$id" stop); Walk never recurses past it,
+                // puck.creation.v2 — see WorldSchema.Bundle and Walk's own "$id" stop); Walk never recurses past it,
                 // so this is the one site such a node is ever visited from.
                 if (node.ContainsKey(propertyName: "$id")) {
                     return;

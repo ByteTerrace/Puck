@@ -14,7 +14,7 @@
 //   prototype "table" {
 //     document {
 //       name: "table"
-//       schema: "puck.creation.v1"
+//       schema: "puck.creation.v2"
 //       palette: displayTablePalette(look, panels)
 //       displayTable(panels: panels)
 //     }
@@ -78,7 +78,7 @@ template displayTable(panels, half = [0.7, 0.76], surface = 1.3, floor = 0.5, ba
   for (panel, i) in panels {
     shape Box $"panel-{i}" {
       material: (base + displayTablePanel + i)
-      position [(0 - ((panel.x0 + panel.x1) / 2)), (surface - 0.006), (0 - ((panel.z0 + panel.z1) / 2))]
+      position [((panel.x0 + panel.x1) / 2), (surface - 0.006), ((panel.z0 + panel.z1) / 2)]
       scale [((panel.x1 - panel.x0) / 2), 0.006, ((panel.z1 - panel.z0) / 2)]
     }
   }
@@ -145,7 +145,7 @@ template displayTokenBlank(id, depth = 0.05) {
   prototype id {
     document {
       name: id
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#000000", roughness: 1 }]
       shape Box "blank" {
         material: 0

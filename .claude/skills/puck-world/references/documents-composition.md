@@ -184,11 +184,10 @@ Engine facts those worlds exercised, which hold for any world:
   preview deadline, and a scale envelope spanning exactly the rows' authored
   scales. Console placement mutations can grow the renderer beyond its initial
   reserve without an authored policy.
-- **Author frame.** A `prototypes[].document`'s coordinates are author-frame:
-  `puck.creation.v1` authors with +Z the front a shape faces, a half-turn about
-  Y from the engine's −Z-forward, and `CreationFrame.ToEngine` converts once at
-  `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world
-  `(−x, y, −z)`; `CreationAuthorFrameLawTests`).
+- **Creation frame.** A `prototypes[].document`'s coordinates are the engine's
+  own frame (+Y up, −Z the front a creation faces, +X its right): authored
+  `[x, y, z]` lands at the placement's `[x, y, z]` turned by its yaw, and nothing
+  converts it ([sdf-authoring](../../sdf-authoring/SKILL.md#the-creation-frame)).
 - **Creation shapes and animation** (modifiers, `flare`/`shear`/`bumps`,
   blends, `cells`, `erode`, `volumes`, `panel`/`trims`/`detail`, sweeps, and
   the `drivers`/`swings`/`effectors` animation `WorldCreationInstances.PackTransforms`

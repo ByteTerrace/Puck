@@ -192,8 +192,8 @@ template braidChain(chainIdx, baseId, positions, rotations) {
       exponent: softness
       material: ink
       parent: braidParent[i]
-      position: positions[i]
-      rotation: rotations[i]
+      position: (positions[i] * [-1, 1, -1])
+      rotation: (rotations[i] * [-1, 1, -1, 1])
       scale [0.014, 0.026, 0.016]
       smooth: 0
     }
@@ -206,8 +206,8 @@ template braidChain(chainIdx, baseId, positions, rotations) {
 template mothLimbs(side, isRight) {
   shape Sweep $"upperArm-{side}" {
     id: 148 + isRight * 68
-    position: mirrorX(isRight, [0.295, 1.4515, 0])
-    rotation: mirrorRotation(isRight, [0, 0, -0.078459, 0.996917])
+    position: (mirrorX(isRight, [0.295, 1.4515, 0]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0, 0, -0.078459, 0.996917]))
     material: charcoal
     parent: "torso"
     curve {
@@ -252,8 +252,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"elbow-{side}" {
     id: 149 + isRight * 68
-    position: mirrorX(isRight, [0.336, 1.2201, 0.004])
-    rotation: mirrorRotation(isRight, [0, 0, -0.078459, 0.996917])
+    position: (mirrorX(isRight, [0.336, 1.2201, 0.004]) * [-1, 1, -1])
+    rotation: (mirrorRotation(isRight, [0, 0, -0.078459, 0.996917]) * [-1, 1, -1, 1])
     scale [0.07, 0.065, 0.072]
     material: charcoal
     parent: $"upperArm-{side}"
@@ -264,7 +264,7 @@ template mothLimbs(side, isRight) {
   // edge stays outboard of the hood as the arm swings.
   shape Superellipsoid $"shoulderPivot-{side}" {
     id: 150 + isRight * 68
-    position: mirrorX(isRight, [0.3, 1.46, 0])
+    position: (mirrorX(isRight, [0.3, 1.46, 0]) * [-1, 1, -1])
     scale [0.085, 0.085, 0.085]
     material: charcoal
     parent: $"upperArm-{side}"
@@ -273,8 +273,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"shoulderSlab-{side}" {
     id: 151 + isRight * 68
-    position: mirrorX(isRight, [0.395, 1.57, -0.005])
-    rotation: mirrorRotation(isRight, [0, 0, -0.1305, 0.9914])
+    position: (mirrorX(isRight, [0.395, 1.57, -0.005]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0, 0, -0.1305, 0.9914]))
     scale [0.135, 0.07, 0.175]
     material: bySide(isRight, violetBandLeft, violetBandRight)
     parent: $"upperArm-{side}"
@@ -290,8 +290,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"shoulderSlabLower-{side}" {
     id: 152 + isRight * 68
-    position: mirrorX(isRight, [0.415, 1.43, 0])
-    rotation: mirrorRotation(isRight, [0, 0, -0.0698, 0.9976])
+    position: (mirrorX(isRight, [0.415, 1.43, 0]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0, 0, -0.0698, 0.9976]))
     scale [0.14, 0.085, 0.185]
     material: bySide(isRight, violetBandLeft, violetBandRight)
     parent: $"upperArm-{side}"
@@ -309,8 +309,8 @@ template mothLimbs(side, isRight) {
   // hinge so they meet inside the joint at any bend.
   shape Cylinder $"elbowCylinder-{side}" {
     id: 153 + isRight * 68
-    position: mirrorX(isRight, [0.3834, 1.3086, 0.0499])
-    rotation: mirrorRotation(isRight, [-0.6604, 0, 0.6817, 0.3149])
+    position: (mirrorX(isRight, [0.3834, 1.3086, 0.0499]) * [-1, 1, -1])
+    rotation: (mirrorRotation(isRight, [-0.6604, 0, 0.6817, 0.3149]) * [-1, 1, -1, 1])
     scale [0.022, 0.0594, 0.022]
     material: pistonSteel
     parent: $"upperArm-{side}"
@@ -319,8 +319,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"forearm-{side}" {
     id: 159 + isRight * 68
-    position: mirrorX(isRight, [0.3706, 1.0524, 0.0024])
-    rotation: mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661])
+    position: (mirrorX(isRight, [0.3706, 1.0524, 0.0024]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
     scale [0.1, 0.2, 0.105]
     material: charcoal
     parent: $"upperArm-{side}"
@@ -372,8 +372,8 @@ template mothLimbs(side, isRight) {
   // forearm's twist, so its outer face and its vents look straight out.
   shape Superellipsoid $"bracer-{side}" {
     id: 160 + isRight * 68
-    position: mirrorX(isRight, [0.395, 0.995, 0])
-    rotation [-0.0915, 0, 0, 0.9958]
+    position: (mirrorX(isRight, [0.395, 0.995, 0]) * [-1, 1, -1])
+    rotation [0, 0.9958, 0.0915, 0]
     scale [0.12, 0.13, 0.135]
     material: bySide(isRight, gauntletLeft, gauntletRight)
     group: 16 + isRight * 14
@@ -383,8 +383,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"bracerMouth-{side}" {
     id: 161 + isRight * 68
-    position: mirrorX(isRight, [0.379697, 0.474186, 0.104559])
-    rotation: mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661])
+    position: (mirrorX(isRight, [0.379697, 0.474186, 0.104559]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
     scale [0.4, 0.4, 0.4]
     material: skin
     blend: "Subtraction"
@@ -394,8 +394,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"cuff-{side}" {
     id: 164 + isRight * 68
-    position: mirrorX(isRight, [0.380726, 0.872656, 0.026507])
-    rotation: mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661])
+    position: (mirrorX(isRight, [0.380726, 0.872656, 0.026507]) * [-1, 1, -1])
+    rotation: (mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]) * [-1, 1, -1, 1])
     scale [0.09, 0.006, 0.09]
     material: charcoal
     parent: $"forearm-{side}"
@@ -404,8 +404,8 @@ template mothLimbs(side, isRight) {
 
   shape Capsule $"elbowRod-{side}" {
     id: 156 + isRight * 68
-    position: mirrorX(isRight, [0.466, 1.1236, 0.084])
-    rotation: mirrorRotation(isRight, [-0.253, 0, 0.411, 0.8758])
+    position: (mirrorX(isRight, [0.466, 1.1236, 0.084]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.253, 0, 0.411, 0.8758]))
     scale [0.013, 0.2612, 0.013]
     material: steel
     parent: $"forearm-{side}"
@@ -413,8 +413,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"palm-{side}" {
     id: 165 + isRight * 68
-    position: mirrorX(isRight, [0.3775, 0.7677, 0.0504])
-    rotation: mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661])
+    position: (mirrorX(isRight, [0.3775, 0.7677, 0.0504]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
     scale [0.09045, 0.0729, 0.054]
     material: charcoal
     parent: $"forearm-{side}"
@@ -423,8 +423,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"wrist-{side}" {
     id: 166 + isRight * 68
-    position: mirrorX(isRight, [0.376562, 0.887196, 0.028315])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.376562, 0.887196, 0.028315]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -438,8 +438,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"finger-{side}-0" {
     id: 167 + isRight * 68
-    position: mirrorX(isRight, [0.3382, 0.7431, 0.1047])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.3382, 0.7431, 0.1047]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -453,8 +453,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"finger-{side}-1" {
     id: 168 + isRight * 68
-    position: mirrorX(isRight, [0.3665, 0.7377, 0.0744])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.3665, 0.7377, 0.0744]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -468,8 +468,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"finger-{side}-2" {
     id: 169 + isRight * 68
-    position: mirrorX(isRight, [0.3949, 0.7324, 0.044])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.3949, 0.7324, 0.044]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -483,8 +483,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"finger-{side}-3" {
     id: 170 + isRight * 68
-    position: mirrorX(isRight, [0.4232, 0.727, 0.0137])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.4232, 0.727, 0.0137]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -498,8 +498,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"thumb-{side}" {
     id: 171 + isRight * 68
-    position: mirrorX(isRight, [0.3312, 0.7959, 0.086])
-    rotation: mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825])
+    position: (mirrorX(isRight, [0.3312, 0.7959, 0.086]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
     material: charcoal
     parent: $"forearm-{side}"
     curve {
@@ -513,7 +513,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"thigh-{side}" {
     id: 174 + isRight * 68
-    position: mirrorX(isRight, [0.135, 1.0265, 0])
+    position: (mirrorX(isRight, [0.135, 1.0265, 0]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: charcoal
     parent: "pelvis"
     curve {
@@ -549,8 +550,8 @@ template mothLimbs(side, isRight) {
   // The hip pivot: a large charcoal disc on the hip's axis, set on an ivory guard, both riding the thigh.
   shape Prism $"hipGuard-{side}" {
     id: 175 + isRight * 68
-    position: mirrorX(isRight, [0.222, 1.05, 0])
-    rotation: mirrorRotation(isRight, [0, diagonal, 0, diagonal])
+    position: (mirrorX(isRight, [0.222, 1.05, 0]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0, diagonal, 0, diagonal]))
     scale [0.13, 0.125, 0.016]
     material: skin
     parent: $"thigh-{side}"
@@ -563,8 +564,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"hipDisc-{side}" {
     id: 176 + isRight * 68
-    position: mirrorX(isRight, [0.25, 1.0265, 0])
-    rotation: mirrorRotation(isRight, [0, 0, diagonal, diagonal])
+    position: (mirrorX(isRight, [0.25, 1.0265, 0]) * [-1, 1, -1])
+    rotation: (mirrorRotation(isRight, [0, 0, diagonal, diagonal]) * [-1, 1, -1, 1])
     scale [0.075, 0.022, 0.075]
     material: charcoal
     parent: $"thigh-{side}"
@@ -574,8 +575,8 @@ template mothLimbs(side, isRight) {
   // The knee piston, behind the knee: a cylinder on the thigh and a rod on the shin, both aimed at the hinge.
   shape Cylinder $"kneeCylinder-{side}" {
     id: 177 + isRight * 48
-    position: mirrorX(isRight, [0.171, 0.865, -0.069])
-    rotation: mirrorRotation(isRight, [0.9286, 0, -0.2563, 0.2684])
+    position: (mirrorX(isRight, [0.171, 0.865, -0.069]) * [-1, 1, -1])
+    rotation: (mirrorRotation(isRight, [0.9286, 0, -0.2563, 0.2684]) * [-1, 1, -1, 1])
     scale [0.021, 0.0923, 0.021]
     material: pistonSteel
     parent: $"thigh-{side}"
@@ -584,7 +585,7 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"knee-{side}" {
     id: 178 + isRight * 68
-    position: mirrorX(isRight, [0.19, 0.7465, 0])
+    position: (mirrorX(isRight, [0.19, 0.7465, 0]) * [-1, 1, -1])
     scale [0.095, 0.085, 0.0975]
     material: charcoal
     parent: $"thigh-{side}"
@@ -593,7 +594,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"kneeGuard-{side}" {
     id: 179 + isRight * 68
-    position: mirrorX(isRight, [0.19, 0.735, 0.118])
+    position: (mirrorX(isRight, [0.19, 0.735, 0.118]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.095, 0.105, 0.04]
     material: skin
     parent: $"thigh-{side}"
@@ -612,7 +614,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"shin-{side}" {
     id: 180 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.105, 0.36, 0.112]
     material: shinViolet
     group: 18 + isRight * 14
@@ -646,7 +649,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"shinEnds-{side}" {
     id: 181 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.407, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.407, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.3, 0.302, 0.4]
     material: shinViolet
     blend: "Intersection"
@@ -656,7 +660,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"shinCavity-{side}" {
     id: 182 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.083, 0.42, 0.09]
     material: charcoal
     blend: "Subtraction"
@@ -675,8 +680,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"shinArch-{side}" {
     id: 183 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.0458, 0.075])
-    rotation [-0.342, 0, 0, 0.9397]
+    position: (mirrorX(isRight, [0.2, 0.0458, 0.075]) * [-1, 1, -1])
+    rotation [0, 0.9397, 0.342, 0]
     scale [0.17, 0.12, 0.3]
     material: charcoal
     blend: "Subtraction"
@@ -691,8 +696,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"shinArchBack-{side}" {
     id: 964 + isRight * 8
-    position: mirrorX(isRight, [0.2, 0.195, -0.25])
-    rotation [0, 0, 0, 1]
+    position: (mirrorX(isRight, [0.2, 0.195, -0.25]) * [-1, 1, -1])
+    rotation [0, 1, 0, 0]
     scale [0.152, 0.162, 0.19]
     material: jet
     blend: "Subtraction"
@@ -717,7 +722,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"archBand-{side}" {
     id: 950 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.105, 0.36, 0.112]
     material: shinCream
     group: 76 + isRight * 2
@@ -736,7 +742,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"archBandEnds-{side}" {
     id: 951 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.407, 0.22])
+    position: (mirrorX(isRight, [0.2, 0.407, 0.22]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.3, 0.302, 0.28]
     material: shinCream
     blend: "Intersection"
@@ -746,8 +753,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"archBandOuter-{side}" {
     id: 952 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.0458, 0.075])
-    rotation [-0.342, 0, 0, 0.9397]
+    position: (mirrorX(isRight, [0.2, 0.0458, 0.075]) * [-1, 1, -1])
+    rotation [0, 0.9397, 0.342, 0]
     scale [0.212, 0.159, 0.3]
     material: shinCream
     blend: "SmoothIntersection"
@@ -772,7 +779,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"archBandHollow-{side}" {
     id: 990 + isRight * 1
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.083, 0.33, 0.09]
     material: shinCream
     blend: "SmoothSubtraction"
@@ -792,8 +800,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"archBandInner-{side}" {
     id: 953 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.0458, 0.075])
-    rotation [-0.342, 0, 0, 0.9397]
+    position: (mirrorX(isRight, [0.2, 0.0458, 0.075]) * [-1, 1, -1])
+    rotation [0, 0.9397, 0.342, 0]
     scale [0.159, 0.105, 0.3]
     material: shinCream
     blend: "SmoothSubtraction"
@@ -818,7 +826,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"archBandBack-{side}" {
     id: 966 + isRight * 8
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.105, 0.36, 0.112]
     material: shinCream
     group: 80 + isRight * 1
@@ -837,7 +846,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"archBandBackEnds-{side}" {
     id: 967 + isRight * 8
-    position: mirrorX(isRight, [0.2, 0.407, -0.16])
+    position: (mirrorX(isRight, [0.2, 0.407, -0.16]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.3, 0.302, 0.1]
     material: shinCream
     blend: "Intersection"
@@ -847,8 +857,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"archBandBackOuter-{side}" {
     id: 968 + isRight * 8
-    position: mirrorX(isRight, [0.2, 0.195, -0.2125])
-    rotation [0, 0, 0, 1]
+    position: (mirrorX(isRight, [0.2, 0.195, -0.2125]) * [-1, 1, -1])
+    rotation [0, 1, 0, 0]
     scale [0.19, 0.205, 0.225]
     material: shinCream
     blend: "SmoothIntersection"
@@ -873,8 +883,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"archBandBackInner-{side}" {
     id: 969 + isRight * 8
-    position: mirrorX(isRight, [0.2, 0.195, -0.2125])
-    rotation [0, 0, 0, 1]
+    position: (mirrorX(isRight, [0.2, 0.195, -0.2125]) * [-1, 1, -1])
+    rotation [0, 1, 0, 0]
     scale [0.148, 0.158, 0.226]
     material: shinCream
     blend: "SmoothSubtraction"
@@ -899,7 +909,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"sidePanel-{side}" {
     id: 954 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.4265, 0.0125])
+    position: (mirrorX(isRight, [0.2, 0.4265, 0.0125]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale [0.105, 0.36, 0.112]
     material: shinCream
     group: 77 + isRight * 2
@@ -918,8 +929,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"sidePanelCut-{side}" {
     id: 955 + isRight * 7
-    position: mirrorX(isRight, [0.35, 0.4465, 0.0125])
-    rotation: mirrorRotation(isRight, [0, diagonal, 0, diagonal])
+    position: (mirrorX(isRight, [0.35, 0.4465, 0.0125]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0, diagonal, 0, diagonal]))
     scale [0.13, 0.18, 0.2]
     material: shinCream
     blend: "SmoothIntersection"
@@ -935,7 +946,8 @@ template mothLimbs(side, isRight) {
 
   shape Sweep $"shinCore-{side}" {
     id: 191 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.2415, 0.0075])
+    position: (mirrorX(isRight, [0.2, 0.2415, 0.0075]) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: charcoal
     parent: $"shin-{side}"
     curve {
@@ -949,8 +961,8 @@ template mothLimbs(side, isRight) {
 
   shape Capsule $"kneeRod-{side}" {
     id: 157 + isRight * 69
-    position: mirrorX(isRight, [0.1955, 0.5716, -0.1233])
-    rotation: mirrorRotation(isRight, [0.3021, 0, 0.0134, 0.9532])
+    position: (mirrorX(isRight, [0.1955, 0.5716, -0.1233]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorRotation(isRight, [0.3021, 0, 0.0134, 0.9532]))
     scale [0.012, 0.404, 0.012]
     material: steel
     parent: $"shin-{side}"
@@ -961,8 +973,8 @@ template mothLimbs(side, isRight) {
   // violet bezel round a dark glass lens, after the model sheet's side views.
   shape Cylinder $"ankleHub-{side}" {
     id: 1000 + isRight * 6
-    position: mirrorX(isRight, [0.392, 0.175, -0.07])
-    rotation [0, 0, diagonal, diagonal]
+    position: (mirrorX(isRight, [0.392, 0.175, -0.07]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
     scale [0.072, 0.024, 0.072]
     material: gunmetal
     group: 122 + isRight * 4
@@ -972,8 +984,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"ankleBezel-{side}" {
     id: 1001 + isRight * 6
-    position: mirrorX(isRight, [0.41, 0.175, -0.07])
-    rotation [0, 0, diagonal, diagonal]
+    position: (mirrorX(isRight, [0.41, 0.175, -0.07]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
     scale [0.057, 0.01, 0.057]
     material: violet
     group: 122 + isRight * 4
@@ -983,8 +995,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"ankleLens-{side}" {
     id: 1002 + isRight * 6
-    position: mirrorX(isRight, [0.418, 0.175, -0.07])
-    rotation [0, 0, diagonal, diagonal]
+    position: (mirrorX(isRight, [0.418, 0.175, -0.07]) * [-1, 1, -1])
+    rotation [0, 0, -diagonal, diagonal]
     scale [0.036, 0.009, 0.036]
     material: jet
     blend: "Subtraction"
@@ -995,8 +1007,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"ankleHubInset-{side}" {
     id: 1303 + isRight * 20
-    position: mirrorX(isRight, [0.407, 0.175, -0.07])
-    rotation [0, 0, diagonal, diagonal]
+    position: (mirrorX(isRight, [0.407, 0.175, -0.07]) * [-1, 1, -1])
+    rotation [0, 0, -diagonal, diagonal]
     scale [0.035, 0.004, 0.035]
     material: jet
     parent: $"shin-{side}"
@@ -1012,8 +1024,8 @@ template mothLimbs(side, isRight) {
   // and separate forefoot tread and heel cheeks follow the boot reference.
   shape Prism $"boot-{side}" {
     id: 195 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.1875, 0.0775])
-    rotation [0, -diagonal, 0, diagonal]
+    position: (mirrorX(isRight, [0.2, 0.1875, 0.0775]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [0, -diagonal, 0, diagonal])
     scale [0.235, 0.235, 0.2]
     material: violet
     group: 21 + isRight * 14
@@ -1048,8 +1060,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"bootPlan-{side}" {
     id: 196 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.19, 0.085])
-    rotation [diagonal, 0, 0, diagonal]
+    position: (mirrorX(isRight, [0.2, 0.19, 0.085]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [diagonal, 0, 0, diagonal])
     scale [0.165, 0.24, 0.25]
     material: violet
     blend: "SmoothIntersection"
@@ -1065,8 +1077,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"bootUnderBand-{side}" {
     id: 1020 + isRight * 1
-    position: mirrorX(isRight, [0.2, -0.248, 0.3339])
-    rotation [-0.342, 0, 0, 0.9397]
+    position: (mirrorX(isRight, [0.2, -0.248, 0.3339]) * [-1, 1, -1])
+    rotation [0, 0.9397, 0.342, 0]
     scale [0.5, 0.5, 0.5]
     material: violet
     blend: "SmoothIntersection"
@@ -1078,8 +1090,8 @@ template mothLimbs(side, isRight) {
   // Clearance follows the nozzle axis through the instep and rubber ankle.
   shape Cylinder $"bootJetClearance-{side}" {
     id: 1340 + isRight * 20
-    position: mirrorX(isRight, [0.2, 0.169638, -0.212769])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.169638, -0.212769]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootNozzleRotation)
     scale [0.12, 0.24, 0.12]
     material: violet
     blend: "Subtraction"
@@ -1090,7 +1102,7 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"ankle-{side}" {
     id: 192 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.17, 0.06])
+    position: (mirrorX(isRight, [0.2, 0.17, 0.06]) * [-1, 1, -1])
     rotation [0, 0, 0, 1]
     scale [0.12, 0.07, 0.1]
     material: charcoal
@@ -1102,8 +1114,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"ankleJetClearance-{side}" {
     id: 1341 + isRight * 20
-    position: mirrorX(isRight, [0.2, 0.169638, -0.212769])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.169638, -0.212769]) * [-1, 1, -1])
+    rotation: (bootNozzleRotation * [-1, 1, -1, 1])
     scale [0.12, 0.24, 0.12]
     material: charcoal
     blend: "Subtraction"
@@ -1114,8 +1126,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"toe-{side}" {
     id: 199 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.125, 0.205])
-    rotation [0, -diagonal, 0, diagonal]
+    position: (mirrorX(isRight, [0.2, 0.125, 0.205]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [0, -diagonal, 0, diagonal])
     scale [0.19, 0.12, 0.215]
     material: violet
     group: 120 + isRight * 4
@@ -1137,8 +1149,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"toePlan-{side}" {
     id: 200 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.1, 0.205])
-    rotation [diagonal, 0, 0, diagonal]
+    position: (mirrorX(isRight, [0.2, 0.1, 0.205]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [diagonal, 0, 0, diagonal])
     scale [0.18, 0.2, 0.2]
     material: violet
     blend: "SmoothIntersection"
@@ -1155,8 +1167,8 @@ template mothLimbs(side, isRight) {
   // centre tread forward, and splay the two carved guards at their front hinges.
   shape Prism $"heelTread-{side}" {
     id: 956 + isRight * 7
-    position: mirrorX(isRight, [0.2, 0.035, -0.08])
-    rotation [0, 0, 0, 1]
+    position: (mirrorX(isRight, [0.2, 0.035, -0.08]) * [-1, 1, -1])
+    rotation [0, 1, 0, 0]
     scale [0.055, 0.035, 0.065]
     material: gunmetal
     blend: "Union"
@@ -1167,7 +1179,7 @@ template mothLimbs(side, isRight) {
     slides [
       {
         driver: "air"
-        axis [0, 0, 1]
+        axis [0, 0, -1]
         amplitude: 0.08
         phase: 0
         wave: "constant"
@@ -1183,8 +1195,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"sole-{side}" {
     id: 201 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.03, 0.204])
-    rotation [diagonal, 0, 0, diagonal]
+    position: (mirrorX(isRight, [0.2, 0.03, 0.204]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), [diagonal, 0, 0, diagonal])
     scale [0.18, 0.2, 0.03]
     material: charcoal
     parent: $"boot-{side}"
@@ -1197,8 +1209,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"heelCheek-inner-{side}" {
     id: 1301 + isRight * 20
-    position: mirrorX(isRight, [0.085, 0.09, -0.135])
-    rotation [0, -0.7071068, 0, 0.7071068]
+    position: (mirrorX(isRight, [0.085, 0.09, -0.135]) * [-1, 1, -1])
+    rotation [0, 0.7071068, 0, 0.7071068]
     scale [0.115, 0.09, 0.052]
     material: violet
     blend: "Union"
@@ -1227,8 +1239,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelCheekClearance-inner-{side}" {
     id: 1342 + isRight * 20
-    position: mirrorX(isRight, [0.2, 0.169638, -0.212769])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.169638, -0.212769]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootNozzleRotation)
     scale [0.12, 0.24, 0.12]
     material: violet
     blend: "SmoothSubtraction"
@@ -1240,8 +1252,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"heelCheek-outer-{side}" {
     id: 1300 + isRight * 20
-    position: mirrorX(isRight, [0.315, 0.09, -0.135])
-    rotation [0, -0.7071068, 0, 0.7071068]
+    position: (mirrorX(isRight, [0.315, 0.09, -0.135]) * [-1, 1, -1])
+    rotation [0, 0.7071068, 0, 0.7071068]
     scale [0.115, 0.09, 0.052]
     material: violet
     blend: "Union"
@@ -1270,8 +1282,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelCheekClearance-outer-{side}" {
     id: 1343 + isRight * 20
-    position: mirrorX(isRight, [0.2, 0.169638, -0.212769])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.169638, -0.212769]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootNozzleRotation)
     scale [0.12, 0.24, 0.12]
     material: violet
     blend: "SmoothSubtraction"
@@ -1283,8 +1295,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelHousing-{side}" {
     id: 202 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.245, -0.16])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.245, -0.16]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootNozzleRotation)
     scale [0.106, 0.052, 0.106]
     material: gunmetal
     group: 121 + isRight * 4
@@ -1294,8 +1306,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelRing-{side}" {
     id: 203 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.2089573, -0.1852374])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.2089573, -0.1852374]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootNozzleRotation)
     scale [0.098, 0.014, 0.098]
     material: steel
     group: 121 + isRight * 4
@@ -1305,8 +1317,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelBore-{side}" {
     id: 1302 + isRight * 20
-    position: mirrorX(isRight, [0.2, 0.1917551, -0.1972825])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.1917551, -0.1972825]) * [-1, 1, -1])
+    rotation: (bootNozzleRotation * [-1, 1, -1, 1])
     scale [0.076, 0.043, 0.076]
     material: jet
     group: 121 + isRight * 4
@@ -1317,8 +1329,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"heelInset-{side}" {
     id: 204 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.2245212, -0.1743394])
-    rotation: bootNozzleRotation
+    position: (mirrorX(isRight, [0.2, 0.2245212, -0.1743394]) * [-1, 1, -1])
+    rotation: (bootNozzleRotation * [-1, 1, -1, 1])
     scale [0.074, 0.01, 0.074]
     material: jet
     parent: $"boot-{side}"
@@ -1327,8 +1339,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"heelLight-{side}" {
     id: 205 + isRight * 68
-    position: mirrorX(isRight, [0.2, 0.2155105, -0.1806488])
-    rotation: bootLensRotation
+    position: (mirrorX(isRight, [0.2, 0.2155105, -0.1806488]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bootLensRotation)
     scale [0.058, 0.058, 0.013]
     material: bootCyan
     parent: $"boot-{side}"
@@ -1337,8 +1349,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"heelCore-{side}" {
     id: 980 + isRight * 1
-    position: mirrorX(isRight, [0.2, 0.2089573, -0.1852374])
-    rotation: bootLensRotation
+    position: (mirrorX(isRight, [0.2, 0.2089573, -0.1852374]) * [-1, 1, -1])
+    rotation: (bootLensRotation * [-1, 1, -1, 1])
     scale [0.028, 0.028, 0.011]
     material: bootGlow
     parent: $"boot-{side}"
@@ -1350,8 +1362,8 @@ template mothLimbs(side, isRight) {
   // bottom plate the largest, hooding the nozzle that sits flush in the opening under it.
   shape Superellipsoid $"pod-{side}" {
     id: 1100 + isRight * 100
-    position: mirrorX(isRight, [0.21, 1.0413, -0.1872])
-    rotation [0, 0, 0, 1]
+    position: (mirrorX(isRight, [0.21, 1.0413, -0.1872]) * [-1, 1, -1])
+    rotation [0, 1, 0, 0]
     scale [0.117, 0.3705, 0.1716]
     material: charcoal
     group: 90 + isRight * 10
@@ -1372,8 +1384,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podCoreFill-{side}" {
     id: 1101 + isRight * 100
-    position: mirrorX(isRight, [0.2003, 1.1284, -0.1729])
-    rotation: mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922])
+    position: (mirrorX(isRight, [0.2003, 1.1284, -0.1729]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922]))
     scale [0.1271, 0.4079, 0.1845]
     material: charcoal
     group: 90 + isRight * 10
@@ -1390,8 +1402,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podBack-{side}" {
     id: 1102 + isRight * 100
-    position: mirrorX(isRight, [0.2, 1.13, -0.2122])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995])
+    position: (mirrorX(isRight, [0.2, 1.13, -0.2122]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995]))
     scale [0.1365, 0.4251, 0.0273]
     material: charcoal
     group: 90 + isRight * 10
@@ -1408,8 +1420,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podCoreClip-{side}" {
     id: 1103 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4239])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4239]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [0, 0, 0, 1]) * [-1, 1, -1, 1])
     scale [1, 1, 0.2391]
     material: charcoal
     blend: "Intersection"
@@ -1419,8 +1431,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podCoreCut-{side}" {
     id: 1104 + isRight * 100
-    position: mirrorX(isRight, [0.7473, 1.6778, 0.0131])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.7473, 1.6778, 0.0131]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [1, 1, 1]
     material: charcoal
     blend: "SmoothIntersection"
@@ -1431,8 +1443,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podHanger-{side}" {
     id: 1105 + isRight * 100
-    position: mirrorX(isRight, [0.105, 1.5, -0.18])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [0.105, 1.5, -0.18]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [0, 0, 0, 1]) * [-1, 1, -1, 1])
     scale [0.024, 0.12, 0.016]
     material: charcoal
     group: 90 + isRight * 10
@@ -1442,8 +1454,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podCap-{side}" {
     id: 1106 + isRight * 100
-    position: mirrorX(isRight, [0.2, 1.13, -0.195])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995])
+    position: (mirrorX(isRight, [0.2, 1.13, -0.195]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995]))
     scale [0.1841, 0.4446, 0.2387]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     group: 91 + isRight * 10
@@ -1460,8 +1472,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podCapClip-{side}" {
     id: 1107 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4376])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4376]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2254]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1472,8 +1484,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podCapCut-{side}" {
     id: 1108 + isRight * 100
-    position: mirrorX(isRight, [0.605, 1.5082, -0.0337])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.605, 1.5082, -0.0337]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1484,8 +1496,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podCapBottom-{side}" {
     id: 1109 + isRight * 100
-    position: mirrorX(isRight, [0.4779, -0.9156, -0.195])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995])
+    position: (mirrorX(isRight, [0.4779, -0.9156, -0.195]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995]))
     scale [0.3386, 2.34, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothSubtraction"
@@ -1501,8 +1513,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podShoulderTop-{side}" {
     id: 1110 + isRight * 100
-    position: mirrorX(isRight, [0.014, 1.0923, -0.195])
-    rotation: mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742])
+    position: (mirrorX(isRight, [0.014, 1.0923, -0.195]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1513,8 +1525,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podShoulderOuter-{side}" {
     id: 1111 + isRight * 100
-    position: mirrorX(isRight, [0.0545, 1.1005, -0.195])
-    rotation: mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742])
+    position: (mirrorX(isRight, [0.0545, 1.1005, -0.195]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1525,8 +1537,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podShoulderSpine-{side}" {
     id: 1112 + isRight * 100
-    position: mirrorX(isRight, [0.0218, 1.0939, -0.195])
-    rotation: mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742])
+    position: (mirrorX(isRight, [0.0218, 1.0939, -0.195]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1537,8 +1549,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podVent-{side}" {
     id: 1113 + isRight * 100
-    position: mirrorX(isRight, [0.1141, 1.3772, -0.4123])
-    rotation: bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774])
+    position: (mirrorX(isRight, [0.1141, 1.3772, -0.4123]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774]))
     scale [0.039, 0.0109, 0.0281]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothSubtraction"
@@ -1549,8 +1561,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podVentSlot-{side}" {
     id: 1114 + isRight * 100
-    position: mirrorX(isRight, [0.1154, 1.3749, -0.4017])
-    rotation: bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774])
+    position: (mirrorX(isRight, [0.1154, 1.3749, -0.4017]) * [-1, 1, -1])
+    rotation: (bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774]) * [-1, 1, -1, 1])
     scale [0.0265, 0.0047, 0.0125]
     material: charcoal
     parent: $"pod-{side}"
@@ -1558,8 +1570,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podBand1-{side}" {
     id: 1115 + isRight * 100
-    position: mirrorX(isRight, [0.1999, 1.1303, -0.2069])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.1999, 1.1303, -0.2069]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.1771, 0.4446, 0.2317]
     material: shinCream
     group: 92 + isRight * 10
@@ -1576,8 +1588,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podBand1Clip-{side}" {
     id: 1116 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4376])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4376]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2254]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1588,8 +1600,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podBand1Cut-{side}" {
     id: 1117 + isRight * 100
-    position: mirrorX(isRight, [0.605, 1.5082, -0.0337])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.605, 1.5082, -0.0337]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [0.78, 0.78, 0.78]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1600,8 +1612,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podBand1Top-{side}" {
     id: 1118 + isRight * 100
-    position: mirrorX(isRight, [0.4759, -0.9059, -0.3095])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.4759, -0.9059, -0.3095]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1617,8 +1629,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podBand1Bottom-{side}" {
     id: 1119 + isRight * 100
-    position: mirrorX(isRight, [0.5023, -1.0361, -0.3161])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.5023, -1.0361, -0.3161]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: shinCream
     blend: "SmoothSubtraction"
@@ -1634,8 +1646,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podMid-{side}" {
     id: 1120 + isRight * 100
-    position: mirrorX(isRight, [0.2, 1.1301, -0.2006])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.2, 1.1301, -0.2006]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.17, 0.4446, 0.2246]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     group: 93 + isRight * 10
@@ -1652,8 +1664,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podMidClip-{side}" {
     id: 1121 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4376])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4376]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2254]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1664,8 +1676,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podMidCut-{side}" {
     id: 1122 + isRight * 100
-    position: mirrorX(isRight, [0.605, 1.5082, -0.0337])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.605, 1.5082, -0.0337]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1676,8 +1688,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podMidTop-{side}" {
     id: 1123 + isRight * 100
-    position: mirrorX(isRight, [0.5009, -1.0294, -0.3095])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.5009, -1.0294, -0.3095]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1693,8 +1705,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podMidBottom-{side}" {
     id: 1124 + isRight * 100
-    position: mirrorX(isRight, [0.5303, -1.1741, -0.3168])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.5303, -1.1741, -0.3168]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothSubtraction"
@@ -1710,8 +1722,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podBand2-{side}" {
     id: 1125 + isRight * 100
-    position: mirrorX(isRight, [0.2, 1.13, -0.1935])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.2, 1.13, -0.1935]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.163, 0.4446, 0.2176]
     material: shinCream
     group: 94 + isRight * 10
@@ -1728,8 +1740,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podBand2Clip-{side}" {
     id: 1126 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4376])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4376]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2254]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1740,8 +1752,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podBand2Cut-{side}" {
     id: 1127 + isRight * 100
-    position: mirrorX(isRight, [0.605, 1.5082, -0.0337])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.605, 1.5082, -0.0337]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [0.78, 0.78, 0.78]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1752,8 +1764,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podBand2Top-{side}" {
     id: 1128 + isRight * 100
-    position: mirrorX(isRight, [0.5289, -1.1674, -0.3095])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.5289, -1.1674, -0.3095]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: shinCream
     blend: "SmoothIntersection"
@@ -1769,8 +1781,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podBand2Bottom-{side}" {
     id: 1129 + isRight * 100
-    position: mirrorX(isRight, [0.5538, -1.2903, -0.3157])
-    rotation: mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947])
+    position: (mirrorX(isRight, [0.5538, -1.2903, -0.3157]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0249, 0.0025, 0.0998, 0.9947]))
     scale [0.3386, 2.34, 0.78]
     material: shinCream
     blend: "SmoothSubtraction"
@@ -1786,8 +1798,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podSkirt-{side}" {
     id: 1130 + isRight * 100
-    position: mirrorX(isRight, [0.2003, 1.1284, -0.1729])
-    rotation: mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922])
+    position: (mirrorX(isRight, [0.2003, 1.1284, -0.1729]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922]))
     scale [0.1638, 0.4446, 0.2211]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     group: 95 + isRight * 10
@@ -1804,8 +1816,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podSkirtClip-{side}" {
     id: 1131 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4376])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4376]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2254]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1816,8 +1828,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"podSkirtCavity-{side}" {
     id: 1132 + isRight * 100
-    position: mirrorX(isRight, [0.2003, 1.1284, -0.1729])
-    rotation: mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922])
+    position: (mirrorX(isRight, [0.2003, 1.1284, -0.1729]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922]))
     scale [0.1209, 0.4017, 0.1782]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "Subtraction"
@@ -1835,8 +1847,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"podSkirtCut-{side}" {
     id: 1133 + isRight * 100
-    position: mirrorX(isRight, [0.605, 1.5082, -0.0337])
-    rotation: mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402])
+    position: (mirrorX(isRight, [0.605, 1.5082, -0.0337]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
     scale [0.78, 0.78, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "ChamferIntersection"
@@ -1847,8 +1859,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"podSkirtTop-{side}" {
     id: 1134 + isRight * 100
-    position: mirrorX(isRight, [0.5479, -1.2612, -0.5372])
-    rotation: mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922])
+    position: (mirrorX(isRight, [0.5479, -1.2612, -0.5372]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0.0746, 0.0075, 0.0996, 0.9922]))
     scale [0.3386, 2.34, 0.78]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothIntersection"
@@ -1864,8 +1876,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"nozzle-{side}" {
     id: 1135 + isRight * 100
-    position: mirrorX(isRight, [0.232, 0.8746, -0.3066])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.232, 0.8746, -0.3066]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]) * [-1, 1, -1, 1])
     scale [0.1321, 0.0822, 0.0234]
     material: charcoal
     group: 96 + isRight * 10
@@ -1880,8 +1892,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"nozzleClip-{side}" {
     id: 1136 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4239])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4239]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [0, 0, 0, 1]) * [-1, 1, -1, 1])
     scale [1, 1, 0.2391]
     material: charcoal
     blend: "Intersection"
@@ -1891,8 +1903,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"nozzleBore-{side}" {
     id: 1137 + isRight * 100
-    position: mirrorX(isRight, [0.2172, 0.8571, -0.3114])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.2172, 0.8571, -0.3114]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]) * [-1, 1, -1, 1])
     scale [0.1181, 0.0682, 0.0125]
     material: jet
     blend: "SmoothSubtraction"
@@ -1908,8 +1920,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"nozzleGlow-{side}" {
     id: 1138 + isRight * 100
-    position: mirrorX(isRight, [0.2236, 0.8647, -0.3093])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.2236, 0.8647, -0.3093]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]) * [-1, 1, -1, 1])
     scale [0.0595, 0.037, 0.0055]
     material: thrusterCyan
     parent: $"nozzle-{side}"
@@ -1918,8 +1930,8 @@ template mothLimbs(side, isRight) {
 
   shape Superellipsoid $"nozzleCore-{side}" {
     id: 1139 + isRight * 100
-    position: mirrorX(isRight, [0.2212, 0.8617, -0.3101])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.2212, 0.8617, -0.3101]) * [-1, 1, -1])
+    rotation: (mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]) * [-1, 1, -1, 1])
     scale [0.0238, 0.0148, 0.0047]
     material: thrusterGlow
     parent: $"nozzle-{side}"
@@ -1928,8 +1940,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"nozzleLip-{side}" {
     id: 1140 + isRight * 100
-    position: mirrorX(isRight, [0.229, 0.8711, -0.3075])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.229, 0.8711, -0.3075]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]))
     scale [0.154, 0.104, 0.0156]
     material: gunmetal
     group: 97 + isRight * 10
@@ -1944,8 +1956,8 @@ template mothLimbs(side, isRight) {
 
   shape Prism $"nozzleLipHole-{side}" {
     id: 1141 + isRight * 100
-    position: mirrorX(isRight, [0.229, 0.8711, -0.3075])
-    rotation: mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246])
+    position: (mirrorX(isRight, [0.229, 0.8711, -0.3075]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]))
     scale [0.1353, 0.0853, 0.0312]
     material: gunmetal
     blend: "SmoothSubtraction"
@@ -1961,8 +1973,8 @@ template mothLimbs(side, isRight) {
 
   shape Box $"nozzleLipClip-{side}" {
     id: 1142 + isRight * 100
-    position: mirrorX(isRight, [1.04, 1.13, -0.4239])
-    rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+    position: (mirrorX(isRight, [1.04, 1.13, -0.4239]) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), mirrorTurnRotation(isRight, [0, 0, 0, 1]))
     scale [1, 1, 0.2391]
     material: gunmetal
     blend: "Intersection"
@@ -1972,8 +1984,8 @@ template mothLimbs(side, isRight) {
 
   shape Cylinder $"podHinge-{side}" {
     id: 212 + isRight * 68
-    position: mirrorX(isRight, [0.102, 1.6015, -0.185])
-    rotation [diagonal, 0, 0, diagonal]
+    position: (mirrorX(isRight, [0.102, 1.6015, -0.185]) * [-1, 1, -1])
+    rotation [-diagonal, 0, 0, diagonal]
     scale [0.018, 0.008, 0.018]
     material: charcoal
     parent: "torso"
@@ -2388,7 +2400,7 @@ prototypes {
           roughness: 0.85
         }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "ground" {
         material: skin
         position [0, -0.2, 0]
@@ -2400,7 +2412,7 @@ prototypes {
   allow PUCK133 "her wall toes solve after her ground feet on the same legs: on a face the ground feet have let go, and at a wall's foot the toes are meant to win"
   prototype "moth" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "moth"
       // At rest her breath re-poses her ten times a second: a breath's few millimetres stay smooth at it, and the views
       // that show her stand between poses. A stride poses her on the frame it starts.
@@ -3142,6 +3154,7 @@ prototypes {
       shape Superellipsoid "torso" {
         id: 2
         position [0, 1.2915, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.15, 0.285, 0.1225]
         material: torsoSuit
         parent: "pelvis"
@@ -3170,7 +3183,8 @@ prototypes {
       // One flat chamfered slab over the chest; its ivory border and lavender centre are paint (chestArmor).
       shape Prism "chestSlab" {
         id: 3
-        position [0, 1.38, 0.1]
+        position [0, 1.38, -0.1]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.175, 0.165, 0.055]
         material: chestArmor
         parent: "torso"
@@ -3184,7 +3198,8 @@ prototypes {
       // The lavender plate below the belt, narrowing to a point between the thighs.
       shape Prism "pelvicShield" {
         id: 7
-        position [0, 1.0, 0.13]
+        position [0, 1.0, -0.13]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.125, 0.11, 0.04]
         material: violet
         parent: "pelvis"
@@ -3198,6 +3213,7 @@ prototypes {
       shape Superellipsoid "belt" {
         id: 10
         position [0, 1.118, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.17, 0.026, 0.1325]
         material: brass
         parent: "pelvis"
@@ -3206,7 +3222,8 @@ prototypes {
 
       shape Prism "beltClasp" {
         id: 11
-        position [0, 1.126, 0.133]
+        position [0, 1.126, -0.133]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.069, 0.027, 0.015]
         material: brass
         parent: "pelvis"
@@ -3226,7 +3243,7 @@ prototypes {
 
       shape Superellipsoid "neckYoke" {
         id: 13
-        position [0, 1.495, 0.0025]
+        position [0, 1.495, -0.0025]
         scale [0.175, 0.07, 0.115]
         material: charcoal
         parent: "torso"
@@ -3235,7 +3252,7 @@ prototypes {
 
       shape Superellipsoid "spine" {
         id: 14
-        position [0, 1.3465, -0.155]
+        position [0, 1.3465, 0.155]
         scale [0.0225, 0.1775, 0.0175]
         material: charcoal
         parent: "torso"
@@ -3245,7 +3262,7 @@ prototypes {
       for i in range(0, 5) {
         shape Superellipsoid $"spineJoint{i}" {
           id: 15 + i
-          position [0, 1.204 + i * 0.0675, -0.172]
+          position [0, 1.204 + i * 0.0675, 0.172]
           scale [0.019, 0.012, 0.01]
           material: charcoal
           parent: "torso"
@@ -3255,8 +3272,8 @@ prototypes {
 
       shape Prism "collar" {
         id: 20
-        position [0, 1.585, 0.09]
-        rotation [diagonal, 0, 0, diagonal]
+        position [0, 1.585, -0.09]
+        rotation: compose(rotate([0, 1, 0], 180), [diagonal, 0, 0, diagonal])
         scale [0.1, 0.095, 0.03]
         material: brass
         group: 3
@@ -3269,8 +3286,8 @@ prototypes {
 
       shape Prism "collarOpening" {
         id: 21
-        position [0, 1.585, 0.09]
-        rotation [diagonal, 0, 0, diagonal]
+        position [0, 1.585, -0.09]
+        rotation [-diagonal, 0, 0, diagonal]
         scale [0.066, 0.065, 0.045]
         material: charcoal
         blend: "Subtraction"
@@ -3283,8 +3300,8 @@ prototypes {
 
       shape Cylinder "collarStud" {
         id: 22
-        position [0.035, 1.58, 0.185]
-        rotation [diagonal, 0, 0, diagonal]
+        position [-0.035, 1.58, -0.185]
+        rotation [-diagonal, 0, 0, diagonal]
         scale [0.011, 0.0025, 0.011]
         material: charcoal
         parent: "torso"
@@ -3293,7 +3310,8 @@ prototypes {
 
       shape Superellipsoid "helmet" {
         id: 23
-        position [0, 1.7603, -0.01575]
+        position [0, 1.7603, 0.01575]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.2882, 0.3014, 0.2475]
         material: violet
         group: 4
@@ -3312,7 +3330,7 @@ prototypes {
       // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
       shape Superellipsoid "helmetInner" {
         id: 24
-        position [0, 1.7559, 0.009]
+        position [0, 1.7559, -0.009]
         scale [0.21, 0.224, 0.186]
         material: charcoal
         blend: "SmoothSubtraction"
@@ -3324,7 +3342,7 @@ prototypes {
 
       shape Prism "helmetFaceOpening" {
         id: 25
-        position [0, 1.7405, 0.2475]
+        position [0, 1.7405, -0.2475]
         scale [0.2222, 0.24112, 0.23175]
         material: charcoal
         // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
@@ -3349,8 +3367,8 @@ prototypes {
 
       shape Cylinder "earMount-left" {
         id: 51
-        position [0.27544, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [-0.27544, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.09592, 0.01452, 0.09592]
         material: skin
         parent: "helmet"
@@ -3359,8 +3377,8 @@ prototypes {
 
       shape Cylinder "earCover-left" {
         id: 52
-        position [0.29568, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [-0.29568, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.06996, 0.00484, 0.06996]
         material: violet
         parent: "helmet"
@@ -3369,8 +3387,8 @@ prototypes {
 
       shape Cylinder "earRing-left" {
         id: 53
-        position [0.30624, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [-0.30624, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.044, 0.00264, 0.044]
         material: brass
         parent: "helmet"
@@ -3379,8 +3397,8 @@ prototypes {
 
       shape Cylinder "earButton-left" {
         id: 54
-        position [0.31152, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [-0.31152, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.033, 0.00264, 0.033]
         material: violet
         parent: "helmet"
@@ -3389,8 +3407,8 @@ prototypes {
 
       shape Cylinder "earMount-right" {
         id: 67
-        position [-0.27544, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [0.27544, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.09592, 0.01452, 0.09592]
         material: skin
         parent: "helmet"
@@ -3399,8 +3417,8 @@ prototypes {
 
       shape Cylinder "earCover-right" {
         id: 68
-        position [-0.29568, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [0.29568, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.06996, 0.00484, 0.06996]
         material: violet
         parent: "helmet"
@@ -3409,8 +3427,8 @@ prototypes {
 
       shape Cylinder "earRing-right" {
         id: 69
-        position [-0.30624, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [0.30624, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.044, 0.00264, 0.044]
         material: brass
         parent: "helmet"
@@ -3419,8 +3437,8 @@ prototypes {
 
       shape Cylinder "earButton-right" {
         id: 70
-        position [-0.31152, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
+        position [0.31152, 1.7295, 0.01575]
+        rotation: compose(rotate([0, 1, 0], 180), [0, 0, diagonal, diagonal])
         scale [0.033, 0.00264, 0.033]
         material: violet
         parent: "helmet"
@@ -3433,7 +3451,8 @@ prototypes {
       // her jaw and leaves through the hood's front opening; the braid keeps its full thickness whatever the head's scale.
       shape Sweep "braid-root-0" {
         id: 119
-        position [-0.1232, 1.695, 0.137]
+        position [0.1232, 1.695, -0.137]
+        rotation: rotate([0, 1, 0], 180)
         material: ink
         parent: "helmet"
         curve {
@@ -3447,7 +3466,8 @@ prototypes {
 
       shape Sweep "braid-root-1" {
         id: 120
-        position [-0.2376, 1.5579, 0.117]
+        position [0.2376, 1.5579, -0.117]
+        rotation: rotate([0, 1, 0], 180)
         material: ink
         parent: "braid-root-0"
         curve {
@@ -3461,7 +3481,8 @@ prototypes {
 
       shape Sweep "braid-root-2" {
         id: 121
-        position [-0.2464, 1.4039, 0.144]
+        position [0.2464, 1.4039, -0.144]
+        rotation: rotate([0, 1, 0], 180)
         material: ink
         parent: "braid-root-1"
         curve {
@@ -3478,7 +3499,8 @@ prototypes {
 
       shape Cylinder "braidTie" {
         id: 146
-        position [-0.264, 1.2455, 0.162]
+        position [0.264, 1.2455, -0.162]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.028, 0.009, 0.028]
         material: brass
         parent: "braid-root-2"
@@ -3487,8 +3509,8 @@ prototypes {
 
       shape Superellipsoid "braidTassel" {
         id: 147
-        position [-0.264, 1.2085, 0.162]
-        rotation [0, 0, -0.0998334, 0.9950042]
+        position [0.264, 1.2085, -0.162]
+        rotation [0, 0, 0.0998334, 0.9950042]
         scale [0.02, 0.035, 0.016]
         material: ink
         parent: "braid-root-2"
@@ -3935,7 +3957,7 @@ prototypes {
             ]
             target {
               kind: "surface"
-              direction [0, 0, 1]
+              direction [0, 0, -1]
               reach: limb.reach
               standoff: limb.standoff
             }

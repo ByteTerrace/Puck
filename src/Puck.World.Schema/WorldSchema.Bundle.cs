@@ -14,7 +14,7 @@ public static partial class WorldSchema {
     private static JsonNode HoistBundleTitles(JsonNode node, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs, bool hoistSelf = true) {
         if (node is JsonObject obj) {
             // A node carrying its OWN "$id" opens a fresh base-URI scope (a whole other document schema — e.g.
-            // puck.creation.v1 — embedded inline, self-contained): a bare "#/$defs/X" pointer written inside it
+            // puck.creation.v2 — embedded inline, self-contained): a bare "#/$defs/X" pointer written inside it
             // resolves against THAT $id, never the bundle root, so hoisting anything out of it (or pulling the
             // island itself into the bundle's own $defs) would mint a $ref nothing can resolve. The split's own
             // common.schema.json hoisting already leaves such an island alone; the bundle matches that here,

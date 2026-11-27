@@ -196,11 +196,8 @@ driver that plays it, and keys:
   the clip and the solve read one copy.
 
 **How a key is stored.** The document keeps the axis and the angle as
-written. A swing is written the same way, so a turn crosses the author frame
-as a swing does: its axis flips and its angle does not
-(`CreationFrame.ToEngine`). A turn of zero stays zero. The converter for an
-absolute orientation is the wrong tool here, because it puts a half turn in
-front of whatever it is given. The compiler makes the composed turn's
+written, as a swing is, in the creation's frame. A turn of zero stays zero. The
+compiler makes the composed turn's
 quaternion, picks the one of its two signs whose scalar part is positive, and
 refuses a composed turn of a half turn or more by name. Below a half turn
 that sign is unique, so two ways of writing one key store the same thing.

@@ -1368,7 +1368,6 @@ public sealed partial class WorldPopulation {
             try {
                 body.ApplyContinuumTrajectory(
                     destinationCompletedEngineTick: destinationCompletedEngineTick,
-                    entityIndex: slot,
                     trajectory: in trajectory
                 );
             } finally {

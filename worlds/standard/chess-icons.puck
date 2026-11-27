@@ -100,22 +100,22 @@ template chessIconLayerShapes(name, piece, size, grow, material, top) {
   for (disc, k) in piece.discs {
     shape Cylinder $"{name}-disc-{k}" {
       material: material
-      position [(disc.c[0] * size), y, (0 - (disc.c[1] * size))]
+      position [(0 - (disc.c[0] * size)), y, (disc.c[1] * size)]
       scale [((disc.r + grow) * size), half, ((disc.r + grow) * size)]
     }
   }
   for (box, k) in piece.boxes {
     shape Box $"{name}-box-{k}" {
       material: material
-      position [(box.c[0] * size), y, (0 - (box.c[1] * size))]
+      position [(0 - (box.c[0] * size)), y, (box.c[1] * size)]
       scale [((box.h[0] + grow) * size), half, ((box.h[1] + grow) * size)]
     }
   }
   for (outline, k) in piece.outlines {
     shape Prism $"{name}-outline-{k}" {
       material: material
-      position [(outline.c[0] * size), y, (0 - (outline.c[1] * size))]
-      rotation: chessIconFlat
+      position [(0 - (outline.c[0] * size)), y, (outline.c[1] * size)]
+      rotation: compose(rotate([0, 1, 0], 180), chessIconFlat)
       scale [((outline.h[0] + grow) * size), ((outline.h[1] + grow) * size), half]
       profile {
         kind: "Convex"
@@ -132,7 +132,7 @@ template chessIconPrototypes(prefix, sides, size = 0.042, grow = 0.1) {
       prototype $"{prefix}-{side.name}-{kind}" {
         document {
           name: $"{prefix}-{side.name}-{kind}"
-          schema: "puck.creation.v1"
+          schema: "puck.creation.v2"
           palette [side.fill, side.rim]
           chessIconLayerShapes(
             name: "rim",
@@ -153,7 +153,7 @@ template chessIconPrototypes(prefix, sides, size = 0.042, grow = 0.1) {
           for (mark, k) in chessIconShapes[kind].marks {
             shape Cylinder $"mark-{k}" {
               material: 1
-              position [(mark.c[0] * size), ((2 * chessIconLayer) + 0.0005), (0 - (mark.c[1] * size))]
+              position [(0 - (mark.c[0] * size)), ((2 * chessIconLayer) + 0.0005), (mark.c[1] * size)]
               scale [(mark.r * size), 0.0005, (mark.r * size)]
             }
           }

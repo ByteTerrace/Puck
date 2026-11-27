@@ -57,7 +57,7 @@ prototypes {
     document {
       name: "auctionChip"
       palette [{ color: "#D6A13E", roughness: 0.35, specular: 0.6 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "chip" {
         material: 0
         position [0, 0.006, 0]

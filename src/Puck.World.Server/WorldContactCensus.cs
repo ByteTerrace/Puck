@@ -3,15 +3,15 @@ using Puck.Physics;
 
 namespace Puck.World.Server;
 
-/// <summary>A contact field that needs the durable identity of the body being resolved. WorldBody supplies the
-/// entity index only to this refinement (<see cref="WorldBody.SweepContact"/>); ordinary terrain fields remain unaware
-/// of population addressing.</summary>
+/// <summary>A contact field that needs the identity of the body a sweep moves. The body hands itself over, only to
+/// this refinement (<see cref="WorldBody.SweepContact"/>), so no sweep names a body by index; ordinary terrain fields
+/// remain unaware of population addressing.</summary>
 internal interface IEntityContactField : IContactField {
-    ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+    ContactResolution ResolveEntitySweep(WorldBody body, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
-    ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
+    ContactResolution ResolveEntitySupportSweep(WorldBody body, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
-    ContactResolution ResolveCarriedSweep(int entityIndex, WorldBody carrier, in FixedVector3 previousPosition, ref FixedVector3 position,
+    ContactResolution ResolveCarriedSweep(WorldBody body, WorldBody carrier, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
 }
 

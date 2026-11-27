@@ -181,7 +181,7 @@ public static partial class CreationShapeLaws {
         return builder.ToString();
     }
     /// <summary>Reads every shape of a creation.</summary>
-    /// <param name="document">The creation, in the engine frame (<see cref="CreationFrame.ToEngine"/>).</param>
+    /// <param name="document">The creation, normalized.</param>
     /// <returns>One law a shape, in the creation's order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<CreationShapeLaw> Of(CreationDocument document) {

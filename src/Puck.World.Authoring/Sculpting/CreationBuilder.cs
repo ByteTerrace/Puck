@@ -9,10 +9,10 @@ namespace Puck.World.Authoring.Sculpting;
 /// <param name="Sign">+1 for <see cref="CreationBuilder.Left"/>, -1 for <see cref="CreationBuilder.Right"/>.</param>
 /// <param name="Suffix">"L" or "R".</param>
 public readonly record struct SculptSide(float Sign, string Suffix);
-/// <summary>A named point in the creation's author frame — a shoulder, a hip, a wing hinge — that
+/// <summary>A named point in the creation's frame — a shoulder, a hip, a wing hinge — that
 /// <see cref="StateHoisting"/> matches an authored swing <c>Pivot</c> against by value.</summary>
 /// <param name="Name">The joint's name (the cell key under the joints row <see cref="StateHoisting.Options.JointsRow"/>).</param>
-/// <param name="Position">The joint's position, in the creation's author frame.</param>
+/// <param name="Position">The joint's position, in the creation's frame.</param>
 public readonly record struct SculptJoint(string Name, Vector3 Position);
 /// <summary>One shape under construction. Mutable (fields, not a record) so a caller can adjust a just-authored
 /// shape the way <c>shapes[-1][...] = ...</c> does in the Python original — <see cref="CreationBuilder.Shape"/>
@@ -46,7 +46,7 @@ public sealed class SculptShape {
     public ShapePanelDocument? Panel;
     /// <summary>The parent shape's <see cref="Name"/> (null = the creation root). Must already be declared.</summary>
     public string? Parent;
-    /// <summary>The position in the creation's author frame.</summary>
+    /// <summary>The position in the creation's frame.</summary>
     public Vector3 Position;
     /// <summary>Only for Prism: the cross-section profile.</summary>
     public SdfPrismProfile? Profile;

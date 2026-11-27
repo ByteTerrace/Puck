@@ -30,15 +30,6 @@ public sealed class CreationDomainParentLawTests {
         y: 1f,
         z: 0f
     );
-    // CreationFrame's author-to-engine flip: a half turn about +Y, (x, y, z, w) = (0, 1, 0, 0). An identity-authored
-    // shape's engine-frame rest rotation is exactly this, so a slot carrying `root * delta * rest` for the torso and
-    // `root * delta` for the fold differ by it on the right.
-    private static readonly Quaternion Yaw180 = new(
-        w: 0f,
-        x: 0f,
-        y: 1f,
-        z: 0f
-    );
 
     // One frame of the real pack path: deliver body 0's Grounded pose, resolve the render poses, then pack — the
     // same harness shape CreationEffectorLawTests drives, with a held Grounded fact so the torso's driver-gated
@@ -347,7 +338,7 @@ public sealed class CreationDomainParentLawTests {
             what: $"the fold's slot position is not the parent's delta frame at scale {Scale} — the delta was not scaled"
         );
         AssertSameOrientation(
-            actual: (fold.Orientation * Yaw180),
+            actual: fold.Orientation,
             expected: torso.Orientation,
             what: $"the fold's slot orientation is not the parent's delta frame at scale {Scale}"
         );
@@ -356,7 +347,7 @@ public sealed class CreationDomainParentLawTests {
             creation: creation,
             scale: Scale
         ).Instructions.ToArray();
-        var engine = CreationFrame.ToEngine(document: creation.Document);
+        var engine = creation.Document;
         // The chain is in the slot's own units, which carries the look's scale.
         Assert.Equal(expected: Scale, actual: fold.Scale);
         var transformIndex = AssertFoldChain(
@@ -437,7 +428,7 @@ public sealed class CreationDomainParentLawTests {
                 value2: Vector3.Zero
             ) > 0.05f) && (MathF.Abs(x: Quaternion.Dot(
                 quaternion1: torso.Orientation,
-                quaternion2: Yaw180
+                quaternion2: Quaternion.Identity
             )) < 0.99f)),
             userMessage: $"the parent's swing never produced a non-identity delta over 120 frames (torso at {torso.Position} / {torso.Orientation})."
         );
@@ -449,13 +440,13 @@ public sealed class CreationDomainParentLawTests {
             what: "the fold's slot position is not the parent's delta frame"
         );
         AssertSameOrientation(
-            actual: (fold.Orientation * Yaw180),
+            actual: fold.Orientation,
             expected: torso.Orientation,
             what: "the fold's slot orientation is not the parent's delta frame"
         );
 
         _ = AssertFoldChain(
-            engineRestPosition: CreationFrame.ToEngine(document: creation.Document).Shapes![1].Position.Value,
+            engineRestPosition: creation.Document.Shapes![1].Position.Value,
             program: EmitProgram(creation: creation).Instructions.ToArray()
         );
     }

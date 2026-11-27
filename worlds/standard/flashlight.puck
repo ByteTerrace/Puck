@@ -63,14 +63,14 @@ prototypes {
   prototype "flashlight-none" {
     document {
       name: "flashlight-none"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#2B2D31" }]
     }
   }
   prototype "flashlight-lit" {
     document {
       name: "flashlight-lit"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         { color: "#2B2D31", roughness: 0.45, specular: 0.2, metal: 0.6 }
         { color: "#FFF4E0", roughness: 0.2, emissive: 4000 }
@@ -78,15 +78,15 @@ prototypes {
       shape Cylinder "flashlight-barrel" {
         material: 0
         position [0, 0, 0]
-        rotation [0.7071068, 0, 0, 0.7071068]
+        rotation [-0.7071068, 0, 0, 0.7071068]
         scale [flashlightRadius, (flashlightLength / 2), flashlightRadius]
         rounding: 0.004
         detail: true
       }
       shape Cylinder "flashlight-lens" {
         material: 1
-        position [0, 0, (0 - (flashlightLength / 2))]
-        rotation [0.7071068, 0, 0, 0.7071068]
+        position [0, 0, (flashlightLength / 2)]
+        rotation [-0.7071068, 0, 0, 0.7071068]
         scale [(flashlightRadius * 0.8), 0.003, (flashlightRadius * 0.8)]
         detail: true
       }

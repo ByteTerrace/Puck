@@ -136,17 +136,17 @@ template wallPainting(label, frame, title, note) {
     faces [{ name: "glass", shapeId: 0 }]
   }
   name: label
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette: paintingPalette
   shape Box "rim" {
     material: paintBlack
-    position [0, canvasCenter, canvasProud]
+    position [0, canvasCenter, -canvasProud]
     scale [canvasHalfWidth, canvasHalfHeight, 0.04]
   }
   shape Box "opening" {
     blend: Subtraction
     material: paintBlack
-    position [0, canvasCenter, canvasProud]
+    position [0, canvasCenter, -canvasProud]
     scale [(canvasHalfWidth - canvasRim), (canvasHalfHeight - canvasRim), 0.3]
   }
   for width in ((frame.lipWidth > 0) ? [frame.lipWidth] : []) {
@@ -181,21 +181,21 @@ template wallPainting(label, frame, title, note) {
     slot: frame.border
   )
   // The plaque: a cream board on the wall, a hand's width beyond the frame.
-  localBox(
+  boundsBox(
     label: "plaque",
-    x0: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15),
-    x1: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15),
+    x0: (0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15)),
+    x1: (0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15)),
     y0: 1.0,
     y1: 1.4,
-    z0: 0,
-    z1: 0.025,
+    z0: -0.025,
+    z1: 0,
     slot: paintBoard
   )
   textRuns [
     {
       text: title
-      position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.31, 0.025]
-      rotation [0, 0, 0, 1]
+      position [(0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65)), 1.31, -0.025]
+      rotation [0, 1, 0, 0]
       emHeight: 0.06
       depth: 0.004
       mode: "emboss"
@@ -205,8 +205,8 @@ template wallPainting(label, frame, title, note) {
     }
     {
       text: note
-      position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.22, 0.025]
-      rotation [0, 0, 0, 1]
+      position [(0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65)), 1.22, -0.025]
+      rotation [0, 1, 0, 0]
       emHeight: 0.028
       depth: 0.003
       mode: "emboss"
@@ -255,7 +255,7 @@ prototypes {
   prototype "wing-fins" {
     document {
       name: "wing-fins"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: wingPalette
       for (x, n) in courtFins {
         boundsBox(
@@ -303,29 +303,29 @@ prototypes {
         faces [{ name: "glass", shapeId: 0 }]
       }
       name: "painting-fall-floor"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: paintingPalette
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceUp
+        rotation: (faceUp * [-1, 1, -1, 1])
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {
         blend: Subtraction
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceUp
+        rotation: (faceUp * [-1, 1, -1, 1])
         scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
       }
       flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: 0, y1: 0.05, slot: paintLip)
       flatRing(label: "border", ix: (fallHalf + 0.05), w: 0.22, y0: 0, y1: 0.07, slot: paintGilt)
-      localBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: 1.55, z1: 2.15, slot: paintBoard)
+      boundsBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: -2.15, z1: -1.55, slot: paintBoard)
       textRuns [
         {
           text: "THE ENDLESS FALL"
-          position [0, 0.02, 1.98]
-          rotation: faceUp
+          position [0, 0.02, -1.98]
+          rotation: compose(rotate([0, 1, 0], 180), faceUp)
           emHeight: 0.07
           depth: 0.004
           mode: "emboss"
@@ -335,8 +335,8 @@ prototypes {
         }
         {
           text: "Step onto the glass and you fall, out of the ceiling and through the floor again. Backspace or L3 gets you out."
-          position [0, 0.02, 1.86]
-          rotation: faceUp
+          position [0, 0.02, -1.86]
+          rotation: compose(rotate([0, 1, 0], 180), faceUp)
           emHeight: 0.03
           depth: 0.003
           mode: "emboss"
@@ -357,19 +357,19 @@ prototypes {
         faces [{ name: "glass", shapeId: 0 }]
       }
       name: "painting-fall-ceiling"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: paintingPalette
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceDown
+        rotation: (faceDown * [-1, 1, -1, 1])
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {
         blend: Subtraction
         material: paintBlack
         position [0, 0, 0]
-        rotation: faceDown
+        rotation: (faceDown * [-1, 1, -1, 1])
         scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
       }
       flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: -0.05, y1: 0, slot: paintLip)

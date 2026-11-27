@@ -9,7 +9,7 @@ import "set-controls"
 prototypes {
   prototype "burst-wall" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "burst-wall"
       palette [{ color: "#888888" }]
       shape Box {

@@ -121,7 +121,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldBindingOverlay))]
 [JsonSerializable(typeof(BindingProfileDocument))]
 // The creation/placement rows (the world.row.set creations / world.row.set placements payload shapes). The embedded
-// puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
+// puck.creation.v2 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldPrototype))]
 [JsonSerializable(typeof(WorldPresentationRows))]

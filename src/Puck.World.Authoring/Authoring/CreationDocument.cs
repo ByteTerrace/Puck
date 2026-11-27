@@ -84,12 +84,12 @@ public sealed record PaletteEntryDocument(
     public bool IsGlass => (Glass is not null);
 }
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
-/// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
+/// <see cref="Rotation"/> are in the creation's frame, the engine's own (+Y up, −Z the creation's front, +X its right), and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
 /// <param name="Id">The shape's stable id.</param>
 /// <param name="Name">The optional player-given name, authored literally or through a containing world's Text state cell.</param>
 /// <param name="Type">The primitive.</param>
-/// <param name="Position">The shape's position (the author frame's workbench space).</param>
+/// <param name="Position">The shape's position, in the creation's frame.</param>
 /// <param name="Rotation">The orientation.</param>
 /// <param name="Scale">The per-axis scale — the primitive's size (see <see cref="CreationGeometry"/>).</param>
 /// <param name="Material">The palette slot (null = 0).</param>
@@ -118,8 +118,8 @@ public sealed record PaletteEntryDocument(
 /// the upper arm's swing at the shoulder. The parent must be declared earlier in <c>shapes</c> (so a chain resolves
 /// in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.</param>
 /// <param name="Joint">The point this shape turns about (null = the pivot of its first swing, or its own position when
-/// it has neither): an effector's solve turns a bone about it (<see cref="CreationRig.Joint"/>). Author-frame, like every
-/// other point here. It changes no pose on its own.</param>
+/// it has neither): an effector's solve turns a bone about it (<see cref="CreationRig.Joint"/>). In the creation's frame,
+/// like every other point here. It changes no pose on its own.</param>
 /// <param name="Taper">Only for Prism: top width divided by bottom width, finite in [0, 1].
 /// Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width,
 /// half-height and extrusion half-depth. Rotate the prism to reverse its taper.</param>
@@ -188,7 +188,7 @@ public sealed record PaletteEntryDocument(
 /// <param name="Morph">Only with a <see cref="SdfBlendOp.Morph"/> <see cref="Blend"/>, and required by it: the lane
 /// and range the morph runs over — see <see cref="ShapeMorphDocument"/>.</param>
 /// <param name="LightsAs">How the shape's surface lights its surroundings with what its material shows (null = it lights
-/// nothing): <see cref="ShapeLightForm.Face"/> lights from a box's front face (+Z in the author frame). The light is the
+/// nothing): <see cref="ShapeLightForm.Face"/> lights from a box's face (its local +Z). The light is the
 /// mean of the material's painted albedo times its emissive over the face, so a console's interface or a marquee's
 /// lettering lights the room in its own colours, and the shape keeps its material and paints.</param>
 public sealed record ShapeDocument(
@@ -294,8 +294,8 @@ public sealed record CreationPartDocument(
 /// <summary>The form a shape's light takes (<see cref="ShapeDocument.LightsAs"/>).</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<ShapeLightForm>))]
 public enum ShapeLightForm {
-    /// <summary>A box's front face (+Z in the author frame, the face its half-extents along X and Y span) lights what
-    /// stands before it as a screen's face does.</summary>
+    /// <summary>A box's face (its local +Z, the face its half-extents along X and Y span; a box turned a half turn about
+    /// up faces its creation's front) lights what stands before it as a screen's face does.</summary>
     Face,
 }
 /// <summary>What a solid placement of a creation collides as (<see cref="CreationDocument.Contact"/>). Either way the
@@ -434,8 +434,8 @@ public sealed record CreationReliefMaskDocument(
 /// centre + <paramref name="Rotation"/>, in the creation's workbench space: local +X = advance, +Y = ascent, +Z = the
 /// relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed
 /// (engrave / Subtraction) but never coplanar — coincident zero-sets speckle (docs/rendering/sdf/reference/text-and-glyphs.md).
-/// <paramref name="Position"/>/<paramref name="Rotation"/> are authored in the creation's author frame (see
-/// <see cref="CreationFrame"/>).
+/// <paramref name="Position"/>/<paramref name="Rotation"/> are in the creation's frame, so an unturned run reads from
+/// +Z, behind a creation facing −Z: a run on its front turns a half turn about up.
 /// </summary>
 /// <param name="Text">The run's text (whitespace / unmapped code points advance the pen without a glyph).</param>
 /// <param name="Position">The run's anchor centre on the host surface (workbench space).</param>
@@ -583,8 +583,7 @@ public sealed record FrameTransformDocument(int Id, DocumentVector3 Position, Do
 /// <param name="Id">The eye's stable id within the creation.</param>
 /// <param name="ShapeId">The anchored shape id (a <see cref="ShapeDocument.Id"/>). A camera naming a missing shape is
 /// dropped at load (its offset frame has no anchor).</param>
-/// <param name="Position">The eye offset from the anchored shape's frame origin, in the creation's author frame (see
-/// <see cref="CreationFrame"/>).</param>
+/// <param name="Position">The eye offset from the anchored shape's frame origin, in the creation's frame.</param>
 /// <param name="Yaw">The eye heading offset, degrees (null = 0).</param>
 /// <param name="Pitch">The eye tilt offset, degrees (null = 0).</param>
 /// <param name="Fov">The vertical field of view, degrees (null = the engine default).</param>
@@ -681,7 +680,7 @@ public sealed record CreationBehaviorDocument(
     float? RestRate = null
 );
 /// <summary>
-/// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
+/// The <c>puck.creation.v2</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
 /// creation can be named, saved, reloaded, and handed to a bake/forge headlessly. Document doctrine applies
 /// throughout: every optional member is declared nullable (the polymorphic parse path skips property initializers —
 /// an omitted member arrives null regardless), validated only when present, and normalized at consumption (see
@@ -690,7 +689,7 @@ public sealed record CreationBehaviorDocument(
 /// <see cref="System.Numerics.Quaternion"/> is <c>[x, y, z, w]</c> — the object form is refused (see
 /// <see cref="Puck.Assets.Documents.QuaternionJsonConverter"/>).
 /// </summary>
-/// <param name="Schema">The document version tag (<c>puck.creation.v1</c>).</param>
+/// <param name="Schema">The document version tag (<c>puck.creation.v2</c>).</param>
 /// <param name="Name">The creation's handle, authored literally or through a containing world's Text state cell;
 /// normalization narrows a literal value to letters, digits, dashes, and underscores.</param>
 /// <param name="Palette">The material palette (null = the default sweep).</param>
@@ -753,7 +752,10 @@ public sealed record CreationDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationContact? Contact = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.creation.v1";
+    public const string CurrentSchema = "puck.creation.v2";
+    /// <summary>The version tag of a creation written in the retired author frame, which <c>puck migrate frame</c>
+    /// converts; validation refuses it by name.</summary>
+    public const string RetiredSchema = "puck.creation.v1";
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 32;

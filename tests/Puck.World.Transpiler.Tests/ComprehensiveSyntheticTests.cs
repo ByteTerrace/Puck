@@ -417,7 +417,7 @@ public class ComprehensiveSyntheticTests {
         // the collector in place to `shape`/"shapes", CreationDocument.Shapes' own key, with "type" replacing "kind"
         // (§4.1, §0-A6). This test now spells the renamed sugar with real SdfSolidPrimitive names.
         const string CreationPuck = """
-            schema: "puck.creation.v1"
+            schema: "puck.creation.v2"
             documentId: "chess-board-creation"
 
             material "wood" {
@@ -438,12 +438,12 @@ public class ComprehensiveSyntheticTests {
             """;
 
         var json = Compile(
-            defaultSchema: "puck.creation.v1",
+            defaultSchema: "puck.creation.v2",
             source: CreationPuck
         );
 
         Assert.Equal(
-            "puck.creation.v1",
+            "puck.creation.v2",
             json["schema"]?.ToString()
         );
         Assert.Equal(
@@ -504,7 +504,7 @@ public class ComprehensiveSyntheticTests {
         // Round-trip
         Assert.Equal(
             CanonicalText(node: Compile(
-                defaultSchema: "puck.creation.v1",
+                defaultSchema: "puck.creation.v2",
                 source: decompiled
             )),
             CanonicalText(node: json)
