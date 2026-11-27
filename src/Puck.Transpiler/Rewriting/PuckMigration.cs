@@ -3,6 +3,14 @@ using Puck.Transpiler.Ast;
 
 namespace Puck.Transpiler.Rewriting;
 
+/// <summary>One source of a <c>puck migrate</c> run, as <see cref="PuckMigration.Prepare"/> reads it.</summary>
+/// <param name="Path">The source's full path.</param>
+/// <param name="Document">The source's parse, carrying the author's trivia.</param>
+/// <param name="Before">What the source compiled to before the rewrite, or <see langword="null"/> when it does not compile
+/// to a document (a library).</param>
+/// <param name="Map">Where each member of <paramref name="Before"/> was authored, or <see langword="null"/> with it.</param>
+public sealed record MigrationSource(string Path, DocumentNode Document, JsonObject? Before, Puck.Transpiler.Diagnostics.SourceMap? Map);
+
 /// <summary>One named rewrite over <c>.puck</c> source, applied to every source under a directory by
 /// <c>puck migrate</c>.</summary>
 /// <remarks>
@@ -197,6 +205,32 @@ public abstract class PuckMigration {
     public virtual bool ReshapesComments => false;
     /// <summary>Gets the one-line description an unknown-name listing prints.</summary>
     public abstract string Summary { get; }
+    /// <summary>Gets a value indicating whether the rewrite of one source changes what another compiles to (a library
+    /// whose templates documents expand), so that a caller rewrites every source of the run first, then compiles each
+    /// against the others' rewrites and holds it to <see cref="DocumentDifference"/>, restoring every source when one
+    /// fails.</summary>
+    public virtual bool ProvesAcrossSources => false;
+    /// <summary>Gets what <see cref="Prepare"/> found the rewrite cannot do, each a one-line reason naming its source; a
+    /// caller refuses the run when any is present.</summary>
+    public virtual IReadOnlyList<string> Refusals => [];
+
+    /// <summary>Reads every source of a run before any is rewritten, for a rewrite that depends on more than one
+    /// source.</summary>
+    /// <param name="sources">The run's sources, each with what it compiled to before the rewrite.</param>
+    public virtual void Prepare(IReadOnlyList<MigrationSource> sources) { }
+    /// <summary>Returns <paramref name="document"/>, the parse of the source at <paramref name="path"/>, rewritten by this
+    /// migration.</summary>
+    /// <param name="document">The parsed source tree, carrying the author's trivia.</param>
+    /// <param name="path">The full path of the source, or <see langword="null"/> when it has none.</param>
+    /// <returns>The rewritten tree; <paramref name="document"/> itself when nothing changed.</returns>
+    public virtual DocumentNode Apply(DocumentNode document, string? path) => this.Apply(document: document);
+    /// <summary>Returns the first difference between the document a source compiled to before this migration and the
+    /// one it compiles to after that this migration does not account for, or <see langword="null"/> when there is
+    /// none.</summary>
+    /// <param name="before">The document the source compiled to before the rewrite.</param>
+    /// <param name="after">The document the rewritten source compiles to.</param>
+    /// <returns>A one-line description naming the member, or <see langword="null"/>.</returns>
+    public virtual string? DocumentDifference(JsonNode? before, JsonNode? after) => this.UndeclaredDifference(before: before, after: after);
 
     /// <summary>Returns <paramref name="document"/> rewritten by this migration.</summary>
     /// <param name="document">The parsed source tree, carrying the author's trivia.</param>

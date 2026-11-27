@@ -5,6 +5,7 @@ using Puck.Cli.Format;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
+using Puck.Transpiler.Ast;
 using Puck.Transpiler.Rewriting;
 using Puck.World.Transpiler;
 
@@ -279,6 +280,135 @@ public static class PuckMigrateCommand {
 
         return 0;
     }
+    // A migration whose rewrite of one source changes what another compiles to: every source is compiled before, every
+    // rewrite is written, every source that compiled is compiled again against the others' rewrites and held to the
+    // migration's own verdict, and every source is restored when one fails it.
+    private static int Across(PuckMigration migration, IReadOnlyList<string> sources, bool check) {
+        var originals = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var parsed = new List<MigrationSource>(capacity: sources.Count);
+        var refused = 0;
+
+        foreach (var path in sources) {
+            string text;
+
+            try {
+                text = File.ReadAllText(path: path);
+            } catch (Exception ex) {
+                Console.Error.WriteLine(value: $"error: {path}: could not be read: {ex.Message}");
+                refused++;
+                continue;
+            }
+
+            var vocabulary = CliVocabularyResolver.Instance.Resolve(source: text);
+            var parse = PuckParser.ParseDocumentWithDiagnostics(source: text, vocabulary: vocabulary);
+
+            if (parse.Value is not { } document) {
+                Console.Error.WriteLine(value: $"error: {path}: does not parse, so it cannot be migrated: {Summarize(diagnostics: parse.Diagnostics)}");
+                refused++;
+                continue;
+            }
+
+            var map = new SourceMap();
+            var diagnostics = new DiagnosticBag();
+            var (_, json) = CompileCommand.CompileSource(diagnostics: diagnostics, imports: ImportHandling.Validate, sourceMap: map, sourcePath: path, sourceText: text, vocabulary: vocabulary);
+            var before = ((diagnostics.HasErrors || (json is null) || (json.Count == 0)) ? null : json);
+
+            originals[path] = text;
+            parsed.Add(item: new MigrationSource(Before: before, Document: document, Map: ((before is null) ? null : map), Path: path));
+        }
+
+        if (refused != 0) {
+            Console.Error.WriteLine(value: $"migrate: {refused} source(s) refused '{migration.Name}'; nothing was written.");
+
+            return 2;
+        }
+
+        migration.Prepare(sources: parsed);
+
+        if (migration.Refusals.Count != 0) {
+            foreach (var refusal in migration.Refusals) { Console.Error.WriteLine(value: $"error: {refusal}"); }
+            Console.Error.WriteLine(value: $"migrate: '{migration.Name}' refused {migration.Refusals.Count} source construct(s); nothing was written.");
+
+            return 2;
+        }
+
+        var changed = new List<Plan>();
+
+        foreach (var source in parsed) {
+            DocumentNode rewritten;
+
+            try {
+                rewritten = migration.Apply(document: source.Document, path: source.Path);
+            } catch (PuckRewriteException ex) {
+                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' could not rewrite it: {ex.Message}");
+                return 2;
+            }
+            if (ReferenceEquals(objA: rewritten, objB: source.Document)) { continue; }
+            if (PuckPrinter.TryPrint(document: rewritten) is not { } printed) {
+                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' produced a tree the printer cannot write back");
+                return 2;
+            }
+            if (string.Equals(a: printed, b: originals[source.Path], comparisonType: StringComparison.Ordinal)) { continue; }
+
+            changed.Add(item: new Plan(Path: source.Path, Refusal: null, Rewritten: printed));
+        }
+
+        if (check) {
+            foreach (var plan in changed) { Console.WriteLine(value: $"would migrate: {plan.Path}"); }
+            if (changed.Count != 0) {
+                Console.Error.WriteLine(value: $"migrate: {changed.Count} source(s) would change under '{migration.Name}'.");
+                return 1;
+            }
+
+            return 0;
+        }
+
+        foreach (var plan in changed) {
+            if (Unwritable(path: plan.Path) is { } reason) {
+                Console.Error.WriteLine(value: $"error: {plan.Path}: would change but cannot be replaced: {reason}");
+                return 2;
+            }
+        }
+
+        if (Write(changed: changed, migration: migration, planned: parsed.Count) != 0) {
+            Restore(originals: originals, paths: changed.Select(selector: static plan => plan.Path));
+            return 2;
+        }
+
+        var failures = 0;
+
+        foreach (var source in parsed) {
+            if (source.Before is null) { continue; }
+
+            var text = File.ReadAllText(path: source.Path);
+            var diagnostics = new DiagnosticBag();
+            var (_, after) = CompileCommand.CompileSource(diagnostics: diagnostics, imports: ImportHandling.Validate, sourceMap: new SourceMap(), sourcePath: source.Path, sourceText: text, vocabulary: CliVocabularyResolver.Instance.Resolve(source: text));
+
+            if (diagnostics.HasErrors || (after is null)) {
+                Console.Error.WriteLine(value: $"error: {source.Path}: does not compile after migration '{migration.Name}': {Summarize(diagnostics: diagnostics)}");
+                failures++;
+            } else if (migration.DocumentDifference(after: after, before: source.Before) is { } difference) {
+                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' changed what it compiles to — {difference}");
+                failures++;
+            }
+        }
+
+        if (failures != 0) {
+            Restore(originals: originals, paths: changed.Select(selector: static plan => plan.Path));
+            Console.Error.WriteLine(value: $"migrate: {failures} source(s) failed '{migration.Name}''s proof; every source was restored.");
+
+            return 2;
+        }
+
+        return 0;
+    }
+    private static void Restore(Dictionary<string, string> originals, IEnumerable<string> paths) {
+        foreach (var path in paths) {
+            using var pending = AtomicFile.StageAllText(path: path, contents: originals[path]);
+
+            pending.Commit();
+        }
+    }
     private static void Discard(IEnumerable<(Plan Plan, AtomicFile.PendingWrite Write)> writes) {
         foreach (var (_, pending) in writes) { pending.Dispose(); }
     }
@@ -340,6 +470,10 @@ public static class PuckMigrateCommand {
             Console.Error.WriteLine(value: $"error: Path '{path}' not found.");
 
             return 2;
+        }
+
+        if (migration.ProvesAcrossSources) {
+            return Across(check: check, migration: migration, sources: Sources(fullPath: fullPath));
         }
 
         var plans = Sources(fullPath: fullPath)
