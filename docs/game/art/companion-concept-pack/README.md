@@ -1,5 +1,99 @@
 # The Moth’s companion
 
+## Round eight
+
+The owner’s verdict on round seven was “I'm not sure the variants were different
+enough for me to choose. We need actual variants of each, not tiny deviations.”
+They saw four versions of the same drawing because each set kept the same
+body, wing plan and major masses. Changes to the brow, fin tips, helmet or
+lamp barely moved the outline. This round gives each take its own body plan,
+lead colour or material, and way to carry light. [Round seven](#round-seven)
+
+All twelve are palm-sized flying guides who draw the Moth’s attention to a
+route or nearby point of interest. One large eye leads the glance. The lamp
+pulses with speech and carries the companion’s light states. Its brightest
+pulse leaves the pupil legible. [The lantern’s light language](#the-lanterns-light-language)
+
+### Rivet’s rescue toys
+
+![Four enamel Rivet designs in three-quarter flight and face views.](r8-rivet.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Bellbuoy | A diving-bell toy with a low pair of flippers and a glowing keel. | Round dome over a short, flat skirt | Tangerine enamel | Reassuring. Its lid droops into a slow, confident blink. |
+| B · Slipstream | A delta-wing scout with a nose eye and a lit strip across its tail. | Wide arrowhead with a split trailing edge | Cobalt enamel | Eager. It darts forward, then peeks back from a bank. |
+| C · Treadplate | A square salvage tug with four blunt paddles and a rooftop beacon. | Broad box with four short, squared projections | Olive enamel | Stubbornly helpful. It squints before leaning into a lift. |
+| D · Hoist | An upright rescue frame with tall twin vanes and a hanging work lamp. | Tall open fork with a lamp below the eye | Butter-yellow enamel | Earnest. It rises on tiptoe and opens its eye wide. |
+
+### Tick’s clockwork flyers
+
+![Four clockwork Tick designs in three-quarter flight and face views.](r8-tick.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Winder | A pocket watch whose lid blinks over the eye above a lit dial segment. | Round coin with a crown and two tiny tabs | Honey brass | Punctual. A crisp lid snap punctuates its glances. |
+| B · Chimebox | A walnut music box with a blinking eye at one end and a glowing comb. | Long low case with two rounded wing blades | Oxblood lacquered walnut | Playful. It cocks the case like a musician waiting for the next beat. |
+| C · Weightdrop | A clock tower with a high eye and a swinging pendulum lantern. | Pointed roof, narrow waist and long drop | Prussian-blue steel | Patient. It takes one pendulum beat before turning to speak. |
+| D · Astral | A clockwork orrery that cradles its eye in rings around a lit moon. | Wide, crossed hoops with open gaps | Satin silver nickel | Absorbed. Its pupil wanders, then snaps to the Moth. |
+
+### Fleecewick’s glowing fuzz
+
+![Four fuzzy Fleecewick designs in three-quarter flight and face views.](r8-fleecewick.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Thimblepuff | A round shearling puff with tiny wings and warm light under its chin. | Nearly circular puff with two nub wings | Coral shearling | Bubbly. It bounces once before a wide-eyed hello. |
+| B · Longhush | A shaggy comet with a low eye, swept locks and a glowing tail tip. | Long taper with an uneven mane and raked fins | Indigo mohair | Shy. It peeks beneath its fringe and trails behind. |
+| C · Patchlace | A felt moth with four quilted wings and light along the inner seams. | Broad, scalloped butterfly with four lobes | Moss-green wool felt | Steady. It holds a soft gaze while flaring all four wings. |
+| D · Seedwick | A fuzzy seed umbrella with one eye and a luminous hanging seed. | High domed canopy over a narrow stalk and drop | Ivory floss | Dreamy. It drifts, then tilts its canopy to look down. |
+
+### Silhouette and scale
+
+![The twelve three-quarter flight poses in solid black, grouped by character.](r8-silhouettes.png)
+
+![The twelve flight poses at palm scale beside the suited Moth’s head.](r8-overview.png)
+
+Both comparisons reuse the three-quarter flight drawings. The silhouette
+sheet keeps the true openings in the outlines and removes surface shading,
+including eye highlights. In the scale sheet, the longest dimension of each
+projected flight pose represents 16 cm. The head crop uses the scale of the
+2.06 m suited figure in the front turnaround. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Building the shapes
+
+Rivet’s housings and vanes can use rounded solids and tapered prisms. Set the
+eye in a separate face recess and put the light on the keel, tail edge, roof or
+hanging diffuser. For Tick, use rounded cases and shallow cuts for the watch
+and music box, a thick sweep for the pendulum stem, and thick rings on pinned
+axes for Astral. The dial, comb, pendulum bob and moon each provide one broad
+emissive patch. For Fleecewick, build the fleece from blended ellipsoids and
+the long locks from tapered sweeps. Give Patchlace’s four felt wings solid
+thickness and paint the stitches. Group Seedwick’s floss into thick clumps
+and reserve individual filaments for the paint. Emissive paint on the chin
+tufts, tail tip, wing-root seams or seed reads as light through or beside the
+coat. All four light placements keep the eye on a separate surface.
+[SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md)
+
+### Round-eight panel audit
+
+The artist checked the saved panels for continuity, plausible joint range,
+flight posture, agreement between views, perspective, compositing and the
+fixed character facts. The three colour sheets each show four distinct lead
+finishes and one eye per pose. The checks cover the poses pictured. The
+checking partner’s independent pass is pending. [Concept art review](../README.md#concept-art-review)
+
+| Panel | What the artist checked |
+| --- | --- |
+| [Rivet](r8-rivet.png) | Bellbuoy’s flippers seat below its porthole. Slipstream’s solid wing joins the nose and both lit tips carry across views. Treadplate’s four paddles have separate roots and the roof bar stays over the chassis. Hoist’s vanes join the eye bridge and its cage hangs from the central mount. The flight angles show the near joints and the face views account for the far ones. Each eye and lamp has its own readable shape. |
+| [Tick](r8-tick.png) | Winder’s lid clears the bezel and the crown seats inside its loop. Chimebox’s blades pivot below the exposed cylinder. Weightdrop’s weight swings under the body from the same short hinge in both views. Astral’s rings turn on their trunnions and the moon rides on a strut. Foreshortening hides or reduces the far parts without changing the attachments. |
+| [Fleecewick](r8-fleecewick.png) | Thimblepuff and Longhush’s paired wings join their bodies beside the eye, with their fur swept away from the wing roots in flight. Patchlace’s four lobes meet behind the ruff. Seedwick’s canopy bundles meet at the brow and the seed hangs below the collar. The wing counts and lit areas carry across views, and the pale floss stays visible against the page. |
+| [Silhouettes](r8-silhouettes.png) | Rivet has a dome, a split dart, a low four-paddle box and an upright fork. Tick has a crowned coin, a horizontal case, a pointed tower with a drop and open hoops. Fleecewick has an orb, a hooked taper, four scalloped wings and a canopy with a hanging seed. The four outlines in each row read separately at the same maximum dimension. |
+| [Palm-scale overview](r8-overview.png) | All twelve flight poses retain their shape, eye and light at 16 cm projected size. The Moth crop and the figures share a scale and occupy separate areas. The rows preserve the order of the colour and silhouette sheets. |
+
+The one-sentence concepts preceded the image prompts. The prompts drew on the
+round-six character sheets for the shared character traits and painted finish.
+[Rivet](r6-rivet.png), [Tick](r6-tick.png), [Fleecewick](r6-fleecewick.png)
+
 ## Round seven
 
 The owner liked Rivet and asked for four slightly different versions of him,
