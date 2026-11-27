@@ -180,7 +180,7 @@ public readonly record struct FixedWorldKit(
     RoleChannelOrdinals RoleOrdinals,
     bool[] RoleMask,
     CompiledActionStateSlot[] ActionState,
-    FixedBodyHold[] Holds,
+    FixedBodyHoldList Holds,
     FixedMotionTuning Tuning,
     ulong AutonomousMotionTicks,
     ulong AutonomousSteeringTicks,

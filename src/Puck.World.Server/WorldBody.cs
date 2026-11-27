@@ -372,7 +372,7 @@ public sealed partial class WorldBody {
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHoldList? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
         // One binding for every holder of this body: a write to any of them notes the body's slot once.
         var slot = new SlotBinding();
 
