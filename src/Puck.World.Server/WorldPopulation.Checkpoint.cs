@@ -403,11 +403,7 @@ public sealed partial class WorldPopulation {
             // A slot the checkpoint holds no entry for stays as Retire leaves it; a captured entry overwrites it below.
             entry.Retire(clearAdmission: true);
             entry.Generation = checkpoint.Generations[index];
-            entry.ProducerState = new BodyProducerState {
-                AcquiredTarget = -1,
-                ActiveProducerCurveIndex = -1,
-                ActiveProducerNavigationDomainIndex = -1,
-            };
+            entry.ProducerState = BodyProducerState.Fresh;
             entry.AutonomyState.Clear();
             entry.Titled = false;
             entry.Mobility = null;
