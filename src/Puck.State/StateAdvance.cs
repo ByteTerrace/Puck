@@ -93,6 +93,17 @@ public sealed record StateAdvance(
     public const int MaxCurveCoefficientBits = 2048;
     /// <summary>The highest power a value curve carries.</summary>
     public const int MaxCurveDegree = (MaxCurveCoefficients - 1);
+    /// <summary>The most bits the reduced numerator or denominator of an exact clock value may take for a nested read to
+    /// build on it. A nested value evaluates its rate's polynomial at its parent's exact value, so each link multiplies the
+    /// size of what it reads by its degree; a parent past this bound is read as unavailable and its child holds its base
+    /// (<see cref="ComputeCurrentValue"/>), the same answer on every machine. A document the validator admits stays
+    /// under it (<see cref="MaxExactDegree"/>); this bound guards a rate written into an arena at run time.</summary>
+    public const int MaxExactValueBits = 2048;
+    /// <summary>The highest degree a clock chain's exact value composes to, the product of its links'
+    /// <see cref="IntegralDegree"/>. A full-width engine tick spans up to 64 bits a part and a composition of degree
+    /// <c>D</c> takes about <c>D</c> times that, so this leaves a quarter of <see cref="MaxExactValueBits"/> for the
+    /// rates' own coefficients; the document validator refuses a chain past it.</summary>
+    public const int MaxExactDegree = (((MaxExactValueBits / 64) * 3) / 4);
 
     /// <summary>Gets whether the advance runs on a parent row rather than the engine's seconds.</summary>
     [JsonIgnore]
@@ -101,6 +112,21 @@ public sealed record StateAdvance(
     /// no <see cref="Rate"/>, or one whose pieces the validator would refuse, accumulates at its rate alone.</summary>
     /// <returns>The compiled shape, cached on first use.</returns>
     public PeriodicPiecewisePolynomial? RateShape() => CompiledShape().Shape;
+    /// <summary>Returns the degree of the polynomial this advance's accumulation takes in its variable: one for an advance
+    /// with no shape (the identity), and one above the highest piece degree for a shaped nested advance, since the
+    /// accumulation integrates the rate. A chain's exact value composes to the product of these along it.</summary>
+    /// <returns>The degree, at least one.</returns>
+    public int IntegralDegree() {
+        var degree = 0;
+
+        if (RateShape() is { } shape) {
+            for (var piece = 0; (piece < shape.PieceCount); piece++) {
+                degree = Math.Max(val1: degree, val2: shape.Piece(piece: piece).Degree);
+            }
+        }
+
+        return (degree + 1);
+    }
 
     /// <summary>Compiles a rate shape's pieces into the periodic polynomial a nested advance integrates.</summary>
     /// <param name="pieces">The pieces, in order, or <see langword="null"/> for none.</param>
@@ -132,6 +158,10 @@ public sealed record StateAdvance(
                 reason = $"rate[{index}].from '{piece.From}' is not an exact rational (digits with an optional decimal fraction, or a quotient such as 5/8)";
                 return false;
             }
+            if (!starts[index].FitsBits(maxBits: MaxCurveCoefficientBits)) {
+                reason = $"rate[{index}].from spells a numerator or denominator over {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
+                return false;
+            }
             if ((piece.Coefficients is not { Count: > 0 } coefficients) || (coefficients.Count > (MaxRateDegree + 1))) {
                 reason = $"rate[{index}].coefficients holds {piece.Coefficients?.Count ?? 0} coefficients; a piece holds from one to {MaxRateDegree + 1}, constant term first";
                 return false;
@@ -142,6 +172,10 @@ public sealed record StateAdvance(
             for (var power = 0; (power < coefficients.Count); power++) {
                 if (!Rational.TryParse(text: coefficients[power], value: out exact[power])) {
                     reason = $"rate[{index}].coefficients[{power}] '{coefficients[power]}' is not an exact rational";
+                    return false;
+                }
+                if (!exact[power].FitsBits(maxBits: MaxCurveCoefficientBits)) {
+                    reason = $"rate[{index}].coefficients[{power}] spells a numerator or denominator over {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
                     return false;
                 }
             }
@@ -280,7 +314,7 @@ public sealed record StateAdvance(
             if (!integral.Fits(maxBits: MaxCurveCoefficientBits, maxDegree: MaxCurveDegree) || (integral.ComposedDegree(inner: parent) > MaxCurveDegree)) {
                 return false;
             }
-            if (!TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch) || !atEpoch.FitsBits(maxBits: MaxCurveCoefficientBits)) {
+            if (!TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch) || !atEpoch.FitsBits(maxBits: MaxExactValueBits)) {
                 return false;
             }
 
@@ -393,6 +427,11 @@ public sealed record StateAdvance(
             !TryReadExactClockWith(cells: cells, depth: (depth + 1), engineTick: epoch, reads: ref reads, row: By!, value: out var from) ||
             !TryReadExactClockWith(cells: cells, depth: (depth + 1), engineTick: currentEngineTick, reads: ref reads, row: By!, value: out var to)
         ) {
+            return Rational.Zero;
+        }
+        // A parent whose exact value has outgrown the bound reads as unavailable, as one that does not read does: the
+        // evaluation below costs by the size of what it reads, and a nested chain grows it by its degree per link.
+        if (!from.FitsBits(maxBits: MaxExactValueBits) || !to.FitsBits(maxBits: MaxExactValueBits)) {
             return Rational.Zero;
         }
 
