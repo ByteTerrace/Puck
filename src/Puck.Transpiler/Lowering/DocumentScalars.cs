@@ -91,6 +91,25 @@ public static class DocumentScalars {
 
         var function = ExpressionVocabulary.Functions[call.Name];
 
+        if (ExpressionOperators.Find(function.Operation)?.Signature == ExpressionSignature.Conversion) {
+            if (call.Arguments.Count != 1) { return Refuse(scope, call, $"{call.Name} takes one argument"); }
+            var argument = DocumentLowering.EvaluateValue(call.Arguments[0].Value, scope, fieldKey);
+            var inputKind = CellKind.Int;
+            if (!DocumentNumbers.TryInteger(argument, out var raw)) {
+                if (!DocumentNumbers.TryExact(argument, out var exact) || !NumericLiteral.TryToFixed(exact, out var fixedValue)) {
+                    return Refuse(scope, call, $"{call.Name} requires a representable numeric value");
+                }
+                raw = fixedValue.Value;
+                inputKind = CellKind.Fixed;
+            }
+            if (!ExpressionArithmetic.TryUnary(function.Operation, inputKind, raw, out var converted)) {
+                return Refuse(scope, call, $"{call.Name} overflows its numeric range");
+            }
+            return function.Operation == ExpressionOp.ToInt
+                ? JsonValue.Create(converted)
+                : JsonValue.Create(converted / (decimal)(1L << Puck.Maths.FixedQ4816.FractionBitCount));
+        }
+
         if (
             !InDouble.Contains(item: call.Name) &&
             (function.Domain != ExpressionDomain.Integer)

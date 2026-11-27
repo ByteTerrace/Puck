@@ -27,8 +27,9 @@ public static class PuckStrings {
     /// <param name="value">The decoded value.</param>
     /// <param name="end">The index just past the closing quote.</param>
     /// <param name="error">Why the literal could not be read, or <see langword="null"/>.</param>
+    /// <param name="interpolated">Whether holes retain their expression source without outer escape processing.</param>
     /// <returns><see langword="true"/> when a complete literal was read.</returns>
-    public static bool TryRead(string source, int offset, out string value, out int end, out string? error) {
+    public static bool TryRead(string source, int offset, out string value, out int end, out string? error, bool interpolated = false) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         value = string.Empty;
@@ -50,6 +51,22 @@ public static class PuckStrings {
 
         while (index < source.Length) {
             var character = source[index];
+
+            if (interpolated && character == '{') {
+                if (index + 1 < source.Length && source[index + 1] == '{') {
+                    builder.Append("{{");
+                    index += 2;
+                    continue;
+                }
+                var close = SourceLexemes.HoleEnd(source, index + 1);
+                if (close < 0) {
+                    error = "Unterminated '{' in an interpolated string";
+                    return false;
+                }
+                builder.Append(source, index, close - index + 1);
+                index = close + 1;
+                continue;
+            }
 
             if (character == '"') {
                 value = builder.ToString();

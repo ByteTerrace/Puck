@@ -686,10 +686,7 @@ public static partial class RuleCompiler {
             } else if (fromState is not null) {
                 var sourceOperand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (staticField.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
 
-                if (sourceOperand.ValueKind != staticField.Kind) {
-                    throw new RuleException(detail: $"direct pool field '{rowName}' and source '{fromState}' have different kinds", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
-                }
-                staticSource = CompiledValueSource.FromOperand(operand: sourceOperand.Operand);
+                staticSource = ConvertOperand(sourceOperand.Operand, staticField.Kind, ruleName, verb);
             }
             return new StaticInstanceFieldWriteEffect(describe: $"{verb} {rowName}", field: staticField, handle: staticHandle, pool: staticPool!, source: staticSource, text: text, write: write);
         }
@@ -964,20 +961,12 @@ public static partial class RuleCompiler {
             )
         );
 
-        if (source.ValueKind != row.Kind) {
-            throw new RuleException(
-                detail: $"state row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)} but 'fromState' '{fromState}' is kind={StateSpelling.Kind(kind: source.ValueKind)} — mixed-kind copies are refused; author both sides the same kind",
-                refusal: RuleRefusal.EffectSourceKindMismatch,
-                ruleName: ruleName
-            );
-        }
-
         return new WriteEffect(
             describe: $"{verb} {rowName}.{destination.Spelling} := {source.Describe}",
             key: destination.Key,
             keyFrom: destination.KeyFrom,
             rowOrdinal: rowOrdinal,
-            source: CompiledValueSource.FromOperand(operand: source.Operand),
+            source: ConvertOperand(source.Operand, row.Kind, ruleName, verb),
             text: null,
             write: write
         );
@@ -1128,11 +1117,7 @@ public static partial class RuleCompiler {
         } else if (fromState is not null) {
             var operand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (field.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
 
-            if (operand.ValueKind != field.Kind) {
-                throw new RuleException(detail: $"pool field '{binding.Name}.{field.Name}' is kind={StateSpelling.Kind(kind: field.Kind)} but source '{fromState}' is kind={StateSpelling.Kind(kind: operand.ValueKind)}", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
-            }
-
-            source = CompiledValueSource.FromOperand(operand: operand.Operand);
+            source = ConvertOperand(operand.Operand, field.Kind, ruleName, verb);
         } else {
             throw new RuleException(detail: $"'{verb}' valueSeconds is not admitted for pool field '{binding.Name}.{field.Name}'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
         }

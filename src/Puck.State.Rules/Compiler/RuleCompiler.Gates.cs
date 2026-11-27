@@ -174,7 +174,10 @@ public static partial class RuleCompiler {
             }
         }
         if (leftKind != rightKind) {
-            throw new RuleException(detail: "comparison operands have different numeric kinds", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+            var common = leftKind == CellKind.Fixed || rightKind == CellKind.Fixed ? CellKind.Fixed : leftKind;
+            left = ConvertExpression(left, leftKind, common, ruleName, "comparison left");
+            right = ConvertExpression(right, rightKind, common, ruleName, "comparison right");
+            leftKind = common;
         }
         return (leftKind, leftCarrier, rightCarrier);
     }
@@ -912,23 +915,17 @@ public static partial class RuleCompiler {
             )
         );
 
-        // Mixed kinds refuse by name for the comparand-row spelling alone; the constant spelling keeps its more
-        // permissive lowering.
-        if (lhs.ValueKind != rhs.ValueKind) {
-            throw new RuleException(
-                detail: $"'{name}' is kind={StateSpelling.Kind(kind: lhs.ValueKind)} but comparand '{compare.ComparandState}' is kind={StateSpelling.Kind(kind: rhs.ValueKind)} — mixed-kind comparisons are refused; author both sides the same kind",
-                refusal: RuleRefusal.ComparandKindMismatch,
-                ruleName: ruleName
-            );
-        }
+        var commonKind = lhs.ValueKind == CellKind.Fixed || rhs.ValueKind == CellKind.Fixed ? CellKind.Fixed : lhs.ValueKind;
+        var leftSource = ConvertOperand(lhs.Operand, commonKind, ruleName, "comparison left");
+        var rightSource = ConvertOperand(rhs.Operand, commonKind, ruleName, "comparison right");
         if (lhs.ValueKind == CellKind.Text) { ValidateTextComparison(comparison: comparison, length: 0, ruleName: ruleName); }
 
         return new GateToken(
             Comparison: comparison,
             Describe: $"{lhs.Describe} {comparison.Symbol()} {rhs.Describe}",
-            LeftSource: CompiledValueSource.FromOperand(operand: lhs.Operand),
-            RightSource: CompiledValueSource.FromOperand(operand: rhs.Operand),
-            ValueKind: lhs.ValueKind
+            LeftSource: leftSource,
+            RightSource: rightSource,
+            ValueKind: commonKind
         );
     }
     private static void ValidateTextComparison(ExpressionOp comparison, int length, string ruleName) {

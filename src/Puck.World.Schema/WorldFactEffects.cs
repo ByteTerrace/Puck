@@ -370,13 +370,11 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <param name="heading">The heading body.</param>
     /// <param name="magnitude">The live magnitude operand.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldRigidImpulseEffect(WorldBodyRef target, WorldBodyRef heading, Puck.State.Rules.IRuleOperand magnitude, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
-        ArgumentNullException.ThrowIfNull(argument: magnitude);
-
+    public WorldRigidImpulseEffect(WorldBodyRef target, WorldBodyRef heading, CompiledValueSource magnitude, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
         Heading = heading;
         Magnitude = magnitude;
         Target = target;
-        m_sources = [EffectSource.FromOperand(kind: CellKind.Fixed, operand: magnitude)];
+        m_sources = [magnitude.AsEffectSource(CellKind.Fixed) ?? EffectSource.Expression([new CompiledExpressionToken(ExpressionOp.Constant, Constant: magnitude.RawValue)], CellKind.Fixed)];
     }
 
     private readonly EffectSource[] m_sources;
@@ -389,7 +387,7 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <summary>Gets the heading body.</summary>
     public WorldBodyRef Heading { get; }
     /// <summary>Gets the live magnitude operand.</summary>
-    public Puck.State.Rules.IRuleOperand Magnitude { get; }
+    public CompiledValueSource Magnitude { get; }
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
     /// <summary>Gets the struck body.</summary>
