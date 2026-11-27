@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Nodes;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -77,6 +78,7 @@ public sealed class HostFrameTimeline {
     private bool m_openBesideStep;
     private long m_lastControl;
     private HostFrameRecording? m_recording;
+    private HostTickWindow? m_tickWindow;
 
     /// <summary>Creates a timeline over the given clock.</summary>
     /// <param name="time">The host loop's clock.</param>
@@ -196,6 +198,7 @@ public sealed class HostFrameTimeline {
                 Wait = m_open[((int)HostFramePhase.Wait)],
             };
 
+            m_tickWindow?.AddIteration(parts: FrameWork.Times, simulate: sample.Simulate);
             Boot.Add(sample: sample, start: m_iterationStart);
             m_recording?.Add(sample: sample, start: m_iterationStart, worlds: FrameWork.Worlds);
             Array.Copy(
@@ -269,6 +272,28 @@ public sealed class HostFrameTimeline {
     public void NoteTick(long ticks) {
         m_tickCosts[((int)(m_tickCount % Capacity))] = ticks;
         Interlocked.Increment(location: ref m_tickCount);
+        m_tickWindow?.AddTick(cost: ticks);
+    }
+
+    /// <summary>Opens a window over the simulation's ticks, which lasts until <see cref="CloseTickWindow"/>: every
+    /// completed tick's cost and the frame thread's named tick work from now on. Runs on the host pump.</summary>
+    /// <returns><see langword="false"/> when a window is already open.</returns>
+    public bool TryOpenTickWindow() {
+        if (m_tickWindow is not null) { return false; }
+
+        m_tickWindow = new HostTickWindow(frequency: m_frequency, startStamp: Time.GetTimestamp(), shedAtStart: ShedSteps, openParts: FrameWork.Times, openSimulate: m_open[((int)HostFramePhase.Simulate)]);
+
+        return true;
+    }
+    /// <summary>Closes the tick window and describes it, counting the work of the iteration in progress.</summary>
+    /// <returns>The window as <c>HostTickWindow.Describe</c> writes it, or <see langword="null"/> when none is open.</returns>
+    public JsonObject? CloseTickWindow() {
+        if (m_tickWindow is not { } window) { return null; }
+
+        m_tickWindow = null;
+        window.AddIteration(parts: FrameWork.Times, simulate: m_open[((int)HostFramePhase.Simulate)]);
+
+        return window.Describe(now: Time.GetTimestamp(), shed: ShedSteps);
     }
     /// <summary>Counts owed steps discarded after a catch-up burst spent its wall-time budget.</summary>
     public void NoteShed(ulong steps) => Interlocked.Add(location1: ref m_shedSteps, value: checked((long)steps));

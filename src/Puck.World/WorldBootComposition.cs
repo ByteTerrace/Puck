@@ -1141,6 +1141,7 @@ public static class WorldBootComposition {
             client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
             packageDocument: new WorldPackageDocuments(boot: sp.GetRequiredService<WorldDefinitionSource>()).Find
         ));
+        services.AddSingleton<ICommandModule, WorldPredictionCommandModule>();
         services.AddSingleton(implementationFactory: static sp => new Puck.World.Client.WorldSeatSenses(
             client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
             navigation: static (definition, previous) => WorldDocumentNavigation.Compile(definition: definition, previous: (previous as WorldDocumentNavigation)),

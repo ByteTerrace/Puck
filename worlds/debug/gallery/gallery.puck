@@ -266,11 +266,6 @@ prototypes {
       }
     }
   }
-  sectionSign(
-    name: "boardroom-sign",
-    title: "BOARD GAMES",
-    what: "chess, Go, Reversi, Alchemy, the granary board: sit at a table with E"
-  )
 
   // The car's platform: what the Moth stands on, attached solid to the car's body.
   prototype "lift-platform" {
@@ -574,12 +569,6 @@ placements {
         prototypeId: "stair-pendant-off"
       }
     ]
-  }
-  placement "boardroom-sign" {
-    prototype: "boardroom-sign"
-    parent: "gallery"
-    position [(wingWest + 0.8), galleryFloor[wingLevel], 4.6]
-    yawDegrees: 90
   }
 
   // The car: one body, posed every tick by `lift-ride`, starting on level 0. Everything the car carries rides the body

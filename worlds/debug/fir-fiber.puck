@@ -1,0 +1,22 @@
+// The fibre-optic firs' colour wheel, shared by every fibre fir in the world (the meadow's grove, firs.puck, and the
+// gallery's holiday trees, gallery/holiday.puck): the `fiber` clock turns a minute of clock time every six seconds, and
+// the fibre groups glow on three world lanes of their own, a third of a turn apart. Each fibre fir names the same lanes,
+// so however many stand, they spend three of the world's four lanes.
+import "../standard/conifer"
+
+timeline {
+  clocks [{ name: fiber, state: fiber, spanSeconds: 60 }]
+}
+state {
+  world [
+    {
+      name: fiber
+      kind: "Fixed"
+      value: "0"
+      advance { perSecondNumerator: 1, perSecondDenominator: 6 }
+    }
+  ]
+}
+render {
+  lanes: firFiberLanes("fiber")
+}

@@ -107,35 +107,6 @@ hud {
         }
       ]
     }
-    {
-      id: "gallery-sign"
-      rect { x: 0.02, y: 0.02, width: 0.68, height: 0.05 }
-      layer: Over
-      style: Panel
-      visible {
-        $type: "all"
-        predicates [
-          { $type: "state", binding: "state.addonHud", comparison: Equal, value: 1 }
-          { $type: "near", subject { $type: "placement", placementId: `gallery-map` }, distance: 2.5 }
-        ]
-      }
-      elements [
-        {
-          id: "directions"
-          kind: Text
-          rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }
-          style: Primary
-          text: galleryMapDirections
-          voice {
-            sampleSet: "voices/gallery.sample-set.json"
-            hash: auto
-            cadenceTicks: 18
-            pitchThousandths: 800
-            paceThousandths: 1100
-          }
-        }
-      ]
-    }
   ]
 }
 

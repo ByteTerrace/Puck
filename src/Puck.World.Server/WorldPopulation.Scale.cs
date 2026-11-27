@@ -90,7 +90,11 @@ public sealed partial class WorldPopulation {
             return;
         }
 
-        var taken = body.SetScaleWithinClearance(value: asked);
+        FixedQ4816 taken;
+
+        using (HoldPasses(index: index)) {
+            taken = body.SetScaleWithinClearance(value: asked);
+        }
 
         if (taken != asked) {
             body.ApplyClearanceScale(

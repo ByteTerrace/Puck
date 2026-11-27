@@ -490,10 +490,8 @@ public static partial class BenchmarkCommand {
             var paused = (connect is null);
 
             foreach (var play in leg.Plays) {
-                var before = AuthorityCompletedTicks(authority: authority);
-                var outcome = PlayRoute(directory: Path.Combine(directory, BenchmarkMetrics.Slug(name: play.Name)), live: live, options: options, parse: parse, paused: paused, play: play, prefix: prefix, seats: leg.Seats, budget: budget, print: print);
+                var outcome = PlayRoute(directory: Path.Combine(directory, BenchmarkMetrics.Slug(name: play.Name)), live: live, authority: authority, options: options, parse: parse, paused: paused, play: play, prefix: prefix, seats: leg.Seats, budget: budget, print: print);
 
-                ReportAuthorityTicks(after: AuthorityCompletedTicks(authority: authority), before: before, outcome: outcome, print: print);
                 outcomes.Add(item: outcome);
                 paused &= (outcome.Run is null);
             }
@@ -626,8 +624,9 @@ public static partial class BenchmarkCommand {
     }
 
     // Plays one route in a booted World: arms it (waiting for any navigation it plans over), resumes a paused World, and
-    // waits for the World's own report.
-    private static Outcome PlayRoute(string directory, SweepWorld live, RunOptions options, ParseResult parse, bool paused, Play play, string prefix, int seats, SuiteBudget budget, Action<string> print) {
+    // waits for the World's own report. With a remote authority this verb started, the authority's own tick accounting
+    // over the span the route plays is read from its console and written into the run's report beside the client's.
+    private static Outcome PlayRoute(string directory, SweepWorld live, SweepWorld? authority, RunOptions options, ParseResult parse, bool paused, Play play, string prefix, int seats, SuiteBudget budget, Action<string> print) {
         var timeout = parse.GetValue(options.Timeout);
         var runDirectory = Path.Combine(directory, "world");
         var line = string.Create(CultureInfo.InvariantCulture, $"world.benchmark run {CommandEcho.Quote(File.Exists(path: play.Route) ? PuckPaths.Normalize(play.Route) : play.Route)} {(prefix.Length == 0 ? "-" : CommandEcho.Quote(prefix))}{((parse.GetValue(options.At) is { } at) ? $" at {at}" : string.Empty)}{((parse.GetValue(options.Budget) is { } budgetMs) ? $" budget {budgetMs}" : string.Empty)} timeout {timeout} loops {parse.GetValue(options.Loops)}{((seats > 1) ? $" seats {seats}" : string.Empty)} output {CommandEcho.Quote(PuckPaths.Normalize(runDirectory))}");
@@ -670,6 +669,7 @@ public static partial class BenchmarkCommand {
         }
         // What else the machine does from the first tick to the last is read from the operating system, beside the run.
         using var competitors = new HostCompetitionRecorder();
+        var windowed = BeginAuthorityWindow(authority: authority);
 
         if (paused && !live.Run("world.rate resume", 30).Ok) {
             throw new InvalidOperationException("the World would not resume");
@@ -700,6 +700,7 @@ public static partial class BenchmarkCommand {
         }
 
         var competition = competitors.Finish();
+        var authorityWindow = (windowed ? EndAuthorityWindow(authority: authority, name: play.Name, print: print) : null);
 
         print($"{summary}\n");
 
@@ -709,7 +710,15 @@ public static partial class BenchmarkCommand {
             throw new InvalidDataException($"the run wrote no report at {PuckPaths.Normalize(path)}: {summary}");
         }
 
-        return new Outcome(Competition: competition, Name: play.Name, Route: play.Route, Run: (JsonNode.Parse(File.ReadAllText(path)) as JsonObject) ?? throw new InvalidDataException($"{PuckPaths.Normalize(path)} is not a JSON object"), Unrun: null);
+        var run = (JsonNode.Parse(File.ReadAllText(path)) as JsonObject) ?? throw new InvalidDataException($"{PuckPaths.Normalize(path)} is not a JSON object");
+
+        // The authority's accounting joins the World's own report, in the run's file as well as the verb's report.
+        if (authorityWindow is not null) {
+            run["authority"] = authorityWindow;
+            File.WriteAllText(path: path, contents: run.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        return new Outcome(Competition: competition, Name: play.Name, Route: play.Route, Run: run, Unrun: null);
     }
 
     // The conditions a comparison reads that the verb states: what must be alike for two runs' numbers to mean the same,
@@ -785,6 +794,11 @@ public static partial class BenchmarkCommand {
             var backend = run["backend"]!.GetValue<string>();
             var leg = BenchmarkMetrics.Slug(run["leg"]!.GetValue<string>());
 
+            if (run["authority"] is JsonObject authority) {
+                foreach (var (name, metric) in BenchmarkMetrics.OfAuthority(authority)) {
+                    metrics[$"{leg}.{backend}.authority.{name}"] = BenchMetric.Of(metric.Unit, [metric.Value]);
+                }
+            }
             foreach (var loop in (run["loops"] as JsonArray ?? []).OfType<JsonObject>()) {
                 var kind = loop["kind"]!.GetValue<string>();
                 var slugs = new HashSet<string>(StringComparer.Ordinal);

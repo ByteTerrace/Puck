@@ -80,30 +80,118 @@ public sealed partial class WorldColliderSet : IContactField {
     // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
     // rebuilds it, which are the only writers between solves.
     private readonly FixedStaticColliderSet m_attachedSet = new();
-    private readonly FixedStaticColliderSet m_rideSet = new();
-    private readonly List<FixedStaticCollider> m_rideColliders = [];
+    // m_attachedColliders less the live rows the sweep in progress leaves out (Excludes), with the holdable subset and
+    // its grip overrides, rebuilt from the latest refresh whenever what is left out changes (RefreshExcluded).
+    private readonly FixedStaticColliderSet m_excludedSet = new();
+    private readonly List<FixedStaticCollider> m_excludedColliders = [];
+    private readonly List<FixedStaticCollider> m_excludedHoldable = [];
+    private readonly List<bool> m_excludedGripOverrides = [];
     private int m_rideExcludedRow = -1;
+    // The pass bits (m_passSlots) the body whose sweeps are in progress holds, set only by HoldPasses.
+    private ulong m_heldPasses;
+    private bool m_excluding;
 
-    private FixedStaticColliderSet QueryAttachedSet => ((m_rideExcludedRow < 0) ? m_attachedSet : m_rideSet);
+    private FixedStaticColliderSet QueryAttachedSet => (m_excluding ? m_excludedSet : m_attachedSet);
+
+    // The pass registers the live rows name (WorldSolid.Passes), one bit each in first-named order: each register's slot
+    // in the register file, and each live row's mask of the registers that let a body through it.
+    private readonly int[] m_passSlots;
+    private readonly ulong[] m_rowPasses;
 
     private readonly FixedStaticColliderSet m_bornSupportSet = new();
     private static readonly FixedStaticColliderSet EmptyColliders = new(colliders: []);
+
+    /// <summary>Gets the register-file slots of the pass registers this set's live rows name, in bit order: a body's
+    /// held mask (<see cref="HoldPasses"/>) sets bit <c>i</c> when it holds the counter in slot <c>i</c> nonzero. Empty
+    /// when no row is gated, so a world without passes reads no register.</summary>
+    internal ReadOnlySpan<int> PassSlots => m_passSlots;
+
+    // Whether the sweep in progress leaves a live row out: the support its ride displaces, or a row one of whose passes
+    // the moving body holds. Every query of the live rows asks it, through QueryAttachedSet or PosedField.
+    private bool Excludes(int row) => ((row == m_rideExcludedRow) || ((m_rowPasses[row] & m_heldPasses) != 0UL));
+    private void RefreshExcluded() {
+        m_excluding = ((m_rideExcludedRow >= 0) || (m_heldPasses != 0UL));
+        if (!m_excluding) { return; }
+        m_excludedColliders.Clear();
+        m_excludedHoldable.Clear();
+        m_excludedGripOverrides.Clear();
+        for (var index = 0; (index < m_attachedColliders.Count); index++) {
+            var row = m_attachedColliderRows[index];
+
+            if (Excludes(row: row)) { continue; }
+            m_excludedColliders.Add(item: m_attachedColliders[index]);
+            if (MovingHoldable(grantedByOverride: out var grantedByOverride, row: row)) {
+                m_excludedHoldable.Add(item: m_attachedColliders[index]);
+                m_excludedGripOverrides.Add(item: grantedByOverride);
+            }
+        }
+        m_excludedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_excludedColliders));
+    }
 
     // During a ride only the support being displaced is omitted: its new pose may already enclose the start.
     // Every other solid, portal and neighbouring authority still participates through the body's normal sweep door.
     internal RideSweep ExcludeRideSupport(int row) {
         if (m_rideExcludedRow >= 0) { throw new InvalidOperationException(message: "A ride sweep is already active."); }
-        m_rideColliders.Clear();
-        for (var index = 0; (index < m_attachedColliders.Count); index++) {
-            if (m_attachedColliderRows[index] != row) { m_rideColliders.Add(item: m_attachedColliders[index]); }
-        }
-        m_rideSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_rideColliders));
         m_rideExcludedRow = row;
+        RefreshExcluded();
         return new RideSweep(owner: this);
     }
 
     internal readonly ref struct RideSweep(WorldColliderSet owner) {
-        public void Dispose() => owner.m_rideExcludedRow = -1;
+        public void Dispose() {
+            owner.m_rideExcludedRow = -1;
+            owner.RefreshExcluded();
+        }
+    }
+
+    /// <summary>Leaves out, for every query until the scope ends, each live row one of whose passes the given mask
+    /// holds: the sweeps of the one body that holds them. A scope opened inside another holds its own mask and gives the
+    /// outer one back when it ends. Only <see cref="WorldPopulation.HoldPasses"/> calls it, from the serial step: a body
+    /// that holds a pass never steps in a kit partition, so the set is never read with a mask while another thread
+    /// queries it.</summary>
+    /// <param name="held">The pass bits the body holds, in <see cref="PassSlots"/> order.</param>
+    /// <returns>The scope, which restores the previous mask when disposed.</returns>
+    internal PassSweep HoldPasses(ulong held) {
+        var previous = m_heldPasses;
+
+        if (held == previous) { return default; }
+        m_heldPasses = held;
+        RefreshExcluded();
+        return new PassSweep(owner: this, previous: previous);
+    }
+
+    internal readonly ref struct PassSweep(WorldColliderSet? owner, ulong previous) {
+        public void Dispose() {
+            if (owner is null) { return; }
+            owner.m_heldPasses = previous;
+            owner.RefreshExcluded();
+        }
+    }
+
+    // Gives each distinct pass register the live rows name a bit, in first-named order, and each live row the mask of
+    // its own. A name that is no declared counter is left out (the validator refuses it), and so is one past the
+    // mask's width (WorldSolid.MaxPassRegisters, which the validator also refuses).
+    private static (int[] Slots, ulong[] Rows) PassGates(WorldDefinition definition, IReadOnlyList<MovingSolidRow> rows) {
+        var slots = new List<int>();
+        var masks = new ulong[rows.Count];
+
+        for (var row = 0; (row < rows.Count); row++) {
+            foreach (var name in (rows[row].Placement.Solid!.Passes ?? [])) {
+                if (!WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out var slot) ||
+                    (kind != Puck.Physics.Motion.ActionStateKind.Counter)) {
+                    continue;
+                }
+                var bit = slots.IndexOf(item: slot);
+
+                if (bit < 0) {
+                    if (slots.Count == WorldSolid.MaxPassRegisters) { continue; }
+                    bit = slots.Count;
+                    slots.Add(item: slot);
+                }
+                masks[row] |= (1UL << bit);
+            }
+        }
+        return (slots.ToArray(), masks);
     }
 
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private set; } = [];
@@ -140,8 +228,9 @@ public sealed partial class WorldColliderSet : IContactField {
     // what it nears.
     private WorldColliderBox m_attachedMoves;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, bool movingOnly, bool defaultGrip, FixedStaticContactField? previousStatic = null) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, (int[] Slots, ulong[] Rows) passes, bool movingOnly, bool defaultGrip, FixedStaticContactField? previousStatic = null) {
         m_defaultGrip = defaultGrip;
+        (m_passSlots, m_rowPasses) = passes;
         m_colliders = colliders;
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
@@ -563,7 +652,7 @@ public sealed partial class WorldColliderSet : IContactField {
             // geometry rides a live body instead — and a sized or turning row's moves with state, so each is recomputed
             // every tick by RefreshAttached rather than compiled here once. Collected separately; never folded into the
             // static m_colliders array.
-            if (WorldPlacementStamp.MovesColliders(creation: creation, placement: placement)) {
+            if (WorldPlacementStamp.CollidesLive(creation: creation, placement: placement)) {
                 if (placement.Attach is not null) {
                     attachedRows.Add(item: new MovingSolidRow(placement, creation, default, FixedQuaternion.Identity, null));
                 } else {
@@ -646,7 +735,7 @@ public sealed partial class WorldColliderSet : IContactField {
             holdableGrantedByOverride: holdableGrantedByOverride.ToArray(),
             colliders: colliders.ToArray(),
             tuning: tuning,
-            attachedRows: attachedRows, movingOnly: movingOnly, defaultGrip: worldDefaultGrip,
+            attachedRows: attachedRows, passes: PassGates(definition: definition, rows: attachedRows), movingOnly: movingOnly, defaultGrip: worldDefaultGrip,
             previousStatic: reuseStatic
         ) {
             DiagnosticColliders = diagnosticColliders.ToArray(),
@@ -736,7 +825,7 @@ public sealed partial class WorldColliderSet : IContactField {
             if (
                 !m_placements.TryGetValue(key: before, value: out var compiled) ||
                 (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: after.ShownPrototypeId) is not { } creation) ||
-                WorldPlacementStamp.MovesColliders(creation: creation, placement: after)
+                WorldPlacementStamp.CollidesLive(creation: creation, placement: after)
             ) {
                 return false;
             }
@@ -914,6 +1003,7 @@ public sealed partial class WorldColliderSet : IContactField {
         FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
         FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
         m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
+        RefreshExcluded();
     }
 
     /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
@@ -1097,7 +1187,7 @@ public sealed partial class WorldColliderSet : IContactField {
             var collider = m_previousAttachedColliders[index];
             var row = m_previousAttachedColliderRows[index];
 
-            if (!m_attachedResolved[row] || !m_previousAttachedResolved[row] || (m_attachedScales[row] <= FixedQ4816.Zero) || (m_previousAttachedScales[row] <= FixedQ4816.Zero)) {
+            if (Excludes(row: row) || !m_attachedResolved[row] || !m_previousAttachedResolved[row] || (m_attachedScales[row] <= FixedQ4816.Zero) || (m_previousAttachedScales[row] <= FixedQ4816.Zero)) {
                 continue;
             }
             foreach (ref readonly var volume in volumes) {
@@ -1135,7 +1225,7 @@ public sealed partial class WorldColliderSet : IContactField {
             for (var index = 0; (index < m_attachedColliders.Count); index++) {
                 var row = m_attachedColliderRows[index];
 
-                if (!m_previousAttachedResolved[row] || (m_previousAttachedScales[row] > FixedQ4816.Zero)) { continue; }
+                if (Excludes(row: row) || !m_previousAttachedResolved[row] || (m_previousAttachedScales[row] > FixedQ4816.Zero)) { continue; }
                 var collider = m_attachedColliders[index];
 
                 if (!collider.WorldBox().Intersects(other: FixedAabb.FromCenter(center: position, extent: FixedVector3.Zero).Grow(margin: skin))) { continue; }
@@ -1196,7 +1286,7 @@ public sealed partial class WorldColliderSet : IContactField {
             candidate: out candidate,
             colliders: m_holdableColliders,
             direction: in direction,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable),
+            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: (m_excluding ? m_excludedHoldable : m_movingHoldable)),
             maxDistance: maxDistance,
             origin: in origin
         )) {
@@ -1207,7 +1297,7 @@ public sealed partial class WorldColliderSet : IContactField {
         }
 
         grantedByOverride = ((candidate.Source == FixedSurfaceColliderSource.Static)
-            ? m_holdableGrantedByOverride[candidate.ColliderIndex] : m_movingGripOverrides[candidate.ColliderIndex]);
+            ? m_holdableGrantedByOverride[candidate.ColliderIndex] : (m_excluding ? m_excludedGripOverrides : m_movingGripOverrides)[candidate.ColliderIndex]);
 
         return true;
     }
@@ -1217,7 +1307,7 @@ public sealed partial class WorldColliderSet : IContactField {
         candidate: out candidate,
         colliders: m_colliders,
         direction: in direction,
-        dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+        dynamicColliders: QueryAttachedSet.Colliders,
         maxDistance: maxDistance,
         origin: in origin
     );

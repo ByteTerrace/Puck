@@ -864,20 +864,22 @@ public static partial class WorldPlacementStamp {
             )
         );
     }
-    /// <summary>Returns whether a solid row's colliders move off its compiled frame, so contact poses them every tick at
-    /// the row's live pose rather than compiling them once: a creation sized by state (<c>sizeBy</c>), a row riding a
-    /// body (<see cref="WorldPlacement.Attach"/>) or a turning row (<see cref="WorldPlacement.Turn"/>). Both contact
-    /// providers read this one predicate, so neither compiles a standing copy of a row the other moves.</summary>
+    /// <summary>Returns whether a solid row's colliders live by row in contact's live set, posed every tick, rather
+    /// than compiled once into the static set: a creation sized by state (<c>sizeBy</c>), a row riding a body
+    /// (<see cref="WorldPlacement.Attach"/>) or a turning row (<see cref="WorldPlacement.Turn"/>), whose colliders move,
+    /// and a row some body may pass (<see cref="WorldSolid.Gated"/>), whose colliders one body's sweep leaves out. Both
+    /// contact providers read this one predicate, so neither compiles a standing copy of a row the other keeps
+    /// live.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The creation the row shows.</param>
-    /// <returns><see langword="true"/> when the row's colliders move.</returns>
+    /// <returns><see langword="true"/> when the row's colliders live by row.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="placement"/> or <paramref name="creation"/> is
     /// <see langword="null"/>.</exception>
-    public static bool MovesColliders(WorldPlacement placement, WorldPrototype creation) {
+    public static bool CollidesLive(WorldPlacement placement, WorldPrototype creation) {
         ArgumentNullException.ThrowIfNull(argument: placement);
         ArgumentNullException.ThrowIfNull(argument: creation);
 
-        return ((creation.Document.SizeBy is not null) || placement.MovesRoot);
+        return ((creation.Document.SizeBy is not null) || placement.MovesRoot || (placement.Solid?.Gated ?? false));
     }
     /// <summary>Returns the placement's shared reflection plane.</summary>
     public static CreationStampPlane? MirrorFor(WorldPlacement placement) => ((placement.Mirror is { } mirror)

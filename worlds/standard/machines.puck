@@ -40,6 +40,8 @@ function advancedBrickMachine(name, content) = {
     }
   }
 }
+// The deck's device name as a cabinet's marquee or a label shows it.
+let deckDeviceName = "HUMBLE GAMING DECK"
 // A Humble Gaming Deck. It has two controller ports, so a screen that seats players on it names them (`deckRoute`).
 function deckMachine(name, content) = {
   name: name

@@ -281,7 +281,6 @@ prototypes {
       }
     }
   }
-  sectionSign(name: "wing-sign", title: "PAINTING WING", what: "walk or jump into a canvas")
 
   for painting in wallPaintings {
     prototype $"painting-{painting.name}" {
@@ -385,12 +384,6 @@ placements {
     parent: "gallery"
     position [0, 0, 0]
     solid
-  }
-  placement "wing-sign" {
-    prototype: "wing-sign"
-    parent: "gallery"
-    position [(courtWest + 1.4), wingFloor, 6.4]
-    yawDegrees: 90
   }
 
   for painting in filter(wallPaintings, p => (p.name != "moon")) {

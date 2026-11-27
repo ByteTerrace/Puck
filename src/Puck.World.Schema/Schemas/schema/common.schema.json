@@ -3891,6 +3891,18 @@
       "additionalProperties": false,
       "title": "WorldPointerRegion"
     },
+    "StringListNullable": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
     "WorldSolid": {
       "description": "A row\u0027s solidity facet \u2014 it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration \u2014 the row is drawn but bodies pass through it.",
       "type": [
@@ -3900,12 +3912,15 @@
       "properties": {
         "margin": {
           "description": "The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.",
-          "type": "number"
+          "type": "number",
+          "default": 0
+        },
+        "passes": {
+          "$ref": "#/$defs/StringListNullable",
+          "description": "Body registers (state.body counters) that let a body through: a body holding any of them nonzero meets none of the row\u0027s colliders, and every other body meets them all. The authority decides it from the moving body\u0027s own registers at each of its sweeps, so a rule that writes the register (a carried key, a spell, a puzzle\u0027s reward) is the predicate. null or empty: every body meets the row.",
+          "default": null
         }
       },
-      "required": [
-        "margin"
-      ],
       "additionalProperties": false,
       "title": "WorldSolid"
     },
@@ -10584,18 +10599,6 @@
         "Mutate": "The right to mutate a world-document section \u2014 apply a WorldMutation targeting it. Checked at mutation apply (and, over every section, at a whole-document swap or journal undo). A Section subject admits every row the section carries; the row-scoped Creation/Placement subjects admit one row apiece and are checked as an alternative to the section hold, never beneath it.",
         "Edit": "The right to edit a concrete state row \u2014 slot-shaped or table-shaped alike (a slot is a table with one key). Checked against the State subject of the row being touched, narrowing which named row a principal may touch beneath the coarse Mutate/section:state hold the mutation\u0027s own section-authority check already requires \u2014 the same subject whether the write is whole-row (WorldMutation.UpsertStateRow/WorldMutation.RemoveStateRow) or per-cell (WorldMutation.UpsertStateCell/WorldMutation.RemoveStateCell) \u2014 there is no separate table:\u003Cname\u003E subject narrowing per-cell writes independently of the whole row\u0027s own hold. The All wildcard covers every row, so the domain-seeded Edit/all every seat and Console already holds reaches every state row until someone narrows it. A concrete state:\u003Cname\u003E row may additionally carry a KindMask \u2014 the verb-scoped narrowing that separates bumping a row (the per-cell pair) from redefining it (the whole-row pair). An unmasked row keeps full reach over its subject, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate a seeded grant has to pass.",
         "Operate": "Full world authority, without host access. Valid only over all, without payloads."
-      }
-    },
-    "StringListNullable": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": [
-          "string",
-          "null"
-        ]
       }
     },
     "CommandPhase": {

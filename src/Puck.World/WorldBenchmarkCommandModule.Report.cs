@@ -376,28 +376,17 @@ public sealed partial class WorldBenchmarkCommandModule {
             worldTimes[name] = new JsonObject {
                 ["steps"] = world.Steps,
                 ["stepMs"] = HostFrameRecording.WorkMilliseconds(world.Ticks),
-                ["partsMs"] = DescribeParts(world.Parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, HostFrameRecording.WorkMilliseconds(world.Ticks)),
+                ["partsMs"] = HostFrameRecording.DescribeParts(world.Parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, HostFrameRecording.WorkMilliseconds(world.Ticks)),
             };
         }
         return new JsonObject {
             ["iterations"] = end - first,
             ["scheduledRenders"] = renders,
             ["produceFenceMs"] = recording.Milliseconds(blocked),
-            ["producePartsMs"] = DescribeParts(parts, HostFrameWorkPart.Pump, HostFrameWorkPart.TickIngress, recording.Milliseconds(produce - blocked)),
-            ["simulatePartsMs"] = DescribeParts(parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, recording.Milliseconds(simulate)),
+            ["producePartsMs"] = HostFrameRecording.DescribeParts(parts, HostFrameWorkPart.Pump, HostFrameWorkPart.TickIngress, recording.Milliseconds(produce - blocked)),
+            ["simulatePartsMs"] = HostFrameRecording.DescribeParts(parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, recording.Milliseconds(simulate)),
             ["worlds"] = worldTimes,
         };
-    }
-
-    private static JsonObject DescribeParts(in HostFrameWorkTimes parts, HostFrameWorkPart first, HostFrameWorkPart end, double total) {
-        var result = new JsonObject();
-        for (var part = (int)first; part < (int)end; part++) {
-            var milliseconds = HostFrameRecording.WorkMilliseconds(parts[part]);
-            result[((HostFrameWorkPart)part).ToString()] = milliseconds;
-            total -= milliseconds;
-        }
-        result["other"] = total;
-        return result;
     }
 
     // The chapter's iterations whose work passed the budget, the longest first: each with its tick, the body's last
