@@ -140,7 +140,7 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
 
         float3 kinds = max(weights, skyAir.weights);
         // The sky and the bodies light the air only as far as the air about the camera sees them open (airLight): a
-        // closed room's air is not lit by the sky outside it.
+        // closed room's air is not lit by the sky outside it, and a view whose camera sample is unknown lights none.
         float airLight = saturate(passGroup.airLight);
         float3 ambient = (sdfAirInScatterReadsSky(kinds) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);

@@ -1022,7 +1022,11 @@ directly instead of a meter inferring it.
 
 The view's camera sample of the volume (`SdfMeshIrradiance.TrySampleCamera`)
 is no meter: it gives the air about the camera its open sky (`airLight`) and
-lights a surface no probe answers. When no visible lattice probe answers, the
+lights a surface no probe answers. Until a sample of the view's current shot is
+known the air takes no sky: the noon sky scattered by even thin haze outshines a
+closed hall's lit walls, so assuming it open washes the hall out, while taking none
+only leaves distant terrain unhazed for the frames the sample takes, and the
+sample's light holds across a cut as the exposure does. When no visible lattice probe answers, the
 tracer measures radiance at the camera itself, which measures an enclosure
 smaller than a lattice cell without importing light from another room. A
 missing reading holds the previous exposure; the authored EV initializes a

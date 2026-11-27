@@ -46,8 +46,10 @@ float sdfLocalAdaptationGain(float incoming) {
 // summed, the sky integrated along each open ray as a probe's is) read about the normal as a probe's cube is, and its
 // reflection the environment over the share of the sky open about the camera (airLight) and the sample's mean
 // luminance over the rest; its traced lights go unoccluded as with the volume off. It reads neither darkness nor the
-// unoccluded sky. Before the sample's first reading the surface reads the open sky. Pixel passes only: a probe's relight
-// never reads this, so an unmeasured hit never feeds the volume a guess.
+// unoccluded sky. After a cut the sample's light holds while the cut's own share is unknown (airLight zero), so the
+// reflection reads the held surroundings alone. Before the sample's first reading the surface reads the open sky, its
+// diffuse light and its reflection alike. Pixel passes only: a probe's relight never reads this, so an unmeasured hit
+// never feeds the volume a guess.
 bool sdfMeshAnswers(SdfMeshProbes probes) {
     return (probes.share > 0.0);
 }
@@ -97,8 +99,12 @@ float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
     return sdfMeshIndirectUnanswered(normal);
 }
 // The environment a surface the volume has measured nothing about reflects: the environment as far as the camera sample
-// sees the sky open, and its surroundings for the rest.
+// sees the sky open, and its surroundings for the rest; the environment whole before the sample's first reading, as the
+// diffuse light reads the open sky then (sdfMeshIndirectUnanswered).
 float3 sdfMeshReflectionUnanswered(float3 direction, float3 environment) {
+    if (passGroup.meterLight[0].w <= 0.0) {
+        return environment;
+    }
     return ((environment * saturate(passGroup.airLight)) + sdfMeshCameraSurroundings());
 }
 // The environment a surface reflects along a mirror direction under the volume (sdfMeshReflection), or where it has

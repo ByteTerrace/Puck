@@ -1178,9 +1178,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   meter's reading, target and band state, and its camera sample's source. An
   automatic exposure meters the view's own composite output a few frames late
   (`SdfExposure.Meter`), so a debug view meters nothing and holds; pin the
-  exposure for any before/after comparison. A view with no camera sample reads the
-  open sky, so a closed room meters as daylight and a display in it reads black:
-  `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
+  exposure for any before/after comparison. A view never assumes the open sky for
+  its air: until a camera sample of its current shot arrives (before its first, and
+  after a cut) its `airLight` is zero, so the fog and haze in-scatter no sky, while
+  the last sample's light holds across the cut for surfaces no probe answers, as the
+  exposure holds. Only before a view's first sample ever do those surfaces read the
+  open sky. `camera=none` or `held` names its `wait=`, and `air=` the share the
+  composite applies ([mesh GI](references/mesh-gi.md)).
 - **A view stores its light at a scale near its exposure** (the pass block's
   `lightScale`, `SdfPhotometry.StoredLightScale`, a power of two kept within
   `StoredLightBand` stops of the exposure), so a star's surface and the noon sky
