@@ -640,7 +640,9 @@ is a real divergence, never rounding.
   checkpoint restore shared with `WorldPopulation.Restore`) and steps it with
   the authority's own tick of bodies (`WorldPopulation.StepBodies`), so the
   attached solids refresh, the body rides them, sleeps and wakes as it does at
-  the authority.
+  the authority. The continuation also carries the entries of the bodies that
+  carry the world's attached solids (never a body a human occupies), restored
+  beside the seat's body so the solids move as they do at the authority.
 - *The input.* The client keeps every batch a remote seat sends, stamped with
   the authority tick it was sent at. The seat clock
   (`WorldClient.SeatClockSeconds`, which runs on through a stalled delivery) is
@@ -656,9 +658,11 @@ is a real divergence, never rounding.
   door (`WorldFaceCatalog.PortalDoors`), where the authority hands the body to a
   world the prediction does not hold, and taking at each tick the batches sent
   by then, folded and written through
-  the same doors the authority uses (`WorldAcceptedInput.Fold`,
-  `WorldBody.TakeOwnerInput`), and holding the last one, its relative movement
-  spent, on a tick with none, as `WorldTick.ApplyFederatedIntents` does.
+  the same doors the authority uses (`WorldAcceptedInput.Admitted`,
+  `WorldAcceptedInput.Fold`, `WorldBody.TakeOwnerInput`), and holding the last
+  one, its relative movement and its presses spent
+  (`WorldAcceptedInput.HeldRepeat`), on a tick with none, as
+  `WorldTick.ApplyFederatedIntents` does through the same two methods.
 - *What reads it.* A route's seat driver steers from the predicted body
   (`WorldSeatSenses.Predict`), so a corner is turned and a stop is braked for
   as a local seat does; walls, the corridor, the chapter's clock and every path
@@ -704,7 +708,8 @@ delivered mirror reads: its population and arena are its own. A client that
 predicts wrongly, or lies about its prediction, gains nothing, since the
 authority steps the body from the input alone.
 
-**Cost.** Bytes: one encoded entry per remote seat per delivery. Work: the
+**Cost.** Bytes: one encoded entry per remote seat per delivery, and one for
+each body carrying an attached solid. Work: the
 authority ticks new since the last prediction, each one step and one digest of
 one body per seat, and one restore and a round trip of steps per correction.
 The digest-first form of replication's decision 7 (send eight bytes while the
