@@ -848,6 +848,11 @@ Example: `shade { fragment { } }`, where the phases are `surface`, `light` and `
 Fix: write a shade template call, a block of `surface`, `light` and `compose` phases, an admitted program, or a list of
 them.
 
+It also refuses a `gradient` whose height reads an operation with no derivative (`shape`, `lines`, `refract`, `tilt`,
+or a gradient op of its point), turns its point by a rotation that varies with the point, or holds another
+`gradient`. Fix: build the height from arithmetic, the smooth functions, `lattice` and `cells`
+([slopes of a height](dsl.md#slopes-of-a-height-gradient-and-relief)).
+
 ### PUCK127
 
 Shade operand types or ranges disagree: a literal with the wrong number of components, a value that is not a finite

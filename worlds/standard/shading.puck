@@ -50,11 +50,19 @@ function shadeWarp(q, seed, amount) = q + amount * [
   lattice(q + [5.2, 1.3, 2.8], seed + uint(1)),
   lattice(q + [1.7, 9.2, 3.4], seed + uint(2))
 ]
+// The edge helpers below (cell borders, brick mortar) ramp from one side of their edge to the other over a bevel, so
+// the edge has a slope: a relief over them carves a groove, which a hard step would not (it is flat on both sides). The
+// ramp is never narrower than two display pixels' footprint, `pixel` being the footprint in the pattern's own units:
+// the default, `surface.footprint`, is right for a point in metres, and a point scaled by `scale` passes
+// `surface.footprint * scale`. So an edge neither aliases in colour nor shimmers in relief, however far it is seen.
+function shadeBevel(bevel, pixel) = max(bevel, 2 * pixel)
 // Cellular pattern pieces over `cells(q, seed)`, which returns [F1, F2 - F1, id]: the distance to the nearest
 // feature, the gap to the second nearest (0 on the borders between cells), and the cell's id in [0, 1).
-// A border line `width` units wide between cells, 1 on the line: cracks, grout, scales' rims, leaf veins.
-function shadeCellBorder(q, seed, width) = 1 - shadeStep(cells(q, seed).y, width, width * 0.5)
-// A per-cell value in [0, 1), constant over each cell: tile, cobble and scale colours.
+// A border line `width` units wide between cells, 1 on the line: cracks, grout, scales' rims, leaf veins. Its edge
+// ramps over `bevel` times its width (0.5 by default), at least the pixel floor above.
+function shadeCellBorder(q, seed, width, bevel = 0.5, pixel = surface.footprint) = 1 -
+  shadeStep(cells(q, seed).y, width, shadeBevel(width * bevel, pixel))
+// A per-cell value in [0, 1), constant over each cell: tile, cobble and scale colours. It has no slope anywhere.
 function shadeCellId(q, seed) = cells(q, seed).z
 // A colour ramp: `stops` is a list of { at, color } in rising `at`, and `t` picks the colour between the two stops
 // around it, held at the ends.
@@ -65,14 +73,18 @@ function shadeRamp(t, stops) = reduce(
 )
 // Running-bond bricks on the plane of `p`'s x and y: `size` is a brick [width, height] and `mortar` the joint width,
 // all in the same units as `p`. Returns [mortar coverage (1 in a joint), brick value in [0, 1)], the value the same
-// everywhere on one brick; every other course is offset by half a brick.
-function shadeBrick(p, size, mortar, seed) = shadeBrickAt(
-  [p.x / size[0] + shadeFrac(floor(p.y / size[1]) * 0.5), p.y / size[1]],
-  [mortar / size[0], mortar / size[1]],
-  seed
+// everywhere on one brick; every other course is offset by half a brick. The brick's edge ramps into the joint over
+// `bevel` times the mortar width (0.5 by default), at least the pixel floor above.
+function shadeBrick(p, size, mortar, seed, bevel = 0.5, pixel = surface.footprint) = shadeBrickAt(
+  [p.x / size.x + shadeFrac(floor(p.y / size.y) * 0.5), p.y / size.y],
+  [mortar / size.x, mortar / size.y],
+  seed,
+  shadeBevel(bevel, pixel / max(mortar, 0.000001))
 )
-function shadeBrickAt(q, joint, seed) = [
-  1 - shadeStep(min(min(shadeFrac(q.x), 1 - shadeFrac(q.x)) / joint[0], min(shadeFrac(q.y), 1 - shadeFrac(q.y)) / joint[1]), 0.5, 0.5),
+// The bricks in brick units: `joint` is the mortar's width in each axis's units and `ramp` the edge's width as a share
+// of the mortar's.
+function shadeBrickAt(q, joint, seed, ramp = 0.5) = [
+  1 - shadeStep(min(min(shadeFrac(q.x), 1 - shadeFrac(q.x)) / joint.x, min(shadeFrac(q.y), 1 - shadeFrac(q.y)) / joint.y), 0.5, ramp),
   0.5 + 0.5 * lattice([floor(q.x) + 0.5, floor(q.y) + 0.5, 0.5], seed)
 ]
 
@@ -84,6 +96,26 @@ shade template plain() {
 shade template paint(color) {
   surface {
     albedo: mix(material.albedo, color, paint.coverage)
+  }
+}
+
+// Relief: the surface lit as if `height` (a function of a point, in metres) raised it along its normal, by `amount`
+// times. The compiler differentiates the height exactly, so any pattern makes relief with no slope written by hand:
+// `relief(q => -0.004 * shadeCellBorder(q * 3, uint(5), 0.06, pixel: surface.footprint * 3), 1)` carves cracks, and
+// `relief(q => 0.01 * shadeFbm(q * 4, uint(7)), 1)` roughens a face. Only slope makes relief: a hard step (floor, step,
+// a cell's id) is flat on both sides of its jump and gives none, so an edge carves a groove only where it ramps
+// (the bevel of shadeCellBorder and shadeBrick). The height stands in the world (`world` 1) or, with `world` 0, in the
+// draw's own frame (`surface.objectPosition`), so every copy of a creation carries the same relief; that frame's slope is
+// turned to the world without its scale, which a uniformly scaled copy's relief keeps. The normal tilts at most
+// `steepest` radians, which bounds the shadow cascades it can ask for. It writes the normal only: placed after a row's
+// own program in its `shade` list (`row with { shade [row.shade, relief(q => ..., 1)] }`), it tilts that program's
+// normal.
+shade template relief(height, amount = 1, structural steepest = 1.2, structural world = 1) {
+  surface {
+    let slope = world ? gradient(surface.position, height) : gradient(surface.objectPosition, height)
+    let turned = drawDirection(slope)
+    let slope = world ? slope : turned * (length(slope) / max(length(turned), 0.000001))
+    normal: tilt(surface.normal, slope * -amount, steepest)
   }
 }
 
@@ -158,6 +190,13 @@ shade template inset(origin, rotation, depth, ior, softness, amplitude, frequenc
   }
 }
 
+// The flow's pattern at `q` (pattern units): the cycle's two phases of the lattice, each shifted back along the motion by
+// its phase and squeezed along it by `squeeze`, blended by their weights at constant variance. The slope `flow` tilts
+// its normal by is this pattern's gradient, the shifts and weights held at the point's values.
+function flowSqueeze(q, along, squeeze) = q - along * (dot(q, along) * squeeze)
+function flowPattern(q, shift0, shift1, along, squeeze, w0, w1, seed) = (
+  w0 * lattice(flowSqueeze(q - shift0, along, squeeze), seed) + w1 * lattice(flowSqueeze(q - shift1, along, squeeze), seed)
+) / sqrt(max(w0 * w0 + w1 * w1, 0.000001))
 shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, softness, color, roughness, metal, seed, structural world = 1, structural velocityLane = -1, structural coverageLane = -1, structural glass = 0) {
   surface {
     let point = world ? surface.position : surface.layerPosition
@@ -177,18 +216,16 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
     let w0 = 1 - abs(2 * c0 - 1)
     let w1 = 1 - w0
     let travel = tangent * (4096 / cycles)
-    let q0 = (point - travel * (c0 - 0.5)) * scale
-    let q1 = (point - travel * (c1 - 0.5)) * scale + [5.3, 2.9, 7.1]
-    let q0 = q0 - along * (dot(q0, along) * squeeze)
-    let q1 = q1 - along * (dot(q1, along) * squeeze)
-    let pattern = (w0 * latticeGradient(q0, seed) + w1 * latticeGradient(q1, seed)) /
-      sqrt(max(w0 * w0 + w1 * w1, 0.000001))
+    let shift0 = travel * ((c0 - 0.5) * scale)
+    let shift1 = travel * ((c1 - 0.5) * scale) - [5.3, 2.9, 7.1]
+    let at = point * scale
+    let value = flowPattern(at, shift0, shift1, along, squeeze, w0, w1, seed)
     let fade = shadeFade(surface.footprint * scale)
     let threshold = 1 - cover
     let soft = max(softness, 0.001)
     let revealed = mix(
       cover,
-      smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * shadeClamp(pattern.x, -1, 1)),
+      smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * shadeClamp(value, -1, 1)),
       fade
     )
     let revealed = cover > 0 ? revealed : 0
@@ -197,8 +234,7 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
     metal: glass ? material.metal : mix(material.metal, metal, revealed)
     coat: glass ? material.coat : material.coat * (1 - revealed)
     reveal: revealed
-    let slope = [pattern.y, pattern.z, pattern.w] * fade
-    let slope = slope - along * (dot(slope, along) * squeeze)
+    let slope = gradient(at, q => flowPattern(q, shift0, shift1, along, squeeze, w0, w1, seed)) * fade
     let slope = slope - normal * dot(normal, slope)
     let share = saturate(speed / max(length(authoredVelocity), 0.000001))
     let tilted = normalize(normal - slope * (tiltAmount * share))

@@ -5,7 +5,7 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfShadeProgram {
     private sealed record Node(SdfShadeOp Op, SdfShadeType Type, Node[] Args, uint[] Bits, uint Immediate, string Key, SdfPaintShape? Shape = null);
-    private sealed class Compiler(SdfShadeDefinition source) {
+    private sealed partial class Compiler(SdfShadeDefinition source) {
         private readonly Dictionary<string, Node> m_nodes = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<string, SdfShadeShape> m_shapeDefinitions = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<SdfShadeExpression, Node>[] m_expressionCache = Enumerable.Range(count: PhaseCount, start: 0)
@@ -48,6 +48,7 @@ public sealed partial class SdfShadeProgram {
                 outputs.Add(item: (output.Phase, output.Name, node));
             }
             outputs.Sort(comparison: (a, b) => ((a.Phase != b.Phase) ? a.Phase.CompareTo(target: b.Phase) : StringComparer.Ordinal.Compare(x: a.Name, y: b.Name)));
+            Fuse(outputs);
             CanonicalizeParameters(outputs);
             var phases = new SdfShadeInstruction[PhaseCount][];
             var bindings = new List<SdfShadeBinding>();
@@ -226,7 +227,7 @@ public sealed partial class SdfShadeProgram {
                 node.Op switch {
                     SdfShadeOp.Parameter => $"p{m_slots[((int)node.Immediate)]}",
                     SdfShadeOp.Input => SdfShadeOps.Inputs[((int)node.Immediate)].Name,
-                    SdfShadeOp.Component => node.Immediate.ToString(provider: CultureInfo.InvariantCulture),
+                    SdfShadeOp.Component or SdfShadeOp.CellsGradient => node.Immediate.ToString(provider: CultureInfo.InvariantCulture),
                     _ => null,
                 }, ((node.Op == SdfShadeOp.Constant) ? node.Type : SdfShadeType.Float),
                 ((node.Op == SdfShadeOp.Constant) ? Array.AsReadOnly(array: node.Bits.ToArray()) : null),
@@ -384,10 +385,23 @@ public sealed partial class SdfShadeProgram {
         private Node Lower(SdfShadeExpression expression, SdfShadePhase phase, int depth) {
             if (expression is null || expression.Op is null) { Fail("PUCK127", "A shade expression requires an operation."); }
             if ((depth > 128) || (++m_visits > 100000)) { Fail(code: "PUCK129", message: "Shade expression expansion exceeds its capacity."); }
-            if (m_expressionCache[((int)phase)].TryGetValue(key: expression, value: out var cached)) { return cached; }
+            // A height lowers over the variable of its point's type, so it has a cache of its own per type: the same
+            // expression read under another point type is another graph.
+            var cache = ((m_variable is { } variable) ? VariableCache(phase, variable.Type) : m_expressionCache[((int)phase)]);
+
+            if (cache.TryGetValue(key: expression, value: out var cached)) { return cached; }
             if (expression.Op == "value") {
                 return (m_values.GetValueOrDefault(key: (phase, (expression.Name ?? "")))
                     ?? throw new SdfShadeException(code: "PUCK128", message: $"Shade value '{expression.Name}' is undefined in {phase}."));
+            }
+            if (expression.Op == "variable") {
+                return (m_variable ?? throw new SdfShadeException(code: "PUCK126", message: "A shade 'variable' is read only inside a gradient's height."));
+            }
+            if (expression.Op == "gradient") {
+                var gradient = LowerGradient(expression, phase, depth);
+
+                cache[expression] = gradient;
+                return gradient;
             }
             var info = (SdfShadeOps.Table.FirstOrDefault(predicate: o => (o.Name == expression.Op))
                 ?? throw new SdfShadeException(code: "PUCK126", message: $"Unknown shade operation '{expression.Op}'."));
@@ -418,6 +432,11 @@ public sealed partial class SdfShadeProgram {
                         Fail(code: "PUCK127", message: "Component is outside its typed vector.");
                     }
                     type = (SdfShadeOps.IsUInt(type: args[0].Type) ? SdfShadeType.UInt : SdfShadeType.Float); break;
+                case SdfShadeOp.CellsGradient:
+                    if (!uint.TryParse(expression.Name, NumberStyles.None, CultureInfo.InvariantCulture, out immediate) || (immediate > 1u)) {
+                        Fail(code: "PUCK127", message: "cellsGradient names its channel: 0 for F1, 1 for F2 - F1.");
+                    }
+                    type = TypeOf(info.Op, args.Select(selector: a => a.Type).ToArray()); break;
                 case SdfShadeOp.Shape:
                     type = TypeOf(info.Op, args.Select(selector: a => a.Type).ToArray());
                     try {
@@ -434,25 +453,42 @@ public sealed partial class SdfShadeProgram {
                     shapeWords.AddRange(collection: shape.Table.Select(selector: BitConverter.SingleToUInt32Bits)); bits = shapeWords.ToArray(); break;
                 default: type = TypeOf(info.Op, args.Select(selector: a => a.Type).ToArray()); break;
             }
-            if (info.Commutative && (string.CompareOrdinal(strA: args[0].Key, strB: args[1].Key) > 0)) { (args[0], args[1]) = (args[1], args[0]); }
-            if ((info.Op == SdfShadeOp.Select) && (args[0].Op == SdfShadeOp.Constant)) {
-                return ((BitConverter.UInt32BitsToSingle(value: args[0].Bits[0]) == 0f) ? args[2] : args[1]);
-            }
-            if (Fold(info.Op, type, args, out var folded)) {
-                info = SdfShadeOps.Get(op: SdfShadeOp.Constant); bits = folded; args = []; immediate = 0;
-            }
-            var key = Key(info.Op, type, immediate, bits, args.Select(a => a.Key));
+            var node = Make(info.Op, type, args, immediate, bits, shape);
 
             if (expression.Shape is { } definition) {
-                m_shapeDefinitions.TryAdd(key: key, value: definition with {
+                m_shapeDefinitions.TryAdd(key: node.Key, value: definition with {
                     Profile = ((definition.Profile is { Vertices: { } vertices } profile)
                         ? profile with { Vertices = Array.AsReadOnly(array: vertices.ToArray()) } : definition.Profile),
                 });
             }
-            if (!m_nodes.TryGetValue(key: key, value: out var node)) { node = new(info.Op, type, args, bits, immediate, key, shape); m_nodes.Add(key: key, value: node); }
-            m_expressionCache[((int)phase)][expression] = node;
+            cache[expression] = node;
             return node;
         }
+        // The one door every node passes, whether lowered from source or written by the differentiator: commutative
+        // operands sort, a constant select picks its arm, exact arithmetic folds, a component of a literal vector
+        // construction is that operand, and equal nodes share one instance by key.
+        private Node Make(SdfShadeOp op, SdfShadeType type, Node[] args, uint immediate = 0, uint[]? bits = null, SdfPaintShape? shape = null) {
+            bits ??= [];
+            if (SdfShadeOps.Get(op: op).Commutative && (string.CompareOrdinal(strA: args[0].Key, strB: args[1].Key) > 0)) { (args[0], args[1]) = (args[1], args[0]); }
+            if ((op == SdfShadeOp.Select) && (args[0].Op == SdfShadeOp.Constant)) {
+                return ((BitConverter.UInt32BitsToSingle(value: args[0].Bits[0]) == 0f) ? args[2] : args[1]);
+            }
+            if ((op == SdfShadeOp.Component) && (args[0].Op is SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4)) { return args[0].Args[immediate]; }
+            if ((op is SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4) && (args[0] is { Op: SdfShadeOp.Component } first) &&
+                (first.Args[0].Type == type) && args.Select(selector: static (a, i) => (a.Op == SdfShadeOp.Component) && (a.Immediate == ((uint)i))).All(predicate: static x => x) &&
+                args.All(predicate: a => ReferenceEquals(objA: a.Args[0], objB: first.Args[0]))) {
+                return first.Args[0];
+            }
+            if (Fold(op, type, args, immediate, out var folded)) {
+                op = SdfShadeOp.Constant; bits = folded; args = []; immediate = 0;
+            }
+            var key = Key(op, type, immediate, bits, args.Select(a => a.Key));
+
+            if (!m_nodes.TryGetValue(key: key, value: out var node)) { node = new(op, type, args, bits, immediate, key, shape); m_nodes.Add(key: key, value: node); }
+            return node;
+        }
+        // Makes an ordinary op typed from its operands.
+        private Node Make(SdfShadeOp op, params Node[] args) => Make(op, TypeOf(op, args.Select(selector: static a => a.Type).ToArray()), args);
     }
 
     private static readonly string[][] OutputNames = [
