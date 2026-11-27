@@ -105,8 +105,13 @@ public static partial class SdfWorldPackage {
     public const int MeshShadowResolution = 2048;
     /// <summary>The side in texels of an optical-shadow clear tile.</summary>
     public const uint ShadowOpticalTileEdge = 16;
-    /// <summary>The words per optical texel, before the dirty-tile bitmap.</summary>
+    /// <summary>The words per optical texel, before the dirty-tile bitmap: the red (or grey) 64-bit optical depth sum, low
+    /// word first, and the nearest glass entry.</summary>
     public const uint ShadowOpticalTexelWords = 3;
+    /// <summary>The words per texel of the optical buffer's colour plane, which follows the dirty-tile bitmap where a drawn
+    /// glass casts colour: the green and the blue 64-bit optical depth sums, low word first
+    /// (<c>sdf-shadow-optical.hlsli</c>).</summary>
+    public const uint ShadowOpticalColorTexelWords = 4;
 
     /// <summary>Returns the number of bitmap words following the optical texels for a square cascade.</summary>
     /// <param name="side">The allocated cascade width in texels.</param>
@@ -114,6 +119,17 @@ public static partial class SdfWorldPackage {
     public static uint ShadowOpticalBitmapWords(uint side) {
         var tiles = side.CeilingDivide(divisor: ShadowOpticalTileEdge);
         return (tiles * tiles).CeilingDivide(divisor: 32U);
+    }
+    /// <summary>Returns the bytes of one cascade entry's optical buffer: the texels' words and the dirty-tile bitmap, then
+    /// the colour plane where <paramref name="color"/> asks for it. The kernels tell the two layouts apart by the bound
+    /// buffer's length (<c>sdfShadowOpticalHoldsColor</c>).</summary>
+    /// <param name="side">The allocated cascade width in texels.</param>
+    /// <param name="color">Whether the buffer holds the colour plane.</param>
+    /// <returns>The buffer's size in bytes.</returns>
+    public static ulong ShadowOpticalBytes(uint side, bool color) {
+        var texels = ((ulong)side * side);
+
+        return checked(((texels * (ShadowOpticalTexelWords + (color ? ShadowOpticalColorTexelWords : 0U))) + ShadowOpticalBitmapWords(side: side)) * sizeof(uint));
     }
 
     /// <summary>The side in texels of one block of a shadow layer's bounds: the surface pass classifies a receiver by

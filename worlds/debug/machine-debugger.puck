@@ -41,80 +41,33 @@ state {
       swap2 = """{"operation":"content.insert","contentName":"moving-sprite.deck","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1"}}"""
       eject2 = """{"operation":"content.eject","payload":{"schema":"puck.humble-gaming-deck.content-eject.v1"}}"""
     }
-    table machineDebugger0 {
-      alive = 0
-      responsive = 0
-      rewind = 0
-      deterministic = 0
-      swap = 0
-      eject = 0
-      tick = -1
-      frames = 0
-      samples = 0
-      hash = 0
-      trace1 = 0
-      trace2 = 0
-      changed = 0
-      mismatches = 0
-      phase = 0
-      driven = 0
-      randomState = 0
-      aliveTick = -1
-      responsiveTick = -1
-      rewindTick = -1
-      deterministicTick = -1
-      swapTick = -1
-      ejectTick = -1
-    }
-    table machineDebugger1 {
-      alive = 0
-      responsive = 0
-      rewind = 0
-      deterministic = 0
-      swap = 0
-      eject = 0
-      tick = -1
-      frames = 0
-      samples = 0
-      hash = 0
-      trace1 = 0
-      trace2 = 0
-      changed = 0
-      mismatches = 0
-      phase = 0
-      driven = 0
-      randomState = 0
-      aliveTick = -1
-      responsiveTick = -1
-      rewindTick = -1
-      deterministicTick = -1
-      swapTick = -1
-      ejectTick = -1
-    }
-    table machineDebugger2 {
-      alive = 0
-      responsive = 0
-      rewind = 0
-      deterministic = 0
-      swap = 0
-      eject = 0
-      tick = -1
-      frames = 0
-      samples = 0
-      hash = 0
-      trace1 = 0
-      trace2 = 0
-      changed = 0
-      mismatches = 0
-      phase = 0
-      driven = 0
-      randomState = 0
-      aliveTick = -1
-      responsiveTick = -1
-      rewindTick = -1
-      deterministicTick = -1
-      swapTick = -1
-      ejectTick = -1
+    // One results table for each body the debugger drives.
+    for m in range(0, length(machineDebuggerBodies)) {
+      table $"machineDebugger{m}" {
+        alive = 0
+        responsive = 0
+        rewind = 0
+        deterministic = 0
+        swap = 0
+        eject = 0
+        tick = -1
+        frames = 0
+        samples = 0
+        hash = 0
+        trace1 = 0
+        trace2 = 0
+        changed = 0
+        mismatches = 0
+        phase = 0
+        driven = 0
+        randomState = 0
+        aliveTick = -1
+        responsiveTick = -1
+        rewindTick = -1
+        deterministicTick = -1
+        swapTick = -1
+        ejectTick = -1
+      }
     }
     table machineDebuggerViolations {
       count = 0

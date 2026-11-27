@@ -1091,11 +1091,12 @@ public static partial class WorldDecompiler {
     };
     // An object carrying a `$type` discriminator prints as a call, unless the discriminator spells a compile-time
     // builtin (an envelope's `range`): the call would evaluate as the builtin wherever the position names no arm, so
-    // the object stays a literal carrying its `$type`.
+    // the object stays a literal carrying its `$type`. A call prints its arguments named, which a positional-only builtin
+    // (`any`, `all`) leaves to the arm of the same name.
     private static bool PrintsAsCall(JsonObject obj) => (
         (obj["$type"] is JsonValue typeVal) &&
         typeVal.TryGetValue<string>(value: out var typeName) &&
-        !DocumentBuiltins.Names.Contains(item: typeName)
+        (!DocumentBuiltins.Names.Contains(item: typeName) || (DocumentBuiltins.Collections.TryGetValue(key: typeName, value: out var builtin) && builtin.PositionalOnly))
     );
     // The separator a field writes before its value: none in front of a container, ": " in front of a leaf. The
     // colon is what tells a reader "this is a leaf", so it never appears in front of a '{' or a '['.

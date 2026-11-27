@@ -29,6 +29,8 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 public static class WorldValueFields {
     /// <summary>Glass shadow extinction, refused at the creation palette door.</summary>
     public static WorldValueField GlassShadowDensity { get; } = new(typeof(PaletteGlassDocument), nameof(PaletteGlassDocument.ShadowDensity), WorldValueDomain.NonNegative);
+    /// <summary>The share of a glass's colour the light it passes carries, refused at the creation palette door.</summary>
+    public static WorldValueField GlassCastsColor { get; } = new(typeof(PaletteGlassDocument), nameof(PaletteGlassDocument.CastsColor), WorldValueDomain.NonNegative);
     /// <summary>A speaker feed's gain, sharing the audio gain ceiling.</summary>
     public static WorldValueField SpeakerGain { get; } = new(typeof(WorldSpeakerFeed), nameof(WorldSpeakerFeed.Gain), new WorldValueDomain(
         Maximum: CreationSoundDocument.MaxLevel,
@@ -435,6 +437,7 @@ public static class WorldValueFields {
         MarkerRingAlpha,
         VolumeSoftness,
         GlassShadowDensity,
+        GlassCastsColor,
         OrbitYaw,
         OrbitPitch,
         FirstPersonActive,

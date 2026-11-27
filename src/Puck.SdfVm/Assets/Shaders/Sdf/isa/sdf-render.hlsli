@@ -22,8 +22,9 @@
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS               58u
 #define SDF_PROBE_RELIGHT_INPUT_WORDS                309u
 #define SDF_PROBE_RELIGHT_HEADER_ROWS                155u
-#define SDF_PROBE_RELIGHT_MATERIAL_ROWS              2u
+#define SDF_PROBE_RELIGHT_MATERIAL_ROWS              1u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS                 4u
+#define SDF_PROBE_RELIGHT_EMITTER_ROWS               3u
 #define SDF_PROBE_SELECT_INPUT_WORDS                 8u
 #define SDF_PROBE_SELECT_HEADER_ROWS                 5u
 #define SDF_PROBE_CACHE_WORDS                        290u
@@ -123,7 +124,7 @@
 #define SDF_SHADE_TILE_LIGHT_WORDS       8u
 #define SDF_SHADE_TILE_SHARE_WORDS       68u
 #define SDF_SHADE_TILE_SHARED_LIGHTS     8u
-#define SDF_VIEWS_FILTER_WORDS           3u
+#define SDF_VIEWS_FILTER_WORDS           4u
 #define SDF_VIEWS_REFLECTION_WORDS       4u
 #define SDF_REFLECTION_DEPTH_LEVELS      8u
 #define SDF_REFLECTION_DEPTH_GROUP_LEVEL 4u
@@ -135,6 +136,9 @@
 #define SDF_VIEWS_PROBE_POOL_WORDS       28u
 #define SDF_VIEWS_PROBE_SLOT_WORDS       28u
 #define SDF_VIEWS_PROBE_HISTORY_WORDS    17u
+#define SDF_VISIBILITY_RECORD_WORDS      8u
+#define SDF_VISIBILITY_PIXEL_WORDS       9u
+#define SDF_SHADOW_TINT_BITS             10u
 #define SDF_SHADOW_BITS                  8u
 #define SDF_SHADOW_MASK                  0x000000FFu
 #define SDF_SHADOW_SLOTS                 4u
@@ -207,6 +211,7 @@
 #define SDF_SHADOW_OPTICAL_CLEAR_STEP     6u
 #define SDF_SHADOW_OPTICAL_TILE_EDGE      16u
 #define SDF_SHADOW_OPTICAL_TEXEL_WORDS    3u
+#define SDF_SHADOW_OPTICAL_COLOR_WORDS    4u
 #define SDF_OCCLUSION_COUNT_STEP          7u
 #define SDF_OCCLUSION_COMPACT_STEP        8u
 #define SDF_COMPACT_ROW                   15u

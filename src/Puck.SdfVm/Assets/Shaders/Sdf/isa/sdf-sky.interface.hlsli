@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/3c864febaa4e01e7be06afab8c38417d2978b727b4cfb8cc2ac40db87b1da3ba). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/8267b41c293a057675b98f66e7b29c099805429c3fb5d23bcf8349582f48b9f3). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -264,25 +264,26 @@ struct SdfSkyPass {
     [[vk::offset(4108)]] uint _pad4108;
     [[vk::offset(4112)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa9676CA23 : register(b0, space3);
-#define passGroup passGroupIsa9676CA23
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaB0805A93 : register(b0, space3);
+#define passGroup passGroupIsaB0805A93
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);
 [[vk::binding(11, 3)]] StructuredBuffer<uint2> transport : register(t11, space3);
 [[vk::binding(12, 3)]] RWStructuredBuffer<uint> exposureMeterRW : register(u12, space3);
 [[vk::binding(13, 3)]] StructuredBuffer<uint> sdfFieldColors : register(t13, space3);
-[[vk::binding(14, 3)]] Texture2D<float4> skyBase : register(t14, space3);
-[[vk::binding(15, 3)]] Texture2D<float4> skyUpper0 : register(t15, space3);
-[[vk::binding(16, 3)]] Texture2D<float4> skyUpper1 : register(t16, space3);
-[[vk::binding(17, 3)]] Texture2D<float4> skyUpper2 : register(t17, space3);
-[[vk::binding(18, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u18, space3);
-[[vk::binding(19, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper0RW : register(u19, space3);
-[[vk::binding(20, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper1RW : register(u20, space3);
-[[vk::binding(21, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper2RW : register(u21, space3);
-[[vk::binding(22, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u22, space3);
-[[vk::binding(23, 3)]] Texture2D<float4> screenSources[128] : register(t23, space3);
-[[vk::binding(151, 3)]] RWStructuredBuffer<uint> workCounters : register(u151, space3);
+[[vk::binding(14, 3)]] StructuredBuffer<uint> sdfGlassSkyFilter : register(t14, space3);
+[[vk::binding(15, 3)]] Texture2D<float4> skyBase : register(t15, space3);
+[[vk::binding(16, 3)]] Texture2D<float4> skyUpper0 : register(t16, space3);
+[[vk::binding(17, 3)]] Texture2D<float4> skyUpper1 : register(t17, space3);
+[[vk::binding(18, 3)]] Texture2D<float4> skyUpper2 : register(t18, space3);
+[[vk::binding(19, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u19, space3);
+[[vk::binding(20, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper0RW : register(u20, space3);
+[[vk::binding(21, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper1RW : register(u21, space3);
+[[vk::binding(22, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper2RW : register(u22, space3);
+[[vk::binding(23, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u23, space3);
+[[vk::binding(24, 3)]] Texture2D<float4> screenSources[128] : register(t24, space3);
+[[vk::binding(152, 3)]] RWStructuredBuffer<uint> workCounters : register(u152, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

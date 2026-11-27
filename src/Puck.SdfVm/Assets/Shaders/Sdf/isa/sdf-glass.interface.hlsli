@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/7423a9ebb784b6ca72c6df649a929655a7e64cd0e54369f654d2382d76533517). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/27859f23968ddf85b76265d7d04a7445a846d5dac41c5f5b37071db1b2c29a94). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -260,8 +260,8 @@ struct SdfGlassPass {
     [[vk::offset(3452)]] uint _pad3452;
     [[vk::offset(3456)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa9676CA23 : register(b0, space3);
-#define passGroup passGroupIsa9676CA23
+[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsaB0805A93 : register(b0, space3);
+#define passGroup passGroupIsaB0805A93
 [[vk::binding(1, 3)]] Texture2D<float4> lit : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> glassVisibility : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -270,7 +270,8 @@ struct SdfGlassPass {
 [[vk::binding(6, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u6, space3);
 [[vk::binding(7, 3)]] StructuredBuffer<uint> sdfGlassProbeHistory : register(t7, space3);
 [[vk::binding(8, 3)]] RWStructuredBuffer<uint> sdfGlassProbeHistoryRW : register(u8, space3);
-[[vk::binding(9, 3)]] RWStructuredBuffer<uint> workCounters : register(u9, space3);
+[[vk::binding(9, 3)]] RWStructuredBuffer<uint> sdfGlassSkyFilterRW : register(u9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfGlassPushedIndex {

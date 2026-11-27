@@ -397,6 +397,19 @@ line that names it (the engine words that refusal once, `WorldDefinitionValidato
 modifier calls, and an optional `{ ... }*` body: `key = value modifiers*` cell entries for `table`/`grid`, bare
 `token` entries for `pile`); it assigns no meaning to a modifier or keyword name, so a second document vocabulary
 could reuse the same grammar for its own row-shaped declarations without touching the core.
+
+**Computed names and cells.** A declaration's name is a bare identifier or an interpolation (`table $"judgeGrade{s}"`),
+family brackets included, and inside a template a bare name that is one of the template's text bindings takes its
+value, as a block's name does (`template seatCells(name) { table name … }`; a quoted literal is never looked up, and
+only a statement directly in the template body is renamed). A cell body admits `let`, `for` and `if` around its
+entries and a computed key (`$"{station.id}-card{k}" = k`, or `[expression] = value` by the one bracket rule), so
+`table pick { for s in stations { [s.id] = 0 } }` writes the cells a hand-built row's `cells: map(…)` wrote.
+`DocumentLowering.ResolveDeclarationName` settles a computed name and `DocumentLowering.ExpandCellBody` flattens a
+body, each the one door its section's expansion (`WorldDocumentEmitter.ExpandOne`) and the template renamer pass, so a
+generated declaration lowers exactly as one written out. A table's `= value` is an array, keyed `0`, `1`, … in order,
+or an object, keyed by its members in order (`table prices = { apple: 2, pear: 3 }`, or any computed object); a
+pile's is an array of its starting token keys; any other value is PUCK053, never dropped. A key or name that
+evaluates to no text is PUCK048.
 `Lowering/WorldDocumentEmitter.State.cs` is the one place that interprets `table`/`slot`/`pile`/`grid` for
 `puck.world.definition.v1`, and refuses every case below by name. `table`/`slot`'s own keyword-vs-property
 disambiguation (a name on the same line as the keyword) also covers `grid`; `pile` disambiguates on a name and the
@@ -666,6 +679,21 @@ table Pile[0, 2..12]
 A member list is either index ranges — where an index nothing names is a gap that selects no row — or member rows
 named outright (`table Pile["stock", "waste"]`), never a mix of the two, because a named row carries no
 family index to select it by.
+
+`as` after the bracket binds a name to each member's family index, which the member's modifiers, cells and value read,
+so members that differ by index are still one declaration and stay consecutive rows, as a family's members must:
+
+```puck
+table patienceMarkerOf[count] as s capacity(2) {
+  $"{stations[s].id}-cursor" = 0
+  $"{stations[s].id}-held" = 1
+}
+```
+
+A family's name may be computed like any declaration's (`pile $"klondikeDown{z}Of"[count] … capacity(z - 1)` inside a
+`for`). A family written where its name is known before lowering (at a document's or a template body's top level, or
+in a block) is indexed before anything lowers, so a reference above it resolves; one a loop or a branch declares
+registers when its section expands it (`WorldDocumentEmitter.ExpandFamily`), before its members lower.
 
 | Code | Severity | Refusal |
 |---|---|---|

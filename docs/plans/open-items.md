@@ -2593,33 +2593,52 @@ Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
 the CPU reference. Measure the live relight backlog under an accelerated day,
 the valley at dawn and dusk, and the first frame and settled light after a
-teleport. The gather now hands missing cells to the coarser levels and the
-view can read its authored sky while its new camera sample is pending.
+teleport. The gather hands missing cells to the coarser levels, and while a
+view's new camera sample is pending its air takes no sky and its surfaces hold
+the last sample's light.
 [The plan](illumination.md#the-build-order) owns the steps, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+The air's in-scatter:
+
+- [medium] The sky's in-scatter is lit by one scalar a view, the camera
+  sample's open sky (`airLight`), so a valley seen through a hall's opening
+  hazes at the hall's share and a hall seen from the open hazes as open air.
+  The structural answer is a share a render sample: views splits each sample's
+  air at the camera sample's reach into a near part lit by `airLight` and a far
+  part lit by the open sky the probe gather already resolved into the pixel's
+  slot (the six-face mean of `sdfViewsSkyShareAt`), and folds that share into
+  the sky-reading kinds' weights (the haze always, the fog unless its colour is
+  authored) before they pack (`sdfPackSampleAir`, `sdfSampleTransport`). The
+  transport stays four linear words, so the resolve filters it as it does now;
+  a resolve-copied sample carries its share in the sample word's unused second
+  word; and the composite and the screen-space reflection pass
+  (`sdf-world-views-reflections.comp.hlsl`, which reads the history's transport
+  words) stop multiplying by `airLight`. It costs one more closed-form air
+  segment and one slot read a sample. It waits for the screen-space reflection
+  lane to land, since that pass changes with it; the forcing case is the
+  valley seen through an opening of the gallery from the nave at noon.
+
 Light through coloured glass:
 
-- [high] Light through coloured glass is not coloured. Stained glass (the
-  gallery's east window, `architecture.puck`'s `stainedGlass`) tints what is seen
-  through it, but the light it passes reaches the floor and walls only as the
-  cascades carry it, and a cascade's glass extinction is one density
-  (`glass.shadowDensity`, `sdf-mesh-shadow-glass.frag.hlsl` accumulating one
-  64-bit optical depth a texel), so a pane casts at most a grey shadow and its
-  came the dark grid; the irradiance volume traces no glass at all. The plan:
-  (1) let a cascade's optical buffer carry RGB optical depth, three 64-bit sums a
-  texel from the material's absorption scaled by a transmitted-light opt-in on
-  the glass (an authored `glass.castsColor`, zero by default, so water and
-  windows keep their grey or no shadow), through the same
-  `sdfOpticalDepthAccumulate`; (2) have the surface pass resolve the key light's
-  transmitted colour beside its scalar visibility (`sdfMeshShadowGap` already
-  reads the optical term per tap) and write it as a chroma word of the
-  visibility record, so views multiplies the directional's colour by it with no
-  new tap; (3) carry the same RGB through the probe trace's visibility bits
-  later, so the irradiance volume bounces the coloured patch. Step 1 and 2
-  decide the record's layout; the forcing case is the east window's patch on the
-  nave floor on a morning sun.
+- [high] The irradiance volume does not bounce light that coloured glass
+  coloured. The key light's cascades carry it: a glass that opts in with
+  `glass.castsColor` adds that share of its absorption to each channel of the
+  cascade's optical buffer (`SdfGlass.ShadowColorExtinction`, the buffer's
+  colour plane in `frame/sdf-shadow-optical.hlsli`), the surface pass resolves
+  the transmitted colour beside the primary role's visibility into the
+  visibility record's tint plane (`sdfMeshShadow`, `sdfVisibilityTintWord`), and
+  the light phase's door multiplies the directional's colour by it
+  (`sdfLightTransmission`), so the stained glass (`stainedGlassPalette`) casts
+  its colours on the nave floor. The probe trace still traces no glass, so the
+  coloured patch bounces as white light and the volume lights the room as
+  though the window were clear. The remaining step carries the same RGB through
+  the probe trace's visibility bits (`SdfMeshIrradiance`'s capture,
+  `shade/sdf-probe-trace.hlsli`), so the volume's indirect light takes the
+  patch's colour. A narrower gap sits beside it: only the primary role keeps a
+  colour, and the second role's visibility through coloured glass is its
+  brightest channel.
 
 The volume's cost and convergence:
 
@@ -5406,6 +5425,18 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
+  (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
+  (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer
+  (`PuckPrinter.Writer.TestGivenItems`, `TestWhenItems`, `TestExpectItems`), a trivia case and an expansion
+  (`WorldDocumentEmitter.GivenLines`, `WhenLines`, `ExpectLines`). One generic loop node over the block's item type,
+  with one parser and one expansion, replaces the three.
+- Operand source syntax has two printers: `ExpressionSpelling.PrintSyntax` (atoms printed by a callback, a nesting
+  check) and `PrintSourceNode`, the `SyntaxNode.Print` path for source nodes, so every new source node (`SourceList`,
+  `SourceLet`) is printed twice. One printer with the atom callback serves both. The other walks already ride
+  `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
+  `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
+  form-aware child walk would fold in too.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)
@@ -5776,7 +5807,7 @@ then Spider.
   station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
   job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
   `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
+  position key in the tally row `positionCounts`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,
@@ -5890,13 +5921,27 @@ annotate, the `probes` and `exposure` views) are
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen. Find why a named world camera row does not replace
   the view.
-- The gallery's twelve display consoles light nothing: each interface is paint
-  on the plinth's glass (`displayScreen`, `consoleText` in `shapes.puck`), and
-  the irradiance volume traces neither paint nor glass, while only a `screens`
-  row lights through the screen-light walk. Rebuild each interface as a screen
-  whose picture is its glyph decal (`SdfWorldTables.SetScreenDecal`), so it
-  lights what stands before it as the toybox's pictures do, or let the volume
-  trace a paint's emission.
+- Emitters at night: what still lights nothing, beside the emitter faces each
+  copy carries (`SdfWorldResidency`'s `CollectEmitterFaces`) and the emitting
+  patches the volume samples (`SdfMeshIrradianceScene.Emitters`):
+  - The volume reads no paint: a hit reflects, and an emitting patch emits, its
+    material's base colour, so a painted emissive that is no emitter face lights
+    the volume in its base colour. Paints need a CPU evaluator beside
+    `shade/shade-paints.hlsli` before the relight can read them in step.
+  - A lane-driven emissive (`emissiveLane`, the fibre fir) emits nothing into
+    the volume, as the views shade a static one dark; a world lane
+    (`SdfFrame.WorldLanes`) could drive it once a lane's motion stops moving the
+    local lighting key every frame.
+  - A material that first turns emissive after a scene is built gathers no
+    patch until the next scene build (`SdfMeshIrradianceScene.Build`'s
+    `emits`).
+  - An emitter face on a body or an animated placement still declares none
+    (`CreationStampEmitter`'s `StampEmitterFace`, `WorldCreationInstances`'
+    `PoolShapeFrame`): its paints ride its slot's frame, which the screens'
+    emission pass does not read.
+  - Screens and emitter faces light receivers through the screen-light walk
+    alone; their bounce off the walls waits on the illumination plan's area
+    emitters in the relight ([step 6](illumination.md#the-build-order)).
 - The GPU looks owed at the gallery (the warps II row, the hall's light
   switches) and the `puck mesh audit` gaps are the
   [rendering plan](rendering.md)'s.

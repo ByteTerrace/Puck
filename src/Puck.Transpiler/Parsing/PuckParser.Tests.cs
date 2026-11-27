@@ -604,10 +604,45 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting a test's 'expect' block");
         }
 
+        var items = ParseTestExpectItems(context: context, diagnostics: diagnostics);
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: "Expected '}' closing a test's 'expect' block");
+        }
+
+        return new TestExpectBlockNode(
+            Column: col,
+            Expectations: items,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Offset: startOffset
+        );
+    }
+    // The entries of an `expect` block or of a `for` inside one, up to the closing brace, which is left unconsumed.
+    private static List<TestExpectItemNode> ParseTestExpectItems(ParseContext context, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
         var items = new List<TestExpectItemNode>();
 
         SkipWhiteSpace(context: context);
         while (!cursor.Eof && (cursor.Current != '}')) {
+            var itemStart = cursor.Offset;
+
+            var (itemLine, itemColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: itemStart);
+
+            if (TryMatchStatementKeyword(context: context, keyword: "for")) {
+                var (item, index, sequence) = ParseForHead(context: context);
+                var body = ParseTestExpectItems(context: context, diagnostics: diagnostics);
+
+                if (!TryConsume(c: '}', context: context)) {
+                    throw CreateException(context: context, message: "Expected '}' closing a 'for' inside a test's 'expect' block");
+                }
+                items.Add(item: new TestExpectForNode(Body: body, Column: itemColumn, Index: index, Item: item, Length: (cursor.Offset - itemStart), Line: itemLine, Offset: itemStart, Sequence: sequence));
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+
+                continue;
+            }
+
             if (TryMatchTestWorldHeader(
                 context: context,
                 span: out var header,
@@ -641,17 +676,7 @@ public static partial class PuckParser {
             ));
         }
 
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: "Expected '}' closing a test's 'expect' block");
-        }
-
-        return new TestExpectBlockNode(
-            Column: col,
-            Expectations: items,
-            Length: (cursor.Offset - startOffset),
-            Line: line,
-            Offset: startOffset
-        );
+        return items;
     }
     private static TestDeclarationNode ParseTestDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;

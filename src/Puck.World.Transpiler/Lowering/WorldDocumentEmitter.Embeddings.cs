@@ -406,7 +406,7 @@ public static partial class WorldDocumentEmitter {
         }
     }
     private static JsonObject? CreateEmbedsCompanionRow(
-        StateTableDeclarationNode textTable,
+        IReadOnlyList<(StateCellEntryNode Cell, DocumentScope Scope)> textCells,
         StateModifierNode embedsMod,
         JsonObject textRowObj,
         JsonObject rootObj,
@@ -494,7 +494,7 @@ public static partial class WorldDocumentEmitter {
 
         var cellsArr = new JsonArray();
 
-        foreach (var cell in textTable.Cells) {
+        foreach (var (cell, _) in textCells) {
             var cellObj = new JsonObject { ["key"] = cell.Key };
 
             if (cell.Value is LiteralExpressionNode { Value: string textVal }) {

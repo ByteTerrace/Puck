@@ -106,14 +106,46 @@ different text, for example composed and decomposed accents or a Cyrillic `а` f
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```puck
-table name [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name [: Enum] [= value] [modifier(...)]*
-pile name of tokenRow [modifier(...)]* { token ... }
-grid name [: Enum] [modifier(...)]* [{ key = value ... }]
+table name [family] [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
+table name [family] [: Enum] [modifier(...)]* = array-or-object
+slot name [family] [: Enum] [= value] [modifier(...)]*
+pile name [family] of tokenRow [modifier(...)]* { token ... }
+grid name [family] [: Enum] [modifier(...)]* [{ key = value ... }]
 ```
 
+`name` is a bare identifier or an interpolation (`$"pile{z}Of"`), and `[family]` is a family bracket (`[count]`,
+`[0, 2..12]`) with an optional `as index` binding each member's family index for its modifiers, cells and value.
+A cell body holds `key = value` entries, a computed key (`$"{s}-held" = 1`, `[expression] = value`), and the
+compile-time `let`, `for` and `if` that produce more entries:
+
+```puck
+template patienceState(stations) {
+  let count = length(stations)
+
+  for z in range(2, 9) {
+    pile $"klondikeDown{z}Of"[count] of solitaireCards capacity(z - 1)
+  }
+  table patienceMarkerOf[count] as s capacity(2) {
+    $"{stations[s].id}-cursor" = 0
+    $"{stations[s].id}-held" = 1
+  }
+  table patiencePosed capacity(52 * count) {
+    for station in stations {
+      for k in range(0, 52) {
+        $"{station.id}-card{k}" = -1
+      }
+    }
+  }
+}
+```
+
+Inside a template, a declaration whose bare name is one of the template's text bindings takes that value, as a
+block's name does, so `template seatCells(name) { table name capacity(4) }` called twice declares two rows. A table's
+`= value` is an array, keyed `0`, `1`, ... in order, or an object, keyed by its members (`table prices = { apple: 2 }`);
+anything else is PUCK053.
+
 `Ast/StateDeclarationNodes.cs` and `Parsing/PuckParser.StateDeclarations.cs` parse this shape for every vocabulary:
-a declared name, an optional `: Enum` naming the enum the row's cells are drawn from (the way a record field names
+a declared name (written out, or computed), an optional `: Enum` naming the enum the row's cells are drawn from (the way a record field names
 one, `field: Enum`), an optional bare-identifier reference (`pile`'s
 `of tokenRow`), zero or more `name(args)` modifier calls (reusing the ordinary call-expression grammar verbatim),
 and an optional `{ }` body — `key = value` cell entries with their own modifiers (`table`/`grid`), or bare `token`
@@ -167,8 +199,9 @@ keeps the explicit `row` form so a round trip does not silently change the domai
 
 A few invariants hold across every declaration form the world vocabulary lowers:
 
-- **One declaration produces one row.** The transpiler never splits a declaration into several rows, never
-  generates a state name, and never changes a grant or a binding.
+- **One declaration produces one row, or one per family member.** A family's members are its only extra rows,
+  named `<name><index>` or as its member list names them; the transpiler invents no other state name and never
+  changes a grant or a binding.
 - **Declarations are accepted only under `state.world`.** `state.body` and `state.identity` hold a different
   record, `ActionStateSlot`, and take no declaration syntax.
 - **A declaration does not imply storage scope.** A `table player { }` declares one world row, not
@@ -445,11 +478,13 @@ or otherwise non-foldable addition to the shared table, not a currently reachabl
 
 ## Collection builtins and lambdas
 
-`range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort` and `groupBy` are the document language's
-OWN vocabulary—a rule has no arrays to fold, so these exist in one language only, and are evaluated WHILE
-LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
+`range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy` and the list library
+below (`any`, `all`, `count`, `sum`, `scan`, `dot`, `contains`, `indexOf`, `find`, `zip`, `reverse`, `slice`, `join`) are the
+document language's OWN vocabulary—a rule has no arrays at run time, so these exist in one language only, and are evaluated
+WHILE LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
 `(item, index) => expression` (`reduce`'s is `(running, item) => expression`), and is an argument to one of these
-builtins and nothing else—there are no first-class functions.
+builtins or a [list fold](#folds-over-a-list) and nothing else—there are no first-class functions. A function that takes
+values only (`sine`) is refused with PUCK042 when it is handed a lambda.
 
 A cartridge's `arrays` section (`worlds/debug/cartridges/shared/tetromino.puck` is the working form; a world
 document has no `arrays` member) shows the builtins at work:
@@ -493,6 +528,66 @@ order, each value the array of items that produced it.
 `map` and `filter` pass the item and, optionally, its index; `reduce` takes the running value and the item.
 A lambda parameter shadows a constant of the same name for the length of one application.
 
+### The list library
+
+Folds, searches and reshapes over a compile-time array. A name a rule also spells (`any`, `all`, `count`, `sum`) is
+the document builtin in a value position and the rule's fold in a rule body; a call that names an argument
+(`all(predicates: [...])`) is a vocabulary arm's, never the builtin. Arithmetic folds through the operators' own
+evaluation, so numbers add exactly and numeric arrays add element by element.
+
+| Builtin | Yields |
+|---|---|
+| `any(array, lambda)` | 1 when some item's lambda is truthy, else 0, stopping at the first. Without a lambda, tests the items themselves |
+| `all(array, lambda)` | 1 when every item's lambda is truthy (1 for an empty array), stopping at the first miss |
+| `count(array, lambda)` | how many items' lambdas are truthy |
+| `sum(array)` / `sum(array, lambda)` | the items, or the lambda's values, added (0 for an empty array) |
+| `scan(array)` / `scan(array, lambda)` | the running totals in one pass: one more value than the array, starting at 0 and ending at the total, so `scan([3, 4, 5])` is `[0, 3, 7, 12]` and element `i` is the sum of the first `i` items. `scan(lengths)[i]` is where item `i` of a list of lengths starts |
+| `dot(a, b)` | the dot product of two numeric arrays of one length |
+| `contains(array, value)` | 1 when an item equals the value, as `==` compares, else 0 |
+| `indexOf(array, value)` / `indexOf(array, lambda)` | the position of the first item equal to the value, or whose lambda is truthy; -1 when none |
+| `find(array, lambda)` | the first item whose lambda is truthy, or `null` |
+| `zip(a, b, ...)` | the items paired by position, `zip([1, 2], [3, 4])` is `[[1, 3], [2, 4]]`; the arrays share one length |
+| `reverse(array)` | the items in the opposite order |
+| `slice(array, start, end)` | the items from `start` up to, not including, `end` (the array's end when omitted); a negative bound counts from the end and a bound past either end stops there |
+| `join(array, separator)` | the strings and numbers joined into one string, the separator (empty when omitted) between them |
+| `minimum(array)`, `maximum(array)` | the smallest or largest number of a non-empty array (with two arguments, the scalar functions) |
+
+### Folds over a list
+
+`sum`, `count`, `any`, `all`, `minimum`, `maximum` and `first` fold a list the compiler knows, written
+`name(list, item => term)` (`first(list, item => condition, otherwise)` or
+`first(list, item => condition, item => value, otherwise)`). `ListFolds` (`Lowering/ListFolds.cs`) is the one
+description of the expression each fold stands for: `sum` is `t0 + t1 + …`, `any` is `t0 or t1 or …`, `first` the
+choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values;
+in a rule, where the body may read state, the operand binder writes it out with each element in place of the binder,
+so the lowered rule is the one an author would paste by hand and is priced the same
+([the rule language's side](state/expressions.md#fold-over-a-compile-time-list)):
+
+```puck
+let total = sum(range(1, 5), k => k * k)                                        // 30, at compile time
+freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)  // four reads, in a rule
+```
+
+The lambda is what makes a call a list fold: `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its
+construct, and a rule's `count(hand)` or `any(row, x -> x > 0)` over a row stays the row fold.
+
+## `let … in`, a name for one expression
+
+`let name = value in body` names a value for the expression after `in`, in a document value, a function body or a
+rule operand; lets chain, and a chain too long for its line prints one binding a line:
+
+```puck
+function loopGradient(keys, f) = let at = f * length(keys) in
+let from = floor(at) in
+let t = at - from in
+loopItem(keys, from) * (1 - t) + loopItem(keys, from + 1) * t
+```
+
+A document value evaluates the value once and binds it as a lambda parameter is bound. A rule operand holds the
+body with the value in place: a compile-time value binds as a fold's element does, and a value that reads state is
+written in place only where the body reads it once or the value is a plain read, so no program evaluates the value
+more often than its author wrote it. Anything else is refused with the fix, a rule `local`.
+
 ### Rotations, points and element-wise arithmetic
 
 A rotation is a quaternion array `[x, y, z, w]`, the spelling a shape's `rotation` holds; a point or axis is
@@ -505,7 +600,7 @@ written `angle * 1rad`.
 | `compose(outer, inner, ...)` | the product of rotations: the last argument turns a point first, the first argument last |
 | `rotatePoint(rotation, point)` | the point turned about the origin |
 | `polarPoint(radius, degrees, y)` | `[radius * cos, y, radius * sin]`, measured from +X toward +Z; `y` defaults to 0 |
-| `fraction(x)` | `x - floor(x)` |
+| `fraction(x)` | `x - floor(x)`, exact for a decimal; a shade program reads `fraction`, `clamp` and `pi` as well, lowering them to the ops that make them (`x - floor(x)`, `min(max(x, lo), hi)`) |
 | `overlaps(a, b)` | 1 when the spans `[low, high]` share a point (spans that only touch at an end do not), else 0 |
 | `within(x, span)` | 1 when `low <= x <= high`, else 0 |
 

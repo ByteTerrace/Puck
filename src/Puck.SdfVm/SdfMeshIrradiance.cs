@@ -1697,7 +1697,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} scene-omitted={m_sceneOmitted.Length} faults={Counters.Read(kind: Faults)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} lighting-epoch={(m_lighting?.Epoch ?? 0)} seen-relights-owed={(OwesSeenRelight ? "yes" : "no")} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} scene-omitted={m_sceneOmitted.Length} faults={Counters.Read(kind: Faults)} lights={(m_lighting?.Points.Length ?? 0)} emitters={(m_lighting?.Emitters.Length ?? 0)}/{(m_scene?.Emitters.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} lighting-epoch={(m_lighting?.Epoch ?? 0)} seen-relights-owed={(OwesSeenRelight ? "yes" : "no")} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -1989,6 +1989,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_snapshotClaims.Update(draws: input);
 
         var previous = m_scene?.Acquire();
+        var appearance = frame.Program.Appearance;
 
         var (previousDraws, previousCount) = (m_diagnosticDraws, m_diagnosticCount);
         var hadScene = (m_scene is not null);
@@ -2002,7 +2003,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             ChangeTree? changed;
 
             using (previous) {
-                scene = TryBuildScene(input, previous, Counters);
+                scene = TryBuildScene(input, previous, appearance, Counters);
                 if (scene is null) {
                     lock (m_gate) {
                         m_sceneRefusedAt = Time.GetTimestamp();
@@ -2038,15 +2039,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var built = clock.Elapsed.TotalSeconds;
 
             if (held) { await install.Done.Task.ConfigureAwait(continueOnCapturedContext: false); }
-            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} omitted={omitted.Length} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
+            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} omitted={omitted.Length} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} emitters={scene.Emitters.Length} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
         });
         return m_build;
     }
     private bool WaitingForMemory(long? refusedAt) => refusedAt is { } at && Time.GetElapsedTime(at) < PendingSceneInterval;
 
     // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
-    private SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
-        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError, allocator: m_allocator); }
+    // The trace scene gathers its emitters (SdfMeshIrradianceScene.Emitters) by the materials of the program its draws
+    // came from; a diagnostic scene, given no appearance, gathers none.
+    private SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, SdfAppearance? appearance = null, WorkCounterSet? counters = null) {
+        Func<int, bool>? emits = ((appearance is null) ? null : material => SdfMeshIrradianceScene.Emits(appearance: appearance, material: material));
+
+        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError, allocator: m_allocator, emits: emits); }
         catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key, the meshes it left out for not standing
@@ -2142,6 +2147,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         local.Add(value: lightsKey);
         local.Add(value: MaterialsKey(program: frame.Program));
+        // The scene's emitting patches and the exposure their ranges are sized at (Lighting.Emitters): a scene that lands
+        // another emitter, or loses one, moves the local key as a recolour does.
+        local.Add(value: (m_scene?.EmitterDigest ?? 0UL));
+        local.AddBits(value: frame.Exposure.BrightestGain);
         var localKey = local.Value;
         var whole = Fnv1aHash.Create();
 
@@ -2178,7 +2187,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_lightsVersion++;
         }
 
-        var captured = Lighting.Capture(roles: roles, captureLights: captureLights, frame: frame, lightsVersion: m_lightsVersion, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, capturedAt: Time.GetTimestamp(), version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(roles: roles, captureLights: captureLights, frame: frame, lightsVersion: m_lightsVersion, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, capturedAt: Time.GetTimestamp(), version: (m_lightingVersion + 1), patches: (m_scene?.Emitters ?? []));
 
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(kind: SkyCaptures); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
@@ -3190,6 +3199,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         for (var axis = 0; (axis < 6); axis++) {
             if (!reuseLocal) { local[axis] /= AxisTotals[axis]; }
+        }
+        if (!reuseLocal) { AddEmitters(lighting: lighting, local: local, origin: origin, scene: scene); }
+        for (var axis = 0; (axis < 6); axis++) {
             radiance[axis] = ((radiance[axis] / AxisTotals[axis]) + local[axis]);
             sky[axis] /= AxisTotals[axis];
         }
@@ -3221,10 +3233,39 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             lights[(index >> 5)] |= bit;
         }
     }
+    // Adds the light the scene's emitting patches send the probe's centre to its local cube, in the cube's units (the
+    // light a surface facing each axis receives, over pi). A patch is sampled where it stands rather than met by the
+    // probe's rays, whose solid angle a bulb is a fraction of: each patch within its range that the centre sees
+    // (ReachesLight, so the solid holding it never hides it) lights the centre as a Lambertian face of the area it shows
+    // toward it (SdfMeshEmitter.ProjectedArea) does, E = L * P * cos / (d^2 + P / pi), exact on the axis of a disc and
+    // bounded near it, as a screen's face lights (sdfLightResponse), eased to zero at its range (SdfPhotometry.Window);
+    // the cosine is each axis's with the direction toward the patch. The bounce of that light reaches the probe through
+    // the probes about its hits, as every bounce does. KEEP IN SYNC with sdfProbeEmitters in shade/sdf-probe-lighting.hlsli.
+    private static void AddEmitters(Vector3 origin, Lighting lighting, SdfMeshIrradianceScene scene, Span<Vector3> local) {
+        foreach (var emitter in lighting.Emitters) {
+            var toward = (emitter.Patch.Centroid - origin);
+            var distanceSquared = toward.LengthSquared();
+
+            if (distanceSquared >= (emitter.Range * emitter.Range)) { continue; }
+
+            var distance = MathF.Sqrt(x: distanceSquared);
+
+            if (!(distance > SdfMeshIrradianceProbe.LightBias)) { continue; }
+
+            var direction = (toward / distance);
+            var shown = emitter.Patch.ProjectedArea(direction: -direction);
+
+            if (!(shown > 0f) || !scene.ReachesLight(direction: direction, maximum: (distance - SdfMeshIrradianceProbe.LightBias), origin: origin)) { continue; }
+
+            var light = (emitter.Radiance * ((shown * SdfPhotometry.Window(distance: distance, range: emitter.Range)) / ((MathF.PI * distanceSquared) + shown)));
+
+            for (var axis = 0; (axis < 6); axis++) { local[axis] += (light * MathF.Max(x: 0f, y: Vector3.Dot(vector1: direction, vector2: Axes[axis]))); }
+        }
+    }
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives),
     // in two parts. Varying: the directional lights' bounce under a traced shadow and, with feedback, the reflected light
     // of the probes about it. Local, when asked for: the traced point and spot lights' bounce under their windowed
-    // falloff, cone and a traced shadow, and its emission. Open: with feedback, the reflectance (times the bounce gain) a
+    // falloff, cone and a traced shadow. Open: with feedback, the reflectance (times the bounce gain) a
     // hit no probe answers leaves without its bounce, zero where the volume answers (sdfProbeShade's `unanswered`).
     private (Vector3 Varying, Vector3 Local, Vector3 Open) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene, in ReaderEpochs<Reclaimable>.Hold hold) {
         var surface = lighting.MaterialAt(index: material);
@@ -3268,11 +3309,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 fixedLight += ((reflected * points) * lighting.Gains.Lights);
             }
         }
-        // A lane-driven emissive reads its lane from a frame slot, and a static draw has none: it reads zero, as the views
-        // pass shades it.
-        if (local && lighting.Emission && (surface.Emissive > 0f) && (surface.EmissiveLane is null)) {
-            fixedLight += (((surface.Albedo * surface.Emissive) * (surface.Bleed ?? Vector3.One)) * lighting.Gains.Emission);
-        }
+        // A hit's own emission adds nothing here: every emitting triangle the scene traces is a patch the relight samples
+        // from the probe's centre (AddEmitters), which a ray meeting it would count again.
         var open = Vector3.Zero;
 
         if (feedback && (reflected != Vector3.Zero)) {
@@ -4193,6 +4231,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A static point or spot light the probes trace: its index in the lights table, and its record's position, colour,
     // intensity over pi, range, cone and bounce gain.
     private readonly record struct TracedLight(int Index, Vector3 Position, Vector3 Color, float Weight, float Range, Vector3 SpotAxis, float SpotOffset, float Bounce);
+    // An emitting patch of the scene under a lighting: the patch, the radiance it emits in nits (its material's albedo
+    // times emissive and bleed, times the emission gain), and its range, past which it gives a white surface facing it
+    // less than SdfPhotometry.RangeThreshold of display white at the world's brightest exposure, as a point light's and a
+    // screen's range are sized.
+    private readonly record struct TracedEmitter(SdfMeshEmitter Patch, Vector3 Radiance, float Range);
     // A tier's volume: its levels (LevelsOf), each measured level's slots after the finer measured levels' in the volume,
     // whether hits reflect the bounce the volume holds about them (any bounce the frame asks for), the reach of its rays
     // (the frame's far distance), and the finest level it measures (SdfFrame.IndirectLevels). A finer level holds no
@@ -4280,6 +4323,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public required int[] LightIndices { get; init; }
         public required SdfMaterial[] Materials { get; init; }
         public required TracedLight[] Points { get; init; }
+        // The emitting patches of the scene installed at the capture (SdfMeshIrradianceScene.Emitters) that emit under it,
+        // which every relight samples from the probe's centre (AddEmitters); none with the emission source off.
+        public required TracedEmitter[] Emitters { get; init; }
         // The appearance the materials were copied from, which a later capture of the same appearance reuses. Never the
         // program: a capture outlives it in pending reads (a camera sample's), and would keep its words alive.
         public required SdfAppearance Appearance { get; init; }
@@ -4327,7 +4373,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
-        public static Lighting Capture(MultisetDigest roles, SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, int lightsVersion, CaptureScratch scratch, long capturedAt) {
+        public static Lighting Capture(MultisetDigest roles, SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, int lightsVersion, CaptureScratch scratch, long capturedAt, SdfMeshEmitter[] patches) {
             var lights = scratch.Lights;
             var indices = scratch.Indices;
             var points = scratch.Points;
@@ -4373,6 +4419,23 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 skyPeak = frame.IndirectLightingGrid.SnapScalar(value: skyPeak);
             }
 
+            var materials = (ReferenceEquals(objA: previous?.Appearance, objB: frame.Program.Appearance) ? previous!.Materials : [.. frame.Program.Appearance.Materials]);
+            var emitters = new List<TracedEmitter>();
+
+            if (((sources & SdfIndirectSources.Emission) != 0) && (frame.IndirectGains.Emission > 0f)) {
+                var gain = frame.Exposure.BrightestGain;
+
+                foreach (var patch in patches) {
+                    if (((uint)patch.Material) >= ((uint)materials.Length)) { continue; }
+
+                    var material = materials[patch.Material];
+                    var radiance = (((material.Albedo * material.Emissive) * (material.Bleed ?? Vector3.One)) * frame.IndirectGains.Emission);
+                    var range = SdfPhotometry.RangeOf(exposure: gain, weight: ((SdfPhotometry.LuminanceOf(color: radiance) * patch.MostProjectedArea) / MathF.PI));
+
+                    if (range > 0f) { emitters.Add(item: new TracedEmitter(Patch: patch, Radiance: radiance, Range: range)); }
+                }
+            }
+
             var inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid);
             var directionals = ((previous is not null) && DirectionalsJump(after: inputs, before: previous.Inputs));
             var jumps = ((previous is not null) && (directionals || (localVersion != previous.LocalVersion)));
@@ -4393,8 +4456,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Inputs = inputs,
                 LightIndices = [.. indices],
                 Appearance = frame.Program.Appearance,
-                Materials = (ReferenceEquals(objA: previous?.Appearance, objB: frame.Program.Appearance) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
+                Materials = materials,
                 Points = [.. points],
+                Emitters = [.. emitters],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
             };
         }

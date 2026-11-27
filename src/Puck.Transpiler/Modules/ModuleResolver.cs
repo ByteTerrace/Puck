@@ -128,6 +128,12 @@ public static class ModuleResolver {
             if (node is Puck.State.ExpressionSpelling.SourceLambda lambda) {
                 return lambda with { Body = Without(names: [lambda.Binder]).RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) };
             }
+            if (node is Puck.State.ExpressionSpelling.SourceLet let) {
+                return let with {
+                    Value = RewriteOperandSyntax(let.Value, DocumentValueForm.Expression),
+                    Body = Without(names: [let.Name]).RewriteOperandSyntax(let.Body, DocumentValueForm.Expression),
+                };
+            }
             var rewritten = base.RewriteOperandSyntax(form: form, node: node);
 
             return (((rewritten is Puck.State.ExpressionSpelling.SourceName { Quoted: false } name) &&

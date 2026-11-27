@@ -131,11 +131,11 @@ function stairCentreX(stair) = ((stair.well.x0 + stair.well.x1) / 2)
 function stairCentreZ(stair) = ((stair.well.z0 + stair.well.z1) / 2)
 // Whether something `halfX` by `halfZ` about (x, z) keeps clear of every stair's well: the opening the benches and
 // planters on every level yield to.
-function galleryStairClear(x, z, halfX, halfZ) = (length(filter(
+function galleryStairClear(x, z, halfX, halfZ) = (count(
   galleryStairWells,
   well => ((((x + halfX) > well.x0) and ((x - halfX) < well.x1)) and
     (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
-)) == 0)
+) == 0)
 
 // The core, against the south wall: the lift tower outside the wall and the entrance east of it.
 // The lift: the car's centre, in a tower 3.6 m wide that stands outside the south wall, its door in the wall. The

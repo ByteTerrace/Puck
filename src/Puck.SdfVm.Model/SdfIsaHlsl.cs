@@ -313,6 +313,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_RELIGHT_HEADER_ROWS", value: SdfMeshProbeRelight.HeaderRows);
         declarations.Count(name: "SDF_PROBE_RELIGHT_MATERIAL_ROWS", value: SdfMeshProbeRelight.MaterialRows);
         declarations.Count(name: "SDF_PROBE_RELIGHT_LIGHT_ROWS", value: SdfMeshProbeRelight.LightRows);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_EMITTER_ROWS", value: SdfMeshProbeRelight.EmitterRows);
         declarations.Count(name: "SDF_PROBE_SELECT_INPUT_WORDS", value: SdfMeshProbeRelight.SelectionInputWords);
         declarations.Count(name: "SDF_PROBE_SELECT_HEADER_ROWS", value: SdfMeshProbeRelight.SelectionHeaderRows);
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
@@ -399,6 +400,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_VIEWS_PROBE_POOL_WORDS", value: SdfWorldPackage.ViewsProbePoolWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_SLOT_WORDS", value: SdfWorldPackage.ViewsProbeSlotWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_HISTORY_WORDS", value: SdfWorldPackage.ViewsProbeHistoryWords);
+        declarations.Count(name: "SDF_VISIBILITY_RECORD_WORDS", value: (SdfWorldPackage.VisibilityRecordByteLength / sizeof(uint)));
+        declarations.Count(name: "SDF_VISIBILITY_PIXEL_WORDS", value: (SdfWorldPackage.VisibilityPixelByteLength / sizeof(uint)));
+        declarations.Count(name: "SDF_SHADOW_TINT_BITS", value: SdfVisibility.ShadowTintBits);
         declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
         declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);
         declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
@@ -467,6 +471,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADOW_OPTICAL_CLEAR_STEP", value: SdfKernelInterfaces.MeshShadowOpticalClearStep);
         declarations.Count(name: "SDF_SHADOW_OPTICAL_TILE_EDGE", value: SdfWorldPackage.ShadowOpticalTileEdge);
         declarations.Count(name: "SDF_SHADOW_OPTICAL_TEXEL_WORDS", value: SdfWorldPackage.ShadowOpticalTexelWords);
+        declarations.Count(name: "SDF_SHADOW_OPTICAL_COLOR_WORDS", value: SdfWorldPackage.ShadowOpticalColorTexelWords);
         declarations.Count(name: "SDF_OCCLUSION_COUNT_STEP", value: SdfKernelInterfaces.MeshOcclusionCountStep);
         declarations.Count(name: "SDF_OCCLUSION_COMPACT_STEP", value: SdfKernelInterfaces.MeshOcclusionCompactStep);
         declarations.Count(name: "SDF_COMPACT_ROW", value: SdfKernelInterfaces.MeshCompactRow);

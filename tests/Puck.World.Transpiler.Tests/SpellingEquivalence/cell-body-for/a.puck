@@ -1,0 +1,23 @@
+// A cell body's 'let', 'for', 'if' and computed keys are the cells written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let stations = [{ id: "east" }, { id: "west" }]
+
+state {
+  world {
+    table pick capacity(5) {
+      let start = 10
+      for station in stations {
+        for k in range(0, 2) {
+          $"{station.id}-{k}" = start + k
+        }
+      }
+      for k in range(0, 3) {
+        if k == 2 {
+          [k] = -1
+        }
+      }
+    }
+  }
+}

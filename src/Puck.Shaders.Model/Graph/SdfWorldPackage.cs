@@ -112,7 +112,7 @@ public static partial class SdfWorldPackage {
     public const string ExposeShare = "exposeShare";
     /// <summary>The pass-group value holding the share of the sky the air about the view's camera sees open, in [0, 1],
     /// which scales the sky's and the light-casting bodies' in-scatter into its atmosphere, so a closed room's air is not
-    /// lit by the sky outside it (<c>float</c>).</summary>
+    /// lit by the sky outside it; zero until the view's camera sample of its current shot is known (<c>float</c>).</summary>
     public const string AirLight = "airLight";
     /// <summary>The pass-group value holding the luminance, in nits, the view's meter read about its camera, which the
     /// local adaptation measures each surface's surroundings against; zero while the meter has no reading
@@ -304,8 +304,11 @@ public static partial class SdfWorldPackage {
     /// <summary>The length of <see cref="Samplers"/>: one sampler per <see cref="GpuSamplerFilter"/>.</summary>
     public const uint SamplerCount = 2;
     /// <summary>The bytes of one visibility record: the eight words <c>sdf-visibility.hlsli</c> lays out
-    /// (<c>SdfVisibilityWords</c>).</summary>
+    /// (<c>SdfVisibilityWords</c>), which the records hold pixel after pixel.</summary>
     public const int VisibilityRecordByteLength = (8 * sizeof(uint));
+    /// <summary>The bytes the visibility storage holds for each pixel: its record, and its word of the tint plane that
+    /// follows every record (the key light's transmitted colour, <c>sdfVisibilityTintWord</c>).</summary>
+    public const int VisibilityPixelByteLength = (VisibilityRecordByteLength + sizeof(uint));
     /// <summary>The format of the mesh visibility target: per pixel the ray parameter, the draw index plus one and the
     /// triangle, each a whole number a float holds exactly.</summary>
     public const GpuPixelFormat MeshTargetFormat = GpuPixelFormat.R32G32B32A32Float;
@@ -594,7 +597,7 @@ public static partial class SdfWorldPackage {
                 Count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)],
                 Kind: ShaderPipelineResourceKind.Buffer,
                 Name: Parts.Visibility,
-                StrideBytes: VisibilityRecordByteLength,
+                StrideBytes: VisibilityPixelByteLength,
                 Retained: true
             ),
             ProbeRecords,

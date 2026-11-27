@@ -166,6 +166,11 @@ public abstract record StateRowShape(
         1,
         StateCapacity.MaxCellsPerRow
     ),
+        StateDomain.Tally tally => StateTally.CellCount(capacity: Math.Clamp(
+            tally.Capacity,
+            1,
+            StateTally.MaxCapacity
+        )),
         StateDomain.KeysOf or StateDomain.CellsOf => ((Capacity is { } linked)
         ? Math.Clamp(
             max: StateCapacity.MaxCellsPerRow,

@@ -589,7 +589,8 @@ public sealed partial class SdfProgramBuilder {
             Right: Vector3.Normalize(value: worldRight),
             ScreenIndex: m_emitterFaces.Count,
             Up: Vector3.Normalize(value: worldUp),
-            EmitterMaterial: material
+            EmitterMaterial: material,
+            Instance: m_instances.Count
         ));
 
         return this;

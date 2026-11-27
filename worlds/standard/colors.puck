@@ -11,6 +11,7 @@ function colorHexByte(v) = $"{colorHexDigits[floor((colorByte(v) / 16))]}{colorH
 function rgbHex(rgb) = $"#{colorHexByte(rgb[0])}{colorHexByte(rgb[1])}{colorHexByte(rgb[2])}"
 // The colour a fraction f in [0, 1) of the way round a closed loop whose keys ([red, green, blue] each) stand evenly
 // round it from f = 0, eased linearly from each key to the next and from the last back to the first.
-function loopGradient(keys, f) = ((loopItem(keys, floor((f * length(keys)))) *
-  (1 - ((f * length(keys)) - floor((f * length(keys)))))) +
-  (loopItem(keys, (floor((f * length(keys))) + 1)) * ((f * length(keys)) - floor((f * length(keys))))))
+function loopGradient(keys, f) = let at = f * length(keys) in
+let from = floor(at) in
+let t = at - from in
+loopItem(keys, from) * (1 - t) + loopItem(keys, from + 1) * t

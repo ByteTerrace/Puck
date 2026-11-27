@@ -102,6 +102,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     /// <summary>Gets the materials the group's shapes carry, in the order its geometry numbers them.</summary>
     public int[] MaterialOrder { get; private set; } = [];
+    /// <summary>Gets whether a material the group's shapes carry emits light the irradiance volume samples as an emitter
+    /// (<see cref="SdfMeshIrradianceScene.Emits"/>), as the program it was sealed with declares them.</summary>
+    public bool Emits { get; private set; }
 
     /// <summary>Gives the group the material ids a later program numbers its shapes with, place for place: the geometry
     /// names each material by its place (<see cref="SdfMeshGeometryBuilder.Materials"/>), so the group's geometry and form
@@ -586,6 +589,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];
+        Emits = Array.Exists(array: MaterialOrder, match: material => SdfMeshIrradianceScene.Emits(appearance: program.Appearance, material: material));
         SampledSnapshots = [.. Geometry.Sampled.Select(selector: static entry => (entry.Key, entry.Value))];
 
         var (first, last) = Geometry.PoseSlots;

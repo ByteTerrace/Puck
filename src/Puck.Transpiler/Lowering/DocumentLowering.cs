@@ -371,6 +371,18 @@ public static partial class DocumentLowering {
                     return result;
                 }
 
+            // The value is evaluated once and bound as the lambda parameters of a collection builtin are, so the body
+            // reads the lowered value rather than lowering the expression again at each reading.
+            case LetExpressionNode let:
+                return Evaluate(
+                    expr: let.Body,
+                    fieldKey: fieldKey,
+                    owned: out owned,
+                    scope: scope.WithLocals(lambdaLocals: new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
+                        [let.Name] = EvaluateValue(expr: let.Value, scope: scope, fieldKey: fieldKey),
+                    })
+                );
+
             case CallExpressionNode call when (FunctionNamed(name: call.Name, scope: scope) is { } function): {
                     owned = false;
 
@@ -512,10 +524,10 @@ public static partial class DocumentLowering {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.LambdaOutsideBuiltin,
                     message: DiagnosticText.Compose(
-                        fix: $"Pass the lambda as an argument to {string.Join(
+                        fix: $"Pass the lambda as an argument to one of {string.Join(
                             separator: ", ",
-                            values: DocumentBuiltins.Names
-                        )}, or remove the '=>'",
+                            values: DocumentBuiltins.LambdaTakers
+                        )}, or remove the '=>'. Other functions, such as 'sine', take only values",
                         problem: "A lambda ('x => ...') is written where no collection function takes one"
                     ),
                     span: lambda.Span
@@ -955,12 +967,27 @@ public static partial class DocumentLowering {
             return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
         }
 
-        var rightNode = EvaluateValue(
-            expr: bin.Right,
-            scope: scope,
-            fieldKey: fieldKey
+        return ApplyBinary(
+            bin: bin,
+            leftNode: leftNode,
+            rightNode: EvaluateValue(
+                expr: bin.Right,
+                scope: scope,
+                fieldKey: fieldKey
+            ),
+            scope: scope
         );
-
+    }
+    /// <summary>Applies an arithmetic, comparison or equality operator to two operands already evaluated: the one
+    /// fold an operator's expression and a collection builtin's reduction (<c>sum</c>, <c>scan</c>, <c>dot</c>) share,
+    /// so a list folds exactly as the same operator written between its elements does.</summary>
+    /// <param name="bin">The operator node: its <see cref="BinaryExpressionNode.Operator"/> and span name the fold and
+    /// place its refusals; its operands are not read.</param>
+    /// <param name="leftNode">The evaluated left operand.</param>
+    /// <param name="rightNode">The evaluated right operand.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The folded value, or <see langword="null"/> after a refusal reported into the scope.</returns>
+    internal static JsonNode? ApplyBinary(BinaryExpressionNode bin, JsonNode? leftNode, JsonNode? rightNode, DocumentScope scope) {
         // The operator's row is the one description of what it means, in a value as in a rule. A binary node the
         // table does not spell was built by something other than the parser, and it has no value to fold to.
         if (
@@ -1406,7 +1433,7 @@ public static partial class DocumentLowering {
     }
     // A hole's value as it reads inside a string. A whole number prints without a decimal point, so
     // `$"row-{floor(i / 4)}"` reads "row-1" rather than "row-1.0".
-    private static string FormatHole(JsonNode? node) {
+    internal static string FormatHole(JsonNode? node) {
         if (node is not JsonValue value) {
             return (node?.ToJsonString() ?? string.Empty);
         }
@@ -1515,9 +1542,28 @@ public static partial class DocumentLowering {
             value: UnitConversion.Scale(crossesAngleUnits: (read.Exact is null), factor: read.Factor, value: numVal)
         );
     }
-    // A block whose bare NAME is a template parameter takes the bound value as its name, so one template can declare a
-    // differently named row per invocation. A quoted name is a literal and is never looked up.
+    // A block or row declaration whose bare NAME is a template parameter takes the bound value as its name, so one
+    // template can declare a differently named row per invocation. A quoted name is a literal and is never looked up,
+    // and a row declaration's interpolated name is computed here, under the invocation's arguments, so the template's
+    // index of what it declares reads the name the row takes. A row declaration renames only to a text binding.
     private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
+        statement = ResolveDeclarationName(scope: scope, statement: statement);
+
+        if (statement is StateTableDeclarationNode or StateSlotDeclarationNode or StatePileDeclarationNode or StateGridDeclarationNode) {
+            var declared = (statement switch {
+                StateTableDeclarationNode table => table.Name,
+                StateSlotDeclarationNode slot => slot.Name,
+                StatePileDeclarationNode pile => pile.Name,
+                StateGridDeclarationNode grid => grid.Name,
+                _ => string.Empty,
+            });
+
+            return (((declared.Length > 0) && scope.TryLowerBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
+                ? NamedDeclaration(name: renamed, statement: statement)
+                : statement
+            );
+        }
+
         var written = (statement switch {
             BlockNode { NameQuoted: false } block => block.Name,
             RuleBlockNode { NameQuoted: false } rule => rule.Name,
@@ -2129,9 +2175,20 @@ public static partial class DocumentLowering {
         using var templateSourceGuard = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
 
         invocationScope.IndexDeclarations(statements: template.Body.Statements);
-        initializeInvocation?.Invoke(invocationScope, template.Body.Statements);
+
+        // The body renamed before the vocabulary indexes it, so a row a parameter names registers under the name it takes.
+        var body = new List<StatementNode>(capacity: template.Body.Statements.Count);
 
         foreach (var stmt in template.Body.Statements) {
+            try {
+                body.Add(item: Rename(scope: invocationScope, statement: stmt));
+            } catch (DocumentEvaluationException error) when (!error.SourceAttributed && (template.DefinitionPath is not null)) {
+                throw error.WithSource(related: useSite, sourcePath: template.DefinitionPath);
+            }
+        }
+        initializeInvocation?.Invoke(invocationScope, body);
+
+        foreach (var stmt in body) {
             scope.Budget.Spend(
                 count: 1,
                 span: stmt.Span
@@ -2139,7 +2196,7 @@ public static partial class DocumentLowering {
 
             try {
                 sink(
-                    Rename(scope: invocationScope, statement: stmt),
+                    stmt,
                     target,
                     invocationScope
                 );

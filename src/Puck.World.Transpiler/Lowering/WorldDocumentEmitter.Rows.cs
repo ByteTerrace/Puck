@@ -286,30 +286,11 @@ public static partial class WorldDocumentEmitter {
 
                 break;
 
-            case StateTableDeclarationNode table when IsFamily(members: table.FamilyMembers, size: table.FamilySize):
-                foreach (var singleTable in ExpandTableFamily(scope: scope, table: table)) {
-                    yield return (singleTable, scope);
-                }
-
-                break;
-
-            case StateSlotDeclarationNode slot when IsFamily(members: slot.FamilyMembers, size: slot.FamilySize):
-                foreach (var singleSlot in ExpandSlotFamily(scope: scope, slot: slot)) {
-                    yield return (singleSlot, scope);
-                }
-
-                break;
-
-            case StatePileDeclarationNode pile when IsFamily(members: pile.FamilyMembers, size: pile.FamilySize):
-                foreach (var singlePile in ExpandPileFamily(pile: pile, scope: scope)) {
-                    yield return (singlePile, scope);
-                }
-
-                break;
-
-            case StateGridDeclarationNode grid when IsFamily(members: grid.FamilyMembers, size: grid.FamilySize):
-                foreach (var singleGrid in ExpandGridFamily(grid: grid, scope: scope)) {
-                    yield return (singleGrid, scope);
+            // A row declaration's computed name is settled here, the one door every row a section lowers passes, and a
+            // family becomes its members' declarations.
+            case StateTableDeclarationNode or StateSlotDeclarationNode or StatePileDeclarationNode or StateGridDeclarationNode:
+                foreach (var member in ExpandFamily(declaration: DocumentLowering.ResolveDeclarationName(scope: scope, statement: statement), scope: scope)) {
+                    yield return member;
                 }
 
                 break;

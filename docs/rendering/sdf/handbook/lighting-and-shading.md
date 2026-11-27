@@ -219,10 +219,14 @@ in the frame.
   sends it, and which static point and spot lights its centre sees, one bit a
   record of the lights table. A hit's radiance is each directional light under
   a traced shadow ray and each static point or spot light under its windowed
-  falloff, cone and a traced shadow ray, each scaled by its `bounce`, its
-  emission, and the light it reflects from the probes about it, its sky
-  included, which is the Feedback source; that bounce converges over
-  successive relights. The sources mask and gains of `render.indirect.sources`
+  falloff, cone and a traced shadow ray, each scaled by its `bounce`, and the
+  light it reflects from the probes about it, its sky included, which is the
+  Feedback source; that bounce converges over successive relights. Emission
+  is no hit's: an emitting surface the scene traces is gathered into patches
+  of about half a probe spacing (`SdfMeshIrradianceScene.Emitters`), and each
+  probe adds every patch in range that its centre sees, as a Lambertian face
+  of the area the patch shows it, so a bulb far smaller than a probe ray still
+  lights the floor and walls about it. The sources mask and gains of `render.indirect.sources`
   apply as described above. A probe
   stands at its cell's centre unless that lies inside geometry or within
   `SdfMeshIrradianceProbe.Clearance` (0.1 m) of a surface: then the trace moves
@@ -339,8 +343,8 @@ in the frame.
   age past which the volume prints `[sdf.mesh-gi] behind`), so a day's moving
   sun keeps the relight cycling over the window and overload lengthens the
   lighting's age, never the frame. `world.budget` prints the age's median and
-  oldest. The part of each probe's light the point and spot lights and emission
-  send is kept while they hold still, so a moving sun relights only the
+  oldest. The part of each probe's light the point and spot lights and the
+  emitting patches send is kept while they hold still, so a moving sun relights only the
   directional light and the bounce. `render.indirect.lightingGrid` optionally
   snaps indirect captures: `directionDegrees` steps directional azimuth and
   elevation; `radiance` is a fractional step per colour channel's power-of-two
@@ -502,8 +506,11 @@ the sample is the device meter's answer, and until the device first answers (it
 needs the volume's scene uploaded, seconds into a boot) the camera's own trace on
 the built scene, so a view's open sky is known from the scene's build on. An
 unavailable scene or a camera inside opaque geometry supplies no sample, and
-the sky visibility and the sample's light hold their previous values; before any
-sample a view reads the open sky, which lights a closed room as daylight.
+the sample's light holds its previous value, across a camera cut too. The air
+never assumes the open sky: until a sample of the view's current shot is known
+(before the first, and after a cut) its sky visibility is zero and the fog and
+haze in-scatter no sky. Only before a view's first sample ever does a surface no
+probe answers read the open sky, which lights a closed room as daylight.
 An automatic exposure's `local` share then adapts each
 surface on its own in the views stage (`sdfLightStage`): the illumination
 arriving at the surface, the lights' diffuse terms and the volume's indirect

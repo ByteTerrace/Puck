@@ -174,31 +174,51 @@ deadlocks on hidden routed scenes whose GPU work correctly never starts.
 
 ## Mesh pipeline limits
 
-Glass shadow extinction is authored by `SdfGlass.ShadowDensity` (zero by
-default; standard water opts in). Cascade selection's optical indirect phase
-routes glass to `SdfMeshRasterPass.ShadowGlassKey`; opaque entry/exit stay in
-their own phases. Count glass vertices once and each executed opaque phase.
-Only a program with a drawn positive-density glass shape adds optical storage
-through `WithGlassShadows`; the graph's ports govern its allocation, clear and
-surface reads. Each texel holds three words (signed depth and nearest entry).
+Glass shadow extinction is authored by `SdfGlass.ShadowDensity`, grey (zero by
+default; standard water opts in), and `SdfGlass.CastsColor`, a share of the
+glass's own absorption added per channel (`ShadowColorExtinction`, zero by
+default; the standard's `stainedGlassPalette` opts in). Cascade selection's
+optical indirect phase routes glass to `SdfMeshRasterPass.ShadowGlassKey`;
+opaque entry/exit stay in their own phases. Count glass vertices once and each
+executed opaque phase. Only a program with a drawn glass that casts
+(`SdfProgram.HasGlassShadows`) gives the world's shadow entries an optical
+buffer (`SdfWorldShadows`' `Optical`, under the shadows' reservation), and only
+one whose glass casts colour (`HasColoredGlassShadows`) gives it the colour
+plane (`SdfWorldPackage.ShadowOpticalBytes`). Each texel holds three words (the
+red, or grey, signed depth and the nearest entry), then the dirty-tile bitmap,
+then the plane's green and blue sums; every kernel finds the plane by the bound
+buffer's length (`sdfShadowOpticalHoldsColor`), so the allocation is the one
+place the layout is decided. A buffer without the plane casts its red sum grey.
 `pipeline.inspect world` (or a session node named by `world.counters gpu`)
 reads the installed graph's named allocations and actual bytes. Read it beside
 `world.residency` and `host.memory`; those broader reports alone do not identify
 an optical buffer. A document reload clears the exposure pin, so pin the same
 EV again before comparing density-only reload stills.
-The glass fragment rejects a zero-density triangle before any optical write (an
-indexed draw's vertex belongs to no one triangle, so no vertex stage can);
-opaque vertices export only position and clip distance. Density has its own
-cadence signature, shared by cascades and surface, including palette-only uploads.
+The glass fragment rejects a triangle with zero extinction in every channel
+before any optical write (an indexed draw's vertex belongs to no one triangle,
+so no vertex stage can); opaque vertices export only position and clip
+distance. The extinction (density and colour) has its own cadence signature,
+shared by cascades and surface, including palette-only uploads.
 The cascade's optical-depth buffer integrates to its first opaque depth with
-the shared `frame/sdf-optical-depth.hlsli` accumulator. Surface shadow taps
-read extinction and nearest glass entry beside the opaque depths. Glass is
-still absent from the irradiance trace. Keep the separate glass descriptor
+the shared `frame/sdf-optical-depth.hlsli` accumulator, one sum a channel.
+Surface shadow taps read extinction and nearest glass entry beside the opaque
+depths; the filter accumulates its lit and known shares per channel, the
+role's visibility is the brightest channel, and the primary role's colour
+relative to it goes to the visibility record's tint plane (`sdfMeshShadow`'s
+`transmitted`, one word a pixel past every record,
+`SdfWorldPackage.VisibilityPixelByteLength`). Views filters the tint over the
+K row's window weighted by the primary visibility (a binned view's filter
+record carries it in its fourth word), and the light phase's door multiplies a
+directional's colour by `SdfLightInputs.transmitted` before the default
+response or a program reads it (`sdfLightTransmission`, role 0 only). Glass is
+still absent from the irradiance trace, so the coloured patch bounces white. Keep the separate glass descriptor
 set: binding the sampled entry depth while it is an attachment is invalid on
 Vulkan even when an earlier shader does not read that binding. Return the
 entry depth to its attachment layout before the graph's outgoing transition.
-Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
-and HLSL load together without changing the row stride.
+Material row 25 carries the glass's shadow extinction: the colour it casts in
+xyz and the grey density in w (`SdfAppearance.Pack`,
+`sdfMaterialShadowExtinction`); keep its C# pack and HLSL load together without
+changing the row stride.
 For a neutral-default comparison, omit density from both prototype palettes
 and field materials in `state.world`; changing only the prototypes leaves
 field water shadowing. Compare fresh base and head processes with lockstep and
@@ -620,7 +640,9 @@ records the options weighed.
 - **Layouts.** Every layer rests shader-readable between uploads; the recorder moves it to the attachment layout and
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
-  selection of every draw (`OpticalKind`).
+  selection of every draw (`OpticalKind`). It is replaced when the texels change or when a drawn glass starts or stops
+  casting colour (`m_opticalColor`), since the kernels find its colour plane by its length; `world.residency` names an
+  entry holding one `/optical` or `/optical-color`.
 - **Draws that cast no shadow.** A palette slot with `castsShadow: false` (`SdfMaterial.CastsNoShadow`, carried on the
   appearance outline) bakes its shapes into groups of their own (`SdfMeshBakeGroup.CastsNoShadow`), whose records carry
   `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging
@@ -1122,7 +1144,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   reduces a grid of the face's points through `sdfApplyPaints`
   (`shade/shade-paints.hlsli`, the paints' one implementation) times the
   material's emissive. The face's own material and paints shade as before.
-  A face on a stamp that rides a slot declares none yet.
+  A face lights where its surface is drawn: a face declared in a mesh
+  template's instances (`SdfScreenSurface.Instance`, a responding static row's
+  template, which `WorldRigidAssets` emits at the prototype's origin) lights
+  once for every copy that draws the template, carried by the copy's root
+  matrix (`SdfWorldResidency`'s `CollectEmitterFaces`), and every resident
+  emitter slot's rows are written from that list each settle, so a copy that
+  moves or swaps templates moves its light. A face on a stamp that rides a slot
+  (a body, an animated placement) declares none yet. An emitter face's material
+  emits nothing into the irradiance volume (`SdfMeshIrradianceScene.Emits`),
+  which every other emissive reaches as sampled patches ([mesh GI](references/mesh-gi.md)).
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no
@@ -1178,9 +1209,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   meter's reading, target and band state, and its camera sample's source. An
   automatic exposure meters the view's own composite output a few frames late
   (`SdfExposure.Meter`), so a debug view meters nothing and holds; pin the
-  exposure for any before/after comparison. A view with no camera sample reads the
-  open sky, so a closed room meters as daylight and a display in it reads black:
-  `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
+  exposure for any before/after comparison. A view never assumes the open sky for
+  its air: until a camera sample of its current shot arrives (before its first, and
+  after a cut) its `airLight` is zero, so the fog and haze in-scatter no sky, while
+  the last sample's light holds across the cut for surfaces no probe answers, as the
+  exposure holds. Only before a view's first sample ever do those surfaces read the
+  open sky. `camera=none` or `held` names its `wait=`, and `air=` the share the
+  composite applies ([mesh GI](references/mesh-gi.md)).
 - **A view stores its light at a scale near its exposure** (the pass block's
   `lightScale`, `SdfPhotometry.StoredLightScale`, a power of two kept within
   `StoredLightBand` stops of the exposure), so a star's surface and the noon sky
@@ -1329,7 +1364,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
   occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
   share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. What it
+  screen's edge, so where rays stop answering the volume takes over with no line. The
+  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
+  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
+  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
+  render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:
@@ -1340,9 +1379,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   offset blocks that break up as the camera moves. With it comes the air's in-scatter the composite added there, which the history does not hold
   (the history surface's transport words, `sdfAirFogColor`, `sdfAirHazeColor`). A
   record is one cell's: colour at the stored scale, the screen and open-sky shares,
-  and the representative's normal and tangent plane; views reads the cells whose
-  representatives lie nearest its pixel and keeps those on its own surface by the probe
-  lookup's tolerances (`sdfViewsScreenReflection`), so the volume
+  and the representative's normal and tangent plane; views weighs the 2x2 cells about its
+  pixel by a tent of one cell about each representative and by how nearly that
+  representative lies on its own surface, falling smoothly to nothing at the probe
+  lookup's tolerances (`sdfViewsScreenReflection`); never accept or reject a cell whole,
+  which turns a silhouette into steps of a cell as the representatives take turns. The volume
   (`sdfViewsReflectionSeen`) still answers what no kept ray reaches, and a view whose
   fragment holds no pass (`passGroup.screenReflections` zero) reflects the volume
   alone. The records' cell is read back from their allocation
@@ -1386,7 +1427,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   read the volume as off that way). A medium (`SdfGlass.Scatter`, `Scattering`, material row
   31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves) are
   functions of the thickness, `opaque - t` and that light alone: the pass reads
-  the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
+  the lit image once (`sdfGlassLitAt`, or the frost's disc, whose taps that land
+  nearer than the glass are left out, `sdfGlassReadsBehind`). The lit image's
+  coverage carries only the luminance of what the glass passes, so the sky the
+  composite puts behind glass is tinted by the glass's sky filter
+  (`SdfWorldPackage.GlassSkyFilter`, `frame/sdf-glass-sky-filter.hlsli`): the
+  glass clear zeroes it whole, the shading pass writes its glass pixels, and
+  `SdfSkyRecorder` binds it to the composite only while `GlassSeen` holds this
+  frame, the tables' dummy otherwise, since a frame that skips the glass passes
+  leaves an earlier frame's filter. A new reader of a glass product downstream
+  of the glass passes keeps that rule. The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits. A frame in which no glass draw's host box meets the view's
   frustum (`SdfWorldPasses.GlassSeen`, decided once per instance and frame for
@@ -1444,10 +1494,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   wall-clock moments as the window follows the first view's camera) and adapt
   exposure over the frame's own presentation time
   (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
-  converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
-  since without it a temporally resolved view's still depends on how many
-  frames the display rendered before the hold. Together these make stills
-  of one tick repeat across Worlds to a 1-level per-render residue.
+  converges over a fresh history (`SdfWorldPackage.ConvergedRenders`,
+  `FrameCaptureRequest.ConvergeOver`), since without it a temporally resolved
+  view's still depends on how many frames the display rendered before the hold.
+  Together these make stills of one tick repeat across Worlds to a 1-level
+  per-render residue. A settled still's first capture frame discards history
+  that read external content the capture gate fills (a screen showing the
+  desktop or a camera, `DiscardTaintedState`), so a still that does not converge
+  already converges over the renders the discard reports
+  (`RenderGraphRuntime.AwaitDiscardedState`): a still served on the render that
+  restarted the epoch is one unjittered sample, aliased and with no screen-space
+  reflection. `ConvergedRenders` is a period and one more because the epoch's
+  first render reads no preceding frame, so it reflects nothing on screen; a
+  temporal view stands only after that many renders too.
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
   dresses: seat views, the operator pose and `views.layouts` slots that name a

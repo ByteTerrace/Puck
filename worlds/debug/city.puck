@@ -504,7 +504,7 @@ placements {
       position [(crossing.x0 + crossing.x1) / 2, 1.5, (crossing.z0 + crossing.z1) / 2]
       region {
         halfExtents [(crossing.x1 - crossing.x0) / 2, 2, (crossing.z1 - crossing.z0) / 2]
-        capacity: length(filter(vehicleSpots, v => v.group == crossing.group))
+        capacity: count(vehicleSpots, v => v.group == crossing.group)
       }
     }
   }

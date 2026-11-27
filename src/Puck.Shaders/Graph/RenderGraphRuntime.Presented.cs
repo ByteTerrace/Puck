@@ -45,20 +45,15 @@ public sealed partial class RenderGraphRuntime {
     }
     // On a capture frame, before anything renders, for an instance the pending capture reads: has each of its packages
     // discard retained state holding unfilled external pixels (IRenderGraphPackageFactory.DiscardTaintedState), which
-    // would otherwise keep every output it reaches tainted for as long as the capture is armed, settled or presented. A
-    // presented capture then skips the presentations the state needs to converge again, so the burst reads the steady
-    // image rather than its reconvergence. A presented capture that holds every frame discards nothing more.
-    private void DiscardCaptureTaint(int index) {
+    // would otherwise keep every output it reaches tainted for as long as the capture is armed, settled or presented.
+    // Returns the renders the discarded state needs to converge again, the most any package reports; zero when nothing
+    // was discarded. A presented capture that holds every frame discards nothing more.
+    private int DiscardCaptureTaint(int index) {
         if (m_presented is { Claimed: true }) {
-            return;
+            return 0;
         }
 
         var factories = m_instanceFactories[index];
-
-        if (factories.Length == 0) {
-            return;
-        }
-
         var name = m_set.Instances[index].Name;
         var settling = 0;
 
@@ -66,7 +61,28 @@ public sealed partial class RenderGraphRuntime {
             settling = Math.Max(val1: settling, val2: factories[position].DiscardTaintedState(instance: name));
         }
 
-        m_presentedWarmup = ((m_presented is null) ? 0 : Math.Max(val1: m_presentedWarmup, val2: settling));
+        return settling;
+    }
+    // Has the pending capture wait out the renders the state its capture frame discarded needs to converge again
+    // (DiscardCaptureTaint), so it never reads the render that restarted a history: a presented capture skips that many
+    // presentations, and a settled one that does not converge already converges over them
+    // (FrameCaptureRequest.ConvergeOver), as a lockstep still does, served on the last. A settled capture of an instance
+    // that cannot converge (an external producer, a source) is served as before.
+    private void AwaitDiscardedState(int settling) {
+        if (m_presented is not null) {
+            m_presentedWarmup = Math.Max(val1: m_presentedWarmup, val2: settling);
+
+            return;
+        }
+        m_presentedWarmup = 0;
+        if (
+            (settling > 0) &&
+            (m_convergence is { Request: { Converge: 0, Claimed: false, Completion.IsCompleted: false } request }) &&
+            (m_capture.PendingPath == request.Path) &&
+            CanConverge(index: m_captureInstance)
+        ) {
+            request.ConvergeOver(samples: settling);
+        }
     }
     // Refuses the presented capture still armed, if any.
     private void RefusePresented(Exception error) {

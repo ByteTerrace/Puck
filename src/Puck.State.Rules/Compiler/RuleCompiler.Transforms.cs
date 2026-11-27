@@ -156,6 +156,12 @@ public static partial class RuleCompiler {
             if (effect is not TransformStateEffect) { resolved.DisclosureReads = reads.ToArray(); }
             ArenaTransforms.CollectAccesses(transform: resolved, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
         }
+        // A tally's cells are its engine-owned table, which only its own add and reset write.
+        foreach (var ordinal in reads.Concat(writes)) {
+            if (context.FindRowAt(rowOrdinal: ordinal) is { EffectiveDomain: StateDomain.Tally } tally) {
+                throw new RuleException(detail: $"a transform addresses tally '{tally.Name.Value}', whose cells are the engine's table", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+            }
+        }
         RequireEnclosedAudience(context: context, reads: reads, ruleName: ruleName, writes: writes);
         if (effect is TransformStateEffect scalar) {
             SettleDisclosure(context: context, controls: [], scalar: scalar);
