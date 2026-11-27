@@ -3583,13 +3583,15 @@ holds a quarter of the medium tier's slots, in its volume, its device tables and
 its hit cache. A residency parked for `SdfWorldResidency.ForgetLightingSeconds`
 gives its measured volume back too (its probe cache, volume words and trace
 scene, all host memory), and a wake after that lights the world from nothing.
-A bake group's admission promises only what its sampled lattice holds; its
-refinement waits in one queue for every bake in the process, holding its
-lattice and no worker, and takes its whole bound
-(`SdfSampledLattice.FineSampleBound`) only as the queue's door starts it
-(`SdfMeshPathBake.Refinement`), narrowing to the fine samples it measured
-once it has them. Admissions stop while the queue holds as many lattices as
-the pool has workers, and no bake worker waits on the account
+A bake group's admission promises what its sampled lattice and its refinement's
+plan hold, and only while the room left still holds its lattice's share of its
+refinement and a readback window; the plan counts the fine samples the
+refinement will measure (`SdfSampledLattice.Plan`), the group narrows to what it
+holds, and its refinement waits in one queue for every bake in the process,
+holding its lattice and no worker, and takes the lattice and that count only as
+the queue's door starts it (`SdfMeshPathBake.Refinement`), narrowing to the fine
+samples it measured once it has them. Admissions stop while a refinement waits
+for room, and no bake worker waits on the account
 (`MemoryAccount.NeverWaitOnThisThread`): a store read it has no room for is
 read again later. A bake's readback is promised as its lattices are taken,
 not whole.
