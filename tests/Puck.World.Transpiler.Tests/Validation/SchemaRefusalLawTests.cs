@@ -20,11 +20,11 @@ public sealed class SchemaRefusalLawTests {
         return refusal!;
     }
 
-    [InlineData("""{ "host": { "width": "wide" } }""", "/host/width", "host.width: expected a whole number, found text")]
-    [InlineData("""{ "host": { "width": 12.5 } }""", "/host/width", "host.width: expected a whole number, found a number")]
-    [InlineData("""{ "host": { "fullscreen": 3 } }""", "/host/fullscreen", "host.fullscreen: expected true or false, found a number")]
-    [InlineData("""{ "placements": { "rows": { "id": "a" } } }""", "/placements/rows", "placements.rows: expected a list, found a block")]
-    [InlineData("""{ "placements": { "rows": [ { "id": "a", "yawDegrees": "north" } ] } }""", "/placements/rows/0/yawDegrees", "placements.rows[0].yawDegrees: expected a number, found text")]
+    [InlineData("""{ "host": { "width": "wide" } }""", "/host/width", "'host.width' takes a whole number, but the document holds text. Write a whole number there.")]
+    [InlineData("""{ "host": { "width": 12.5 } }""", "/host/width", "'host.width' takes a whole number, but the document holds a number. Write a whole number there.")]
+    [InlineData("""{ "host": { "fullscreen": 3 } }""", "/host/fullscreen", "'host.fullscreen' takes true or false, but the document holds a number. Write true or false there.")]
+    [InlineData("""{ "placements": { "rows": { "id": "a" } } }""", "/placements/rows", "'placements.rows' takes a list, but the document holds a block. Write a list there.")]
+    [InlineData("""{ "placements": { "rows": [ { "id": "a", "yawDegrees": "north" } ] } }""", "/placements/rows/0/yawDegrees", "'placements.rows[0].yawDegrees' takes a number, but the document holds text. Write a number there.")]
     [Theory]
     public void AValueOfTheWrongKindIsRefusedAtItsPointerInTheAuthorsWords(string json, string pointer, string authored) {
         var refusal = Refuse(json: json);
@@ -89,7 +89,7 @@ public sealed class SchemaRefusalLawTests {
             predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.SchemaRejected)
         );
 
-        Assert.Equal(expected: "host.width: expected a whole number, found text", actual: finding.Message);
+        Assert.Equal(expected: "'host.width' takes a whole number, but the document holds text. Write a whole number there.", actual: finding.Message);
         Assert.Equal(expected: 5, actual: finding.Span.Line);
     }
     [Fact]
@@ -102,6 +102,6 @@ public sealed class SchemaRefusalLawTests {
             reason: out var reason,
             sourceName: "world.json"
         ));
-        Assert.Equal(expected: "world.json is not a valid puck.world.definition.v1 document: host.width: expected a whole number, found text", actual: reason);
+        Assert.Equal(expected: "world.json is not a valid puck.world.definition.v1 document: 'host.width' takes a whole number, but the document holds text. Write a whole number there.", actual: reason);
     }
 }

@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -194,7 +195,10 @@ public static class ModuleResolver {
                 if (inLibrary) {
                     diagnostics.ReportError(
                         code: PuckDiagnosticCodes.ImportGraph,
-                        message: $"Module library '{Path.GetFileName(path: fullPath)}' imports the document '{importNode.Path}'. A library emits no document, so the document would compose into nothing; import '{importNode.Path}' from the document that composes it.",
+                        message: DiagnosticText.Compose(
+                            fix: $"Import '{importNode.Path}' from the document that composes it",
+                            problem: $"The module library '{Path.GetFileName(path: fullPath)}' imports the document '{importNode.Path}', and a library emits no document, so the document would compose into nothing"
+                        ),
                         span: importNode.Span
                     );
                     success = false;
@@ -214,7 +218,10 @@ public static class ModuleResolver {
 
                 diagnostics.ReportError(
                     code: PuckDiagnosticCodes.ImportGraph,
-                    message: $"Circular import dependency detected: {cycle}",
+                    message: DiagnosticText.Compose(
+                        fix: "Move what the sources share into a third library that both import",
+                        problem: $"The imports form a cycle: {cycle}"
+                    ),
                     span: importNode.Span
                 );
                 success = false;
@@ -225,7 +232,10 @@ public static class ModuleResolver {
             if (activeChain.Count >= DocumentEvaluationBudget.DepthLimit) {
                 diagnostics.ReportError(
                     code: PuckDiagnosticCodes.EvaluationLimit,
-                    message: $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.",
+                    message: DiagnosticText.Compose(
+                        fix: "Flatten the imports: have the top-level source import the libraries directly",
+                        problem: $"The imports nest more than {DocumentEvaluationBudget.DepthLimit.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} source documents deep, which is the most a compile follows"
+                    ),
                     span: importNode.Span
                 );
                 success = false;
@@ -255,7 +265,10 @@ public static class ModuleResolver {
             } catch (Exception ex) when ((ex is not OperationCanceledException)) {
                 diagnostics.ReportError(
                     code: PuckDiagnosticCodes.ImportGraph,
-                    message: $"Failed to parse imported module '{importNode.Path}': {ex.Message}",
+                    message: DiagnosticText.Compose(
+                        fix: $"Fix the error in '{importNode.Path}' and compile again",
+                        problem: $"The imported module '{importNode.Path}' could not be read: {ex.Message}"
+                    ),
                     span: importNode.Span
                 );
                 success = false;

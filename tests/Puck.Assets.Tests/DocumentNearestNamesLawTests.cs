@@ -25,6 +25,6 @@ public sealed class DocumentNearestNamesLawTests {
         var near = DocumentNearestNames.Among(candidates: ["slota", "slotc", "slotb", "slotd", "slot"], name: "slot");
 
         Assert.Equal(expected: ["slot", "slota", "slotb"], actual: near);
-        Assert.Equal(expected: "; nearest: 'seconds'", actual: DocumentNearestNames.Suggestion(candidates: Members, name: "secondz"));
+        Assert.Equal(expected: " Did you mean 'seconds'?", actual: DocumentNearestNames.Suggestion(candidates: Members, name: "secondz"));
     }
 }

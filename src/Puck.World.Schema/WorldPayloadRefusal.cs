@@ -31,9 +31,13 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
     /// document holds.</summary>
     public string Authored {
         get {
-            var said = (IsWrongKind ? $"expected {Expected!.Value.Words()}, found {Found!.Value.Words()}" : Detail);
+            if (IsWrongKind) {
+                var expected = Expected!.Value.Words();
 
-            return ((Path.Length == 0) ? said : $"{Path}: {said}");
+                return $"{((Path.Length == 0) ? "The document" : $"'{Path}'")} takes {expected}, but the document holds {Found!.Value.Words()}. Write {expected} there.";
+            }
+
+            return ((Path.Length == 0) ? Detail : $"{Path}: {Detail}");
         }
     }
     /// <summary>Gets the refusal for a console line: its own words, the member it names and the payload head it quotes.</summary>

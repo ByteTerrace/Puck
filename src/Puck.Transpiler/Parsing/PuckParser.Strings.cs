@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Ast;
@@ -87,7 +88,10 @@ public static partial class PuckParser {
                 )) {
                     throw CreateException(
                         context: context,
-                        message: "Unterminated raw string literal"
+                        message: DiagnosticText.Compose(
+                            fix: "Close it with the same number of quote characters that opened it",
+                            problem: "A raw string literal is never closed"
+                        )
                     );
                 }
             } else {
@@ -294,7 +298,10 @@ public static partial class PuckParser {
 
             if (close < 0) {
                 throw new PuckParseException(
-                    "Unterminated '{' in an interpolated string",
+                    Puck.Assets.Documents.DiagnosticText.Compose(
+                        fix: "Close it with '}', or write '{{' for a literal brace",
+                        problem: "An interpolated string opens an expression with '{' that no '}' closes"
+                    ),
                     span.Offset,
                     span.Line,
                     span.Column

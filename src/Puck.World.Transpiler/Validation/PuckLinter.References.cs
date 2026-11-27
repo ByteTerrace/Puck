@@ -297,7 +297,7 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.UnresolvedParent,
                     diagnostics: diagnostics,
-                    message: $"Shape parent '{parentName}' does not resolve to a sibling shape name in this collection{DocumentNearestNames.Suggestion(candidates: siblingNames, name: parentName)}.",
+                    message: $"{DiagnosticText.Compose(problem: $"The shape parent '{parentName}' is not the name of a sibling shape in this collection")}{DocumentNearestNames.Suggestion(candidates: siblingNames, name: parentName)} {DiagnosticText.Compose(problem: "A parent is named by another shape in the same 'shapes' array")}",
                     pointer: DocumentJsonPointer.Child(name: "parent", pointer: DocumentJsonPointer.Child(index: index, pointer: pointer)),
                     severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
@@ -338,7 +338,7 @@ public static partial class PuckLinter {
         Report(
             code: PuckDiagnosticCodes.LintUnresolvedState,
             diagnostics: diagnostics,
-            message: $"Unresolved state row '{name}'{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)}.",
+            message: $"{DiagnosticText.Compose(problem: $"The state row '{name}' is not declared")}{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)} {DiagnosticText.Compose(problem: "Declare it in 'state.world', or check the spelling")}",
             pointer: DocumentJsonPointer.Child(name: field, pointer: pointer),
             severity: DiagnosticSeverity.Warning,
             sourceMap: sourceMap
@@ -371,7 +371,7 @@ public static partial class PuckLinter {
                     Report(
                         code: resolved.Code,
                         diagnostics: diagnostics,
-                        message: $"Unresolved {resolved.Noun} '{name}'{DocumentNearestNames.Suggestion(candidates: declared, name: name)}.",
+                        message: $"{DiagnosticText.Compose(problem: $"The {resolved.Noun} '{name}' is not declared")}{DocumentNearestNames.Suggestion(candidates: declared, name: name)} {DiagnosticText.Compose(problem: $"Declare a {resolved.Noun} of that name, or check the spelling")}",
                         pointer: ((index < 0) ? at : DocumentJsonPointer.Child(index: index, pointer: at)),
                         severity: DiagnosticSeverity.Warning,
                         sourceMap: sourceMap
@@ -426,7 +426,7 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
-                    message: $"Unresolved region placement '{placementId}'{DocumentNearestNames.Suggestion(candidates: catalog.Declared(kind: WorldNameKind.Placement), name: placementId)}.",
+                    message: $"{DiagnosticText.Compose(problem: $"The region names the placement '{placementId}', which is not declared")}{DocumentNearestNames.Suggestion(candidates: catalog.Declared(kind: WorldNameKind.Placement), name: placementId)} {DiagnosticText.Compose(problem: "Name a placement the document declares in 'placements'")}",
                     pointer: DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder)),
                     severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
@@ -642,7 +642,7 @@ public static partial class PuckLinter {
             Report(
                 code: PuckDiagnosticCodes.LintUnresolvedState,
                 diagnostics: diagnostics,
-                message: $"Unresolved state row '{name}'{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)}.",
+                message: $"{DiagnosticText.Compose(problem: $"The state row '{name}' is not declared")}{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)} {DiagnosticText.Compose(problem: "Declare it in 'state.world', or check the spelling")}",
                 pointer: pointer(),
                 severity: DiagnosticSeverity.Warning,
                 sourceMap: sourceMap
@@ -728,7 +728,7 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnknownChannelPrefix,
                     diagnostics: diagnostics,
-                    message: $"'{prefix}' does not match any known reserved-channel prefix — did you mean '{known}'?",
+                    message: DiagnosticText.Compose(fix: $"Did you mean '{known}'?", problem: $"'{prefix}' is not a reserved-channel prefix"),
                     pointer: atPointer(),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap

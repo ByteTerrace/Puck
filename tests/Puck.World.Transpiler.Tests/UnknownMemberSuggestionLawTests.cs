@@ -23,13 +23,13 @@ public sealed class UnknownMemberSuggestionLawTests {
         var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Layout(member: "secondz"));
         var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
-        Assert.Contains(expectedSubstring: "Unknown member 'secondz'; nearest: 'seconds'.", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "'secondz' is not a member of", actualString: finding.Message);
     }
     [Fact]
     public void AnUnknownMemberFarFromEveryDeclaredMemberSuggestsNothing() {
         var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Layout(member: "bogusMember"));
         var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
-        Assert.Contains(expectedSubstring: "Unknown member 'bogusMember'.", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "'bogusMember' is not a member of", actualString: finding.Message);
     }
 }

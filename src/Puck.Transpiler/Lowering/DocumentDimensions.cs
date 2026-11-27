@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Units;
@@ -108,7 +109,10 @@ public static class DocumentDimensions {
             if (!inferred.Dimension.IsNone && (inferred.Dimension != Angle)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.DimensionMismatch,
-                    message: $"{FieldName(fieldKey: fieldKey)} takes an angle or a pure number, but this value is {Spelling(dimension: inferred.Dimension)}",
+                    message: DiagnosticText.Compose(
+                        fix: "Write the value as an angle (3deg, 0.5rad) or as a plain number",
+                        problem: $"{FieldName(fieldKey: fieldKey)} takes an angle or a pure number, but this value is {Spelling(dimension: inferred.Dimension)}"
+                    ),
                     span: expression.Span
                 );
             }
@@ -116,14 +120,20 @@ public static class DocumentDimensions {
             if (inferred.Dimension != expected) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.UnitNotAdmitted,
-                    message: $"{FieldName(fieldKey: fieldKey)} takes {ValueIn(dimension: expected)}, but this value is {Spelling(dimension: inferred.Dimension)}",
+                    message: DiagnosticText.Compose(
+                        fix: $"Change the arithmetic or the unit so the value is {ValueIn(dimension: expected)}",
+                        problem: $"{FieldName(fieldKey: fieldKey)} takes {ValueIn(dimension: expected)}, but this value is {Spelling(dimension: inferred.Dimension)}"
+                    ),
                     span: expression.Span
                 );
             }
         } else if (!inferred.Dimension.IsNone) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.UnitOnUnknownField,
-                message: $"{FieldName(fieldKey: fieldKey)} admits no unit, but this value is {Spelling(dimension: inferred.Dimension)}; remove the unit",
+                message: DiagnosticText.Compose(
+                    fix: "Remove the unit and write the number alone",
+                    problem: $"{FieldName(fieldKey: fieldKey)} admits no unit, but this value is {Spelling(dimension: inferred.Dimension)}"
+                ),
                 span: expression.Span
             );
         }
@@ -162,7 +172,10 @@ public static class DocumentDimensions {
         if ((inferred.Knowledge == DimensionKnowledge.Known) && (inferred.Dimension != unit.Dimension)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.DimensionMismatch,
-                message: $"this value is {Spelling(dimension: inferred.Dimension)}, but its annotation says {annotation.Unit}, {ValueIn(dimension: unit.Dimension)}",
+                message: DiagnosticText.Compose(
+                    fix: "Change the annotation to the unit the value has, or change the value to match the annotation",
+                    problem: $"This value is {Spelling(dimension: inferred.Dimension)}, but its annotation says {annotation.Unit}, {ValueIn(dimension: unit.Dimension)}"
+                ),
                 span: annotation.Value.Span
             );
         }
@@ -178,7 +191,11 @@ public static class DocumentDimensions {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.UnitNotAdmitted,
-            message: $"'{unit}' is not a unit; a unit is one of m, cm, mm, s, ms, min, h, hz, deg, rad, %, pct, lx, lm, cd, nit and K, or several joined by '/' and raised by '^' (m/s, m/s^2)",
+            message: DiagnosticText.Compose(
+                example: "'8m/s' or '9.8m/s^2'",
+                fix: "Use one of m, cm, mm, s, ms, min, h, hz, deg, rad, %, pct, lx, lm, cd, nit and K, or several joined by '/' and raised by '^'",
+                problem: $"'{unit}' is not a unit"
+            ),
             span: span
         );
     }
@@ -357,7 +374,10 @@ public static class DocumentDimensions {
         if (left.Dimension != right.Dimension) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.DimensionMismatch,
-                message: $"{what} joins {Name(dimension: left.Dimension)} with {Name(dimension: right.Dimension)}",
+                message: DiagnosticText.Compose(
+                    fix: "Convert one side so both have the same dimension, or remove the unit from the side that should be a plain number",
+                    problem: $"{what} joins {Name(dimension: left.Dimension)} with {Name(dimension: right.Dimension)}, and the two must agree"
+                ),
                 span: span
             );
 

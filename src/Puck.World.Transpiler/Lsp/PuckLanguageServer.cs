@@ -1454,7 +1454,7 @@ public sealed partial class PuckLanguageServer {
         SendResponse(id: id, result: actions);
     }
     private static void TryAddNearestNameActions(JsonArray actions, string code, JsonObject diagnostic, string message, JsonObject range, string text, string uri) {
-        const string Marker = "; nearest: ";
+        const string Marker = Puck.Assets.Documents.DocumentNearestNames.Marker;
         var markerIndex = message.IndexOf(comparisonType: StringComparison.Ordinal, value: Marker);
 
         if (markerIndex < 0) {
@@ -1468,7 +1468,8 @@ public sealed partial class PuckLanguageServer {
         }
 
         var tail = message[(markerIndex + Marker.Length)..];
-        var candidates = ExtractQuotedNames(text: tail);
+        var tailEnd = tail.IndexOf(value: '?');
+        var candidates = ExtractQuotedNames(text: ((tailEnd < 0) ? tail : tail[..tailEnd]));
 
         if (candidates.Count == 0) {
             return;

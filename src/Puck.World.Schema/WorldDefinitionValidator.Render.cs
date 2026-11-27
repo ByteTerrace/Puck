@@ -110,7 +110,13 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateRenderLanes(WorldDefinition definition, List<string> errors) {
         if (definition.Render.Lanes is not { } lanes) { return; }
         if (lanes.Count > WorldRenderDefaults.MaxLanes) {
-            errors.Add(item: $"render.lanes holds at most {WorldRenderDefaults.MaxLanes} lanes (render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}); got {lanes.Count}.");
+            errors.Add(item: DiagnosticText.Capacity(
+                capacity: WorldRenderDefaults.MaxLanes,
+                fix: $"Remove {(lanes.Count - WorldRenderDefaults.MaxLanes)} of them, or let effects that never animate together share one lane. The lanes are render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}",
+                noun: "lanes",
+                used: [.. lanes.Select(selector: static lane => lane.Name)],
+                what: "render.lanes"
+            ));
         }
         for (var index = 0; (index < lanes.Count); index++) {
             JudgeScalar(WorldValueFields.RenderLane, lanes[index].Value, definition, $"render.lanes[{index}].value", errors);
@@ -139,7 +145,10 @@ public static partial class WorldDefinitionValidator {
 
         if (lighting.Lights is { } lights) {
             if (lights.Count > SdfLights.MaxLights) {
-                errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfLights.MaxLights} fit the lights table.");
+                errors.Add(item: DiagnosticText.Compose(
+                    fix: $"Remove {(lights.Count - SdfLights.MaxLights)} lights, or merge lights that light the same place. The first {SdfLights.MaxLights} fit; {path}.lights[{SdfLights.MaxLights}] and every light after it does not. By kind, the section holds {string.Join(separator: ", ", values: lights.Where(predicate: static light => (light is not null)).GroupBy(keySelector: static light => light!.GetType().Name).OrderByDescending(keySelector: static group => group.Count()).Select(selector: static group => $"{group.Count()} {group.Key}"))}",
+                    problem: $"'{path}.lights' holds {lights.Count} lights, and the lights table has room for {SdfLights.MaxLights}"
+                ));
             }
 
             for (var index = 0; (index < lights.Count); index++) {
@@ -1048,13 +1057,13 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!value.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} {value} {BindableScalar.Grammar}.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"A value here {BindableScalar.Grammar}", problem: $"'{path}' holds {value}, which is not a value this field accepts"));
 
             return;
         }
 
         if ((value.Literal is { } literal) && !field.Domain.Contains(value: literal)) {
-            errors.Add(item: $"{path} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"Write a finite number within {field.Domain}", problem: $"'{path}' is {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, which is outside {field.Domain}{Because(field: field)}"));
         }
 
         if (value.Keys is { } keys) {
@@ -1070,7 +1079,7 @@ public static partial class WorldDefinitionValidator {
             if (keys.Keys[index].Value.Keys is { } nested) {
                 JudgeKeys(errors: errors, field: field, keys: nested, path: keyPath);
             } else if (keys.Keys[index].Value.Literal is { } literal && !field.Domain.Contains(value: literal)) {
-                errors.Add(item: $"{keyPath} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
+                errors.Add(item: DiagnosticText.Compose(fix: $"Write a finite number within {field.Domain}", problem: $"'{keyPath}' is {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, which is outside {field.Domain}{Because(field: field)}"));
             }
         }
     }
