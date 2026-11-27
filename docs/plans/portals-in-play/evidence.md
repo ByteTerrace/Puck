@@ -61,7 +61,7 @@ No query the simulation runs crosses one.
 | Query | Where it ends | Crosses a door |
 |---|---|---|
 | `$los`, a sensed target's sight, a target register's sight, flock sight, a decision's neighbours | `WorldPopulation.HasLineOfSight`, which asks the solid field for one straight segment (`IWorldQuery.LineOfSight`) | No |
-| A tether's aim and a hold's reach | `IContactField.TryNearestSurfaceAlongDirection` and `TryHoldableSurfaceAlongDirection`; `WorldPortalHoleContactField` passes both to the field it wraps unchanged | No |
+| A tether's aim and a hold's reach | `IContactField.TryNearestSurfaceAlongDirection` and `TryHoldableSurfaceAlongDirection`; `WorldPortalHoleContactField` hides a surface the ray reaches through an open door's glass, and finds nothing past it | No |
 | Body against body contact, and collision events | One broadphase over world positions (`FixedSweepGrid`); a body halfway through a door has no presence on the far side | No |
 | A body's sweep against the world | `WorldPortalHoleContactField` takes back the push of the wall behind the glass; nothing resolves the part of the body past the glass against what stands on the far side | No |
 | Routes | `WorldDocumentNavigation` opens the wall behind a door for the walker's contact; the route search joins domains only where two grids share cells | No |

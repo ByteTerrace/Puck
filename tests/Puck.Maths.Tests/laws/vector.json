@@ -1510,6 +1510,10 @@
       },
       {
         "Type": "Puck.Maths.FixedVector3",
+        "Name": "L1Norm"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
         "Name": "Multiply"
       },
       {
@@ -1582,8 +1586,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedVector3.Max, FixedVector3.MaxComponent and FixedVector3.Clamp",
-        "Against": "Exact inline comparisons of the lane raws in the claim: the greater raw per lane, the greatest of the three lanes, and the clamp of each lane to bounds built from the second operand's lane and its fourth lane, ordered so the lower is never above the upper",
+        "Subject": "FixedVector3.Max, FixedVector3.MaxComponent, FixedVector3.L1Norm and FixedVector3.Clamp",
+        "Against": "Exact inline comparisons of the lane raws in the claim: the greater raw per lane, the greatest of the three lanes, the sum of the three lanes' magnitudes in 128-bit integers clamped to the raw extremes, and the clamp of each lane to bounds built from the second operand's lane and its fourth lane, ordered so the lower is never above the upper",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
