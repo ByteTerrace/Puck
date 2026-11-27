@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
 using Puck.Abstractions.Machines;
 using Puck.World.Authoring;
@@ -9,6 +10,70 @@ namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Validates lowered world definitions against engine semantic rules and maps errors to source spans.</summary>
 public static class WorldSemanticValidator {
+    /// <summary>Compiles the rules each generated test world adds to its world (its expectations and the state rows they
+    /// write) over the composed root, as installing that test world does, and reports a rule the compiler refuses as
+    /// PUCK030 naming the test. A test world is its world's own document plus what its <c>test</c> block asked for,
+    /// so the rules and rows it carries beyond the root's are exactly what the root's own validation never compiled
+    /// (an expectation reading a cell an aliased row does not declare). The root is composed once; each test costs one
+    /// read of the composed document and one rule compilation.</summary>
+    /// <param name="loweredRoot">The root's lowered document, which names the rules and rows the root itself carries.</param>
+    /// <param name="composedRoot">The root composed with its basis and imports, as
+    /// <see cref="ValidateComposedWorld"/> returned it.</param>
+    /// <param name="tests">The root's generated test worlds.</param>
+    /// <param name="diagnostics">The bag the refusals are reported into.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static void ValidateTestRules(JsonObject loweredRoot, JsonObject composedRoot, IReadOnlyList<WorldTestWorld> tests, DiagnosticBag diagnostics) {
+        ArgumentNullException.ThrowIfNull(loweredRoot);
+        ArgumentNullException.ThrowIfNull(composedRoot);
+        ArgumentNullException.ThrowIfNull(tests);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+
+        var rootRows = Names(array: ((loweredRoot["state"] as JsonObject)?["world"] as JsonArray));
+        var rootRules = Names(array: (loweredRoot["rules"] as JsonArray));
+
+        foreach (var test in tests) {
+            var rules = Added(array: (test.Json["rules"] as JsonArray), known: rootRules);
+
+            if (rules.Count == 0) {
+                continue;
+            }
+
+            var candidate = ((JsonObject)composedRoot.DeepClone());
+
+            if (candidate["state"] is not JsonObject state) {
+                state = [];
+                candidate["state"] = state;
+            }
+            if (state["world"] is not JsonArray rows) {
+                rows = [];
+                state["world"] = rows;
+            }
+            if (candidate["rules"] is not JsonArray candidateRules) {
+                candidateRules = [];
+                candidate["rules"] = candidateRules;
+            }
+            foreach (var row in Added(array: ((test.Json["state"] as JsonObject)?["world"] as JsonArray), known: rootRows)) {
+                rows.Add(item: row.DeepClone());
+            }
+            foreach (var rule in rules) {
+                candidateRules.Add(item: rule.DeepClone());
+            }
+
+            if (!WorldDefinitionFileSource.TryReadDocument(definition: out var definition, json: candidate.ToJsonString(), reason: out var reason, refusal: out _, sourceName: test.Name) || (definition is null)) {
+                diagnostics.ReportError(code: PuckDiagnosticCodes.SemanticValidation, message: $"test '{test.Test}' does not read as a world: {reason}", span: SourceSpan.None);
+                continue;
+            }
+
+            try {
+                _ = WorldRuleCompilation.Compile(definition: definition);
+            } catch (Puck.State.RuleException exception) {
+                diagnostics.ReportError(code: PuckDiagnosticCodes.SemanticValidation, message: $"test '{test.Test}': {exception.Message}", span: SourceSpan.None);
+            }
+        }
+
+        static HashSet<string> Names(JsonArray? array) => [.. (array ?? []).Select(selector: static node => (node?["name"]?.GetValue<string>() ?? string.Empty))];
+        static List<JsonNode> Added(JsonArray? array, HashSet<string> known) => [.. (array ?? []).OfType<JsonNode>().Where(predicate: node => !known.Contains(item: (node["name"]?.GetValue<string>() ?? string.Empty)))];
+    }
     /// <summary>Returns a value indicating whether <paramref name="loweredJson"/> is a ROOT — a whole world that
     /// stands on its own or on a basis chain — rather than a MODULE, a fragment some other root imports.</summary>
     /// <remarks>A root declares <see cref="WorldDefinition.SchemaVersion"/>, a <c>basis</c>, or both; every other document is a
