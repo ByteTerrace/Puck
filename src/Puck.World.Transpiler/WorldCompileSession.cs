@@ -54,6 +54,9 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     public const long MaxPersistedBytes = (4L << 30);
     /// <summary>The most editor buffers whose latest compile a session holds; holding one more forgets the least recently used.</summary>
     public const int MaxHeldBuffers = 64;
+    /// <summary>The most source compiles a session holds in memory; holding one more forgets the least recently used,
+    /// which is read back from the persistent directory or compiled again when next asked for.</summary>
+    public const int MaxHeldCompiles = 1024;
 
     private const string EntryExtension = ".compiled";
 
@@ -65,7 +68,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         public bool DeferCompositionWrites;
 
         public ConcurrentDictionary<string, Lock> Compiling { get; } = new(comparer: StringComparer.Ordinal);
-        public ConcurrentDictionary<string, WorldCompiledSource> Held { get; } = new(comparer: StringComparer.Ordinal);
+        public CodeDerivedCache<string, WorldCompiledSource> Held { get; } = new(capacity: MaxHeldCompiles);
         public CodeDerivedCache<string, HeldBuffer> Buffers { get; } = new(capacity: MaxHeldBuffers);
         public Lock PersistLock { get; } = new();
         public PuckSourceTable Sources { get; } = sources;
@@ -382,7 +385,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             compiled = WorldCompiledSource.From(compilation: compilation);
             // Only the caller holding this source's lock stores a compile, so the one it stores is the newest.
             if (hold) {
-                m_state.Held[key] = compiled;
+                m_state.Held.Set(key: key, value: compiled);
             }
             WritePersisted(
                 compiled: compiled,
@@ -393,8 +396,9 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         }
     }
 
-    // A hit: the held compile if it still stands, else the persisted entry if it stands. An entry read back from disk
-    // is held only in place of the entry this caller found, so a newer compile stored meanwhile is never displaced.
+    // A hit: the held compile if it still stands, else the persisted entry if it stands. Whichever is held is proved
+    // against its file facts again before every serve, so an entry read back from disk that replaces a newer compile
+    // stored meanwhile costs that source one compile, never a stale answer.
     private bool TryServe(string key, bool hold, out WorldCompiledSource? compiled) {
         var found = m_state.Held.TryGetValue(
             key: key,
@@ -408,16 +412,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             key: key
         ) && Stands(inputs: persisted!.Inputs)) {
             if (hold) {
-                _ = (found
-                    ? m_state.Held.TryUpdate(
-                        comparisonValue: held!,
-                        key: key,
-                        newValue: persisted!
-                    )
-                    : m_state.Held.TryAdd(
-                        key: key,
-                        value: persisted!
-                    ));
+                m_state.Held.Set(key: key, value: persisted!);
             }
             compiled = persisted;
         } else {

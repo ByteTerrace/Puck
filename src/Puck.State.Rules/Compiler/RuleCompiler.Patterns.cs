@@ -172,6 +172,18 @@ public static partial class RuleCompiler {
 
             query = new BoardMaskQuery(
                 lower: lower,
+                planes: (BoardMask.TryPlaneWindow(
+                    catalog: context.Catalog,
+                    lower: out var planeLower,
+                    row: row,
+                    rowOrdinal: ResolveRowOrdinal(
+                        context: context,
+                        name: row.Name.Value
+                    ),
+                    width: out var planeWidth
+                )
+                    ? (planeLower, planeWidth)
+                    : null),
                 topology: topology,
                 upper: upper
             );

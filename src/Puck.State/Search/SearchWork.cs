@@ -154,11 +154,12 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
                     right: score
                 )
                 : 0L),
-            // A restart reads every token's key and clears the root's outputs and the transposition table.
+            // A restart reads every token's key, clears the root's outputs, and moves the transposition table to its
+            // next generation, clearing that generation's block of meta words.
             Restart: BinaryIntegerFunctions.AddSaturating(
                 left: (4L * tokens),
                 right: (keyed
-                    ? ((3L * SearchCapacity.TranspositionEntries) / 8L)
+                    ? (1L + SearchCapacity.TranspositionSweep)
                     : 0L)
             ),
             // A tree job holds its path and its playout open together; a walk holds one scope a ply and one for a
