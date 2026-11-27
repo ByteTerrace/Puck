@@ -60,8 +60,8 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
 
-    // The seat whose player-scope panel is being emitted, which its bindings resolve for; -1 while a world-scope panel
-    // is.
+    // The seat the panel being emitted is drawn for, which its bindings resolve for: a seat's player-scope panel, or a
+    // world-scope panel drawn for one seat (OverlayHudPanel.Seat); -1 while a world-scope panel drawn once is.
     private int m_seat = -1;
 
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
@@ -352,6 +352,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             y: y
         );
 
+        m_seat = panel.Seat;
         EmitPanelInto(
             builder: builder,
             originX: 0f,
@@ -360,6 +361,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             spanH: builder.Height,
             spanW: builder.Width
         );
+        m_seat = -1;
 
         builder.EndClip();
     }

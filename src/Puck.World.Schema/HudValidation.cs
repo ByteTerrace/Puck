@@ -160,6 +160,24 @@ internal static class HudRowValidation {
                 return;
             }
 
+            // The body key reads the cell keyed by the body of the seat the panel is drawn for, which a keyed row takes
+            // when that body first writes it, so only its row's shape is checked here.
+            if (string.Equals(
+                a: parsed.StateCellKey,
+                b: StateBinding.BodyKey,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                if (!row.IsKeyed) {
+                    Refuse(
+                        errors: errors,
+                        reason: refusal,
+                        message: $"{path} '{token}' reads '{StateBinding.BodyKey}' from state row '{parsed.StateName}', which holds one value rather than a cell a body."
+                    );
+                }
+
+                return;
+            }
+
             if (
                 (parsed.StateCellKey is { } cellKey) &&
                 !row.HasCell(key: cellKey)

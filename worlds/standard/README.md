@@ -44,6 +44,7 @@ documents under [`contexts/`](contexts/) hold them:
 | Swimming | [`contexts/swimming.puck`](contexts/swimming.puck) | `swimPlay()`: the `swimming` row and its rule, and the `swim` group (surface and dive) | The seat's body is in a world's medium: `swimming[<body>]` is 1 |
 | At a tabletop | [`contexts/tabletop.puck`](contexts/tabletop.puck) | `tabletopControls()`: the `tabletop` group's Board page, and the seat library a game's rules read a seated player through (`seatButtons`, `seatHeld`, `seatPress`, `seatStepCell`) | The seat sits at a board: `engagement` reads `tabletop` |
 | At a terminal | [`contexts/terminal.puck`](contexts/terminal.puck) | `terminalPlay(terminals)`, `terminalFamily()`, `terminalCamera(...)`, `terminalRoute()` and `pointerCapture()` | The context button, within a terminal's reach |
+| At a terminal's console | [`contexts/terminal-console.puck`](contexts/terminal-console.puck) | `terminalPlay(console: ...)`'s typed command line: the `terminal-console` group and panel, `terminalConsoleFamily()`, and `terminalWrap(...)` for replies | The console key (the backtick), while engaged at a desk-view terminal |
 
 `contexts/modes.puck` holds the other half of a context: which actions the
 simulation accepts in it. `engagementFamily()` is the `inputModes` family for the
@@ -84,8 +85,11 @@ pixel for pixel on a matte, so nothing of the world shows: a screen row's
 map (`machines.puck`'s `deviceRoute` and `deckRoute` are that route with the
 device pad). `pointerCapture` makes a press that lands on a pointer surface the
 surface's alone until release; `terminalPlay` lists it, and a world with
-surfaces and no terminals lists it itself. The debug world's gallery displays
-are the worked desk view ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)),
+surfaces and no terminals lists it itself. A desk view may carry a console
+(`terminalPlay(console: ...)`): the console key opens a typed line that runs
+only the commands the terminal offers, each posting an action to that
+terminal's mailbox for the world's rules, which treat it as a press on the
+screen. The debug world's gallery displays are the worked desk view ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)),
 and its toybox cabinets and television sets, its rental handhelds and its
 desktop monitor the worked full views.
 

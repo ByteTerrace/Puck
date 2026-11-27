@@ -51,6 +51,11 @@
 //
 // A world whose movement family should stand still while a seat is engaged lists
 // `suspendedBy [{ family: "terminal", states ["engaged"] }]` on it.
+//
+// A desk view may carry a console (terminal-console.puck): `terminalPlay(console: ...)` gives the terminals a typed
+// command line the console key opens while a seat is engaged, and a world that does so also lists
+// `terminalConsoleFamily()` in its `inputModes`.
+import "terminal-console"
 
 // The most terminals one world declares: the register's range, and the engaged state's.
 let terminalLimit = 64
@@ -165,7 +170,10 @@ function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = 
 // where it stands between the terminal's camera and what it frames. `seats` sizes the cells (bodies 0 to seats - 1 are
 // seeded; a visitor's body takes a cell when it first engages, up to `capacity`). The terminals' controls come with
 // pointer capture (`pointerCapture`), listed after them so a seat engaged at a terminal keeps the terminal's controls
-// while its pointer rests on the terminal's own glass; `restingPage` is the page pointer capture refines.
+// while its pointer rests on the terminal's own glass; `restingPage` is the page pointer capture refines. `console` is
+// the terminals' console (terminal-console.puck's `terminalConsole`), or null for none; `consoleSources` open and close
+// it, and the console's own page closes it on `consoleCloseSources` too, runs its line on `consoleEnterSources` and
+// erases on `consoleEraseSources`.
 template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near = 0, seats = 4, capacity = 16, tapSources = [
   "mouse.button1"
 ], leaveSources = [
@@ -174,9 +182,24 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
 ], backSources = [
   "keyboard.backspace"
   "gamepad.buttonEast"
-], restingPage = "base") {
+], restingPage = "base", console = null, consoleSources = ["keyboard.backtick"], consoleCloseSources = [], consoleEnterSources = [
+  "keyboard.enter"
+], consoleEraseSources = ["keyboard.backspace"]) {
   let count = length(terminals)
   let gated = map(terminals, terminal => ({ needs [] } with terminal))
+
+  if console != null {
+    terminalConsole(console: console, count: count, seats: seats, capacity: capacity)
+    // Listed ahead of the terminal's own row, so the console's controls win while it is open.
+    bindingOverlays [
+      terminalConsoleOverlay(
+        toggleSources: consoleSources,
+        closeSources: consoleCloseSources,
+        enterSources: consoleEnterSources,
+        eraseSources: consoleEraseSources
+      )
+    ]
+  }
 
   state {
     body [
@@ -337,11 +360,22 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
             page {
               id: "terminal"
               label: "Terminal"
-              entries [
-                { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
-                { channel: "interact", id: "interact", label: "Leave", scale: 1, sources: leaveSources }
-                { channel: "cancel", id: "cancel", label: "Back", scale: 1, sources: backSources }
-              ]
+              entries: concat(
+                [
+                  { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
+                  { channel: "interact", id: "interact", label: "Leave", scale: 1, sources: leaveSources }
+                  { channel: "cancel", id: "cancel", label: "Back", scale: 1, sources: backSources }
+                ],
+                ((console != null) ? [
+                  {
+                    channel: "terminalConsole"
+                    id: "terminalConsole"
+                    label: "Console"
+                    scale: 1
+                    sources: consoleSources
+                  }
+                ] : [])
+              )
             }
           }
         ]

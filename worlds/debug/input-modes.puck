@@ -6,6 +6,7 @@ import "../standard/contexts/modes"
 import "../standard/instrument"
 import "../standard/typing"
 import "../standard/contexts/terminal"
+import "../standard/contexts/terminal-console"
 
 let movement = movementChannels
 let controls = ["jump", "suit", "noclip"]
@@ -69,5 +70,7 @@ inputModes {
     typingFamily(suspendedBy: [whileEngaged, { family: "terminal", states ["engaged"] }])
     // A gallery display's console takes the seat's taps and its step back while she uses it (gallery/gallery.puck).
     terminalFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }])
+    // Its typed console offers the console key there, and the typed line, Enter and Backspace while it is open.
+    terminalConsoleFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }])
   ]
 }
