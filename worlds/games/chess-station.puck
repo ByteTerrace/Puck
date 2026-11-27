@@ -533,7 +533,8 @@ template chessStationHolodeck(station, game) {
         key: `placement:$each`,
         topology: chessBoard,
         expression: chessStationCursor[chair.name],
-        offset: [0, chessStationHover, 0]
+        offset: [0, chessStationHover, 0],
+        frame: `chess-board`
       )
       holodeckTidy()
     }
@@ -545,7 +546,13 @@ template chessStationHolodeck(station, game) {
     when search(ply) == 0 and square >= 0 and holodeckAt[$each] != square and lifted == 0 and holodeckStands()
     forEach: pieceCode
     mode: Level
-    poseCell(key: `placement:$each`, topology: chessBoard, expression: square, offset: [0, chessStationDrop, 0])
+    poseCell(
+      key: `placement:$each`,
+      topology: chessBoard,
+      expression: square,
+      offset: [0, chessStationDrop, 0],
+      frame: `chess-board`
+    )
     holodeckAt[$each] = square
   }
 

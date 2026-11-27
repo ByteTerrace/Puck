@@ -4484,7 +4484,9 @@ unreadable source.
 `schema:` is the world vocabulary's, or absent) and every `.world.json` file
 under `<root>` recursively, in ordinal path order; a cartridge source is
 selected by its schema, never by its folder or suffix. A world source given
-`--validate` without `--output` is validated and writes nothing; a world source
+`--validate` without `--output` is validated and writes nothing (its `test` blocks' expectations are compiled over the
+composed world too, as installing each test world compiles them, so an expectation the install would refuse is
+refused here); a world source
 has no committed document beside it. With source paths, it
 may report elapsed time, peak process working set, managed allocation and live
 managed bytes with `--measure`, then the five sources that charged the most evaluation work units (the
