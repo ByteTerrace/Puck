@@ -9,23 +9,46 @@ namespace Puck.SdfVm.Tests;
 [Collection(ProcessWorkCollection.Name)]
 public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
     [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "PublishMeshIrradiance")]
-    private static extern void PublishIrradiance(SdfWorldTables tables, IGpuBuffer source, int wordCount, List<int> slots);
+    private static extern void PublishIrradiance(SdfWorldTables tables, IGpuBuffer feedback);
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "SettleMeshIrradiance")]
+    private static extern void SettleIrradiance(SdfWorldTables tables);
     [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "ServiceMemoryTrim")]
     private static extern void ServiceTrim(SdfWorldTables tables);
 
     [Fact]
-    public void RetiredFeedbackRegionStaysHeldUntilItsPendingIrradianceCopyIsSubmitted() {
+    public void ARetiredFeedbackTableTheViewsBindStaysHeldUntilTheUploadThatUnbindsItIsSubmitted() {
         using var rig = new Rig(1);
         var services = rig.Gpu.Services;
         using var feedback = new GpuRegion(GpuResidencyPolicy.InPlace, GpuHostVisibleMemory.Host,
             (SdfMeshIrradianceProbe.ProbeWords * 4L), 1, services.BufferFactory, services.Bindings,
             services.Recorder, null, default);
 
-        PublishIrradiance(rig.Engine, feedback.Buffer(slot: 0), SdfMeshIrradianceProbe.ProbeWords, [0]);
+        PublishIrradiance(rig.Engine, feedback.Buffer(slot: 0));
         rig.Engine.RetireBackgroundResource(replaced: feedback);
         ServiceTrim(tables: rig.Engine);
         ServiceTrim(tables: rig.Engine); // A hidden residency may service retirements repeatedly before its next upload.
         Assert.NotEqual(0, feedback.Buffer(slot: 0).BufferHandle);
+        // An upload no preparation unbound it before still leaves the World sets naming it.
+        rig.Engine.SubmitUpload();
+        ServiceTrim(tables: rig.Engine);
+        Assert.NotEqual(0, feedback.Buffer(slot: 0).BufferHandle);
+        // The preparation unbinds it; the upload that carries the unbinding lets the retirement follow every view.
+        SettleIrradiance(tables: rig.Engine);
+        ServiceTrim(tables: rig.Engine);
+        Assert.NotEqual(0, feedback.Buffer(slot: 0).BufferHandle);
+        rig.Engine.SubmitUpload();
+        ServiceTrim(tables: rig.Engine);
+        Assert.Throws<ObjectDisposedException>(testCode: () => feedback.Buffer(slot: 0));
+    }
+    [Fact]
+    public void ARetiredFeedbackTableNoViewBindsGoesBehindTheSubmittedWorkAlone() {
+        using var rig = new Rig(1);
+        var services = rig.Gpu.Services;
+        using var feedback = new GpuRegion(GpuResidencyPolicy.InPlace, GpuHostVisibleMemory.Host,
+            (SdfMeshIrradianceProbe.ProbeWords * 4L), 1, services.BufferFactory, services.Bindings,
+            services.Recorder, null, default);
+
+        rig.Engine.RetireBackgroundResource(replaced: feedback);
         rig.Engine.SubmitUpload();
         ServiceTrim(tables: rig.Engine);
         Assert.Throws<ObjectDisposedException>(testCode: () => feedback.Buffer(slot: 0));

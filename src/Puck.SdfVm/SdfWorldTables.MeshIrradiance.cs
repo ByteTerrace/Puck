@@ -2,79 +2,65 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
-// The mesh path's published irradiance table (SdfMeshIrradiance): SdfMeshIrradianceProbe.ProbeWords words a probe, the
-// slots of the active tier's volume, read by the views pass through the World set (sdfMeshIrradiance). The probe
-// service's feedback table (SdfMeshProbeGpuWork) holds every record its relights committed; the frame's upload copies the
-// slots the volume publishes from it on the device, so no frame uploads the table from the host. Until the volume first
-// publishes into these tables there is no table, the World set binds the dummy buffer, and the volume's parameters are
-// disabled (SdfMeshIrradiance.Publish).
+// The mesh path's irradiance table (SdfMeshIrradiance): SdfMeshIrradianceProbe.ProbeWords words a probe, the slots of the
+// active tier's volume, read by the views pass through the World set (sdfMeshIrradiance). It is the probe service's
+// feedback table itself (SdfMeshProbeGpuWork), which its relights read and commit into, so the volume stands once on the
+// device: a publication binds that table and moves the irradiance revision, and copies nothing. Until the volume first
+// publishes into these tables the World set binds the dummy buffer and the volume's parameters are disabled
+// (SdfMeshIrradiance.Stage).
+//
+// Invariant: a feedback table is disposed only once no submission that reads it can still run: the probe jobs that
+// recorded against it and every view whose World set bound it. Enforced at the one door the probe service retires a
+// table through (RetireBackgroundResource): a table no World set binds is held behind the jobs submitted before it; a
+// bound one is held until the World sets stop naming it, which happens only at a preparation (SettleMeshIrradiance,
+// since a set is rewritten only in a frame's pack or upload), and the upload carrying that unbinding has reached the
+// queue, after which the retirement's checkpoint follows every view that bound it.
+//
+// A view reads the feedback as the device last wrote it, which may run a few frames ahead of the published parameters
+// (a commit that landed but was not yet published); every slot carries the cell it holds and the views reject a slot of
+// another cell, and a still view stands until a publication moves the irradiance revision its signature folds. The
+// probe service hands the table to the views' stages (TableReaders) after every write it records.
 public sealed partial class SdfWorldTables {
-    private readonly GpuFittedBuffer m_meshIrradiance;
-    private bool m_meshIrradianceFresh;
-    private IGpuBuffer? m_meshIrradianceSource;
-    private readonly List<int> m_meshIrradianceSlots = [];
+    // The feedback table the World sets bind, or null for the dummy buffer; and the bound table its probe service retired,
+    // which the next preparation unbinds.
+    private IGpuBuffer? m_meshIrradiance;
+    private UnboundTable? m_meshIrradianceUnbinding;
     // Moves with every publication, which changes what the passes that gather the volume read behind one binding: the
     // tables' signature and the lighting passes' signature fold it (UpdateTablesSignature).
     private long m_meshIrradianceRevision;
 
-    /// <summary>Gets the published irradiance table's device bytes.</summary>
-    public GpuMemoryBytes MeshIrradianceBufferBytes => new(DeviceLocal: m_meshIrradiance.Buffer?.SizeBytes ?? 0, HostVisible: 0);
+    /// <summary>Gets the device bytes of the irradiance table the views read: the probe service's feedback table, which
+    /// the service's own bytes count (<see cref="SdfMeshProbeGpuWork.OwnedBytes"/>), so no total adds them again.</summary>
+    public GpuMemoryBytes MeshIrradianceBufferBytes => new(DeviceLocal: m_meshIrradiance?.SizeBytes ?? 0, HostVisible: 0);
+    /// <summary>Gets whether the World sets bind an irradiance table: the views may read the volume.</summary>
+    internal bool BindsMeshIrradiance => (m_meshIrradiance is not null);
+    /// <summary>Gets the residency's reservation of the lighting's device storage.</summary>
+    public SdfLightingHold Lighting => m_lighting;
 
-    // Stage holds the volume's gate. Only records whose GPU commit completed and whose scene/window still stand enter
-    // this list. The table fits the published volume exactly, growing or shrinking with its tier; a replaced table
-    // retires through the frame ring, and a new one is cleared before its first copies, so no view reads uninitialized
-    // memory. Slots still pending for a replaced table belonged to its layout and are dropped with it.
-    internal void PublishMeshIrradiance(IGpuBuffer source, int wordCount, List<int> slots) {
-        var bytes = (ulong)wordCount * sizeof(uint);
-        if (m_meshIrradiance.Fit(bytes)) {
-            m_meshIrradianceFresh = true;
-            m_meshIrradianceSlots.Clear();
+    // Called at a publication, in the frame's pack: binds the feedback table the published slots lie in.
+    internal void PublishMeshIrradiance(IGpuBuffer feedback) {
+        if (!ReferenceEquals(objA: m_meshIrradiance, objB: feedback)) {
+            m_meshIrradiance = feedback;
             m_bindingRevision++;
         }
-        m_meshIrradianceSource = source;
-        m_meshIrradianceSlots.AddRange(slots);
         m_meshIrradianceRevision++;
     }
+    // Called at every preparation before the volume stages, in the frame's pack: stops binding a table its probe service
+    // retired, so its retirement can follow the upload this preparation leads to.
+    internal void SettleMeshIrradiance() {
+        if (m_meshIrradianceUnbinding is not { } unbinding) { return; }
+        m_meshIrradianceUnbinding = null;
+        if (ReferenceEquals(objA: m_meshIrradiance, objB: unbinding.Buffer)) {
+            m_meshIrradiance = null;
+            m_bindingRevision++;
+        }
+        unbinding.Revision = m_bindingRevision;
+    }
 
-    private void RecordMeshIrradiance(nint command) {
-        if (m_meshIrradiance.Buffer is not { } destination || (!m_meshIrradianceFresh && m_meshIrradianceSlots.Count == 0)) { return; }
-        var recorder = m_gpu.Recorder;
-        // A buffer copy writes as CopyWrite and a clear as TransferWrite: Direct3D 12 synchronizes each by its own scope.
-        if (m_meshIrradianceFresh) {
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: TableReaders,
-                destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
-            recorder.ClearStorageBuffer(bufferHandle: destination.BufferHandle, commandBufferHandle: command, sizeBytes: destination.SizeBytes);
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
-            m_meshIrradianceFresh = false;
-        } else {
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: TableReaders,
-                destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
-        }
-        if (m_meshIrradianceSlots.Count > 0) {
-            var source = m_meshIrradianceSource!;
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: source.BufferHandle,
-                sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.CopyWrite, sourceStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-            m_meshIrradianceSlots.Sort();
-            for (var i = 0; i < m_meshIrradianceSlots.Count;) {
-                var first = m_meshIrradianceSlots[i++];
-                var end = first + 1;
-                while (i < m_meshIrradianceSlots.Count && m_meshIrradianceSlots[i] <= end) { end = Math.Max(end, m_meshIrradianceSlots[i++] + 1); }
-                var offset = (ulong)first * SdfMeshIrradianceProbe.ProbeWords * sizeof(uint);
-                recorder.CopyBuffer(command, source.BufferHandle, destination.BufferHandle, (ulong)(end - first) * SdfMeshIrradianceProbe.ProbeWords * sizeof(uint), offset, offset);
-            }
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: source.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
-            m_meshIrradianceSlots.Clear();
-        }
-        m_meshIrradianceSource = null;
-        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: TableReaders);
+    // A bound table its probe service retired: held until the upload that carries its unbinding (Revision, set by
+    // SettleMeshIrradiance) has reached the queue.
+    private sealed class UnboundTable(IGpuBuffer buffer) {
+        public IGpuBuffer Buffer { get; } = buffer;
+        public long Revision = long.MaxValue;
     }
 }
