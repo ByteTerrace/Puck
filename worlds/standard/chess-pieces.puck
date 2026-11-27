@@ -1,7 +1,7 @@
 // A chess set in miniature: the six pieces of the Staunton pattern, each turned from a few primitives on a two-step
 // foot, sized to stand on a 10 cm square. A module library: it hands its importers the pieces' kinds and a template
-// that expands their prototypes, and emits no document. A game station's glass stands them on its board through
-// `gameStationTokens` (game-station.puck), one token a square picked by the piece code the game's board row holds.
+// that expands their prototypes, and emits no document. A game station's holodeck stands them on its board as rigid
+// bodies while it shows chess (../games/chess-station.puck).
 //
 //   import "../standard/chess-pieces"
 //   prototypes { chessPiecePrototypes(prefix: "piece", sides [{ name: "white", body: {...}, trim: {...} }, ...]) }

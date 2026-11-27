@@ -355,7 +355,7 @@ placements {
   }
 
   // The walkers: a Moth each, looping about its home. The debug world imports this file last, so they take the
-  // population's lowest free slots, below the chess pieces.
+  // lowest slots of its authored inhabitants.
   for walker in walkers {
     placement $"{walker.name}" {
       prototype: "moth"

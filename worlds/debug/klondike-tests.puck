@@ -109,3 +109,38 @@ test "a move out of the empty waste is refused" {
     count(klondikePile2Of0) == 1
   }
 }
+
+// The station's board is a holodeck: showing Klondike stands its 52 card bodies, which the deal lays out, and releases
+// the chess pieces' bodies; showing chess again releases the cards and stands the pieces where the game left them.
+test "the deal materializes the cards, and a switch back to chess releases them" {
+  given {
+    gameStationGame.station = 1
+  }
+  when {
+    ticks 400
+    seat1: world.state.cell.set gameStationGame station 0
+    ticks 60
+  }
+  expect {
+    klondikeDeals[0] == 1
+    sum(holodeckLive) == 0
+    sum(station.holodeckLive) == 32
+    station.chessHold == 0
+  }
+}
+
+// While Klondike is shown every card stands and lies in the slot the glass read it at, and no chess piece stands.
+test "while Klondike is shown every card stands in its slot and no piece does" {
+  given {
+    gameStationGame.station = 1
+  }
+  when {
+    ticks 400
+  }
+  expect {
+    sum(holodeckLive) == 52
+    sum(station.holodeckLive) == 0
+    station.chessHold == 1
+    holodeckAt["station-card0"] >= 0
+  }
+}

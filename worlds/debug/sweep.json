@@ -25,14 +25,6 @@
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 6000
-    },
-    {
-      "name": "chess-scope",
-      "note": "The chess table's idle demonstration: the first cycle records its scope tape, the second replays and compares it. It runs after the fuzzer and the traversal bot, whose lift rides recompile the solid consumers, so the sweep shows the scope's restore validating exactly its own rows and bodies.",
-      "lines": [],
-      "until": { "line": "replay.scope chess-demo", "metric": "status", "in": ["4", "-1"], "red": ["-1"] },
-      "everyTicks": 300,
-      "maxTicks": 12000
     }
   ],
   "signals": [
@@ -42,7 +34,6 @@
     { "name": "traversal", "line": "world.state traversal", "parse": "cells", "leg": "headless", "red": ["missed > 0", "falls > 0", "reached < 23"], "compare": { "reached": "exact", "missed": "exact", "falls": "exact" } },
     { "name": "traversal-failures", "line": "world.state traversalFailures", "parse": "cells", "leg": "headless", "compare": { "*": "exact" } },
     { "name": "traversal-falls", "line": "world.state traversalFalls", "parse": "cells", "leg": "headless", "compare": { "*": "exact" } },
-    { "name": "chess-scope", "line": "replay.scope chess-demo", "parse": "words", "leg": "headless", "red": ["status == -1"], "compare": { "inputs": "exact" } },
     { "name": "rule-failures", "line": "world.rule.failures", "parse": "text", "recheck": true, "amber": ["text != [world.rule.failures: none]"], "compare": { "text": "exact" } },
     { "name": "counters-physics", "line": "world.counters physics", "parse": "counters", "compare": { "*": "relative:0.5" } },
     { "name": "colliders", "line": "world.debug-view report colliders --json", "parse": "report", "timeoutSeconds": 120, "pending": "coverage.pending > 0", "maxAsks": 8, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "comparisons.*": "exact", "coverage.tested": "exact" } },
@@ -81,7 +72,7 @@
   ],
   "tour": {
     "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the held tick, plus the stop's settle ticks. Authority stays paused across bake waits and coordinator calls, and pauses again at the capture tick. The frame lines (camera recenter and animation reseed) run at the start tick, and a stop's steps are pinned after it (world.at). Lockstep presentation follows those ticks, so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
-    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.wait 300"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
     "frame": ["view.recenter 1", "view.reseed 0"],
     "settle": 45,

@@ -3,6 +3,7 @@ import "../standard/inputs"
 import "../standard/kits"
 import "shapes"
 import "gametable"
+import "board-cursor"
 // Physical Reversi (Othello) on an 8x8 board, played to the World Othello Federation's official rules
 // (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
 // black on one face and white on the other, on a table in the gallery hall's board game room (gallery/gallery.puck), whose every
