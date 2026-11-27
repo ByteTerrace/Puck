@@ -28,6 +28,8 @@ public ref struct EvaluationFrame {
 
     // Whether the frame names a reader: the constant folder evaluates with none, and every live read refuses then.
     internal readonly bool IsLive => (m_reader is not null);
+    // The narration a traced gate writes its conjuncts into while it decides, or null.
+    internal List<string>? Trace { get; set; }
     /// <summary>Gets the evaluation in flight.</summary>
     /// <exception cref="InvalidOperationException">The frame is <see langword="default"/>.</exception>
     public readonly IStateReader Reader => (m_reader ?? throw new InvalidOperationException(message: "A default evaluation frame names no reader."));

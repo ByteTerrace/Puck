@@ -345,7 +345,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static Closure Prove(CompiledRule rule, RuleCompileContext? context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        var gate = Array.FindAll(array: rule.Gate, match: static token => (token.Op != GateOp.ShortCircuit));
+        var gate = Array.FindAll(array: rule.Gate.Tokens, match: static token => (token.Op != GateOp.ShortCircuit));
 
         if (gate.Length == 0) {
             return Closure.None;

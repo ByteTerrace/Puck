@@ -6,7 +6,7 @@ namespace Puck.State.Rules;
 public interface IWordFoldOperand : IRuleOperand {
     /// <summary>Gets the program run once per token with <c>$token</c> and <c>$previous</c> bound, whose value is
     /// the token's letter, or <see langword="null"/> when the word is the row's own live values.</summary>
-    CompiledExpressionToken[]? WordProgram { get; }
+    CompiledProgram? WordProgram { get; }
     /// <summary>Gets the kind the per-token program evaluates in.</summary>
     CellKind WordKind { get; }
 
@@ -102,7 +102,7 @@ public static partial class RuleExpressions {
 
     // The interpreter's read of an operand whose token it built as ReadAddressed: every address resolved in the
     // evaluation's own frame, then the word spelled when the operand matches one.
-    private static Fact ReadAddressed(ref EvaluationFrame frame, IRuleOperand operand, scoped ReadOnlySpan<AddressFeed> feeds) {
+    internal static Fact ReadAddressed(ref EvaluationFrame frame, IRuleOperand operand, scoped ReadOnlySpan<AddressFeed> feeds) {
         var addresses = operand.Addresses;
 
         if (addresses.Length > MaxAddresses) {
@@ -216,7 +216,7 @@ public static partial class RuleExpressions {
     /// <returns>The word's length as a finite answer when every token spelled a letter; an absence when a token's
     /// letter is absent; otherwise the token's fault.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-    public static Outcome FoldWord(IStateReader reader, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, int start = 0) {
+    public static Outcome FoldWord(IStateReader reader, int rowOrdinal, CompiledProgram body, CellKind kind, Span<long> word, int start = 0) {
         var frame = new EvaluationFrame(reader: reader);
 
         return SpellWord(
@@ -229,7 +229,7 @@ public static partial class RuleExpressions {
         );
     }
     // The fold itself, inside the evaluation that reads the pattern, so each token's letter reads through its frame.
-    private static Outcome SpellWord(ref EvaluationFrame frame, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, int start) {
+    private static Outcome SpellWord(ref EvaluationFrame frame, int rowOrdinal, CompiledProgram body, CellKind kind, Span<long> word, int start) {
         var reader = frame.Reader;
         var arena = frame.Arena;
         var cursor = start;

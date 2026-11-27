@@ -348,7 +348,7 @@ public sealed class LiveRow {
     public bool SelectsByBinding => (Table is { PerBinding: true });
 
     /// <summary>Gets the program the index resolves through, or <see langword="null"/>.</summary>
-    public CompiledExpressionToken[]? FeedProgram => Index.FeedProgram;
+    public CompiledProgram? FeedProgram => Index.FeedProgram;
 
     private Resolved<int> Select(IStateReader reader, Resolved<long> resolved) => Select(
         each: (SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null),
@@ -387,7 +387,7 @@ public sealed class LocalKeyFact : RuleKeyFact {
     /// <summary>Initializes the fact.</summary>
     /// <param name="ordinal">The local's slot in the rule.</param>
     /// <param name="source">The local's compiled expression, whose reads this key rests on.</param>
-    public LocalKeyFact(int ordinal, CompiledExpressionToken[]? source) {
+    public LocalKeyFact(int ordinal, CompiledProgram? source) {
         Ordinal = ordinal;
         Source = source;
     }
@@ -395,7 +395,7 @@ public sealed class LocalKeyFact : RuleKeyFact {
     /// <summary>Gets the local's slot in the rule.</summary>
     public int Ordinal { get; }
     /// <summary>Gets the local's compiled expression.</summary>
-    public CompiledExpressionToken[]? Source { get; }
+    public CompiledProgram? Source { get; }
 
     /// <summary>Appends what the local's expression reads: a read addressed by this key moves whenever they do, so a
     /// schedule or a memo built over the read rests on them too.</summary>
