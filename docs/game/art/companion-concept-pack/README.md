@@ -1,5 +1,76 @@
 # The Moth’s companion
 
+## Round six
+
+The owner called Sparkbill the first baseline. They want it to feel more
+endearing and asked for eight distinct directions, including two fuzzy
+ones. They will choose which designs to refine. [Round five](#round-five)
+
+![The suited Moth's head next to Velvet, Fleecewick, Tick, Vellum, Samara, Pinlight, Rivet and Echo at the same scale.](r6-overview.png)
+
+| Variant | Main idea | How it endears | How its light speaks | What reads small | SDF buildability risks |
+| --- | --- | --- | --- | --- | --- |
+| [Velvet](r6-velvet.png) | A rosy maple techno moth with short, plush pile across the face, wing edges and lantern belly. | Two large violet irises track first. Fuzzy upper lids blink slowly and the wide wings catch a little upward bob. | Honey light wells up through the belly pile on each syllable. | At 5 m the pink wings frame a gold tip. At 15 m their breadth carries the outline. | Smooth-union a handful of ellipsoid tufts into a soft shell. Confine fine noise to the fringe and use emissive paint along the belly's tuft ridges so it looks lit through the pile. Keep the lids smooth and clear of the hinges. |
+| [Fleecewick](r6-fleecewick.png) | A bumble-firefly with a thick shearling collar and a hard, banded lantern behind it. | One big cyan iris peeks out above the ruff. A soft upper lid opens wide before it bobs up to look. | A mint belt pulses cleanly under the ruff. The hard diffuser gives syllables crisp edges. | At 5 m the stripe separates the fuzzy collar from the long tail. At 15 m look for the squat middle and narrow wing. | Build a scalloped SDF ruff over the smooth thorax with a shallow noise fringe. Test collar clearance at both ends of the wing stroke and keep the stripe visible in a bank. |
+| [Tick](r6-tick.png) | A clockwork firefly with an exposed gear window and a three-slot brass lantern. | A large amber iris leads a precise head pivot. One sprung brow lifts, then its lid clicks shut. | Brightness walks across the slots in speech. An urgent cue illuminates all three together. | At 5 m the slots start to join into a single warm patch. At 15 m the spike and narrow paddles do most of the work. | Keep the gear recess shallow. Use broad teeth for the close view and emissive slot masks on one lantern so the combined patch survives a smaller bake. |
+| [Vellum](r6-vellum.png) | A folded paper-lantern moth with kite-like wings and a lilac paper diffuser. | Large mauve irises look sideways from a little folded face. Paper creases lower as lids while it dips into a gliding bow. | The lilac lantern breathes and its spill lightly colors the inner paper folds with each phrase. | At 5 m the light separates from the high ivory wing. At 15 m the rising V keeps some height. | Give the folds thickness with bevelled solids or wedges. Use emissive paint to suggest light through paper. Check crease and root thickness at the lower mesh tiers. |
+| [Samara](r6-samara.png) | An asymmetric seed firefly with one big spoon petal and a short counter-petal. | A curled brow can lift over the open olive iris. It rolls like a falling seed, then squares back up to see what caught its eye. | The amber kernel swells inside the hull slit. | At 5 m the single big petal and bright seed slit read together. At 15 m the spoon remains the stronger of the two wing shapes. | Blend the hull and subtract one broad opening. Rig both petals to the same yoke and keep the kernel exposed through the roll. |
+| [Pinlight](r6-pinlight.png) | A blown-glass firefly with short vanes and a long tapered filament bulb. | A broad blue iris looks ahead of a skipping dart. A cream shutter lid closes over the eye in a quick blink. | The filament brightens on speech peaks. The frosted tip carries the cue across a larger area. | At 5 m the filament and tip form a stroke. At 15 m the long diagonal tail remains. | Sweep a thick filament through an elongated shell. Check glass, filament and gasket at oblique angles. The frosted tip must carry the signal even when the filament is subpixel. |
+| [Rivet](r6-rivet.png) | A squat enamel rescue mech moth with thick canards and a light strip in its keel. | Two big cyan eyes glance under one hinged visor. It throws the canards wide to brake, then blinks before settling. | The cyan keel bar rises and falls across its full width on syllables. | At 5 m the visor and strip sit on opposite sides of a square mass. At 15 m the thick wing tips and squat chassis retain weight. | Use rounded boxes, thick wing roots and a single visor pivot with clearance above the lenses. Check the underbody strip's visibility in front and in the braking bank. |
+| [Echo](r6-echo.png) | A larger mint firefly and a smaller honey firefly in a staggered formation. | Each blinks and looks independently. The smaller one checks the leader and catches up with a tiny overshoot. | The leader voices the phrase and the follower answers on the release. Both lanterns beat together for a held cue. | At 5 m the two differently sized lamps separate. At 15 m their gap can shrink to one pixel or close. | Use two poses on one companion rig with a bounded offset. Keep one lead optic for lighting, camera, recording and marking. Check clearance as the follower catches up. |
+
+### Expression and light cues
+
+The main optic leads each turn. A moving iris sells the glance, a lid
+or visor supplies the blink, and the whole eye mount aims the lamp,
+camera and mark. The recorder takes the same view. On Echo the larger
+firefly carries those tools. Its follower can look away while the
+leader holds the target. Tilt into a move, let the tail follow and show
+a counter-bank on arrival. Give a hover room for one or two small
+corrections so the wings and body stay alive between excursions.
+
+All eight carry Sparkbill's [eight light states](#the-lanterns-light-language).
+Speech modulates the active state above a held brightness floor. Give
+danger three short whole-lantern beats about 0.4 seconds apart, with a
+clear pause after the third. Give objective one smooth whole-lantern
+swell about every 2.4 seconds, with the objective mark still visible on
+the destination. Keep those rhythms readable by limiting the speech
+modulation while they play. The lantern patterns in the table are
+proposals to check in motion at 5 m and 15 m.
+
+![Eight unlit silhouettes at native 15 m size and at 13 times magnification.](r6-15m-silhouettes.png)
+
+The overview sets each flight pose to a maximum projected span of 0.16 m,
+including both bodies for Echo. The Moth crop keeps the scale of the 2.06 m
+suited figure in the [front turnaround](../moth-concept-pack/01-suited-turnaround.png).
+Each 5 m color inset is drawn at about 30 px at 1080p and 60° vertical field
+of view. The 15 m sheet uses the same pose at about 10 px, with light and
+color reduced to an outline. The enlarged row repeats those same pixels.
+At 15 m several broad-wing shapes converge. Pinlight's tail and Echo's
+stagger change the outline most, and danger and objective need the rhythms
+above to carry their meanings at that size.
+
+### Round-six panel audit
+
+The artist checked these sheets against the
+[concept art review](../README.md#concept-art-review). Each variant uses a
+front drawing as its anatomy reference, a perspective drawing for its
+flight pose and the same flight drawing for both distance samples. This is
+the artist's written pass. The checking partner's independent pass is pending.
+
+| Panel | Attachment and range | Pose, view agreement and composition |
+| --- | --- | --- |
+| [Velvet](r6-velvet.png) | Both wing pins meet the teal yoke, with the nearer wing raised clear of the face. The antennae seat in the pile. | The head leads the roll and the fuzzy emitter trails. Eyes, wing spots and belly agree with the front view. Pile edges and wing tips are intact in both crops. |
+| [Fleecewick](r6-fleecewick.png) | The narrow wings seat above the ruff, where their stroke clears the collar and hard tail. | The tail leans back from the rising eye. Both views show the same ruff, lens and wide band. The wing tips and bright belt stay inside their crops. |
+| [Tick](r6-tick.png) | Paddle pivots seat against the housing, outside the gear window. The lid sits over the optic on its own hinge. | The eye leads the bank and the light cage trails the housing. The side gear is visible only in perspective. The single brow spike and three slots agree in both views. |
+| [Vellum](r6-vellum.png) | Both folded wing roots seat on the binding. The high and low poses leave room at the head and diffuser. | The low wing foreshortens as it bows and the single lantern trails below. Both views retain the same folded wings, two eyes and visible paper seams. |
+| [Samara](r6-samara.png) | Both petals stay on the yoke. The short one clears the pointed tail as the long one sweeps back. | The big petal and its counter-petal remain asymmetric in front and in the roll. The eye heads left and the light trails inside the split hull. |
+| [Pinlight](r6-pinlight.png) | A thick gasket seats the whole bulb. The vanes can sweep without touching the bulb or shutter. | The large eye leads the canted flight pose. The U stays inside the glass and lengthens in the front view, with the frosted tip visible in both. |
+| [Rivet](r6-rivet.png) | Each canard meets a brass pin. The visor's two end mounts stay seated over the helmet. | The chassis rolls into the canards with the light trailing under it. The two eyes, inward wing roots and single keel light agree in front and in perspective. The regenerated sheet leaves both wing tips clear of the gutter. |
+| [Echo](r6-echo.png) | Each body has two seated wings and its own attached lamp. The formation leaves wing clearance in both views. | The follower looks toward the leader in flight, with both tails tucked beneath their bodies. The relative size and colors carry across both views. The gap is intact at panel scale. |
+| [Overview](r6-overview.png) | Uses the eight audited flight views at a common projected scale. | The head is a labeled crop of the suited turnaround, with the lavender hood, warm brown skin and front-rooted braid. The crop and all eight variants have clear margins. |
+| [15 m silhouettes](r6-15m-silhouettes.png) | Uses the same wings, roots, tails and poses as the flight views. | All eight masks fit their native and enlarged cells. The enlarged row preserves the native pixels and adds no details. |
+
 ## Round five
 
 **Sparkbill** is a palm-sized flying flashlight and camera. It hangs beside
