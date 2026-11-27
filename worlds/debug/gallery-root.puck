@@ -14,6 +14,8 @@ import "ship-rows"
 import "shapes"
 import "exposure"
 import "gallery/gallery"
+// Every player's hand torch, switched by 6 (the standard's flashlight.puck).
+import "../standard/flashlight"
 // A body's size register, which level 1's size field writes (gallery/wonder.puck).
 import "size"
 

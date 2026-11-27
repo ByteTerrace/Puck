@@ -101,20 +101,29 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var moved = false;
+        var lightingMoved = false;
 
-        // The expansion reads the render section alone, so a delivery that hands over the same section (a state write, a
-        // response swap) keeps it; the delivery still writes the environment again below.
+        // The lights are the render section's and its creations' (WorldCreationLights), so a delivery that hands over the
+        // same lights (a state write, a response swap that only moves which creation a row shows) keeps them; the
+        // delivery still writes the environment again below.
+        if (!ReferenceEquals(objA: definition, objB: m_definition)) {
+            var lighting = WorldCreationLights.Expand(definition: definition);
+
+            if (!SameLighting(left: lighting, right: m_lighting)) {
+                m_lighting = lighting;
+                m_sources = SourcesOf(lighting: m_lighting);
+                lightingMoved = true;
+            }
+        }
         if (!ReferenceEquals(
             objA: definition.Render,
             objB: m_definition?.Render
         )) {
-            m_lighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
-            m_sources = SourcesOf(lighting: m_lighting);
             m_sky = WorldRenderKeys.Expand(sky: definition.Render.Sky);
             m_skyLabels = WorldSkyLayers.LabelsOf(layers: (m_sky?.Layers ?? []));
         }
         if ((revision != m_revision) || !ReferenceEquals(objA: definition, objB: m_definition)) {
-            moved = (revision != m_revision) || !ReferenceEquals(objA: definition.Render, objB: m_definition?.Render);
+            moved = (revision != m_revision) || lightingMoved || !ReferenceEquals(objA: definition.Render, objB: m_definition?.Render);
             m_definition = definition;
             m_revision = revision;
         }
@@ -157,6 +166,14 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes);
     }
 
+    // Two lighting sections that light alike: the same section, or sections whose members and lights compare equal, as a
+    // definition rebuilt around the same render section and prototypes composes them.
+    private static bool SameLighting(WorldRenderLighting? left, WorldRenderLighting? right) => (
+        ReferenceEquals(objA: left, objB: right) ||
+        ((left is not null) && (right is not null) &&
+        (left with { Lights = null }).Equals(other: (right with { Lights = null })) &&
+        (left.Lights ?? []).SequenceEqual(second: (right.Lights ?? [])))
+    );
     // The full resolution, apart from Resolve so that the closure over the exposure's mirror is built only when one runs.
     private void ResolveAgain(WorldDefinition definition, WorldSkyAudition? layers, WorldStateMirror mirror) {
         m_mirror = mirror;

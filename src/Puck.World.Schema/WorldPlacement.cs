@@ -27,12 +27,19 @@ namespace Puck.World;
 /// <paramref name="Document"/> at load — an author never writes a content hash by hand; see <see cref="Hash"/>.</param>
 /// <param name="Mesh">Opaque triangles every static placement of the prototype draws beside its field, or
 /// <see langword="null"/> for none.</param>
+/// <param name="Lights">The lights the creation carries (<see cref="WorldCreationLights"/>): point, spot, tube and
+/// occluder lights that name no anchor, each positioned and aimed in the frame a placement draws the creation's shapes
+/// in (the placement's own frame, at its scale). Every placement showing the prototype carries them, so placing the
+/// creation places its light, moving the placement moves it, and a placement whose response shows another prototype
+/// shows that prototype's lights instead. A light of a placement that stands still (no attach, inhabit, turn or deal)
+/// is traced and occluded by the irradiance volume as an unanchored light is. <see langword="null"/> carries none.</param>
 public sealed record WorldPrototype(
     [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Declares)] DocumentIdentifier Id,
     CreationDocument Document,
     [property: DocumentText("a content digest")]
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLight>? Lights = null
 ) {
     // Both caches derive from Document alone. A `with` copies them, so Document's init clears them; a `with` that
     // keeps Document keeps caches that still hold.

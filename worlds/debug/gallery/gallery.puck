@@ -175,10 +175,11 @@ let stairPendantAt = [
 ]
 let stairPendantDrop = 0.55
 let stairPendantPower = glowSpotPower(lookStairPendant.luminance, pendantGlowArea())
-// The pendant's diffuser lit and dark: the two prototypes differ only in that slot, so a flip bakes nothing.
+// The pendant's diffuser lit and dark: the two prototypes differ only in that slot, so a flip bakes nothing. The lit one
+// carries the pendant's light, so the placement's response to level 1's switch turns the light with the diffuser.
 let stairPendantStates = [
-  { name: "on", glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance } }
-  { name: "off", glow { color: lookStairPendant.off, roughness: 0.5, specular: 0.04 } }
+  { name: "on", lit: true, glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance } }
+  { name: "off", lit: false, glow { color: lookStairPendant.off, roughness: 0.5, specular: 0.04 } }
 ]
 // The car's luminous ceiling panel, in the cab's frame: its half extents across and along, and its glowing face's
 // height over the car's floor.
@@ -186,11 +187,8 @@ let carLampHalf = [1.25, 1.4]
 let carLampFace = 2.51
 
 // What each `hallLamps` cell holds while its level is On: a storey's stretch of the flaw, its light in candela per metre
-// (look.puck's lookFlaw), and the stairwell's pendant, in lumens, on level 1's switch.
-let hallLampLevels = concat(
-  map(range(0, 4), k => { key: $"level{k}", level: k, value: lookFlaw.intensity }),
-  [{ key: "stairs", level: 1, value: stairPendantPower }]
-)
+// (look.puck's lookFlaw).
+let hallLampLevels = map(range(0, 4), k => { key: $"level{k}", level: k, value: lookFlaw.intensity })
 
 // The tour: every exhibit in walking order, level by level and display by display (shapes.puck's galleryCatalog).
 // `galleryStop` is the exhibit the tour last showed (-1 before the first step); gallery.next and gallery.prev write
@@ -263,6 +261,21 @@ prototypes {
           state.glow
         ]
         pendantLamp(base: 0, at: [0, 0, 0], drop: stairPendantDrop)
+      }
+      // The diffuser faces down under its drum shade, so its light is a spot opening to a hemisphere at the face's
+      // centre, in the face's colour, giving what the face shows.
+      if state.lit {
+        lights [
+          spot(
+            name: "glow",
+            position: pendantGlowAt([0, 0, 0], stairPendantDrop),
+            direction: [0, -1, 0],
+            angle: 90deg,
+            innerAngle: 70deg,
+            color: lookStairPendant.color,
+            power: stairPendantPower
+          )
+        ]
       }
     }
   }
@@ -769,25 +782,15 @@ placements {
 // cannot see it. The flaw (flaw.puck) lights the inside: its tube lights run the whole of its length, each in one
 // storey, reading its power from that storey's `hallLamps` cell. Beside it stand only the two lamps a body can see,
 // each light standing at its fixture's glowing face in that face's colour and giving what the face shows (look.puck's
-// lookCarLamp and lookStairPendant): the south-west stair's pendant, since the flaw never enters that stair's well, and
-// the lift car's luminous ceiling, which rides the car's body through the shaft, so it is neither traced nor bounced.
-// Every screen lights what stands before it by its own picture (toybox.puck), and the windows' daylight is the world's
-// sun. Nothing else lights the building: the coffers' small lamps are paint.
+// lookCarLamp and lookStairPendant): the south-west stair's pendant, since the flaw never enters that stair's well,
+// which its lit prototype carries (`stair-pendant-on`), and the lift car's luminous ceiling, which rides the car's body
+// through the shaft, so it is neither traced nor bounced. Every screen lights what stands before it by its own picture
+// (toybox.puck), and the windows' daylight is the world's sun. Nothing else lights the building: the coffers' small
+// lamps are paint.
 render {
   lighting {
     lights: concat(
       [
-        // The pendant's diffuser faces down under its drum shade, so its light is a spot opening to a hemisphere.
-        spot(
-          name: "hall-stairs",
-          anchor: placement(placementId: gallery),
-          position: pendantGlowAt(stairPendantAt, stairPendantDrop),
-          direction: [0, -1, 0],
-          angle: 90deg,
-          innerAngle: 70deg,
-          color: lookStairPendant.color,
-          power: "state.hallLamps.stairs"
-        )
         // The car's panel lights the cab below it and not the ceiling it is set in, in the car body's frame (the cab
         // rides `liftRoot` under the body).
         spot(
@@ -905,7 +908,6 @@ state {
       level1 = lookFlaw.intensity
       level2 = lookFlaw.intensity
       level3 = lookFlaw.intensity
-      stairs = stairPendantPower
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
