@@ -30,12 +30,7 @@ import "../standard/companion"
 
 // The obelisk teaches a companion sight. A seat's body that stands within 3 m of it carries `companionSight` home on
 // its identity, and that seat's companion notices interests twice as far away in every world after
-// (standard/companion.puck, `companionSight`). The identity lane is where each seat's facts load and are written.
-state {
-  world [
-    { name: "identity", kind: "Int", capacity: 64 }
-  ]
-}
+// (standard/companion.puck, `companionSight`). The identity lane (standard/character.puck) is where each seat's facts load and are written.
 for seat in range(0, 4) {
   rule $"obelisk-sight-{seat}" {
     local dx = bodyPosition(body, seat, x) - 9
