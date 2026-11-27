@@ -266,8 +266,14 @@ every ply below the root. A position where no candidate is accepted scores
 `-SearchCapacity.MateScore` for the side to move.
 
 A scored negamax job keeps a **transposition table**: a cache of values for
-positions reached along more than one path. The table has 8,192 entries per job,
-cleared on every restart. A position's key folds:
+positions reached along more than one path. The table has 8,192 entries per job.
+A restart discards it in constant time: every entry carries the generation of
+the walk that stored it, and a restart moves the job to the next generation, so
+no older entry reads as live. Generations wrap after
+`SearchCapacity.TranspositionGenerations`; each restart also clears its new
+generation's block of `SearchCapacity.TranspositionSweep` entries, and those
+blocks cover the table, so an entry is cleared before its generation comes round
+again. A position's key folds:
 
 - every row the plan names (tokens, turn, verdict, zones, codes, scores, and
   the chance row) and every row the judge rules read or write, plus the rows

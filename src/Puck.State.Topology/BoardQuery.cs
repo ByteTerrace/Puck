@@ -65,6 +65,10 @@ public abstract class BoardQuery {
     public CompiledTopology Topology { get; }
     /// <summary>Returns the conservative visit count one evaluation costs, beyond reading the board itself.</summary>
     public virtual long Visits => Topology.CellCount;
+    /// <summary>Gets a value indicating whether an evaluation reads every cell of the board into a span first, which
+    /// costs a visit per cell beside <see cref="Visits"/>; a query that reads the cells it needs in place does
+    /// not.</summary>
+    public virtual bool ReadsWholeBoard => true;
 }
 /// <summary>The adjacent cell in a topology-specific direction (<see cref="BoardQueryKind.Neighbour"/>) — also
 /// the carrier for a <c>BoardShift</c>/<c>BoardImage</c> expression token and a pattern's board-ray source, both of
@@ -173,23 +177,42 @@ public sealed class BoardComponentQuery : BoardQuery {
     /// <inheritdoc/>
     public override long Visits => ((((long)(MaxVisits + 1)) * Topology.DirectionCount) + Topology.CellCount);
 }
-/// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="BoardQueryKind.Mask"/>).</summary>
+/// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="BoardQueryKind.Mask"/>).
+/// Over a board whose declarations give it a plane window (<see cref="BoardMask.TryPlaneWindow"/>) the arena answers
+/// from the board's value planes, reading the planes the range covers instead of every cell.</summary>
 public sealed class BoardMaskQuery : BoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="lower">The inclusive range lower bound.</param>
     /// <param name="upper">The inclusive range upper bound.</param>
-    public BoardMaskQuery(CompiledTopology topology, long lower, long upper) : base(
+    /// <param name="planes">The plane window of the board the query reads, as <see cref="BoardMask.TryPlaneWindow"/>
+    /// answers it for that row, or <see langword="null"/> when the board keeps no planes and is read cell by
+    /// cell.</param>
+    public BoardMaskQuery(CompiledTopology topology, long lower, long upper, (long Lower, int Width)? planes = null) : base(
         BoardQueryKind.Mask,
         topology
     ) {
         Lower = lower;
         Upper = upper;
+        Planes = planes;
     }
 
     /// <summary>Gets the inclusive range lower bound.</summary>
     public long Lower { get; }
+    /// <summary>Gets the plane window the board's planes span, or <see langword="null"/> when it keeps none.</summary>
+    public (long Lower, int Width)? Planes { get; }
+    /// <inheritdoc/>
+    public override bool ReadsWholeBoard => (Planes is null);
     /// <summary>Gets the inclusive range upper bound.</summary>
     public long Upper { get; }
+    /// <inheritdoc/>
+    public override long Visits => ((Planes is { } planes)
+        ? Puck.Maths.BitmapIndex64.RangeReads(
+            lower: Lower,
+            upper: Upper,
+            width: planes.Width,
+            windowLower: planes.Lower
+        )
+        : Topology.CellCount);
 }
 /// <summary>The least 64-bit fingerprint of the board's values over every point-group element (<see cref="BoardQueryKind.Canonical"/>).</summary>
 public sealed class BoardCanonicalQuery : BoardQuery {
@@ -260,4 +283,6 @@ public sealed class BoardAttacksQuery : BoardQuery {
             return 2L * reads;
         }
     }
+    /// <inheritdoc/>
+    public override bool ReadsWholeBoard => false;
 }

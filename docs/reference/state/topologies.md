@@ -423,6 +423,16 @@ ceiling; it's a consequence of the representation, and there's no multi-word
 set type in the expression language. `board(mask, …)`, the three mask functions,
 and `writeSet` from a mask all refuse a topology of more than 64 cells.
 
+A board of at most 64 cells whose declared values (its `min` and `max`, its enum,
+or a Bool row's two values) and its empty value span at most 64 consecutive
+integers keeps **value planes**: one 64-bit mask per value, which the arena holds
+current at every cell write (`BoardMask.TryPlaneWindow`, `BitmapIndex64`). A
+`board(mask, row, min, max)` over such a board ORs the planes the range covers,
+or the ones outside it when that is fewer, instead of reading all 64 cells, and
+the work sheet prices it at that many planes plus one. Declaring a board's `min`
+and `max` is what lets its masks read this way; a board without them is read
+cell by cell and priced at twice its cell count.
+
 ### Board masks and board rows
 
 Masks and whole board rows do the same set algebra at different scales.
