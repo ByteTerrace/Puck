@@ -55,6 +55,7 @@ public sealed partial class WorldBody {
             );
             var stepOutcome = FixedStepUpOutcome.NotAttempted;
             var stepRise = FixedQ4816.Zero;
+            var blockedResolution = contactResolution;
 
             if (attemptedStep) {
                 stepOutcome = FixedStepUp.Attempt(
@@ -171,7 +172,7 @@ public sealed partial class WorldBody {
                 position: scratch.NextPosition,
                 stepTicks: scratch.StepTicks
             );
-            WitnessKinematics(attemptedStep: attemptedStep, resolution: in contactResolution, scratch: in scratch, snapped: snappedDown,
+            WitnessKinematics(attemptedStep: attemptedStep, blocked: in blockedResolution, resolution: in contactResolution, scratch: in scratch, snapped: snappedDown,
                 stepOutcome: stepOutcome, stepRise: stepRise);
 
             if (

@@ -21,8 +21,26 @@ public sealed class WorldStateRoot {
         FullPath = Path.GetFullPath(path: path);
     }
 
+    /// <summary>The file-name suffix of a runtime guard under a state root: a file a running process holds open as an OS
+    /// lock (the account's <c>account.lock</c>). A guard is never state, so nothing that archives, copies or hashes a
+    /// state directory reads it, and while its process runs the OS refuses anyone who tries.</summary>
+    public const string GuardSuffix = ".lock";
+
     /// <summary>Gets the absolute path of the root directory.</summary>
     public string FullPath { get; }
+
+    /// <summary>Returns whether a file under a state root is a runtime guard (<see cref="GuardSuffix"/>) rather than
+    /// state.</summary>
+    /// <param name="path">The file's path or name.</param>
+    /// <returns><see langword="true"/> for a runtime guard.</returns>
+    public static bool IsRuntimeGuard(string path) => path.EndsWith(value: GuardSuffix, comparisonType: StringComparison.OrdinalIgnoreCase);
+    /// <summary>Enumerates every state file under the root, in every subdirectory, leaving out the runtime guards a
+    /// running process holds (<see cref="IsRuntimeGuard"/>): the one walk anything that archives or copies a state
+    /// directory reads.</summary>
+    /// <returns>The files' absolute paths, or none when the root does not exist.</returns>
+    public IEnumerable<string> EnumerateStateFiles() => (Directory.Exists(path: FullPath)
+        ? Directory.EnumerateFiles(path: FullPath, searchOption: SearchOption.AllDirectories, searchPattern: "*").Where(predicate: static file => !IsRuntimeGuard(path: file))
+        : []);
 
     /// <summary>Returns the absolute path of <paramref name="name"/> under the root.</summary>
     /// <param name="name">A relative path under the root.</param>

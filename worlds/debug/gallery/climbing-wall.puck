@@ -127,6 +127,13 @@ placements {
     position [climbWallX, galleryFloor[0], (climbWallFace + climbWallThickness)]
     solid
   }
+  // The doorway in level 3's balustrade behind the ledge (layout.puck's galleryEdgeDoors), as at the tree's landings.
+  placement "gallery-climb-door" {
+    prototype: "gallery-branch-door"
+    parent: "gallery"
+    position [climbWallX, galleryFloor[climbWallLevel], (naveNorth + balconyInset)]
+    solid
+  }
   for (volume, n) in climbVolumes {
     placement $"gallery-climb-volume-{n}" {
       prototype: $"gallery-climb-volume-{volume.tone}"

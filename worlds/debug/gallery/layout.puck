@@ -301,10 +301,9 @@ function flawCanopyAt(c) = ([treeX, galleryFloor[0], treeZ] + polarPoint(c.r, c.
 // `flawTreadStep` treads.
 let flawExit = filter(treeLimbs, b => ((b.level == 3) and (b.side == "north")))[0]
 let flawInlay = 0.03
-let flawTreadOut = 0.95
 let flawTreadStep = 4
 function flawBranchAt(b, t) = (treeBranchAt(b, t) + [0, flawInlay, 0])
-function flawTreadAt(k) = (treeTreadPlan(k, flawTreadOut) + [0, flawInlay, 0])
+function flawTreadAt(k) = (treeTreadWalk(k) + [0, flawInlay, 0])
 let flawWalkway = map(
   range(0, (floor((flawExit.tread / flawTreadStep)) + 1)),
   n => flawTreadAt((flawExit.tread - (n * flawTreadStep)))
@@ -496,26 +495,44 @@ let toyLatticeNetBay = 9
 let treeBay = 6
 let treeX = bayX(treeBay)
 let treeZ = naveMid
-// The trunk: a cone `base` metres in radius at the floor whose taper would close `apex` metres up, cut off at `top`
-// inside the canopy. Its treads climb from `treeTreadStart` degrees round it (from +x toward +z in the plan, so the first
-// stands just south of east, facing the hall's long axis), one every `treeTreadStep` degrees and `treeTreadRise` metres,
-// a storey a turn in risers under the Moth's 0.3 m step.
+// The trunk: a taper `base` metres in radius at the floor that would close `apex` metres up, ending at `top` inside the
+// canopy. Its treads climb from `treeTreadStart` degrees round it (from +x toward +z in the plan, so the first stands just
+// south of east, facing the hall's long axis), one every `treeTreadStep` degrees and `treeTreadRise` metres, a storey a
+// turn in risers under the Moth's 0.3 m step.
 let treeTrunk = { base: 2.1, apex: 34, top: 17.1 }
 let treeTreadStart = -12
 let treeTreadStep = 18
 let treeTreadRise = 0.225
-// The branches: each leaves the trunk from a tread and walks out to its level's edge, a pair to each level. Each pair
-// leaves two treads (36 degrees) further round than the pair below, so the canopy turns as it climbs; a level's south
-// branch leaves from below its floor and rises to it, its north branch from half a turn higher and falls to it. A
-// branch's walking line ends `treeOverhang` metres onto its balcony, `treeLandingLift` over the floor, so the branch's tip lies
-// on the floor's edge rather than tucking under it, where a foot crossing from the bark to the floor would meet a crease.
+// The walkway round the trunk is a helix of constant radius: every tread is a timber board from inside the bark out to
+// `treeRim` metres from the trunk's axis, whatever the taper, so the guard along its rim climbs one even helix, and a body
+// walks it `treeWalkRadius` from the axis, clear of the bark's strands and of the guard. Each riser is a radial line half a
+// step either side of its tread's bearing (limbs.puck's spiralTreads), so a tread's walkable top spans its whole step at
+// every radius, and a board is `treeTreadThickness` thick, more than a riser, so each riser is closed under the next.
+let treeRim = 4
+let treeWalkRadius = 3.05
+let treeTreadThickness = 0.32
+// Where a branch leaves the spiral, its tread opens onto a level timber pad from `treePadFrom` metres from the axis (just
+// past a walker on the spiral, so the pad never raises the tread before it under her feet) out to `treePadReach`,
+// `treePadWidth` wide; the branch's deck leaves from the pad's outer edge.
+let treePadFrom = 3.55
+let treePadReach = 5.6
+let treePadWidth = 2.8
+// The branches: each leaves the spiral from a tread's pad and walks out to its level's edge, a pair to each level, the
+// pairs turning round the trunk as they climb, so the canopy turns too; a level's south branch leaves from below its
+// floor and rises to it, its north branch from higher and falls to it. Level 1's pads stand between the four displays
+// round the trunk (bays 5 and 7 on both showcase rows), whose exhibits stand taller than a pad over the hall's floor.
+// Each branch's tread is the one whose bearing points within about 25 degrees of its landing, so its deck leaves the
+// pad nearly straight on: a deck that leaves sideways crosses its own pad and the walk across it, and one that turns
+// back passes over the treads below. A
+// branch's deck ends at its balcony's edge, its top flush with the floor, and the walk goes on `treeOverhang` metres onto
+// the balcony (`treeDoorOverhang` through a doorway).
 let treeLimbs = [
-  { level: 1, side: "south", tread: 14, x: bayX(4) }
+  { level: 1, side: "south", tread: 16, x: bayX(6) }
   { level: 1, side: "north", tread: 24, x: bayX(8) }
-  { level: 2, side: "south", tread: 36, x: bayX(8) }
-  { level: 2, side: "north", tread: 46, x: bayX(4) }
-  { level: 3, side: "south", tread: 58, x: bayX(5) }
-  { level: 3, side: "north", tread: 68, x: bayX(7) }
+  { level: 2, side: "south", tread: 38, x: bayX(8) }
+  { level: 2, side: "north", tread: 48, x: bayX(4) }
+  { level: 3, side: "south", tread: 54, x: bayX(5) }
+  { level: 3, side: "north", tread: 64, x: bayX(7) }
 ]
 // Where a level's branch lands on one side, and the arcade bay that x stands in.
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
@@ -526,42 +543,43 @@ let treeDoorWidth = 2
 let treeDoorPost = 0.22
 let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)
 let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
-let treeOverhang = 0.7
-// Where a branch meets a doorway (levels 2 and 3) its walking line runs on through the opening and this far onto the
-// floor, so the tip rests inside the aisle rather than ending on the threshold.
+// Level 1's walk ends on the balcony strip between the edge and the branch's magic barrier in the arcade's plane
+// (shell.puck), which holds a body without a pass; levels 2 and 3 walk on through their doorways into the aisle.
+let treeOverhang = 0.2
 let treeDoorOverhang = 1.5
 function treeOverhangOf(b) = ((b.level >= 2) ? treeDoorOverhang : treeOverhang)
-let treeLandingLift = 0.08
-// A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
-// middle line `out` metres from the bark.
+// A tread's angle round the trunk in degrees and its top's height over the hall's floor, the plan point on its middle
+// line `out` metres from the bark, and the point on it where a body walks the spiral.
 function treeTreadAngle(k) = (treeTreadStart + (treeTreadStep * k))
 function treeTreadTop(k) = treadTop(treeTreadRise, k)
+function treeBarkAt(k) = trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k))
 function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] +
   treadPoint(treeTreadStart, treeTreadStep, treeTreadRise, treeTrunk.base, treeTrunk.apex, k, out))
-// Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
-function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
-function treeBranchTo(b) = [
-  b.x,
-  (galleryFloor[b.level] + treeLandingLift),
-  ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))
-]
+function treeTreadWalk(k) = treeTreadPlan(k, (treeWalkRadius - treeBarkAt(k)))
+// Where a branch's walking line starts (on its pad's outer edge, level with its tread) and ends (on its balcony's edge,
+// level with the floor), and where the walk across its landing ends, in the plan.
+function treeBranchFrom(b) = treeTreadPlan(b.tread, (treePadReach - treeBarkAt(b.tread)))
+function treePadCentre(b) = treeTreadPlan(b.tread, (((treePadFrom + treePadReach) / 2) - treeBarkAt(b.tread)))
+function treeBranchTo(b) = [b.x, galleryFloor[b.level], ((b.side == "south") ? naveSouth : naveNorth)]
+function treeBranchLanding(b) = (treeBranchTo(b) +
+  [0, 0, ((b.side == "south") ? (0 - treeOverhangOf(b)) : treeOverhangOf(b))])
 // The tree creation (tree.puck) is authored in a frame turned a half turn about up from the plan's, its origin at the
 // trunk's foot; the flaw (flaw.puck) reads the branches' walking lines too, so they live here.
 // A plan point as the creation's author-frame point.
 function treeAuthor(p) = [(treeX - p[0]), (p[1] - galleryFloor[0]), (treeZ - p[2])]
 let treeAuthorTurn = 180
 
-// A branch's walking line: from just inside the bark over its shelf, bending round to its landing, arching a little as
-// it goes. Its control point lies halfway between a point out along its shelf's bearing (so it leaves the trunk as a
-// limb does) and a point straight back from its landing across the edge (so it meets the balcony nearly square and
-// walks onto its balcony square).
+// A branch's walking line: from its pad's outer edge, bending round to its landing, arching a little as it goes. Its
+// control point lies halfway between a point out along its tread's bearing (so it leaves the pad as a limb leaves a
+// trunk) and a point straight back from its landing across the edge (so it meets the balcony nearly square and walks
+// onto its balcony square).
 function treeBranchA(b) = treeAuthor(treeBranchFrom(b))
 function treeBranchC(b) = treeAuthor(treeBranchTo(b))
 function treeBranchReach(b) = vectorLength((treeBranchC(b) - treeBranchA(b)) * [1, 0, 1])
-// How high a branch's control point stands over the straight rise from trunk to landing: level 1's branches cross the
-// hall low over the showcase's displays, so they arch high enough to leave their exhibits breathing room (a quadratic's
-// middle rises half its control point's height over the line, so 5 m lifts the branch's middle 2.5 m).
-function treeBranchArch(b) = ((b.level == toyboxLevel) ? 5.0 : 0.35)
+// How high a branch's control point stands over the straight rise from its pad to its landing: level 1's branches cross
+// the hall low beside the showcase's displays, so they arch enough to leave the exhibits breathing room and no more, a
+// gentle walk up and down (a quadratic's middle rises half its control point's height over the line).
+function treeBranchArch(b) = ((b.level == toyboxLevel) ? (0.12 * treeBranchReach(b)) : 0.35)
 function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
   (0.45 * treeBranchReach(b)),
   (treeTreadAngle(b.tread) + treeAuthorTurn),
@@ -574,7 +592,7 @@ function treeBranchB(b) = ((b.level >= 2) ? [
   treeBranchOut(b)[1],
   ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)
 ] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
-// The plan point on a branch's walking line `t` of the way from the bark (0) to its landing (1): the quadratic the
+// The plan point on a branch's walking line `t` of the way from its pad (0) to its balcony's edge (1): the quadratic the
 // creation draws the branch along (treeBranchA, treeBranchB, treeBranchC), carried back from the creation's frame into
 // the plan's. The walkway's route (tree-walk.puck) and the flaw read the branches here.
 function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t) in

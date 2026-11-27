@@ -218,15 +218,15 @@ function treePoint(p, lean) = rotatePoint(leanTurn(lean), p) * [-1, 1, -1]
 
 // A crown of separate leaf clusters rather than one blob: `count` lobes on a dome `radius` metres across and `height`
 // metres tall over `centre`, laid in a sunflower spiral (each the golden angle round from the last, at a radius that
-// grows with the square root of its index), so they cover the dome evenly with sky between them, wandering in height by
-// a weylShare sequence that does not line up with the spiral. leafClusterAt is where lobe `i` stands, for the clumps
-// placed there and the limbs that reach into them.
+// grows with the square root of its index), so they cover the dome evenly with sky between them, wandering in height
+// over a span of `wander` metres by a weylShare sequence that does not line up with the spiral. leafClusterAt is where
+// lobe `i` stands, for the clumps placed there and the limbs that reach into them.
 function leafClusterShare(count, i) = squareRoot(((i + 0.5) / count))
-function leafClusterAt(centre, radius, height, count, i, turn = 0) = (centre + polarPoint(
+function leafClusterAt(centre, radius, height, count, i, turn = 0, wander = 0.7) = (centre + polarPoint(
   (radius * leafClusterShare(count, i)),
   ((i * 137.50776) + turn),
   ((height * (1 - (leafClusterShare(count, i) * leafClusterShare(count, i)))) +
-    ((weylShare((i + 1), 0.7548776662) - 0.5) * 0.7))
+    ((weylShare((i + 1), 0.7548776662) - 0.5) * wander))
 ))
 // The turn that lays a flat Prism leaf (long along local +Y, thin along local Z) out along yaw `phi` at `a` radians off
 // vertical, its face looking up and its width horizontal: yaw(-phi) * roll about Z(-a) * yaw(pi/2).
@@ -325,10 +325,11 @@ template leafyClump(id, tones, inner, radii = leafyRadii, count = 120, leaf = [0
 // The placements that clothe a crown in leafy clumps, one where each lobe stands (leafClusterAt) and as large:
 // `prototype` is a leafyClump whose radii are `unit`, and each copy is scaled so its first radius is its lobe's, turned
 // to a bearing of its own. The crown's creation, placed at `origin` under `parent`, writes the lobe leafClusterAt gives
-// as (x, y, z) at (-x, y, -z), a half turn about up, so the clump for it stands at origin + (-x, y, -z).
-template leafyClumps(label, prototype, origin, centre, radius, height, count, size, parent = null, turn = 0, unit = leafyRadii[0]) {
-  for i in range(0, count) {
-    let at = leafClusterAt(centre, radius, height, count, i, turn)
+// as (x, y, z) at (-x, y, -z), a half turn about up, so the clump for it stands at origin + (-x, y, -z). `only`, when
+// set, lists the lobes that get a clump, so a crown leaves out the lobes that would stand where bodies walk.
+template leafyClumps(label, prototype, origin, centre, radius, height, count, size, parent = null, turn = 0, unit = leafyRadii[0], only = null, wander = 0.7) {
+  for i in ((only == null) ? range(0, count) : only) {
+    let at = leafClusterAt(centre, radius, height, count, i, turn, wander)
     let t = leafClusterShare(count, i)
     placement $"{label}-{i}" {
       prototype: prototype

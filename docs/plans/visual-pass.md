@@ -39,16 +39,17 @@ The display stations stay as they are; they are iterated in their own root world
 
    Climbing is already an ability ([climbing](climbing.md)); feel counts as much as looks.
 
-   The walkway has a route to watch and a test that walks it. `world.benchmark run tree-walk` plays the `tree-walk`
-   route (`worlds/debug/benchmark-route.puck`) through seat 1's own controls: from the nave floor to the trunk's foot,
-   up the spiral two treads a waypoint, out along each branch to its landing and back, ending on level 3's north
-   balcony. Every waypoint is derived from the tree's plan (`worlds/debug/tree-walk.puck`), so the route moves with
-   the tree. `puck test worlds/debug/tree-walk-tests.puck` plays the same route headless and fails at the section
+   The tree has a lab, `worlds/debug/labs/tree.puck`: the tree with just the floor and balcony landings its branches
+   reach, booted and judged on its own. The walkway has a route to watch and a test that walks it.
+   `world.benchmark run tree-walk` plays the `tree-walk` route (`worlds/debug/tree-walk.puck`'s `treeWalkRoute`, in
+   the lab and in the debug world) through seat 1's own controls: from the nave floor to the trunk's foot, up the
+   spiral two treads a waypoint, out across each pad and along each branch to its landing and back, ending on level
+   3's north balcony. Every waypoint is derived from the tree's plan, so the route moves with the tree.
+   `puck test worlds/debug/tree-walk-tests.puck` plays the same route headless in the lab and fails at the section
    where the walk stops, with the waypoint after which the body fell, stuck, had a step refused, ended a solve too
    deep, or climbed a stretch of treads without a step-up, and whether it stood on each balcony it reached. The
-   walker holds the toybox's full-size pass, because a body that walks off a level-1 branch onto the toybox's floor
-   without one is made small there and stays small on the tree, too small for the treads' risers. Whether a pass-less
-   visitor should be able to climb back up is a design question for the tree; the route does not answer it.
+   walker is a plain visitor with no pass: a level-1 branch ends on the balcony strip outside its barrier, which
+   changes no size.
 2. **Foliage, planters and decorations** across the hall.
 3. **The netting** around the toybox playroom: playful and beautiful, never a fence.
 4. **The climbing wall** ([gallery.md](../../worlds/debug/gallery.md#the-climbing-wall)) stands in front of the
