@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -453,7 +454,7 @@ public static partial class WorldDocumentEmitter {
                         return;
                     }
                 }
-                Refuse(message: $"Enum '{enumName.Name}' has no member '{access.Member}'", span: operand.Span);
+                Refuse(message: $"{DiagnosticText.Compose(problem: $"The enum '{enumName.Name}' has no member '{access.Member}'")}{DocumentNearestNames.Suggestion(candidates: definition.Members, name: access.Member)} {DiagnosticText.Compose(problem: $"Its members are {DiagnosticText.List(items: [.. definition.Members])}")}", span: operand.Span);
                 m_text.Append(value: '0');
                 return;
             }
@@ -502,7 +503,10 @@ public static partial class WorldDocumentEmitter {
                     }
                 }
                 scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.FamilyIndexOutOfBounds,
-                    message: $"Index '{literal.Value}' names no member of family '{name.Name}', whose members are {string.Join(separator: ", ", values: family.Indices)}",
+                    message: DiagnosticText.Compose(
+                        fix: "Use one of the family's member indexes, or declare the index in the family's brackets",
+                        problem: $"The index '{literal.Value}' names no member of the family '{name.Name}', whose members are {string.Join(separator: ", ", values: family.Indices)}"
+                    ),
                     span: operand.Span);
             }
             Write(index.Target, DocumentValueForm.Name, operand);
@@ -576,7 +580,7 @@ public static partial class WorldDocumentEmitter {
                             quoted: true
                         ));
                     } else {
-                        Refuse(message: "A computed operand name must be nonempty and cannot contain a backquote", span: span);
+                        Refuse(message: DiagnosticText.Compose(fix: "Compute a name of one or more characters with no backquote", problem: "A computed operand name is empty or contains a backquote"), span: span);
                         m_text.Append(value: '0');
                     }
                     return;
@@ -588,7 +592,7 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: scalar.ToJsonString());
                 return;
             }
-            Refuse(message: $"A {form} operand requires one name or scalar value", span: span);
+            Refuse(message: DiagnosticText.Compose(fix: "Write one name, number or text, or an interpolated string that computes one", problem: $"A {form} operand takes one name or scalar value, and something else is written"), span: span);
             m_text.Append(value: '0');
         }
         // The generated name an access names when its dotted spelling reads through a module instance of this scope
@@ -649,7 +653,7 @@ public static partial class WorldDocumentEmitter {
             _ => RefuseCompileTime(operand: operand),
         };
         private LiteralExpressionNode RefuseCompileTime(OperandExpressionNode operand) {
-            Refuse(message: "A compile-time access requires a compile-time index expression", span: operand.Span);
+            Refuse(message: DiagnosticText.Compose(fix: "Index with a literal or a 'let' constant, or use '[...]' with a runtime expression where a row is read", problem: "A compile-time access is indexed by something the compiler cannot evaluate"), span: operand.Span);
             return new LiteralExpressionNode(0m);
         }
     }

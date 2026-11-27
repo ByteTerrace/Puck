@@ -258,7 +258,10 @@ public static partial class DocumentLowering {
                     }
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.IndexRefused,
-                        message: $"only an object read at compile time has a member '{memberAccess.Member}'",
+                        message: DiagnosticText.Compose(
+                            fix: "Read a member of an object the document computes at compile time, such as a 'let' bound to an object literal",
+                            problem: $"The member '{memberAccess.Member}' is read from something that is not an object known at compile time"
+                        ),
                         span: memberAccess.Span
                     );
 
@@ -336,7 +339,10 @@ public static partial class DocumentLowering {
                     if (EvaluateValue(expr: derived.Base, fieldKey: fieldKey, scope: scope) is not JsonObject based) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.InvalidValue,
-                            message: "'with' derives a record from an object; its base is not one",
+                            message: DiagnosticText.Compose(
+                                fix: "Write an object (a literal, or a 'let' bound to one) before 'with'",
+                                problem: "The value before 'with' is not an object, so there is nothing to derive from"
+                            ),
                             span: derived.Base.Span
                         );
 
@@ -351,7 +357,11 @@ public static partial class DocumentLowering {
                     } else {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.InvalidValue,
-                            message: "'with' derives a record with an object of overrides; the right-hand side is not one",
+                            message: DiagnosticText.Compose(
+                                example: "'base with { speed: 5 }'",
+                                fix: "Write the overrides as an object after 'with'",
+                                problem: "The value after 'with' is not an object of overrides"
+                            ),
                             span: derived.Overrides.Span
                         );
 
@@ -370,7 +380,10 @@ public static partial class DocumentLowering {
             case FunctionExpressionNode function:
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
-                    message: "a function is called with its arguments, never read as a value",
+                    message: DiagnosticText.Compose(
+                        fix: "Call it with its arguments, such as 'name(1, 2)'",
+                        problem: "A function name is written where a value belongs, without a call"
+                    ),
                     span: function.Span
                 );
 
@@ -400,7 +413,7 @@ public static partial class DocumentLowering {
                         !scope.Vocabulary.NamesArm(callName: call.Name)
                     ) {
                         var hint = ((DocumentBuiltins.SpellingFor(written: call.Name) is { } spelling)
-                            ? $"; write '{spelling}'"
+                            ? $" Write '{spelling}' instead."
                             : DocumentNearestNames.Suggestion(
                                 candidates: DocumentBuiltins.Names,
                                 name: call.Name
@@ -408,7 +421,7 @@ public static partial class DocumentLowering {
 
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.BuiltinRefused,
-                            message: $"'{call.Name}' is not a known function or construct{hint}",
+                            message: $"{DiagnosticText.Compose(problem: $"'{call.Name}' is not a known function or construct in this document")}{hint}",
                             span: call.Span
                         );
 
@@ -498,10 +511,13 @@ public static partial class DocumentLowering {
             case LambdaExpressionNode lambda:
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.LambdaOutsideBuiltin,
-                    message: $"a lambda is an argument to {string.Join(
-                        separator: "/",
-                        values: DocumentBuiltins.Names
-                    )} and nothing else",
+                    message: DiagnosticText.Compose(
+                        fix: $"Pass the lambda as an argument to {string.Join(
+                            separator: ", ",
+                            values: DocumentBuiltins.Names
+                        )}, or remove the '=>'",
+                        problem: "A lambda ('x => ...') is written where no collection function takes one"
+                    ),
                     span: lambda.Span
                 );
 
@@ -550,14 +566,23 @@ public static partial class DocumentLowering {
 
             refusal = ((at >= bound.Length)
                 ? ((argumentNames[index] is { } unknown)
-                    ? $"function '{name}' has no parameter '{unknown}'{DocumentNearestNames.Suggestion(candidates: function.Parameters.Select(selector: static parameter => parameter.Name), name: unknown)}"
-                    : $"function '{name}' takes {bound.Length} argument(s)")
-                : ((bound[at] >= 0) ? $"function '{name}' is given '{function.Parameters[at].Name}' twice" : null));
+                    ? $"{DiagnosticText.Compose(problem: $"The function '{name}' has no parameter '{unknown}'")}{DocumentNearestNames.Suggestion(candidates: function.Parameters.Select(selector: static parameter => parameter.Name), name: unknown)}"
+                    : DiagnosticText.Compose(
+                        fix: $"Pass at most {bound.Length.ToString(provider: CultureInfo.InvariantCulture)}: {string.Join(separator: ", ", values: function.Parameters.Select(selector: static parameter => parameter.Name))}",
+                        problem: $"The function '{name}' is called with more arguments than it takes"))
+                : ((bound[at] >= 0)
+                    ? DiagnosticText.Compose(
+                        fix: "Pass it once, by position or by name",
+                        problem: $"The function '{name}' is given its parameter '{function.Parameters[at].Name}' twice")
+                    : null));
             if (refusal is null) { bound[at] = index; }
         }
         for (var at = 0; ((at < bound.Length) && (refusal is null)); at++) {
             if ((bound[at] < 0) && (function.Parameters[at].DefaultValue is null)) {
-                refusal = $"function '{name}' needs its argument '{function.Parameters[at].Name}'";
+                refusal = DiagnosticText.Compose(
+                    fix: $"Pass it, or give the parameter a default in the function's declaration ('{function.Parameters[at].Name} = ...')",
+                    problem: $"The function '{name}' needs its argument '{function.Parameters[at].Name}'"
+                );
             }
         }
         if (refusal is not null) {
@@ -583,7 +608,10 @@ public static partial class DocumentLowering {
             scope.Annotations[CallingFunctionsKey] = calling;
         }
         if (!calling.Add(item: name)) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"function '{name}' calls itself; a function is inlined and cannot recur", span: span);
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: DiagnosticText.Compose(
+                fix: "Express the repetition with a compile-time 'for' or a collection function such as 'map' or 'reduce'",
+                problem: $"The function '{name}' calls itself, directly or through another function, and a function is inlined where it is called, so it cannot recur"
+            ), span: span);
             return refused;
         }
         try {
@@ -778,7 +806,10 @@ public static partial class DocumentLowering {
             ) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.ArgumentWrittenQuoted,
-                    message: $"no constant named '{word.Name}'; if it is text, write '{memberName}: \"{word.Name}\"'",
+                    message: DiagnosticText.Compose(
+                        fix: $"If it is text, quote it: '{memberName}: \"{word.Name}\"'. If it is a constant, declare it with 'let {word.Name} = ...'",
+                        problem: $"'{word.Name}' is written where text belongs, and no constant of that name is declared"
+                    ),
                     span: word.Span
                 );
             }
@@ -796,7 +827,10 @@ public static partial class DocumentLowering {
         if ((form == DocumentValueForm.Expression) && (value is InterpolatedStringNode built)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ExpressionBuiltAsText,
-                message: $"{member} holds {holds} and is written bare, with an interpolated string only where it computes a name; write '{memberName}: {BareInterpolation(interpolated: built)}'",
+                message: DiagnosticText.Compose(
+                    fix: $"Write the expression itself: '{memberName}: {BareInterpolation(interpolated: built)}'. An interpolated string computes a name, a key, a number or text, never an expression",
+                    problem: $"{member} holds {holds}, and an interpolated string is written instead"
+                ),
                 span: value.Span
             );
 
@@ -807,13 +841,19 @@ public static partial class DocumentLowering {
         if (value is LiteralExpressionNode { Value: string { Length: > 0 } written }) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ArgumentWrittenBare,
-                message: $"{member} holds {holds} and is written bare; write {(element ? $"'{BareSpelling(form: form, written: written)}' in the list" : $"'{memberName}: {BareSpelling(form: form, written: written)}'")}",
+                message: DiagnosticText.Compose(
+                    fix: $"Write it bare: {(element ? $"'{BareSpelling(form: form, written: written)}' in the list" : $"'{memberName}: {BareSpelling(form: form, written: written)}'")}",
+                    problem: $"{member} holds {holds}, and a quoted string is written instead"
+                ),
                 span: value.Span
             );
         } else if ((form == DocumentValueForm.Name) && (value is ObjectExpressionNode)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ArgumentWrittenBare,
-                message: $"{member} holds {holds} and is written bare; a pool field is written 'binding.field'",
+                message: DiagnosticText.Compose(
+                    fix: "Name a pool field as 'binding.field'",
+                    problem: $"{member} holds {holds}, and an object is written instead"
+                ),
                 span: value.Span
             );
         }
@@ -899,7 +939,10 @@ public static partial class DocumentLowering {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' is not an infix operator of the expression language.",
+                message: DiagnosticText.Compose(
+                    fix: "Use one of the expression language's operators (+ - * / % == != < <= > >= and or, and the bitwise & | ^ << >>)",
+                    problem: $"'{bin.Operator}' is not an infix operator of the expression language"
+                ),
                 span: bin.Span
             );
 
@@ -941,7 +984,10 @@ public static partial class DocumentLowering {
         if ((leftArray is not null) && (rightArray is not null) && (leftArray.Count != rightArray.Count)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' pairs the elements of two arrays, which needs one length; these have {leftArray.Count} and {rightArray.Count}.",
+                message: DiagnosticText.Compose(
+                    fix: "Give both arrays the same number of elements",
+                    problem: $"'{bin.Operator}' works on two arrays element by element, and these have {leftArray.Count.ToString(provider: CultureInfo.InvariantCulture)} and {rightArray.Count.ToString(provider: CultureInfo.InvariantCulture)} elements"
+                ),
                 span: bin.Span
             );
 
@@ -950,7 +996,10 @@ public static partial class DocumentLowering {
         if ((leftArray is null) && (row.Operation is not ExpressionOp.Multiply)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' with a number on the left and an array on the right has no element-wise meaning; only '*' scales an array from either side.",
+                message: DiagnosticText.Compose(
+                    fix: "Write the array first, or use '*', which scales an array from either side",
+                    problem: $"'{bin.Operator}' with a number on the left and an array on the right has no meaning"
+                ),
                 span: bin.Span
             );
 
@@ -959,7 +1008,10 @@ public static partial class DocumentLowering {
         if ((rightArray is null) && (row.Operation is ExpressionOp.Add or ExpressionOp.Subtract)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' adds arrays of one length element by element; a number is not added to every element.",
+                message: DiagnosticText.Compose(
+                    fix: "Add two arrays of one length, or build the array with 'map' to add a number to each element",
+                    problem: $"'{bin.Operator}' cannot add a number to an array; it adds arrays element by element"
+                ),
                 span: bin.Span
             );
 
@@ -995,7 +1047,10 @@ public static partial class DocumentLowering {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' reads signed 64-bit whole numbers known at compile time.",
+                message: DiagnosticText.Compose(
+                fix: "Use whole numbers that the compiler can compute, such as literals and 'let' constants",
+                problem: $"'{bin.Operator}' takes signed 64-bit whole numbers known at compile time, and an operand is not one"
+            ),
                 span: bin.Span
             );
 
@@ -1010,7 +1065,10 @@ public static partial class DocumentLowering {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' is not defined for {left} and {right}; a shift counts 0 to 63.",
+                message: DiagnosticText.Compose(
+                fix: "Shift by a count from 0 to 63",
+                problem: $"'{bin.Operator}' is not defined for {left.ToString(provider: CultureInfo.InvariantCulture)} and {right.ToString(provider: CultureInfo.InvariantCulture)}"
+            ),
                 span: bin.Span
             );
 
@@ -1037,7 +1095,10 @@ public static partial class DocumentLowering {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' needs numbers known at compile time.",
+                message: DiagnosticText.Compose(
+                fix: "Use numbers the compiler can compute: literals, 'let' constants and compile-time function results",
+                problem: $"'{bin.Operator}' needs numbers known at compile time, and an operand is not one"
+            ),
                 span: bin.Span
             );
             return null;
@@ -1069,7 +1130,10 @@ public static partial class DocumentLowering {
         if ((row.Operation is ExpressionOp.Divide or ExpressionOp.Remainder) && (rNum == 0)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"'{bin.Operator}' by zero has no value.",
+                message: DiagnosticText.Compose(
+                fix: "Change the divisor so it cannot be zero",
+                problem: $"'{bin.Operator}' by zero has no value"
+            ),
                 span: bin.Span
             );
 
@@ -1172,7 +1236,10 @@ public static partial class DocumentLowering {
         if ((target is not JsonArray) && (text is null)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: "only an array, an object or a string can be indexed",
+                message: DiagnosticText.Compose(
+                fix: "Index a compile-time array, object or string",
+                problem: "The value being indexed is not an array, an object or a string known at compile time"
+            ),
                 span: indexed.Span
             );
 
@@ -1185,7 +1252,10 @@ public static partial class DocumentLowering {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: $"{((text is null) ? "an array" : "a string")} index is a whole number known at compile time",
+                message: DiagnosticText.Compose(
+                fix: "Use a whole number the compiler can compute, such as a literal or a 'let' constant",
+                problem: $"The index into {((text is null) ? "an array" : "a string")} is not a whole number known at compile time"
+            ),
                 span: indexed.Span
             );
 
@@ -1200,7 +1270,10 @@ public static partial class DocumentLowering {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: $"index {ordinal} is outside the {((text is null) ? "array" : "string")}'s 0..{(count - 1)}",
+                message: DiagnosticText.Compose(
+                fix: $"Use an index from 0 to {(count - 1).ToString(provider: CultureInfo.InvariantCulture)}, counting from zero",
+                problem: $"Index {ordinal.ToString(provider: CultureInfo.InvariantCulture)} is outside the {((text is null) ? "array" : "string")}, which holds {count.ToString(provider: CultureInfo.InvariantCulture)} {((text is null) ? "elements" : "characters")}"
+            ),
                 span: indexed.Span
             );
 
@@ -1237,7 +1310,10 @@ public static partial class DocumentLowering {
             ) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
-                    message: "'~' reads a signed 64-bit whole number known at compile time.",
+                    message: DiagnosticText.Compose(
+                    fix: "Use a whole number the compiler can compute",
+                    problem: "'~' takes a signed 64-bit whole number known at compile time, and its operand is not one"
+                ),
                     span: un.Span
                 );
 
@@ -1279,7 +1355,10 @@ public static partial class DocumentLowering {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: "A unary numeric operator needs a number.",
+                message: DiagnosticText.Compose(
+                fix: "Apply it to a number",
+                problem: "A unary numeric operator ('-' or '+') is applied to a value that is not a number"
+            ),
                 span: un.Span
             );
             return null;
@@ -1519,7 +1598,10 @@ public static partial class DocumentLowering {
             default:
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.RepeatedMember,
-                    message: $"'{path}' is written more than once — the later writing would silently replace the earlier; write each member once, or merge the two into one",
+                    message: DiagnosticText.Compose(
+                        fix: "Write each member once, or merge the two writings into one",
+                        problem: $"'{path}' is written more than once, and the later writing would silently replace the earlier one"
+                    ),
                     span: span
                 );
 
@@ -1707,7 +1789,11 @@ public static partial class DocumentLowering {
         ) is not JsonArray sequence) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ForSequenceRefused,
-                message: "a 'for' walks an array known at compile time",
+                message: DiagnosticText.Compose(
+                    example: "'for item in [1, 2, 3] { ... }', or 'for i in range(0, 4) { ... }'",
+                    fix: "Walk an array literal, a 'let' bound to one, or the result of a collection function such as 'range' or 'map'",
+                    problem: "A 'for' walks something that is not an array known at compile time"
+                ),
                 span: sequenceExpr.Span
             );
 
@@ -1854,7 +1940,7 @@ public static partial class DocumentLowering {
 
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.UnknownTemplate,
-                message: $"Unknown module or template '{call.Name}'{suggestion}.",
+                message: $"{DiagnosticText.Compose(problem: $"'{call.Name}' is not a template or module in scope")}{suggestion} {DiagnosticText.Compose(problem: "Declare it with 'template', or add the 'import' that provides it")}",
                 span: call.Span
             );
             return;
@@ -1863,8 +1949,12 @@ public static partial class DocumentLowering {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
                 message: (template.IsRuleBody
-                    ? $"'{templateName}' is a rule template: its locals, gate and effects splice into a rule body, so it is called inside one"
-                    : $"'{templateName}' is a document template; a rule body calls a 'rule template'"),
+                    ? DiagnosticText.Compose(
+                        fix: "Call it from inside a rule body, or declare it with 'template' instead of 'rule template' to use it in the document",
+                        problem: $"'{templateName}' is a rule template, whose locals, gate and effects splice into a rule body, and it is called outside one")
+                    : DiagnosticText.Compose(
+                        fix: "Declare a 'rule template' for statements a rule body calls",
+                        problem: $"'{templateName}' is a document template, and a rule body can only call a rule template")),
                 span: call.Span
             );
             return;
@@ -1901,7 +1991,10 @@ public static partial class DocumentLowering {
                     if (boundValue is not null) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.TemplateArgument,
-                            message: $"{kind} '{templateName}' received argument '{param.Name}' more than once (parameters: {parameterList}).",
+                            message: DiagnosticText.Compose(
+                                fix: $"Pass it once. The parameters are: {parameterList}",
+                                problem: $"{kind} '{templateName}' receives the argument '{param.Name}' more than once"
+                            ),
                             span: arg.Span
                         );
                         consumed.Add(item: argumentIndex);
@@ -1941,7 +2034,10 @@ public static partial class DocumentLowering {
             } else {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
-                    message: $"{kind} '{templateName}' requires argument '{param.Name}'.",
+                    message: DiagnosticText.Compose(
+                        fix: $"Pass it, or give the parameter a default ('{param.Name} = ...') in the declaration",
+                        problem: $"{kind} '{templateName}' requires the argument '{param.Name}', and the call does not pass it"
+                    ),
                     span: call.Span
                 );
                 argumentError = true;
@@ -1963,19 +2059,25 @@ public static partial class DocumentLowering {
 
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.TemplateArgument,
-                        message: $"{kind} '{templateName}' has no parameter '{named}'{suggestion} (parameters: {parameterList}).",
+                        message: $"{DiagnosticText.Compose(problem: $"{kind} '{templateName}' has no parameter '{named}'")}{suggestion} {DiagnosticText.Compose(problem: $"Its parameters are: {parameterList}")}",
                         span: arg.Span
                     );
                 } else if (argumentIndex < template.Parameters.Count) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.TemplateArgument,
-                        message: $"{kind} '{templateName}' parameter '{template.Parameters[argumentIndex].Name}' is supplied both positionally and by name (parameters: {parameterList}).",
+                        message: DiagnosticText.Compose(
+                            fix: $"Pass it once, either by position or by name. The parameters are: {parameterList}",
+                            problem: $"{kind} '{templateName}' receives the parameter '{template.Parameters[argumentIndex].Name}' both by position and by name"
+                        ),
                         span: arg.Span
                     );
                 } else {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.TemplateArgument,
-                        message: $"{kind} '{templateName}' takes at most {template.Parameters.Count} argument(s) (parameters: {parameterList}).",
+                        message: DiagnosticText.Compose(
+                            fix: $"Remove the extra arguments. The parameters are: {parameterList}",
+                            problem: $"{kind} '{templateName}' takes at most {template.Parameters.Count.ToString(provider: CultureInfo.InvariantCulture)} arguments, and the call passes more"
+                        ),
                         span: arg.Span
                     );
                 }
@@ -2033,7 +2135,10 @@ public static partial class DocumentLowering {
         if (!valid) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
-                message: $"Argument '{parameter.Name}' must be a {parameter.Kind}{((parameter.RequiredExports.Count == 0) ? "." : $" exporting {string.Join(separator: ", ", values: parameter.RequiredExports)}.")}",
+                message: DiagnosticText.Compose(
+                    fix: $"Pass {DiagnosticText.Article(noun: (parameter.Kind ?? "value"))} here, as the parameter is declared '{parameter.Name}: {parameter.Kind}'",
+                    problem: $"The argument for '{parameter.Name}' is not {DiagnosticText.Article(noun: (parameter.Kind ?? "value"))}{((parameter.RequiredExports.Count == 0) ? string.Empty : $" exporting {string.Join(separator: ", ", values: parameter.RequiredExports)}")}"
+                ),
                 span: value.Span
             );
         }
@@ -2340,9 +2445,15 @@ public static partial class DocumentLowering {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.ForRepeatsARuleMember,
                         message: (member switch {
-                            WhenStatementNode => "a 'for' inside a rule repeats its locals and effects, and a rule has one 'when'; write the condition in that 'when', or in an 'if' inside the loop",
-                            DecisionBlockNode => "a 'for' inside a rule repeats its locals and effects, and a rule has one 'decision'; write the decision beside the loop",
-                            _ => "a 'for' inside a rule repeats its locals and effects; a 'rule' is stamped by a 'for' outside any rule body",
+                            WhenStatementNode => DiagnosticText.Compose(
+                                fix: "Write the condition in the rule's own 'when', or in an 'if' inside the loop",
+                                problem: "A 'for' inside a rule repeats its locals and effects, and a rule has one 'when', so a 'when' cannot be repeated"),
+                            DecisionBlockNode => DiagnosticText.Compose(
+                                fix: "Write the decision beside the loop, inside the rule",
+                                problem: "A 'for' inside a rule repeats its locals and effects, and a rule has one 'decision', so a 'decision' cannot be repeated"),
+                            _ => DiagnosticText.Compose(
+                                fix: "Stamp rules with a 'for' outside any rule body",
+                                problem: "A 'for' inside a rule repeats its locals and effects, so it cannot repeat a nested 'rule'"),
                         }),
                         span: member.Span
                     );
@@ -2446,7 +2557,11 @@ public static partial class DocumentLowering {
 
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ForAssignsAField,
-                message: ((string)$"a 'for' emits rows, and '{property.Name}' is a field assignment — every iteration would write the same field. Build the value with map(...) in value position instead."),
+                message: DiagnosticText.Compose(
+                    example: $"'{property.Name}: map(range(0, 4), i => ...)'",
+                    fix: "Build the value with 'map' where the field is written",
+                    problem: $"A 'for' emits rows, and '{property.Name}' is a field assignment, so every iteration would write the same field"
+                ),
                 span: property.Span
             );
 

@@ -33,7 +33,10 @@ public static class SourceLexemes {
     internal static void Validate(string source) {
         if (source.Length > DocumentEvaluationBudget.TextLimit) {
             throw Refuse(
-                message: "The source exceeds the four-million-character limit.",
+                message: Puck.Assets.Documents.DiagnosticText.Compose(
+                    fix: "Split the source into several files and join them with 'import'",
+                    problem: "The source is longer than four million characters, the most one source may hold"
+                ),
                 offset: 0
             );
         }
@@ -49,7 +52,10 @@ public static class SourceLexemes {
             if (source[index] is '(' or '[' or '{') {
                 if (++depth > DocumentEvaluationBudget.DepthLimit) {
                     throw Refuse(
-                        message: "Source nesting exceeds 64 levels.",
+                        message: Puck.Assets.Documents.DiagnosticText.Compose(
+                            fix: "Flatten the nesting by moving inner blocks into templates or separate rows",
+                            problem: "Blocks, lists or objects nest more than 64 levels deep, the most one source may hold"
+                        ),
                         offset: index
                     );
                 }

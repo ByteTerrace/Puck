@@ -93,7 +93,7 @@ internal sealed class WorldShadeLowering {
             scope.Diagnostics.ReportError(code: error.Code, message: error.Message, span: expression.Span);
             return null;
         } catch (OverflowException) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.ShadeCapacity, message: "Shade cost or structural arithmetic overflowed.", span: expression.Span);
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.ShadeCapacity, message: DiagnosticText.Compose(fix: "Simplify the program: use fewer or smaller structural loops, or fewer operations", problem: "The shade program is too large: its cost or its structural arithmetic overflowed"), span: expression.Span);
             return null;
         } catch (JsonException error) {
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.ShadeOperand, message: error.Message, span: expression.Span);
@@ -174,7 +174,7 @@ internal sealed class WorldShadeLowering {
         if (expression is ObjectExpressionNode obj) {
             m_names.Add(item: "inline");
             foreach (var property in obj.Properties) {
-                if (property.Value is not ObjectExpressionNode body) { throw new SdfShadeException(code: "PUCK126", message: "A shade phase is a block."); }
+                if (property.Value is not ObjectExpressionNode body) { throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(example: "'shade { surface { ... } }'", fix: "Write each phase ('surface', 'light', 'compose') as a block", problem: "A shade phase is written as something other than a block")); }
                 Phase(new BlockNode(property.Name, null, null, body.Properties), scope);
             }
             return;
@@ -186,20 +186,20 @@ internal sealed class WorldShadeLowering {
             switch (DocumentLowering.EvaluateValue(expression, scope)) {
                 case JsonObject admitted:
                     Import(definition: (admitted.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)
-                        ?? throw new SdfShadeException(code: "PUCK126", message: "A shade value is an admitted program.")));
+                        ?? throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Use a row's 'shade', which names an admitted program", problem: "A value used as a shade program is not one"))));
                     return;
                 // An admitted program is held by its key: a row's `shade` this compilation lowered names its program.
                 case JsonValue named when named.TryGetValue<string>(value: out var key):
                     Import(definition: ((Compilations.TryGetValue(key: scope.Budget, value: out var compilation) && compilation.Programs.TryGetValue(key: key, value: out var held))
                         ? held.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)!
-                        : throw new SdfShadeException(code: "PUCK126", message: $"Shade value '{key}' names no program this compilation lowered.")));
+                        : throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Check that the row it reads from declares a 'shade' in this compilation", problem: $"The shade value '{key}' names no program this compilation lowered"))));
                     return;
                 case null when optional:
                     return;
             }
         }
         throw new SdfShadeException(code: "PUCK126",
-            message: "shade needs a shade template call, a block of surface, light and compose phases, an admitted program or a list of them.");
+            message: DiagnosticText.Compose(example: "'shade: terrain(...)' or 'shade { surface { ... } }'", fix: "Write a call to a shade template, a block of 'surface', 'light' and 'compose' phases, an admitted program, or a list of them", problem: "This 'shade' is none of the forms a shade takes"));
     }
     // Lowers an admitted program's canonical definition into this one: each named value expands into the expression it
     // names (shared, so the compiler still lowers it once), its parameters take fresh slots, and its surface reads see
@@ -220,10 +220,10 @@ internal sealed class WorldShadeLowering {
 
         SdfShadeExpression Expand(SdfShadeExpression expression, SdfShadePhase phase) => expression.Op switch {
             "value" => (values.GetValueOrDefault(key: (phase, (expression.Name ?? "")))
-                ?? throw new SdfShadeException(code: "PUCK128", message: $"Shade value '{expression.Name}' is undefined in {phase}.")),
+                ?? throw new SdfShadeException(code: "PUCK128", message: DiagnosticText.Compose(fix: $"Declare it with 'let {expression.Name} = ...' earlier in the phase, or check the spelling", problem: $"The shade value '{expression.Name}' is not defined in the {phase} phase"))),
             "parameter" => expression with {
                 Name = (renamed.GetValueOrDefault(key: (expression.Name ?? ""))
-                    ?? throw new SdfShadeException(code: "PUCK128", message: $"Undefined shade parameter '{expression.Name}'.")),
+                    ?? throw new SdfShadeException(code: "PUCK128", message: DiagnosticText.Compose(fix: "Declare the parameter in the shade template's parameter list, or check the spelling", problem: $"The shade parameter '{expression.Name}' is not defined"))),
             },
             "input" => (ReadComposed(name: (expression.Name ?? ""), phase: phase) ?? expression),
             _ => ((expression.Arguments is { Count: > 0 } arguments)
@@ -259,7 +259,7 @@ internal sealed class WorldShadeLowering {
     private void Phase(StatementNode statement, DocumentScope scope) {
         if (statement is LetNode let) { BindLet(let, scope); return; }
         if ((statement is not BlockNode block) || !Enum.TryParse<SdfShadePhase>(block.Identifier, true, out var phase) || !Enum.IsDefined(value: phase)) {
-            throw new SdfShadeException(code: "PUCK126", message: "A shade template contains surface, light, compose and ink blocks.");
+            throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Keep a shade template's body to 'surface', 'light', 'compose' and 'ink' blocks", problem: "A shade template holds a statement that is not one of those blocks"));
         }
         var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal);
         var local = scope.WithConstants(constants);
@@ -285,7 +285,7 @@ internal sealed class WorldShadeLowering {
                     return true;
                 }, false);
                 break;
-            default: throw new SdfShadeException(code: "PUCK126", message: "Shade phases admit let, assignment, template calls and compile-time for only.");
+            default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Use only 'let', an assignment, a template call or a compile-time 'for' inside a shade phase", problem: "A shade phase holds a statement it does not admit"));
         }
     }
     private void BindLet(LetNode let, DocumentScope scope) {
@@ -324,7 +324,7 @@ internal sealed class WorldShadeLowering {
                 }
                 if (scope.Locals.TryGetValue(key: id.Name, value: out var local)) { return Literal(expected: expected, node: local); }
                 if (scope.TryGetExpression(id.Name, out var declared, out var lexical)) {
-                    if (!m_resolving.Add(item: declared!)) { throw new SdfShadeException(code: "PUCK128", message: $"Shade binding '{id.Name}' reads itself before definition."); }
+                    if (!m_resolving.Add(item: declared!)) { throw new SdfShadeException(code: "PUCK128", message: DiagnosticText.Compose(fix: "Define the binding from other values, or rename the earlier one it reads", problem: $"The shade binding '{id.Name}' reads itself before it is defined")); }
                     try { return Expression(expected: expected, expression: declared!, scope: lexical); } finally { m_resolving.Remove(item: declared!); }
                 }
                 return Read(name: id.Name);
@@ -337,7 +337,7 @@ internal sealed class WorldShadeLowering {
             case IndexExpressionNode index when (Qualified(node: index.Target) is "lanes.slot" or "lanes.world"):
                 var selector = DocumentLowering.EvaluateValue(RequireStructural(expression: index.Index, scope: scope), scope);
                 if (!int.TryParse(selector?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var lane) || (lane is < 0 or > 3)) {
-                    throw new SdfShadeException(code: "PUCK127", message: "A shade lane selector must be an integer from 0 to 3.");
+                    throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(example: "'lanes.slot[2]'", fix: "Index with a whole number from 0 to 3 that is known when the program is compiled", problem: "A shade lane selector is not a whole number from 0 to 3"));
                 }
                 return Read(name: $"{Qualified(node: index.Target)}{lane}");
             case LiteralExpressionNode or ColorExpressionNode:
@@ -374,14 +374,14 @@ internal sealed class WorldShadeLowering {
             case CallExpressionNode { Name: "shape" } shape when (shape.Arguments.Count == 2):
                 var descriptor = DocumentLowering.EvaluateValue(RequireStructural(expression: shape.Arguments[0].Value, scope: scope), scope);
                 var parsed = (descriptor.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeShape)
-                    ?? throw new SdfShadeException(code: "PUCK127", message: "shape needs a structural descriptor."));
+                    ?? throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(fix: "Pass a descriptor that the compiler can evaluate, such as a constant", problem: "A 'shape' call is given a descriptor that is not structural")));
                 return new("shape", [Expression(shape.Arguments[1].Value, scope)], Shape: parsed);
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
                     call.Name == "hash" ? SdfShadeType.UInt3 :
                     ((((call.Name is "lattice" or "latticeGradient" or "lines") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
                     call.Name == "select" && i > 0 ? expected : null))).ToArray());
-            default: throw new SdfShadeException(code: "PUCK126", message: "Expression is outside the shade vocabulary.");
+            default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Rewrite it with the shade operations, names and numbers a shade program admits", problem: "This expression uses something a shade program has no word for"));
         }
     }
     private static string? Qualified(ExpressionNode node) => node switch {
@@ -409,13 +409,13 @@ internal sealed class WorldShadeLowering {
         var values = ((node is JsonArray array) ? array.ToArray() : new[] { node });
         var type = (expected ?? ((SdfShadeType)values.Length));
 
-        if (values.Length != SdfShadeOps.Width(type: type)) { throw new SdfShadeException(code: "PUCK127", message: "Shade literal has the wrong width."); }
+        if (values.Length != SdfShadeOps.Width(type: type)) { throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(fix: "Write as many components as the type takes: one for a number, three for a vector, four for a colour with alpha", problem: "A shade literal has the wrong number of components for its type")); }
         var bits = values.Select(selector: value => {
             if (!double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || !double.IsFinite(d: number)) {
-                throw new SdfShadeException(code: "PUCK127", message: "A shade value must be a finite number, vector or colour.");
+                throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(fix: "Write an ordinary number, a vector of numbers or a colour", problem: "A shade value is not a finite number, vector or colour"));
             }
             if (!SdfShadeOps.IsUInt(type: type)) { return BitConverter.SingleToUInt32Bits(value: ((float)number)); }
-            if ((number < 0) || (number > uint.MaxValue) || (Math.Truncate(d: number) != number)) { throw new SdfShadeException(code: "PUCK127", message: "A uint shade parameter must be a 32-bit unsigned integer."); }
+            if ((number < 0) || (number > uint.MaxValue) || (Math.Truncate(d: number) != number)) { throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(fix: "Write a whole number from 0 to 4294967295", problem: "A 'uint' shade parameter is not a 32-bit unsigned integer")); }
             return ((uint)number);
         }).ToArray();
 
@@ -429,12 +429,12 @@ internal sealed class WorldShadeLowering {
         public ExpressionNode Apply(ExpressionNode expression) => RewriteExpression(expression: expression);
 
         protected override ExpressionNode RewriteExpression(ExpressionNode expression) {
-            if (expression is Runtime) { throw new SdfShadeException(code: "PUCK130", message: "A runtime parameter cannot shape a shade program; mark it structural."); }
+            if (expression is Runtime) { throw new SdfShadeException(code: "PUCK130", message: DiagnosticText.Compose(fix: "Mark the parameter 'structural' in the template's parameter list, so the compiler knows its value", problem: "A runtime parameter is used where it would shape the program (a loop range, a shape descriptor or a lane selector)")); }
             if (expression is Bound bound) { return new Structural(scope: bound.Scope, visiting: visiting).Apply(expression: bound.Source); }
             if (expression is IdentifierExpressionNode id) {
                 if (scope.Locals.TryGetValue(key: id.Name, value: out var local)) { return Syntax(value: local); }
                 if (scope.TryGetExpression(id.Name, out var source, out var lexical)) {
-                    if (!visiting.Add(item: source!)) { throw new SdfShadeException(code: "PUCK128", message: $"Structural binding '{id.Name}' reads itself."); }
+                    if (!visiting.Add(item: source!)) { throw new SdfShadeException(code: "PUCK128", message: DiagnosticText.Compose(fix: "Define the binding from other values", problem: $"The structural binding '{id.Name}' reads itself")); }
                     try { return new Structural(scope: lexical, visiting: visiting).Apply(expression: source!); } finally { visiting.Remove(item: source!); }
                 }
             }

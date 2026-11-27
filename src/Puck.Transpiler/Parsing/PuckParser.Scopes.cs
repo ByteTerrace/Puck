@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -39,7 +40,7 @@ public static partial class PuckParser {
             var (nLine, nCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: cursor.Offset);
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RuleNameMissing,
-                message: "Expected an identifier or quoted name after 'rules'",
+                message: DiagnosticText.Compose(example: "'rules \"doors\" { ... }'", fix: "Name the group with a name or a quoted string", problem: "A 'rules' group has no name"),
                 span: new SourceSpan(cursor.Offset, 1, nLine, nCol)
             );
             name = string.Empty;
@@ -156,7 +157,10 @@ public static partial class PuckParser {
             return prop;
         }
 
-        throw CreateException(context: context, message: $"Unexpected statement inside rules scope at offset {cursor.Offset}");
+        throw CreateException(context: context, message: DiagnosticText.Compose(
+            fix: "A 'rules' scope holds 'rule', 'rule template' and 'let' statements only",
+            problem: "Unexpected statement inside a 'rules' scope"
+        ));
     }
     private static List<StatementNode> ParseRuleScopeStatementsBlock(
         string blockKind,

@@ -25,14 +25,24 @@ public static class DocumentNearestNames {
             .Take(count: MaxNearNames)
             .Select(selector: static pair => pair.Candidate)];
     }
-    /// <summary>Spells the suggestion a refusal appends, or nothing when no candidate is near.</summary>
+    /// <summary>The words every suggestion opens with, which the language server reads back to offer each name as a
+    /// quick fix.</summary>
+    public const string Marker = "Did you mean ";
+
+    /// <summary>Spells the suggestion a refusal appends after its own sentence, or nothing when no candidate is near.</summary>
     /// <param name="name">The name the author wrote.</param>
     /// <param name="candidates">The names the document declares.</param>
-    /// <returns>For example <c>; nearest: 'size', 'sides'</c>; empty when none is near.</returns>
+    /// <returns>For example <c> Did you mean 'size' or 'sides'?</c>, with a leading space so it follows a sentence;
+    /// empty when none is near.</returns>
     public static string Suggestion(string name, IEnumerable<string> candidates) {
         var near = Among(candidates: candidates, name: name);
 
-        return ((near.Length == 0) ? string.Empty : $"; nearest: {string.Join(separator: ", ", values: near.Select(selector: static candidate => $"'{candidate}'"))}");
+        return near.Length switch {
+            0 => string.Empty,
+            1 => $" {Marker}'{near[0]}'?",
+            2 => $" {Marker}'{near[0]}' or '{near[1]}'?",
+            _ => $" {Marker}{string.Join(separator: ", ", values: near[..^1].Select(selector: static candidate => $"'{candidate}'"))}, or '{near[^1]}'?",
+        };
     }
 
     // The Levenshtein distance between two names.

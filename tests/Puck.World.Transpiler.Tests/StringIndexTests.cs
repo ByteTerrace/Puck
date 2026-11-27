@@ -54,10 +54,10 @@ public class StringIndexTests {
             filter: item => (item.Code == PuckDiagnosticCodes.InvalidValue)
         );
     }
-    [InlineData("_cells: \"abc\"[3]", "outside the string's 0..2")]
-    [InlineData("_cells: \"abc\"[-1]", "outside the string's 0..2")]
-    [InlineData("_cells: \"abc\"[\"x\"]", "a string index is a whole number")]
-    [InlineData("_cells: 4[0]", "only an array, an object or a string can be indexed")]
+    [InlineData("_cells: \"abc\"[3]", "is outside the string, which holds 3 characters")]
+    [InlineData("_cells: \"abc\"[-1]", "is outside the string, which holds 3 characters")]
+    [InlineData("_cells: \"abc\"[\"x\"]", "index into a string is not a whole number")]
+    [InlineData("_cells: 4[0]", "is not an array, an object or a string known at compile time")]
     [Theory]
     public void AnIndexAStringCannotAnswerIsRefusedByName(string body, string refusal) {
         var diagnostic = Assert.Single(collection: Compile(body: body).Diagnostics, predicate: item => (item.Code == PuckDiagnosticCodes.IndexRefused));

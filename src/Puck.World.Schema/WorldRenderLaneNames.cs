@@ -162,13 +162,17 @@ public static class WorldRenderLaneNames {
 
         foreach (var (name, lane) in LanesOf(rows: rows)) {
             if (!lanes.TryAdd(key: name, value: lane)) {
-                refuse(WorldRenderLaneRefusal.Duplicate, $"render.lanes declares '{name}' twice; each lane's name is its own.", DocumentJsonPointer.Child(name: NameMember, pointer: DocumentJsonPointer.Child(index: (lane - SdfLanes.FirstWorld), pointer: pointer)));
+                refuse(WorldRenderLaneRefusal.Duplicate, DiagnosticText.Compose(fix: "Rename one of them, or delete the duplicate row; a creation selects a lane by its name", problem: $"'render.lanes' declares the lane '{name}' twice"), DocumentJsonPointer.Child(name: NameMember, pointer: DocumentJsonPointer.Child(index: (lane - SdfLanes.FirstWorld), pointer: pointer)));
             }
         }
         if (rows.Count > WorldRenderDefaults.MaxLanes) {
-            var names = string.Join(separator: ", ", values: rows.Select(selector: static row => ((row as JsonObject)?[NameMember]?.ToString() ?? "?")));
-
-            refuse(WorldRenderLaneRefusal.TooMany, $"render.lanes declares {rows.Count.ToString(provider: CultureInfo.InvariantCulture)} lanes ({names}); a world holds at most {WorldRenderDefaults.MaxLanes.ToString(provider: CultureInfo.InvariantCulture)}, render lanes {SdfLanes.FirstWorld.ToString(provider: CultureInfo.InvariantCulture)} to {(SdfLanes.Count - 1).ToString(provider: CultureInfo.InvariantCulture)}.", pointer);
+            refuse(WorldRenderLaneRefusal.TooMany, DiagnosticText.Capacity(
+                capacity: WorldRenderDefaults.MaxLanes,
+                fix: $"Remove {(rows.Count - WorldRenderDefaults.MaxLanes).ToString(provider: CultureInfo.InvariantCulture)} of them, or let effects that never animate together share one lane. The lanes are render lanes {SdfLanes.FirstWorld.ToString(provider: CultureInfo.InvariantCulture)} to {(SdfLanes.Count - 1).ToString(provider: CultureInfo.InvariantCulture)}",
+                noun: "lanes",
+                used: [.. rows.Select(selector: static row => ((row as JsonObject)?[NameMember]?.ToString() ?? "?"))],
+                what: "render.lanes"
+            ), pointer);
         }
         return lanes;
     }
@@ -211,7 +215,7 @@ public static class WorldRenderLaneNames {
                     if (lanes.TryGetValue(key: name, value: out var lane)) {
                         if (rewrite) { obj[member.Name] = lane; }
                     } else {
-                        refuse(WorldRenderLaneRefusal.Unknown, $"'{name}' names no render lane; render.lanes declares {((lanes.Count == 0) ? "none" : string.Join(separator: ", ", values: lanes.Keys))}.", at);
+                        refuse(WorldRenderLaneRefusal.Unknown, $"{DiagnosticText.Compose(problem: $"'{name}' names no render lane, and 'render.lanes' declares {((lanes.Count == 0) ? "none" : DiagnosticText.List(items: [.. lanes.Keys]))}")}{DocumentNearestNames.Suggestion(candidates: lanes.Keys, name: name)} {DiagnosticText.Compose(problem: "Add a row with that name to 'render.lanes', or write a name it declares")}", at);
                     }
                 }
                 continue;

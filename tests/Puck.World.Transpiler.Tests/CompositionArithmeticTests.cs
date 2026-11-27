@@ -61,7 +61,7 @@ public sealed class CompositionArithmeticTests {
             filter: static diagnostic => (
                 (diagnostic.Severity == DiagnosticSeverity.Error) &&
                 (diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "needs numbers") ||
-                    diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "must be a Point"))
+                    diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "is not a Point"))
             )
         );
         Assert.False(condition: compilation.Success);

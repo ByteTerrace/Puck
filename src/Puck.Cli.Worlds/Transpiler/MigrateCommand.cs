@@ -64,7 +64,7 @@ public static class PuckMigrateCommand {
         if (parsed.Value is not { } document) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not parse, so it cannot be migrated: {Summarize(diagnostics: parsed.Diagnostics)}",
+                Refusal: $"does not parse, so it cannot be migrated: {Diagnostic.Summarize(diagnostics: parsed.Diagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -113,7 +113,7 @@ public static class PuckMigrateCommand {
         if (reparsed.Value is not { } migrated) {
             return new Plan(
                 Path: path,
-                Refusal: $"migration '{migration.Name}' produced a source that does not parse back: {Summarize(diagnostics: reparsed.Diagnostics)}",
+                Refusal: $"migration '{migration.Name}' produced a source that does not parse back: {Diagnostic.Summarize(diagnostics: reparsed.Diagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -148,7 +148,7 @@ public static class PuckMigrateCommand {
         ) is not { } before) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not compile before the migration, so nothing can be compared against: {Summarize(diagnostics: beforeDiagnostics)}",
+                Refusal: $"does not compile before the migration, so nothing can be compared against: {Diagnostic.Summarize(diagnostics: beforeDiagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -162,7 +162,7 @@ public static class PuckMigrateCommand {
         ) is not { } after) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not compile after migration '{migration.Name}': {Summarize(diagnostics: afterDiagnostics)}",
+                Refusal: $"does not compile after migration '{migration.Name}': {Diagnostic.Summarize(diagnostics: afterDiagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -208,12 +208,6 @@ public static class PuckMigrateCommand {
             searchPattern: "*.puck"
         ).Order(comparer: StringComparer.Ordinal)]
         : [fullPath]
-    );
-    private static string Summarize(DiagnosticBag diagnostics) => string.Join(
-        separator: "; ",
-        values: diagnostics
-            .Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error))
-            .Select(selector: static diagnostic => $"({diagnostic.Span.Line},{diagnostic.Span.Column}) {diagnostic.Code}: {diagnostic.Message}")
     );
     /// <summary>Returns why <paramref name="path"/> could not be opened for writing, or <see langword="null"/>.</summary>
     private static string? Unwritable(string path) {

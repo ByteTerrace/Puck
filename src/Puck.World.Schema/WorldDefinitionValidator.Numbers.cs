@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.World.Authoring;
 
 namespace Puck.World;
@@ -12,7 +13,7 @@ public static partial class WorldDefinitionValidator {
 
     private static void RequireFinite(float value, Subject name, List<string> errors) {
         if (!float.IsFinite(f: value)) {
-            errors.Add(item: $"{name} must be finite.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"It is {value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}; write an ordinary number, since NaN and infinity are not values", problem: $"{name} must be finite"));
         }
     }
     private static void RequireIntRange(int value, int min, int max, Subject name, List<string> errors) {
@@ -20,7 +21,7 @@ public static partial class WorldDefinitionValidator {
             (value < min) ||
             (value > max)
         ) {
-            errors.Add(item: $"{name} {value} is outside {min}..{max}.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"Write a whole number from {min} to {max}", problem: $"{name} {value} is outside {min}..{max}"));
         }
     }
     private static void RequireNonNegative(float value, Subject name, List<string> errors) {
@@ -28,12 +29,12 @@ public static partial class WorldDefinitionValidator {
             !float.IsFinite(f: value) ||
             (value < 0f)
         ) {
-            errors.Add(item: $"{name} must be finite and non-negative.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"It is {value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}; write zero or a positive number", problem: $"{name} must be finite and non-negative"));
         }
     }
     private static void RequireNonNegativeEpoch(long value, Subject name, List<string> errors) {
         if (value < 0) {
-            errors.Add(item: $"{name} {value} must be non-negative.");
+            errors.Add(item: DiagnosticText.Compose(fix: "Write zero or a positive number", problem: $"{name} {value} must be non-negative"));
         }
     }
     private static void RequirePositive(float value, Subject name, List<string> errors) {
@@ -41,7 +42,7 @@ public static partial class WorldDefinitionValidator {
             !float.IsFinite(f: value) ||
             (value <= 0f)
         ) {
-            errors.Add(item: $"{name} must be finite and positive.");
+            errors.Add(item: DiagnosticText.Compose(fix: $"It is {value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}; write a number greater than zero", problem: $"{name} must be finite and positive"));
         }
     }
     private static void RequireUnitInterval(float value, Subject name, List<string> errors) {
@@ -50,7 +51,7 @@ public static partial class WorldDefinitionValidator {
             (value < 0f) ||
             (value > 1f)
         ) {
-            errors.Add(item: $"{name} {value} must be within 0..1.");
+            errors.Add(item: DiagnosticText.Compose(fix: "Write a number from 0 to 1", problem: $"{name} {value} must be within 0..1"));
         }
     }
     // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
@@ -65,7 +66,7 @@ public static partial class WorldDefinitionValidator {
         );
 
         if (!domain.Contains(value: value)) {
-            errors.Add(item: $"{name} {value} must be finite and within {domain}.");
+            errors.Add(item: DiagnosticText.Compose(fix: "Change it to a value inside that range", problem: $"{name} {value} must be finite and within {domain}"));
         }
     }
 }

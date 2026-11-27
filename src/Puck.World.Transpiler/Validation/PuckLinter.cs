@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -63,7 +64,7 @@ public static partial class PuckLinter {
             if ((node.DefinitionPath is null) && !duplicated.Contains(item: name) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
-                    message: $"Constant '{name}' is declared but its value is never used",
+                    message: DiagnosticText.Compose(fix: "Delete the 'let', or use it", problem: $"The constant '{name}' is declared but never read"),
                     span: node.Span
                 );
             }
@@ -73,7 +74,7 @@ public static partial class PuckLinter {
             if ((node.DefinitionPath is null) && !duplicated.Contains(item: name) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
-                    message: $"Template '{name}' is declared but never instantiated",
+                    message: DiagnosticText.Compose(fix: "Delete the template, or call it", problem: $"The template '{name}' is declared but never called"),
                     span: node.Span
                 );
             }
@@ -120,7 +121,7 @@ public static partial class PuckLinter {
                 if (operand.Syntax is { } syntax && CollectOperandReferences(syntax, operand.Form, references)) {
                     diagnostics.ReportWarning(
                         code: PuckDiagnosticCodes.EagerConditionalArithmetic,
-                        message: "A ternary evaluates both arms: division or remainder here can fault even when its arm is unselected. Guard the operation with an if/else effect or a short-circuit gate.",
+                        message: DiagnosticText.Compose(fix: "Guard the operation with an 'if'/'else' effect or a short-circuit gate ('and', 'or'), so the divisor is checked before it is used", problem: "A choice ('?:') evaluates both arms, so a division or remainder here can fault on a zero divisor even when its arm is not the one selected"),
                         span: operand.Span
                     );
                 }
@@ -154,7 +155,7 @@ public static partial class PuckLinter {
                 if (!inLet) {
                     diagnostics.ReportInformation(
                         code: PuckDiagnosticCodes.LintInlineColor,
-                        message: $"Inline color literal '{color.Hex}' — consider declaring as a named 'let' constant",
+                        message: DiagnosticText.Compose(fix: "Declare it once as 'let name = ...' and use the name, so a colour is changed in one place", problem: $"The colour '{color.Hex}' is written inline"),
                         span: color.Span
                     );
                 }
@@ -163,7 +164,7 @@ public static partial class PuckLinter {
             case LiteralExpressionNode { Value: string strVal } lit when (!inLet && strVal.StartsWith(value: '#') && ((strVal.Length == 7) || (strVal.Length == 9))):
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintInlineColor,
-                    message: $"Inline color literal '{strVal}' — consider declaring as a named 'let' constant",
+                    message: DiagnosticText.Compose(fix: "Declare it once as 'let name = ...' and use the name, so a colour is changed in one place", problem: $"The colour '{strVal}' is written inline"),
                     span: lit.Span
                 );
                 break;
@@ -258,7 +259,7 @@ public static partial class PuckLinter {
             if ((64L * absW) < sumAbs) {
                 diagnostics.ReportWarning(
                     code: PuckDiagnosticCodes.VectorMixStall,
-                    message: $"Vector mix term weight {weight} has relative share below 1/64; consider mean over a history table as the alternative.",
+                    message: DiagnosticText.Compose(fix: "Raise the weight, drop the term, or average over a history table instead", problem: $"The mix term with weight {weight} contributes less than 1/64 of the total weight, so it barely changes the result"),
                     span: span
                 );
             }

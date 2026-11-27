@@ -287,6 +287,6 @@ public sealed class EmbeddingDeclarationEmitterTests {
         Assert.Contains(collection: lintDiags, filter: d => (d.Code == PuckDiagnosticCodes.VectorMixStall));
         var warning = lintDiags.First(predicate: d => (d.Code == PuckDiagnosticCodes.VectorMixStall));
 
-        Assert.Contains("mean over a history table", warning.Message);
+        Assert.Contains("average over a history table", warning.Message);
     }
 }

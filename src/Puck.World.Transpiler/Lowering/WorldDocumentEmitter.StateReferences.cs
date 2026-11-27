@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 
@@ -79,7 +80,7 @@ public static partial class WorldDocumentEmitter {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"pile '{reference.OwnRowName}' names no row '{reference.RowName}'",
+                message: DiagnosticText.Compose(fix: $"Declare a token-domain row named '{reference.RowName}' in 'state.world', or fix the name", problem: $"The pile '{reference.OwnRowName}' names the row '{reference.RowName}', which is not declared"),
                 span: reference.Span
             );
 
@@ -88,7 +89,7 @@ public static partial class WorldDocumentEmitter {
         if (!IsPlainTokenDomainRow(row: domainRow)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"pile '{reference.OwnRowName}' names '{reference.RowName}', which is not a plain token-domain row",
+                message: DiagnosticText.Compose(fix: "Name a plain row whose cells are the tokens the pile holds", problem: $"The pile '{reference.OwnRowName}' names '{reference.RowName}', which is not a plain token-domain row"),
                 span: reference.Span
             );
 
@@ -110,7 +111,7 @@ public static partial class WorldDocumentEmitter {
         if ((domainCount is { } count) && (capacity > count)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationCapacityExceedsDomain,
-                message: $"pile '{reference.OwnRowName}' declares capacity {capacity} greater than its token domain '{reference.RowName}' provides ({count})",
+                message: DiagnosticText.Compose(fix: $"Lower the capacity to {count} or fewer, or add tokens to '{reference.RowName}'", problem: $"The pile '{reference.OwnRowName}' has capacity {capacity}, and its token domain '{reference.RowName}' provides only {count} tokens"),
                 span: reference.Span
             );
         }
@@ -122,7 +123,7 @@ public static partial class WorldDocumentEmitter {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' positions names no row '{reference.RowName}'",
+                message: DiagnosticText.Compose(fix: $"Declare an integer row named '{reference.RowName}' in 'state.world', or fix the name", problem: $"The 'positions' of the grid '{reference.OwnRowName}' names the row '{reference.RowName}', which is not declared"),
                 span: reference.Span
             );
 
@@ -139,7 +140,7 @@ public static partial class WorldDocumentEmitter {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' positions names '{reference.RowName}', which is not an integer keysOf row",
+                message: DiagnosticText.Compose(fix: "Name an Int row declared with 'keysOf', so each token has an integer position", problem: $"The 'positions' of the grid '{reference.OwnRowName}' names '{reference.RowName}', which is not an integer keysOf row"),
                 span: reference.Span
             );
 
@@ -155,7 +156,7 @@ public static partial class WorldDocumentEmitter {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' inverse.tokens names no row '{reference.RowName}'",
+                message: DiagnosticText.Compose(fix: $"Declare a row named '{reference.RowName}' in 'state.world', or fix the name", problem: $"The 'inverse.tokens' of the grid '{reference.OwnRowName}' names the row '{reference.RowName}', which is not declared"),
                 span: reference.Span
             );
 
@@ -167,7 +168,7 @@ public static partial class WorldDocumentEmitter {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' inverse.codes names no row '{reference.SecondaryRowName}'",
+                message: DiagnosticText.Compose(fix: $"Declare a row named '{reference.SecondaryRowName}' in 'state.world', or fix the name", problem: $"The 'inverse.codes' of the grid '{reference.OwnRowName}' names the row '{reference.SecondaryRowName}', which is not declared"),
                 span: reference.Span
             );
 
@@ -179,14 +180,14 @@ public static partial class WorldDocumentEmitter {
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.tokens '{reference.RowName}' names no keyed integer row",
+                message: DiagnosticText.Compose(fix: "Name an Int row that has keyed cells", problem: $"The 'inverse.tokens' row '{reference.RowName}' of the grid '{reference.OwnRowName}' is not a keyed integer row"),
                 span: reference.Span
             );
         }
         if (!IsRowKindInt(row: codesRow)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' names no integer row",
+                message: DiagnosticText.Compose(fix: "Name an Int row", problem: $"The 'inverse.codes' row '{reference.SecondaryRowName}' of the grid '{reference.OwnRowName}' is not an integer row"),
                 span: reference.Span
             );
         }
@@ -201,7 +202,7 @@ public static partial class WorldDocumentEmitter {
         if (!sameShape) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' must carry the same keys, in the same order, as inverse.tokens '{reference.RowName}'",
+                message: DiagnosticText.Compose(fix: "Give both rows the same keys in the same order", problem: $"The 'inverse.codes' row '{reference.SecondaryRowName}' of the grid '{reference.OwnRowName}' has different keys from 'inverse.tokens' '{reference.RowName}'"),
                 span: reference.Span
             );
         }

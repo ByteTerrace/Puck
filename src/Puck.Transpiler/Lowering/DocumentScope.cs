@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Puck.Abstractions.Collections;
 using Puck.Assets;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Units;
@@ -116,7 +117,10 @@ public interface IDocumentVocabulary {
         library = (CompileInputs.Exists(path: path) ? path : null);
         reason = ((library is not null)
             ? string.Empty
-            : $"Imported module '{name}' could not be found at '{path}'."
+            : DiagnosticText.Compose(
+                fix: $"Check the name and that the file exists beside the importing source; import names the file without its extension, such as import \"{name}\"",
+                problem: $"The imported module '{name}' could not be found at '{path}'"
+            )
         );
 
         return (library is not null);
@@ -535,7 +539,10 @@ public sealed partial class DocumentScope {
                 )) {
                     Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.DuplicateName,
-                        message: $"Duplicate constant '{let.Name}'.",
+                        message: DiagnosticText.Compose(
+                            fix: "Rename or delete one of the two declarations; the first one stands",
+                            problem: $"The constant '{let.Name}' is declared twice in one scope"
+                        ),
                         span: let.Span
                     );
                 } else {
@@ -552,14 +559,20 @@ public sealed partial class DocumentScope {
                 )) {
                     Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.DuplicateName,
-                        message: $"Duplicate template '{template.Name}'.",
+                        message: DiagnosticText.Compose(
+                            fix: "Rename or delete one of the two declarations; the first one stands",
+                            problem: $"The template '{template.Name}' is declared twice in one scope"
+                        ),
                         span: template.Span
                     );
                 } else { m_templateScopes[template.Name] = ForConstant(); }
                 if (template.Parameters.Select(selector: parameter => parameter.Name).Distinct(comparer: StringComparer.Ordinal).Count() != template.Parameters.Count) {
                     Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.DuplicateName,
-                        message: $"Template '{template.Name}' repeats a parameter name.",
+                        message: DiagnosticText.Compose(
+                            fix: "Give each parameter its own name",
+                            problem: $"The template '{template.Name}' declares the same parameter name twice"
+                        ),
                         span: template.Span
                     );
                 }

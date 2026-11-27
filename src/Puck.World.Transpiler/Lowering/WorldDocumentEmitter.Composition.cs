@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -27,15 +28,15 @@ public static partial class WorldDocumentEmitter {
     // would be a document no reader could find.
     private static void DeclareWorld(WorldDeclarationNode declaration, DocumentScope scope) {
         if (!scope.Annotations.TryGetValue(key: CompositionAnnotation, value: out var value) || (value is not Composition composition)) {
-            Refuse(message: "A world declaration belongs at the composition root, not inside a world module.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Move the 'world' declaration to the top level of the composing source", problem: "A 'world' declaration is written inside a world module"), node: declaration, scope: scope);
             return;
         }
         if (!composition.TopLevel.Contains(item: declaration)) {
-            Refuse(message: "A world is declared at the top level of its source, never inside a loop, a condition or another construct, so a reader finds every world a source emits without expanding it.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Declare each world at the top level of its source, so a reader finds every world the source emits without expanding anything", problem: "A 'world' declaration is written inside a loop, a condition or another construct"), node: declaration, scope: scope);
             return;
         }
         if (WorldSourceDeclaration.WorldName(declaration: declaration) is not { } name) {
-            Refuse(message: "A world's name is written as a name or a plain string, never computed, so a reader finds every world a source emits without evaluating it.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Write the name as a bare name or a plain quoted string", problem: "A world's name is computed instead of written out"), node: declaration, scope: scope);
             return;
         }
 
@@ -50,15 +51,15 @@ public static partial class WorldDocumentEmitter {
         if (string.IsNullOrEmpty(value: name) || (name.Length > 100) || !char.IsAsciiLetter(c: name[0]) ||
             name.Any(predicate: static c => (!char.IsAsciiLetterOrDigit(c: c) && (c is not '_' and not '-'))) ||
             Puck.Confinement.PortablePath.IsDeviceName(segment: name)) {
-            Refuse(message: "A world name must be a portable filename: an ASCII letter followed by at most 99 letters, digits, underscores or hyphens, and no reserved device name.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Start with an ASCII letter, follow with at most 99 letters, digits, underscores or hyphens, and avoid device names such as 'con' and 'nul'", problem: "A world name is not a portable filename"), node: declaration, scope: scope);
             return;
         }
         if (composition.Worlds.ContainsKey(key: name)) {
-            Refuse(message: $"World '{name}' is declared more than once (world filenames are case-insensitive).", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Give each world its own name; names that differ only in letter case collide, since each world is written to a file of that name", problem: $"The world '{name}' is declared more than once"), node: declaration, scope: scope);
             return;
         }
         if (composition.Worlds.Count >= 256) {
-            Refuse(message: "A source may declare at most 256 worlds.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Split the worlds across several sources", problem: "A source declares more than 256 worlds, the most one source may hold"), node: declaration, scope: scope);
             return;
         }
         if (declaration.Entry && (composition.Worlds.Values.FirstOrDefault(predicate: static world => world.Declaration.Entry) is { } entry)) {
@@ -80,19 +81,19 @@ public static partial class WorldDocumentEmitter {
     }
     private static void DeclareLink(WorldLinkNode declaration, DocumentScope scope) {
         if (!scope.Annotations.TryGetValue(key: CompositionAnnotation, value: out var value) || (value is not Composition composition)) {
-            Refuse(message: "A border or door belongs at the composition root.", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(fix: "Move the 'border' or 'door' to the top level of the composing source, beside the worlds it joins", problem: "A 'border' or 'door' is written away from the composition root"), node: declaration, scope: scope);
             return;
         }
         if (!TryEndpoint(declaration.Left, scope, out var leftWorld, out var left) ||
             !TryEndpoint(declaration.Right, scope, out var rightWorld, out var right)) {
-            Refuse(message: "A link endpoint must name world.endpoint or world.endpoint(argument).", node: declaration, scope: scope);
+            Refuse(message: DiagnosticText.Compose(example: "'door garden.gate, house.front(spawn)'", fix: "Name each endpoint as 'world.endpoint' or 'world.endpoint(argument)'", problem: "A link endpoint is not written as 'world.endpoint'"), node: declaration, scope: scope);
             return;
         }
         var options = new JsonObject();
 
         foreach (var property in declaration.Properties) {
             if ((property is not PropertyNode p) || options.ContainsKey(propertyName: p.Name)) {
-                Refuse(message: "Link options must be distinct scalar or container properties.", node: property, scope: scope);
+                Refuse(message: DiagnosticText.Compose(fix: "Write each option once, as 'name: value' or a block", problem: "A link's options repeat a name or are not properties"), node: property, scope: scope);
                 continue;
             }
             var dimension = p.Name switch { "center" => "position", "width" or "height" or "hysteresis" => (p.Name + "Meters"), "pitch" or "yaw" => (p.Name + "Degrees"), _ => p.Name };

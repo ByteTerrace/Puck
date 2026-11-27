@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Physics.Motion;
 using Puck.Maths;
 
@@ -65,7 +66,7 @@ public static partial class WorldDefinitionValidator {
             (value > 0f) &&
             (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)
         ) {
-            errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
+            errors.Add(item: DiagnosticText.Compose(fix: "The simulation holds nothing smaller than 1/65536 (about 0.0000153), so write at least that", problem: $"{name} {value} is positive but quantizes to zero in Q48.16"));
         }
     }
     // The op→facet mapping: walks a COMPILED program's selected operations (never the authored list — compilation

@@ -638,7 +638,10 @@ public static class DocumentBuiltins {
     internal static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.BuiltinRefused,
-            message: message,
+            message: DiagnosticText.Compose(
+                fix: "Correct the call so each argument matches the form above",
+                problem: $"{message}, and this call to '{call.Name}' passes {call.Arguments.Count.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} {((call.Arguments.Count == 1) ? "argument" : "arguments")}"
+            ),
             span: call.Span
         );
 

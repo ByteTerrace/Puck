@@ -1,5 +1,6 @@
 using Parlot;
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -123,6 +124,7 @@ public static partial class PuckParser {
         var basisSpan = SourceSpan.None;
         var schemaSpan = SourceSpan.None;
         var statements = new List<StatementNode>();
+        var recovering = false;
 
         SkipWhiteSpace(context: context);
 
@@ -170,15 +172,28 @@ public static partial class PuckParser {
             }
 
             if (context.Scanner.Cursor.Current == '}') {
-                var (bLine, bCol) = GetLineAndColumn(buffer: source, offset: context.Scanner.Cursor.Offset);
-                diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: "Unexpected closing brace '}' at document level", span: new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol));
+                // A '}' left over once a statement failed is the failed statement's own closing brace, which recovery
+                // stopped short of: it is the first error's echo, so it is skipped rather than reported again.
+                if (!recovering) {
+                    var (bLine, bCol) = GetLineAndColumn(buffer: source, offset: context.Scanner.Cursor.Offset);
+                    diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.Syntax,
+                        message: DiagnosticText.Compose(
+                            fix: "Remove it, or add the '{' that should open the block it closes",
+                            problem: "Unexpected closing brace '}' at the top level of the document, where no block is open"
+                        ),
+                        span: new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol)
+                    );
+                }
                 context.Scanner.Cursor.Advance();
                 SkipWhiteSpace(context: context);
                 continue;
             }
 
+            var reportedBefore = diagnostics.Count;
             var statement = ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
 
+            recovering = (diagnostics.Count > reportedBefore);
             if (statement is not null) {
                 statements.Add(item: statement);
             }
@@ -233,7 +248,10 @@ public static partial class PuckParser {
         SkipWhiteSpace(context: context);
 
         if (!context.Scanner.Cursor.Eof) {
-            throw CreateException(context: context, message: $"Unexpected token '{context.Scanner.Cursor.Current}' after expression");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "Separate statements with a newline or ';', or remove the extra text",
+                problem: $"Unexpected token '{context.Scanner.Cursor.Current}' after a complete expression"
+            ));
         }
 
         return expr;
@@ -247,21 +265,24 @@ public static partial class PuckParser {
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
 
         if (cursor.Eof) {
-            throw CreateException(context: context, message: "Unexpected end of input while expecting statement");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "Complete the statement, or remove the dangling keyword",
+                problem: "The source ends where a statement is expected"
+            ));
         }
 
         if (TryParseAllow(allow: out var allow, context: context, diagnostics: diagnostics)) {
             ConsumeSeparator(context: context);
             SkipWhiteSpace(context: context);
             if (cursor.Eof || (cursor.Current == '}')) {
-                const string Refusal = "'allow' covers the statement written after it, and none follows";
+                var refusal = DiagnosticText.Compose(fix: "Write the statement it acknowledges on the next line, or delete the 'allow'", problem: "An 'allow' covers the statement written after it, and none follows");
 
                 if (diagnostics is null) {
-                    throw new PuckParseException(Refusal, offset: startOffset, line: line, column: col) { Code = PuckDiagnosticCodes.AllowRefused };
+                    throw new PuckParseException(refusal, offset: startOffset, line: line, column: col) { Code = PuckDiagnosticCodes.AllowRefused };
                 }
-                diagnostics.ReportError(code: PuckDiagnosticCodes.AllowRefused, message: Refusal, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
+                diagnostics.ReportError(code: PuckDiagnosticCodes.AllowRefused, message: refusal, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
 
-                return new ErrorStatementNode(Refusal, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
+                return new ErrorStatementNode(refusal, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
             }
 
             var covered = ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
@@ -275,22 +296,22 @@ public static partial class PuckParser {
             if (diagnostics is null) {
                 throw;
             }
-            diagnostics.ReportError(code: ex.Code, message: ex.Reason, span: new SourceSpan(ex.Offset, Math.Max(val1: 1, val2: (cursor.Offset - ex.Offset)), ex.Line, ex.Column));
+            diagnostics.ReportError(code: ex.Code, message: ReasonOf(buffer: context.Scanner.Buffer, fault: ex), span: new SourceSpan(ex.Offset, Math.Max(val1: 1, val2: (cursor.Offset - ex.Offset)), ex.Line, ex.Column));
             SynchronizeToStatementBoundary(context: context);
             var len = Math.Max(val1: 1, val2: (cursor.Offset - startOffset));
 
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
-        } catch (Exception) {
+        } catch (Exception internalError) {
             if (diagnostics is null) {
                 throw;
             }
-            const string InternalParserMessage = "Could not read this statement due to an internal parser error.";
+            var internalMessage = UnreadableStatementReason(fault: internalError);
 
-            diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: InternalParserMessage, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
+            diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: internalMessage, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
             SynchronizeToStatementBoundary(context: context);
             var len = Math.Max(val1: 1, val2: (cursor.Offset - startOffset));
 
-            return new ErrorStatementNode(InternalParserMessage, startOffset, len, line, col);
+            return new ErrorStatementNode(internalMessage, startOffset, len, line, col);
         }
     }
     // `allow CODE "reason"` acknowledges one diagnostic over the statement that follows it. A property or block named
@@ -315,9 +336,9 @@ public static partial class PuckParser {
         var reason = (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var text) ? text : null);
         var span = new SourceSpan(start, (cursor.Offset - start), line, col);
         var refusal = (!PuckDiagnosticCodes.Declares(code: code)
-            ? $"'allow {code}' names no diagnostic the compiler reports"
+            ? DiagnosticText.Compose(fix: "Use a code the compiler reports, such as PUCK122; the reference page lists them all", problem: $"'allow {code}' names no diagnostic the compiler reports")
             : (string.IsNullOrWhiteSpace(value: reason)
-                ? $"'allow {code}' needs a reason: write why the statement keeps what {code} reports, as 'allow {code} \"...\"'"
+                ? DiagnosticText.Compose(example: $"'allow {code} \"why the statement keeps this\"'", fix: $"Write why the statement keeps what {code} reports, as a quoted reason after the code", problem: $"'allow {code}' gives no reason")
                 : null));
 
         if (refusal is null) {
@@ -347,8 +368,8 @@ public static partial class PuckParser {
             return ParseRuleBodyStatementCore(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         } catch (Exception ex) when ((diagnostics is not null)) {
             var (code, offset, faultLine, faultCol, message) = (((ex as PuckParseException) is { } pex)
-                ? (pex.Code, pex.Offset, pex.Line, pex.Column, pex.Reason)
-                : (PuckDiagnosticCodes.Syntax, startOffset, line, col, "Could not read this statement due to an internal parser error.")
+                ? (pex.Code, pex.Offset, pex.Line, pex.Column, ReasonOf(buffer: context.Scanner.Buffer, fault: pex))
+                : (PuckDiagnosticCodes.Syntax, startOffset, line, col, UnreadableStatementReason(fault: ex))
             );
 
             diagnostics.ReportError(code: code, message: message, span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
@@ -564,7 +585,7 @@ public static partial class PuckParser {
             if (import.NamesFile) {
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.ImportNamesFile,
-                    message: $"'import \"{importPath}\"' spells a file; an import names what the file carries: use 'import \"{import.Name}\"'",
+                    message: DiagnosticText.Compose(fix: $"An import names what the file carries, never the file: use 'import \"{import.Name}\"'", problem: $"'import \"{importPath}\"' spells a file name"),
                     span: new SourceSpan(Column: col, Length: len, Line: line, Offset: startOffset)
                 );
             }
@@ -628,7 +649,7 @@ public static partial class PuckParser {
                         // An exported name is a name: one the bare form cannot carry is backquoted, never quoted.
                         diagnostics?.ReportError(
                             code: PuckDiagnosticCodes.ArgumentWrittenBare,
-                            message: $"an exported name is written as a name; write `{exportStr}`",
+                            message: DiagnosticText.Compose(fix: $"Write the name bare: `{exportStr}`", problem: "An exported name is written as a quoted string"),
                             span: new SourceSpan(startOffset, (context.Scanner.Cursor.Offset - startOffset), line, col)
                         );
                         names.Add(item: exportStr);
@@ -878,7 +899,10 @@ public static partial class PuckParser {
 
         // Identifier or string starting token
         if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var firstSpelling, text: out var firstId)) {
-            throw CreateException(context: context, message: $"Unexpected token '{cursor.Current}' while parsing statement");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "A statement starts with a keyword, a name or a block; check for a missing '}' above or a stray character",
+                problem: $"Unexpected token '{cursor.Current}' where a statement begins"
+            ));
         }
 
         // Raw position right after `firstId`, before the whitespace skip below can erase the newline a bare
@@ -972,7 +996,10 @@ public static partial class PuckParser {
             }
         }
 
-        throw CreateException(context: context, message: $"Unexpected token sequence after '{firstId}'");
+        throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: $"Check what follows '{firstId}': a block takes a name and '{{', a property takes ':' or '='",
+                problem: $"The text after '{firstId}' does not form a statement"
+            ));
     }
     // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
     // `body` parses one statement of the loop's body where the loop stands somewhere other than a document block,
@@ -1124,7 +1151,7 @@ public static partial class PuckParser {
             var sawSolidOverride = statements.Exists(match: static s => (s is PropertyNode { Name: "solid" } or BlockNode { Identifier: "solid" }));
 
             if (sawBareSolid && sawSolidOverride) {
-                diagnostics?.ReportError(code: PuckDiagnosticCodes.SolidSpelledTwice, message: $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid {{ }}' override", span: new SourceSpan(startOffset, (context.Scanner.Cursor.Offset - startOffset), line, col));
+                diagnostics?.ReportError(code: PuckDiagnosticCodes.SolidSpelledTwice, message: DiagnosticText.Compose(fix: "Keep one: the bare 'solid' flag for the default solid, or the 'solid { }' block to override it", problem: $"The placement '{name}' writes both the bare 'solid' flag and an explicit 'solid {{ }}' block"), span: new SourceSpan(startOffset, (context.Scanner.Cursor.Offset - startOffset), line, col));
             }
         }
 
@@ -1284,7 +1311,10 @@ public static partial class PuckParser {
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
 
         if (cursor.Eof) {
-            throw CreateException(context: context, message: "Unexpected end of file while expecting expression");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "Write the value after the operator or the colon",
+                problem: "The source ends where an expression is expected"
+            ));
         }
 
         if (cursor.Current == '`') {
@@ -1367,7 +1397,10 @@ public static partial class PuckParser {
             return new IdentifierExpressionNode(Column: col, Length: len, Line: line, Name: ident, Offset: startOffset);
         }
 
-        throw CreateException(context: context, message: $"Unexpected token '{cursor.Current}' while parsing expression");
+        throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "An expression is a number, a string, a name, a call, a list '[...]', an object '{...}' or an operator between them",
+                problem: $"Unexpected token '{cursor.Current}' where an expression begins"
+            ));
     }
     private static LiteralExpressionNode ParseNumberWithOptionalUnit(ParseContext context) {
         var cursor = context.Scanner.Cursor;
@@ -1394,12 +1427,19 @@ public static partial class PuckParser {
             var hexLen = (cursor.Offset - hexStart);
 
             if (hexLen == 0) {
-                throw CreateException(context: context, message: "Expected hexadecimal digits after '0x'");
+                throw CreateException(context: context, message: DiagnosticText.Compose(
+                    example: "0xFF",
+                    fix: "Write one or more hexadecimal digits after '0x'",
+                    problem: "'0x' is not followed by a hexadecimal digit"
+                ));
             }
             var rawHex = context.Scanner.Buffer.Substring(length: hexLen, startIndex: hexStart).Replace(newValue: "", oldValue: "_");
 
             if (!long.TryParse(rawHex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var hexVal)) {
-                throw CreateException(context: context, message: $"Invalid hex integer literal '0x{rawHex}'");
+                throw CreateException(context: context, message: DiagnosticText.Compose(
+                    fix: "Use at most 16 hexadecimal digits",
+                    problem: $"The hex literal '0x{rawHex}' has too many digits"
+                ));
             }
             var totalHexVal = (isNegative ? -hexVal : hexVal);
 
@@ -1423,7 +1463,10 @@ public static partial class PuckParser {
         var numLength = (cursor.Offset - numStart);
 
         if (numLength == 0) {
-            throw CreateException(context: context, message: "Expected number digits");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                fix: "Write at least one digit after the sign or the decimal point",
+                problem: "A number is started but has no digits"
+            ));
         }
 
         // Scientific notation is part of the number, never a unit suffix: a canonical document holds small
@@ -1453,7 +1496,10 @@ public static partial class PuckParser {
 
         if (hasDecimalPoint || hasExponent) {
             if (!double.TryParse(signedNumStr, System.Globalization.CultureInfo.InvariantCulture, out var d)) {
-                throw CreateException(context: context, message: $"Invalid floating point literal '{signedNumStr}'");
+                throw CreateException(context: context, message: DiagnosticText.Compose(
+                    fix: "Write the number with digits, an optional decimal point and an optional exponent, such as 1.5 or 2e-3",
+                    problem: $"'{signedNumStr}' is not a valid decimal number"
+                ));
             }
             numVal = d;
         } else {
@@ -1463,7 +1509,10 @@ public static partial class PuckParser {
                 } else if (double.TryParse(signedNumStr, System.Globalization.CultureInfo.InvariantCulture, out var dbl)) {
                     numVal = dbl;
                 } else {
-                    throw CreateException(context: context, message: $"Invalid integer literal '{signedNumStr}'");
+                    throw CreateException(context: context, message: DiagnosticText.Compose(
+                        fix: "Use a whole number that fits in a signed 64-bit integer, or write it as a decimal such as 1e19 if it is a real value",
+                        problem: $"The integer '{signedNumStr}' is too large"
+                    ));
                 }
             } else {
                 numVal = l;
@@ -1566,7 +1615,11 @@ public static partial class PuckParser {
         var hex = ("#" + context.Scanner.Buffer.Substring(length: (cursor.Offset - hexStart), startIndex: hexStart));
 
         if (!HexColor.TryCanonicalize(canonical: out _, value: hex)) {
-            throw CreateException(context: context, message: $"Invalid hex color length {hex}: a colour is # and 3, 4, 6 or 8 hex digits");
+            throw CreateException(context: context, message: DiagnosticText.Compose(
+                example: "#f80, #ff8800 or #ff880080",
+                fix: "Write a colour as '#' and 3, 4, 6 or 8 hexadecimal digits",
+                problem: $"The colour '{hex}' has {(hex.Length - 1).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} hexadecimal digits"
+            ));
         }
 
         return new ColorExpressionNode(Hex: hex, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
@@ -2012,7 +2065,7 @@ public static partial class PuckParser {
                 if (!string.Equals(a: respelled, b: text, comparisonType: StringComparison.Ordinal)) {
                     owned.Bag?.ReportError(
                         code: PuckDiagnosticCodes.OperandColonChannel,
-                        message: $"'{text}' spells a reserved channel with colons; write '{respelled}'",
+                        message: DiagnosticText.Compose(fix: $"Write it as '{respelled}'", problem: $"'{text}' spells a reserved channel with colons"),
                         span: span
                     );
                 }
@@ -2174,11 +2227,43 @@ public static partial class PuckParser {
             if (!shapeMatches) {
                 return;
             }
-            throw new PuckParseException($"'{keyword}' is only valid inside a '{owner}' body", startOffset, line, col) {
+            throw new PuckParseException(DiagnosticText.Compose(fix: $"Move it inside the '{owner}' block it belongs to", problem: $"'{keyword}' is only valid inside a '{owner}' body"), startOffset, line, col) {
                 Code = code,
             };
         }
     }
+    // The text a parse fault reports. A fault that says what the grammar expected also names what the source holds
+    // there, as a compiler error does ("Expected '}' closing a 'for' body, but found 'let'").
+    private static string ReasonOf(string buffer, PuckParseException fault) {
+        var reason = fault.Reason;
+
+        if (!reason.StartsWith(value: "Expected ", comparisonType: StringComparison.Ordinal) || reason.Contains(value: "found", comparisonType: StringComparison.Ordinal) || reason.Contains(value: ", got ", comparisonType: StringComparison.Ordinal)) {
+            return reason;
+        }
+
+        var index = fault.Offset;
+
+        while ((index < buffer.Length) && char.IsWhiteSpace(c: buffer[index])) { index++; }
+        if (index >= buffer.Length) {
+            return $"{reason}, but the file ends here";
+        }
+
+        var end = index;
+
+        if (char.IsLetterOrDigit(c: buffer[index]) || (buffer[index] == '_')) {
+            while ((end < buffer.Length) && (char.IsLetterOrDigit(c: buffer[end]) || (buffer[end] == '_'))) { end++; }
+        } else {
+            end = (index + 1);
+        }
+
+        return $"{reason}, but found '{buffer.AsSpan(start: index, length: Math.Min(val1: (end - index), val2: 24))}'";
+    }
+    // The text for a statement the parser stopped on without a syntax fault of its own: the exception says what it
+    // hit, since the author can only act on the statement by simplifying it and reporting the defect.
+    private static string UnreadableStatementReason(Exception fault) => DiagnosticText.Compose(
+        fix: "This is a defect in the compiler. Simplify the statement to read the rest of the document, and report it with the statement that triggers it",
+        problem: $"The parser stopped on an internal error ({fault.GetType().Name}: {fault.Message}) while reading this statement"
+    );
     private static PuckParseException CreateException(ParseContext context, string message) {
         var offset = context.Scanner.Cursor.Offset;
 
