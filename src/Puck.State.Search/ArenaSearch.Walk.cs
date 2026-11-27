@@ -4,6 +4,9 @@ public sealed partial class ArenaSearch {
     private const long TranspositionExact = 1L;
     private const long TranspositionLower = 2L;
     private const long TranspositionUpper = 3L;
+    // A meta word holds the plies an entry covers in bits 0-7, its bound flag in bits 8-15, and the generation that
+    // stored it from this bit up.
+    private const int TranspositionGenerationShift = 16;
 
     private static Level At(Job job, int p) => ((p == 0)
         ? job.Root
@@ -500,8 +503,9 @@ public sealed partial class ArenaSearch {
         var slot = ((int)(key & ((ulong)(keys.Length - 1))));
         var meta = job.TtMeta![slot];
 
+        // An empty slot's meta is zero, a generation no walk runs under, so the generation test refuses it too.
         if (
-            (meta == 0L) ||
+            ((meta >> TranspositionGenerationShift) != job.TtGeneration) ||
             (keys[slot] != key) ||
             ((meta & 0xFFL) < remaining)
         ) {
@@ -509,7 +513,7 @@ public sealed partial class ArenaSearch {
         }
 
         var stored = job.TtValue![slot];
-        var flag = (meta >> 8);
+        var flag = ((meta >> 8) & 0xFFL);
         var childAlpha = -level.Beta;
         var childBeta = -level.Alpha;
 
@@ -539,9 +543,28 @@ public sealed partial class ArenaSearch {
                 : TranspositionExact
         ));
 
-        job.TtMeta![slot] = (flag << 8) | ((long)remaining);
+        job.TtMeta![slot] = ((job.TtGeneration << TranspositionGenerationShift) | (flag << 8) | ((long)remaining));
         job.TtValue![slot] = level.Best;
         keys[slot] = level.Key;
+    }
+    // Discards every entry the table holds in constant time: the job moves to the next generation, under which no
+    // stored entry is live, and clears that generation's own block of SearchCapacity.TranspositionSweep meta words.
+    // Generations run 1..TranspositionGenerations and wrap. The blocks of all of them cover the table (the sweep is
+    // derived so they do), and every one is cleared in the restarts between two walks under one generation, so an
+    // entry stored under a generation is cleared before that generation runs again and is never read as live after a
+    // wrap.
+    private static void RestartTransposition(Job job) {
+        if (job.TtMeta is not { } meta) {
+            return;
+        }
+
+        var generation = ((job.TtGeneration % SearchCapacity.TranspositionGenerations) + 1L);
+        var start = ((int)(((generation - 1L) * SearchCapacity.TranspositionSweep) % meta.Length));
+
+        job.TtGeneration = generation;
+        for (var offset = 0; (offset < SearchCapacity.TranspositionSweep); offset++) {
+            meta[((start + offset) % meta.Length)] = 0L;
+        }
     }
     private static void AdvanceCandidate(Level level, int p, SearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var candidate = (level.Target + 1);
