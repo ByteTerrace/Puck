@@ -217,10 +217,10 @@ public static partial class WorldConstructs {
                 new(
                     Default: "0",
                     DocumentKeys: ["smooth"],
-                    Kind: WorldMemberKind.Fixed,
+                    Kind: WorldMemberKind.Value,
                     Name: "smooth",
                     Position: WorldMemberPosition.Property,
-                    Summary: "The blend's smoothing radius."
+                    Summary: "The blend's smoothing radius, in metres; a binding reference in its place follows its cell, and each write rebakes the groups the shape sits in."
                 ),
                 new(
                     Default: "0",

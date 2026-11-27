@@ -1618,6 +1618,10 @@ export type CreationDocument = {
    * What a solid placement of this creation collides as (null = Drawn); see CreationContact.
    */
   contact?: CreationContact | null;
+  /**
+   * The point, in the creation's own units, SizeBy scales about (null = the origin): a creation sized by state keeps this point where it stands, so an exhibit resting on a stand can grow and shrink about its own centre. A literal point; drawn and contact alike.
+   */
+  sizeAbout?: DocumentVector3;
   [k: string]: unknown;
 };
 
@@ -3165,6 +3169,18 @@ export type PalettePaintTextDocument = {
    * Which line of the block stands on the box's middle, one of AnchorNames (capMiddle centres a line of capitals on it); null centres the whole laid-out block, its ascent to its descent.
    */
   anchor?: string | null;
+  /**
+   * Whether the substituted text is math: each line is math markup (MathMarkup) or a directive that brings in one of the engine's own field formulas (@formula shape:Sphere), gives a term a live value or highlights one (the World's WorldMathText). A math text is set from the box's top-left corner, a line wider than the box set smaller to fit it; Fit, Wrap, Markup, Align and Anchor do not apply to it.
+   */
+  math?: boolean;
+  /**
+   * How far a math text is scrolled: a template like Template that resolves to a number, the share of the text's height past the box's that is moved up out of the box, clamped to 0..1 (null = 0). The box clips what scrolls out.
+   */
+  scroll?: string | null;
+  /**
+   * For a math text, whether every line stands exactly one line step below the last, so its lines fall on a pointer region's rows; otherwise a line taller than the step (a fraction) pushes the next one down.
+   */
+  pitch?: boolean;
 };
 
 export type PaletteRadialPaintDocument = {
@@ -4122,9 +4138,9 @@ export type ShapeDocument = {
    */
   blend?: SdfBlendOp | null;
   /**
-   * The smooth-blend radius (null = 0).
+   * The smooth-blend radius (null = 0): a number, or a state.<row>[.<key>] reference, so a blend's softness follows a cell and each write re-emits and rebakes the groups the shape sits in. Read it through SmoothRadius, which clamps a live value to MaxSmooth.
    */
-  smooth?: number | null;
+  smooth?: DocumentScalar;
   /**
    * The composition group (null = ungrouped).
    */

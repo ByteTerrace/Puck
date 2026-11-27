@@ -27,6 +27,7 @@ import "../standard/styles"
 import "../standard/rig"
 import "../standard/architecture"
 import "../standard/contexts/terminal-console"
+import "../standard/learn-panel"
 
 let seatPopulation = 4
 let visitorPopulation = 8
@@ -711,6 +712,8 @@ let consoleBar = { y0: 0.125, y1: 0.165 }
 let consoleList = { x0: -0.53, x1: 0.105, y0: -0.145, y1: 0.105 }
 let consolePrev = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.025, y1: 0.05 }
 let consoleNext = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.105, y1: -0.03 }
+// The left column's foot, the learn button: a tap opens the learn panel (../standard/learn-panel.puck).
+let consoleLearn = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.165, y1: -0.11 }
 let consoleDetail = { x0: 0.155, x1: 0.72 }
 // The turntable's row along the foot of the detail column: its three buttons, then the pace it keeps.
 let consoleTurnRow = { y0: -0.145, y1: -0.105 }
@@ -782,7 +785,9 @@ function consoleGroupLines(display) = reduce(
   "",
   (text, row) => ((row == 0) ? consoleGroupLine(display, row) : $"{text}\n{consoleGroupLine(display, row)}")
 )
-function consolePaints(display) = [
+// The frame every screen of a console shares: the elbow, the top bar's cap, the left column's two buttons and its foot
+// (the foot is the learn button, `consoleLearn`), and the rule closing the screen's foot.
+function consoleFrame(display) = [
   // The elbow: the left column's head turning into the top bar, its inner corner a quarter round the field cuts.
   consoleFill(
     display,
@@ -810,15 +815,14 @@ function consolePaints(display) = [
   consoleFill(display, { x0: 0.33, x1: 0.72, y0: consoleBar.y0, y1: consoleBar.y1 }, consoleLook.frame, 0.02)
   consoleFill(display, consolePrev, consoleLook.cream, 0.012)
   consoleFill(display, consoleNext, consoleLook.teal, 0.012)
-  consoleFill(
-    display,
-    { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.165, y1: -0.11 },
-    consoleLook.terracotta,
-    0.025
-  )
-  // The rule closing the list's foot, and the divider between the list and the chosen exhibit.
+  consoleFill(display, consoleLearn, consoleLook.terracotta, 0.025)
+  // The rule closing the screen's foot.
   consoleFill(display, { x0: (consoleColumn.x1 + 0.025), x1: 0.72, y0: -0.165, y1: -0.153 }, consoleLook.frame, 0.006)
+]
+function consolePaints(display) = concat(consoleFrame(display), [
+  // The divider between the list and the chosen exhibit, and the learn button's label.
   consoleFill(display, { x0: 0.125, x1: 0.133, y0: consoleList.y0, y1: consoleList.y1 }, consoleLook.frame, 0.004)
+  consoleText(display, consoleInset(consoleLearn), "LEARN", consoleLook.ink, 0.016, "right")
   consoleText(
     display,
     { x0: 0.35, x1: 0.70, y0: consoleBar.y0, y1: consoleBar.y1 },
@@ -911,9 +915,83 @@ function consolePaints(display) = [
     0.015,
     "right"
   )
-]
+])
+// A display's learn screen (../standard/learn-panel.puck), which the screen placement responds with while the display's
+// `learnOpen` cell is not 0: the console's frame, the exhibit's title in the cap, BACK and the layer button down the left
+// column, the exhibit's sentence over its maths (the formula, the formula with its live value, and the step by step,
+// which a drag, a flick or the wheel scrolls), a divider, the formula's terms a row each (a tap selects one, highlighted
+// wherever it appears), and the scrub bar, whose reading names the term it sets and the value it stands at.
+let learnSentence = { x0: consoleList.x0, x1: 0.27, y0: 0.052, y1: 0.105 }
+let learnSteps = { x0: consoleList.x0, x1: 0.27, y0: consoleList.y0, y1: 0.045 }
+let learnTermRows = 6
+let learnTerms = { x0: 0.33, x1: consoleDetail.x1, y0: -0.07, y1: consoleList.y1 }
+let learnScrub = { x0: 0.33, x1: consoleDetail.x1, y0: consoleList.y0, y1: -0.115 }
+let learnScrubReading = { x0: 0.33, x1: consoleDetail.x1, y0: -0.112, y1: -0.08 }
+let learnTermEm = 0.0135
+let learnStepsEm = 0.0155
+// The scrub bar's track, and its ticks' em and tracking (in ems) which spread learnBarCells vertical bars across it.
+let learnScrubTrack = { x0: learnScrub.x0, x1: learnScrub.x1, y0: (learnScrub.y0 + 0.008), y1: (learnScrub.y1 - 0.008) }
+let learnTickEm = 0.0115
+let learnTickTracking = 1.1
+// How much past its box the step by step usually runs, in box heights: a drag's travel scrolls by this estimate, so the
+// steps follow the finger near enough while a scroll of 0..1 always reaches both ends.
+let learnStepsSpan = 2
+let learnDrag = ((2 * plinthGlassHalf[1]) / ((learnSteps.y1 - learnSteps.y0) * learnStepsSpan))
+// A math text on a display's glass: `scroll` a template the text scrolls by, `pitch` its lines set to a list's rows.
+function consoleMath(display, rect, template, ink, em, spacing = 1, scroll = null, pitch = false) = consoleText(
+  display,
+  rect,
+  "",
+  ink,
+  em,
+  "left"
+) with {
+  text: ({ template: template, emHeight: (displayScale * em), math: true, lineSpacing: spacing, pitch: pitch } with ((scroll == null) ? {} : { scroll: scroll }))
+}
+// A row of ticks on a display's glass, a markup text whose ticks' colours bind state, spread by `tracking` (in ems).
+function consoleTicks(display, rect, template, ink, em, tracking) = consoleText(
+  display,
+  rect,
+  "",
+  ink,
+  em,
+  "left"
+) with {
+  text: { template: template, emHeight: (displayScale * em), align: "left", fit: true, markup: true, tracking: tracking }
+}
+function learnPaints(display) = concat(consoleFrame(display), [
+  consoleFill(display, { x0: 0.295, x1: 0.303, y0: consoleList.y0, y1: consoleList.y1 }, consoleLook.frame, 0.004)
+  consoleText(
+    display,
+    { x0: 0.35, x1: 0.70, y0: consoleBar.y0, y1: consoleBar.y1 },
+    $"{{state.galleryScreenTitle.{display.id}}}",
+    consoleLook.ink,
+    0.02,
+    "right"
+  )
+  consoleText(display, consoleInset(consolePrev), "BACK", consoleLook.ink, 0.016, "right")
+  consoleText(display, consoleInset(consoleNext), learnToggleText(display.id), consoleLook.ink, 0.012, "right")
+  consoleText(display, learnSentence, learnSentenceText(display.id), consoleLook.lit, 0.0145, "left", wrap: true)
+  consoleMath(display, learnSteps, learnMathsText(display.id), consoleLook.dim, learnStepsEm, spacing: 1.1, scroll: learnScrollText(display.id))
+  consoleMath(
+    display,
+    learnTerms,
+    learnTermsText(display.id),
+    consoleLook.dim,
+    learnTermEm,
+    spacing: (((learnTerms.y1 - learnTerms.y0) / learnTermRows) / (learnTermEm * consoleFontLine)),
+    pitch: true
+  )
+  // The scrub bar: a track across its region, its ticks lit up to the size the subject stands at (learnBarText), and its
+  // reading over it.
+  consoleFill(display, learnScrubTrack, learnColors.track, 0.005)
+  consoleTicks(display, learnScrubTrack, learnBarText(display.id), consoleLook.teal, learnTickEm, learnTickTracking)
+  consoleText(display, learnScrubReading, learnScrubText(display.id), consoleLook.lit, 0.015, "left")
+])
 // The pointer surface a display's screen placement carries: the glass's front face, carried from the plinth's author
-// frame into the placement's (author x and z point the other way), with the list and the buttons as its regions.
+// frame into the placement's (author x and z point the other way), with the list and the buttons as its regions, and the
+// learn panel's beside them (the learn screen shows over the same glass, so each panel's rules read only its own
+// screen's regions: the console's while learnOpen is 0, the learn panel's otherwise).
 let consolePointer = {
   origin [0, plinthOnFace(0, 0, displayGlassFront)[1], (0 - plinthOnFace(0, 0, displayGlassFront)[2])]
   right [-1, 0, 0]
@@ -927,6 +1005,12 @@ let consolePointer = {
     consoleRegion("slower", consoleSlower)
     consoleRegion("hold", consoleHold)
     consoleRegion("faster", consoleFaster)
+    consoleRegion("learn", consoleLearn)
+    consoleRegion("back", consolePrev)
+    consoleRegion("layer", consoleNext)
+    consoleRegion("terms", learnTerms, learnTermRows)
+    consoleRegion("steps", learnSteps)
+    consoleRegion("scrub", learnScrub)
   ]
 }
 // A display's screen in terminal mode: the hidden console its terminal opens (../standard/contexts/terminal-console.puck,
@@ -1005,9 +1089,10 @@ template consoleScreen(name, paints) {
     }
   }
 }
-// A display's two screens: its interface, and its terminal mode for terminal `number`.
+// A display's three screens: its interface, its learn panel, and its terminal mode for terminal `number`.
 template displayScreen(display, number) {
   consoleScreen(name: $"gallery-screen-{display.id}", paints: consolePaints(display))
+  consoleScreen(name: $"gallery-screen-{display.id}-learn", paints: learnPaints(display))
   consoleScreen(name: $"gallery-screen-{display.id}-terminal", paints: terminalScreenPaints(display, number))
 }
 
@@ -1126,11 +1211,16 @@ template displayPlacements(displays = galleryDisplays) {
       yawDegrees: display.yaw
       scale: displayScale
       pointer: consolePointer
-      // The display's terminal (its place in `displays` from 1) turns the screen into its hidden console.
+      // The display's terminal (its place in `displays` from 1) turns the screen into its hidden console, and its learn
+      // panel, while open and the console is not, into the learn screen.
       respond [
         {
           when: state(state: terminalConsoleOpen, key: $"{index + 1}", comparison: Equal, value: 1)
           prototypeId: $"gallery-screen-{display.id}-terminal"
+        }
+        {
+          when: state(state: learnOpen, key: display.id, comparison: Greater, value: 0)
+          prototypeId: $"gallery-screen-{display.id}-learn"
         }
       ]
     }
@@ -1208,9 +1298,93 @@ template displayCells(displays, name, values, kind = "Int") {
   }
 }
 
+// What each exhibit's learn panel shows (../standard/learn-panel.puck): the engine formula it reads (a typeset formula's
+// reference, `world.formula` lists them), a sentence that says it plainly, and the term a player may scrub, with its value
+// at full size and the least share of it the scrub reaches. A scrubbed size term sizes the exhibit by its `learnSize` cell
+// about its centre (`learnSizeBy`), so the scrub reshapes it with no bake; a scrubbed softness binds the blend's `smooth`
+// to its `learnAmount` cell (`learnSoftness`), so each write re-emits the exhibit and rebakes its seam. The blends and the
+// primitives the formulas name fall out of their own rows; the rest show the sentence alone.
+let learnExhibits = [
+  {
+    name: "shape-sphere"
+    formula: "shape:Sphere"
+    sentence: "Every point of a sphere stands the same distance r from its centre, so the distance to it is how far you are from the centre, less r."
+    scrub { term: "radius", value: 0.5, least: 0.4 }
+  }
+  {
+    name: "shape-box"
+    formula: "shape:Box"
+    sentence: "A box measures how far a point stands past its half size b along each axis; its corners are rounded by c, taken off and given back."
+    scrub { term: "halfExtents", value: 0.45, least: 0.4 }
+  }
+  {
+    name: "shape-torus"
+    formula: "shape:Torus"
+    sentence: "A torus is a ring of radius R with a tube of radius r around it: find the nearest point of the ring, then measure to the tube."
+    scrub { term: "major", value: 0.6, least: 0.4 }
+  }
+  {
+    name: "shape-rounding"
+    formula: "shape:Cylinder"
+    sentence: "Rounding insets the cylinder by its rounding and grows it back by as much, which rounds every edge and keeps its size."
+    scrub { term: "radius", value: 0.4, least: 0.4 }
+  }
+  {
+    name: "shape-smooth-union"
+    formula: "blend:SmoothUnion"
+    sentence: "Two shapes joined softly: near the seam the blend borrows from both distances, and a fillet as wide as the softness grows between them."
+    scrub { term: "smoothRadius", value: 0.15, least: 0.1 }
+  }
+  {
+    name: "shape-cubic-smooth-union"
+    formula: "blend:CubicSmoothUnion"
+    sentence: "The soft join on a cubic curve, so the fillet's curvature has no step where it meets each shape."
+    scrub { term: "smoothRadius", value: 0.15, least: 0.1 }
+  }
+  {
+    name: "shape-chamfer-union"
+    formula: "blend:ChamferUnion"
+    sentence: "The join cut flat instead of rounded: the seam is a bevel at 45 degrees, as wide as the softness."
+    scrub { term: "smoothRadius", value: 0.1, least: 0.1 }
+  }
+  {
+    name: "shape-blend-subtraction"
+    formula: "blend:Subtraction"
+    sentence: "The sphere cuts the box: a point is solid only inside the box and outside the sphere, so the larger of the two distances wins."
+  }
+]
+let learnPrimitives = [
+  { name: "shape-capsule", type: "Capsule" }
+  { name: "shape-cylinder", type: "Cylinder" }
+  { name: "shape-round-cone", type: "RoundCone" }
+  { name: "shape-superellipsoid", type: "Superellipsoid" }
+  { name: "shape-plane", type: "Plane" }
+]
+let learnPlain = { sentence: "This exhibit's maths has no panel of its own yet; its plaque says what it shows." }
+function learnFallback(name) = first(blendExhibits, entry => (entry.id == name), entry => {
+  formula: $"blend:{entry.blend}"
+  sentence: "The box and the sphere joined by this blend: the formula below is the one the engine runs at every point."
+}, first(learnPrimitives, entry => (entry.name == name), entry => {
+  formula: $"shape:{entry.type}"
+  sentence: "The distance to this primitive: the formula below is the one the engine runs at every point."
+}, learnPlain))
+function learnExhibitOf(name) = first(learnExhibits, entry => (entry.name == name), entry => entry, learnFallback(name))
+// The sizeBy a scrubbed exhibit's document carries, its learnSize cell, and the centre it is sized about (sizeAbout), the
+// height every primitive exhibit stands its subject at.
+function galleryIndexOf(name) = indexOf(map(galleryCatalog, entry => entry.name), name)
+function learnSizeBy(name) = $"state.learnSize.{galleryIndexOf(name)}"
+// A blend exhibit whose scrub sets the softness binds its shape's `smooth` to the scrubbed amount (learnAmount); the others
+// keep their authored radius.
+function learnSoftness(entry) = ((learnSubjectOf(learnExhibitOf(entry.id)).scrub == null)
+  ? entry.smooth
+  : $"state.learnAmount.{galleryIndexOf(entry.id)}")
+let learnCentre = [0, 1.2, 0]
+
 // The state of `displays` and of the catalog their consoles list: the stations' rows, then every exhibit's copy.
 template displayState(displays = galleryDisplays) {
   let consoleSlots = consoleSlotsOf(displays)
+  learnPanelState(keys: map(displays, display => display.id))
+  learnSubjectsState(subjects: map(galleryCatalog, entry => learnExhibitOf(entry.name)))
   displayCells(displays: displays, name: "gallerySelect", values: map(displays, display => displayDefault(display)))
   displayCells(displays: displays, name: "galleryShownAt", values: map(displays, display => displayDefault(display)))
   displayCells(
@@ -1618,7 +1792,7 @@ template blendPrototypes() {
           material: accentMaterial
           position: (entry.tool * [-1, 1, -1])
           scale: entry.radius
-          smooth: entry.smooth
+          smooth: learnSoftness(entry)
         }
         exhibit(label: entry.label, extra: [accent])
       }
@@ -3597,6 +3771,7 @@ template galleryPrototypes(displays = galleryDisplays) {
     displayScreen(display: display, number: index + 1)
   }
   // Each primitive at a uniform scale.
+  // The sphere, box and torus are sized by their learn panel's scrub about their centre (learnSizeBy).
   prototype "shape-sphere" {
     document {
       shape Sphere "subject" {
@@ -3605,6 +3780,8 @@ template galleryPrototypes(displays = galleryDisplays) {
         scale [0.5, 0.5, 0.5]
       }
       exhibit(label: "SPHERE", subject: exhibitSubjects.sphere)
+      sizeBy: learnSizeBy("shape-sphere")
+      sizeAbout: learnCentre
     }
   }
   prototype "shape-box" {
@@ -3615,6 +3792,8 @@ template galleryPrototypes(displays = galleryDisplays) {
         scale [0.45, 0.45, 0.45]
       }
       exhibit(label: "BOX", subject: exhibitSubjects.box)
+      sizeBy: learnSizeBy("shape-box")
+      sizeAbout: learnCentre
     }
   }
   prototype "shape-torus" {
@@ -3626,6 +3805,8 @@ template galleryPrototypes(displays = galleryDisplays) {
         scale [0.6, 0.6, 0.6]
       }
       exhibit(label: "TORUS", subject: exhibitSubjects.torus)
+      sizeBy: learnSizeBy("shape-torus")
+      sizeAbout: learnCentre
     }
   }
   prototype "shape-cylinder" {
@@ -4221,6 +4402,8 @@ template galleryPrototypes(displays = galleryDisplays) {
       exhibit(
         label: "ROUNDING"
       )
+      sizeBy: learnSizeBy("shape-rounding")
+      sizeAbout: learnCentre
     }
   }
   prototype "shape-chamfer" {

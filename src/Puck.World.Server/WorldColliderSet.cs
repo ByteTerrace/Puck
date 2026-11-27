@@ -1229,6 +1229,10 @@ public sealed partial class WorldColliderSet : IContactField {
                 }
                 scale = ((arena.Keys.TryResolve(moving.SizeKey, out var key) && arena.TryReadLive(moving.SizeHandle.Ordinal, key, time, out var value))
                     ? WorldCreationSize.Of(value: value) : FixedQ4816.Zero);
+                // The size scales about the creation's pivot, which stays where the unsized creation holds it, as drawn.
+                if ((scale > FixedQ4816.Zero) && (moving.Creation.Document.SizePivot() is var pivot) && (pivot != System.Numerics.Vector3.Zero)) {
+                    origin += rotation.Rotate(vector: (FixedVector3.FromVector3(value: pivot) * (FixedQ4816.FromDouble(value: moving.Placement.Scale) * (FixedQ4816.One - scale))));
+                }
             }
 
             RestoreAttachedRow(origin: origin, rotation: rotation, row: row, scale: scale);

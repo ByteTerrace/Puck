@@ -66,6 +66,7 @@ public static class WorldBootComposition {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
         probe.ProgramBuildsSource = () => presenter.Composed.ProgramBuilds;
         probe.Composition = presenter.Composed;
+        probe.MathTexts = presenter.DescribeMathTexts;
 
         return presenter;
     }

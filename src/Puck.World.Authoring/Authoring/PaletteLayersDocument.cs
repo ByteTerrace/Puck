@@ -218,6 +218,16 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
 /// <param name="Anchor">Which line of the block stands on the box's middle, one of
 /// <see cref="TextRunDocument.AnchorNames"/> (<c>capMiddle</c> centres a line of capitals on it); null centres the whole
 /// laid-out block, its ascent to its descent.</param>
+/// <param name="Math">Whether the substituted text is math: each line is math markup (<see cref="Puck.Text.MathMarkup"/>)
+/// or a directive that brings in one of the engine's own field formulas (<c>@formula shape:Sphere</c>), gives a term a
+/// live value or highlights one (the World's <c>WorldMathText</c>). A math text is set from the box's top-left corner, a
+/// line wider than the box set smaller to fit it; <paramref name="Fit"/>, <paramref name="Wrap"/>,
+/// <paramref name="Markup"/>, <paramref name="Align"/> and <paramref name="Anchor"/> do not apply to it.</param>
+/// <param name="Scroll">How far a math text is scrolled: a template like <paramref name="Template"/> that resolves to a
+/// number, the share of the text's height past the box's that is moved up out of the box, clamped to 0..1 (null = 0). The
+/// box clips what scrolls out.</param>
+/// <param name="Pitch">For a math text, whether every line stands exactly one line step below the last, so its lines fall
+/// on a pointer region's rows; otherwise a line taller than the step (a fraction) pushes the next one down.</param>
 public sealed record PalettePaintTextDocument(
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)] string Template,
     float EmHeight,
@@ -232,7 +242,11 @@ public sealed record PalettePaintTextDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Markup = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? EffectUnit = null,
     [property: DocumentText("a text anchor")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Anchor = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Anchor = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Math = false,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scroll = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Pitch = false
 ) {
     /// <summary>Gets the layout options the lettering is laid out under, for a box of a given width.</summary>
     /// <param name="boxWidth">The box's full width, in the paint frame's units, which lines wrap at when

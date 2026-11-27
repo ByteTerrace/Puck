@@ -71,7 +71,7 @@ public static class ShapeEmission {
 
         var facetScale = frame.FacetScale;
         var blend = (shape.Blend ?? SdfBlendOp.Union);
-        var smooth = ((shape.Smooth ?? 0f) * facetScale);
+        var smooth = (shape.SmoothRadius * facetScale);
         var dilate = ((shape.Dilate ?? 0f) * facetScale);
         var onion = ((shape.Onion ?? 0f) * facetScale);
         var detail = (shape.Detail ?? false);

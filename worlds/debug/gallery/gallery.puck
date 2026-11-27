@@ -53,8 +53,9 @@ import "games"
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
   reads [liftDoors, gallery]
-  // The debug world's lamp over the context button reads which display a seat stands at (debug.puck).
-  bindings [galleryExposure, terminalNear]
+  // The debug world's lamp over the context button reads which display a seat stands at (debug.puck), and the exhibits
+  // a learn panel scrubs read their size or softness (shapes.puck's learnSizeBy and learnSoftness).
+  bindings [galleryExposure, terminalNear, learnSize, learnAmount]
 }
 
 // The exposure `gallery.inspect On` pins the camera at, in EV100 (a lit room is about 7).

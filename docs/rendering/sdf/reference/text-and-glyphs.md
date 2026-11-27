@@ -146,7 +146,39 @@ when a placeholder's cell moved, and resolves a marked-up text's per-glyph
 channel (`TextGlyphChannel`: offset, scale, coverage and tint) at the
 presentation clock. `WorldPresentationManifest.SurfaceTexts` assigns the slots,
 one per distinct text paint in document order, and both the emitted program and
-the glyph supply read that one list.
+the glyph supply read that one list. A glyph quad is its laid-out plane
+rectangle, so a layout may size and stretch a glyph freely, and a glyph wholly
+outside the paint's box packs nothing.
+
+### Math text
+
+A text paint with `math: true` reads its resolved text as lines of math markup
+(`Puck.Text.MathMarkup`): characters stand for their glyphs, `{…}` groups,
+`^` and `_` raise and lower, and `\frac`, `\sqrt`, `\abs`, `\norm`, `\term`,
+`\color`, `\,` and `\quad` build the rest. `Puck.Text.MathLayout` sets it in
+the same font atlas: a fraction's parts a size smaller over a rule on the math
+axis, a root under a rule, bars about an absolute value or a norm, scripts a
+size smaller, parentheses stretched over what they enclose. A rule or a bar is
+a glyph quad too, the interior of the hyphen's or the vertical bar's atlas cell
+where the field changes across the stroke alone, stretched along it, so maths
+draws through the surface text tier with no shader of its own.
+
+A line that starts with `@` is a directive (`WorldMathText`): `@formula
+<reference> [equation|values|steps|terms|meaning]` brings in one of the
+engine's own field formulas, typeset from the formula tree every reader lowers
+(`SdfFormulaTypesetting`, [the decision](../../../decisions/rendering.md#the-maths-a-screen-shows-is-the-engines-own-formula-tree)),
+`@value <term> <number>` writes a term's live value into the `values` line,
+`@select <row|term>` highlights a term wherever it appears, `@meaning <term>
+<text>` says what it means in the `terms` lines (written after the term's symbol
+as given, so it never repeats the symbol; a term with no meaning shows its
+name), and `@color` sets their inks.
+A math text is set from its box's top-left corner, a line wider than the box
+set smaller to fit it; `pitch: true` stands its lines exactly one step apart so
+they fall on a pointer region's rows, and `scroll` (a template resolving to a
+share in 0..1) moves that share of its overflow up out of the box, which clips
+it. The standard's learn panel (`worlds/standard/learn-panel.puck`) is the
+worked use, and `world.texts` reads back each math text as it was last laid
+out.
 
 ## Layout and determinism
 

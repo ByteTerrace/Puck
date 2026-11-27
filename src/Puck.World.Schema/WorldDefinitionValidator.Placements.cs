@@ -457,6 +457,14 @@ public static partial class WorldDefinitionValidator {
         if (document.SizeBy is { } sizeBy) {
             RequireNumericStateReference(definition: definition, errors: errors, path: $"{path}.sizeBy", reference: sizeBy, subject: "a size");
         }
+        if (document.SizeAbout is { } sizeAbout) {
+            if (document.SizeBy is null) {
+                errors.Add(item: $"{path}.sizeAbout places the point sizeBy scales about, so it needs a sizeBy.");
+            }
+            if (sizeAbout.Reference is not null) {
+                errors.Add(item: $"{path}.sizeAbout must be a literal point, not the state binding '{sizeAbout.Reference}'.");
+            }
+        }
         var drivers = (document.Drivers ?? []);
 
         for (var index = 0; (index < drivers.Count); index++) {
@@ -817,6 +825,15 @@ public static partial class WorldDefinitionValidator {
                     }
                     if (paintText.Template is { } template) {
                         _ = TryValidateTextTemplate(definition: definition, errors: errors, line: template, literalRunes: out _, path: $"{textPath}.template");
+                    }
+                    if (paintText.Scroll is { } scroll) {
+                        if (!paintText.Math) {
+                            errors.Add(item: $"{textPath}.scroll scrolls only a math text (math: true).");
+                        }
+                        _ = TryValidateTextTemplate(definition: definition, errors: errors, line: scroll, literalRunes: out _, path: $"{textPath}.scroll");
+                    }
+                    if (paintText.Pitch && !paintText.Math) {
+                        errors.Add(item: $"{textPath}.pitch sets only a math text's lines (math: true).");
                     }
                 }
             }
