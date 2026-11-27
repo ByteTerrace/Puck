@@ -3365,6 +3365,10 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
+- [high] The chess opponent's search is unbounded: on the RTX 2060 partner's machine, chess-tests'
+  World peaked at 8.7 GB working set and 10.4 GB private over 28 minutes, never moved, and kept the turn
+  (verdict 0, turn White at tick 601). The one-ply opponent's search needs a hard node and memory bound
+  and an answer within a tick budget; a game's AI must never hold a world's memory.
 - [med] The endless fall's opening in level 1's floor is tabled (the owner,
   live): `fallOpen` (layout.puck) closes the hole and its rails while the wing's
   fall paintings below stand. Revisit the fall as a whole before turning it on.
