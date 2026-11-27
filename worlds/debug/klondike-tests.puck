@@ -60,6 +60,11 @@ test "the seeded deal fills the tableau and leaves 24 in the stock" {
     count(klondikeDown5Of0) == 3
     count(klondikePile8Of0) == 1
     count(klondikeDown8Of0) == 6
+    // The glass read the piles: column 1's one card lies at the column's first slot (76), and column 4's face-up card
+    // over its three face-down ones (133 to 136).
+    patienceSlotOf0[patienceCardAtOf0[76]] == 76
+    patienceSlotOf0[patienceCardAtOf0[135]] == 135
+    patienceSlotOf0[patienceCardAtOf0[136]] == 136
   }
 }
 

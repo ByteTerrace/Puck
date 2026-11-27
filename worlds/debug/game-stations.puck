@@ -47,7 +47,6 @@ let rootStation = { id: "station", at [0, -0.5, 0] }
 module gameStationGames(station, index) {
   state {
     chessBoardGrid(cellSize: 0.1, origin: [-0.4, 0, -0.4], band: 0.1)
-    patienceStationSlots(station: station)
     world {
       gameStationSeatState()
       chessGameState(settleTicks: chessGameSettleTicks, digital: true)
@@ -82,7 +81,6 @@ module gameStationGames(station, index) {
 // moves the table's pieces too.
 module gameStationSharedChess(station, index) {
   state {
-    patienceStationSlots(station: station)
     world {
       gameStationSeatState()
       chessStationState(station: station)
@@ -122,20 +120,24 @@ template gameStationSetGrids(stations) {
   for station in stations {
     gameStationGrid(station: station)
   }
+  patienceSlotsGraph()
+  patienceDisplayFamilies(count: length(stations))
 }
 
 // What the stations' paints, the console and every station's rules read, inside the world's `state.world` block.
 template gameStationSetState(stations) {
   gameStationState(stations: stations, catalog: gameStationCatalog)
   chessStationDisplayState(stations: stations)
-  patienceDisplayState()
+  patienceDisplayState(stations: stations)
   solitaireState(count: length(stations))
 }
 
-// The rules the world holds once for every station, at the world's top level: the patience games', each sweeping the
-// stations' tables (`solitaireTable`, keyed by a station's place in the list, the `index` its instance is made with).
+// The rules the world holds once for every station, at the world's top level: the patience games' and the patience
+// layout's, each sweeping the stations' tables (`solitaireTable`, keyed by a station's place in the list, the `index`
+// its instance is made with) or a family a member a station (`patienceCardNoOf`, `klondikePile2Of`).
 template gameStationSetRules() {
   solitaireGame()
+  patienceSetRules()
 }
 
 // A small room holding `stations` on their own: a floor, the seats and visitors with the stations' decks above them,
