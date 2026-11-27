@@ -55,7 +55,8 @@ public sealed partial class SdfWorldPassesLawTests {
         var context = default(FrameContext);
 
         passes.BeginFrame(context: in context);
-        Assert.NotEqual(expected: revision, actual: counter.Revision);
+        // An instance that resolves no residency keeps the capacity it was last counted at, so the gap rebuilds nothing.
+        Assert.Equal(expected: revision, actual: counter.Revision);
         Assert.False(condition: passes.IsUnchanged(context: in context, instance: "view", reads: RenderGraphReadStands.None, unreadFrames: 0));
         Assert.False(condition: passes.HasRenderedResolvedView(instance: "view"));
     }

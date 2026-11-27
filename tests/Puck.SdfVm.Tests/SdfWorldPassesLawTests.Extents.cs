@@ -36,9 +36,10 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
         Assert.True(condition: Reconstructs(plan: node.Plan!));
-        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * SdfWorldPackage.VisibilityRecordByteLength));
+        // A pixel holds its record and a word of the tint plane past every record (VisibilityPixelByteLength).
+        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * SdfWorldPackage.VisibilityPixelByteLength));
 
-        Assert.Equal(expected: ((24 * 24) * SdfWorldPackage.VisibilityRecordByteLength), actual: storage.Length);
+        Assert.Equal(expected: ((24 * 24) * SdfWorldPackage.VisibilityPixelByteLength), actual: storage.Length);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // The irradiance volume's first lighting, which creates its GPU work's objects as it starts and lands in wall time,
         // settles before the scale changes count buffers.
@@ -50,7 +51,9 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         _ = view.Produce(context: in context);
         _ = view.Produce(context: in context);
-        var createdBuffers = gpu.BufferBytes;
+        // The view's own storage: the irradiance volume's background work keeps resizing its staging (the probe origins'
+        // ring shrinks once placement settles) on its own schedule, which no scale change causes.
+        var createdBuffers = node.OwnedBytes;
         var createdPools = gpu.PoolsCreated.Count;
         var revision = node.WorkRevision;
 
@@ -70,7 +73,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: Extent, actual: BitConverter.ToUInt32(startIndex: 0, value: block));
             Assert.Equal(expected: pixels, actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))));
             Assert.Equal(expected: 0.4f, actual: BitConverter.ToSingle(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.UpscaleSharpness))));
-            Assert.Equal(expected: createdBuffers, actual: gpu.BufferBytes);
+            Assert.Equal(expected: createdBuffers, actual: node.OwnedBytes);
             Assert.Equal(expected: createdPools, actual: gpu.PoolsCreated.Count);
             Assert.Equal(expected: revision, actual: node.WorkRevision);
             // The picker copies one record from the active packed grid, independently of output and allocation size.
