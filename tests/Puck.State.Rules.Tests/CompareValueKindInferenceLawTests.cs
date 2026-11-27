@@ -26,12 +26,12 @@ public sealed class CompareValueKindInferenceLawTests {
         Assert.Equal(expected: expected, actual: Compile(left: left, right: right).Gate[0].ValueKind);
     }
     [Fact]
-    public void AComparisonMixingAnIntAndAFixedReadRefusesUnderEitherReading() {
-        Assert.Throws<RuleException>(testCode: () => Compile(left: "score + 1", right: "ratio"));
+    public void AComparisonMixingAnIntAndAFixedReadUsesFixedContext() {
+        Assert.Equal(CellKind.Fixed, Compile(left: "score + 1", right: "ratio").Gate[0].ValueKind);
     }
     [Fact]
     public void ADeclaredKindIsKeptEvenWhereTheOtherWouldCompile() {
         Assert.Equal(expected: CellKind.Fixed, actual: Compile(kind: CellKind.Fixed, left: "3 / 2", right: "1").Gate[0].ValueKind);
-        Assert.Throws<RuleException>(testCode: () => Compile(kind: CellKind.Fixed, left: "score + 1", right: "6"));
+        Assert.Equal(CellKind.Fixed, Compile(kind: CellKind.Fixed, left: "score + 1", right: "6").Gate[0].ValueKind);
     }
 }
