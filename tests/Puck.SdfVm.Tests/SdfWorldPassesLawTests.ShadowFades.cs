@@ -58,7 +58,7 @@ public sealed partial class SdfWorldPassesLawTests {
             var passBlock = new byte[SdfFrameBlock.SizeBytes];
             var recording = new RenderGraphPackageRecording(CommandBuffer: commands.CommandBufferHandle, Recorder: gpu.Services.Recorder,
                 Slot: 0, Width: Extent, Height: Extent, Inputs: Resources(declarations: context.Inputs), Outputs: Resources(declarations: context.Outputs),
-                PassBlock: passBlock, Leases: new LeaseRetireList(), Context: frame, MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
+                PassBlock: passBlock, Leases: new LeaseRetireList(), Context: (frame with { Latch = Puck.Abstractions.Presentation.DeliveryLatch.Capture() }), MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
 
             Assert.Equal(expected: RenderGraphPackageOutcome.Drew, actual: recorder.Record(recording: in recording));
             // A frame running no shade program shades through the fixed views kernel (SdfWorldResidency.ShadeFallback).
@@ -73,7 +73,11 @@ public sealed partial class SdfWorldPassesLawTests {
         ShaderPipelineResource[] Declarations(IReadOnlyList<ResourceReference> ports) => [.. ports.Select(selector: port =>
             fragment.Resources.Single(predicate: resource => (resource.Name == port.Name)) with { Name = $"sdf.world${port.Name}" })];
         RenderGraphPackageResource[] Resources(IReadOnlyList<ShaderPipelineResource> declarations) => [.. declarations.Select(selector: resource =>
-            new RenderGraphPackageResource(Version: resource.Name, Kind: resource.Kind, Image: default,
+            new RenderGraphPackageResource(Version: resource.Name, Kind: resource.Kind,
+                Image: ((resource.Kind == ShaderPipelineResourceKind.Buffer) ? default : new ShaderPipelineExternalImage(
+                    ImageHandle: 1, ImageViewHandle: 1, Width: Extent, Height: Extent, Format: RenderGraphPackageCatalog.WorkingFormat,
+                    Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host),
+                    Layout: GpuImageLayout.General)),
                 Buffer: ((resource.Kind == ShaderPipelineResourceKind.Buffer) ? scratch : null), Owned: null))];
     }
 }
