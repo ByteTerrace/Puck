@@ -1587,6 +1587,30 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The index into the delivered definition's kit rows.</returns>
     public int Kit(int index) => ArrayCapacity.ElementOr(array: m_kit, index: index);
+    /// <inheritdoc/>
+    /// <remarks>The delivered definition's kits compile again only when its kit or creation rows change: a definition
+    /// derived for a state change carries both lists, so the colliders it keeps stand.</remarks>
+    public FixedWorldCollider? Collider(int index) {
+        var definition = Definition;
+        var compiled = Volatile.Read(location: ref m_kitColliders);
+
+        if (!ReferenceEquals(objA: compiled.Kits, objB: definition.Kits) || !ReferenceEquals(objA: compiled.Creations, objB: definition.Creations)) {
+            compiled = new KitColliders(
+                Colliders: FixedWorldCollider.CompileEach(creations: definition.Creations, kits: definition.Kits),
+                Creations: definition.Creations,
+                Kits: definition.Kits
+            );
+            Volatile.Write(location: ref m_kitColliders, value: compiled);
+        }
+
+        var kit = Kit(index: index);
+
+        return ((((uint)kit) < ((uint)compiled.Colliders.Length)) ? compiled.Colliders[kit] : null);
+    }
+    // Every kit's compiled collider by kit row, with the kit and creation rows it was compiled from, published whole so a
+    // reader on any thread sees one compilation.
+    private sealed record KitColliders(FixedWorldCollider?[] Colliders, IReadOnlyList<WorldKit>? Kits, IReadOnlyList<WorldPrototype>? Creations);
+    private KitColliders m_kitColliders = new(Colliders: [], Creations: null, Kits: null);
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>

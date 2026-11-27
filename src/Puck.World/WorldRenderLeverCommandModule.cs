@@ -812,6 +812,22 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
+            name: "world.occluders",
+            description: "Reads the analytic occluders the presentation's residency last packed (a creation's `occlusion`, an authored render.lighting occluder row): how many, and for each its source (the body, the placement and the creation it shows, or the authored row), its solid (sphere, capsule or box), centre, radius, half segment or half axes, reach, strength, shadow, softness, the frame slots of the body whose own surfaces it skips, and whether the first view's mask keeps it. World units. Presentation only; reads change nothing.",
+            handler: (context, args) => {
+                if (CommandResult.RequireNoArguments(args: in args, verb: "world.occluders") is { } refusal) {
+                    return refusal;
+                }
+                if (renderProbe.Residency?.Frame is not { } frame) {
+                    return new CommandResult(Output: "[world.occluders: renderer not built yet]");
+                }
+
+                return new CommandResult(Output: $"[world.occluders: {DescribeOccluders(frame: frame)}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Unbindable,
             name: "world.probe",
             description: $"Reads the settled irradiance probes about a point: {WorldProbeForms.Spelling}. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
             forms: WorldProbeForms,
