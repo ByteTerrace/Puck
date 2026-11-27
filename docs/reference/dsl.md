@@ -446,10 +446,10 @@ or otherwise non-foldable addition to the shared table, not a currently reachabl
 ## Collection builtins and lambdas
 
 `range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort` and `groupBy` are the document language's
-OWN vocabulary—a rule has no arrays to fold, so these exist in one language only, and are evaluated WHILE
+OWN vocabulary—a rule has no arrays at run time, so these exist in one language only, and are evaluated WHILE
 LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
 `(item, index) => expression` (`reduce`'s is `(running, item) => expression`), and is an argument to one of these
-builtins and nothing else—there are no first-class functions.
+builtins or a [list fold](#folds-over-a-list) and nothing else—there are no first-class functions.
 
 A cartridge's `arrays` section (`worlds/debug/cartridges/shared/tetromino.puck` is the working form; a world
 document has no `arrays` member) shows the builtins at work:
@@ -492,6 +492,42 @@ order, each value the array of items that produced it.
 
 `map` and `filter` pass the item and, optionally, its index; `reduce` takes the running value and the item.
 A lambda parameter shadows a constant of the same name for the length of one application.
+
+### Folds over a list
+
+`sum`, `count`, `any`, `all`, `minimum`, `maximum` and `first` fold a list the compiler knows, written
+`name(list, item => term)` (`first(list, item => condition, otherwise)` or
+`first(list, item => condition, item => value, otherwise)`). `ListFolds` (`Lowering/ListFolds.cs`) is the one
+description of the expression each fold stands for: `sum` is `t0 + t1 + …`, `any` is `t0 or t1 or …`, `first` the
+choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values;
+in a rule, where the body may read state, the operand binder writes it out with each element in place of the binder,
+so the lowered rule is the one an author would paste by hand and is priced the same
+([the rule language's side](state/expressions.md#fold-over-a-compile-time-list)):
+
+```puck
+let total = sum(range(1, 5), k => k * k)                                        // 30, at compile time
+freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)  // four reads, in a rule
+```
+
+The lambda is what makes a call a list fold: `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its
+construct, and a rule's `count(hand)` or `any(row, x -> x > 0)` over a row stays the row fold.
+
+## `let … in`, a name for one expression
+
+`let name = value in body` names a value for the expression after `in`, in a document value, a function body or a
+rule operand; lets chain, and a chain too long for its line prints one binding a line:
+
+```puck
+function loopGradient(keys, f) = let at = f * length(keys) in
+let from = floor(at) in
+let t = at - from in
+loopItem(keys, from) * (1 - t) + loopItem(keys, from + 1) * t
+```
+
+A document value evaluates the value once and binds it as a lambda parameter is bound. A rule operand holds the
+body with the value in place: a compile-time value binds as a fold's element does, and a value that reads state is
+written in place only where the body reads it once or the value is a plain read, so no program evaluates the value
+more often than its author wrote it. Anything else is refused with the fix, a rule `local`.
 
 ### Rotations, points and element-wise arithmetic
 

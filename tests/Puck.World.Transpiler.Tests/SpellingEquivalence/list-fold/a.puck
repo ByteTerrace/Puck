@@ -1,0 +1,33 @@
+// A fold over a compile-time list is the chain written out, one term per element with the element in place of the
+// binder, in a value, a gate and a document constant alike.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let chairs = [{ name: "near", side: 0 }, { name: "far", side: 2 }]
+let squares = sum(range(1, 4), k => k * k)
+
+state {
+  world {
+    table pile0 capacity(1) {
+      a = 0
+    }
+    table pile1 capacity(1) {
+      a = 0
+    }
+    table pile2 capacity(1) {
+      a = 0
+    }
+    table chair capacity(auto) {
+      near = 0
+      far = 0
+    }
+    slot seat = 0
+    slot total = 0
+  }
+}
+
+rule "tick" {
+  when any(range(0, 3), k => count($"pile{k}") > 0) and all(chairs, c => chair[c.name] == 0)
+  total = sum(range(0, 3), k => count($"pile{k}") == 0) + count([0, 2], k => count($"pile{k}")) + squares
+  seat = first(range(1, 3), s => chair[chairs[s - 1].name] == s, s => s * 10, -1) + minimum(chairs, c => chair[c.name])
+}

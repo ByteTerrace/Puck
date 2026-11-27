@@ -1,0 +1,29 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table pile0 capacity(1) {
+      a = 0
+    }
+    table pile1 capacity(1) {
+      a = 0
+    }
+    table pile2 capacity(1) {
+      a = 0
+    }
+    table chair capacity(auto) {
+      near = 0
+      far = 0
+    }
+    slot seat = 0
+    slot total = 0
+  }
+}
+
+rule "tick" {
+  when (count(pile0) > 0 or count(pile1) > 0 or count(pile2) > 0) and chair.near == 0 and chair.far == 0
+  total = (count(pile0) == 0) + (count(pile1) == 0) + (count(pile2) == 0) +
+    ((count(pile0) != 0) + (count(pile2) != 0)) + 14
+  seat = (chair.near == 1 ? 10 : (chair.far == 2 ? 20 : -1)) + minimum(chair.near, chair.far)
+}

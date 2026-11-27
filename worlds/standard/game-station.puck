@@ -527,7 +527,12 @@ function gameStationWord(seat) = (gameStationBits.pick * seatPastOf(seat, "confi
 function gameStationSeatIn(cells, side, seats) = first(range(1, seats + 1), s => seatAtSide(cells, s, side), 0)
 // The buttons and the pick cell of seat `seat` (1 to `seats`; 0 holds none and points nowhere).
 function gameStationButtonsOf(seat, seats) = first(range(1, seats + 1), s => seat == s, s => gameStationWord(s), 0)
-function gameStationPointedBy(cells, seat, seats) = first(range(1, seats + 1), s => seat == s, s => board(pointer, cells, s), -1)
+function gameStationPointedBy(cells, seat, seats) = first(
+  range(1, seats + 1),
+  s => seat == s,
+  s => board(pointer, cells, s),
+  -1
+)
 
 // A station's rules, inside its module instance. The chairs rule reads who sits where; it reads only whether a seat is
 // at the board and where, so it runs when one sits down or stands up. A chair's presses rule reads its seat's buttons
