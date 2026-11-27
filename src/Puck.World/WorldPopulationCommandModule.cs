@@ -278,16 +278,16 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             yield return (device, type.ToString());
         }
     }
-    // The sequence and its row view, then any per-body selector as select(<body register>: <value>=<row>, …).
+    // The sequence and its row view, then each per-body selector in the order they are read as
+    // select(<name> <body register>: <value>=<row>, …).
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
             ? "all"
             : string.Join(
                 separator: ",",
                 values: assignment.Rows
-            ))}]{((assignment.Select is { } select)
-            ? $" select({select.BodyState}:{string.Join(separator: ",", values: select.Cases.Select(selector: static selectCase => $"{selectCase.Value}={selectCase.Row}"))})"
-            : string.Empty)}";
+            ))}]{string.Concat(values: assignment.Selectors.Select(selector: static select =>
+                $" select({select.Name} {select.BodyState}:{string.Join(separator: ",", values: select.Cases.Select(selector: static selectCase => $"{selectCase.Value}={selectCase.Row}"))})"))}";
     // A gamepad's battery and accessories text for world.devices, or null without a manager or a report.
     private string? DescribeGamepadStatus(InputDeviceId device) =>
         (((gamepads is not null) &&
