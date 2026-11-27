@@ -860,8 +860,15 @@ last takes the rest of the distance and of the optical depth (`sdfGlassShare`),
 so a pane over a pool keeps the pane's tint thin and the pool's deep, and the
 interfaces together absorb exactly what the sums hold. The even part assumes
 the later panes alike, since the sums keep only the nearest exit. The glass pixel's coverage is the light behind's, darkened by
-each interface's luminous transmittance, so the sky the composite puts behind a
-clear pane shows through at the pixel's own direction. The reflection and the
+the luminance of the RGB share the interfaces pass. That share goes to the
+composite in the glass's sky filter (`SdfWorldPackage.GlassSkyFilter`, one word
+a render pixel), and the composite tints its sky share by the filter's chroma,
+so the sky behind a stained pane shows through tinted as the opaque light behind
+it is, at the pixel's own direction, unrefracted and unfrosted. The composite
+binds the filter only in a frame whose glass passes ran; otherwise it reads the
+tables' dummy and passes the sky as it is. A frosted read leaves out each tap
+that lands on a surface nearer than the glass, as the centre read does, so a
+frame, came or arch in front of a pane is not spread over it. The reflection and the
 highlights pass through the atmosphere over the glass's own distance; the light
 behind carries the atmosphere over the opaque hit's distance already, and the
 composite's in-scatter and media composite at the opaque hit's distance.
@@ -951,7 +958,7 @@ for the world's own views; the quality presets carry it, off at `low` and on at
 `medium` and `high`. The world's own views are every view the presentation lays
 out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
 layout slots that name a camera alike, so a named-camera slot reconstructs and
-its settled still converges over a jitter period. A camera view a screen films
+its settled still converges over the held renders. A camera view a screen films
 never reconstructs (its quality restriction,
 `WorldRenderSettings.NestedRestriction`, does not ask), and neither does a session
 view. Beyond that a nested view gives up only what the world's `render.nested`
@@ -1106,7 +1113,9 @@ portal crossing, a view or extent change, a parked view shown again, a debug vie
 reconstruction turned on is the spatial path's frame exactly, at the sequence's
 first sample, the pixel center. Under `world.cadence on`, a still temporal view
 renders one jitter period after its inputs last change and then stands, its
-output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
+output converged (`SdfTemporalHistory.Stands`); after its history restarts it
+renders one more (`SdfWorldPackage.ConvergedRenders`), since the epoch's first
+render reads no preceding frame and so reflects nothing on screen. A render-grid dip or recovery
 restarts this settling period, including a grid change that takes effect only
 when a replacement graph installs. A view the display stopped showing is parked:
 the render graph counts the frames its schedule leaves an instance unread, which

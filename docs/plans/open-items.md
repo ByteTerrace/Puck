@@ -2593,11 +2593,32 @@ Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
 the CPU reference. Measure the live relight backlog under an accelerated day,
 the valley at dawn and dusk, and the first frame and settled light after a
-teleport. The gather now hands missing cells to the coarser levels and the
-view can read its authored sky while its new camera sample is pending.
+teleport. The gather hands missing cells to the coarser levels, and while a
+view's new camera sample is pending its air takes no sky and its surfaces hold
+the last sample's light.
 [The plan](illumination.md#the-build-order) owns the steps, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
+
+The air's in-scatter:
+
+- [medium] The sky's in-scatter is lit by one scalar a view, the camera
+  sample's open sky (`airLight`), so a valley seen through a hall's opening
+  hazes at the hall's share and a hall seen from the open hazes as open air.
+  The structural answer is a share a render sample: views splits each sample's
+  air at the camera sample's reach into a near part lit by `airLight` and a far
+  part lit by the open sky the probe gather already resolved into the pixel's
+  slot (the six-face mean of `sdfViewsSkyShareAt`), and folds that share into
+  the sky-reading kinds' weights (the haze always, the fog unless its colour is
+  authored) before they pack (`sdfPackSampleAir`, `sdfSampleTransport`). The
+  transport stays four linear words, so the resolve filters it as it does now;
+  a resolve-copied sample carries its share in the sample word's unused second
+  word; and the composite and the screen-space reflection pass
+  (`sdf-world-views-reflections.comp.hlsl`, which reads the history's transport
+  words) stop multiplying by `airLight`. It costs one more closed-form air
+  segment and one slot read a sample. It waits for the screen-space reflection
+  lane to land, since that pass changes with it; the forcing case is the
+  valley seen through an opening of the gallery from the nave at noon.
 
 Light through coloured glass:
 
@@ -2623,17 +2644,14 @@ Light through coloured glass:
 
 The volume's cost and convergence:
 
-- [medium] The `scene-placement` stop has no device-free law. A probe job
-  whose scene names a mesh the tables have not placed is refused until
-  `AdmissionWait` and then cancelled (`SdfMeshProbeGpuWork.TryTake`), and the
-  gallery's lighting showed that stop, but only a windowed run reaches it. A
-  law over a fake device that holds a scene's meshes unplaced and checks the
-  head's cancel and the volume's `NoteScenePlacement` answer would witness it.
-- [medium] The `scene-upload` refusal has no time bound. `TryTake` refuses
-  every take while a scene uploads (`ServeSceneUpload`), and only the
-  placement wait is bounded by `AdmissionWait`, so an upload that never
-  completes holds the volume's work indefinitely. Give the upload the same
-  bound and name the stop where it ends.
+- [low] The `scene-placement` cancel has no device-free law over the probe
+  service itself. The volume's answer to it is witnessed device-free
+  (`ASceneTheProbeServiceCouldNotBindIsBuiltAgainThoughItsDrawsStandUnchanged`),
+  but the head's cancel in `SdfMeshProbeGpuWork.TryTake`, and the
+  `scene-upload-stalled` stop beside it (`UploadStalled`), are reached only by a
+  windowed run. A law over a fake device whose region holds a scene's meshes
+  unplaced, and one whose residency uploads never carry the probe scene's
+  chunks, would witness both.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
@@ -5022,6 +5040,13 @@ private-install activation measurement.
   the client was given.
 - Time the front's swap to a newly activated build from a private install root
   (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`).
+- [medium] One malformed client line still ends the operator session and stops
+  every World it owns: `BoundedMcpInput` fails the session on a line over
+  64 KiB, more than 128 unconsumed messages or invalid UTF-8. A line it cannot
+  admit should be dropped and named, not end the session.
+- [medium] A front that ends says why only on standard error, which Claude Code
+  records only while the server connects. Write the reason where an operator
+  can read it after the session is gone.
 - [low] Investigate the reported operator attachment loss on `world.reset`:
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint.

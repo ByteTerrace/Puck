@@ -155,12 +155,14 @@ public sealed partial class RenderGraphRuntime {
         m_unvisited.Clear();
         m_unvisited.Push(item: captured);
 
+        var settling = 0;
+
         while (m_unvisited.TryPop(result: out var index)) {
             if (!m_visitedIndices.Add(index: index)) {
                 continue;
             }
 
-            DiscardCaptureTaint(index: index);
+            settling = Math.Max(val1: settling, val2: DiscardCaptureTaint(index: index));
 
             if (
                 !m_set.Instances[index].IsSource &&
@@ -175,6 +177,7 @@ public sealed partial class RenderGraphRuntime {
                 m_unvisited.Push(item: reads[read].Producer);
             }
         }
+        AwaitDiscardedState(settling: settling);
 
         return m_rerenderIndices.Members;
     }

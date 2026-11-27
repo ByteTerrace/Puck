@@ -497,10 +497,11 @@ public static class OperatorMcpServer {
     /// <param name="target">A World's private capability file, or a directory of them whose newest answering World
     /// each attachment follows; Worlds publish theirs in the user's temporary directory.</param>
     /// <param name="input">MCP JSON-RPC input, with a 64 KiB line ceiling.</param>
-    /// <param name="output">Protocol-only output. The adapter owns and closes both streams on shutdown.</param>
+    /// <param name="output">Protocol-only output. The adapter owns and closes both streams on shutdown. A reply waits for
+    /// the client to drain it however long that takes; only a write the client's end refuses closes the adapter.</param>
     /// <param name="cancellationToken">Adapter shutdown.</param>
-    /// <param name="clock">Drives every adapter-side deadline: the attachment's connect and handshake, each call, the
-    /// control connection's own call deadline, and each reply write. <see langword="null"/> is
+    /// <param name="clock">Drives every adapter-side deadline: the attachment's connect and handshake, each call, and the
+    /// control connection's own call deadline. <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>. The World's side runs its deadlines on its own clock.</param>
     /// <param name="launch">The checkout and GPU lease <c>puck_world_start</c> boots Worlds with, or
     /// <see langword="null"/> for an adapter outside any checkout, whose start is refused. Every World the adapter
@@ -519,11 +520,10 @@ public static class OperatorMcpServer {
             input,
             () => { attachment.Dispose(); lifetime.Cancel(); }
         );
-        await using var transport = new BoundedMcpTransport(
+        await using var transport = new WholeReplyMcpTransport(
             bounded,
             output,
             bounded.Fail,
-            clock,
             lifetime.Token
         );
         using var interruptIo = lifetime.Token.Register(callback: () => { bounded.Dispose(); output.Dispose(); });

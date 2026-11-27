@@ -70,10 +70,11 @@ public sealed partial class SdfMeshIrradiance {
     // read before the next job is submitted.
     private Vector4[] m_gpuOrigins = [];
     private uint[] m_gpuInput = [];
-    private OwnedBuffer<uint>? m_gpuAnswer;
-    // The native buffer a batch's selections, traces and relights answer into, one call after another, allocated at the
-    // batch's first call and freed when the batch ends (BatchEnded).
-    private OwnedBuffer<uint> GpuAnswer => (m_gpuAnswer ??= new OwnedBuffer<uint>(allocator: m_allocator));
+    private SdfMeshProbeGpuWork.Answers? m_gpuAnswer;
+    // The native buffers a batch's selections, traces and relights answer into, one call after another, and the ring the
+    // probe service's parts answer into: sized at the batch's first call, freed when the batch ends (BatchEnded) and
+    // disposed only once the worker has stopped (ReleaseScene), so no client's retirement frees a buffer the worker reads.
+    private SdfMeshProbeGpuWork.Answers GpuAnswer => (m_gpuAnswer ??= new SdfMeshProbeGpuWork.Answers(allocator: m_allocator));
     private uint[] m_gpuFresh = [];
     private int[] m_gpuDestinations = [];
     // The candidate each row of a selection answers for (ListGpu).

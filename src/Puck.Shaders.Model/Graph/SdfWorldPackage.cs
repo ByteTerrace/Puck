@@ -112,7 +112,7 @@ public static partial class SdfWorldPackage {
     public const string ExposeShare = "exposeShare";
     /// <summary>The pass-group value holding the share of the sky the air about the view's camera sees open, in [0, 1],
     /// which scales the sky's and the light-casting bodies' in-scatter into its atmosphere, so a closed room's air is not
-    /// lit by the sky outside it (<c>float</c>).</summary>
+    /// lit by the sky outside it; zero until the view's camera sample of its current shot is known (<c>float</c>).</summary>
     public const string AirLight = "airLight";
     /// <summary>The pass-group value holding the luminance, in nits, the view's meter read about its camera, which the
     /// local adaptation measures each surface's surroundings against; zero while the meter has no reading

@@ -48,7 +48,8 @@ public sealed class FrameCaptureRequest {
     /// creation and path policy.</summary>
     /// <param name="path">The PNG path.</param>
     /// <param name="converge">The number of rendered samples to capture; zero captures one render with no extra
-    /// samples. Either way the capture holds presentation from the frame it is armed in until it is served: the
+    /// samples, unless the capture's first frame discards a history and so converges it (<see cref="ConvergeOver"/>).
+    /// Either way the capture holds presentation from the frame it is armed in until it is served: the
     /// renderer keeps rendering that held frame, with no presentation time passing, and serves a render of it.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="converge"/> is negative.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or white space.</exception>
@@ -95,8 +96,10 @@ public sealed class FrameCaptureRequest {
     public int Converge { get; private set; }
 
     /// <summary>Has a settled request converge over a fresh sequence of samples (<see cref="Converge"/>) rather than
-    /// observe the next normal one, before it is armed: the arming host's choice when a still must not depend on the
-    /// temporal history that frames before it built.</summary>
+    /// observe the next normal one, before it is served: the arming host's choice when a still must not depend on the
+    /// temporal history that frames before it built, and the runtime's when the capture's first frame discarded that
+    /// history (a history that read external content the capture gate fills), so the still never reads the render that
+    /// restarted it.</summary>
     /// <param name="samples">The samples to converge over, one or more.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="samples"/> is less than one.</exception>
     /// <exception cref="InvalidOperationException">The request is presented, or already claimed.</exception>

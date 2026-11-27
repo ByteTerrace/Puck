@@ -750,7 +750,7 @@ add the row you found.
 | Draw text in the world: lettering that is relief, a display's own text, or words on a surface that follow state | `SdfProgramBuilder.Text` (marchable `Glyph` shapes, a creation's `textRuns`), a screen's glyph decal (`SdfWorldTables.SetScreenDecal`, `WorldScreenTextDecal`), and a text paint's surface text (`SdfPaint.Text`, `SdfWorldTables.SetSurfaceText`, `WorldSurfaceTexts`); both shade-time tiers sample through `shade/sdf-glyph-ink.hlsli` | `src/Puck.SignedDistance`, `src/Puck.SdfVm`, `src/Puck.World.Client`; [text and glyphs](../../../docs/rendering/sdf/reference/text-and-glyphs.md) |
 | Compute or check a lane the builder derives from others (a scale's correction, a repeat's reciprocal, a noise relief's normalization), or ask how the program door classes a lane | `SdfDerivedLanes` (the one function per derived lane, called by the builder and the door), `SdfNoiseDisplacement` (the decoded noise relief), `SdfProgram.LaneContractOf` | `src/Puck.SignedDistance`; [Lipschitz reference](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md#procedural-detail) |
 | Weight a relief by regions (no relief over a bowl, a pad, a path) | `SdfReliefMask` (a band, `SdfReliefBand`, over listed region shapes, `SdfReliefRegion`), carried as `SdfOp.ReliefRow` rows before the relief and decoded once by the program's door (`SdfProgram.ReliefMasksAt`); a document's masks compile through `CreationStampEmitter.ReliefMasks` | `src/Puck.SignedDistance`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
-| Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
+| Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore`. A box rule, certificate or region drop reads a parameter through the compiled instruction's enclosures (`Bounds0X` and the rest), never its raw lane, so the render reading's bounds hold the kernels' float parameters | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Make a point or box query of a large program cost what stands near it, or prune a program per region | A regional `SdfFieldEvaluator` (`regional: true`, `IndexesRegions`): a tape per cube of the world, recorded by the interval walk. A point query answers what the plain evaluator answers to the bit; a box query (`TryDistanceBounds`, which contact's clearance proofs read) is cut along region faces and answers the hull of its parts, as certain an enclosure but not the same interval, and records the regions it reads so its interval never depends on earlier queries. The server's per-collider fields are regional. A new drop rule belongs in that walk, proved against its enclosing interval, never in a pruner of its own or on a Lipschitz bound, which holds for no single candidate | `SdfFieldEvaluator.Regions.cs`; [region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes) |
 | Write or change a primitive's or blend's distance arithmetic, an op's point map or field edit, a scope pop or a material winner once for every reader (fixed-point C#, precise HLSL, the wide C# for normals) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula`, `DistanceFormula`, `Winner` or `Operand` | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
@@ -1178,9 +1178,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   meter's reading, target and band state, and its camera sample's source. An
   automatic exposure meters the view's own composite output a few frames late
   (`SdfExposure.Meter`), so a debug view meters nothing and holds; pin the
-  exposure for any before/after comparison. A view with no camera sample reads the
-  open sky, so a closed room meters as daylight and a display in it reads black:
-  `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
+  exposure for any before/after comparison. A view never assumes the open sky for
+  its air: until a camera sample of its current shot arrives (before its first, and
+  after a cut) its `airLight` is zero, so the fog and haze in-scatter no sky, while
+  the last sample's light holds across the cut for surfaces no probe answers, as the
+  exposure holds. Only before a view's first sample ever do those surfaces read the
+  open sky. `camera=none` or `held` names its `wait=`, and `air=` the share the
+  composite applies ([mesh GI](references/mesh-gi.md)).
 - **A view stores its light at a scale near its exposure** (the pass block's
   `lightScale`, `SdfPhotometry.StoredLightScale`, a power of two kept within
   `StoredLightBand` stops of the exposure), so a star's surface and the noon sky
@@ -1329,7 +1333,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
   occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
   share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. What it
+  screen's edge, so where rays stop answering the volume takes over with no line. The
+  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
+  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
+  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
+  render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:
@@ -1340,9 +1348,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   offset blocks that break up as the camera moves. With it comes the air's in-scatter the composite added there, which the history does not hold
   (the history surface's transport words, `sdfAirFogColor`, `sdfAirHazeColor`). A
   record is one cell's: colour at the stored scale, the screen and open-sky shares,
-  and the representative's normal and tangent plane; views reads the cells whose
-  representatives lie nearest its pixel and keeps those on its own surface by the probe
-  lookup's tolerances (`sdfViewsScreenReflection`), so the volume
+  and the representative's normal and tangent plane; views weighs the 2x2 cells about its
+  pixel by a tent of one cell about each representative and by how nearly that
+  representative lies on its own surface, falling smoothly to nothing at the probe
+  lookup's tolerances (`sdfViewsScreenReflection`); never accept or reject a cell whole,
+  which turns a silhouette into steps of a cell as the representatives take turns. The volume
   (`sdfViewsReflectionSeen`) still answers what no kept ray reaches, and a view whose
   fragment holds no pass (`passGroup.screenReflections` zero) reflects the volume
   alone. The records' cell is read back from their allocation
@@ -1386,7 +1396,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   read the volume as off that way). A medium (`SdfGlass.Scatter`, `Scattering`, material row
   31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves) are
   functions of the thickness, `opaque - t` and that light alone: the pass reads
-  the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
+  the lit image once (`sdfGlassLitAt`, or the frost's disc, whose taps that land
+  nearer than the glass are left out, `sdfGlassReadsBehind`). The lit image's
+  coverage carries only the luminance of what the glass passes, so the sky the
+  composite puts behind glass is tinted by the glass's sky filter
+  (`SdfWorldPackage.GlassSkyFilter`, `frame/sdf-glass-sky-filter.hlsli`): the
+  glass clear zeroes it whole, the shading pass writes its glass pixels, and
+  `SdfSkyRecorder` binds it to the composite only while `GlassSeen` holds this
+  frame, the tables' dummy otherwise, since a frame that skips the glass passes
+  leaves an earlier frame's filter. A new reader of a glass product downstream
+  of the glass passes keeps that rule. The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits. A frame in which no glass draw's host box meets the view's
   frustum (`SdfWorldPasses.GlassSeen`, decided once per instance and frame for
@@ -1444,10 +1463,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   wall-clock moments as the window follows the first view's camera) and adapt
   exposure over the frame's own presentation time
   (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
-  converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
-  since without it a temporally resolved view's still depends on how many
-  frames the display rendered before the hold. Together these make stills
-  of one tick repeat across Worlds to a 1-level per-render residue.
+  converges over a fresh history (`SdfWorldPackage.ConvergedRenders`,
+  `FrameCaptureRequest.ConvergeOver`), since without it a temporally resolved
+  view's still depends on how many frames the display rendered before the hold.
+  Together these make stills of one tick repeat across Worlds to a 1-level
+  per-render residue. A settled still's first capture frame discards history
+  that read external content the capture gate fills (a screen showing the
+  desktop or a camera, `DiscardTaintedState`), so a still that does not converge
+  already converges over the renders the discard reports
+  (`RenderGraphRuntime.AwaitDiscardedState`): a still served on the render that
+  restarted the epoch is one unjittered sample, aliased and with no screen-space
+  reflection. `ConvergedRenders` is a period and one more because the epoch's
+  first render reads no preceding frame, so it reflects nothing on screen; a
+  temporal view stands only after that many renders too.
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
   dresses: seat views, the operator pose and `views.layouts` slots that name a
@@ -1515,7 +1543,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Nothing a view's signature reads moves while those copies wait, so a frame whose views all stand opens an upload for
   them anyway (`SdfWorldPasses.StageOwedCopies`, counted in `sdf.captures.copies-staged`); without it a still view left
   the volume `settling=worker` for good. A volume's `settling=worker-device:<why>` names why its head query was last
-  refused (`SdfMeshProbeGpuWork.DescribeWait`). The
+  refused (`SdfMeshProbeGpuWork.DescribeWait`). A trace scene holds only meshes whose words stand in the region when it
+  is built (`SdfMeshIrradiance.TraceDraws`; a floor that does not stand gives way to the drawn mesh), and one that left
+  a mesh out is built again once it stands (`scene-omitted=` on `world.probe`); a scene the region took a mesh of back
+  since is refused as `scene-placement`, its head cancelled after `AdmissionWait`, and built again whatever the draws'
+  key says (`NoteScenePlacement`); every query queued on that scene is cancelled with the head, and until the rebuild
+  installs neither the worker nor a camera sample starts (`world.exposure` reads `wait=scene-rebuild`). `region-copies` is the region's copies in flight, and `scene-upload-stalled` the end
+  stop of a scene upload the store moved nothing of for `AdmissionWait` (`UploadStalled`). The answers a probe call
+  reads (`SdfMeshProbeGpuWork.Answers`) are the volume's, disposed only after its worker stops, and a fault of the
+  worker or camera sample is contained (`SdfMeshIrradiance.ContainFault`: reported, counted in `sdf.mesh-gi.faults`,
+  the volume rebuilt), never thrown at the frame. The
   region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
   ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through

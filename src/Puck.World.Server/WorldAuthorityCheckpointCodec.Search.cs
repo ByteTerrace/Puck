@@ -136,6 +136,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             values: job.TtMeta,
             writer: writer
         );
+        writer.WriteInt64(value: job.TtGeneration);
         writer.WriteBoolean(value: (job.Tree is not null));
 
         if (job.Tree is { } tree) {
@@ -221,6 +222,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "search job transposition meta",
             reader: ref reader
         );
+        var ttGeneration = reader.ReadInt64();
         ArenaSearchTreeCheckpoint? tree = null;
 
         if (reader.ReadBoolean()) {
@@ -304,6 +306,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             TokenCount: tokenCount,
             Tree: tree,
             TtKey: ttKey,
+            TtGeneration: ttGeneration,
             TtMeta: ttMeta,
             TtValue: ttValue,
             Wide: wide,

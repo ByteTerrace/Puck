@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/7423a9ebb784b6ca72c6df649a929655a7e64cd0e54369f654d2382d76533517). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/30c62f73d3ebf9219031270dda0a711c64140b1fa82eaa934b9602aa4e69adc9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -270,7 +270,8 @@ struct SdfGlassPass {
 [[vk::binding(6, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u6, space3);
 [[vk::binding(7, 3)]] StructuredBuffer<uint> sdfGlassProbeHistory : register(t7, space3);
 [[vk::binding(8, 3)]] RWStructuredBuffer<uint> sdfGlassProbeHistoryRW : register(u8, space3);
-[[vk::binding(9, 3)]] RWStructuredBuffer<uint> workCounters : register(u9, space3);
+[[vk::binding(9, 3)]] RWStructuredBuffer<uint> sdfGlassSkyFilterRW : register(u9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfGlassPushedIndex {

@@ -502,8 +502,11 @@ the sample is the device meter's answer, and until the device first answers (it
 needs the volume's scene uploaded, seconds into a boot) the camera's own trace on
 the built scene, so a view's open sky is known from the scene's build on. An
 unavailable scene or a camera inside opaque geometry supplies no sample, and
-the sky visibility and the sample's light hold their previous values; before any
-sample a view reads the open sky, which lights a closed room as daylight.
+the sample's light holds its previous value, across a camera cut too. The air
+never assumes the open sky: until a sample of the view's current shot is known
+(before the first, and after a cut) its sky visibility is zero and the fog and
+haze in-scatter no sky. Only before a view's first sample ever does a surface no
+probe answers read the open sky, which lights a closed room as daylight.
 An automatic exposure's `local` share then adapts each
 surface on its own in the views stage (`sdfLightStage`): the illumination
 arriving at the surface, the lights' diffuse terms and the volume's indirect

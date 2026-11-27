@@ -34,6 +34,10 @@ public static class ArenaBoards {
             result = BoardQueries.Attacks(attacks, default, layout.Empty, source, arena, rowOrdinal);
             return true;
         }
+        if ((query is BoardMaskQuery mask) && arena.TryReadBoardPlanes(rowOrdinal, mask.Lower, mask.Upper, out var planes)) {
+            result = (long)planes;
+            return true;
+        }
         if (!arena.TryReadBoard(rowOrdinal, values)) {
             reason = $"a board read over {topology.CellCount} cells needs a span that long";
             return false;

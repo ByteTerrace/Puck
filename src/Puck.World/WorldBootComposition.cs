@@ -790,10 +790,10 @@ public static class WorldBootComposition {
                     )
                     : null
                 ),
-                // Under lockstep an ordinary still converges over one fresh jitter period, so it is the same image for
+                // Under lockstep an ordinary still converges over a fresh history (SdfWorldPackage.ConvergedRenders), so it is the same image for
                 // the same tick whatever temporal history the display's frames built before it.
                 stillSamples: ((sp.GetService<PresentPacingControl>() is { } pacing)
-                    ? (Func<int>)(() => (pacing.TickLocked ? ((int)SdfWorldPackage.TemporalPeriod) : 0))
+                    ? (Func<int>)(() => (pacing.TickLocked ? ((int)SdfWorldPackage.ConvergedRenders) : 0))
                     : null),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
@@ -1231,6 +1231,10 @@ public static class WorldBootComposition {
         // onto (the container disposes it, joining its threads).
         services.AddSingleton(implementationInstance: inputs.Workers);
         services.AddSingleton<Puck.Hosting.Jobs.JobPool>();
+        // The process's command vocabulary is this container's registry for exactly the container's life: resolving
+        // the installation installs it (WorldPostBuildWiring), and the container disposes it with the host, so the
+        // static never keeps a disposed host's registry, and every service its modules hold, reachable.
+        services.AddSingleton(implementationFactory: static sp => WorldAffordances.Install(registry: sp.GetRequiredService<CommandRegistry>()));
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         if (worldSource.DrawKeys is WorldPrivateDrawKeys drawKeys) {

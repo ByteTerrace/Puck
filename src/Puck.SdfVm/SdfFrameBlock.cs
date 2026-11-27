@@ -291,7 +291,7 @@ public static partial class SdfFrameBlock {
         // window share for one a window shows, and none for a sky layer's geometry, which its consumer's sky composes
         // in nits beside its own layers and exposes with them (SdfWorldPasses' Converts).
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Quality.GeometryOnly ? 0f : (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f)));
-        WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
+        WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 0f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
         Span<Vector4> meterLight = stackalloc Vector4[6];
 

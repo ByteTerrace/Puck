@@ -171,7 +171,7 @@ public sealed class McpAdversarialTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public async Task BlockedStdoutHasBothADeadlineAndABoundedReplyQueue(bool flood) {
+    public async Task BlockedStdoutHoldsTheSessionUntilTheClientsEndRefusesAWrite(bool flood) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         const string Parameters = """
             "method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"blocked-output","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}
@@ -199,22 +199,15 @@ public sealed class McpAdversarialTests {
         );
 
         try {
-            // Saturation closes the queue on its own, possibly before the first queued write reaches stdout, and
-            // no deadline expires. A single reply enters the blocked writer and stays there until its write
-            // deadline expires on the adapter's clock.
-            if (!flood) {
-                await output.Entered.Task.WaitAsync(
-                    HangGuard,
-                    Token
-                );
-                Assert.False(condition: run.IsCompleted);
-                await clock.WhenArmedAsync(
-                    count: 1,
-                    ct: Token,
-                    dueTime: TimeSpan.FromSeconds(seconds: 5)
-                );
-                clock.Advance(by: TimeSpan.FromSeconds(seconds: 5));
-            }
+            // A slow client is not a gone one: neither the time a reply waits nor how many queue behind it ends the
+            // session. The client's end refusing the write does.
+            await output.Entered.Task.WaitAsync(
+                HangGuard,
+                Token
+            );
+            clock.Advance(by: TimeSpan.FromHours(hours: 1));
+            Assert.False(condition: run.IsCompleted);
+            output.Refuse();
             var error = await Record.ExceptionAsync(testCode: () => run.WaitAsync(
                 HangGuard,
                 Token
@@ -730,12 +723,15 @@ public sealed class McpAdversarialTests {
             );
         }
     }
+    // Holds every write until it is closed or its reader goes away (Refuse), as a pipe whose client stopped reading does.
     private sealed class BlockedWriteStream : MemoryStream {
         private readonly TaskCompletionSource m_closed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal TaskCompletionSource Entered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal bool Closed { get; private set; }
+
+        internal void Refuse() => m_closed.TrySetException(exception: new IOException(message: "The pipe is being closed."));
 
         protected override void Dispose(bool disposing) { Closed = true; m_closed.TrySetResult(); base.Dispose(disposing: disposing); }
 

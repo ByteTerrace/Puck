@@ -64,6 +64,7 @@ public sealed partial class ArenaSearch {
             }
 
             if (job.TtKey is { } ttKey) {
+                hash.Add(value: job.TtGeneration);
                 for (var slot = 0; (slot < ttKey.Length); slot++) {
                     hash.Add(value: ttKey[slot]);
                     hash.Add(value: job.TtValue![slot]);
@@ -147,6 +148,7 @@ public sealed partial class ArenaSearch {
                 TtKey: (job.TtKey?.ToArray() ?? []),
                 TtValue: (job.TtValue?.ToArray() ?? []),
                 TtMeta: (job.TtMeta?.ToArray() ?? []),
+                TtGeneration: job.TtGeneration,
                 Tree: CaptureTree(job: job),
                 Headroom: job.Headroom
             );
@@ -209,6 +211,7 @@ public sealed partial class ArenaSearch {
             entry.TtKey.AsSpan().CopyTo(destination: (job.TtKey ?? []));
             entry.TtMeta.AsSpan().CopyTo(destination: (job.TtMeta ?? []));
             entry.TtValue.AsSpan().CopyTo(destination: (job.TtValue ?? []));
+            job.TtGeneration = entry.TtGeneration;
             entry.Wide.AsSpan().CopyTo(destination: (job.Wide ?? []));
             job.Active = entry.Active;
             job.Count = entry.Count;
@@ -367,6 +370,7 @@ public sealed partial class ArenaSearch {
             !Same(carried: entry.TtKey, held: job.TtKey) ||
             !Same(carried: entry.TtMeta, held: job.TtMeta) ||
             !Same(carried: entry.TtValue, held: job.TtValue) ||
+            (entry.TtGeneration is < 1L or > SearchCapacity.TranspositionGenerations) ||
             !Same(carried: entry.Wide, held: job.Wide) ||
             (entry.Scopes is null) ||
             (entry.Scopes.Length > job.ScopeMark.Length) ||

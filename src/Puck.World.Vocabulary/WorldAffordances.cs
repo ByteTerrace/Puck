@@ -202,14 +202,30 @@ public static class WorldAffordances {
             registered: WorldConsoleVerbCatalog.Lookup
         );
     }
-    /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
-    /// after the container is built.</summary>
+    /// <summary>Installs the command registry the vocabulary reads through, for as long as the returned installation
+    /// lives. The composition root installs its container's registry once the container is built, and the container
+    /// disposes the installation with the host (<c>WorldBootComposition</c> registers it as a singleton).</summary>
     /// <param name="registry">The live command registry.</param>
+    /// <returns>The installation, whose disposal uninstalls <paramref name="registry"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/> is <see langword="null"/>.</exception>
-    public static void Install(CommandRegistry registry) {
+    public static Installation Install(CommandRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
         Registry = registry;
+
+        return new Installation(registry: registry);
+    }
+    /// <summary>One registry's tenure as the process's command vocabulary. The registry's modules hold their host's
+    /// services, so the installation belongs to the container that owns the registry and ends with it: a disposed host's
+    /// registry is never the vocabulary a later boot, or the static itself, keeps reachable.</summary>
+    public sealed class Installation : IDisposable {
+        private readonly CommandRegistry m_registry;
+
+        internal Installation(CommandRegistry registry) => m_registry = registry;
+
+        /// <summary>Uninstalls the registry, leaving <see cref="Installed"/> <see langword="false"/>, unless a later
+        /// installation has already replaced it.</summary>
+        public void Dispose() => _ = Interlocked.CompareExchange(location1: ref Registry, value: null, comparand: m_registry);
     }
     /// <summary>Whether <paramref name="command"/> names a command (or alias) THIS composition's registry declares —
     /// the exact registration FACT <see cref="Validate"/>'s command half checks, exposed standalone so a caller can

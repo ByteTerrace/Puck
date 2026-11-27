@@ -997,9 +997,11 @@ On every frame a capture is pending and still to be served, before anything
 renders, the runtime asks the packages of every instance it reads to discard
 retained state holding unfilled external pixels (`DiscardTaintedState`): the
 SDF package resets tainted temporal history and has tainted lighting sources
-derived again from the gate's fills. A settled capture serves the first clean
-frame; a presented one, which forwards nowhere and holds nothing, also skips
-the renders the packages report the discarded state needs to converge again.
+derived again from the gate's fills. Both kinds of capture then wait out the
+renders the packages report the discarded state needs to converge again: a
+presented one, which forwards nowhere and holds nothing, skips that many
+presentations, and a settled one that does not converge already converges over
+them (`FrameCaptureRequest.ConvergeOver`).
 `TaintOf` names the state, and a waiting capture's reason carries the name.
 
 ### The default root graph
