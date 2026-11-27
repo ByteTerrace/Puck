@@ -34,6 +34,9 @@ let mouseDoorSide = ((mouseDoorWidth / 2) + sizedDoorwayPost(galleryVisitorHeigh
 let mouseDoorTop = (mouseDoorHeight + sizedDoorwayLintel(galleryVisitorHeight, mouseHouse.admits))
 // The cake's table, at the room's back.
 let mouseCakeAt = [0, 0, mouseHouseCake[2]]
+// What the pass's mailbox takes to grant the pass: wonder.puck's `WonderSwitch.on`, which this document cannot name (an
+// enum stays its own document's).
+let mouseHousePassOn = 2
 
 // The palette: the house's pastel walls, cream trim, its candy roof, dark window glass, the table's timber, the cake's
 // sponge, icing and cherry, the sign's ink, the room's lamp and its rug.
@@ -260,10 +263,13 @@ placements {
   )
 }
 
-// The cake grants the full-size pass to the body that eats it.
+// The cake grants the full-size pass to the body that eats it, through the pass's mailbox (wonder.puck's `wonderpass`,
+// which `gallery.wonder pass on` writes too): its `wonder-pass-ask` rule, a sweep over the players, writes the body's
+// register. A press rule over a reach's region writes rows only, as the rentals' do: a region binds whatever body stands
+// in it, so a body effect there could reach any body, and a scoped replay (replay.scope) refuses to isolate it.
 rule "mouse-house-cake" {
   when pressing()
   mode: Edge
   forEach: region("gallery-mouse-house-cake")
-  setBodyState(key: $each, state: "wonderPass", expression: 1.0)
+  wonderpass[$each] = mouseHousePassOn
 }
