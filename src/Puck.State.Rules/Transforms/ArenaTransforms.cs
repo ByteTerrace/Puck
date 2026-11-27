@@ -105,7 +105,8 @@ public static partial class ArenaTransforms {
             context: in context,
             moved: out moved,
             refusal: out refusal,
-            shuffle: shuffle
+            shuffle: shuffle,
+            binding: in binding
         ),
             ArenaTransform.SortKeyed sortKeyed => TrySortKeyed(
             context: in context,

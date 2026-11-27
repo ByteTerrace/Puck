@@ -502,9 +502,22 @@ public static partial class RuleCompiler {
             case StateTransform.Shuffle shuffle: {
                     var shuffleRow = shuffle.Row.Spelling;
                     var shuffleDrawName = shuffle.Draw.Spelling;
+                    // A live row (a family member the binding selects) is substituted per firing, as a transfer's end
+                    // is; every row it can select is checked for the shape here.
+                    var shuffleRows = new List<string>();
+
+                    if (TryResolveLiveRow(context: context, name: shuffleRow, row: out fromRow, ruleName: ruleName, where: "shuffle")) {
+                        var candidates = new List<CellAccess>();
+
+                        fromRow!.CollectRows(into: candidates, isSet: true);
+                        shuffleRows.AddRange(collection: candidates.Select(selector: access => context.Catalog.Descriptors[access.RowOrdinal].Name).Distinct());
+                    } else {
+                        shuffleRows.Add(item: shuffleRow);
+                    }
 
                     if (
-                        (Row(name: shuffleRow) is not { Shape: RowShape.Keyed or RowShape.Ordered }) ||
+                        (shuffleRows.Count == 0) ||
+                        shuffleRows.Exists(match: name => (Row(name: name) is not { Shape: RowShape.Keyed or RowShape.Ordered })) ||
                         (Row(name: shuffleDrawName).Draw is not { Timing: not DrawTiming.Boot } shuffleDraw) ||
                         (Row(name: shuffleDrawName).Kind != CellKind.Int) ||
                         !GeneratorEngine.TryResolveSource(
@@ -519,10 +532,12 @@ public static partial class RuleCompiler {
                     }
 
                     writes.Add(item: Ordinal(name: shuffleDrawName));
-                    writes.Add(item: Ordinal(name: shuffleRow));
+                    if (fromRow is null) {
+                        writes.Add(item: Ordinal(name: shuffleRow));
+                    }
                     resolved = new ArenaTransform.Shuffle(
                         DrawRowOrdinal: Ordinal(name: shuffleDrawName),
-                        RowOrdinal: Ordinal(name: shuffleRow)
+                        RowOrdinal: ((fromRow is null) ? Ordinal(name: shuffleRow) : -1)
                     );
 
                     break;
@@ -1012,6 +1027,7 @@ public static partial class RuleCompiler {
             ),
             // The order lease and its fill, a select and swap a position, the reorder, and the site's stream.
             ArenaTransform.Shuffle shuffle => ShuffleWork(
+                rows: Ends(live: fromRow, own: shuffle.RowOrdinal),
                 context: context,
                 shuffle: shuffle
             ),
@@ -1118,8 +1134,9 @@ public static partial class RuleCompiler {
             rowOrdinal: arrange.RowOrdinal
         ));
     }
-    private static long ShuffleWork(RuleCompileContext context, ArenaTransform.Shuffle shuffle) {
-        var members = context.RowCapacity(rowOrdinal: shuffle.RowOrdinal);
+    // The dearest row the shuffle can permute: its own, or each a live row can select.
+    private static long ShuffleWork(RuleCompileContext context, ArenaTransform.Shuffle shuffle, int[] rows) => rows.Max(selector: row => {
+        var members = context.RowCapacity(rowOrdinal: row);
         var samples = Math.Max(
             val1: 0L,
             val2: (members - 1L)
@@ -1128,13 +1145,13 @@ public static partial class RuleCompiler {
         return ((((2L * members) + (samples * 3L)) + TransformWork.Reorder(
             context: context,
             members: members,
-            rowOrdinal: shuffle.RowOrdinal
+            rowOrdinal: row
         )) + TransformWork.Draws(
             context: context,
             rowOrdinal: shuffle.DrawRowOrdinal,
             samples: samples
         ));
-    }
+    });
     // Price stable-slot moves or an in-row permutation for the costliest admitted row pair.
     private static long TransferWork(RuleCompileContext context, ArenaTransform.Transfer transfer, int[] froms, int[] tos) {
         var door = TransformWork.Door;

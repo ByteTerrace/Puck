@@ -98,7 +98,7 @@ public static partial class ArenaTransforms {
                 case ArenaTransform.SetRay value:
                     Write(row: value.RowOrdinal, read: true); break;
                 case ArenaTransform.Shuffle value:
-                    Write(row: value.RowOrdinal, read: true); Write(row: value.DrawRowOrdinal, read: true); break;
+                    Write(row: binding.FromOr(own: value.RowOrdinal), read: true); Write(row: value.DrawRowOrdinal, read: true); break;
                 case ArenaTransform.SortKeyed value:
                     Write(row: value.RowOrdinal, read: true); break;
                 case ArenaTransform.SortZone value:

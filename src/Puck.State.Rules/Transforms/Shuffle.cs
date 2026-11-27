@@ -2,7 +2,9 @@ namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
     // Fisher-Yates uses unbiased bounded selections. The stream persists every accepted and rejected raw word.
-    private static bool TryShuffle(in ArenaTransformContext context, ArenaTransform.Shuffle shuffle, out bool moved, out EffectRefusal refusal) {
+    private static bool TryShuffle(in ArenaTransformContext context, ArenaTransform.Shuffle shuffle, in ArenaTransformBinding binding, out bool moved, out EffectRefusal refusal) {
+        var rowOrdinal = binding.FromOr(own: shuffle.RowOrdinal);
+
         moved = false;
 
         var arena = context.Arena;
@@ -12,13 +14,13 @@ public static partial class ArenaTransforms {
             context: in context,
             layout: out _,
             refusal: out refusal,
-            rowOrdinal: shuffle.RowOrdinal,
+            rowOrdinal: rowOrdinal,
             verb: "shuffle"
         )) {
             return false;
         }
 
-        var count = arena.CellCount(rowOrdinal: shuffle.RowOrdinal);
+        var count = arena.CellCount(rowOrdinal: rowOrdinal);
 
         if (count < 2) {
             return Applied(refusal: out refusal);
@@ -64,7 +66,7 @@ public static partial class ArenaTransforms {
             moved: out moved,
             order: order,
             refusal: out refusal,
-            rowOrdinal: shuffle.RowOrdinal
+            rowOrdinal: rowOrdinal
         )) {
             return false;
         }
