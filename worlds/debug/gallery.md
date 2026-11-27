@@ -351,9 +351,11 @@ the same write, which keeps the angle where it stood.
 A tap is a contact: a finger or a pen tip on a touchscreen, or the mouse's
 primary button, which is the mouse's contact while it is held. Every console
 reads the contacts on its glass through one sweep (`forEach:
-contacts(display-<id>-screen)`), so a click and a touch answer alike. In first
-person the mouse aims with the view, so a click casts through the reticle at the
-view's centre, not where the hidden cursor last rested.
+contacts(display-<id>-screen)`), so a click and a touch answer alike. Walking
+in first person the mouse aims with the view, so a click casts through the
+reticle at the view's centre, not where the hidden cursor last rested. At a
+terminal the station view takes the camera, so a click there casts from the
+cursor, in first person or third.
 
 The owner's ruling: a player walks up to a display, uses it, and ends up at
 the hero angle every display shares, and while using it the inputs go to the
