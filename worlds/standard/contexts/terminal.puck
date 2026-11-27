@@ -52,9 +52,9 @@
 // A world whose movement family should stand still while a seat is engaged lists
 // `suspendedBy [{ family: "terminal", states ["engaged"] }]` on it.
 //
-// A desk view may carry a console (terminal-console.puck): `terminalPlay(console: ...)` gives the terminals a typed
-// command line the console key opens while a seat is engaged, and a world that does so also lists
-// `terminalConsoleFamily()` in its `inputModes`.
+// A desk view may carry a hidden console (terminal-console.puck): `terminalPlay(console: ...)` lets the console key turn
+// an engaged terminal's own screen into a typed command line every onlooker sees, and a world that does so also lists
+// `terminalConsoleFamily()` in its `inputModes` and gives the terminal's screen a terminal mode to respond with.
 import "terminal-console"
 
 // The most terminals one world declares: the register's range, and the engaged state's.
@@ -193,6 +193,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
     // Listed ahead of the terminal's own row, so the console's controls win while it is open.
     bindingOverlays [
       terminalConsoleOverlay(
+        count: count,
         toggleSources: consoleSources,
         closeSources: consoleCloseSources,
         enterSources: consoleEnterSources,

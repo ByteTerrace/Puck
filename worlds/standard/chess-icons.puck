@@ -1,0 +1,164 @@
+// A chess set for a display: the six pieces as flat silhouettes that lie on a glass and glow in it, in as many colours
+// as a world names. A module library: it hands its importers the pieces' kinds and a template that expands their
+// prototypes, and emits no document. A display table (display-table.puck) shows them on its board through
+// `displayTokens`, one token a square, each picked by the piece code the game's board row holds.
+//
+//   import "../standard/chess-icons"
+//   prototypes {
+//     chessIconPrototypes(prefix: "icon", sides [{ name: "white", fill: {...}, rim: {...} }, { name: "black", ... }])
+//   }
+//
+// expands `icon-white-pawn` to `icon-black-king`. A piece is two layers: its rim, the silhouette grown by `grow`, and
+// over it its fill, so a piece reads against a light square and a dark one alike. A side's `fill` and `rim` are palette
+// entries (a colour, a finish and the luminance each glows at). The silhouette is drawn upright to a viewer at the -Z
+// side of a placement with no yaw, lying flat on the placement's origin; `size` is half its height in metres.
+
+// The kinds in the order of the chess vocabulary's piece codes (PieceKind 1 to 6 in ../games/chess.puck): a piece of
+// kind k is code k + 1 for the side that plays up the board and -(k + 1) for the other.
+let chessIconKinds = ["pawn", "knight", "bishop", "rook", "queen", "king"]
+
+// A silhouette in its own units, [-1, 1] across (u) and up (v): discs `{ c, r }`, boxes `{ c, h }` (half extents) and
+// convex outlines `{ c, h, v }` (clockwise vertices in [-1, 1], scaled by h), with marks (discs in the rim's colour over
+// the fill). Every piece stands on the same foot.
+function chessIconTrapezoid(top) = [[(0 - top), 1], [top, 1], [1, -1], [-1, -1]]
+function chessIconFan(bottom) = [[-1, 1], [1, 1], [bottom, -1], [(0 - bottom), -1]]
+let chessIconFoot = { c [0, -0.84], h [0.66, 0.13], v: chessIconTrapezoid(0.82) }
+let chessIconBody = { c [0, -0.36], h [0.36, 0.34], v: chessIconTrapezoid(0.55) }
+let chessIconShapes = {
+  pawn {
+    discs [{ c [0, 0.42], r: 0.31 }]
+    boxes [{ c [0, 0.06], h [0.36, 0.07] }]
+    outlines [chessIconFoot, { c [0, -0.36], h [0.36, 0.36], v: chessIconTrapezoid(0.42) }]
+    marks []
+  }
+  knight {
+    discs []
+    boxes []
+    outlines [
+      chessIconFoot
+      { c [0.12, -0.26], h [0.46, 0.46], v [[-0.35, 1], [0.62, 1], [1, -1], [-1, -1]] }
+      { c [-0.16, 0.36], h [0.52, 0.28], v [[-0.2, 1], [1, 0.8], [1, -0.6], [-1, -1]] }
+      { c [0.26, 0.76], h [0.16, 0.17], v [[0, 1], [1, -1], [-1, -1]] }
+    ]
+    marks [{ c [-0.04, 0.44], r: 0.065 }]
+  }
+  bishop {
+    discs [{ c [0, 0.86], r: 0.11 }]
+    boxes [{ c [0, -0.07], h [0.38, 0.065] }]
+    outlines [
+      chessIconFoot
+      { c [0, -0.42], h [0.33, 0.29], v: chessIconTrapezoid(0.5) }
+      {
+        c [0, 0.36]
+        h [0.4, 0.4]
+        v [[0, 1], [0.72, 0.42], [1, -0.25], [0.58, -1], [-0.58, -1], [-1, -0.25], [-0.72, 0.42]]
+      }
+    ]
+    marks []
+  }
+  rook {
+    discs []
+    boxes [
+      { c [0, 0.3], h [0.56, 0.12] }
+      { c [-0.4, 0.56], h [0.15, 0.15] }
+      { c [0, 0.56], h [0.15, 0.15] }
+      { c [0.4, 0.56], h [0.15, 0.15] }
+    ]
+    outlines [chessIconFoot, { c [0, -0.28], h [0.42, 0.44], v: chessIconTrapezoid(0.84) }]
+    marks []
+  }
+  queen {
+    discs [
+      { c [-0.56, 0.46], r: 0.11 }
+      { c [-0.28, 0.52], r: 0.11 }
+      { c [0, 0.6], r: 0.13 }
+      { c [0.28, 0.52], r: 0.11 }
+      { c [0.56, 0.46], r: 0.11 }
+    ]
+    boxes []
+    outlines [chessIconFoot, chessIconBody, { c [0, 0.14], h [0.56, 0.22], v: chessIconFan(0.5) }]
+    marks []
+  }
+  king {
+    discs []
+    boxes [{ c [0, 0.56], h [0.085, 0.3] }, { c [0, 0.6], h [0.24, 0.075] }]
+    outlines [chessIconFoot, chessIconBody, { c [0, 0.1], h [0.5, 0.18], v: chessIconFan(0.6) }]
+    marks []
+  }
+}
+
+// Each layer is `chessIconLayer` thick: the rim lies on the origin and the fill over it, the marks over the fill.
+let chessIconLayer = 0.0025
+// An outline is extruded along its local Z; this lays it flat with its +v away from the viewer (author -Z).
+let chessIconFlat = rotate([1, 0, 0], -90)
+
+// One layer of a silhouette: every part grown by `grow` (in the silhouette's units), `size` metres to a unit, its top
+// at `top`.
+template chessIconLayerShapes(name, piece, size, grow, material, top) {
+  let half = (chessIconLayer / 2)
+  let y = (top - half)
+  for (disc, k) in piece.discs {
+    shape Cylinder $"{name}-disc-{k}" {
+      material: material
+      position [(disc.c[0] * size), y, (0 - (disc.c[1] * size))]
+      scale [((disc.r + grow) * size), half, ((disc.r + grow) * size)]
+    }
+  }
+  for (box, k) in piece.boxes {
+    shape Box $"{name}-box-{k}" {
+      material: material
+      position [(box.c[0] * size), y, (0 - (box.c[1] * size))]
+      scale [((box.h[0] + grow) * size), half, ((box.h[1] + grow) * size)]
+    }
+  }
+  for (outline, k) in piece.outlines {
+    shape Prism $"{name}-outline-{k}" {
+      material: material
+      position [(outline.c[0] * size), y, (0 - (outline.c[1] * size))]
+      rotation: chessIconFlat
+      scale [((outline.h[0] + grow) * size), ((outline.h[1] + grow) * size), half]
+      profile {
+        kind: "Convex"
+        cornerRadius: 0.06
+        vertices: outline.v
+      }
+    }
+  }
+}
+
+template chessIconPrototypes(prefix, sides, size = 0.042, grow = 0.1) {
+  for side in sides {
+    for kind in chessIconKinds {
+      prototype $"{prefix}-{side.name}-{kind}" {
+        document {
+          name: $"{prefix}-{side.name}-{kind}"
+          schema: "puck.creation.v1"
+          palette [side.fill, side.rim]
+          chessIconLayerShapes(
+            name: "rim",
+            piece: chessIconShapes[kind],
+            size: size,
+            grow: grow,
+            material: 1,
+            top: chessIconLayer
+          )
+          chessIconLayerShapes(
+            name: "fill",
+            piece: chessIconShapes[kind],
+            size: size,
+            grow: 0,
+            material: 0,
+            top: (2 * chessIconLayer)
+          )
+          for (mark, k) in chessIconShapes[kind].marks {
+            shape Cylinder $"mark-{k}" {
+              material: 1
+              position [(mark.c[0] * size), ((2 * chessIconLayer) + 0.0005), (0 - (mark.c[1] * size))]
+              scale [(mark.r * size), 0.0005, (mark.r * size)]
+            }
+          }
+        }
+      }
+    }
+  }
+}

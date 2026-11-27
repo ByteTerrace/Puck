@@ -327,6 +327,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD", value: SdfMeshProbeRelight.PartialSkyWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD", value: SdfMeshProbeRelight.SkyOutputWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_ROW", value: SdfMeshProbeRelight.SkyRow);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_EPOCH_ROW", value: SdfMeshProbeRelight.EpochRow);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_INSIDE_SHARE", value: SdfMeshIrradianceProbe.InsideShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE", value: SdfMeshIrradianceProbe.OpenGroundShare);
@@ -496,6 +497,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_OFFSET_WORD", value: SdfMeshIrradianceProbe.OffsetWord);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_INVALID", value: SdfMeshIrradianceProbe.InvalidFlag);
+        declarations.Bits(name: "SDF_MESH_IRRADIANCE_EPOCH_MASK", value: SdfMeshIrradianceProbe.EpochMask);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);
