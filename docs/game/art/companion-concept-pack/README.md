@@ -1,5 +1,81 @@
 # The Moth’s companion
 
+## Build reference
+
+The owner chose **Mintstitch** (Patchlace C) and **Tangerine** (Bellbuoy A).
+Both are palm-sized, one-eyed flying guides. The Moth swaps the active
+companion from the Menagerie page of her wrist journal. The
+[build specification](build-spec.md) gives the dimensions, SDF groups,
+materials, paint paths, hinges, gaze, motion keys and light cues.
+
+| Sheet | Mintstitch | Tangerine |
+| --- | --- | --- |
+| Turnaround | [Front, right, back, top](ref-mintstitch-turnaround.png) | [Front, right, back, top](ref-tangerine-turnaround.png) |
+| Construction | [Felt body and four wing groups](ref-mintstitch-construction.png) | [Bell, bezel, keel and spoons](ref-tangerine-construction.png) |
+| Materials | [Quilting, thread, brass and seam light](ref-mintstitch-materials.png) | [Enamel, brass and keel light](ref-tangerine-materials.png) |
+| Eye | [Globe, gaze and green lid](ref-mintstitch-eye.png) | [Porthole, gaze and brown lid](ref-tangerine-eye.png) |
+| Light and state | [Nine seam-light cues](ref-mintstitch-states.png) | [Nine keel-light cues](ref-tangerine-states.png) |
+| Motion | [Hover, dart, glide and startle](ref-mintstitch-motion.png) | [Hover, dart, glide and startle](ref-tangerine-motion.png) |
+
+| Moth’s left wrist journal | Sheet |
+| --- | --- |
+| Closed | [Flush flap and forearm scale](ref-wristpanel-closed.png) |
+| Open | [Folded flap and seated display](ref-wristpanel-open.png) |
+| Reveal | [Closed, unlatch, fold and ready](ref-wristpanel-reveal.png) |
+| Screen | [Menagerie with Mintstitch active](ref-wristpanel-screen.png) |
+| Construction | [Armour cut, hinge, glass and finishes](ref-wristpanel-construction.png) |
+
+### How the build sheets were made
+
+Each set of measured views, expressions and motion keys projects the same
+part geometry. The rendered material studies show how the authored colours
+and surface details should read at close range. The built-in image generator
+made the three finish insets from these prompts and images:
+
+- **Mintstitch.** Using Patchlace C, make an unlabelled landscape macro of
+  one teal quilted felt wing. Show curved warm cream embroidery, plush
+  compressed wool, a dark teal backing, and a thin uninterrupted mint
+  seam integrated into the cloth at the root. Fill the frame with the
+  detail. Omit the face, additional colours, collage and lettering.
+  [Patchlace source](r9-patchlace.png)
+- **Tangerine.** Using Bellbuoy A, make an unlabelled landscape macro of
+  the orange enamel dome at its wide satin brass bezel. Show two seated
+  brass rivets, a few tiny chips to dark primer, warm cream reflections,
+  and soft stylized highlights. Crop before the eye aperture.
+  [Bellbuoy source](r9-bellbuoy.png)
+- **Wrist.** Using the Moth construction sheet’s gauntlet close-up, make
+  an unlabelled landscape macro of muted lavender and ivory armour over
+  a charcoal flexible cuff. Keep the layered plate edge, subtle wear and
+  restrained highlights. Fill the frame with the material detail.
+  [Moth gauntlet source](../moth-concept-pack/02-construction-details.png)
+
+### Build sheet audit
+
+The artist checked the saved sheets for attachments, joint travel, pose,
+agreement with the turnaround, camera projection, compositing seams and
+fixed character details. The checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Sheet | Artist’s check |
+| --- | --- |
+| Mintstitch turnaround | Front, right, back and top agree on the central eye, two antennae and four seated wings. The rear welt stays dark. All views use the same centimetre grid. |
+| Mintstitch construction | The rest assembly and right stack show the collar connecting face and body and each root entering its knuckle. The exploded view offsets only the parts it calls out. |
+| Mintstitch materials | Three cream curves and the dashed hem stay on the felt. The macro ends at the wing surface and the swatches distinguish dark welt, thread, brass and light. |
+| Mintstitch eye | The lid passes in front of the pupil and catchlight at full blink. Both look limits stay in the same housing and the side pins remain opaque. |
+| Mintstitch states | Four hinges remain seated through the lean, flare and bank. The front seam regions change by cue and the eye retains the same surface finish. |
+| Mintstitch motion | The wings sweep around their own roots as the body tips into the dart and recoils on the startle. The fixed camera shows the bob and holds the same scale throughout. |
+| Tangerine turnaround | The crown, two opaque side covers, single brass-rimmed eye, two spoon flippers and keel agree across all four views. The top view shows the bezel and flipper depth. |
+| Tangerine construction | The side stack shows the globe seated under its gasket, the bell resting in the skirt, and the flipper origins at the lower pins. The exploded flippers are visibly set away from the assembly. |
+| Tangerine materials | The enamel seam and wear stay on the shell and the brass rivets sit on the bezel. The bounded macro shows this interface and the whole model identifies the keel. |
+| Tangerine eye | The same eight rivets frame each expression. The dark lid closes across the full aperture, and the pupil and catchlight travel together with gaze. |
+| Tangerine states | Both spoons remain seated through the bank and brake. The three combat segments and the single low-energy ember stay in the keel below the eye. |
+| Tangerine motion | The two spoons share mirrored travel around separate pins. The bell tips forward for the dart and up for recoil while both mounts remain under the same skirt line. |
+| Wrist closed | The lavender boundary crosses the flap at the same line as the bracer. The pocket and dark glass sit below its curved skin. The measured view shows flap size against the 26 cm bracer. |
+| Wrist open | The flap clears the glass while the two knuckles remain at one axis. The orthographic view retains the closed sheet’s scale and the display stays seated. |
+| Wrist reveal | All four frames share one camera, shell, cuff and hinge. The free edge lifts and passes to the vent side. The screen stays in its pocket until it lights at ready. |
+| Wrist screen | Both cards match the companion turnarounds. Only Mintstitch has a check, cyan keyline and Active label. The same card stack appears on the opened forearm. |
+| Wrist construction | The flap, hinge pair, module and well align along the bracer frame. The separated view shows their layer order, and the finish crop follows the suit’s ivory and lavender plates over charcoal. |
+
 ## Round nine
 
 The owner narrowed round eight to Patchlace and Bellbuoy. They asked for four
