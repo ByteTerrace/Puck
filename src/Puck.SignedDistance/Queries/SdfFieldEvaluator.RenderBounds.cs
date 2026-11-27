@@ -192,18 +192,24 @@ public sealed partial class SdfFieldEvaluator {
 
         return weight;
     }
-    // A LaneErode's effect on the next shape over a box: skipped outright, eroded by any share of its reach, or, where its
-    // threshold lanes lie off the grid and their enclosures straddle the skip, either.
+    // A LaneErode's effect on the next shape over a box: skipped outright, eroded by any share of its reach, or, where the
+    // lane's fraction t straddles the skip at one, either. The skip is a branch on a rounded quotient: the point walk
+    // rounds the exact fraction to the nearest raw and the kernels to the nearest float, so a fraction within a raw of one
+    // (from −4 to 2⁻¹⁶ gives 1 − 2⁻¹⁸) skips on one reader and erodes on the other. An eroded shape's field is not the
+    // accumulator's (its distance plus the reach is finite wherever the shape is), so neither outcome is moot. The
+    // fraction's enclosure, the outward quotient over the lanes' enclosures, holds the exact fraction and both rounded
+    // ones, so the skip is certain only where it lies at or past one, and absent only where it lies below.
     private static (bool Skip, bool MaySkip, FixedInterval Amount) LaneErodeBounds(in CompiledInstruction instruction) {
-        var t = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((FixedQ4816.Zero - instruction.Data0Y) / (instruction.Data0Z - instruction.Data0Y)));
-        var spread = (instruction.ExactData0
-            ? Point(value: t)
-            : FixedInterval.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((Point(value: FixedQ4816.Zero) - instruction.Bounds0Y) / (instruction.Bounds0Z - instruction.Bounds0Y))));
+        var spread = FixedInterval.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((Point(value: FixedQ4816.Zero) - instruction.Bounds0Y) / (instruction.Bounds0Z - instruction.Bounds0Y)));
         var amount = new FixedInterval(lower: FixedQ4816.Zero, upper: (FixedInterval.Abs(value: instruction.Bounds1X).Upper + RenderBoundSlack));
 
-        return ((spread.IsUnbounded || ((t >= FixedQ4816.One) != (spread.Lower >= FixedQ4816.One)) || ((t >= FixedQ4816.One) != (spread.Upper >= FixedQ4816.One)))
-            ? (false, true, amount)
-            : ((t >= FixedQ4816.One) ? (true, false, amount) : (false, false, amount)));
+        if (spread.IsUnbounded) {
+            return (false, true, amount);
+        }
+
+        return ((spread.Lower >= FixedQ4816.One)
+            ? (true, false, amount)
+            : ((spread.Upper >= FixedQ4816.One) ? (false, true, amount) : (false, false, amount)));
     }
     // The interval a coordinate turned or reflected about the origin lies in: within the largest magnitude either way.
     private static FixedInterval Spread(FixedInterval magnitude) {

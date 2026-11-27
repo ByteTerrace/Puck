@@ -1745,6 +1745,12 @@ each function as `field/sdf-dual.hlsli` does), which
 A node with no fixed-point dual (a varying exponent, the ellipse's root, the cell noise)
 leaves its formula without one, and a tape that reaches it takes the six taps.
 A new dual rule goes in both libraries ([the decision](../../../docs/decisions/engine-design.md#a-field-formula-lowers-once-per-carrier)).
+The affine reader (`SdfFormula`'s affine lowering, the box walk's `SdfBoundsReading.Affine`) lowers each formula
+twice: over the instruction's raws, and over its lanes' enclosures (the `...Enclosed` dispatches, every lane a
+`FixedAffineForm` of `CompiledInstruction.Bounds0X` and the rest), which the walk reads for an instruction whose floats
+lie off the raw grid. An operand the enclosed dispatch cannot lift (`SdfFormula.EnclosureOf`: a rotation, a side
+table, a new operand spelling) leaves its formula no enclosed overload, so the walk takes the interval rule there;
+lifting a new operand spelling is a line in `EnclosureOf`.
 
 `ShaderDeclarations` regenerates the field switch includes and operand readers
 under `Assets/Shaders/Sdf/isa/`, and `SdfIsaHlsl` stamps both the field and whole
