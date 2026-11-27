@@ -1,5 +1,62 @@
 # The Moth’s companion
 
+## Lighting character
+
+Mintstitch shows its feelings in running stitches and washes of light through
+felt. Tangerine acts like a little lantern whose dome changes colour, while
+its inner bezel, keel and spoon edges mark the beat. Each has a different use
+for darkness. Mintstitch tucks light into the ruff, while Tangerine draws it
+down into the base of the bell. Both speak in pulses of their current mood
+colour. [Paint, light, poses and blending](build-spec.md#light-and-state)
+
+| Sheet | Mintstitch | Tangerine |
+| --- | --- | --- |
+| Fifteen emotions and a speech study, with 5 m colour and greyscale insets | [Emotion and light](r11-mintstitch-emotions.png) | [Emotion and light](r11-tangerine-emotions.png) |
+| The same phrase over a content and a worried baseline | [Talking with light](r11-mintstitch-talking.png) | [Talking with light](r11-tangerine-talking.png) |
+| Discovery, fear and contentment in the moonlit canyon | [Three night moments](r11-mintstitch-night.png) | [Three night moments](r11-tangerine-night.png) |
+
+[Side-by-side comparison](r11-emotion-comparison.png) aligns all fifteen
+expressions, pairs two moods in speech and samples light envelopes in greyscale.
+At 5 m, bright whole silhouettes carry delight, a high inner flash carries
+alarm, and a low ember or soft pool carries fatigue. Curiosity singles out
+one side, while focus holds a symmetric bracket. These reads also show up
+in the pose. The insets use a 1080 px image and a 60° vertical field of view.
+
+### How the lighting sheets were made
+
+The emotion, speech and comparison sheets pose the same measured models
+as the turnarounds. The night triptychs are illustrations made with the
+built-in image generator using the companion turnarounds and the suited Moth
+as references. The prompts call for three palm-scale moments against teal
+moonlight and ochre sandstone. Chartreuse delight lights a crystal seam,
+icy-violet fear catches the rim of a chasm, and seafoam contentment touches
+the Moth’s glove. Mintstitch's prompts put light in the stitches, quilt faces
+and ruff. Tangerine's prompts put it inside the dome and along the inner
+bezel, keel and spoon edges. A correction carried the chartreuse down the
+delighted bell and restored the continuous brass bezel in the fear shot.
+[Moth turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Lighting panel audit
+
+The artist reviewed the following panels for attachment and continuity,
+joint travel, pose, agreement with the turnaround, camera, compositing and
+fixed character details. The checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Panels | Artist’s check |
+| --- | --- |
+| Mintstitch emotions and insets | All four wing roots ride their own hinge, the ruff and antennae stay on the body, and the single lid and iris stay in the housing. In the same camera the lifted delight, aimed curiosity, drawn-in fear, lowered sadness and small tired tips hold apart by pose and footprint. Greyscale and colour use the same projection. |
+| Tangerine emotions and insets | The two spoons remain on their seated pins and the eye stays in the continuous eight-rivet bezel. The crown, skirt and spoon tips retain their finishes. Upper flash, belt, lower pool and quiet keel read as different footprints on the same bell in the close and distant views. |
+| Mintstitch talking, both rows | Every frame keeps four joined wings, the single eye, the same pose and camera within its row. The syllable moves through the root stitching and ruff and dies inside those surfaces. |
+| Tangerine talking, both rows | Both spoons and the opaque bezel keep their shape across each row. The bright syllable stays inside the keel and inner bezel and diffuses into the lower dome. The underlying lid and bank carry the mood at each phase. |
+| Mintstitch night, discovery | Four connected wings open around the one eye and the two antenna tips. The nearby crystal and rock take the strongest coloured light, with the far canyon in moonlight. |
+| Mintstitch night, fear | The four attached lobes overlap as the body pulls back, with the near two in front. The ruff and violet stitching throw a compact patch across the ledge. |
+| Mintstitch night, contentment | The four wings and half-lid settle at glove scale. Mild ruff and root light carries through the Moth’s palm and cuff. Her single front braid, suit and glove hold the close view. |
+| Tangerine night, discovery | Two spoons rise on their lower pivots. The continuous dome glows around the opaque porthole ring and crown, and the crystal and ledge share the glow. |
+| Tangerine night, fear | Two spoons scull from the hinge pins, one wide eye reads through the continuous bezel, and the cold top flash colours the near ledge edge. |
+| Tangerine night, contentment | The flippers hang from the pins at palm scale, below the lidded eye. The dome fades to orange at the crown, and the near glove and bracer pick up the lower bell’s light. |
+| Side-by-side comparison | Each pair reuses the authored silhouette, rig and camera of the emotion sheet. The small phase samples preserve scale, pose and attachment as the light shifts. |
+
 ## Build reference
 
 The owner chose **Mintstitch** (Patchlace C) and **Tangerine** (Bellbuoy A).
@@ -14,8 +71,11 @@ materials, paint paths, hinges, gaze, motion keys and light cues.
 | Construction | [Felt body and four wing groups](ref-mintstitch-construction.png) | [Bell, bezel, keel and spoons](ref-tangerine-construction.png) |
 | Materials | [Quilting, thread, brass and seam light](ref-mintstitch-materials.png) | [Enamel, brass and keel light](ref-tangerine-materials.png) |
 | Eye | [Globe, gaze and green lid](ref-mintstitch-eye.png) | [Porthole, gaze and brown lid](ref-tangerine-eye.png) |
-| Light and state | [Nine seam-light cues](ref-mintstitch-states.png) | [Nine keel-light cues](ref-tangerine-states.png) |
 | Motion | [Hover, dart, glide and startle](ref-mintstitch-motion.png) | [Hover, dart, glide and startle](ref-tangerine-motion.png) |
+
+The original [Mintstitch seam cues](ref-mintstitch-states.png) and
+[Tangerine keel cues](ref-tangerine-states.png) record the earlier light study.
+Use the [lighting character sheets](#lighting-character) for the current build.
 
 | Moth’s left wrist journal | Sheet |
 | --- | --- |
