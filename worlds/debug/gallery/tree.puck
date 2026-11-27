@@ -308,7 +308,7 @@ prototypes {
           curve {
             a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
             b: leanLocal(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
-            c: leanLocal([(into[0] * 0.8), (into[1] - 0.25), (into[2] * 0.8)], 0)
+            c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
             radiusStart: 0.36
             radiusEnd: 0.08
           }
@@ -327,7 +327,7 @@ prototypes {
             curve {
               a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
               b: leanLocal(treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)), 0)
-              c: leanLocal([(into[0] * 0.84), (into[1] - 0.3), (into[2] * 0.84)], 0)
+              c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
               radiusStart: 0.2
               radiusEnd: 0.05
             }
