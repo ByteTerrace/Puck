@@ -762,7 +762,15 @@ materializes exact isotropically scaled spheres and conservative world-axis
 bounds for every other finite primitive copy, capped document-wide by
 `WorldPlacementPolicy.MaxSolidPlacementColliders`. Authored body colliders
 compile here into `Puck.Physics`' fixed collider vocabulary; contact geometry
-does not live in the document assembly.
+does not live in the document assembly. A solid's `passes` (`WorldSolid.Passes`)
+name body counter registers: a body holding any of them nonzero meets none of
+the row's colliders and every other body meets them all, decided on the
+authority from the moving body's own registers. Such a row is kept live by row
+(`WorldPlacementStamp.CollidesLive`), the set one body's sweep can leave a row
+out of (`WorldColliderSet.HoldPasses`, opened only by
+`WorldPopulation.HoldPasses`). The validator refuses a pass that names no
+declared counter, a repeated one, more than `WorldSolid.MaxPassRegisters`
+distinct registers across the document, and passes on a screen's slab.
 `WorldAddonRow` similarly gained `MemoryWatches` (`WorldAddonMemoryWatch`
 rows: `Screen`/`Address`/`Length`)—the machine-memory-watch event family's
 addon-scoped declaration.

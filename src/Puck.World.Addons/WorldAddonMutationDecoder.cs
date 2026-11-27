@@ -91,7 +91,7 @@ public static class WorldAddonMutationDecoder {
     private static readonly string[] SequenceMembers = ["name", "offset", "step"];
     private static readonly string[] MirrorMembers = ["normal", "offset"];
     private static readonly string[] EmissionMembers = ["patchId", "level", "radius"];
-    private static readonly string[] SolidMembers = ["margin"];
+    private static readonly string[] SolidMembers = ["margin", "passes"];
     private static readonly string[] RegionMembers = ["radius", "halfExtents", "center", "yawDegrees"];
     private static readonly string[] AttachMembers = ["bodyIndex", "localOffset", "localYawDegrees"];
     private static readonly string[] InhabitMembers = ["kit", "look", "source", "count", "distribution"];
@@ -276,27 +276,9 @@ public static class WorldAddonMutationDecoder {
                         members: members
                     );
 
-                    if (
-                        !members.TryGetValue(
-                        key: "names",
-                        value: out var namesElement
-                    ) ||
-                        (namesElement.ValueKind != JsonValueKind.Array)
-                    ) {
-                        throw new AddonMutationDecodeException(message: $"{context}: 'names' must be an array");
-                    }
-
-                    var names = new List<string>();
-
-                    foreach (var name in namesElement.EnumerateArray()) {
-                        if (name.ValueKind != JsonValueKind.String) {
-                            throw new AddonMutationDecodeException(message: $"{context}: every 'names' entry must be a string");
-                        }
-                        names.Add(item: name.GetString()!);
-                    }
-
                     return new WorldDistributionRegion.Points(
-                        Names: names,
+                        Names: (OptionalStrings(context: context, members: members, name: "names") ??
+                            throw new AddonMutationDecodeException(message: $"{context}: 'names' must be an array")),
                         HalfExtent: RequireFinite(
                             context: context,
                             members: members,
@@ -978,7 +960,7 @@ public static class WorldAddonMutationDecoder {
             name: "margin"
         );
 
-        return new WorldSolid(Margin: margin);
+        return new WorldSolid(Margin: margin, Passes: OptionalStrings(context: context, members: members, name: "passes"));
     }
     // A fixed-kind value is DECIMAL TEXT here, exactly as the document and the console verb spell it — the addon
     // wire's raw-bits convention covers the ABI's numeric channel cells (WorldMutation.UpsertStateCell.Value), never
@@ -1783,6 +1765,25 @@ public static class WorldAddonMutationDecoder {
         }
 
         return whole;
+    }
+    // An array of strings, or null when the member is absent.
+    private static List<string>? OptionalStrings(JsonMembers members, string name, string context) {
+        if (!members.TryGetValue(key: name, value: out var element)) {
+            return null;
+        }
+        if (element.ValueKind != JsonValueKind.Array) {
+            throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be an array");
+        }
+
+        var strings = new List<string>();
+
+        foreach (var item in element.EnumerateArray()) {
+            if (item.ValueKind != JsonValueKind.String) {
+                throw new AddonMutationDecodeException(message: $"{context}: every '{name}' entry must be a string");
+            }
+            strings.Add(item: item.GetString()!);
+        }
+        return strings;
     }
     private static string RequireString(JsonMembers members, string name, string context) {
         if (

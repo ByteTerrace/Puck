@@ -374,7 +374,8 @@ public sealed partial class WorldPopulation {
             if (player.SleepsThrough(contactFieldVersion: contactFieldVersion)) {
                 continue;
             }
-            if (!player.StepIsLocal || !ProducerIsLocal(entry: entry, body: player, index: index)) {
+            // A body holding a pass steps serially, where its passes are opened on the contact set (HoldPasses).
+            if (!player.StepIsLocal || !ProducerIsLocal(entry: entry, body: player, index: index) || HoldsPasses(index: index)) {
                 partition.Serial.Add(item: index);
                 continue;
             }

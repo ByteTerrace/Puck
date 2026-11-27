@@ -312,6 +312,10 @@ let displayExhibitLift = 0.3
 // (yaw 0). `look` is the colourway a station wears (look.puck's lookCabinets and lookTelevisions) and `cartridge` the
 // shipped deck program it boots.
 let toyboxLevel = 1
+// The body registers that let a body into level 1 at its full size (wonder.puck): the full-size pass a puzzle grants,
+// and the wonder key a body carries switched on (rentals.puck). Level 1's size field gives a holder its full size, and
+// the magic barrier filling each level-1 branch's arch (shell.puck) lets a holder through and holds every other body.
+let wonderPasses = ["wonderPass", "wonderKey"]
 let toyboxSides = [
   { name: "south", cabinetRow: (wallRowSouth + 1), televisionRow: (wallRowSouth + 1), yaw: 180, facing: 1 }
   { name: "north", cabinetRow: (wallRowNorth - 1), televisionRow: (wallRowNorth - 1), yaw: 0, facing: -1 }

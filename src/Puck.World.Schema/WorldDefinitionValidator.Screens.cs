@@ -131,6 +131,10 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".solid.margin", Path: path),
                     errors: errors
                 );
+                // A screen's slab joins the static colliders, which hold no row a body's passes could leave out.
+                if (screenSolid.Gated) {
+                    errors.Add(item: $"{path}.solid.passes: a screen's slab collides with every body; a placement's solid row carries passes.");
+                }
                 RequirePositiveEffectiveExtent(
                     halfExtents: new Vector3(
                         x: screen.HalfWidth,

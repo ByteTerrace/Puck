@@ -457,7 +457,7 @@ public sealed class WorldSolidField : IContactField {
             // A row that moves (sized by state, attached to a body, or turning) is a root of the moving set
             // (WorldColliderSet.Build's movingOnly rows), which this field unions in at its live pose. Compiling it here
             // too would leave a second, standing copy at its authored pose.
-            if (WorldPlacementStamp.MovesColliders(creation: creation, placement: placement)) { continue; }
+            if (WorldPlacementStamp.CollidesLive(creation: creation, placement: placement)) { continue; }
             var (material, reach) = BeginRow(creation: creation, placement: placement, solid: solid);
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
             var fixedRotation = stamp.FixedRotation;

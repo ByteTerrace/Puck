@@ -84,8 +84,12 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   on the balconies end blunt. Judge it on captures from all three levels at noon and night.
 - The tree's shelves: a body pressed against the bark does not step up them (the step-up beside the trunk core's
   cylinders), so the walking line runs a little out from the bark; a look from the physics side.
-- Leaving small is the player's puzzle (the owner's ruling): only the stairs and the lift change size; a small body
-  that leaves level 1 another way (past a branch's barrier onto the tree) stays small until a route changes it. More
-  gameplay builds on this later. An author stuck small resets with `gallery.wonder size 1`.
+- Only the stairs and the lift change size (the owner's ruling). Each level-1 branch ends at a magic barrier that holds
+  every body without a wonder pass, small or full size; the wonder key lent on level 3 (gallery.md, "The wonder key"),
+  carried switched on, lets its holder through onto level 1 at full size. More gameplay builds on this later: no
+  puzzle sets `wonderPass` yet, and the key is free for the taking. An author stuck small resets with
+  `gallery.wonder size 1`.
+- The barrier and the key want a look pass: the key's chest offset and scale on a body at each size, the barrier's
+  glass from both sides, and whether the key's dull state reads as off at a glance.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better; [the climbing
   plan](climbing.md) holds its research round, what is built and what is open.

@@ -15134,7 +15134,11 @@ export type WorldSolid = {
   /**
    * The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.
    */
-  margin: number;
+  margin?: number;
+  /**
+   * Body registers (state.body counters) that let a body through: a body holding any of them nonzero meets none of the row's colliders, and every other body meets them all. The authority decides it from the moving body's own registers at each of its sweeps, so a rule that writes the register (a carried key, a spell, a puzzle's reward) is the predicate. null or empty: every body meets the row.
+   */
+  passes?: StringListNullable | null;
 };
 
 /**

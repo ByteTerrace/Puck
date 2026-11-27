@@ -149,10 +149,13 @@ public sealed partial class WorldPopulation {
         var kitIndex = ResolveKitIndex(index: index);
 
         if ((kitIndex != kit) && (m_entries[index] is { Active: true, Body: { } body })) {
-            RecompileBodyKit(
-                body: body,
-                kitIndex: kitIndex
-            );
+            // A new collider steps the body out of what it embeds in, which leaves out the rows its passes open.
+            using (HoldPasses(index: index)) {
+                RecompileBodyKit(
+                    body: body,
+                    kitIndex: kitIndex
+                );
+            }
         }
 
         return ((kitIndex != kit) || (look != LookIndex(index: index)));

@@ -578,7 +578,9 @@ function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
 // Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
-// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Each lattice panel
+// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
+// every body, small or full size, except one holding a wonder pass (layout.puck's `wonderPasses`: the wonder key
+// switched on, rentals.puck), which walks through it and onto level 1 at its full size. Each lattice panel
 // rises in its own `shellLatticeRails` crossbars so the bars keep one spacing.
 // The level-1 arcade's arch opening (architecture.puck's branchedPier): its radius and the height of its spring line.
 let shellArchRadius = ((arcadePitch / 2) - 0.42)
@@ -1187,7 +1189,9 @@ template shellPlacements() {
       prototype: panel.prototype
       parent: "gallery"
       position [panel.x, (galleryFloor[1] + panel.y), panel.z]
-      solid
+      solid {
+        passes: wonderPasses
+      }
     }
   }
   for panel in filter(shellLattices, p => (p.slat != "")) {

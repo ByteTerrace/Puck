@@ -6862,7 +6862,9 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldSolid), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("margin", typeof(global::System.Single), typeof(global::Puck.World.WorldSolid), "Margin", Read | Write | Required, static value => ((global::Puck.World.WorldSolid)value).Margin),
+                M("margin", typeof(global::System.Single), typeof(global::Puck.World.WorldSolid), "Margin", Read | Write, static value => ((global::Puck.World.WorldSolid)value).Margin),
+                M("passes", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldSolid), "Passes", Read | Write, static value => ((global::Puck.World.WorldSolid)value).Passes, text: "a per-body slot name"),
+                M("gated", typeof(global::System.Boolean), typeof(global::Puck.World.WorldSolid), "Gated", None),
             ],
             []),
         T(typeof(global::Puck.World.WorldSpatialShape), true, JsonTypeInfoKind.Object, null,

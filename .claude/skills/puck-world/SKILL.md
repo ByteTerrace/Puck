@@ -1169,7 +1169,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   presented values (`WorldTurnedPose`, the stamp pool and the rigid copies), a
   solid row's colliders every tick in fixed point
   (`WorldPlacementTurn.YawRadiansAt`, the moving rows
-  `WorldPlacementStamp.MovesColliders` names), so a body rides it. A turning row
+  `WorldPlacementStamp.CollidesLive` names), so a body rides it. A turning row
   carries no distribution, mirror, inhabit, deal, board, pointer, spatial or
   surface facet and parents nothing (`WorldPlacement.HasStaticFrame`).
   `world.turns` reads each turning row's angle. The gallery's twelve
