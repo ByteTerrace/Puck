@@ -167,7 +167,7 @@ relocates and poses the pieces, the board rests and is judged, and an
 arrangement judged illegal is put back as it stood. A request waits while the
 board settles, a piece is held or a move is being judged, and lapses once its
 square holds no piece of the side to move or that side is the computer's;
-`accepted` counts the requests it took. While `seated` is 1 (a seat playing the
+either way `request` returns to 0. While `seated` is 1 (a seat playing the
 game at the glass) the idle demonstration waits, as for a seat at this table.
 The table exports what the glass reads (`board`, `turn`, `verdict`, `move`,
 `inCheck`, `aiSide`, `halfmoveClock`, `repetitionCount`) and the door.

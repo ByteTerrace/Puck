@@ -5654,7 +5654,7 @@ confirming its site in the debug world and its work-budget share.
   `worlds/standard/` where it is a reusable design, and is verified by running
   the debug world.
 
-### The game table in the board game room
+### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the windowed look at the game table's

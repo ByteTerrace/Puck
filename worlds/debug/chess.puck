@@ -478,33 +478,27 @@ rule "chess-play-put" {
 // poses the pieces, the board rests and is judged, and an arrangement judged illegal is put back. A request waits while
 // the board settles, a piece is held or a move is being judged, and lapses once its square holds no piece of the side to
 // move or that side is the computer's.
-rule "chess-put-move" {
-  when (chessPut.request == 1 and
-    chessPut.from == pieceCell[$each] and
-    (pieceCode[$each] * (1 - 2 * turn)) > 0 and
-    aiSide != turn and
+rule "chess-put" {
+  local mover = board[chessPut.from]
+  local ready = (
     chessDemo.playing == 0 and
     ai.pending == 0 and
     play.held < 0 and
     play.judging == 0 and
-    settleHold == chessSettleTicks)
+    settleHold == chessSettleTicks
+  )
+  when chessPut.request == 1
   mode: Level
-  forEach: pieceCode
-  // A firing clears the request, which closes the gate for every later binding.
-  maxFirings: 1
-  ai.from = chessPut.from
-  ai.to = chessPut.to
-  ai.mover = pieceCode[$each]
-  ai.pending = 1
-  play.judging = 1
-  chessPut.request = 0
-  chessPut.accepted += 1
-}
-
-rule "chess-put-lapse" {
-  when chessPut.request == 1 and ((board[chessPut.from] * (1 - 2 * turn)) <= 0 or aiSide == turn)
-  mode: Level
-  chessPut.request = 0
+  if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {
+    chessPut.request = 0
+  } else if ready {
+    ai.from = chessPut.from
+    ai.to = chessPut.to
+    ai.mover = mover
+    ai.pending = 1
+    play.judging = 1
+    chessPut.request = 0
+  }
 }
 
 // What the put-down is judged against, captured the tick it is made.
@@ -676,14 +670,12 @@ state {
       returning = -1
       revert = 0
     }
-    // The display door (chess-put-move): the squares a move leaves and lands on, the request, how many it accepted, and
-    // `seated`, 1 while a seat plays this game at a display elsewhere, which holds the idle demonstration off as a seat at
-    // this table does.
+    // The display door (chess-put): the squares a move leaves and lands on, the request, and `seated`, 1 while a seat
+    // plays this game at a display elsewhere, which holds the idle demonstration off as a seat at this table does.
     table chessPut {
       from = -1
       to = -1
       request = 0
-      accepted = 0
       seated = 0
     }
     row {

@@ -130,15 +130,15 @@ function lookTelevisionPalette(t) = [
   { color: t.beanbag, roughness: 0.7, specular: 0.03 }
   { color: t.beanbagAlt, roughness: 0.7, specular: 0.03 }
 ]
-// The board game room's display table (../cardtable.puck over the standard's displayTable): a slim teal chassis in the
-// structure's paint with a lit amber line round its rim, a brushed-steel column and foot trimmed in brass, and a top that is one
-// near-black glass the games glow on at a console's brightness (`glow`, nits: a paint shows as its colour times it). The
-// games draw in the consoles' own colours (consoleLook): `inks` are a chess board's light and dark squares, the last
-// move's two squares, the lifted piece's square and the cursor's, `off` (the bare glass, where the cards lie), then the
-// bar's buttons (the game shown lit, the others dim, the deal button and the deal button while chess is shown) and their
-// labels and the status line's ink. `spot` is a pile's outline glowing faintly on the glass. The pieces are the
-// standard's chess icons, ivory with a dark rim and charcoal with a teal one, each glowing faintly as the glass's
-// content does.
+// The board game room's display table (../cardtable.puck over the standard's displayTable): a slim teal chassis in
+// the structure's paint with a lit amber line round its rim, a brushed-steel column and foot trimmed in brass, and a
+// top that is one near-black glass the games glow on at a console's brightness (`glow` and `edgeGlow` are nits: a
+// paint shows as its colour times the glow). The games draw in the consoles' own colours (consoleLook): `inks` are a
+// chess board's light and dark squares, the rings of the last move's two squares, the lifted piece's and the
+// cursor's, `off` (the bare glass: a ring at rest, and the board while the cards lie on it), then the bar's game
+// buttons (`dim`) and its deal button; `label` and `status` are the bar's lettering and the status line's. `spot` is
+// a pile's outline glowing faintly on the glass. The pieces are the standard's chess icons, ivory with a dark rim and
+// charcoal with a teal one, each glowing faintly as the glass's content does.
 let lookDisplayTable = {
   chassis: lookTeal
   edge: "#FFC46A"
@@ -155,10 +155,8 @@ let lookDisplayTable = {
     picked: "#FFC46A"
     cursor: "#6FB0B4"
     off: "#081315"
-    lit: "#FFC46A"
     dim: "#6FB0B4"
     deal: "#EFE3C8"
-    idle: "#1A3338"
   }
   label: "#20160A"
   status: "#FFC46A"

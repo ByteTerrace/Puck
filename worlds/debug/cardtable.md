@@ -29,9 +29,9 @@ enough to sit. Every game is laid out for the chair, and the keys move the
 cursor the way they point.
 
 A bar of four buttons runs along the glass's near edge: CHESS, KLONDIKE and
-FREECELL show their game (the one shown is lit amber), and NEW DEAL deals the
-patience game shown again. Under the bar a status line says whose move it is in
-chess, or which patience game lies on the glass and whether it is solved. A
+FREECELL show their game, and NEW DEAL deals the patience game shown again.
+Under the bar a status line says whose move it is in chess, or which patience
+game lies on the glass and whether it is solved. A
 pick on the bar presses its button and is never read as a move. `table.game
 0|1|2` does the same from the console. The table boots showing chess.
 
@@ -47,9 +47,12 @@ The glass shows a board of 10 cm squares, White's back rank nearest the chair
 and the a-file at her left, and on each square the piece the chess game's
 `board` row holds there, drawn from the standard's chess icons
 ([`../standard/chess-icons.puck`](../standard/chess-icons.puck)): ivory pieces
-with a dark rim and charcoal pieces with a glowing teal rim. Each square is a
-paint on the glass whose colour the rules choose: the cursor's square is teal,
-the lifted piece's amber, and the last legal move's two squares terracotta.
+with a dark rim and charcoal pieces with a glowing teal rim. Each square is two
+paints on the glass: a light or dark fill, which shows while chess is shown,
+and over it a ring, which at rest draws the board's grid in the glass's own
+dark and lights teal for the cursor, amber for the lifted piece and terracotta
+for the last legal move's two squares. The rules write a ring only when what it
+shows changes, at most two a tick.
 
 A pick on a piece of the side to move lifts it; a pick on another square asks
 for the move. The move goes through the chess game's display door
@@ -64,7 +67,7 @@ it plays here the chess table's idle demonstration waits.
 |---|---|
 | Show chess | `table.game 0` |
 | Read the seat's cursor and lifted square | `world.state tableChess` |
-| Read each square's colour code (0 light, 1 dark, 2 last move, 3 lifted, 4 cursor, 5 bare glass) | `world.state tableSquareCode` |
+| Read what each square's ring shows (2 last move, 3 lifted, 4 cursor, 5 at rest) | `world.state tableRingCode` |
 | Ask for a move from the console, as the glass does | `world.state.cell.set chessPut from 11`, `to 27`, then `request 1` |
 | Read the door | `world.state chessPut` |
 

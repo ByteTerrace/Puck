@@ -116,6 +116,18 @@ let displayReading = [0, 0.7071068, 0.7071068, 0]
 // (world x) and away (world z), its corners rounded by `round`.
 function displayFill(at, half, color, round = 0) = faceFill(at, displayReading, half, color, round)
 
+// A rounded rectangle's outline on a level display, `stroke` wide, its corners rounded by `round` of its smaller half
+// extent: a cell's frame that lights without hiding what is drawn inside it.
+function displayRing(at, half, color, stroke, round = 0.25) = {
+  type: "Prism"
+  position: at
+  rotation: displayReading
+  scale [half[0], half[1], 0.03]
+  profile { kind: "RoundedRectangle", cornerRadius: round }
+  stroke: stroke
+  color: color
+}
+
 // Lettering on a level display, read from its -Z edge: `half` is the box it fits, across and away.
 function displayText(at, half, template, ink, em, align = "center") = faceText(
   at,

@@ -139,20 +139,42 @@ let tableStatusLines = [
   "KLONDIKE", "FREECELL", "SOLVED  -  TAP NEW DEAL", "DEALING"
 ]
 
-// The glass: three panels side to side across the display, so none carries more paints than a palette slot draws. The far
-// one holds the chess board's ranks 5 to 8, the middle one ranks 1 to 4 and the near one the bar and the status line. A
-// square's colour is its `tableSquareInk` cell (the rules light the cursor, the lifted piece and the last move, and bare
-// the glass while a patience game lies on it); a button's is its `tableButtonInk` cell.
-function chessSquarePaint(cell) = displayFill(
-  tableWorld(chessSquareAt(cell)[0], chessSquareAt(cell)[1]),
-  [0.0485, 0.0485],
-  $"state.tableSquareInk.{cell}",
-  0.004
-)
+// The glass: five panels side to side across the display, so none carries more paints than a palette slot draws. Four
+// hold two ranks of the chess board each, nearest the seat first, and the fifth the bar and the status line. A square is
+// two paints: its fill, light or dark, whose colour is the board's (`tableBoardInk`, the bare glass while a patience game
+// lies on it, so the board comes and goes in two writes), and over it a ring whose colour is the square's own
+// (`tableRingInk`): the bare glass at rest, so it draws the board's grid, and lit for the cursor, the lifted piece and the
+// last move.
+function chessSquarePaints(cell) = [
+  displayFill(
+    tableWorld(chessSquareAt(cell)[0], chessSquareAt(cell)[1]),
+    [0.0485, 0.0485],
+    ((chessParity[cell] == 0) ? "state.tableBoardInk.light" : "state.tableBoardInk.dark"),
+    0.004
+  )
+  displayRing(
+    tableWorld(chessSquareAt(cell)[0], chessSquareAt(cell)[1]),
+    [0.043, 0.043],
+    $"state.tableRingInk.{cell}",
+    0.006
+  )
+]
+function chessRankPanel(first) = {
+  x0: -0.6
+  x1: 0.6
+  z0: (chessZ0 + (chessSquare * first))
+  z1: ((first == 6) ? 0.66 : (chessZ0 + (chessSquare * (first + 2))))
+  paints: flatMap(range((8 * first), (8 * (first + 2))), cell => chessSquarePaints(cell))
+}
 let tableBarPaints = concat(
   map(
     range(0, 4),
-    b => displayFill(tableWorld(tableButtonX(b), tableBarZ), [0.11, 0.032], $"state.tableButtonInk.{b}", 0.012)
+    b => displayFill(
+      tableWorld(tableButtonX(b), tableBarZ),
+      [0.11, 0.032],
+      ((b == 3) ? lookDisplayTable.inks.deal : lookDisplayTable.inks.dim),
+      0.012
+    )
   ),
   map(
     range(0, 4),
@@ -166,11 +188,10 @@ let tableBarPaints = concat(
   ),
   [displayText(tableWorld(0, tableStatusZ), [0.46, 0.024], "{state.tableStatus.line}", lookDisplayTable.status, 0.03)]
 )
-let tablePanels = [
-  { x0: -0.6, x1: 0.6, z0: (chessZ0 + 0.4), z1: 0.66, paints: map(range(32, 64), cell => chessSquarePaint(cell)) }
-  { x0: -0.6, x1: 0.6, z0: chessZ0, z1: (chessZ0 + 0.4), paints: map(range(0, 32), cell => chessSquarePaint(cell)) }
-  { x0: -0.6, x1: 0.6, z0: -0.66, z1: chessZ0, paints: tableBarPaints }
-]
+let tablePanels = concat(
+  map([0, 2, 4, 6], first => chessRankPanel(first)),
+  [{ x0: -0.6, x1: 0.6, z0: -0.66, z1: chessZ0, paints: tableBarPaints }]
+)
 
 // The pieces the glass draws, by the piece code a chess square holds: White's positive, Black's negative.
 let tableIconCodes = flatMap(range(0, 2), s => map(range(0, 6), k => {
@@ -563,48 +584,41 @@ state {
     }
 
     // Seat 1 at chess on the glass: the cursor's square, the square of the piece it lifted (-1 for none) and the last
-    // pointed pick cell; then what the glass was last drawn for, each packed into one number so a rule writes only when
-    // it moves: the squares (`view`), the status line (`status`, its line's code) and the bar (`buttons`).
+    // pointed pick cell; then what the glass was last drawn for, so a rule writes only when it moves: whether the board
+    // shows (`board`) and the status line's code (`status`).
     table tableChess {
       cursor = 11
       picked = -1
       pointer = -1
-      view = -1
+      board = 1
       status = -1
-      buttons = -1
     }
 
-    // Each chess square's colour, keyed by its cell: its code (0 light, 1 dark, 2 the last move, 3 the lifted piece, 4
-    // the cursor, 5 the bare glass) and the ink that code names in `tableInk`, which the square's paint reads.
+    // The board's two fills, light and dark, and each square's ring by its cell: the code of what the ring shows (2 the
+    // last move, 3 the lifted piece, 4 the cursor, 5 the bare glass) and the ink that code names in `tableInk`, which
+    // the ring's paint reads.
     row {
-      name: "tableSquareCode"
+      name: "tableBoardInk"
+      kind: Text
+      cells [{ key: "light", value: lookDisplayTable.inks.light }, { key: "dark", value: lookDisplayTable.inks.dark }]
+    }
+    row {
+      name: "tableRingCode"
       kind: Int
       capacity: 64
-      cells: map(range(0, 64), cell => { key: $"{cell}", value: chessParity[cell] })
+      cells: map(range(0, 64), cell => { key: $"{cell}", value: 5 })
     }
     row {
-      name: "tableSquareInk"
+      name: "tableRingInk"
       kind: Text
       capacity: 64
-      cells: map(
-        range(0, 64),
-        cell => {
-          key: $"{cell}"
-          value: (chessParity[cell] == 0 ? lookDisplayTable.inks.light : lookDisplayTable.inks.dark)
-        }
-      )
+      cells: map(range(0, 64), cell => { key: $"{cell}", value: lookDisplayTable.inks.off })
     }
     row {
-      name: "tableButtonInk"
-      kind: Text
-      capacity: 4
-      cells: map(
-        range(0, 4),
-        b => {
-          key: $"{b}"
-          value: (b == 0 ? lookDisplayTable.inks.lit : (b == 3 ? lookDisplayTable.inks.idle : lookDisplayTable.inks.dim))
-        }
-      )
+      name: "tableSquareNo"
+      kind: Int
+      capacity: 64
+      cells: map(range(0, 64), cell => { key: $"{cell}", value: cell })
     }
     row {
       name: "tableInk"
@@ -616,10 +630,6 @@ state {
         { key: "3", value: lookDisplayTable.inks.picked }
         { key: "4", value: lookDisplayTable.inks.cursor }
         { key: "5", value: lookDisplayTable.inks.off }
-        { key: "lit", value: lookDisplayTable.inks.lit }
-        { key: "dim", value: lookDisplayTable.inks.dim }
-        { key: "deal", value: lookDisplayTable.inks.deal }
-        { key: "idle", value: lookDisplayTable.inks.idle }
       ]
     }
 
@@ -863,16 +873,12 @@ rule "table-bar-choose" {
   mode: Level
   if button < 3 {
     tableGame.game = button
-  }
-  if (button == 3 and
-    tableGame.game == 1 and
+  } else if (tableGame.game == 1 and
     solitaireKlondike.request == solitaireKlondike.applied and
     solitaireKlondike.stage == 0) {
     solitaireKlondike.action = 1
     solitaireKlondike.request += 1
-  }
-  if (button == 3 and
-    tableGame.game == 2 and
+  } else if (tableGame.game == 2 and
     solitaireFreecell.request == solitaireFreecell.applied and
     solitaireFreecell.stage == 0) {
     solitaireFreecell.action = 1
@@ -1248,12 +1254,11 @@ rule "table-chess-pick" {
     chessPut.from = picked
     chessPut.to = cursor
     chessPut.request = 1
-    tableChess.picked = -1
   }
 }
 
 // The lifted piece is put back by the cancel button, by standing up or by another game taking the glass, and once its
-// square no longer holds a piece of the side to move.
+// square no longer holds a piece of the side to move, as when the move it was lifted for is played.
 rule "table-chess-cancel" {
   when tableChess.picked >= 0 and (kSeat.cancelEdge == 1 or board(engaged, kBoard, 1) == 0 or tableGame.game or (
         board[tableChess.picked] * (1 - 2 * turn)
@@ -1270,35 +1275,42 @@ rule "table-chess-seated" {
   chessPut.seated = seated
 }
 
-// The squares: each its colour by what it shows, in order of precedence the bare glass while a patience game lies on it,
-// the lifted piece's square, the cursor's while the seat sits here, the last legal move's two squares, then light or
-// dark. What they were last drawn for packs into one view, so the squares are written only when it moves.
-rule "table-chess-squares" {
-  local seated = board(engaged, kBoard, 1) == 1
+// The board's fills show while chess is shown and take the bare glass's colour otherwise: two writes when the game
+// changes.
+rule "table-chess-board" {
   local shown = tableGame.game == 0
-  local view = (
-    (
-      (
-        ((((tableGame.game * 64) + tableChess.cursor) * 65 + (tableChess.picked + 1)) * 65 + (move.from + 1)) * 65 +
-        (move.to + 1)
-      ) * 2 +
-      verdict
-    ) * 2 +
-    seated
-  )
-  when tableChess.view != view
+  when tableChess.board != shown
   mode: Level
-  for cell in range(0, 64) {
-    tableSquareCode[$"{cell}"] = (
-      (shown == 0) ? 5 :
-      (tableChess.picked == cell) ? 3 :
-      (seated and tableChess.cursor == cell) ? 4 :
-      ((verdict == 1) and ((move.from == cell) or (move.to == cell))) ? 2 :
-      chessParity[cell]
-    )
-    setState(state: tableSquareInk, key: $"{cell}", fromState: tableInk, fromKey: $"$cell:tableSquareCode:{cell}")
+  if shown {
+    setState(state: tableBoardInk, key: light, fromState: tableInk, fromKey: 0)
+    setState(state: tableBoardInk, key: dark, fromState: tableInk, fromKey: 1)
+  } else {
+    setState(state: tableBoardInk, key: light, fromState: tableInk, fromKey: 5)
+    setState(state: tableBoardInk, key: dark, fromState: tableInk, fromKey: 5)
   }
-  tableChess.view = view
+  tableChess.board = shown
+}
+
+// The rings: each square's shows, in order of precedence, the lifted piece, the cursor while the seat sits here, the last
+// legal move's two squares, and otherwise the bare glass, as does every ring while chess is not shown. A ring is written
+// only when what it shows changes, and at most two a tick, so a cursor's step relights its two squares at once and a
+// larger change spreads over a few ticks.
+rule "table-chess-rings" {
+  local cell = tableSquareNo[$each]
+  local seated = (tableGame.game == 0) and (board(engaged, kBoard, 1) == 1)
+  local want = (
+    (tableGame.game != 0) ? 5 :
+    (tableChess.picked == cell) ? 3 :
+    (seated and (tableChess.cursor == cell)) ? 4 :
+    ((verdict == 1) and ((move.from == cell) or (move.to == cell))) ? 2 :
+    5
+  )
+  when tableRingCode[$each] != want
+  mode: Level
+  forEach: tableRingCode
+  maxFirings: 2
+  tableRingCode[$each] = want
+  setState(state: tableRingInk, key: $each, fromState: tableInk, fromKey: tableRingCode[$each])
 }
 
 // The status line: whose move it is in chess, or which patience game lies on the glass and how it stands.
@@ -1316,25 +1328,6 @@ rule "table-status" {
   mode: Level
   tableChess.status = code
   setState(state: tableStatus, key: line, fromState: tableLines, fromKey: tableChess.status)
-}
-
-// The bar: the game shown lit and the others dim, and the deal button lit while a patience game is shown.
-rule "table-buttons" {
-  when tableChess.buttons != tableGame.game
-  mode: Level
-  for b in range(0, 3) {
-    if tableGame.game == b {
-      setState(state: tableButtonInk, key: $"{b}", fromState: tableInk, fromKey: lit)
-    } else {
-      setState(state: tableButtonInk, key: $"{b}", fromState: tableInk, fromKey: dim)
-    }
-  }
-  if tableGame.game == 0 {
-    setState(state: tableButtonInk, key: 3, fromState: tableInk, fromKey: idle)
-  } else {
-    setState(state: tableButtonInk, key: 3, fromState: tableInk, fromKey: deal)
-  }
-  tableChess.buttons = tableGame.game
 }
 
 // The console plays the mailboxes directly (`world.state.cell.set solitaireKlondike ...`); these lines are the same
