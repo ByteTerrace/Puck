@@ -359,10 +359,15 @@ public sealed class SdfRenderOpsLawTests {
     [Fact]
     public void LaneErodeSkipsTheNextShapeOnceTheLaneIsPastItsWindow() {
         var skipped = new SdfFieldEvaluator(program: Program(chain: static builder => builder.LaneErode(from: -2f, lane: 1, noiseScale: 1f, reach: 0.3f, to: -1f)), reading: SdfFieldReading.Render);
-        var kept = new SdfFieldEvaluator(program: Program(chain: static builder => builder.LaneErode(from: 1f, lane: 2, noiseScale: 1f, reach: 0.3f, to: 2f)), reading: SdfFieldReading.Render);
+        var keptProgram = Program(chain: static builder => builder.LaneErode(from: 1f, lane: 2, noiseScale: 1f, reach: 0.3f, to: 2f));
+        var kept = new SdfFieldEvaluator(program: keptProgram, reading: SdfFieldReading.Render);
+        // The kept box is uneroded, read through the step scale its chain's LaneErode stretch charges the shape, as
+        // AssertAnswers reads every candidate.
+        var scale = keptProgram.Instructions.Select(selector: (_, index) => keptProgram.ShapeStepScaleAt(instructionIndex: index)).Min();
 
         Assert.True(condition: (Read(field: skipped, point: Vector3.Zero) > 1e6f));
-        Assert.Equal(expected: Box(p: Vector3.Zero), actual: Read(field: kept, point: Vector3.Zero), tolerance: Tolerance);
+        Assert.True(condition: (scale < 1f));
+        Assert.Equal(expected: (Box(p: Vector3.Zero) * scale), actual: Read(field: kept, point: Vector3.Zero), tolerance: Tolerance);
     }
     [Fact]
     public void DisplaceAddsTheSineProductRelief() {

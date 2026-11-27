@@ -75,6 +75,7 @@ public sealed partial class SdfMeshPathBake {
             group.Projection = null;
             group.PeakFloor = Math.Max(val1: group.PeakFloor, val2: floor);
             group.Admitted = false;
+            group.EndRefinement();
             _ = group.TakeAdmittedAt();
             group.Memory.ReleaseReservation();
             StartFinal(group: group);

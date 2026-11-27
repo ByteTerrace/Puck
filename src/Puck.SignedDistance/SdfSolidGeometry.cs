@@ -1017,7 +1017,7 @@ public static class SdfSolidGeometry {
 
         // The canonical (unit-scale) half-extent per local axis, from the same dimension table GetLocalBounds reads
         // — a Prism's extrude spelling carries its own here (X/Y/Z all canonically 1: bottom half-width, half-height,
-        // extrusion half-depth) rather than GetLocalBounds's conservative 1.0001 placeholder cube.
+        // extrusion half-depth).
         // A Sphere/Ellipsoid's support along a unit direction is the L2 length of its radii weighted by that
         // direction — the L1 projection below would read a unit sphere's diagonal support as √2.
         if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
