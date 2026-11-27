@@ -161,7 +161,7 @@ template displayPlinth(base) {
   }
 }
 
-// The structure's materials, in slot order from `base`: deep teal steel and its brass inlay.
+// The structure's materials, in slot order from `base`: deep teal steel and its brass trim.
 let structureTeal = 0
 let structureBrass = 1
 let structurePalette = [
@@ -172,10 +172,10 @@ let structureAcross = [0.7071, 0, 0, 0.7071]
 
 // A teal branched pier that faces +Z (docs/game/art/gallery-kit-pack/branched-pier-and-arcade.png): a splayed foot that
 // narrows to a chamfered shaft, which splits into two arches springing toward ±X, cut by two circles so the haunch above
-// the shaft curves out to a band along the ceiling, with three brass inlay strips on the shaft's face where it branches.
+// the shaft curves out to a band along the ceiling.
 // It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre, where the next
 // pier's arch meets it, so piers `2 × span` apart join into an arcade. The foot and the shaft are what a body meets: the
-// haunch, the arches and the inlays are `detail`, so a pier collides as its two boxes. `foot`, when given, is the foot's
+// haunch and the arches are `detail`, so a pier collides as its two boxes. `foot`, when given, is the foot's
 // exact half width and half depth where it meets the floor, unchamfered so its edge meets the floor there, and the foot
 // tapers on all four sides toward the shaft;
 // by default it splays from the shaft, tapering on its sides only.
@@ -241,14 +241,6 @@ template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null
       position [(side * span), ((height - 0.3) - (span - shaft)), 0]
       rotation: structureAcross
       scale [(span - shaft), depth, (span - shaft)]
-      detail: true
-    }
-  }
-  for strip in [{ x: 0, half: 0.46 }, { x: -0.13, half: 0.3 }, { x: 0.13, half: 0.3 }] {
-    shape Box $"pier-inlay-{strip.x}" {
-      material: (base + structureBrass)
-      position [strip.x, ((height * 0.6) + (0.46 - strip.half)), (depth + 0.006)]
-      scale [0.03, strip.half, 0.014]
       detail: true
     }
   }

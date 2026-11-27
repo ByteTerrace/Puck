@@ -213,6 +213,22 @@ public static class WorldMachineContentFolder {
         entry = default;
         return false;
     }
+    /// <summary>Counts the titles of a machine's library: the mountable files <see cref="TryTitle"/> numbers.</summary>
+    /// <param name="entries">The files the folders hold, as <see cref="TryList"/> returns them.</param>
+    /// <returns>The number of titles.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
+    public static int TitleCount(IReadOnlyList<Entry> entries) {
+        ArgumentNullException.ThrowIfNull(argument: entries);
+
+        var count = 0;
+
+        foreach (var candidate in entries) {
+            if (candidate.Refusal is null) {
+                count++;
+            }
+        }
+        return count;
+    }
     /// <summary>Numbers a file of a machine's library as <see cref="TryTitle"/> does.</summary>
     /// <param name="entries">The files the folders hold, as <see cref="TryList"/> returns them.</param>
     /// <param name="entry">The file to number.</param>

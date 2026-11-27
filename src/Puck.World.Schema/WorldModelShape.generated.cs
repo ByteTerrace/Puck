@@ -4776,6 +4776,7 @@ public static partial class WorldModelShape {
             [
                 M("state", typeof(global::System.String), typeof(global::Puck.World.WorldMachineContentSelector), "State", Read | Write | Required, static value => ((global::Puck.World.WorldMachineContentSelector)value).State, kind: WorldNameKind.State, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("key", typeof(global::System.String), typeof(global::Puck.World.WorldMachineContentSelector), "Key", Read | Write, static value => ((global::Puck.World.WorldMachineContentSelector)value).Key, kind: WorldNameKind.State, role: WorldNameRole.Key, facet: WorldExportFacet.Read),
+                M("wrapFrom", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldMachineContentSelector), "WrapFrom", Read | Write, static value => ((global::Puck.World.WorldMachineContentSelector)value).WrapFrom),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineMemory), true, JsonTypeInfoKind.Object, null,

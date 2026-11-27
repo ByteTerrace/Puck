@@ -46,6 +46,7 @@ is corrected in the same change.
 | Walk up to a thing, press the context button, and have the seat's inputs and camera go to it until it steps back (a console, a cabinet, a handheld) | the standard's terminal context (`worlds/standard/contexts/terminal.puck`). A desk view is `terminalPlay` and `terminalFamily`: rules on `interact`/`cancel` over `$players`, a `terminal` body register for the input family, a `state:terminalAt` context row for the binding group, a `views.framings` row whose `selectProgram` picks the terminal's camera by `state.terminalAt.$body` (`terminalCamera` writes one from how much of the view the screen fills); the gallery's displays are the worked use. A full view is a screen row's `terminalRoute()`, engaged by the engine's context-button probe | [engagement](../puck-world/references/engagement.md#worldscreenrouteinput--where-a-pointer-hit-on-the-screen-goes) |
 | A finger, pen tip or mouse click on an in-world screen (the player's touchscreen used as the game's own) | `WindowInputQueue.EnqueueContact` numbers each OS contact; `touch.contact<n>` and `pen.tip` bind it; `WorldContacts` (written by `WorldPointerSink` and `world.view.touch`) → `WorldPointerRayCapture` casts it through the seat's view → `SeatController.AddContact` → `WorldInputBatch.Contacts` → `WorldInputOwner.ContactsAt` → `forEach: contacts(<screen>|<placement>)` (any surface `pointer(…)` names, resolved by `WorldFactsVocabulary.PointerSurfaceOf`) and `contact(each, …)`, including `region`/`row <id>` (`WorldContactIteration`); `source.contact` queues one as a world ray, headless (`worlds/debug/touch-tests.puck`) | [touch](../../../docs/decisions/input-channels.md#touch-is-diegetic), [device input](../../../docs/reference/input.md#touch-and-pen-contacts) |
 | A game played by typing words | the standard's `typingPlay` and `typingFamily` (`worlds/standard/typing.puck`): a `Text` channel judged a character at a time against words authored as strings (`scalars(text)`) | [the press](../../../worlds/debug/press.md) |
+| A typed command line at an engaged terminal that runs only that terminal's commands | the standard's terminal console (`terminalPlay(console: …)`, `terminalConsoleFamily`, `worlds/standard/contexts/terminal-console.puck`): the backtick opens it, a `Text` channel builds the line in a `Text` cell (`addState` edits its end), Enter looks it up in the authored command table and posts the command's action to the engaged terminal's mailbox (`terminalAction`), which the world's rules carry into the cells its screen writes; a world HUD panel keyed `$body` draws it per seat | the gallery displays (`worlds/debug/gallery/gallery.puck`, `galleryConsole`) |
 
 ## Semantic channels and typed values
 
@@ -206,12 +207,16 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 
 ## The always-active plane and reserved gestures
 
-- `InputRouter` resolves `IAlwaysActiveInputBindings` beside the active page
-  for every source. Today `TerminalInputBindings.Resolve` answers only
-  `keyboard.backtick` (the `console` command). While the console holds
-  terminal focus, signals enter through `InputRouter.CaptureFocusExempt`: only
-  commands declaring `CommandInputScope.FocusExempt` dispatch and only the
-  plane answers presses.
+- `InputRouter` asks `IAlwaysActiveInputBindings` for a source the seat's
+  active page leaves unbound. Today `TerminalInputBindings.Resolve` answers only
+  `keyboard.backtick` (the `console` command), so a context whose page binds
+  the backtick takes it while it holds: the standard's terminal console
+  (`worlds/standard/contexts/terminal-console.puck`) opens on it at an engaged
+  terminal, and the developer console opens everywhere else. While the console
+  holds terminal focus, signals enter through `InputRouter.CaptureFocusExempt`:
+  the page is never asked, only commands declaring
+  `CommandInputScope.FocusExempt` dispatch and only the plane answers presses,
+  so the backtick always closes it.
 - Host-reserved gestures outside the binding profile: Control+Alt+Escape
   returns keyboard focus from a passthrough source (`SourceFocus`), and Escape
   closes an open console (`ConsoleInputSink`).

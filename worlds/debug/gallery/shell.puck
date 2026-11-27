@@ -330,7 +330,7 @@ function shellFloorPieces(level) = boundsCutAll(
     ],
     ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : [])
   ),
-  concat(galleryStairWells, ((level == 1) ? [fallWell] : []), flawOpenings(level))
+  concat(galleryStairWells, (((level == 1) and fallOpen) ? [fallWell] : []), flawOpenings(level))
 )
 // The roof: the same plan without the wells and the terrace, the nave closed over between three skylights, each
 // 2.5 m in from the balcony edges.
@@ -538,7 +538,7 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 // 2's balcony edges take them; level 1's are its lattice (below).
 // Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a tree branch lands; there
 // the bay takes a doorway (below) with a short length either side of it.
-let shellBalconyBays = range(arcadeWestBays, (galleryBays - 1))
+let shellBalconyBays = range(arcadeWestBays, galleryBays)
 function shellDoorSides(k, side, z, yaw) = map([-1, 1], s => {
   id: $"rail-door-{side}-{k}-{s}", x: (treeLanding(k, side) + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2)))), y: galleryFloor[k], z: z, yaw: yaw, short: 2
 })
@@ -554,12 +554,12 @@ let shellRails = concat(
     shellDoorSides(k, "north", (naveNorth + balconyInset), 0),
     map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - balconyInset), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
-  [
+  (fallOpen ? [
     { id: "rail-fall-south", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] - fallHole) - 0.08), yaw: 180, short: 1 }
     { id: "rail-fall-north", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] + fallHole) + 0.08), yaw: 0, short: 1 }
     { id: "rail-fall-west", x: ((fallPlan[0] - fallHole) - 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 270, short: 1 }
     { id: "rail-fall-east", x: ((fallPlan[0] + fallHole) + 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 90, short: 1 }
-  ],
+  ] : []),
   map(range(0, 4), i => { id: $"rail-terrace-south-{i}", x: ((galleryWestOut + 2.2) + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
@@ -652,16 +652,6 @@ let shellBenches = filter(concat(
     { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: (arcadeSouth - 1.35), yaw: 0 }
   ]
 ), bench => shellFurnitureClear(bench))
-// A banner hangs on the nave's side of every other pier of level 0's arcades, and four large ones on the blank wall
-// behind the forecourt's arches.
-let shellBanners = concat(
-  flatMap(filter(arcadeXs, x => ((((x - naveWest) / arcadePitch) % 2) == 1)), x => [
-    { id: $"banner-south-{x}", x: x, y: 3.5, z: (arcadeSouth + 0.42), yaw: 180, large: 0 }
-    { id: $"banner-north-{x}", x: x, y: 3.5, z: (arcadeNorth - 0.42), yaw: 0, large: 0 }
-  ]),
-  map([33.75, 41.25, 48.75, 56.25], x => { id: $"banner-front-{x}", x: x, y: 6.4, z: -0.02, yaw: 0, large: 1 })
-)
-
 template shellPrototypes() {
   for k in range(0, 4) {
     prototype $"gallery-walls-{k}" {
@@ -985,22 +975,6 @@ template shellPrototypes() {
       bench(base: 0, length: (2 * galleryTile))
     }
   }
-  prototype "gallery-banner" {
-    document {
-      name: "gallery-banner"
-      schema: "puck.creation.v1"
-      palette: shellKit
-      banner(base: 0, width: 0.8, drop: 1.9)
-    }
-  }
-  prototype "gallery-banner-large" {
-    document {
-      name: "gallery-banner-large"
-      schema: "puck.creation.v1"
-      palette: shellKit
-      banner(base: 0, width: 1.5, drop: 4.2)
-    }
-  }
 }
 
 template shellPlacements() {
@@ -1222,14 +1196,6 @@ template shellPlacements() {
       position [galleryTileX(bench.x), galleryFloor[bench.y], galleryTileZ(bench.z)]
       yawDegrees: bench.yaw
       solid
-    }
-  }
-  for banner in shellBanners {
-    placement $"gallery-{banner.id}" {
-      prototype: ((banner.large == 1) ? "gallery-banner-large" : "gallery-banner")
-      parent: "gallery"
-      position [banner.x, banner.y, banner.z]
-      yawDegrees: banner.yaw
     }
   }
 }

@@ -8,11 +8,10 @@ lift, floors, walls, windows and indoor light. Two displays move: their
 exhibits run through the dynamic stamp path on one console-controlled clock, so
 motion, skinning and motion vectors can be inspected, paused and scrubbed.
 [`shapes.puck`](shapes.puck) holds the exhibits and the displays; `debug.puck`
-imports it, expands `galleryPrototypes()` in its `prototypes` block,
-`galleryPlacements()` (the signs and the lobby's map) in its `placements` block
+imports it, expands `galleryPrototypes()` in its `prototypes` block
 and `galleryState()` in its `state.world` block, concatenates `gallerySpawns`
 into its `spawnPoints` and `galleryCommands` into its `commands`, and declares
-the font the signs emboss in. [`gallery/gallery.puck`](gallery/gallery.puck) is
+the font its lettering embosses in. [`gallery/gallery.puck`](gallery/gallery.puck) is
 the building, a module under one root placement: its shell, floors, stairs,
 lift, lights, level boards, the displays and their rules, tour and keys.
 [gallery.md](gallery.md) draws its plan and says what stands where.

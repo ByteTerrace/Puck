@@ -307,8 +307,6 @@ placements {
     solid
   }
 
-  // The shape gallery (shapes.puck): every authorable construct, and two rows of motion, on the open ground at +X/+Z.
-  galleryPlacements()
   studioPlacements()
 }
 

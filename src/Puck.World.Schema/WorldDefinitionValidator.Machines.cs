@@ -112,6 +112,9 @@ public static partial class WorldDefinitionValidator {
                 ) is CellKind.Text) {
                     errors.Add(item: $"{path}.contentBy.state '{contentBy.State}' is a Text row; a title is selected by a number.");
                 }
+                if (contentBy.WrapFrom is < 1) {
+                    errors.Add(item: $"{path}.contentBy.wrapFrom must be a title number of at least 1; got {contentBy.WrapFrom}.");
+                }
             }
             ValidateMachineBindings(
                 definition: definition,

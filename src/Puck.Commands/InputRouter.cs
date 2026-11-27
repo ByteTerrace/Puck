@@ -550,8 +550,8 @@ public sealed partial class InputRouter : IDisposable {
         // exemption (see below), and the one that releases stranded holds.
         var isReleasing = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !signal.Value.IsActive);
         // Focus-exempt capture deliberately never DISPATCHES through the current authored page. Host-owned terminal
-        // bindings live in their own always-active plane, so a page override cannot accidentally remove the escape
-        // hatch. A release is still forwarded through the resolver and its answer discarded: the resolver carries the
+        // bindings live in their own always-active plane, which answers every source while focus is released, so the
+        // key that opened a host console always closes it. A release is still forwarded through the resolver and its answer discarded: the resolver carries the
         // chord/modifier tracker, the press latches, and the armed command rows, and a release those never see leaves
         // the page flipped and the row armed for as long as the seat console stays open. Presses stay withheld —
         // nothing may flip a page or arm a row while the device's focus is released.
@@ -588,10 +588,17 @@ public sealed partial class InputRouter : IDisposable {
         var pageBindings = ResolveBindings(bindings: (focusExemptOnly
             ? null
             : resolvedPageBindings));
-        var alwaysActiveBindings = ResolveBindings(bindings: m_alwaysActiveBindings?.Resolve(
-            slot: slot,
-            source: signal.Source
-        ));
+        // The always-active plane answers a source the seat's active page leaves unbound: a context whose page binds
+        // the source (a terminal's own console on the backtick) takes it while that context holds, and the plane takes
+        // it everywhere else. Under focus exemption the page is never asked, so the plane always answers there and the
+        // key that opened a host console still closes it.
+        var alwaysActiveBindings = ((pageBindings.Length == 0)
+            ? ResolveBindings(bindings: m_alwaysActiveBindings?.Resolve(
+                slot: slot,
+                source: signal.Source
+            ))
+            : []
+        );
 
         if (
             forwardsToResolver &&
