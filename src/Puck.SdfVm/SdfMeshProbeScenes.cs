@@ -111,10 +111,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     /// <summary>Gets the device bytes the region holds. Safe to read from any thread.</summary>
     internal GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
 
-    /// <summary>Gets whether a begun upload has words ready that only a residency's upload carries (<see cref="RecordOwed"/>):
-    /// a chunk or a root, or chunks a refused flush kept staged. Its claimant takes no query until the root lands, so while
-    /// this holds some residency's upload must open, whether or not any view renders. Safe to read from any thread.</summary>
-    internal bool OwesCopies { get { lock (m_gate) { return (!m_disposed && ((m_staged.Count > 0) || HasOwed())); } } }
+    /// <summary>Gets whether the region owes copies only a residency's upload carries (<see cref="RecordOwed"/>): a begun
+    /// upload's chunk or root, chunks a refused flush kept staged, or the region's carry. Its claimant takes no query until
+    /// they land, so while this holds some residency's upload must open, whether or not any view renders. Safe to read from
+    /// any thread.</summary>
+    internal bool OwesCopies { get { lock (m_gate) { return (!m_disposed && ((m_staged.Count > 0) || HasOwed() || m_region.OwesCarry)); } } }
 
     /// <summary>Begins the upload of a claimant's scene: its worker creates the export in the store's arena, claiming each
     /// geometry it names, and cuts the words the arena does not hold yet into chunks, which residencies' uploads record in
@@ -192,7 +193,9 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
         lock (m_gate) {
             if (m_disposed) { return false; }
             if (m_retired.Count > 0) { m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static item => item.Dispose()); }
-            if ((m_staged.Count == 0) && !HasOwed()) { return false; }
+            // A region that owes its carry (a fresh destination's clear, a grown one's carry) records it whether or not
+            // a chunk is ready: no claimant takes a query while it is owed (Carrying).
+            if ((m_staged.Count == 0) && !HasOwed() && !m_region.OwesCarry) { return false; }
             if (!m_freeSlots.TryPop(result: out var slot)) {
                 m_slotMisses++;
                 return false;
