@@ -83,16 +83,23 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     if ((ambientFilter || shadowFilter) && s.hit) {
         float ambient;
         float4 shadows;
+        float3 tint;
 
 #ifdef SDF_VIEWS_BINNED
         uint record = sdfViewsFilterRecord(p.pixel, p.viewIndex);
 
         sdfViewsFilterUnpack(uint2(sdfViewsFilterRecords[record], sdfViewsFilterRecords[record + 1u]), ambient, shadows);
+        tint = (shadowFilter ? sdfUnpackShadowTint(sdfViewsFilterRecords[record + 3u]) : float3(1.0, 1.0, 1.0));
 #else
-        sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows);
+        sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows, tint);
 #endif
         s.ambient = (ambientFilter ? ambient : s.ambient);
         s.shadows = (shadowFilter ? shadows : s.shadows);
+        s.shadowTint = (shadowFilter ? tint : s.shadowTint);
+    }
+    // A view that filters no shadow lights by the record's own, its colour included, wherever the cascades answer.
+    if (!shadowFilter && s.hit && (passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled()) {
+        s.shadowTint = sdfLoadVisibilityTint(worldVisibilityRecord(p.pixel, p.viewIndex));
     }
 
     // The pixel's edges, which its program's edge.* members read: the filter record's in a binned view, the group's own

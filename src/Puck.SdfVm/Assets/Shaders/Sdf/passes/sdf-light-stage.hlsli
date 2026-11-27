@@ -211,6 +211,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
+            shadeSurface.shadowTint = (cascaded ? s.shadowTint : float3(1.0, 1.0, 1.0));
             shadeSurface.shadowMeasured = shadowMeasured;
             shadeSurface.cascaded = cascaded;
             shadeSurface.probed = sdfMeshAnswers(probes);

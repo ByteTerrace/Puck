@@ -70,6 +70,7 @@ float3 sdfDebugKeyShadow(SdfPixel p, SdfSurfaceSample s) {
 
     surface.ambientOcclusion = s.ambient;
     surface.shadowVisibility = s.shadows;
+    surface.shadowTint = s.shadowTint;
     surface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
     surface.shadowMeasured = (surface.cascaded
         ? sdfShadowQueried(sdfVisibilityRecordBuffer[worldVisibilityRecord(p.pixel, p.viewIndex) + SdfVisibilityShadowWord])
@@ -81,13 +82,15 @@ float3 sdfDebugKeyShadow(SdfPixel p, SdfSurfaceSample s) {
     }
 
     bool traced = (surface.probed && (sdfLights[(uint)key].Shadows != 0u));
-    float visibility = sdfLightVisibility(surface, key, traced, -1.0);
+    SdfLightShadowing shadowing = sdfLightShadowingOf(key);
+    float visibility = sdfLightVisibility(surface, shadowing, key, traced, -1.0);
     float cascadeShare = (surface.cascaded ? saturate(s.shadows.z) : 0.0);
 
     if (dot(s.normal, sdfLights[(uint)key].Direction) <= 0.0) {
         return (visibility * float3(0.55, 0.35, 1.0));
     }
-    return (visibility * lerp(float3(1.0, 0.7, 0.25), float3(1.0, 1.0, 1.0), cascadeShare));
+    // A side facing the light reads grey, or the colour coloured glass gave the light that reaches it.
+    return ((visibility * sdfLightTransmission(surface, shadowing)) * lerp(float3(1.0, 0.7, 0.25), float3(1.0, 1.0, 1.0), cascadeShare));
 }
 
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {

@@ -2935,6 +2935,10 @@ export type PaletteGlassDocument = {
    * Shadow extinction per creation unit, finite and non-negative (null = zero).
    */
   shadowDensity?: number | null;
+  /**
+   * How much of the glass's colour the light it passes carries onto what it lights, finite and non-negative: at 1 a pane colours the sunlit patch it casts as it colours what is seen through it (null = 0, no colour).
+   */
+  castsColor?: number | null;
 };
 
 export type PaletteInsetDocument = {
