@@ -1,26 +1,42 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
-    /// <summary>Bounds the arena audience check shared by transforms and searches, including live cell and zone policies.</summary>
+    /// <summary>Bounds the arena audience check shared by transforms and searches, including live cell and zone
+    /// policies: every written row compared against every read row, each comparison as dear as the target's readers
+    /// and the source's cells and zones make it.</summary>
+    /// <param name="reads">The rows the check reads; a negative ordinal is skipped.</param>
+    /// <param name="writes">The rows the check writes.</param>
+    /// <param name="context">The compile context.</param>
+    /// <returns>The work units.</returns>
     public static RuleWork DisclosureCost(IEnumerable<int> reads, IEnumerable<int> writes, RuleCompileContext context) {
-        var cost = RuleWork.Zero;
-        foreach (var target in writes.Distinct()) {
-            var comparisons = 1L + ((long)(context.FindRowAt(rowOrdinal: target)?.Visibility?.Readers?.Count ?? 0) * StateCapacity.MaxVisibilityReaders);
-            foreach (var source in reads.Distinct()) {
-                if (source < 0) { continue; }
-                var zones = context.Catalog.ContainingZones(rowOrdinal: source).Length;
-                var cells = BoardCells(context: context, row: context.FindRowAt(rowOrdinal: source));
-                var capacity = cells > 0 ? cells : context.RowCapacity(rowOrdinal: source);
-                cost += RuleWork.Known(units: comparisons) * (1L + (capacity * (1L + (3L * zones))));
-            }
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        var comparisons = writes.Distinct().Aggregate(seed: 0L, func: (sum, target) => sum.AddSaturating(right: AudienceComparisons(context: context, target: target)));
+        var spans = reads.Distinct().Aggregate(seed: 0L, func: (sum, source) => sum.AddSaturating(right: AudienceSpan(context: context, source: source)));
+
+        return RuleWork.Known(units: comparisons.MultiplySaturating(right: spans));
+    }
+    // The comparisons one source costs against a target: one, plus every reader the target's audience can name.
+    private static long AudienceComparisons(RuleCompileContext context, int target) =>
+        (1L + ((long)(context.FindRowAt(rowOrdinal: target)?.Visibility?.Readers?.Count ?? 0) * StateCapacity.MaxVisibilityReaders));
+    // What one source row costs a comparison: its cells, each against the zones containing it.
+    private static long AudienceSpan(RuleCompileContext context, int source) {
+        if (source < 0) {
+            return 0L;
         }
-        return cost;
+
+        var zones = context.Catalog.RestrictingZones(rowOrdinal: source).Length;
+        var cells = BoardCells(context: context, row: context.FindRowAt(rowOrdinal: source));
+        var capacity = ((cells > 0) ? cells : context.RowCapacity(rowOrdinal: source));
+
+        return (1L + (capacity * (1L + (3L * zones))));
     }
     /// <summary>Settles a transform's audience check for one firing: the rows its kernel reads besides its live ends
     /// (<see cref="ArenaTransform.DisclosureReads"/>) and the price of the check. A firing checks the one row each live
-    /// end's index selects (<c>ArenaTransforms</c>' disclosure walk reads the bound ends), so the price is the dearest
-    /// pairing of one candidate per live end with the transform's fixed reads and writes, never every candidate at
-    /// once.</summary>
+    /// end's index selects (<c>ArenaTransforms</c>' disclosure walk reads the bound ends), so the price is the fixed
+    /// reads and writes with the dearest candidate of each live end added to both.</summary>
     /// <param name="scalar">The transform effect.</param>
     /// <param name="controls">The rows whose cells decide whether the transform runs.</param>
     /// <param name="context">The compile context.</param>
@@ -51,18 +67,18 @@ public static partial class RuleCompiler {
         ArenaTransforms.CollectAccesses(transform: scalar.Arena, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
         writes.AddRange(collection: accesses.Select(selector: static access => access.RowOrdinal).Where(predicate: row => !candidates.Contains(item: row)));
 
-        var cost = RuleWork.Zero;
+        // The check is the product of the targets' comparisons and the sources' spans, so the dearest candidate of
+        // each end in each factor bounds every pairing a binding can select.
+        long Dearest(int[] rows, Func<int, long> price) => ((rows.Length == 0) ? 0L : rows.Max(selector: price));
 
-        foreach (var from in ((froms.Length == 0) ? new[] { -1 } : froms)) {
-            foreach (var to in ((tos.Length == 0) ? new[] { -1 } : tos)) {
-                int[] bound = [.. new[] { from, to }.Where(predicate: static row => (row >= 0))];
-                var pair = DisclosureCost(context: context, reads: reads.Concat(bound), writes: writes.Concat(bound));
+        var comparisons = writes.Distinct().Aggregate(seed: 0L, func: (sum, target) => sum.AddSaturating(right: AudienceComparisons(context: context, target: target)))
+            .AddSaturating(right: Dearest(rows: froms, price: row => AudienceComparisons(context: context, target: row)))
+            .AddSaturating(right: Dearest(rows: tos, price: row => AudienceComparisons(context: context, target: row)));
+        var spans = reads.Distinct().Aggregate(seed: 0L, func: (sum, source) => sum.AddSaturating(right: AudienceSpan(context: context, source: source)))
+            .AddSaturating(right: Dearest(rows: froms, price: row => AudienceSpan(context: context, source: row)))
+            .AddSaturating(right: Dearest(rows: tos, price: row => AudienceSpan(context: context, source: row)));
 
-                cost = ((pair.Units > cost.Units) || !pair.IsKnown) ? pair : cost;
-            }
-        }
-
-        scalar.DisclosureCost = cost;
+        scalar.DisclosureCost = RuleWork.Known(units: comparisons.MultiplySaturating(right: spans));
     }
     /// <summary>Checks and retains state dependencies that decide whether a transform runs. Hosts with additional
     /// choice policies pass their gates, scores and membership dependencies through this same door.</summary>

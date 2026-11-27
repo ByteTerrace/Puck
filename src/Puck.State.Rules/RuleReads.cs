@@ -396,6 +396,15 @@ public static class RuleReads {
         ));
     }
 
+    /// <summary>Returns the integer the key bound to <c>$each</c> spells: the family index a binding's own key
+    /// selects.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <returns>The integer, or <see langword="null"/> when no key is bound or the bound key spells none.</returns>
+    public static long? BoundEachIndex(IStateReader reader) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        return (reader.Arena.Keys.TryKeyInteger(integer: out var each, key: reader.BoundEachKey) ? each : null);
+    }
     /// <summary>Resolves one live indirection as an integer index — a live row's table index, a static table's key.
     /// An indirection that spells no integer names nothing.</summary>
     /// <param name="reader">The evaluation in flight.</param>

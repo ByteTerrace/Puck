@@ -677,7 +677,11 @@ marks the rule in full. A family member selected by the binding's own key
 member `k`, a cell or the row whole, marks only the binding whose key spells
 `k`, so one rule sweeping a set of stations whose piles are families judges one
 station's binding when one station's pile moves, and the sheet prices it at one
-binding. A host fact read for the body bound to `$each` marks
+binding. A rule's `zones` table may list families instead of rows
+(`zones [ pile0 pile1 … ]` over `pile pile0[n]`, `pile pile1[n]`): `$zones[i]`
+then selects family `i`'s member at the binding's own index, so a sweep picks
+one of its own station's piles by a computed index and is still reached and
+priced per binding, where a table of rows is judged in place every tick. A host fact read for the body bound to `$each` marks
 that body's binding the same way, and in a sweep whose keys are bodies it marks
 nothing for a body outside the set the sweep last bound: that body has no
 binding until the set itself moves, which reaches the sweep through the set's

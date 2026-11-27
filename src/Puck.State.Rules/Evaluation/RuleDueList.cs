@@ -527,7 +527,7 @@ internal sealed class RuleDueList {
             schedule.Volatile ||
             !schedule.IterationVersioned ||
             (rule.MaxFirings > 0) ||
-            (rule.Zones is { References.Count: > 0 })
+            (rule.Zones is { References.Count: > 0, PerBinding: false })
         ) {
             return Visit.Always;
         }

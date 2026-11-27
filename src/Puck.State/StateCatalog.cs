@@ -109,6 +109,7 @@ public sealed class StateCatalog {
     private readonly CellKey[] m_ringKeys;
     private readonly int[] m_poolSlotsByKeyOrdinal;
     private readonly int[][] m_containingZones;
+    private readonly int[][] m_restrictingZones;
     private readonly int[][] m_dependentRows;
     private readonly int[][] m_nestedClocks;
     private readonly EffectiveBehavior[] m_defaultBehaviors;
@@ -180,6 +181,10 @@ public sealed class StateCatalog {
         var frozenDependents = dependentsByDomain.ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value.ToArray());
         m_containingZones = rows.Select(row => frozenZones.GetValueOrDefault(
             key: row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row : row.Name) ?? []).ToArray();
+        // A zone restricts a cell only when the zone or its cells carry an audience policy; every other zone encloses
+        // every audience, so a check that skips it answers the same.
+        m_restrictingZones = m_containingZones.Select(zones => Array.FindAll(array: zones, match: zone =>
+            ((rows[zone].Visibility is { IsPublic: false }) || ArenaLayout.DeclaresCellVisibility(row: rows[zone])))).ToArray();
         m_dependentRows = rows.Select(row => frozenDependents.GetValueOrDefault(key: row.Name) ?? []).ToArray();
         var nestedByParent = new Dictionary<int, List<int>>();
         for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
@@ -274,6 +279,13 @@ public sealed class StateCatalog {
     /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
     /// <returns>The zones over the row's token domain, or an empty list.</returns>
     public ReadOnlySpan<int> ContainingZones(int rowOrdinal) => RowsOf(table: m_containingZones, rowOrdinal: rowOrdinal);
+    /// <summary>Gets the zones of <see cref="ContainingZones"/> that can restrict an audience: those whose row declares
+    /// a non-public visibility or whose cells may carry their own (<see cref="ArenaLayout.DeclaresCellVisibility"/>).
+    /// An audience check over every containing zone answers what one over these answers. Declarations alone
+    /// decide.</summary>
+    /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
+    /// <returns>The restricting zones, or an empty list.</returns>
+    public ReadOnlySpan<int> RestrictingZones(int rowOrdinal) => RowsOf(table: m_restrictingZones, rowOrdinal: rowOrdinal);
     /// <summary>Gets the ordinals of every row keyed over the supplied row as its token domain (<see cref="StateDomain.KeysOf"/>,
     /// ordered or not). A write that changes the row's membership is validated against each of them
     /// (<see cref="StateArena.TryValidateRelations(ReadOnlySpan{bool}, out string)"/>), so they are the row's declared write

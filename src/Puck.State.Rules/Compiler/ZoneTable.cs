@@ -1,18 +1,24 @@
 namespace Puck.State.Rules;
 
 /// <summary>A rule's <see cref="Rule.Zones"/> table as the evaluator indexes it: ordered zones over one token
-/// domain, each entry's catalog ordinal in index order, with <c>-1</c> at every gap.</summary>
+/// domain, each entry's catalog ordinal in index order, with <c>-1</c> at every gap. A table whose entries are
+/// families (<see cref="PerBinding"/>) holds, for each entry, the member the binding's own <c>$each</c> key selects:
+/// <c>$zones[i]</c> is entry <c>i</c>'s member at the binding's index, so every binding has a table of its own.</summary>
 public sealed class ZoneTable {
     private readonly int[] m_ordinals;
+    private readonly RowFamily[]? m_families;
     private readonly List<LiveRow> m_references = [];
 
     /// <summary>Initializes the table.</summary>
     /// <param name="names">The authored entries, in index order; an empty entry is a gap.</param>
-    /// <param name="ordinals">Each entry's catalog ordinal; <c>-1</c> at a gap.</param>
+    /// <param name="ordinals">Each entry's catalog ordinal, or its family's first member's for a family entry;
+    /// <c>-1</c> at a gap.</param>
     /// <param name="tokenDomain">The token domain every zone in the table is ordered over.</param>
     /// <param name="kind">The cell kind every zone in the table shares.</param>
     /// <param name="indices">The non-gap indices spelled as interned cell keys, for a <c>forEach</c> over the table.</param>
-    public ZoneTable(IReadOnlyList<string> names, int[] ordinals, string tokenDomain, CellKind kind, CellKey[] indices) {
+    /// <param name="families">Each entry's family, aligned with <paramref name="names"/>, when every entry is a
+    /// family whose member the binding's key selects; otherwise <see langword="null"/>.</param>
+    public ZoneTable(IReadOnlyList<string> names, int[] ordinals, string tokenDomain, CellKind kind, CellKey[] indices, RowFamily[]? families = null) {
         ArgumentNullException.ThrowIfNull(argument: names);
         ArgumentNullException.ThrowIfNull(argument: ordinals);
         ArgumentNullException.ThrowIfNull(argument: indices);
@@ -21,8 +27,13 @@ public sealed class ZoneTable {
         Kind = kind;
         Names = names;
         TokenDomain = tokenDomain;
+        m_families = families;
         m_ordinals = ordinals;
     }
+
+    /// <summary>Gets a value indicating whether every entry is a family whose member the binding's own <c>$each</c>
+    /// key selects, so each binding reaches its own members and no other binding's.</summary>
+    public bool PerBinding => (m_families is not null);
 
     /// <summary>Gets the non-gap indices spelled as interned cell keys, in index order.</summary>
     public CellKey[] Indices { get; }
@@ -44,6 +55,15 @@ public sealed class ZoneTable {
     public void CollectRows(List<CellAccess> into, bool isSet) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
+        if (m_families is { } families) {
+            foreach (var family in families) {
+                if (family.Count > 0) {
+                    LiveRow.CollectMembers(each: true, family: family, into: into, isSet: isSet);
+                }
+            }
+
+            return;
+        }
         foreach (var ordinal in m_ordinals) {
             if (ordinal >= 0) {
                 into.Add(item: new CellAccess(
@@ -83,10 +103,17 @@ public sealed class ZoneTable {
     /// <summary>Resolves an index to its zone's catalog ordinal; an index outside the table or at a gap answers
     /// none.</summary>
     /// <param name="index">The live index.</param>
+    /// <param name="each">The integer the binding's <c>$each</c> key spells, which selects a family entry's member;
+    /// <see langword="null"/> when the evaluation binds none.</param>
     /// <param name="rowOrdinal">The selected zone's catalog ordinal, on success.</param>
     /// <returns><see langword="true"/> when the index selects a zone.</returns>
-    public bool TryOrdinal(long index, out int rowOrdinal) {
-        if (
+    public bool TryOrdinal(long index, long? each, out int rowOrdinal) {
+        if (m_families is { } families) {
+            if ((((ulong)index) < ((ulong)families.Length)) && (each is { } member) && (((ulong)member) <= int.MaxValue) &&
+                families[index].TryGetOrdinal(index: (int)member, ordinal: out rowOrdinal)) {
+                return true;
+            }
+        } else if (
             (((ulong)index) < ((ulong)m_ordinals.Length)) &&
             (m_ordinals[index] >= 0)
         ) {
@@ -125,17 +152,16 @@ public sealed class LiveRow {
     /// <summary>Gets the widest row this reference can select, for pricing a live read.</summary>
     /// <param name="context">The admitted row reservations.</param>
     public long SelectionCapacity(IRuleCostContext context) {
-        var capacity = 0L;
+        ArgumentNullException.ThrowIfNull(argument: context);
 
-        if (Table is { } table) {
-            foreach (var ordinal in table.Ordinals) {
-                if (ordinal >= 0) { capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: ordinal)); }
-            }
-        } else {
-            foreach (var ordinal in m_family.Ordinals()) {
-                capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: ordinal));
-            }
+        var capacity = 0L;
+        var rows = new List<CellAccess>();
+
+        CollectRows(into: rows, isSet: false);
+        foreach (var row in rows) {
+            capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: row.RowOrdinal));
         }
+
         return capacity;
     }
 
@@ -213,15 +239,20 @@ public sealed class LiveRow {
 
         CollectMembers(into: into, isSet: isSet);
     }
-    // Every member row, as any cell of it: under the binding's own $each key, each tagged with the family index that
-    // selects it, so a due list wakes the one binding whose key spells it.
-    private void CollectMembers(List<CellAccess> into, bool isSet) {
-        var each = SelectsEachMember;
-        var slots = m_family.Slots;
-        var count = ((slots is null) ? m_family.Count : slots.Length);
+    private void CollectMembers(List<CellAccess> into, bool isSet) => CollectMembers(each: SelectsEachMember, family: m_family, into: into, isSet: isSet);
+    /// <summary>Appends every member row of a family, as any cell of it. A member the binding's own <c>$each</c> key
+    /// selects is tagged with the family index that selects it (<see cref="CellReach.Member"/>), so a due list wakes
+    /// the one binding whose key spells it.</summary>
+    /// <param name="family">The family.</param>
+    /// <param name="each">Whether the binding's own key selects the member.</param>
+    /// <param name="into">The access set being collected.</param>
+    /// <param name="isSet">Whether the access replaces the row's contents.</param>
+    internal static void CollectMembers(RowFamily family, bool each, List<CellAccess> into, bool isSet) {
+        var slots = family.Slots;
+        var count = ((slots is null) ? family.Count : slots.Length);
 
         for (var index = 0; (index < count); index++) {
-            var ordinal = ((slots is null) ? (m_family.FirstOrdinal + index) : slots[index]);
+            var ordinal = ((slots is null) ? (family.FirstOrdinal + index) : slots[index]);
 
             if (ordinal < 0) {
                 continue;
@@ -254,7 +285,7 @@ public sealed class LiveRow {
             reference: in reference
         );
 
-        return Select(resolved: resolved);
+        return Select(reader: reader, resolved: resolved);
     }
     /// <summary>Resolves the row once the program its index resolves through has left its value.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -263,7 +294,7 @@ public sealed class LiveRow {
     public Resolved<int> Resolve(IStateReader reader, in AddressFeed feed) {
         var reference = Index;
 
-        return Select(resolved: RuleReads.ResolveIndex(
+        return Select(reader: reader, resolved: RuleReads.ResolveIndex(
             feed: in feed,
             reader: reader,
             reference: in reference
@@ -272,16 +303,25 @@ public sealed class LiveRow {
     /// <summary>Selects the row an index the interpreter already resolved names: an operand reads its live row through
     /// this, since the index is one of its declared addresses.</summary>
     /// <param name="index">What the index address named.</param>
+    /// <param name="each">The integer the binding's <c>$each</c> key spells (<see cref="RuleReads.BoundEachIndex"/>),
+    /// which selects a family entry's member when <see cref="SelectsByBinding"/>; otherwise ignored.</param>
     /// <returns>The selected row's catalog ordinal when the index selects a row, and
     /// <see cref="FaultCase.Absent"/> otherwise.</returns>
-    public Resolved<int> Select(in ResolvedKey index) => (index.Named
-        ? Select(resolved: Resolved<long>.Named(value: index.Index))
+    public Resolved<int> Select(in ResolvedKey index, long? each) => (index.Named
+        ? Select(each: each, resolved: Resolved<long>.Named(value: index.Index))
         : Resolved<int>.Nothing);
+    /// <summary>Gets a value indicating whether the row selected also depends on the binding's own <c>$each</c> key:
+    /// a zone table whose entries are families.</summary>
+    public bool SelectsByBinding => (Table is { PerBinding: true });
 
     /// <summary>Gets the program the index resolves through, or <see langword="null"/>.</summary>
     public CompiledExpressionToken[]? FeedProgram => Index.FeedProgram;
 
-    private Resolved<int> Select(Resolved<long> resolved) {
+    private Resolved<int> Select(IStateReader reader, Resolved<long> resolved) => Select(
+        each: (SelectsByBinding ? RuleReads.BoundEachIndex(reader: reader) : null),
+        resolved: resolved
+    );
+    private Resolved<int> Select(long? each, Resolved<long> resolved) {
         if (!resolved.TryNamed(value: out var index)) {
             return ((resolved.Case == FaultCase.Faulted)
                 ? Resolved<int>.Faulted
@@ -289,6 +329,7 @@ public sealed class LiveRow {
         }
         if (Table is { } table) {
             return (table.TryOrdinal(
+                each: each,
                 index: index,
                 rowOrdinal: out var tableOrdinal
             )

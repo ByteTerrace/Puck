@@ -12,7 +12,7 @@ public sealed partial class StateArena {
         var row = m_rows[rowOrdinal];
         Visit(lanes: 1L);
         if (!StateVisibility.Encloses(policy: row.Visibility, audience: audience)) { return false; }
-        var zones = m_catalog.ContainingZones(rowOrdinal: rowOrdinal);
+        var zones = m_catalog.RestrictingZones(rowOrdinal: rowOrdinal);
         var cursor = 0;
         while (TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
             Visit(lanes: 1L);

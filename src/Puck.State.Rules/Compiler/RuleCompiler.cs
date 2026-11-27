@@ -533,6 +533,9 @@ public static partial class RuleCompiler {
         var ordinals = new int[authored.Count];
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
         string? tokenDomain = null;
+        // A family entry stands for the member the binding's own key selects; a table is all families or all rows.
+        var families = new RowFamily[authored.Count];
+        bool? overFamilies = null;
 
         for (var index = 0; (index < authored.Count); index++) {
             var name = (authored[index] ?? string.Empty);
@@ -543,22 +546,43 @@ public static partial class RuleCompiler {
                 continue;
             }
 
-            var row = (context.FindRow(name: name) ?? throw Malformed(detail: $"'zones' entry {index} names row '{name}', which the document does not declare"));
+            var isFamily = (CellName.TryParse(candidate: name, name: out var familyName, reason: out _) &&
+                context.Catalog.TryGetFamily(family: out families[index], name: familyName) && (families[index].Count > 0));
 
-            if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
-                throw Malformed(detail: $"'zones' entry {index} '{name}' is not an ordered token zone");
+            if ((overFamilies is { } expected) && (expected != isFamily)) {
+                throw Malformed(detail: $"'zones' entry {index} '{name}' is a {(isFamily ? "family" : "row")} where the table's other entries are {(expected ? "families" : "rows")}; a table selects every entry the same way");
             }
-            if (tokenDomain is null) {
-                kind = row.Kind;
-                tokenDomain = zone.Row.Value;
-            } else if (!string.Equals(
-                a: tokenDomain,
-                b: zone.Row.Value,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                throw Malformed(detail: $"'zones' entry {index} '{name}' is a zone over '{zone.Row}', not the token domain '{tokenDomain}' the table's other zones share");
-            } else if (kind != row.Kind) {
-                throw Malformed(detail: $"'zones' entry {index} '{name}' is kind={StateSpelling.Kind(kind: row.Kind)}, not the kind={StateSpelling.Kind(kind: kind)} the table's other zones share");
+            overFamilies = isFamily;
+
+            // Every row the entry can select is an ordered zone over the table's one token domain and of its one kind:
+            // the entry's own row, or each member of its family.
+            var members = new List<string>();
+
+            if (isFamily) {
+                foreach (var ordinal in families[index].Ordinals()) {
+                    members.Add(item: context.Catalog.Descriptors[ordinal].Name);
+                }
+            } else {
+                members.Add(item: name);
+            }
+            foreach (var member in members) {
+                var row = (context.FindRow(name: member) ?? throw Malformed(detail: $"'zones' entry {index} names row '{member}', which the document does not declare"));
+
+                if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
+                    throw Malformed(detail: $"'zones' entry {index} '{member}' is not an ordered token zone");
+                }
+                if (tokenDomain is null) {
+                    kind = row.Kind;
+                    tokenDomain = zone.Row.Value;
+                } else if (!string.Equals(
+                    a: tokenDomain,
+                    b: zone.Row.Value,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    throw Malformed(detail: $"'zones' entry {index} '{member}' is a zone over '{zone.Row}', not the token domain '{tokenDomain}' the table's other zones share");
+                } else if (kind != row.Kind) {
+                    throw Malformed(detail: $"'zones' entry {index} '{member}' is kind={StateSpelling.Kind(kind: row.Kind)}, not the kind={StateSpelling.Kind(kind: kind)} the table's other zones share");
+                }
             }
             if (!seen.Add(item: name)) {
                 throw Malformed(detail: $"'zones' names '{name}' twice");
@@ -568,17 +592,20 @@ public static partial class RuleCompiler {
                 context: context,
                 name: IndexKeyCache.Get(index: index)
             ));
-            ordinals[index] = ResolveRowOrdinal(
-                context: context,
-                name: name
-            );
+            ordinals[index] = (isFamily
+                ? ResolveRowOrdinal(context: context, name: members[0])
+                : ResolveRowOrdinal(context: context, name: name));
         }
 
         if (tokenDomain is null) {
             throw Malformed(detail: "declares a 'zones' table with no zone in it — every entry is empty");
         }
+        if ((overFamilies == true) && (rule.ForEach is null)) {
+            throw Malformed(detail: "lists families in its 'zones' table, which select the member the binding's own key names, but sweeps no set with 'forEach'");
+        }
 
         return new ZoneTable(
+            families: ((overFamilies == true) ? families : null),
             indices: [.. indices],
             kind: kind,
             names: names,

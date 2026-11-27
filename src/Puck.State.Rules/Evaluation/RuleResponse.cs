@@ -72,7 +72,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         if (
             inPlace ||
             (rule.MaxFirings > 0) ||
-            (rule.Zones is { References.Count: > 0 }) ||
+            (rule.Zones is { References.Count: > 0, PerBinding: false }) ||
             (rule.PoolForEach is not null) ||
             rule.ForEachZones ||
             (rule.ForEachBodies && !context.LiveBodiesVersioned) ||
