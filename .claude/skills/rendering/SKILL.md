@@ -1317,10 +1317,17 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   level zero is the mesh target itself. Levels above a group's own are gathered with
   atomics into words the recorder clears (`SdfWorldPackage.ReflectionDepthWordsBelow`,
   the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
-  occluders before it gives up, and at most `passGroup.reflectionSteps` reads. What it
+  occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
+  share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
+  screen's edge, so where rays stop answering the volume takes over with no line. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
-  plus the air's in-scatter the composite added there, which the history does not hold
+  as one filtered sample of the level of that colour the specular lobe's footprint spans:
+  the pass's first dispatch prefilters the history into levels of means
+  (`frame/sdf-reflection-color.hlsli`, `SdfWorldPackage.ReflectionColorWritten`), so a
+  rough floor's blur is the same every frame and adds no noise the resolve must reject in
+  motion; never spread a wide footprint over a few history taps, which shows the hit as
+  offset blocks that break up as the camera moves. With it comes the air's in-scatter the composite added there, which the history does not hold
   (the history surface's transport words, `sdfAirFogColor`, `sdfAirHazeColor`). A
   record is one cell's: colour at the stored scale, the screen and open-sky shares,
   and the representative's normal and tangent plane; views reads the cells whose

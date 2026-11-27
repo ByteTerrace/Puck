@@ -526,6 +526,7 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ReflectionHistory, type: ShaderValueType.Float4),
         Read(element: ShaderValueType.Uint, name: ReflectionDepth),
         Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
+        Written(element: ShaderValueType.Uint, name: ReflectionColorWritten),
         Read(element: ShaderValueType.Uint, name: OverlapSpans),
         .. Tables,
     ];
