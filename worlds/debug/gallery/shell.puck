@@ -819,7 +819,7 @@ template shellPrototypes() {
       name: "gallery-nave-pier"
       schema: "puck.creation.v1"
       palette: shellStructure
-      branchedPier(base: 0, height: (tallBayHeight + 1.1), span: naveEndSpan, depth: 0.26, shaft: 0.22)
+      branchedPier(base: 0, height: (tallBayHeight + 1.1), span: naveEndSpan, depth: 0.26, shaft: 0.22, foot: [shellTileHalf, shellTileHalf])
     }
   }
   prototype "gallery-arch" {
@@ -1083,7 +1083,7 @@ template shellPlacements() {
       placement $"gallery-nave-pier-{tier}-{n}" {
         prototype: "gallery-nave-pier"
         parent: "gallery"
-        position [(galleryEast - 0.24), galleryFloor[tier], z]
+        position [(galleryEast - shellTileHalf), galleryFloor[tier], z]
         yawDegrees: 90
       }
     }
