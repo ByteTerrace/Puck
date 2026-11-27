@@ -4040,7 +4040,7 @@ State and server:
   (`WorldAddonRuntime.ResolveBodyPoses` and the development queries that
   charge `ChargeHostFuel`) return without a reply when host fuel is exhausted;
   `ValidateStateTransaction` validates the unmaterialized definition for the
-  authority; `RuleExpressions.Run` swallows an absent value
+  authority; the evaluator (`ProgramClosures`' `BodyTruthNode`, `ShortCircuitNode`) swallows an absent value
   inside `not`, `and` and `or`; `StateSeedReader` builds a state section
   without lattices, spaces, enums or pools; `ArenaSnapshot` and `ArenaUndo`
   index rows by non-document lane ordinals and keep change-window state across
