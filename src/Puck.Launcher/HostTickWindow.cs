@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Hosting;
-using Puck.Maths;
 
 namespace Puck.Launcher;
 
@@ -15,8 +14,7 @@ internal sealed class HostTickWindow {
     private readonly long m_frequency;
     private readonly long m_startStamp;
     private readonly long m_shedAtStart;
-    private long[] m_costs = new long[1024];
-    private int m_count;
+    private readonly List<long> m_costs = new(capacity: 1024);
     private HostFrameWorkTimes m_parts;
     private long m_simulate;
 
@@ -31,10 +29,7 @@ internal sealed class HostTickWindow {
     }
 
     // Records one completed tick's cost, in the timeline's clock ticks.
-    internal void AddTick(long cost) {
-        if (m_count == m_costs.Length) { Array.Resize(array: ref m_costs, newSize: (m_costs.Length * 2)); }
-        m_costs[m_count++] = cost;
-    }
+    internal void AddTick(long cost) => m_costs.Add(cost);
     // Adds the named work and simulate phase of a closed iteration, or of the open one as the window ends.
     internal void AddIteration(in HostFrameWorkTimes parts, long simulate) {
         for (var part = 0; part < (int)HostFrameWorkPart.Count; part++) {
@@ -51,35 +46,29 @@ internal sealed class HostTickWindow {
     /// <param name="shed">The timeline's host-lifetime shed-step count now.</param>
     /// <returns>The object.</returns>
     internal JsonObject Describe(long now, long shed) {
-        var costs = new double[m_count];
+        var count = m_costs.Count;
+        var costs = new double[count];
         var total = 0.0;
 
-        for (var index = 0; index < m_count; index++) {
+        for (var index = 0; index < count; index++) {
             costs[index] = Milliseconds(m_costs[index]);
             total += costs[index];
         }
         Array.Sort(array: costs);
 
         var seconds = ((now - m_startStamp) / (double)m_frequency);
-        var cost = (m_count == 0)
-            ? new JsonObject { ["mean"] = 0.0, ["p50"] = 0.0, ["p99"] = 0.0, ["max"] = 0.0 }
-            : new JsonObject {
-                ["mean"] = (total / m_count),
-                ["p50"] = OrderStatistics.Quantile(ascending: costs, fraction: 0.5),
-                ["p99"] = OrderStatistics.Quantile(ascending: costs, fraction: 0.99),
-                ["max"] = costs[^1],
-            };
+        var cost = HostFrameDistribution.Of(sorted: costs, total: total);
 
         return new JsonObject {
-            ["ticks"] = m_count,
+            ["ticks"] = count,
             ["seconds"] = seconds,
-            ["ticksPerSecond"] = ((seconds > 0.0) ? (m_count / seconds) : 0.0),
+            ["ticksPerSecond"] = ((seconds > 0.0) ? (count / seconds) : 0.0),
             ["shed"] = (shed - m_shedAtStart),
-            ["tickMs"] = cost,
+            ["tickMs"] = new JsonObject { ["mean"] = cost.Mean, ["p50"] = cost.P50, ["p99"] = cost.P99, ["max"] = cost.Max },
             ["tickTotalMs"] = total,
             ["simulatePhaseMs"] = Milliseconds(m_simulate),
             ["partsMs"] = HostFrameRecording.DescribeParts(m_parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count),
-            ["partsMeanMs"] = HostFrameRecording.DescribeParts(m_parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, divisor: Math.Max(1, m_count)),
+            ["partsMeanMs"] = HostFrameRecording.DescribeParts(m_parts, HostFrameWorkPart.TickIngress, HostFrameWorkPart.Count, divisor: Math.Max(1, count)),
         };
     }
 
