@@ -91,6 +91,10 @@ public readonly record struct MemoryRowReading(string Name, PhysicalMemory Pool,
 public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, long Held, long Peak, long Promised, long Retired, long Forced, long ForcedJobs, long OverLimitBytes, long OverLimitGrants, long Refusals, long DeviceRefusals, long PressureTrims, long Floor, IReadOnlyList<long> ClassHeld, IReadOnlyList<long> ClassPromised) {
     /// <summary>Gets the owner of the most recent refusal in this pool.</summary>
     public string? LastRefusedOwner { get; init; }
+    /// <summary>Gets the bytes past the room that owners which handed the forced allowance on still reserve
+    /// (<see cref="MemoryAccount.Owner.PassForced"/>), never more than the largest forced grant among them and the
+    /// holder's; host memory only.</summary>
+    public long Passed { get; init; }
     /// <summary>Gets who took the pool's over-limit grants (<see cref="OverLimitGrants"/>), most bytes first: the
     /// device family or host owner each grant was charged to, with its grants and bytes over the account's life.</summary>
     public IReadOnlyList<MemoryOverLimitTaker> OverLimitTakers { get; init; } = [];
@@ -133,9 +137,10 @@ public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, lo
     /// <summary>Gets the room left for a new promise, at least zero, or <see langword="null"/> where nothing bounds the
     /// pool.</summary>
     public long? Room => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: ((limit - Held) - Promised)) : null);
-    /// <summary>Gets the bytes held and promised past the limit beyond the forced job's, at least zero: what a limit
-    /// that fell leaves standing, and storage that cannot give way.</summary>
-    public long OverLimit => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: (((Held + Promised) - Forced) - limit)) : 0L);
+    /// <summary>Gets the bytes held and promised past the limit beyond the forced job's and those it passed on
+    /// (<see cref="Passed"/>), at least zero: what a limit that fell leaves standing, and storage that cannot give
+    /// way.</summary>
+    public long OverLimit => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: ((((Held + Promised) - Forced) - Passed) - limit)) : 0L);
 }
 /// <summary>One taker of a pool's over-limit grants.</summary>
 /// <param name="Taker">The device family (<c>owner/part</c>) or host owner the grants were charged to, or a segment's name

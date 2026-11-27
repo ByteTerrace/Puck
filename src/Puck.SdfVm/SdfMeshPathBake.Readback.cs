@@ -15,7 +15,7 @@ public sealed partial class SdfMeshPathBake {
     public const long ReadbackBytes = ((((long)SdfGpuWork.SlotCount) * SdfWorldPackage.MeshBakeMaxSamples) * 2L * sizeof(uint));
 
     // Invariant: every host byte the bake holds for an answer it has not finished with (a batch's copy of its samples, a
-    // sample set read in place of a dispatch) is charged to m_readback within its reservation, so the charge never asks
+    // sample set read in place of a dispatch) is charged to ReadbackOwner within its reservation, so the charge never asks
     // the account for room and is never refused. The reservation is promised as it is used: it covers the output bytes
     // granted and not yet freed (m_readbackPending) and what the take in progress has promised and not yet granted
     // (m_readbackTaking), at the charge their storage makes (ChargeOf), and nothing more. The one door that raises it is
@@ -24,9 +24,22 @@ public sealed partial class SdfMeshPathBake {
     // batch that never copied), and every change of either sum settles the reservation to them under m_readbackGate. A
     // promise is a progress floor (Owner.TryReserveProgress): the groups the account admitted can be answered past the
     // room they hold themselves, within the host bar.
-    private readonly MemoryAccount.Owner m_readback = MemoryAccount.Shared.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "mesh-bake-readback");
+    private MemoryAccount.Owner ReadbackOwner => (Volatile.Read(location: ref m_readbackOwner) ?? CreateOwnerOnce(account: HostAccount, owner: ref m_readbackOwner, name: "mesh-bake-readback"));
+
+    private MemoryAccount.Owner? m_readbackOwner;
+
+    // Creates an authoring workspace owner in the bake's account the first time one is asked for (the account is an init
+    // property, set after field initializers run); a racing creation loses and its owner is disposed.
+    private static MemoryAccount.Owner CreateOwnerOnce(MemoryAccount account, ref MemoryAccount.Owner? owner, string name) {
+        var created = account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: name);
+        var held = Interlocked.CompareExchange(location1: ref owner, value: created, comparand: null);
+
+        if (held is null) { return created; }
+        created.Dispose();
+        return held;
+    }
     // Under m_readbackGate: the output bytes of the batches and probes taken whose storage is not yet freed; the bytes the
-    // take in progress promised and has not granted yet; the reservation m_readback holds; and whether a refused promise
+    // take in progress promised and has not granted yet; the reservation ReadbackOwner holds; and whether a refused promise
     // has been reported since one was last made.
     private long m_readbackPending;
     private long m_readbackTaking;
@@ -41,8 +54,8 @@ public sealed partial class SdfMeshPathBake {
         lock (m_readbackGate) {
             var promise = (m_readbackPending + taking);
 
-            if ((promise > m_readbackPromised) && !m_readback.TryReserveProgress(peak: promise)) {
-                if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(residency: Residency, bytes: promise); m_readbackReported = true; }
+            if ((promise > m_readbackPromised) && !ReadbackOwner.TryReserveProgress(peak: promise)) {
+                if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(account: HostAccount, residency: Residency, bytes: promise); m_readbackReported = true; }
                 m_accounts.ReadbackWaits++;
                 return false;
             }
@@ -64,7 +77,7 @@ public sealed partial class SdfMeshPathBake {
         var promise = (m_readbackPending + m_readbackTaking);
 
         if (promise >= m_readbackPromised) { return; }
-        _ = m_readback.TryReserve(peak: promise);
+        _ = ReadbackOwner.TryReserve(peak: promise);
         m_readbackPromised = promise;
     }
     // The readback bytes the take may still grant: what is left of ReadbackBytes.
@@ -124,7 +137,7 @@ public sealed partial class SdfMeshPathBake {
         public AnsweredSamples(SdfMeshPathBake bake, long granted) {
             m_bake = bake;
             m_granted = granted;
-            m_bytes = new OwnedBuffer<byte>(allocator: bake.Library.Allocator, observer: bake.m_readback);
+            m_bytes = new OwnedBuffer<byte>(allocator: bake.Library.Allocator, observer: bake.ReadbackOwner);
         }
 
         /// <summary>Gets the copied bytes; valid while a reference is held.</summary>

@@ -183,6 +183,11 @@ public sealed class MemoryAccount {
     private Owner? m_forced;
     private long m_forcedBytes;
     private long m_forcedJobs;
+    // The bytes past the room that owners which handed the forced allowance on still reserve (Owner.PassForced), and the
+    // most it may reach: the largest forced grant among them and the holder's, so the forced allowance and its passed
+    // reservations stand past the room by no more than two forced jobs' worth. Zero cap while nothing is passed.
+    private long m_passedBytes;
+    private long m_passedCap;
     // Whether an admission was refused or a limit fell under what its pool holds since the last trim, and when that
     // trim ran.
     private int m_pressure;
@@ -1107,6 +1112,7 @@ public sealed class MemoryAccount {
             AuthoringOnPlayBar = (host && m_authoringOnPlayBar),
             AuthoringPromised = (host ? AuthoringPromised : 0L),
             LastRefusedOwner = state.LastRefusedOwner,
+            Passed = (host ? m_passedBytes : 0L),
             AuthoringRoom = (host ? (m_authoringOnPlayBar ? 0L : Math.Max(val1: 0L, val2: AuthoringRoomLocked())) : null),
             OverLimitTakers = [.. state.OverLimitBy
                 .Select(selector: static taker => new MemoryOverLimitTaker(Bytes: taker.Value.Bytes, Grants: taker.Value.Grants, Taker: taker.Key))
@@ -1128,12 +1134,12 @@ public sealed class MemoryAccount {
             m_pressure = 1;
         }
     }
-    // Under m_gate: marks pressure when what a pool holds and has promised past its limit, beyond the forced job, has
-    // grown since it was last read. A pool that stands over a limit it cannot get back under asks for one trim, not one
-    // at every reading; one that falls back and passes it again asks again.
+    // Under m_gate: marks pressure when what a pool holds and has promised past its limit, beyond the forced job and the
+    // reservations it passed on, has grown since it was last read. A pool that stands over a limit it cannot get back
+    // under asks for one trim, not one at every reading; one that falls back and passes it again asks again.
     private void NotePressure(PhysicalMemory pool) {
         var state = m_pools[((int)pool)];
-        var forced = (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L);
+        var forced = ForcedPastRoom(pool: pool);
         var over = ((LimitOf(pool: pool) is { } limit)
             ? Math.Max(val1: 0L, val2: (((PlayHeldOf(pool: pool) + PlayPromisedOf(pool: pool)) - forced) - limit))
             : 0L);
@@ -1149,6 +1155,35 @@ public sealed class MemoryAccount {
         if (over > state.PressureOver) { m_pressure = 1; }
         state.PressureOver = over;
     }
+    // Under m_gate: hands the forced allowance on for a holder that asked to (Owner.PassForced) once its reservation past
+    // the room fits under the passed total's cap, the largest forced grant among the passed owners and the holder's. The
+    // part past the room is what the pool stands past its room beyond the passed total already, at most the holder's
+    // reservation. The one place an owner joins the passed total.
+    private void TryPassForced() {
+        if (m_forced is not { PassWanted: true } holder) { return; }
+
+        var room = (Apart(allowance: holder.Allowance) ? AuthoringRoomLocked() : RoomOf(pool: PhysicalMemory.Host));
+        var past = ((room is { } left) ? Math.Clamp(value: ((-left) - m_passedBytes), min: 0L, max: holder.ReservationPeakLocked) : 0L);
+        var cap = Math.Max(val1: m_passedCap, val2: m_forcedBytes);
+
+        if ((m_passedBytes + past) > cap) { return; }
+        if (past > 0L) {
+            m_passedBytes += past;
+            m_passedCap = cap;
+        }
+        holder.MovePassed(bytes: past, pass: true);
+    }
+    // Under m_gate: lets go of bytes of the passed total an owner stood for, as its reservation narrows or ends, and hands
+    // the allowance on for a holder waiting for that room.
+    private void Unpass(Owner owner, long bytes) {
+        owner.MovePassed(bytes: -bytes, pass: false);
+        m_passedBytes -= bytes;
+        if (m_passedBytes == 0L) { m_passedCap = 0L; }
+        TryPassForced();
+    }
+    // Under m_gate: what a pool stands past its room by the forced allowance's leave: the holder's forced peak and the
+    // reservations passed on; host memory only.
+    private long ForcedPastRoom(PhysicalMemory pool) => ((pool == PhysicalMemory.Host) ? (((m_forced is not null) ? m_forcedBytes : 0L) + m_passedBytes) : 0L);
     // Under m_gate: keeps the most a pool has held at once.
     private void RaisePeak(PhysicalMemory pool) {
         var state = m_pools[((int)pool)];
@@ -1330,6 +1365,10 @@ public sealed class MemoryAccount {
         private long m_ownedPeak;
         private bool m_closed;
         private bool m_tracked;
+        // The part of the account's passed total this owner's reservation stands for, and whether the owner, holding the
+        // forced allowance, asked to hand it on and waits for the passed total to leave it room (PassForced).
+        private long m_passed;
+        private bool m_passWanted;
 
         /// <summary>Gets the owner for diagnostics.</summary>
         public string Name { get; }
@@ -1380,6 +1419,8 @@ public sealed class MemoryAccount {
 
             MovePromise(change: change);
             Track();
+            // A passed reservation that narrows stands for less of the passed total, which may let the holder pass on.
+            if (m_passed > peak) { m_account.Unpass(owner: this, bytes: (m_passed - peak)); }
             if (change < 0L) { m_account.SignalRoom(); }
         }
         // Under the account's lock: the one place an admitted owner's promise moves the account's, its class's and its
@@ -1409,10 +1450,12 @@ public sealed class MemoryAccount {
         // grant; for the forced job, within the host bar whatever the room, one owner at a time. Work past the room is
         // still held to the machine's floor (FitsMachine). An authoring owner the machine's room refuses makes the process
         // give back what it no longer uses and asks once more (ReclaimForAuthoring).
-        private bool Reserve(long peak, bool progress, bool forced) => (ReserveOnce(forced: forced, peak: peak, progress: progress) ||
-            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveOnce(forced: forced, peak: peak, progress: progress)));
-        private bool ReserveOnce(long peak, bool progress, bool forced) {
+        // Past the room, a rise must also leave `spare` bytes under the machine's floor and the host bar.
+        private bool Reserve(long peak, bool progress, bool forced, long spare = 0L) => (ReserveOnce(forced: forced, peak: peak, progress: progress, spare: spare) ||
+            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveOnce(forced: forced, peak: peak, progress: progress, spare: spare)));
+        private bool ReserveOnce(long peak, bool progress, bool forced, long spare) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
+            ArgumentOutOfRangeException.ThrowIfNegative(spare);
             m_account.RefreshAvailable();
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
@@ -1421,10 +1464,14 @@ public sealed class MemoryAccount {
 
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
                 var pastRoom = (forced || !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host));
+                var floor = ((extra > 0L) ? (extra + spare) : extra);
 
-                if (pastRoom && (!(forced || progress) || !m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host))) { return RefusePeak(peak); }
+                if (pastRoom && (!(forced || progress) || !m_account.FitsMachine(extra: floor) || !m_account.FitsHostBar(allowance: m_allowance, extra: floor, pool: PhysicalMemory.Host))) { return RefusePeak(peak); }
                 if (forced) {
-                    if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
+                    if (m_account.m_forced is null) {
+                        m_account.m_forcedJobs++;
+                        m_passWanted = false;
+                    }
                     m_account.m_forced = this;
                     m_account.m_forcedBytes = peak;
                 } else if (pastRoom) {
@@ -1454,13 +1501,17 @@ public sealed class MemoryAccount {
         /// its reservation is released (<see cref="ReleaseReservation"/>) or it is disposed; the bytes forced are counted
         /// (<see cref="MemoryAdmissionReading.Forced"/>).</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
+        /// <param name="spare">The bytes the rise must still leave under the machine's floor and the host bar, for work
+        /// that finishes what the account already admitted and asks for room after this job (a bake's readback); zero
+        /// for none.</param>
         /// <returns><see langword="true"/> when the reservation is held; <see langword="false"/> when another owner holds
-        /// the forced allowance, or the requested peak, with what the owners hold and are promised, exceeds the host bar
-        /// or the machine's floor.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
+        /// the forced allowance, or the requested peak and <paramref name="spare"/>, with what the owners hold and are
+        /// promised, exceed the host bar or the machine's floor.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> or <paramref name="spare"/> is
+        /// negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserveForced(long peak) => Reserve(peak: peak, progress: false, forced: true);
+        public bool TryReserveForced(long peak, long spare = 0L) => Reserve(peak: peak, progress: false, forced: true, spare: spare);
         /// <summary>Reserves storage that work the account admitted needs to progress at all, such as a mesh bake's
         /// readback, which answers the groups it admitted: granted when it fits the pool's room
         /// (<see cref="TryReserve"/>), and otherwise when it fits the authored host bar counting only what the owners hold
@@ -1478,24 +1529,44 @@ public sealed class MemoryAccount {
         public void ReleaseReservation() {
             lock (m_account.m_gate) {
                 if (m_kind == OwnerKind.Admitted) { SetPeak(peak: 0); }
-                PassForcedLocked();
+                m_passWanted = false;
+                EndForcedLocked();
             }
         }
         /// <summary>Hands the process's forced allowance on, keeping the owner's reservation, once the step it was
         /// granted for holds what it needs: the next forced job may start while this owner's work runs on asking the
         /// account for no more, so the allowance paces the steps that need room past the pool's, one at a time, never
-        /// the whole of the work behind them. The reservation still counts against the pool and the machine's floor as
-        /// every other does. Nothing when the owner does not hold the allowance, or is disposed.</summary>
+        /// the whole of the work behind them. The part of the reservation that stands past the room joins the account's
+        /// passed total (<see cref="MemoryAdmissionReading.Passed"/>), which never passes the largest forced grant among
+        /// the passed owners and the holder's: while it would, the owner keeps the allowance and hands it on as soon as
+        /// passed reservations narrow or end enough to leave it room. Nothing when the owner does not hold the allowance,
+        /// or is disposed.</summary>
         public void PassForced() {
-            lock (m_account.m_gate) { PassForcedLocked(); }
+            m_account.RefreshAvailable();
+            lock (m_account.m_gate) {
+                if (!ReferenceEquals(objA: m_account.m_forced, objB: this)) { return; }
+                m_passWanted = true;
+                m_account.TryPassForced();
+            }
         }
         // Under the account's lock: the one place the forced allowance leaves its holder.
-        private void PassForcedLocked() {
+        private void EndForcedLocked() {
             if (!ReferenceEquals(objA: m_account.m_forced, objB: this)) { return; }
             m_account.m_forced = null;
             m_account.m_forcedBytes = 0;
             m_account.SignalRoom();
         }
+        // Under the account's lock: moves the part of the passed total the owner stands for by `bytes`, and with `pass`
+        // hands the allowance on (TryPassForced, the one door that sets it).
+        internal void MovePassed(long bytes, bool pass) {
+            m_passed += bytes;
+            if (!pass) { return; }
+            m_passWanted = false;
+            EndForcedLocked();
+        }
+        // Under the account's lock.
+        internal bool PassWanted => m_passWanted;
+        internal long ReservationPeakLocked => m_reservationPeak;
         /// <summary>Reserves the owner's simultaneous peak for transient work that holds nothing else, waiting for room
         /// when the pool has none: it is admitted when the reservation fits (<see cref="TryReserve"/>) or, with no other
         /// forced job in the process, as the forced job (<see cref="TryReserveForced"/>), and otherwise sleeps on the

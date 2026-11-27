@@ -387,44 +387,49 @@ internal static class SdfMeshBakeReport {
     }
     // The bake's own room, which its admissions are refused on: the machine's limit on play and authoring together and
     // what authoring has left of the machine's measured room past its margin (play's room in a player's build).
-    private static string AuthoringRoom() {
-        var host = MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host);
+    private static string AuthoringRoom(MemoryAccount account) {
+        var host = account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host);
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"machine-limit={host.MachineLimit} low-memory={(host.MachineLowMemory ? "yes" : "no")} authoring={(host.AuthoringOnPlayBar ? "on-play-bar" : "apart")} room={host.RoomFor(allowance: MemoryAllowance.Authoring)}");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"machine-limit={host.MachineLimit} low-memory={(host.MachineLowMemory ? "yes" : "no")} authoring={(host.AuthoringOnPlayBar ? "on-play-bar" : "apart")} room={host.RoomFor(allowance: MemoryAllowance.Authoring)} forced={host.Forced} forced-passed={host.Passed}");
     }
     /// <summary>Writes the line for a group the memory account could not admit beside the groups already admitted.</summary>
+    /// <param name="account">The account the bake reserves in.</param>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     /// <param name="admitted">The groups admitted this take.</param>
-    public static void Deferred(string residency, int selector, long peak, int admitted) => Say(line: () => $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} {AuthoringRoom()}");
+    public static void Deferred(MemoryAccount account, string residency, int selector, long peak, int admitted) => Say(line: () => $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} {AuthoringRoom(account: account)}");
     /// <summary>Writes the line for a group admitted alone as the process's one forced job, whatever the account's host
     /// pool holds.</summary>
+    /// <param name="account">The account the bake reserves in.</param>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
-    public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} {AuthoringRoom()}");
+    public static void AdmittedAlone(MemoryAccount account, string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} {AuthoringRoom(account: account)}");
     /// <summary>Writes the line for a bake whose take found no room to promise the readback that answers a lattice; the
     /// lattice waits for a later take.</summary>
+    /// <param name="account">The account the bake reserves in.</param>
     /// <param name="residency">The residency's name.</param>
     /// <param name="bytes">The readback the bake would have promised, in bytes.</param>
-    public static void ReadbackDeferred(string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} {AuthoringRoom()}");
+    public static void ReadbackDeferred(MemoryAccount account, string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} {AuthoringRoom(account: account)}");
     /// <summary>Writes the line for a group whose refinement waits at the head of the refinement queue for room for its
     /// peak; no refinement queued behind it starts before it.</summary>
+    /// <param name="account">The account the bake reserves in.</param>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The refinement's peak bytes.</param>
     /// <param name="waiting">The refinements queued, every bake's.</param>
     /// <param name="refining">The refinements holding their peak, every bake's.</param>
-    public static void RefinementDeferred(string residency, int selector, long peak, int waiting, int refining) => Say(line: () => $"[sdf.mesh-bake] refinement deferred residency={residency} group={selector} peak={peak} waiting={waiting} refining={refining} {AuthoringRoom()}");
+    public static void RefinementDeferred(MemoryAccount account, string residency, int selector, long peak, int waiting, int refining) => Say(line: () => $"[sdf.mesh-bake] refinement deferred residency={residency} group={selector} peak={peak} waiting={waiting} refining={refining} {AuthoringRoom(account: account)}");
     /// <summary>Writes the line for a group whose copy into the mesh library (its published mesh, or its renumbered take
     /// of its leader's) the host memory account refused; it waits where it stands until the group can reserve the copy's
     /// bytes.</summary>
+    /// <param name="account">The account the bake reserves in.</param>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="owner">The memory owner the account refused.</param>
     /// <param name="bytes">The bytes the copy waits for.</param>
-    public static void CopyDeferred(string residency, int selector, string owner, long bytes) => Say(line: () => $"[sdf.mesh-bake] copy deferred residency={residency} group={selector} owner={owner} bytes={bytes} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    public static void CopyDeferred(MemoryAccount account, string residency, int selector, string owner, long bytes) => Say(line: () => $"[sdf.mesh-bake] copy deferred residency={residency} group={selector} owner={owner} bytes={bytes} room={account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
     /// <summary>Writes the line for a group whose stage the host memory account refused, which starts its final lattice
     /// again under an admission of at least <paramref name="floor"/> bytes.</summary>
     /// <param name="residency">The residency's name.</param>
