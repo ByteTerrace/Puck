@@ -2571,6 +2571,28 @@ view can read its authored sky while its new camera sample is pending.
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+Light through coloured glass:
+
+- [high] Light through coloured glass is not coloured. Stained glass (the
+  gallery's east window, `architecture.puck`'s `stainedGlass`) tints what is seen
+  through it, but the light it passes reaches the floor and walls only as the
+  cascades carry it, and a cascade's glass extinction is one density
+  (`glass.shadowDensity`, `sdf-mesh-shadow-glass.frag.hlsl` accumulating one
+  64-bit optical depth a texel), so a pane casts at most a grey shadow and its
+  came the dark grid; the irradiance volume traces no glass at all. The plan:
+  (1) let a cascade's optical buffer carry RGB optical depth, three 64-bit sums a
+  texel from the material's absorption scaled by a transmitted-light opt-in on
+  the glass (an authored `glass.castsColor`, zero by default, so water and
+  windows keep their grey or no shadow), through the same
+  `sdfOpticalDepthAccumulate`; (2) have the surface pass resolve the key light's
+  transmitted colour beside its scalar visibility (`sdfMeshShadowGap` already
+  reads the optical term per tap) and write it as a chroma word of the
+  visibility record, so views multiplies the directional's colour by it with no
+  new tap; (3) carry the same RGB through the probe trace's visibility bits
+  later, so the irradiance volume bounces the coloured patch. Step 1 and 2
+  decide the record's layout; the forcing case is the east window's patch on the
+  nave floor on a morning sun.
+
 The volume's cost and convergence:
 
 - [medium] Faster probe convergence costs host time while the volume works.
@@ -3499,9 +3521,20 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   its lattices and bodies (what `replay.record` snapshots at its arm,
   `WorldPersistence`), so a stage of a long simulated arc is a file a windowed
   World loads. Build it when a second long-arc feature wants it.
-- [low] A pixel shades two glass interfaces; past three front faces only the
-  nearest is shaded. A 64-bit atomic k-buffer would lift the count. The glass
-  kernel's register count on the RTX 2060 decides whether a third fits.
+- [medium] The glass layer list's length (`SdfWorldPackage.GlassLayers`) is one
+  number for every device, and a pixel pays a full interface (surface resolve,
+  probe gather, light walk, program) for each layer it shows. Read
+  `sdf.world$glass-shade`'s registers and time on the RTX 2060 and the RTX 4070
+  through the gallery's barrier (four layers at its middle) in the lead's quiet
+  window; if the 2060 misses its bar there, give the device quality table a
+  glass-layers lever the shading loop stops at, with the storage left at the
+  list's length.
+- [low] The glass target and its depth duplicate the layer list's nearest face
+  (the target's reversed-Z test keeps the same face the list's first entry
+  holds, `sdf-mesh-glass.frag.hlsl`). The shading pass could take its near face
+  from the list and the raster drop both attachments, a render-sized float4 image
+  and a depth the size of the view, once the list's draw and triangle fields
+  are wide enough for every draw (a face past them takes no entry today).
 - [low] Edge shimmer: `sdfGlassLitAt` takes one bilinear refracted sample and
   marks refraction displacement as reactive in a stationary scene, so the
   resolve suppresses history at the silhouette. Give refraction motion,

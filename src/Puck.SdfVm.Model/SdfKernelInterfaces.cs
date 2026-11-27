@@ -301,6 +301,9 @@ public sealed class SdfKernelInterfaces {
                 // shadow passes bind the tables' dummy at both.
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.VisibilityRecords),
                 Written(element: ShaderValueType.Uint, name: SdfWorldPackage.GlassSumsWritten),
+                // The same buffer as 64-bit words, which the glass raster's layer list inserts into with 64-bit atomics
+                // (frame/sdf-glass.hlsli); every set binds it beside the sums through SdfWorldTables.WriteMeshAccumulation.
+                Written(element: ShaderValueType.Uint64, name: SdfWorldPackage.GlassLayersWritten),
                 // The mesh pass's occlusion kernel (passes/sdf-mesh-occlusion.comp.hlsl) reads the target its first phase
                 // drew and the frame's candidates, and writes the depth pyramid, each draw's visibility and both phases'
                 // indirect draws; every other raster part binds the tables' filler and dummy at them.

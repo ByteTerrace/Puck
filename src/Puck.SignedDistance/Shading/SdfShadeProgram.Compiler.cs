@@ -144,7 +144,7 @@ public sealed partial class SdfShadeProgram {
             uint WorkOf(SdfShadeInstruction instruction) => checked(SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
                 ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
             if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxPhaseWork) { Fail("PUCK129", $"Shade work exceeds {MaxPhaseWork} after register allocation."); }
-            if (checked(128UL * PixelWork(costs: costs, lights: MaxLights)) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
+            if (checked((64UL * GlassInterfaces) * PixelWork(costs: costs, lights: MaxLights)) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
             // Header: instruction ranges for each phase, constant and layout ranges, then the identity the constructor
             // writes. Every range is vector relative.
             const int InstructionVectors = 3;

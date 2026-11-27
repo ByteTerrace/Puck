@@ -22,6 +22,10 @@ public sealed partial class SdfShadeProgram {
     public const uint DefaultLightWork = 512;
     /// <summary>Work of the default post-light composition.</summary>
     public const uint DefaultComposeWork = 256;
+    /// <summary>The glass interfaces one pixel of the glass shading pass runs a program for at most: the glass sums' layer
+    /// list's length (<c>SdfWorldPackage.GlassLayers</c>, which the kernel generator holds equal to it), so admission and
+    /// the dispatch planner price a glass group at this many interfaces a pixel.</summary>
+    public const uint GlassInterfaces = 4;
     /// <summary>A provisional CPU admission bound. Step 5 measures the dispatch throughput and sets its margin.</summary>
     public const ulong MaxWork = (1UL << 32);
     /// <summary>The first header vector holding the program's identity: <see cref="IdentityVectors"/> vectors of its

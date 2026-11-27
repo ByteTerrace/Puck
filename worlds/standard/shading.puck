@@ -2,6 +2,9 @@
 function shadeFrac(x) = x - floor(x)
 function shadeClamp(x, lo, hi) = min(max(x, lo), hi)
 function shadeFade(rate) = 1 - smoothstep(0.35, 0.9, rate)
+// The whole cycles a motion `seconds` long makes in the shading clock's period (4096 seconds, SdfFlow.ClockPeriodSeconds),
+// at least one: `clock * clockCycles(s)` turns once about every `s` seconds and joins without a seam where the clock wraps.
+function clockCycles(seconds) = maximum(1, floor(4096 / seconds + 0.5))
 // A soft threshold: 0 below `threshold`, 1 above it, rising over `width` centred on it (a hair's width at least).
 function shadeStep(value, threshold, width) = smoothstep(
   threshold - max(width * 0.5, 0.0005),
@@ -154,7 +157,7 @@ function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, gl
     layer.velocity,
     layer.scale,
     layer.stretch,
-    floor(4096 / layer.cycle + 0.5),
+    clockCycles(layer.cycle),
     layer.tilt,
     layer.coverage,
     layer.softness,
@@ -245,4 +248,67 @@ shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeA
     metal: material.metal * (1 - reveal) * (1 - deposition)
     coat: material.coat * (1 - reveal) * (1 - deposition)
   }
+}
+
+// The magic film: the glow an enchanted pane, a barrier or a portal's surface shows over the light it passes, for a glass
+// row. It cycles through a palette, shimmers, and brightens where the surface turns from the eye. Its brightness is the
+// row's own emissive (nits), so the row's `emissiveLane` switches it as it would any glow. Its colour is a cosine palette,
+// `low + swing × cos(2π (rate × h + offset))` a channel, at a hue h that turns `cycles` whole times each shading clock
+// period (clockCycles), `rings` turns a metre outward from `centre` (a point in the draw's own frame, so every copy of a
+// creation rings about the same place on it) and `swirl` turns with a lattice noise `scale` waves a metre across, from
+// `phase` on. `rim` more of the glow (a share of it) shows where the surface turns edge-on, as the edge's cosine to the
+// power `power`, and the noise twinkles a `shimmer` share of it `twinkles` whole times each period. The surface's
+// reflections and highlights stay; the film composes no medium, so on a clear glass it reads as light over what lies
+// behind, tinted by the glass as every layer before it is.
+shade template magicFilm(low, swing, rate, offset, cycles, rings, centre, swirl, scale, rim, power, shimmer, twinkles, seed, phase = 0) {
+  compose {
+    let turn = 6.283185307179586
+    let facing = saturate(0 - dot(surface.normal, surface.rayDirection))
+    let edge = pow(1 - facing, power)
+    let wobble = lattice(surface.objectPosition * scale, seed)
+    let h = clock * cycles + length(surface.objectPosition - centre) * rings + wobble * swirl + phase
+    let hue = max(low + swing * cos((rate * h + offset) * turn), [0, 0, 0])
+    let sparkle = 0.5 + 0.5 * sin((clock * twinkles + wobble) * turn)
+    let glow = surface.emissive * (1 + rim * edge) * mix(1, sparkle, shimmer)
+    color: (compose.environment + compose.specular + compose.rim) * compose.attenuation * compose.adaptation + hue * glow
+  }
+}
+// A glass row with the magic film `film` (a film value: its palette `low`, `swing`, `rate` and `offset`, the `cycle` and
+// `twinkle` periods in seconds, and `rings`, `swirl`, `scale`, `rim`, `power`, `shimmer` and `seed`) about `centre`,
+// its hue `phase` of a cycle on.
+function magicFilmed(base, film, centre, phase = 0) = base with {
+  shade: magicFilm(
+    film.low,
+    film.swing,
+    film.rate,
+    film.offset,
+    clockCycles(film.cycle),
+    film.rings,
+    centre,
+    film.swirl,
+    film.scale,
+    film.rim,
+    film.power,
+    film.shimmer,
+    clockCycles(film.twinkle),
+    film.seed,
+    phase: phase
+  )
+}
+// A rainbow magic film: the full hue circle at even brightness, turning once a quarter minute and rippling out in rings
+// about a metre and a half apart, with a soft twinkle and a bright rim.
+let rainbowFilm = {
+  low [0.55, 0.55, 0.55]
+  swing [0.45, 0.45, 0.45]
+  rate [1, 1, 1]
+  offset [0, 0.33, 0.67]
+  cycle: 15
+  twinkle: 2.5
+  rings: 0.7
+  swirl: 0.3
+  scale: 1.2
+  rim: 2.5
+  power: 3
+  shimmer: 0.3
+  seed: 6427
 }

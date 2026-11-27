@@ -1769,7 +1769,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             tables.WriteMeshTables(bound: bound, set: set, slot: tables.CurrentSlot);
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: m_owner.m_counters, set: set);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: set);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: set);
+            tables.WriteMeshAccumulation(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, set: set);
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[kind][slot], boundTarget: ref m_meshSetTargets[kind][slot], first: 0, set: set, tables: tables);
             selection.Stage(tables: tables, count: count, width: (uint)m_texels, height: (uint)m_texels, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame,
                 glass: false, occlude: false, audience: m_owner.m_casterAudience, splitExit: true, motion: motion, slice: share, slices: slices, tag: tag);
@@ -1782,7 +1782,7 @@ internal sealed class SdfWorldShadows : IDisposable {
                 tables.WriteMeshTables(bound: occlusionBound, set: occlusionSet, slot: tables.CurrentSlot);
                 tables.WriteMeshWorkCounters(bound: ref occlusionBound[MeshSetCounters], counters: m_owner.m_counters, set: occlusionSet);
                 tables.WriteMeshBuffer(bound: ref occlusionBound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
-                tables.WriteMeshBuffer(bound: ref occlusionBound[MeshSetGlassSums], buffer: (((phase == 0) ? optical : null) ?? tables.DummyBuffer), member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+                tables.WriteMeshAccumulation(bound: ref occlusionBound[MeshSetGlassSums], buffer: (((phase == 0) ? optical : null) ?? tables.DummyBuffer), set: occlusionSet);
                 selection.Bind(bound: occlusionBound, boundTarget: ref m_occlusionSetTargets[at], first: MeshSetBuffers, set: occlusionSet, tables: tables, target: tables.SampledFiller.ImageViewHandle);
             }
         }
@@ -1818,7 +1818,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             tables.WriteMeshTables(bound: bound, set: glassSet, slot: tables.CurrentSlot);
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: m_owner.m_counters, set: glassSet);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: glassSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: optical, member: SdfWorldPackage.GlassSumsWritten, set: glassSet);
+            tables.WriteMeshAccumulation(bound: ref bound[MeshSetGlassSums], buffer: optical, set: glassSet);
             SdfMeshOcclusion.Unbind(bound: m_glassSetOcclusion[slot], boundTarget: ref m_glassSetTargets[slot], first: 0, set: glassSet, tables: tables);
             tables.WriteMeshTarget(bound: ref m_glassSetTargets[slot], set: glassSet, view: pair.Depth.Image.ImageViewHandle);
             selection.BindDraws(tables: tables, set: glassSet, bound: m_glassSetOcclusion[slot]);

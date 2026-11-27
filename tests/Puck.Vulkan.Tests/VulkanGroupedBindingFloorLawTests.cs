@@ -81,12 +81,16 @@ public sealed class VulkanGroupedBindingFloorLawTests {
     [InlineData(26, "fragmentStoresAndAtomics")]
     [InlineData(29, "shaderStorageImageExtendedFormats")]
     [InlineData(37, "shaderClipDistance")]
+    [InlineData(4, "geometryShader")]
+    [InlineData(40, "shaderInt64")]
     [Theory]
     public void ADeviceWithoutARequiredBaseFeatureIsRefusedByName(int required, string feature) {
+        const int GeometryShader = 4;
         const int SampledImageArrayDynamicIndexing = 34;
         const int FragmentStoresAndAtomics = 26;
         const int StorageImageExtendedFormats = 29;
         const int ClipDistance = 37;
+        const int ShaderInt64 = 40;
         var every = Enumerable.Repeat(count: 55, element: true).ToArray();
         var without = every.ToArray();
 
@@ -102,12 +106,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         }
 
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 4),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 6),
+            expected: [((uint)GeometryShader), ((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance), ((uint)ShaderInt64)]
         );
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or ClipDistance))]),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is GeometryShader or SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or ClipDistance or ShaderInt64))]),
+            expected: [((uint)GeometryShader), ((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance), ((uint)ShaderInt64)]
         );
     }
 }

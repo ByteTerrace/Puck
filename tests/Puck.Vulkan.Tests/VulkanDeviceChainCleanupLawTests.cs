@@ -376,9 +376,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34) and clip distance (37).
+        // The required base features: geometry shaders (4), fragment storage (26), extended storage formats (29), sampled
+        // array indexing (34), clip distance (37) and 64-bit integers (40).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: index => ((index is 26 or 29 or 34 or 35 or 37) || (IndirectDraws && (index is 9 or 10))))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: index => ((index is 4 or 26 or 29 or 34 or 35 or 37 or 40) || (IndirectDraws && (index is 9 or 10))))];
         public GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemoryProfile profile) =>
             GpuMemorySegments.FromVulkan(memoryHeaps: [], memoryTypes: [], profile: profile);
         public GpuSegmentReading[] ReadMemoryBudget(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemorySegments segments, bool budgetEnabled, out bool estimated) =>
@@ -415,7 +416,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             false;
         // Required fragment demotion, draw parameters and storage-buffer non-uniform indexing, and no optional feature.
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType, int flag = 0) =>
-            ((structureType is 1000276000 or 1000063000) || ((structureType == 1000161001) && (flag == 5)));
+            ((structureType is 1000276000 or 1000063000 or 1000180000) || ((structureType == 1000161001) && (flag == 5)));
         public VkResult WaitIdle(VulkanDeviceCommands device) =>
             VkResult.Success;
     }

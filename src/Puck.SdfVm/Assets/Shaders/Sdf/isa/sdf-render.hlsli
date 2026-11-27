@@ -267,7 +267,8 @@
 #define SDF_OVERLAP_SPAN_WORDS 2u
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
-#define SDF_GLASS_SUM_WORDS            17u
+#define SDF_GLASS_SUM_WORDS            18u
+#define SDF_GLASS_LAYERS               4u
 #define SDF_GLASS_SUM_SCALE            4096.0
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0

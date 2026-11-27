@@ -48,7 +48,7 @@ aisles.
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
 | Terrace | x -3.75 to 12.8, z 0 to 7.5, off level 3 | the roof of the west wing's south aisle; the south-west stair arrives on it inside a guarded well |
-| Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's end wall holds one tier of three 5 by 7.3 m bays through levels 0 and 1 |
+| Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's end wall holds one tier of three 5 by 7.3 m bays through levels 0 and 1, the middle one stained glass |
 | Display stations | the nave's two lines, 4.5 m in from each balcony edge, and along the middle of each gallery | a display plinth 2.5 m wide with its cap 1.05 m up, staged 12 m or more apart on a cream pad |
 
 The Moth is 2.06 m tall in her suit, so a door is 2.7 m or more, every
@@ -174,11 +174,16 @@ pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
 **The tree's barriers.** Each level-1 branch ([the central tree](#the-central-tree))
-ends at a magic barrier filling the arch behind its bay: nested rainbow neon
-arches over a clear pane (architecture.puck's `rainbowArch`, the
-`gallery-barrier` rows in [gallery/shell.puck](gallery/shell.puck), coloured
-by look.puck's `lookBarrier`), a dead end that tells a player there is a way
-across. The pane is a solid that holds every body, small or full size, except
+ends at a magic barrier filling the arch behind its bay (architecture.puck's
+`filmArch`, the `gallery-barrier` rows in [gallery/shell.puck](gallery/shell.puck),
+coloured by look.puck's `lookBarrier`): a glass pane in the arch's shape and
+three thinner arch-shaped films nested inside it, standing a few centimetres
+before and behind it, every one glowing with the standard magic film
+(shading.puck's `magicFilm`), a rainbow that turns and ripples outward from the
+arch's centre, twinkles and brightens at the edges. A ray through the middle
+crosses all four, so the barrier is the glass layers' exhibit: each sheet tints
+and glows over those behind it, and the colours deepen toward the middle. It is
+a dead end that tells a player there is a way across. The pane is a solid that holds every body, small or full size, except
 one holding a wonder pass (layout.puck's `wonderPasses`): the `wonderPass`
 register a puzzle sets, or a [wonder key](#the-wonder-key) carried switched
 on. Such a body walks through the barrier and onto level 1 at its full size,
@@ -557,6 +562,15 @@ The fan shades are moving parts. Each leaf swings about its hub on one driver
 that follows its level's `hallBlinds` cell, so `gallery.blinds <level> Down`
 spreads that level's shades over its south and east windows and `Up` gathers
 them.
+
+The middle of the end wall's three wide bays, which no fan shade covers, is
+stained glass (the standard's `stainedGlassBay`, the `gallery-bay-stained`
+prototype): the bay's surround about a leaded light of 117 coloured panes held
+by lead came, a sun rising over green hills under a blue sky in a ruby border
+(look.puck's `lookStained`, the pattern written as rows of palette indices). Each
+pane is glass that tints what is seen through it; the morning sun puts the
+came's grid on the nave floor, but the light through the panes is not yet
+coloured there ([open items](../../docs/plans/open-items.md#lighting-and-gi)).
 
 ## The look
 

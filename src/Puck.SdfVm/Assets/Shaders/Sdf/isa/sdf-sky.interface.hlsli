@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/4111fd710f4c1521effc328c7c8dcac35cc71d98330520a6b576d5789a30f0ef). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/ccc99e6c2366eb6670c378ad8e28b29c73bcf4b704554eb6ca571c71b70787e4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -264,8 +264,8 @@ struct SdfSkyPass {
     [[vk::offset(4108)]] uint _pad4108;
     [[vk::offset(4112)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaD4D27599 : register(b0, space3);
-#define passGroup passGroupIsaD4D27599
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaA5A75D14 : register(b0, space3);
+#define passGroup passGroupIsaA5A75D14
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);

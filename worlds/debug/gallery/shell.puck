@@ -578,7 +578,7 @@ function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
 // Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
-// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
+// it (architecture.puck's filmArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
 // every body, small or full size, except one holding a wonder pass (layout.puck's `wonderPasses`: the wonder key
 // switched on, rentals.puck), which walks through it and onto level 1 at its full size. Each lattice panel
 // rises in its own `shellLatticeRails` crossbars so the bars keep one spacing.
@@ -852,6 +852,16 @@ template shellPrototypes() {
       windowBay(base: 0, width: tallBayWidth, height: tallBayHeight, sill: baySill, wall: galleryWall)
     }
   }
+  // The middle tall bay of the nave's end wall, which no fan shade covers, glazed with stained glass (look.puck's
+  // lookStained) that the morning sun comes through.
+  prototype "gallery-bay-stained" {
+    document {
+      name: "gallery-bay-stained"
+      schema: "puck.creation.v1"
+      palette: concat(shellKit, stainedGlassPalette(lookStained.colors))
+      stainedGlassBay(base: 0, stained: length(shellKit), cells: lookStained.cells, width: tallBayWidth, height: tallBayHeight, sill: baySill, wall: galleryWall)
+    }
+  }
   // A fan shade for each level's bays: every level's follows its own `hallBlinds` cell, 1 spread and 0 gathered.
   for k in range(0, 4) {
     prototype $"gallery-fan-{k}" {
@@ -924,8 +934,8 @@ template shellPrototypes() {
     document {
       name: "gallery-barrier"
       schema: "puck.creation.v1"
-      palette: rainbowArchPalette(lookBarrier.colors, glow: lookBarrier.glow)
-      rainbowArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, hues: length(lookBarrier.colors))
+      palette: filmArchPalette(lookBarrier.film, [0, shellArchSpring, 0], lookBarrier.tints, pane: lookBarrier.pane, glow: lookBarrier.glow, step: lookBarrier.step)
+      filmArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, films: length(lookBarrier.tints))
     }
   }
   for kind in latticeKinds {
@@ -1110,7 +1120,7 @@ template shellPlacements() {
   for tier in [0] {
     for (z, n) in tallBayZs {
       placement $"gallery-bay-tall-{tier}-{n}" {
-        prototype: "gallery-bay-tall"
+        prototype: ((n == 1) ? "gallery-bay-stained" : "gallery-bay-tall")
         parent: "gallery"
         position [(galleryWidth - (galleryWall / 2)), galleryFloor[tier], z]
         yawDegrees: 270
