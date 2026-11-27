@@ -393,6 +393,16 @@ exhibit; a drag scrolls the list a row for each row the pointer travels and taps
 nothing; PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists
 the displays and the console lines.
 
+The terracotta foot of the left column is LEARN: a tap opens the exhibit's
+[learn panel](../../docs/authoring/learn-panel.md) on the same glass. It says
+the exhibit plainly first; THE MATHS adds the engine's own formula for it,
+typeset from the formula tree the renderer runs, the formula with its live
+value written in, its terms a row each (a tap highlights one wherever it
+appears) and the step by step, which a drag, a flick or the wheel scrolls. The
+sphere, box, torus and rounding exhibits scrub: dragging the bar at the panel's
+foot sizes the exhibit about its centre, and the formula's number follows. BACK
+returns to the catalog.
+
 Every exhibit turns on its turntable by default, once every 24 gallery seconds
 (`turntableSecondsPerTurn` in [shapes.puck](shapes.puck)), as a collector's
 showcase turns a piece so it is seen from every side. The console's pause button

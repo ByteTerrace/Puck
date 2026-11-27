@@ -308,39 +308,43 @@ public sealed class MathLayout {
             return box;
         }
         // A horizontal rule from x0 to x1 centred at y: the middle of the hyphen's cell, as thick as the hyphen's stroke.
-        private Item? Rule(float x0, float x1, float y, float size, Vector4? tint) {
-            if (!(x1 > x0) || !atlas.TryGetGlyph(glyph: out var hyphen, unicode: Hyphen) || (hyphen.PlaneBounds is not { } plane) || (hyphen.AtlasBounds is not { } cell)) {
-                return null;
-            }
-
-            var half = (0.5f * (plane.Top - plane.Bottom) * size);
-            var middle = (0.5f * (cell.Left + cell.Right));
-            var crop = (0.5f * RuleCrop * (cell.Right - cell.Left));
-
-            return new Item(
-                Cell: new FontAtlasBounds(Bottom: cell.Bottom, Left: (middle - crop), Right: (middle + crop), Top: cell.Top),
-                Glyph: hyphen,
-                Plane: new FontAtlasBounds(Bottom: (y - half), Left: x0, Right: x1, Top: (y + half)),
-                Tint: tint
-            );
-        }
+        private Item? Rule(float x0, float x1, float y, float size, Vector4? tint) =>
+            (x1 > x0) ? Stroke(along: new Vector2(x: x0, y: x1), across: y, horizontal: true, size: size, tint: tint, unicode: Hyphen, advance: out _) : null;
         // A vertical bar at x from y0 to y1: the middle of the vertical bar's cell, as wide as its stroke.
-        private Item? Upright(float x, float y0, float y1, float size, Vector4? tint, out float advance) {
+        private Item? Upright(float x, float y0, float y1, float size, Vector4? tint, out float advance) =>
+            Stroke(along: new Vector2(x: y0, y: y1), across: x, horizontal: false, size: size, tint: tint, unicode: Bar, advance: out advance);
+        // A straight glyph's stroke stretched from along.X to along.Y: the glyph's cell cropped to its middle along the
+        // stroke, where its field changes across the stroke alone, placed with its own plane extent across the stroke
+        // (centred on `across` for a horizontal stroke, from `across` as its origin for a vertical one).
+        private Item? Stroke(Vector2 along, float across, bool horizontal, float size, Vector4? tint, int unicode, out float advance) {
             advance = (0.25f * size);
-            if (!atlas.TryGetGlyph(glyph: out var bar, unicode: Bar) || (bar.PlaneBounds is not { } plane) || (bar.AtlasBounds is not { } cell)) {
+            if (!atlas.TryGetGlyph(glyph: out var glyph, unicode: unicode) || (glyph.PlaneBounds is not { } plane) || (glyph.AtlasBounds is not { } cell)) {
                 return null;
             }
 
-            advance = (bar.Advance * size);
-            var middle = (0.5f * (cell.Bottom + cell.Top));
-            var crop = (0.5f * RuleCrop * (cell.Top - cell.Bottom));
+            advance = (glyph.Advance * size);
+            if (horizontal) {
+                var half = (0.5f * (plane.Top - plane.Bottom) * size);
+                var middle = (0.5f * (cell.Left + cell.Right));
+                var crop = (0.5f * RuleCrop * (cell.Right - cell.Left));
 
-            return new Item(
-                Cell: new FontAtlasBounds(Bottom: (middle - crop), Left: cell.Left, Right: cell.Right, Top: (middle + crop)),
-                Glyph: bar,
-                Plane: new FontAtlasBounds(Bottom: y0, Left: (x + (plane.Left * size)), Right: (x + (plane.Right * size)), Top: y1),
-                Tint: tint
-            );
+                return new Item(
+                    Cell: new FontAtlasBounds(Bottom: cell.Bottom, Left: (middle - crop), Right: (middle + crop), Top: cell.Top),
+                    Glyph: glyph,
+                    Plane: new FontAtlasBounds(Bottom: (across - half), Left: along.X, Right: along.Y, Top: (across + half)),
+                    Tint: tint
+                );
+            } else {
+                var middle = (0.5f * (cell.Bottom + cell.Top));
+                var crop = (0.5f * RuleCrop * (cell.Top - cell.Bottom));
+
+                return new Item(
+                    Cell: new FontAtlasBounds(Bottom: (middle - crop), Left: cell.Left, Right: cell.Right, Top: (middle + crop)),
+                    Glyph: glyph,
+                    Plane: new FontAtlasBounds(Bottom: along.X, Left: (across + (plane.Left * size)), Right: (across + (plane.Right * size)), Top: along.Y),
+                    Tint: tint
+                );
+            }
         }
         private static FontAtlasBounds Scaled(FontAtlasBounds bounds, float size) =>
             new(Bottom: (bounds.Bottom * size), Left: (bounds.Left * size), Right: (bounds.Right * size), Top: (bounds.Top * size));
