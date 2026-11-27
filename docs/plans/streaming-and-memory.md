@@ -878,7 +878,10 @@ work always settle. It is one allowance for the process
 bake, drawn from the workspace class, in place of one per bake. The allowance covers the step that needs room
 past the pool's, and its holder hands it on once that step holds what it needs, keeping its reservation
 (`MemoryAccount.Owner.PassForced`): a bake group passes it on once its admission or its refinement's narrowed
-peak is reserved, so the group's later stages never keep the next group's step waiting. A job whose peak passes the whole class is
+peak is reserved, so the group's later stages never keep the next group's step waiting. What passed reservations
+stand past the room is one total (`MemoryAdmissionReading.Passed`), excused from pressure and never past the largest
+forced grant among them and the holder's, and a forced refinement leaves a whole readback under the machine's floor,
+so work that finishes a refined group always comes before refining another. A job whose peak passes the whole class is
 split where it can be (a lattice baked in parts) and failed by name where it
 cannot (`SdfMeshBakeReport.Failed`).
 

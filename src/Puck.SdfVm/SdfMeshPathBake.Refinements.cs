@@ -23,8 +23,23 @@ public sealed partial class SdfMeshPathBake {
     // anywhere, so the bake always progresses. The forced allowance covers the refinement's step alone: once Prepare has
     // narrowed the reservation to what it measured, Finish hands the allowance on (Owner.PassForced) and the group's GPU
     // rounds, contour and landing run on under the narrowed reservation, so the next head can start while they do.
+    //
+    // Invariant: work that finishes a refined group beats refining another. A refined group needs its readback (a
+    // progress floor, PromiseReadback) for every GPU round, in the same room past the margin a forced head spends. So the
+    // door forces no head while any bake's take found the account refusing an admitted group's readback (NoteReadback),
+    // and a forced head must leave one whole readback (ReadbackBytes) under the machine's floor beside its own peak
+    // (TryReserveForced's spare). Enforced here, the only caller of TryReserveForced for a refinement. Where it stops: play
+    // growing into the floor can still refuse a readback, and a bake no frame drives renews no mark, so its mark lapses
+    // after ReadbackMarkStands.
     private sealed class Refinement {
         private static readonly Lock Gate = new();
+        // The bakes whose latest take found the account refusing an admitted group's readback, each with when its take
+        // marked it; a lock of its own, since a take marks under its bake's gate.
+        private static readonly Lock MarkGate = new();
+        private static readonly List<(SdfMeshPathBake Bake, long At)> Starved = [];
+        // How long a mark stands without its bake taking again: a frame drives a rendered residency's takes many times
+        // a second, and a bake no frame drives answers no readback whatever the door does.
+        private static readonly long ReadbackMarkStands = Stopwatch.Frequency;
         // Under Gate: the refinements waiting, in arrival order; the refinements started whose peak is not yet narrowed to
         // what they measured (every bake's).
         private static readonly List<Refinement> Queue = [];
@@ -49,6 +64,33 @@ public sealed partial class SdfMeshPathBake {
 
         // Gets the refinements waiting for room, every bake's.
         public static int Waiting => Volatile.Read(location: ref WaitingCount);
+
+        // Records whether a bake's take found the account refusing an admitted group's readback; a take that did not
+        // clears the bake's mark. Under the bake's gate, at the end of every take.
+        public static void NoteReadback(SdfMeshPathBake bake, bool starved) {
+            lock (MarkGate) {
+                var at = Starved.FindIndex(match: entry => ReferenceEquals(objA: entry.Bake, objB: bake));
+
+                if (starved) {
+                    var entry = (bake, Stopwatch.GetTimestamp());
+
+                    if (at < 0) { Starved.Add(item: entry); } else { Starved[at] = entry; }
+                } else if (at >= 0) {
+                    Starved.RemoveAt(index: at);
+                }
+            }
+        }
+        // Whether a mark that still stands says an admitted group waits for its readback.
+        private static bool ReadbackStarved() {
+            var now = Stopwatch.GetTimestamp();
+
+            lock (MarkGate) {
+                foreach (var (_, at) in Starved) {
+                    if ((now - at) < ReadbackMarkStands) { return true; }
+                }
+            }
+            return false;
+        }
 
         // Queues a group's refinement, its final lattice sampled whole, and runs the door. The group's job count is taken
         // here and held while it waits, so its workspace stays until its refinement runs or the queue drops it. Off any
@@ -84,11 +126,11 @@ public sealed partial class SdfMeshPathBake {
 
                     var peak = Math.Max(val1: PeakOf(final: next.Final), val2: group.PeakFloor);
 
-                    if (!group.Memory.TryReserve(peak: peak) && ((RefiningCount > 0) || !group.Memory.TryReserveForced(peak: peak))) {
+                    if (!group.Memory.TryReserve(peak: peak) && ((RefiningCount > 0) || ReadbackStarved() || !group.Memory.TryReserveForced(peak: peak, spare: ReadbackBytes))) {
                         if (!next.m_reported) {
                             next.m_reported = true;
                             _ = Interlocked.Increment(location: ref next.Bake.m_accounts.RefinementWaits);
-                            SdfMeshBakeReport.RefinementDeferred(peak: peak, refining: RefiningCount, residency: next.Bake.Residency, selector: group.Selector, waiting: Queue.Count);
+                            SdfMeshBakeReport.RefinementDeferred(account: next.Bake.HostAccount, peak: peak, refining: RefiningCount, residency: next.Bake.Residency, selector: group.Selector, waiting: Queue.Count);
                         }
                         break;
                     }
@@ -106,10 +148,11 @@ public sealed partial class SdfMeshPathBake {
                 foreach (var refinement in started) { refinement.Bake.Run(refinement: refinement); }
             }
         }
-        // Drops a bake's waiting refinements, for its residency released. Off the bake's gate.
+        // Drops a bake's waiting refinements and its readback mark, for its residency released. Off the bake's gate.
         public static void Drop(SdfMeshPathBake bake) {
             List<Refinement>? dropped = null;
 
+            NoteReadback(bake: bake, starved: false);
             lock (Gate) {
                 for (var index = (Queue.Count - 1); (index >= 0); index--) {
                     if (!ReferenceEquals(objA: Queue[index].Bake, objB: bake)) { continue; }

@@ -23,9 +23,9 @@ public sealed partial class SdfMeshPathBake {
         using (EnterGate(site: BakeGate.Land)) {
             m_accounts.CopyWaits++;
             if (group.Retired || !GroupList.Holds(group: group)) { return; }
-            m_parked.Add(item: (group, bytes, MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-copy"), work));
+            m_parked.Add(item: (group, bytes, HostAccount.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-copy"), work));
         }
-        SdfMeshBakeReport.CopyDeferred(bytes: bytes, owner: refused.Owner, residency: Residency, selector: group.Selector);
+        SdfMeshBakeReport.CopyDeferred(account: HostAccount, bytes: bytes, owner: refused.Owner, residency: Residency, selector: group.Selector);
     }
     // Runs again each parked copy whose bytes can now be reserved in play's allowance: the reservation holds that room
     // until the work, on the pool, gives it back for the copy's own owners to charge (SchedulePark). Under the gate, on
