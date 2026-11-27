@@ -25,7 +25,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void TheUploadPassesArePinned() {
         Assert.Equal(
-            expected: ["fillers", "upload", "environment"],
+            // The world's shadows draw in the residency's upload, ahead of every view (SdfWorldShadows).
+            expected: ["fillers", "upload", "environment", "shadows"],
             actual: SdfWorldTables.PassLabels.ToArray()
         );
         Assert.Equal(
@@ -112,17 +113,20 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void TheDescriptorPoolsTheTablesStateAreThePoolsTheyCreate() {
         using var rig = new Rig();
 
-        // Tables create region-copy, mesh-region-copy, strided-history-copy and World pools. Admission also reserves the
-        // bake and probe clients' pools, which the residency creates after the tables; a standalone tables fixture has none.
+        // Tables create region-copy, the first attached tables the presentation's mesh-region store's (its region's copy,
+        // moves and gathers), then strided-history-copy and World pools, then one for each shadow entry the world cannot
+        // shadow without, which the shadows take when they are made. Admission also reserves the bake and probe clients'
+        // pools, which the residency creates after the tables; a standalone tables fixture has none.
         var copyPool = SdfWorldTables.DescriptorPools[1];
-        var meshCopyPool = SdfWorldTables.DescriptorPools[2];
+        var stridedPool = GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2);
+        var shadowPools = SdfWorldTables.DescriptorPools[^6..^2];
 
         Assert.Equal(
-            expected: [copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2), SdfWorldTables.DescriptorPoolSizes],
+            expected: [copyPool, .. SdfMeshRegionStore.DescriptorPools, stridedPool, SdfWorldTables.DescriptorPoolSizes, .. shadowPools],
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
+            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, .. SdfMeshRegionStore.DescriptorPools, stridedPool, .. shadowPools],
             actual: SdfWorldTables.DescriptorPools[..^2]
         );
     }

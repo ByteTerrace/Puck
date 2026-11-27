@@ -45,6 +45,10 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private const int LandingSlots = 4;
     private const int UploadSlots = 4;
 
+    /// <summary>Gets the descriptor pools a store creates with its region: the region's own copy pool and its moves' and
+    /// gathers' pools, over the landing and upload slots.</summary>
+    public static GpuDescriptorPoolSizes[] DescriptorPools => GpuRegion.OwnedPoolSizes(slotCount: (LandingSlots + UploadSlots), runCopies: true);
+
     private readonly Lock m_gate = new();
     private readonly IGpuDeviceContext m_device;
     private readonly IGpuComputePipeline m_copyPipeline;

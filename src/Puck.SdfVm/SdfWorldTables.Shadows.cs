@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.SdfVm;
 
 // The world's one shadow solution (SdfWorldShadows): created once the pass pipelines it draws with are built, drawn by the
@@ -6,6 +8,38 @@ public sealed partial class SdfWorldTables {
     private SdfWorldShadows? m_shadows;
     // The frame the tables last packed, which the upload draws the shadows of.
     private SdfFrame? m_shadowFrame;
+    // The descriptor pools reserved at construction for the shadow entries the world cannot shadow without
+    // (SdfWorldShadows.ReservedEntries), until an entry takes one; an entry destroys the pool it took.
+    private readonly Stack<nint> m_shadowPools = new();
+
+    // The pools the tables reserve for the shadows (DescriptorPools).
+    private static GpuDescriptorPoolSizes[] ShadowPoolSizes {
+        get {
+            var pools = new GpuDescriptorPoolSizes[SdfWorldShadows.ReservedEntries];
+
+            Array.Fill(array: pools, value: SdfWorldShadows.EntryPoolSizes);
+
+            return pools;
+        }
+    }
+
+    // Creates the shadows' reserved pools; the constructor calls it, so no later frame takes their descriptor ranges.
+    private void ReserveShadowPools(GpuCreationScope scope) {
+        for (var at = 0; (at < SdfWorldShadows.ReservedEntries); at++) {
+            var pool = m_bindings.CreatePool(name: NameOf(part: "shadow-descriptors", index: at), sizes: SdfWorldShadows.EntryPoolSizes);
+
+            m_shadowPools.Push(item: pool);
+            _ = scope.Own(handle: pool, release: m_bindings.DestroyPool);
+        }
+    }
+    // Takes a pool reserved for a shadow entry, or zero once every one is taken.
+    internal nint TakeShadowPool() => (m_shadowPools.TryPop(result: out var pool) ? pool : 0);
+    // Destroys the reserved pools no entry took.
+    private void DestroyShadowPools() {
+        while (m_shadowPools.TryPop(result: out var pool)) {
+            m_bindings.DestroyPool(poolHandle: pool);
+        }
+    }
 
     /// <summary>Gets the world's shadows, or <see langword="null"/> while a pipeline they draw with still builds.</summary>
     internal SdfWorldShadows? Shadows {
