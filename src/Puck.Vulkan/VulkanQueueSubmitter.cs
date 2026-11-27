@@ -10,27 +10,33 @@ public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
     // Only VulkanLogicalDevice's timeline transaction calls this. It joins the graphics queue to the signal
-    // before returning, so no consumer can omit the graphics-side dependency.
+    // before returning, so no consumer can omit the graphics-side dependency. A nonzero join is a binary semaphore the
+    // bind signals beside the timeline value, for the graphics queue's join to wait on (VulkanQueueTimeline.BindSparse).
     internal void BindSparse(VulkanDeviceCommands device, VkQueue queue, nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings,
-        nint semaphore, ulong waitValue, ulong signalValue) {
+        nint semaphore, ulong waitValue, ulong signalValue, nint join) {
         if (device.QueueBindSparse == null) { throw new InvalidOperationException(message: "vkQueueBindSparse is unavailable on a sparse-enabled device."); }
+        // A binary semaphore's value is ignored, but the timeline info lists one for every signal.
+        var signals = stackalloc nint[2] { semaphore, join };
+        var signalValues = stackalloc ulong[2] { signalValue, 0UL };
+        var signalCount = ((join == 0) ? 1U : 2U);
+
         fixed (VkSparseMemoryBind* ranges = bindings) {
             var buffers = new VkSparseBufferMemoryBindInfo { BindCount = ((uint)bindings.Length), Buffer = buffer, PBinds = ((nint)ranges) };
             var timeline = new VkTimelineSemaphoreSubmitInfo {
-                PSignalSemaphoreValues = ((nint)(&signalValue)),
+                PSignalSemaphoreValues = ((nint)signalValues),
                 PWaitSemaphoreValues = ((nint)(&waitValue)),
                 SType = VkTimelineSemaphoreSubmitInfo.StructureType,
-                SignalSemaphoreValueCount = 1,
+                SignalSemaphoreValueCount = signalCount,
                 WaitSemaphoreValueCount = 1,
             };
             var info = new VkBindSparseInfo {
                 BufferBindCount = 1,
                 PBufferBinds = ((nint)(&buffers)),
                 PNext = ((nint)(&timeline)),
-                PSignalSemaphores = ((nint)(&semaphore)),
+                PSignalSemaphores = ((nint)signals),
                 PWaitSemaphores = ((nint)(&semaphore)),
                 SType = VkBindSparseInfo.StructureType,
-                SignalSemaphoreCount = 1,
+                SignalSemaphoreCount = signalCount,
                 WaitSemaphoreCount = 1,
             };
 
