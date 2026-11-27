@@ -38,7 +38,7 @@ let station = {
   z: 0
   yaw: 180
   floor: 0
-  site: [0, 0, 0]
+  site [0, 0, 0]
   parent: null
 }
 let stations = [station]
@@ -106,7 +106,7 @@ prototypes {
   prototype "station-floor" {
     document {
       name: "station-floor"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         {
           color: "#A9A395"

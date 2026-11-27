@@ -180,7 +180,7 @@ let galleryDisplays = map(
     floor: galleryFloor[display.level]
     site: gallerySite
     parent: "gallery"
-    homes: [display.id]
+    homes [display.id]
   })
 )
 // Every display's exhibit turns as on a turntable. At speed 1 it turns once in turntableSecondsPerTurn gallery seconds;
