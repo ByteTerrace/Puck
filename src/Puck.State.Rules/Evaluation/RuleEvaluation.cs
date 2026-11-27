@@ -224,8 +224,7 @@ public static class RuleEvaluation {
     /// <see cref="ExpressionFault.Forever"/>.</returns>
     public static Fact ReadSource(ref EvaluationFrame frame, in CompiledValueSource source, CellKind kind) {
         if (source.Operand is { } operand) {
-
-            return operand.Read(reader: frame.Reader);
+            return operand.Read(frame: ref frame);
         }
         if (source.Expression is { } expression) {
             // A Bool destination's program was compiled in Int, the kind a comparison leaves, so it evaluates in Int

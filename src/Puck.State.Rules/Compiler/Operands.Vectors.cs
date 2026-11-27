@@ -189,7 +189,8 @@ public sealed class VectorCallOperand : RuleOperand {
         _ => (2L + Dimensions),
     });
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var reader = frame.Reader;
         // Both sides' addresses were resolved before either answers: an absence beside a faulted key is still the
         // fault, which a negation must not turn into truth.
         var leftFrom = ((Left.KeyFrom is not null) && !Left.IsConstant);

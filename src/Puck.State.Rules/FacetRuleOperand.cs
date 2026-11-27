@@ -19,8 +19,8 @@ public abstract class FacetRuleOperand<TFacet> : OperandFact<TFacet>, IRuleOpera
     /// <returns>The live fact.</returns>
     public virtual Fact Read(IStateReader reader, TFacet facet, ReadOnlySpan<ResolvedKey> keys) => Read(reader: reader, facet: facet);
 
-    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    Fact IRuleOperand.Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var reader = frame.Reader;
 
         return Read(reader: reader, facet: ((TFacet)reader), keys: keys);
     }
