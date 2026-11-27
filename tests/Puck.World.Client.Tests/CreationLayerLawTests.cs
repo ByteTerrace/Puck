@@ -112,7 +112,7 @@ public sealed class CreationLayerLawTests {
             Assert.Null(@object: envelope.Refusal);
             Assert.True(condition: (envelope.Rotation > 0f), userMessage: $"rig {rigIndex}'s seam has no motion to bound");
 
-            var k = (shapes[^1].Smooth ?? 0f);
+            var k = shapes[^1].SmoothRadius;
             var identity = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1f, null);
             var a = CreationStampEmitter.ShapeStampBox(document: rig.Document, shapeIndex: blend.Shape, transform: identity)!.Value;
             var b = CreationStampEmitter.ShapeStampBox(document: rig.Document, shapeIndex: blend.Other, transform: identity)!.Value;

@@ -133,6 +133,15 @@ internal class SdfFormula {
 
     internal SdfFormulaType ResultType => Result;
 
+    // The readable lowering (Typesetting/SdfFormulaTypeset.cs, which the generator does not compile) reads a formula's
+    // declared inputs, in declaration order, and its steps, in evaluation order: a step with a name binds it, one with
+    // a condition returns its value when the condition holds, and the last returns its value. An input one reader does
+    // not take (a reciprocal only the kernels read) is that reader's form of another, not a parameter of its own.
+    internal IEnumerable<(SdfFormulaType Type, string Name, bool Bound, bool EveryReader)> DeclaredInputs =>
+        m_parameters.Select(static parameter => (parameter.Type, parameter.Name, parameter.Bound, (parameter.Fixed is not null) && (parameter.Shader is not null)));
+    internal IEnumerable<(string? Name, SdfFormulaNode Value, SdfFormulaNode? When)> DeclaredSteps =>
+        m_steps.Select(static step => (step.Name, step.Value, step.When));
+
     // The walk state a formula reads on the fixed-point side: its operands whose argument is one of the given names
     // rather than an instruction lane, in parameter order.
     internal IEnumerable<(string Name, string Type)> FixedState(params string[] names) => Parameters(shader: false)

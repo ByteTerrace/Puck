@@ -903,7 +903,7 @@ and `TryAdopt` mints from it (`:577`) **[opened]**. Nothing restores the
 resolver's map. But **[opened]**:
 
 - A continuation's generation id is narration only, never re-verified
-  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2546-2548`):
+  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2522-2524`):
 
   ```csharp
     /// <param name="FrozenGenerationId">The resolver-issued generation id the resolve produced — carried purely for

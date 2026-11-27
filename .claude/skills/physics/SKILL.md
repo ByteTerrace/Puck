@@ -305,7 +305,9 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
 - **No query crosses a portal door.** Line of sight (`WorldPopulation.HasLineOfSight`),
   a tether's aim, a hold's reach, body pairs and routes all stop at the glass,
   and a door that moves is not swept. `WorldPortalHoleContactField` only takes
-  back the push of the wall behind an opening.
+  back the push of the wall behind an opening, within the asking body's own band
+  (its collider's reach along the door's normal, its travel this step and the
+  contact skin), and hides a surface a hold or a tether reaches through the glass.
   [Portals in play](../../../docs/plans/portals-in-play.md#2-queries-through-doors)
   designs the one layer that carries every ray through, composed where the
   opening and seam layers are.

@@ -52,10 +52,10 @@ glass. To loom over the devices, walk in through the room's own doorway
   Walk ahead.
 - `debug.go devices` stands you in the room before the television, at whatever
   size you are.
-- Headless or from the console: `body.pose 12.5 0.05 30.5 90 0 0`, then
+- Headless or from the console: `body.pose spawn:wonderland`, then
   `body.fly 0 -1 0 0 0 0 1.5` (the strafe runs -X while the camera faces -Z).
-  Back out: `body.pose 8.8 0.05 30.5 -90 0 0`, then
-  `body.fly 0 1 0 0 0 0 1.5`.
+  Back out: `body.pose 4.875 0.05 30.5 -90 0 0` (0.6 m before the mouse hole,
+  whose wall face stands at world x 5.475), then `body.fly 0 1 0 0 0 0 1.5`.
 
 ## What to watch
 

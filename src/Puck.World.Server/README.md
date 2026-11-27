@@ -1535,8 +1535,8 @@ transfer for the same reason (see Carry below).
 `TryApplyRigidImpulse` refuses by name a second way beyond a raw fixed-point
 overflow: the resulting velocity's magnitude may not exceed
 `WorldPopulation.RigidVelocityCeiling`—the document's own declared speed
-ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the same fastest travel a
-crossing face already reads), so a degenerate `body.impulse` magnitude is
+ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the fastest travel the
+document declares), so a degenerate `body.impulse` magnitude is
 refused before it can reach the solver as an unrepresentable per-tick
 position delta rather than accepted and left to overflow deeper in the
 sweep. `world.budget`'s `rigid` segment echoes the compiled ceiling as
@@ -1985,7 +1985,10 @@ hold that implementation itself (`build/Architecture.props` denies it a
 `System.Console` reference). A server's own
 narration must be attached from its constructor's `narrationSink` parameter,
 not after—the document's own authored grants narrate during construction,
-before any post-build wiring step could reach them. The machine host
+before any post-build wiring step could reach them. The instance host takes its
+sink the same way: the composition admits the boot row as it builds the host, and
+that admission starts the worlds the row's screens show, so a refused start
+narrates its reason before the container finishes. The machine host
 (`WorldMachineHost` in [`Puck.World.Machines`](../Puck.World.Machines/README.md),
 reached here through `IWorldMachineHost`) takes an optional `WorldOutputHub`/narration sink
 because it owns no single server of its own to share (a peer singleton to

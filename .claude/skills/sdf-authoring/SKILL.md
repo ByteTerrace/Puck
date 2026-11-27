@@ -36,7 +36,10 @@ alike.
 A text run, a box's face light (`lightsAs: Face`) and a screen face their local
 +Z, the side a viewer reads them from. One on a creation's front therefore turns
 a half turn about up (`rotation: rotate([0, 1, 0], 180)`), as does any shape
-whose local axes a paint, a face or a riding run reads.
+whose local axes a paint, a face or a riding run reads. A portal face (a
+painting's glass) fires only for a body passing through it from the side it
+faces, so a door whose face shape lacks that half turn faces the wall it hangs
+on and nobody walks through it.
 
 A `puck.creation.v1` creation was written in the retired author frame, a half
 turn about up from this one (x and z negated). Validation refuses it by name;
@@ -139,6 +142,7 @@ from what you want the surface to *do*:
 | Cellular or faceted relief: scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
 | A stripe, ring, panel outline or mouth line | a palette `paints` entry | colour drawn at the hit, never sculpted relief; see "Surface and look" |
 | Words on a part that change while the world runs | a paint with `text` | glyphs laid out in the paint's box from a template of state cells, no rebake; [surface](references/surface.md#text-paints) |
+| A formula on a part: the engine's own maths for a shape or blend, with live values | a text paint with `math: true` and an `@formula shape:Sphere` line | typeset from the engine's formula tree, never typed; [math text](../../../docs/rendering/sdf/reference/text-and-glyphs.md#math-text) |
 
 Exact scale conventions per primitive (a torus is not what you would guess), the
 facet-admission matrix, every ceiling, and every refusal message are in
@@ -320,7 +324,7 @@ sample of a masked creation evaluates each region, so keep the regions few. They
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
 The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength
 under root scaling. Parts that move within that frame refuse it (`CreationMotionPlan`, PUCK030): per-part
-relief would change the composed surface at their seams. A moving cutter counts as such a part today. `sizeBy` reads a numeric state binding in authority fixed point; solid contact and the drawn root share the tick's sampled size, and zero removes contact.
+relief would change the composed surface at their seams. A moving cutter counts as such a part today. `sizeBy` reads a numeric state binding in authority fixed point; solid contact and the drawn root share the tick's sampled size, and zero removes contact. `sizeAbout` (a literal point in creation units) is the point it scales about, so an exhibit on a stand grows about its own centre; the drawn root (`WorldCreationInstances.Pack`) and contact (`WorldColliderSet`) both shift the origin by it. A size change moves only the root matrix and never bakes, which is how the learn panel's scrub reshapes an exhibit live ([the learn panel](../../../docs/authoring/learn-panel.md)).
 
 **Blends between shapes that move apart (owner's ruling).** A pooled `group`
 whose blend joins shapes with different motion owners (a swing, slide, effector

@@ -6261,6 +6261,24 @@
                                   "null"
                                 ],
                                 "default": null
+                              },
+                              "math": {
+                                "description": "Whether the substituted text is math: each line is math markup (MathMarkup) or a directive that brings in one of the engine\u0027s own field formulas (@formula shape:Sphere), gives a term a live value or highlights one (the World\u0027s WorldMathText). A math text is set from the box\u0027s top-left corner, a line wider than the box set smaller to fit it; Fit, Wrap, Markup, Align and Anchor do not apply to it.",
+                                "type": "boolean",
+                                "default": false
+                              },
+                              "scroll": {
+                                "description": "How far a math text is scrolled: a template like Template that resolves to a number, the share of the text\u0027s height past the box\u0027s that is moved up out of the box, clamped to 0..1 (null = 0). The box clips what scrolls out.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "pitch": {
+                                "description": "For a math text, whether every line stands exactly one line step below the last, so its lines fall on a pointer region\u0027s rows; otherwise a line taller than the step (a fraction) pushes the next one down.",
+                                "type": "boolean",
+                                "default": false
                               }
                             },
                             "required": [

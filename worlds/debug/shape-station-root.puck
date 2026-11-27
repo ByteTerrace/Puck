@@ -62,7 +62,7 @@ bodies {
 // What a seat may press: the Moth's movement and forms, the context button that engages the console and the tap that
 // presses its glass, and the terminal's own channels while engaged and while its console is open.
 inputModes {
-  global: concat(movementChannels, ["interact", "tap", "jump", "rise", "flight", "dash", "suit", "noclip"])
+  global: concat(movementChannels, ["interact", "tap", "scroll", "jump", "rise", "flight", "dash", "suit", "noclip"])
   families [
     terminalFamily()
     terminalConsoleFamily()
@@ -77,7 +77,8 @@ text {
       name: "inter"
       source: "fonts/inter-regular.ttf"
       hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
-      codePointRanges ["U+0020-U+007E"]
+      // ASCII, and the signs the learn panel typesets formulas with (middle dot, minus, root, ≤ and ≥).
+      codePointRanges ["U+0020-U+007E", "U+00B7", "U+2212", "U+221A", "U+2264-U+2265"]
     }
   ]
 }

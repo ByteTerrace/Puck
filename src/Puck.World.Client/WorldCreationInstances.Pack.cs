@@ -425,7 +425,7 @@ public sealed partial class WorldCreationInstances {
     // the table, and reads the client, the definition and the state mirror, which nothing writes during the fork but a
     // lease's first acquisition of a slot, which the mirror serializes (WorldStateMirror.Acquire). A rig that reads
     // another body is never in the fork, so no partition reads another registration's pose.
-    private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Hosting.Jobs.IJobPartitions {
+    private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Abstractions.Jobs.IJobPartitions {
         private IWorldStampSource? m_client;
         private DynamicTransform[] m_transforms = [];
         private float m_deltaSeconds;
@@ -1014,7 +1014,13 @@ public sealed partial class WorldCreationInstances {
             var size = SizeOf(client: client, live: live);
 
             live.PackedSize = size;
-            if (size == 0f) { rootPosition = parkPosition; } else { placementScale *= size; }
+            if (size == 0f) {
+                rootPosition = parkPosition;
+            } else {
+                // The size scales about the creation's pivot, which stays where the unsized creation holds it.
+                rootPosition += Vector3.Transform(value: (document.SizePivot() * (placementScale * (1f - size))), rotation: rootRotation);
+                placementScale *= size;
+            }
         }
         var slotsMoved = SdfMovedTransforms.Write(slot: rootSlot, table: transforms, value: new DynamicTransform(Lanes: lanes, Orientation: rootRotation, Position: rootPosition) { Scale = placementScale });
 

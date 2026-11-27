@@ -21,7 +21,7 @@ namespace Puck.SignedDistance;
 /// distance range and the grid's columns (low sixteen bits) and rows (high sixteen bits).</remarks>
 public static class SdfSurfaceTextLayout {
     /// <summary>The most surface text slots one program's paints name (<c>SDF_MAX_SURFACE_TEXTS</c>).</summary>
-    public const int MaxTexts = 256;
+    public const int MaxTexts = 1024;
     /// <summary>The most glyph quads one slot draws; a longer text draws its first this many. The slots share one pool
     /// (<see cref="PoolEntries"/>), so a slot's run is as long as its text, not this cap.</summary>
     public const int MaxGlyphs = 1024;
