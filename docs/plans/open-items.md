@@ -515,6 +515,8 @@ one says so:
 
 **The owner's order for the next session.** The owner set it in the session that closed the foundation campaign; it
 leads the list below until the owner changes it.
+The owner sequenced it on the next session's start: item 4 runs on the RTX 4070 first, item 2 on the RTX 2060 beside it, then
+item 3 with the board games' performance and memory solved; item 1 starts only after that, and item 5 waits.
 
 1. [high] [The gallery's visual pass](visual-pass.md): rapid visual feedback in quick bursts on the RTX 4070, with
    an authoring wall handed to a lane. In order: the tree's pathing and feel, then foliage, planters and decorations,

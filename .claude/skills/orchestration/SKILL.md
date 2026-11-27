@@ -174,22 +174,7 @@ same short lock that registers tickets, before any resource grant.
 
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
-what the machine can verify. **At most two subagents run at once** (the
-owner's standing order, so that agents stay focused and cooperate instead of
-competing for the machine and the same files): the lead starts a third only
-when the owner explicitly asks for a fan-out, and a workflow's agents count
-toward the two, except a lane on the Azure release and the silo, which runs
-beside them on the lead machine (the owner's ruling: the release process is
-relied on heavily and is worth the time to design well). The partner session on the RTX 2060 machine is a peer with
-its own cap of one subagent, so the team is five actors: the lead, its two
-subagents, the partner and its one. The owner's intent is cooperation, not
-parallel effort: each actor's work enhances another's (the partner measures and
-judges what the lead's lanes build, the lanes fix what the partner's readings
-find), and the tools they share (the CLI, the `puck` MCP server, the
-benchmark) are improved by whoever needs them to work well together. Within that cap the lead still judges from the
-work in hand (concurrent builds, measuring lanes that load would skew, GPU
-legs, shared files, its own capacity to inspect and merge) whether a second
-lane pays. The owner's direction:
+what the machine can verify, and only the leads verify. **Subagents are not capped** (AGENTS.md, the owner's ruling): the lead runs as many writing and read-only lanes as there is work, because lanes build only what they touched and hold no GPU, so they do not compete for the machine. The partner session on the RTX 2060 machine is a peer lead under the same rule. The owner's intent is cooperation, not parallel effort: each actor's work enhances another's (the partner measures and judges what the lead's lanes build, the lanes fix what the partner's readings find), and the tools they share (the CLI, the `puck` MCP server, the benchmark) are improved by whoever needs them to work well together. The lead still judges from the work in hand (shared files, its own capacity to inspect and merge) whether another lane pays. The owner's direction:
 
 - **Check what running cannot show, early, without gating it.** A change in a
   class [hazards](../../../docs/development/hazards.md#silent-invariants) marks
@@ -1256,6 +1241,8 @@ holds only what they leave out:
 | `look-critic` | Opus 5.5 | high | none | none |
 | `specialist` | Opus 5.5 | high | own | `delegate` |
 | `principal` | Fable 5.2 | high | own | `delegate` |
+
+`principal` (Fable) is not routed for now (AGENTS.md, the owner's ruling): Astra takes the work that needs the strongest judgement.
 
 Route each brief to the role that fits it, and say why in the brief: a brief
 with a known cause or a specified result goes to `implementer` even when it is
