@@ -31,9 +31,56 @@
 //   layer meter nothing.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
+// - The live field slice (SdfLiveFieldSlice): where a view shown as it is (its whole exposure applied) looks through the
+//   slice's square, the slice's colours (sdfFieldSliceWords, display-encoded) cover the composited pixel at the slice's
+//   opacity in front of the pixel's surface and at SDF_FIELD_SLICE_HIDDEN of it behind, after the image meter read the
+//   pixel, so the slice never moves the view's exposure. A zero opacity reads nothing.
 #include "Shared/luma.hlsli"
+#include "Shared/transfer.hlsli"
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
+
+// The share of the live field slice's opacity it keeps where a surface lies in front of it: enough to place it by, not
+// enough to hide the surface.
+static const float SDF_FIELD_SLICE_HIDDEN = 0.2;
+
+// The live field slice over a composited, display-referred pixel; surface is the ray distance to the pixel's surface, or
+// zero where none covers it.
+float3 sdfFieldSliceOver(float3 color, uint2 pixel, float surface) {
+    ViewportData view = sdfSkyPassView();
+    float3 direction = sdfSkyPassDirection(view, pixel);
+    float3 axisU = passGroup.fieldSliceAxisU.xyz;
+    float3 axisV = passGroup.fieldSliceAxisV.xyz;
+    float3 normal = cross(axisU, axisV);
+    float facing = dot(direction, normal);
+
+    if (abs(facing) < 1.0e-6) {
+        return color;
+    }
+
+    float t = (dot((passGroup.fieldSliceOrigin.xyz - view.position.xyz), normal) / facing);
+
+    if (!(t > 0.0)) {
+        return color;
+    }
+
+    float3 offset = ((view.position.xyz + (direction * t)) - passGroup.fieldSliceOrigin.xyz);
+    float2 square = (float2(dot(offset, axisU), dot(offset, axisV)) / max(passGroup.fieldSliceAxisU.w, 1.0e-6));
+
+    if (any(abs(square) > 1.0)) {
+        return color;
+    }
+
+    // Row zero is the square's top (+v), as SdfFieldSlice samples it.
+    uint resolution = max((uint)passGroup.fieldSliceAxisV.w, 1u);
+    uint column = min((uint)(((square.x + 1.0) * 0.5) * (float)resolution), (resolution - 1u));
+    uint row = min((uint)(((1.0 - square.y) * 0.5) * (float)resolution), (resolution - 1u));
+    uint word = sdfFieldSliceWords[((row * resolution) + column)];
+    float3 slice = puckSrgbToLinearExtended(float3((float)(word & 0xFFu), (float)((word >> 8) & 0xFFu), (float)((word >> 16) & 0xFFu)) / 255.0);
+    float opacity = (saturate(passGroup.fieldSliceOrigin.w) * (((surface > 0.0) && (surface < t)) ? SDF_FIELD_SLICE_HIDDEN : 1.0));
+
+    return lerp(color, slice, opacity);
+}
 
 // The factor the local adaptation scales a view's sky share by: one where the sky's brightest already lies at or below
 // white under the view's exposure, and one for a view a window shows, whose output is not display-referred (the view
@@ -79,6 +126,7 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
     bool geometryOnly = (passGroup.geometryOnly != 0u);
+    float surfaceDistance = 0.0;
 
     if (sdfDebugComposesFinal(passGroup.debugMode) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST)) {
         ViewportData view = sdfSkyPassView();
@@ -95,6 +143,7 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
         skyAir.transmittance = 1.0;
         skyAir.weights = float3(0.0, 0.0, 0.0);
         sdfSkyPassSurface(id.xy, coverage, origin, direction, weights, t);
+        surfaceDistance = t;
         if (!geometryOnly && (coverage < 1.0) && sdfAirBeforeSky()) {
             skyAir = sdfAirAlong(origin, direction, worldFarDistance(view), false);
         }
@@ -167,6 +216,9 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
             covered = saturate(litColor.a);
         }
         color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
+        if (!geometryOnly && (passGroup.exposeShare >= 1.0) && (passGroup.fieldSliceOrigin.w > 0.0)) {
+            color = sdfFieldSliceOver(color, id.xy, surfaceDistance);
+        }
     }
 
     // The float working color, held within the half-float range it is stored in; the display encode dithers and

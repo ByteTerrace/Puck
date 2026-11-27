@@ -1870,6 +1870,11 @@ wrong. The contracts that bite most often:
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.
   A per-pixel field view would put a second interpreter copy in a pixel kernel.
+  The live plane (`world.slice.live`, `SdfLiveFieldSlice`) samples the same way
+  once per plane and program, colours through the PNG's one mapping
+  (`SdfFieldSlice.RenderPlane`) and uploads the colours as a table the composite
+  intersects with each pixel's ray (`sdfFieldSliceOver`); its table is the last
+  member of `SdfKernelInterfaces.LightAndSkyTables`, so no bake binding moves.
 - **Winding is one contract across three places.** The bake winds outward
   faces counter-clockwise (`SdfDualContouring`), both backends declare a
   counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
