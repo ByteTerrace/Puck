@@ -436,8 +436,9 @@ function treeBranchA(b) = treeAuthor(treeBranchFrom(b))
 function treeBranchC(b) = treeAuthor(treeBranchTo(b))
 function treeBranchReach(b) = vectorLength((treeBranchC(b) - treeBranchA(b)) * [1, 0, 1])
 // How high a branch's control point stands over the straight rise from trunk to landing: level 1's branches cross the
-// hall low over the showcase's displays, so they arch high enough to leave their exhibits breathing room.
-function treeBranchArch(b) = ((b.level == toyboxLevel) ? 3.0 : 0.35)
+// hall low over the showcase's displays, so they arch high enough to leave their exhibits breathing room (a quadratic's
+// middle rises half its control point's height over the line, so 5 m lifts the branch's middle 2.5 m).
+function treeBranchArch(b) = ((b.level == toyboxLevel) ? 5.0 : 0.35)
 function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
   (0.45 * treeBranchReach(b)),
   (treeTreadAngle(b.tread) + treeAuthorTurn),
