@@ -512,6 +512,9 @@ public static partial class RuleExpressions {
         var arena = frame.Arena;
         var time = frame.Time;
         var cursor = 0;
+        var choosing = (fold.Operation is ExpressionOp.ArgMinimum or ExpressionOp.ArgMaximum);
+        var chosen = false;
+        var best = 0L;
 
         while (arena.TryNextLiveNumber(
             cursor: ref cursor,
@@ -532,8 +535,25 @@ public static partial class RuleExpressions {
                 values: values
             );
 
+            // An arg fold weighs only the members it can score: an absent score is no candidate, never a fault.
+            if (choosing && (memberOutcome.Case == FaultCase.Absent)) {
+                continue;
+            }
             if (!memberOutcome.TryFinite(raw: out var applied)) {
                 return memberOutcome;
+            }
+            if (choosing) {
+                // Every score is in the body's one kind, so its raw encodings order as the values do; a tie keeps the
+                // member the row's order reached first.
+                if (!chosen || ((fold.Operation == ExpressionOp.ArgMinimum)
+                    ? (applied < best)
+                    : (applied > best))) {
+                    chosen = true;
+                    best = applied;
+                    accumulator = member;
+                }
+
+                continue;
             }
 
             switch (fold.Operation) {
@@ -571,7 +591,9 @@ public static partial class RuleExpressions {
             }
         }
 
-        return Outcome.Finite(raw: accumulator);
+        return ((choosing && !chosen)
+            ? Outcome.Absent
+            : Outcome.Finite(raw: accumulator));
     }
 
     // The operand feeds of one address-reading token, on the machine stack beside the block.

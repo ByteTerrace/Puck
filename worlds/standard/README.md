@@ -32,6 +32,14 @@ its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
 
+[companion.puck](companion.puck) is the companion, one per owner: `companionDesign`
+once (its creation, flight kit, the world's interests and the guide commands),
+then `companion(owner, slot, position)` for each owner's seat. Its rules project
+what it senses and where a guide sends it into the owner's sense row, and its
+pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
+`companionUnlock` and `companionSight` keep what it learns on its owner's
+identity. The debug world's faerie is one (`../debug/companion.puck`).
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 

@@ -75,6 +75,8 @@ public static partial class ExpressionSpelling {
         "all" => ExpressionOp.All,
         "any" => ExpressionOp.Any,
         "count" => ExpressionOp.Count,
+        "argmin" => ExpressionOp.ArgMinimum,
+        "argmax" => ExpressionOp.ArgMaximum,
         _ => ExpressionOp.Sum,
     };
 
@@ -82,6 +84,10 @@ public static partial class ExpressionSpelling {
     // on the calling thread and read where a state read and a key print.
     [ThreadStatic]
     private static bool SourceDialect;
+    // The binder of the fold whose body is printing on this thread: a key reading the fold member
+    // (RuleFacts.FoldMemberKey) prints as it.
+    [ThreadStatic]
+    private static string? PrintBinder;
     // The locals of the rule whose text is being lowered on this thread; see WithLocals.
     [ThreadStatic]
     private static IReadOnlySet<string>? AmbientLocals;
@@ -246,12 +252,14 @@ public static partial class ExpressionSpelling {
 
         return true;
     }
-    private static bool IsFoldName(string name) => (name is "all" or "any" or "count" or "sum");
+    private static bool IsFoldName(string name) => (name is "all" or "any" or "count" or "sum" or "argmin" or "argmax");
     private static string? FoldName(ExpressionOp operation) => operation switch {
         ExpressionOp.All => "all",
         ExpressionOp.Any => "any",
         ExpressionOp.Count => "count",
         ExpressionOp.Sum => "sum",
+        ExpressionOp.ArgMinimum => "argmin",
+        ExpressionOp.ArgMaximum => "argmax",
         _ => null,
     };
     // A name continues with the identifier rule's characters and the dot a dotted path carries.
@@ -1301,6 +1309,10 @@ public static partial class ExpressionSpelling {
                 ));
             }
             if (key is { } spelled) {
+                if ((PrintBinder is { } binder) && string.Equals(a: spelled, b: RuleFacts.FoldMemberKey, comparisonType: StringComparison.Ordinal)) {
+                    into.Append(value: '[').Append(value: binder).Append(value: ']');
+                    return;
+                }
                 if (SourceDialect && !Quoted && IdentifierSpelling.IsIdentifier(text: name) && IdentifierSpelling.IsIdentifier(text: spelled)) {
                     into.Append(value: '.').Append(value: spelled);
                     return;
@@ -1543,11 +1555,19 @@ public static partial class ExpressionSpelling {
         }
         internal override void PrintBare(StringBuilder into) {
             into.Append(value: Name).Append(value: '(').Append(value: PrintName(name: Family)).Append(value: ", ").Append(value: Binder).Append(value: " -> ");
-            Body.Print(
-                into: into,
-                parentLevel: 0,
-                rightOperand: false
-            );
+
+            var outer = PrintBinder;
+
+            PrintBinder = Binder;
+            try {
+                Body.Print(
+                    into: into,
+                    parentLevel: 0,
+                    rightOperand: false
+                );
+            } finally {
+                PrintBinder = outer;
+            }
             into.Append(value: ')');
         }
     }
@@ -2407,9 +2427,12 @@ public static partial class ExpressionSpelling {
 
                 Advance();
                 Prime();
-                // The key ends at the closing bracket — or at the end of the text, when the key is parsed alone.
+                // The key ends at the closing bracket — or at the end of the text, when the key is parsed alone. The
+                // binder of the fold in flight, written bare, keys by the member that fold visits.
                 if (KeyEnds()) {
-                    return key;
+                    return ((indexable && string.Equals(a: key, b: m_binder, comparisonType: StringComparison.Ordinal))
+                        ? RuleFacts.FoldMemberKey
+                        : key);
                 }
                 if (
                     indexable &&
@@ -2449,6 +2472,10 @@ public static partial class ExpressionSpelling {
             ) {
                 return read.Name;
             }
+            // The fold member in brackets, `x[i]` or `x[(i)]`, keys by the member the fold visits.
+            if (node is Member) {
+                return RuleFacts.FoldMemberKey;
+            }
 
             var builder = new ProgramBuilder();
             var instructions = new List<Instruction>();
@@ -2457,6 +2484,9 @@ public static partial class ExpressionSpelling {
                 builder: builder,
                 into: instructions
             );
+            if (instructions.Exists(match: static instruction => (instruction.Operation == ExpressionOp.Member))) {
+                throw Fail(message: $"a key computes from the fold member '{m_binder}'; a key reads the member only bare, as [{m_binder}]");
+            }
             return $"{RuleFacts.ExpressionKeyPrefix}{Print(program: new ExpressionProgram(Instructions: instructions) { Subprograms = builder.Subprograms })}";
         }
     }
