@@ -1132,36 +1132,49 @@ public sealed partial class SdfMeshPathBake {
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
             var queued = -1;
+            var finishing = m_finishingHeap;
             var ready = m_readyHeap;
             var wanting = m_wantingHeap;
+            // Set once a lattice of an admitted group finds no readback room: the room the answers in flight give back
+            // goes to the groups that finish, never to a group starting, so no lattice of a group not admitted is taken.
+            var startersWait = false;
 
             if (waiting > 0) {
-                // While the pool holds the stages an admission's lead would only wait behind, or the refinement queue holds
-                // as many sampled lattices waiting for room as the pool has workers to refine them, no group can begin its
-                // final lattice, so the groups wanting an admission are not read at all: a group admitted then would only
-                // wait in one queue or the other holding its lattice.
-                if (Refinement.Waiting >= Workers) {
+                // While a refinement waits for room, or the pool holds the stages an admission's lead would only wait
+                // behind, no group can begin its final lattice, so the groups wanting an admission are not read at all: a
+                // refinement finishes a group already admitted and gives its room back, so the room goes to it before any
+                // new group's, and a group admitted behind the pool would only wait there holding its lattice.
+                if (Refinement.Waiting > 0) {
                     admissionWaits = true;
                 } else if (admitted > 0) {
                     queued = QueuedStages();
                     admissionWaits = Backlogged(awaiting: awaiting, queued: queued);
                 }
                 m_tally.Offered(includeWanting: !admissionWaits, ready: m_offeredReady, wanting: m_offeredWanting);
-                Rank(groups: m_offeredReady, heap: ready, owedOnly: owedOnly);
+                Rank(groups: m_offeredReady, heap: ready, owedOnly: owedOnly, finishing: finishing);
                 Rank(groups: m_offeredWanting, heap: wanting, owedOnly: owedOnly);
             }
-            // The better ranked of the two sets' next groups, each set in its own order, and the plan's order among equals.
+            // Every admitted group's lattice first, in rank order: each finishes work the account admitted and leads to the
+            // room it holds coming back. Then the better ranked of the two other sets' next groups, each set in its own
+            // order, and the plan's order among equals.
             while (true) {
-                (float Priority, int Index) readyAt = default;
-                (float Priority, int Index) wantingAt = default;
+                var finisher = finishing.TryDequeue(element: out var finished, priority: out _);
+                Group group;
 
-                var haveReady = ready.TryPeek(element: out _, priority: out readyAt);
-                var haveWanting = (!admissionWaits && wanting.TryPeek(element: out _, priority: out wantingAt));
+                if (finisher) {
+                    group = finished!;
+                } else {
+                    if (startersWait) { break; }
 
-                if (!haveReady && !haveWanting) { break; }
+                    (float Priority, int Index) readyAt = default;
+                    (float Priority, int Index) wantingAt = default;
 
-                var group = ((haveReady && (!haveWanting || (ByRank.Compare(x: readyAt, y: wantingAt) <= 0))) ? ready.Dequeue() : wanting.Dequeue());
+                    var haveReady = ready.TryPeek(element: out _, priority: out readyAt);
+                    var haveWanting = (!admissionWaits && wanting.TryPeek(element: out _, priority: out wantingAt));
 
+                    if (!haveReady && !haveWanting) { break; }
+                    group = ((haveReady && (!haveWanting || (ByRank.Compare(x: readyAt, y: wantingAt) <= 0))) ? ready.Dequeue() : wanting.Dequeue());
+                }
                 if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
 
                 var next = group.Next!.Value;
@@ -1184,8 +1197,10 @@ public sealed partial class SdfMeshPathBake {
                     break;
                 }
                 // A lattice whose answer the readback has no room left for, under ReadbackBytes or in the account, waits
-                // until earlier answers end, and a smaller one behind it may fit; it is not admitted before then.
+                // until earlier answers end, and a smaller one behind it may fit; it is not admitted before then. Behind an
+                // admitted group's lattice that waits, only another admitted group's may fit (startersWait).
                 if (((readback + next.OutputBytes) > ReadbackRoom) || !PromiseReadback(taking: (readback + next.OutputBytes))) {
+                    startersWait |= finisher;
                     stop = 4;
                     continue;
                 }
@@ -1217,6 +1232,9 @@ public sealed partial class SdfMeshPathBake {
                             admissionWaits = true;
                             continue;
                         }
+                        // The admission holds all its slabs need, so the allowance passes on at once: a group sampling
+                        // its slabs never keeps a refinement, which finishes an admitted group, from being forced.
+                        group.Memory.PassForced();
                         if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(peak: peak, residency: Residency, selector: group.Selector); }
                     }
                     group.DeferredReported = false;
@@ -1244,6 +1262,7 @@ public sealed partial class SdfMeshPathBake {
                 foreach (var (handle, snapshot) in group.SampledSnapshots) { m_takenSampled[handle] = snapshot; }
             }
             // The heaps hold no group between takes, so none outlives the list that held it.
+            finishing.Clear();
             ready.Clear();
             wanting.Clear();
             if (lattices.Count > 0) { GrantReadback(bytes: readback); }
@@ -1299,20 +1318,23 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
-    // The order a take offers groups in. Invariant: a take offers its candidates in the order a sort of them by ByRank
-    // would give, each at the rank it holds when the take reads it. A take reads only the groups the tally holds as
-    // offering (GroupTally), into two heaps (the ready, and the wanting an admission) it takes the better top of, so
-    // the cost of a take is the groups holding a lattice, and a rank changing while Prioritize measures it needs no
+    // The order a take offers groups in. Invariant: a take offers every admitted group's lattice before any other group's,
+    // and each of the two classes in the order a sort of them by ByRank would give, each at the rank it holds when the take
+    // reads it. A take reads only the groups the tally holds as offering (GroupTally), into three heaps (the admitted, the
+    // ready not admitted, and the wanting an admission): it drains the first, then takes the better top of the other two,
+    // so the cost of a take is the groups holding a lattice, and a rank changing while Prioritize measures it needs no
     // index kept in step.
     private readonly List<Group> m_offeredReady = [];
     private readonly List<Group> m_offeredWanting = [];
+    private readonly PriorityQueue<Group, (float Priority, int Index)> m_finishingHeap = new(comparer: ByRank);
     private readonly PriorityQueue<Group, (float Priority, int Index)> m_readyHeap = new(comparer: ByRank);
     private readonly PriorityQueue<Group, (float Priority, int Index)> m_wantingHeap = new(comparer: ByRank);
 
-    // Puts the groups a take may take a lattice of into a heap by their ranks.
-    private static void Rank(List<Group> groups, PriorityQueue<Group, (float Priority, int Index)> heap, bool owedOnly) {
+    // Puts the groups a take may take a lattice of into a heap by their ranks: the admitted into `finishing` where one is
+    // given.
+    private static void Rank(List<Group> groups, PriorityQueue<Group, (float Priority, int Index)> heap, bool owedOnly, PriorityQueue<Group, (float Priority, int Index)>? finishing = null) {
         foreach (var group in groups) {
-            if (Offers(group: group, owedOnly: owedOnly)) { heap.Enqueue(element: group, priority: (RankOf(group: group), group.Index)); }
+            if (Offers(group: group, owedOnly: owedOnly)) { (((finishing is not null) && group.Admitted) ? finishing : heap).Enqueue(element: group, priority: (RankOf(group: group), group.Index)); }
         }
     }
     // Whether a take may take a lattice of a group: one it owes, with none in flight or being worked, and, for an owed

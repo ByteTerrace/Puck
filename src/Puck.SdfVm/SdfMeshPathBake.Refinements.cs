@@ -6,8 +6,9 @@ public sealed partial class SdfMeshPathBake {
     // The refinement queue. A group's admission promises only what its final lattice holds while its slabs are sampled
     // (SampledPeakOf), which is frames of GPU work; its refinement (Prepare) is the stage that allocates the fine samples,
     // whose bound (PeakOf) is many times more, so a sampled lattice waits here, holding its lattice and no worker, until the
-    // account has room for that bound. Admissions are paced by this queue's depth (Refinement.Waiting, read by the take),
-    // never by a worker waiting for room.
+    // account has room for that bound. A refinement finishes a group the account admitted and gives its room back, so it
+    // comes before any new group: no group is admitted while a refinement waits here (Refinement.Waiting, read by the
+    // take), and the room the account gives back reaches this queue's head before any admission can take it.
     //
     // Invariant: a refinement starts only with its peak reservation held, and no bake worker waits on the memory account
     // for it. The one door is Refinement.Start, the queue's dequeue: the only code that constructs a started refinement,
@@ -19,7 +20,9 @@ public sealed partial class SdfMeshPathBake {
     // room the account gives back goes to it before any refinement queued behind it, so a large refinement never starves
     // behind a stream of small ones, and the residencies' bakes draw on one room in one order. A refinement whose head
     // finds no room starts anyway as the process's one forced job (TryReserveForced) when no refinement holds its peak
-    // anywhere, so the bake always progresses.
+    // anywhere, so the bake always progresses. The forced allowance covers the refinement's step alone: once Prepare has
+    // narrowed the reservation to what it measured, Finish hands the allowance on (Owner.PassForced) and the group's GPU
+    // rounds, contour and landing run on under the narrowed reservation, so the next head can start while they do.
     private sealed class Refinement {
         private static readonly Lock Gate = new();
         // Under Gate: the refinements waiting, in arrival order; the refinements started whose peak is not yet narrowed to
@@ -118,10 +121,12 @@ public sealed partial class SdfMeshPathBake {
             if (dropped is null) { return; }
             foreach (var refinement in dropped) { refinement.Group.EndWork(); }
         }
-        // Ends a started refinement's hold on the peak count once, after its peak narrowed or its stage ended, and runs the
-        // door, since the room it gave back may start the head. On the refinement's worker, off any gate.
+        // Ends a started refinement's hold on the peak count and on the forced allowance once, after its peak narrowed or
+        // its stage ended, and runs the door, since the room it gave back may start the head. On the refinement's worker,
+        // off any gate.
         public void Finish() {
             if (Interlocked.Exchange(location1: ref m_finished, value: 1) != 0) { return; }
+            Group.Memory.PassForced();
             lock (Gate) { RefiningCount--; }
             Start();
         }
