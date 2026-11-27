@@ -121,7 +121,9 @@ truncating pair), with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for trac
 truncation); `power(base, exponent)` (exact or refused), `modularPower(base, exponent, modulus)` and
 `modularInverse(value, modulus)`; `smallestMissing(mask)`, the smallest value missing from a 64-bit set (the Sprague–Grundy value of a set of options); `isPrime(n)` (exact, bounded) and `primeAt(i)` for
 i in 0..255 (a Gödel multiset in one cell: add is `* primeAt(k)`, presence is `% primeAt(k) == 0`) — no next-prime or
-n-th-prime search, which is unbounded and belongs to a generator draw source; `binomialCoefficient(n, k)`, `factorial(n)`
+n-th-prime search, which is unbounded and belongs to a generator draw source; `hash(a, b, …)`, a deterministic 64-bit
+key over a tuple, which a `tally(capacity:)` row counts in O(1) (`row[key] += 1`, `row[key]`, `row = 0`; see the state
+data model's tally section); `binomialCoefficient(n, k)`, `factorial(n)`
 (n ≤ 20); a subset as a bitmask — `subsetRank(n, mask)` (colex rank below `binomialCoefficient(n, setBitCount(mask))`, n ≤ 64),
 `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` — so a poker hand or a drafted set is one cell; a
 permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16) — `arrangementRank(n, packed)`
