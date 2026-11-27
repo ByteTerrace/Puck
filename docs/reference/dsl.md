@@ -652,7 +652,7 @@ A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absenc
 nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
 its right operand when the left is false; `or` skips it when the left is true. A skipped
 operand neither reads state nor faults, but must still be well-typed. Logical operands may read different
-numeric kinds; arithmetic requires matching kinds. Other arithmetic
+numeric kinds; arithmetic over mixed kinds widens its Int operands to Fixed. Other arithmetic
 propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
