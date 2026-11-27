@@ -334,6 +334,7 @@ public sealed class FixedFieldContactSolver(
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
         var uncertain = default(ContactUncertainty);
+        var residual = FixedQ4816.Zero;
 
         for (var iteration = 0; (iteration < m_iterations); iteration++) {
             // A field authoring its own up samples it HERE, per iteration and at the body's current position: that is
@@ -348,8 +349,10 @@ public sealed class FixedFieldContactSolver(
 
             var pushed = false;
 
-            // Only the last pass, at the pose the body keeps, says whether that pose is proved.
+            // Only the last pass, at the pose the body keeps, says whether that pose is proved and how deep it still
+            // pushed.
             uncertain = default;
+            residual = FixedQ4816.Zero;
             var extracted = false;
 
             for (var volumeIndex = 0; (volumeIndex < volumes.Length); volumeIndex++) {
@@ -390,13 +393,17 @@ public sealed class FixedFieldContactSolver(
                         ),
                         velocity: ref velocity
                     );
-                    pushed |= (kind == FixedContactPushMath.ContactKind.Push);
+                    if (kind == FixedContactPushMath.ContactKind.Push) {
+                        pushed = true;
+                        residual = FixedQ4816.Max(x: residual, y: depth);
+                    }
                 } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && contact.Pushes && !extracted &&
                     (contact.Penetration > FixedContactPushMath.RestingBand)) {
                     extracted = true;
                     position += (contact.Normal * (contact.Penetration - FixedContactPushMath.RestingBand));
                     velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -contact.Normal);
                     pushed = true;
+                    residual = FixedQ4816.Max(x: residual, y: (contact.Penetration - FixedContactPushMath.RestingBand));
                 }
             }
 
@@ -409,7 +416,8 @@ public sealed class FixedFieldContactSolver(
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal,
-            Uncertainty: uncertain
+            Uncertainty: uncertain,
+            Residual: residual
         );
     }
     /// <inheritdoc/>

@@ -260,7 +260,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     // and end, the two readings taken at both ends and the pose, place and mark samples between.
     private static int LinesOf(IReadOnlyList<Program> programs) => programs.Sum(selector: static program => (program.Rows.Count + Held(lines: program.Rows.Select(selector: static row => (row.Command, row.Slot))).Count + 7 + (2 * ChapterReads.Length) + (3 * (program.Duration / SampleTicks))));
 
-    private CommandResult Run(CommandContext context, string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
+    private CommandResult Run(CommandContext context, string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output, int? playSeat = null) {
         if (m_running) {
             return CommandResult.Error(output: $"[world.benchmark: '{m_route}' is running — world.benchmark stop ends it]");
         }
@@ -274,7 +274,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             return CommandResult.Error(output: $"[world.benchmark: {script.PendingCount} world.at line(s) are armed, and a run owns the pinned lines while it plays — let them run or world.at clear first]");
         }
 
-        if ((server?.Definition.Routes.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name, b: reference, comparisonType: StringComparison.Ordinal)) is { } route)) {
+        if ((server?.Definition.Routes.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name, b: reference, comparisonType: StringComparison.Ordinal)) is { } authored)) {
+            // A seat that plays a route itself (route.play) plays it on its own seat, whichever seat the route names.
+            var route = ((playSeat is { } own) ? (authored with { Seat = own }) : authored);
+
             if ((senses is null) || (seatRouter is null)) {
                 return CommandResult.Error(output: "[world.benchmark: this host composes no seat routes or seat views, so it plays no route]");
             }
@@ -301,7 +304,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
             if ((context.TextSession is { } session) && (undisclosed || !senses.Navigation(endpoint: endpoint).Ready) && route.Chapters.Any(predicate: chapter =>
                 chapter.Name.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) && chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false }))) {
-                return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, session: session, timeout: timeout);
+                return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, playSeat: playSeat, session: session, timeout: timeout);
             }
             return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, session: context.TextSession, timeout: timeout);
         }
@@ -392,7 +395,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     // it never started once the run's own wall-time limit passes, so the wait is bounded by the caller's timeout and not by
     // the time its call may take to answer; world.benchmark reads which. The wait precedes the run's recording, so no frame
     // of it is a measured one.
-    private CommandResult Prepare(CommandContext context, TextCommandSession session, Puck.World.Client.WorldAuthorityEndpoint endpoint, string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
+    private CommandResult Prepare(CommandContext context, TextCommandSession session, Puck.World.Client.WorldAuthorityEndpoint endpoint, string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output, int? playSeat) {
         var started = Stopwatch.GetTimestamp();
         var preparing = new Preparation(endpoint: endpoint, limit: (started + (Stopwatch.Frequency * timeout)), reference: reference, started: started);
 
@@ -427,7 +430,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
                 m_prepared = new JsonObject { ["what"] = "navigation", ["seconds"] = seconds, ["domainsBaked"] = baked, ["domainsDeclared"] = declared };
 
-                var begun = Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: reference, timeout: timeout);
+                var begun = Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: reference, playSeat: playSeat, timeout: timeout);
 
                 if (begun.IsError) {
                     m_prepared = null;
@@ -1296,7 +1299,39 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 return Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: args[1].ToString(), timeout: timeout);
             }
         );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Local,
+            bindability: CommandBindability.Unbindable,
+            name: "route.play",
+            description: $"Plays a route of the running world on the seat that asks, as world.benchmark run plays it: {RoutePlayForms.Spelling}. Each chapter's steps are played by the route's seat program through that seat's own controls, the chapter whose name starts with the prefix first (every chapter with none or '-'), and the run reports like world.benchmark's, which reads its progress and whose stop ends it. A seat line plays the route on its own seat, so a test's when block plays a route as one step (seat1: route.play <route>), its expectations read at the export tick; the console plays it on the seat the route names. Refused while a run plays or world.at lines other than the asking line are armed.",
+            forms: RoutePlayForms,
+            handler: (context, args) => {
+                var named = ((args.Count > 0) ? args[0].ToString() : string.Empty);
+
+                if ((args.Count is not (1 or 2)) || (server?.Definition.Routes.Any(predicate: candidate => string.Equals(a: candidate.Name, b: named, comparisonType: StringComparison.Ordinal)) != true)) {
+                    return RoutePlayForms.Refuse(args: in args);
+                }
+                if (!m_running && (m_preparing is null) && (m_finishOwed is null)) {
+                    m_seatCount = 1;
+                    m_budgetSource = DeviceBudget().Source;
+                }
+
+                return Run(
+                    at: null,
+                    budget: DeviceBudget().Milliseconds,
+                    context: context,
+                    loops: 1,
+                    output: null,
+                    prefix: (((args.Count == 2) && !args.Is(index: 1, value: "-")) ? args[1].ToString() : string.Empty),
+                    reference: named,
+                    playSeat: ((context.Principal.Kind == PrincipalKind.Seat) ? (context.Principal.Index + 1) : null),
+                    timeout: DefaultTimeoutSeconds
+                );
+            }
+        );
     }
+
+    private static readonly CommandForms RoutePlayForms = CommandForms.Of(verb: "route.play", "<route> [<chapter name prefix>|-]");
 
     // The places a route's capture pass frames (its `captures`), each with its region's centre and half extents read from
     // the running document's places, as one JSON line; refuses, naming them, places the document does not author.

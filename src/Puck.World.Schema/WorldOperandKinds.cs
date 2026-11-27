@@ -149,6 +149,22 @@ public sealed class BodyFactOperand : WorldOperandFact {
     public CompiledBodyRef Body { get; }
     public BodyFacts Fact { get; }
 }
+/// <summary>One kinematic witness of a body's own step (<see cref="WorldRuleFacts.KinematicsPrefix"/>); a reference
+/// resolving to no live body reads <c>0</c>.</summary>
+public sealed class BodyKinematicsOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="BodyKinematicsOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="witness">The witness read.</param>
+    public BodyKinematicsOperand(CompiledBodyRef body, WorldKinematicsWitness witness) : base(WorldKinematicsVocabulary.KindOf(witness: witness)) {
+        Body = body;
+        Witness = witness;
+    }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the witness read.</summary>
+    public WorldKinematicsWitness Witness { get; }
+}
 /// <summary>One world axis of a body's live position, in metres (<see cref="WorldRuleFacts.BodyPositionPrefix"/>); a
 /// reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyPositionOperand : WorldOperandFact {

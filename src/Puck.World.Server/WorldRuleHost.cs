@@ -472,6 +472,15 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         });
     }
     /// <inheritdoc/>
+    public Fact Read(BodyKinematicsOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return Fact.Finite(
+            kind: operand.ValueKind,
+            value: ((Host.Body(index: ResolveBodyRef(bodyRef: operand.Body)) is { } body) ? body.Kinematics.CellValue(witness: operand.Witness) : 0L)
+        );
+    }
+    /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 

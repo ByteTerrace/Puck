@@ -484,6 +484,9 @@ rule writes a body's transient into a world row through (an eased
 `airPose` cell a creation's drivers then read), where `$identity:` is the
 persisted fact lane. `$bodyPosition:<bodyRef>:x|y|z` reads one axis of a
 body's live position (fixed-point metres, 0 for no live body).
+`$kinematics:<bodyRef>:<witness>` (`kinematics(each, stepUps)`) reads what the
+body's own contact phase decided (`WorldKinematicsWitness`; the
+[physics skill](../../physics/SKILL.md#kinematic-witnesses) lists them).
 `$engaged:<bodyRef>:<screen>` (`engaged(each, 0)`) reads 1 while the body's
 participant holds a control application onto a declared screen, captured or
 mirrored (`WorldEngagement.Applies`); the debug world's `brick-pick-up` rule
