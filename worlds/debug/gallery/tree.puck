@@ -16,9 +16,9 @@
 // turn, and shades as one soft volume, so a change to the leaves bakes one clump.
 //
 // Every dimension is layout.puck's (the trunk, the shelves, the branches and where they land), every colour and look
-// value look.puck's (lookTree). Shapes are authored in the creation's frame, a half turn about up from the plan's, so a
-// plan offset (dx, y, dz) from the tree's centre stands at author (-dx, y, -dz), and a plan angle a round the trunk is
-// author angle a + 180.
+// value look.puck's (lookTree). Its points are written in the tree frame (limbs.puck, foliage.puck's treePoint), a half
+// turn about up from the plan's, so a plan offset (dx, y, dz) from the tree's centre is tree-frame (-dx, y, -dz)
+// (layout.puck's treeAuthor), and a plan angle a round the trunk is tree-frame angle a + 180.
 
 import "../../standard/foliage"
 import "../../standard/limbs"

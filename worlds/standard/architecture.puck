@@ -2,6 +2,10 @@
 // ochre shells with rounded corners over darker teal recesses, brass trim and small functional lights. A module library:
 // it hands its importers palettes and templates and emits no document. Each template takes `base`, the palette slot of
 // its palette's first entry, so a creation appends the palette after its own slots and passes where it starts.
+//
+// A piece's constants, its `at` arguments and the comments below describe it facing +Z, a half turn about up from its
+// creation, which faces out along its front (-Z): each shape carries those points in with `* [-1, 1, -1]` and its turn
+// conjugated by the half turn, and a world places the piece's points (a picture, a console face) with the same turn.
 import "rig"
 import "shading"
 

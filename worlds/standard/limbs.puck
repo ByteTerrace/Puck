@@ -7,8 +7,8 @@
 // shape, and leaf masses stay in separate, non-solid creations (foliage.puck's groupedTree, leafyClump and
 // canopySurface).
 //
-// Every point is in the creation's author frame (sdf-authoring: +Z the front, +X the subject's left), the frame shape
-// rows are written in.
+// Every point is in the tree frame, a half turn about up from the creation's (foliage.puck's treePoint): each shape
+// carries its point into the creation with `* [-1, 1, -1]`, and its turn conjugated by the half turn.
 
 import "rig"
 import "paths"
@@ -61,8 +61,8 @@ function limbForkTip(a, b, c, at, side, reach, rise, drop) = ((limbForkBase(a, b
 
 // A fork off a limb: a sweep from inside the limb, under its walking line, out to one side and up, tapering from
 // `radius[0]` to `radius[1]`, smooth-blended into the limb so it reads as grown from it. A sweep never collides, and the
-// fork leaves the limb's flank sideways, so it stands clear of the line a foot walks. Its curve is local to the shape,
-// whose pose crosses the author frame (sdf-authoring), so its points are carried there by `* [-1, 1, -1]`.
+// fork leaves the limb's flank sideways, so it stands clear of the line a foot walks. Its curve is in the shape's own
+// frame, which the shape's half turn carries into the creation as treePoint carries a point.
 template limbFork(label, a, b, c, at, side, reach, rise, radius, material, drop = 0.35, smooth = 0.22) {
   let base = limbForkBase(a, b, c, at, drop)
   let tip = limbForkTip(a, b, c, at, side, reach, rise, drop)
@@ -150,8 +150,8 @@ function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
 )
 
 // Bark grain frames for foliage.puck's landscapeSurface (`grain: 1`): the turn whose local +X runs along a direction.
-// A static placement's surface pattern stands in the world, a half turn about up from the author frame, so a direction
-// `d` authored in the creation's frame is carried there first; `barkUpright` is the frame of grain that climbs.
+// A direction `d` in the tree frame is carried into the creation first, where the surface pattern of a static
+// placement at yaw 0 stands; `barkUpright` is the frame of grain that climbs.
 function barkAlong(d) = turnAlong((d * [-1, 1, -1]))
 let barkUpright = rotate([0, 0, 1], 90)
 
