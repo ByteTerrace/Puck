@@ -13,7 +13,9 @@ import "noclip"
 import "ship-rows"
 import "shapes"
 import "exposure"
+import "game-station-deck"
 import "gallery/gallery"
+import "../games/chess-game"
 // Every player's hand torch, switched by 6 (the standard's flashlight.puck).
 import "../standard/flashlight"
 // A body's size register, which level 1's size field writes (gallery/wonder.puck).
@@ -35,7 +37,7 @@ spawnPoints: concat(
 commands: galleryCommands
 
 bodies {
-  capacity: galleryPopulation
+  capacity: (galleryPopulation + cardBodies)
   localSeats: seatPopulation
   networkPlayers: visitorPopulation
 }

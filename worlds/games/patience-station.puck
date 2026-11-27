@@ -4,7 +4,7 @@
 // a world expands its templates beside the station's, with each game's place in the station's catalog.
 //
 //   import "patience-station"
-//   patienceStationCards(station: s)                   // the deck's bodies, where the world's body order wants them
+//   patienceStationCards(station: s)                   // the deck and its bodies, where the world's body order wants them
 //   prototypes { patienceStationPrototypes() }
 //   placements { patienceStationSpots(station: s) }
 //   state { patienceStationSlots(station: s)  world { patienceStationState() } }
@@ -70,9 +70,16 @@ let patienceFaceDown = 90
 
 let patienceLineTexts = ["KLONDIKE", "FREECELL", "SOLVED  -  TAP NEW GAME", "DEALING"]
 
-// The deck's bodies: the cursor outline, the 52 cards and the held-run outline, lying inside the station's cap until a
-// patience game is shown. They are inhabitants, so a world expands this where its body order wants them.
+// The deck: its faces and the two outlines as prototypes, and its bodies: the cursor outline, the 52 cards and the
+// held-run outline, lying inside the station's cap until a patience game is shown. The bodies are inhabitants, so a
+// world expands this where its body order wants them.
 template patienceStationCards(station) {
+  prototypes {
+    cardDeckPrototypes(variant: "light")
+    patienceOutline(name: "patienceCursor", color: "#9FE6F0")
+    patienceOutline(name: "patienceHeld", color: "#FFC46A")
+  }
+
   looks: concat(
     map(patienceFaces, name => {
       motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
@@ -175,9 +182,6 @@ template patienceSpot(name, depth) {
 }
 
 template patienceStationPrototypes() {
-  cardDeckPrototypes(variant: "light")
-  patienceOutline(name: "patienceCursor", color: "#9FE6F0")
-  patienceOutline(name: "patienceHeld", color: "#FFC46A")
   patienceSpot(name: "patienceSpot", depth: 0)
   patienceSpot(name: "patienceSpotHidden", depth: -0.01)
 }

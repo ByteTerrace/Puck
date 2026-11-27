@@ -12,3 +12,7 @@ let gameStationCatalog = [
 
 // The station the isolated root stands: at the origin, its creation's floor on the root's floor.
 let rootStation = { id: "station", at [0, -0.5, 0] }
+
+// The board game room's station (gallery/games.puck), where the card table stood at the west end of the row of tables
+// toward the balustrade: its creation's floor on level 2's floor (y 9.05).
+let boardRoomStation = { id: "boardroom", at [38, 8.55, 17.2] }

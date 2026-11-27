@@ -559,7 +559,7 @@ state {
   world {
     chessGameState(settleTicks: chessSettleTicks)
 
-    table chessDemo {
+    table chessDemo capacity(auto) {
       enabled = 1
       ready = 0
       playing = 0
@@ -574,13 +574,13 @@ state {
       idleTicks = chessDemoIdleSeconds * 30
       holdTicks = chessDemoHoldSeconds * 30
     }
-    table chessTape {
+    table chessTape capacity(auto) {
       request = 0
       status = 0
       cursor = 0
       completed = 0
     }
-    table chessDemoInk {
+    table chessDemoInk capacity(auto) {
       recorded = "#000000"
       match = "#000000"
       mismatch = "#000000"
