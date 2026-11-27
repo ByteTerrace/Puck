@@ -83,6 +83,15 @@ let galleryWidth = (galleryEast + galleryWall)
 // How far east, in metres, the west wall's inner face now stands of world x 10.3, where the rooms against it were
 // authored: Wonderland's room and its devices behind it, the desktop and the press before it.
 let galleryWestShift = ((22 - naveWest) + galleryWestIn - 10.3)
+// Where Wonderland's three devices stand on its floor (devices.puck), in world coordinates, each facing +x, and where a
+// body stands to play each one: in front of it, inside its screen's engage radius. The devices' rows and spawn points,
+// the companion's senses and the benchmark route all read these, so they move with the wall together.
+let deckAt = [(1.4 + galleryWestShift), galleryFloor[0], 30.5]
+let advancedAt = [(5 + galleryWestShift), galleryFloor[0], 31.6]
+let brickAt = [(6.6 + galleryWestShift), galleryFloor[0], 29.4]
+let deckPlayAt = (deckAt + [0.6, 0, 0])
+let advancedPlayAt = (advancedAt + [0.5, 0, 0])
+let brickPlayAt = (brickAt + [0.4, 0, 0])
 // The centre of the tile nearest a plan position, along x or z.
 function galleryTileX(x) = tileX(floor(((x - gridX0) / galleryTile)))
 function galleryTileZ(z) = tileZ(floor(((z - gridZ0) / galleryTile)))

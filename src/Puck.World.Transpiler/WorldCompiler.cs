@@ -260,8 +260,9 @@ internal static class WorldCompiler {
         }
 
         // Only a source with a test block reads the composed state of its imports: a test's given lines and witness
-        // rows resolve against it, and composing every imported document is not free.
-        var hasTests = document.Statements.OfType<TestDeclarationNode>().Any();
+        // rows resolve against it, and composing every imported document is not free. A test a template holds (an
+        // imported library's included) lowers where the document calls it, so it counts as the document's own.
+        var hasTests = document.Statements.Any(predicate: SyntaxWalk.Holds<TestDeclarationNode>);
 
         var (inheritedEnums, inheritedState) = ((effectiveImports == ImportHandling.Ignore)
             ? (Enums: [], State: null)

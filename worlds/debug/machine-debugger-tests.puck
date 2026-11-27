@@ -8,43 +8,46 @@ import "gallery/layout"
 // Schedules act as seat1. Positioning another body requires the same explicit Drive grant as live play.
 grants: map(range(14, 17), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
 
-machines: concat([
-  {
-    name: "humble-gaming-brick"
-    engine: "gaming-brick"
-    configuration {
-      schema: "puck.gaming-brick.configuration.v1"
-      model: "cgb"
-      boot: "fast"
-      content { path: "cartridges/cgb/machine-test.cgb.puck" }
+machines: concat(
+  [
+    {
+      name: "humble-gaming-brick"
+      engine: "gaming-brick"
+      configuration {
+        schema: "puck.gaming-brick.configuration.v1"
+        model: "cgb"
+        boot: "fast"
+        content { path: "cartridges/cgb/machine-test.cgb.puck" }
+      }
+      contentFolders ["cartridges/cgb"]
     }
-    contentFolders ["cartridges/cgb"]
-  }
-  {
-    name: "advanced-gaming-brick"
-    engine: "advanced-gaming-brick"
-    configuration {
-      schema: "puck.advanced-gaming-brick.config.v1"
-      boot: "fast"
-      content { path: "cartridges/agb/machine-test.agb.puck" }
+    {
+      name: "advanced-gaming-brick"
+      engine: "advanced-gaming-brick"
+      configuration {
+        schema: "puck.advanced-gaming-brick.config.v1"
+        boot: "fast"
+        content { path: "cartridges/agb/machine-test.agb.puck" }
+      }
+      contentFolders ["cartridges/agb"]
     }
-    contentFolders ["cartridges/agb"]
-  }
-  {
-    name: "humble-gaming-deck"
-    engine: "humble-gaming-deck"
-    configuration {
-      schema: "puck.humble-gaming-deck.configuration.v1"
-      content { path: "cartridges/deck/colour-bars.deck" }
+    {
+      name: "humble-gaming-deck"
+      engine: "humble-gaming-deck"
+      configuration {
+        schema: "puck.humble-gaming-deck.configuration.v1"
+        content { path: "cartridges/deck/colour-bars.deck" }
+      }
+      contentFolders ["cartridges/deck"]
+      preferFolderDefault: false
     }
-    contentFolders ["cartridges/deck"]
-    preferFolderDefault: false
-  }
-  // The range's televisions and the gallery toybox's decks are no part of these checks: mounted, but not advanced.
-  { name: "range-deck-9", running: false }
-  { name: "range-deck-24", running: false }
-  { name: "range-deck-50", running: false }
-], map(concat(toyboxMachines, rentalMachines), name => { name: name, running: false }))
+    // The range's televisions and the gallery toybox's decks are no part of these checks: mounted, but not advanced.
+    { name: "range-deck-9", running: false }
+    { name: "range-deck-24", running: false }
+    { name: "range-deck-50", running: false }
+  ],
+  map(concat(toyboxMachines, rentalMachines), name => { name: name, running: false })
+)
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {
   when {
@@ -52,7 +55,7 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
     seat1: world.state.cell.set machineDebugger p0 1536
     seat1: world.state.cell.set machineDebugger p1 1553
     ticks 30
-    seat1: body.pose 7 0.05 29.4 0 0 0 14
+    seat1: body.pose spawn:device-humble-gaming-brick 14
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
     seat1: world.state.cell.set machineDebugger run 0
@@ -61,7 +64,7 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
     seat1: world.state.cell.set machineDebugger address 33554432
     seat1: world.state.cell.set machineDebugger length 262144
     ticks 3
-    seat1: body.pose 5.5 0.05 31.6 0 0 0 15
+    seat1: body.pose spawn:device-advanced-gaming-brick 15
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
     seat1: world.state.cell.set machineDebugger run 0
@@ -70,7 +73,7 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
     seat1: world.state.cell.set machineDebugger address 0
     seat1: world.state.cell.set machineDebugger length 2048
     ticks 3
-    seat1: body.pose 2 0.05 30.5 0 0 0 16
+    seat1: body.pose spawn:device-humble-gaming-deck 16
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
   }
@@ -106,7 +109,7 @@ test "withholding input fails responsive while the other checks pass" {
     seat1: world.state.cell.set machineDebugger window 12
     seat1: world.state.cell.set machineDebugger withhold 1
     ticks 30
-    seat1: body.pose 2 0.05 30.5 0 0 0 16
+    seat1: body.pose spawn:device-humble-gaming-deck 16
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
   }

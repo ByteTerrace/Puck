@@ -316,19 +316,25 @@ except the four probe addresses, which can change during the run. Ending or
 cancelling releases input, disengages the body and releases its checkpoint.
 A health pass swaps and ejects content; insert a cartridge before another pass.
 
-| Device | screen | body | Pose before starting (x y z) | RAM address | length |
+| Device | screen | body | Stand it at | RAM address | length |
 |---|---:|---:|---|---:|---:|
-| Humble Gaming Brick | 0 | 4 | 7 0.05 29.4 | 49152 (WRAM) | 8192 |
-| Advanced Gaming Brick | 1 | 5 | 5.5 0.05 31.6 | 33554432 (EWRAM) | 262144 |
-| Humble Gaming Deck | 2 | 6 | 2 0.05 30.5 | 0 (CPU RAM) | 2048 |
+| Humble Gaming Brick | 0 | first | `spawn:device-humble-gaming-brick` | 49152 (WRAM) | 8192 |
+| Advanced Gaming Brick | 1 | second | `spawn:device-advanced-gaming-brick` | 33554432 (EWRAM) | 262144 |
+| Humble Gaming Deck | 2 | third | `spawn:device-humble-gaming-deck` | 0 (CPU RAM) | 2048 |
 
-These are hardware ranges, replaceable at runtime. Pose the body with
-`body.pose <x> <y> <z> 0 0 0 <body>` from the host; the guest never teleports
-it. Its Drive handle engages that body with the screen under ordinary reach,
-Control and application rules, then sends the same channels a player uses.
+The bodies are the three the debugger holds Drive over, `machineDebuggerBodies`
+in [machine-debugger.puck](machine-debugger.puck), and `body` starts at the
+first. The RAM ranges are hardware ranges, replaceable at runtime. Stand the
+body in front of its device with `body.pose spawn:<id> <body>` from the host
+(the spawn points are devices.puck's, placed from the device positions in
+[gallery/layout.puck](gallery/layout.puck), so they move with the devices);
+the guest never teleports it. Its Drive handle engages that body with the
+screen under ordinary reach, Control and application rules, then sends the
+same channels a player uses.
 
-For example, on the Deck, set `screen=2`, `body=6`, `address=0`,
-`length=2048`, pose body 6 at the table position, and set `run=1`. Each
+For example, on the Deck, set `screen=2`, `body` to the third body,
+`address=0`, `length=2048`, stand that body at `spawn:device-humble-gaming-deck`,
+and set `run=1`. Each
 setting uses `world.state.cell.set machineDebugger <key> <integer>`. Over MCP,
 put related commands in one `world.at` schedule and read after
 `world.wait`; separate MCP calls do not land on adjacent ticks.
