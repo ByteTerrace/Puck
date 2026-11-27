@@ -84,6 +84,15 @@ public sealed record StateAdvance(
     public const int MaxRatePieces = 64;
     /// <summary>The highest power one rate piece's polynomial carries.</summary>
     public const int MaxRateDegree = 8;
+    /// <summary>The most coefficients a closed-form value curve holds (<see cref="TryValueCurve"/>): a nested clock's curve
+    /// is a polynomial of its parent's, so its degree is the product of its chain's and a chain whose product passes this
+    /// bound has no curve, and its value is read at each tick instead.</summary>
+    public const int MaxCurveCoefficients = 64;
+    /// <summary>The most bits the reduced numerator or denominator of a value curve's coefficient may take: the exact
+    /// rationals of a nested chain grow with its degree, and a curve past this is not worth evaluating.</summary>
+    public const int MaxCurveCoefficientBits = 2048;
+    /// <summary>The highest power a value curve carries.</summary>
+    public const int MaxCurveDegree = (MaxCurveCoefficients - 1);
 
     /// <summary>Gets whether the advance runs on a parent row rather than the engine's seconds.</summary>
     [JsonIgnore]
@@ -224,7 +233,9 @@ public sealed record StateAdvance(
     /// polynomial when none is returned.</param>
     /// <param name="depth">The nesting depth this read stands at; zero for a read that is not a parent's.</param>
     /// <returns><see langword="true"/> when the value follows a polynomial from <paramref name="engineTick"/>: the
-    /// engine tick stands at or after the epoch, every parent reads, and the value stands inside the envelope.</returns>
+    /// engine tick stands at or after the epoch, every parent reads, the value stands inside the envelope, and the curve
+    /// fits <see cref="MaxCurveCoefficients"/> and <see cref="MaxCurveCoefficientBits"/>. A chain whose composed degree
+    /// would pass the bound is refused before it is composed, so the work is bounded whatever the chain's depth.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
     public bool TryValueCurve(StateRow row, long baseValue, ulong engineTick, long epochEngineTick, IStateClockCells? cells, out RationalPolynomial curve, int depth = 0) {
         ArgumentNullException.ThrowIfNull(argument: row);
@@ -248,25 +259,40 @@ public sealed record StateAdvance(
 
             curve = (RationalPolynomial.Constant(value: stored) + (rate * seconds));
         } else {
+            // The parent's curve is itself a result this method bounded, so it is read first and every later step is
+            // checked against the bound before it expands: the composition's degree multiplies per link and its exact
+            // coefficients grow with it, so a chain too deep to fit is refused before any of that work is done.
             if (
                 (cells is null) || (depth >= MaxNestingDepth) ||
-                !TryReadClockCurve(cells: cells, curve: out var parent, depth: (depth + 1), engineTick: engineTick, row: By!) ||
-                !TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch)
+                !TryReadClockCurve(cells: cells, curve: out var parent, depth: (depth + 1), engineTick: engineTick, row: By!)
             ) {
                 return false;
             }
 
             var integral = RationalPolynomial.Identity;
-            var integralAtEpoch = atEpoch;
+            var shape = RateShape();
 
-            if (RateShape() is { } shape) {
+            if (shape is not null) {
                 var start = parent.Evaluate(x: Rational.Zero);
 
                 integral = shape.IntegralOn(piece: shape.PieceAt(fraction: start.Fraction()), turn: start.Floor());
-                integralAtEpoch = shape.Integral(x: atEpoch);
+            }
+            if (!integral.Fits(maxBits: MaxCurveCoefficientBits, maxDegree: MaxCurveDegree) || (integral.ComposedDegree(inner: parent) > MaxCurveDegree)) {
+                return false;
+            }
+            if (!TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch) || !atEpoch.FitsBits(maxBits: MaxCurveCoefficientBits)) {
+                return false;
             }
 
+            var integralAtEpoch = ((shape is null) ? atEpoch : shape.Integral(x: atEpoch));
+
             curve = (RationalPolynomial.Constant(value: (stored - (rate * integralAtEpoch))) + (rate * integral.Compose(inner: parent)));
+        }
+
+        if (!curve.Fits(maxBits: MaxCurveCoefficientBits, maxDegree: MaxCurveDegree)) {
+            curve = RationalPolynomial.Zero;
+
+            return false;
         }
 
         var now = curve.Evaluate(x: Rational.Zero);

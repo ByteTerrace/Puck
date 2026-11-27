@@ -165,6 +165,35 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
 
         return result;
     }
+    /// <summary>Returns the degree <see cref="Compose"/> gives, without composing: the product of the two degrees, zero
+    /// when either polynomial is constant or zero. A caller that bounds a curve's size asks this before the Horner
+    /// expansion, whose cost and coefficient size grow with it.</summary>
+    /// <param name="inner">The inner polynomial.</param>
+    /// <returns>The composition's degree, or zero for a composition that is constant or zero.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="inner"/> is <see langword="null"/>.</exception>
+    public long ComposedDegree(RationalPolynomial inner) {
+        ArgumentNullException.ThrowIfNull(argument: inner);
+
+        return (((Degree <= 0) || (inner.Degree <= 0))
+            ? 0L
+            : (((long)Degree) * inner.Degree)
+        );
+    }
+    /// <summary>Tests whether the polynomial stays within a degree and a coefficient size, the two quantities an exact
+    /// evaluation or composition costs by.</summary>
+    /// <param name="maxDegree">The highest degree allowed.</param>
+    /// <param name="maxBits">The most bits a coefficient's reduced numerator or denominator may take
+    /// (<see cref="Rational.FitsBits"/>).</param>
+    /// <returns><see langword="true"/> when the degree and every coefficient are within bounds.</returns>
+    public bool Fits(int maxDegree, int maxBits) {
+        if (Degree > maxDegree) { return false; }
+
+        foreach (var coefficient in m_coefficients) {
+            if (!coefficient.FitsBits(maxBits: maxBits)) { return false; }
+        }
+
+        return true;
+    }
     /// <summary>Returns the derivative, by the power rule.</summary>
     /// <returns>The derivative; the zero polynomial for a constant.</returns>
     public RationalPolynomial Derivative() => new(trimmed: DerivativeOf(coefficients: m_coefficients));

@@ -254,6 +254,11 @@ public readonly record struct Rational : IComparable<Rational> {
     );
     /// <summary>Returns the least integer no smaller than this value.</summary>
     public BigInteger Ceiling() => -(-this).Floor();
+    /// <summary>Tests whether the reduced numerator and the reduced denominator each fit in a number of bits, which bounds
+    /// what an exact operation on this value costs.</summary>
+    /// <param name="maxBits">The most bits either part may take (<see cref="BigInteger.GetBitLength"/>).</param>
+    /// <returns><see langword="true"/> when neither part is longer.</returns>
+    public bool FitsBits(int maxBits) => ((Numerator.GetBitLength() <= maxBits) && (Denominator.GetBitLength() <= maxBits));
     /// <inheritdoc />
     public int CompareTo(Rational other) =>
         (Numerator * other.Denominator).CompareTo(other: (other.Numerator * Denominator));
