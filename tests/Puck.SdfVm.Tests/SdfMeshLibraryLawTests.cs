@@ -393,7 +393,9 @@ public sealed class SdfMeshLibraryLawTests {
     // that id at a place.
     [Fact]
     public void AnIdNoShapeOwnsKeepsItsValueThroughEveryRenumberedVariant() {
-        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-mesh-library-outside-");
+        // A host library that publishes from its store leases the set until the process ends (SdfMeshStore.Hold), so the
+        // scratch store is deleted as far as the lease allows.
+        using var scratch = new Puck.Testing.TemporaryDirectory(bestEffortDelete: true, prefix: "puck-mesh-library-outside-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0001ul);
         UInt128 identity = 3;
@@ -417,7 +419,9 @@ public sealed class SdfMeshLibraryLawTests {
     [InlineData(false)]
     [InlineData(true)]
     public void ANativeDecodeHoldsTheManagedDecodesPlanesAndARestoreWritesTheSameWords(bool chunked) {
-        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-mesh-library-native-");
+        // A host library that publishes from its store leases the set until the process ends (SdfMeshStore.Hold), so the
+        // scratch store is deleted as far as the lease allows.
+        using var scratch = new Puck.Testing.TemporaryDirectory(bestEffortDelete: true, prefix: "puck-mesh-library-native-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0002ul);
         UInt128 identity = 4;
