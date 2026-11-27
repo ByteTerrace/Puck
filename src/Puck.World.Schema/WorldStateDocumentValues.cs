@@ -85,7 +85,7 @@ public static class WorldStateDocumentValues {
     internal static object SourceOfBinding(object value) => BindingSources.TryGetValue(value, out var source) ? source : value;
     // The rows each definition's document values name, collected once per definition. A rewrite can drop a reference
     // (a flattening) but never add one, so a set collected earlier is never missing a row the definition names.
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
+    private static readonly WorldDocumentDerivedTable<HashSet<string>> ReferencedRowSets = new();
 
     /// <summary>Returns an owner's own projection of a definition, whose state-bound values read the arena held by
     /// <paramref name="live"/>: a server's live arena, or the arena a client's deliveries fill. Seed rows remain
@@ -131,7 +131,7 @@ public static class WorldStateDocumentValues {
         var bound = definition;
 
         // A set already collected answers a definition that names no reference without a walk; nothing collects one here.
-        if (!ReferencedRowSets.TryGetValue(key: definition, value: out var named) || (named.Count != 0)) {
+        if (!ReferencedRowSets.TryGetValue(definition: definition, value: out var named) || (named.Count != 0)) {
             var binder = new Binder(live: live);
 
             bound = Walker.Rewrite(
@@ -489,16 +489,12 @@ public static class WorldStateDocumentValues {
 
                 return rows;
             },
-            key: definition
+            definition: definition
         );
     }
     // A definition that names the same references as another (a state-only replacement, a holding projection, a
     // resolution or a binding of it) carries the set already collected for the other.
-    internal static void CarryReferencedRows(WorldDefinition source, WorldDefinition target) {
-        if (ReferencedRowSets.TryGetValue(key: source, value: out var rows)) {
-            ReferencedRowSets.AddOrUpdate(key: target, value: rows);
-        }
-    }
+    internal static void CarryReferencedRows(WorldDefinition source, WorldDefinition target) => _ = ReferencedRowSets.Carry(source: source, target: target);
     /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="graph"/>
     /// — one section or value holder of a definition — names to <paramref name="rows"/>, in one walk.</summary>
     /// <param name="graph">The sub-graph to walk.</param>

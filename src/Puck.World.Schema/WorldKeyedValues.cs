@@ -74,7 +74,7 @@ public static class WorldKeyedValues {
         public WorldAuthoredValues Values { get; init; }
     }
 
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HeldAuthoredValues> AuthoredCache = new();
+    private static readonly WorldDocumentDerivedTable<HeldAuthoredValues> AuthoredCache = new();
 
     /// <summary>Returns a document's keyed values (<see cref="Of"/>) and bound values (<see cref="BoundOf"/>) from one
     /// walk of the document, memoized for the immutable definition's lifetime.</summary>
@@ -85,7 +85,7 @@ public static class WorldKeyedValues {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return AuthoredCache.GetValue(
-            key: definition,
+            definition: definition,
             derive: static candidate => new HeldAuthoredValues { Values = Read(graph: candidate) }
         ).Values;
     }

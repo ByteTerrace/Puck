@@ -23,6 +23,13 @@ public sealed class CodeDerivedCacheAnalyzerTests {
             }
         }
 
+        namespace Puck.World {
+            public sealed class WorldDefinition { }
+            public sealed class WorldDocumentDerivedTable<TValue> where TValue : class? {
+                private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, TValue> m_entries = new();
+            }
+        }
+
         """;
 
     // The fixtures compile without xUnit: a compilation that references it is a test assembly, which the rule skips.
@@ -75,6 +82,22 @@ public sealed class CodeDerivedCacheAnalyzerTests {
             }
             """);
 
+        Assert.Empty(collection: result.WithId(id: "CACHE001"));
+    }
+
+    [Fact]
+    public void ADefinitionKeyedTableIsRefusedOutsideTheDocumentDoor() {
+        var result = Run(body: """
+            internal static class Memos {
+                private static readonly Puck.Abstractions.CodeDerivedTable<Puck.World.WorldDefinition, object> Raw = new();
+                private static readonly Puck.World.WorldDocumentDerivedTable<object> Door = new();
+                private static readonly Puck.Abstractions.CodeDerivedTable<string, object> Other = new();
+                [Puck.SideTable(reason: "no product build reads it")]
+                private static readonly Puck.Abstractions.CodeDerivedTable<Puck.World.WorldDefinition, object> Marked = new();
+            }
+            """);
+
+        Assert.Contains(actualString: result.Single(id: "CACHE002").GetMessage(), comparisonType: StringComparison.Ordinal, expectedSubstring: "'Memos.Raw'");
         Assert.Empty(collection: result.WithId(id: "CACHE001"));
     }
 }
