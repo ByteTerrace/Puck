@@ -206,10 +206,13 @@ tick's own due signals, so anything synthesized during a fold is visible only to
 the next call. A catch-up of N steps therefore cannot stretch the gap between an
 input's active and inactive edge.
 
-A device whose terminal focus is released captures through
+The host-owned always-active plane (`IAlwaysActiveInputBindings`) answers a
+source the seat's active page leaves unbound, so a page that binds one of its
+sources (an engaged terminal's console on the backtick) takes it while that
+page is active. A device whose terminal focus is released captures through
 `CaptureFocusExempt`. Only commands declaring `CommandInputScope.FocusExempt`
-may dispatch, and only the host-owned always-active plane answers, so a typed
-key cannot press a gameplay page's binding. A RELEASE is still forwarded through
+may dispatch, and only the plane answers, so a typed key cannot press a
+gameplay page's binding. A RELEASE is still forwarded through
 the page resolver, because that resolver holds the chord tracker, the press
 latches, and the armed command rows; a release those never observe would leave a
 page flipped and a row armed until the console closes.
@@ -880,6 +883,32 @@ supersedes one still open. A settled loop prints `[world.iteration] <line>` on
 stderr, so `host.log category world.iteration` reads every loop a World has
 run, and `world.wait iteration <seconds>` holds a script until the latest loop
 settles. A host with no renderer reaches no frame and says so.
+
+## Overlap view
+
+`world.debug-view overlaps [<tolerance-mm>] [bodies]` dims the scene and makes
+every surface glow where another placed object's solid passes into the solid
+behind it: a branch through a display station, a pier haunch through a wall, a
+button sunk into a panel. The glow runs from magenta just past the tolerance to
+yellow at five centimetres and deeper, measured as the depth of the first
+overlap behind the surface along the pixel's ray. An overlap under the
+tolerance (three millimetres unless given, `0` shows every one) stays dark, so
+solids meant to touch, a foot on a floor or a cabinet against a wall, read
+clean. The shapes of one placed creation are one object whatever groups they
+bake into, so a creation's own unions never glow; bodies (the seat's character
+and every moving rigid copy, with what rides them) take part only with
+`bodies`. The answer echoes the tolerance and the bodies setting.
+
+The view reads the baked meshes the frame draws, so it shows what a player
+sees, and it needs no report and no CPU work per frame. While it is on, the
+view's graph adds one raster pass that draws every opaque draw its frustum
+keeps again, faces behind the visible surface only
+(`SdfWorldPackage.WithOverlaps`); with it off, no view allocates or records
+anything for it. Only solids take part: an open authored sheet or a draw cut by
+a portal plane has no inside. The overlap is measured along the ray, so a thin
+contact seen at a grazing angle reads deeper than it is; look again from
+another side before calling it a flaw. An overlap wholly behind another
+object's back face is not seen from that side.
 
 ## Scene diagnostics
 

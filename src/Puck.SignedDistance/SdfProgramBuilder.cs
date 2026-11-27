@@ -199,6 +199,7 @@ public sealed partial class SdfProgramBuilder {
         m_materialRecolor = null;
         m_positionalFold = null;
         ResetOpenInstance();
+        m_objectInstances = -1;
         m_shapeCount = 0;
     }
 

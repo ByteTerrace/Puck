@@ -28,7 +28,10 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
     /// <param name="text">The text literal for a kind=Text row, or <see langword="null"/>.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     /// <param name="rowFrom">The live row selection, or <see langword="null"/> when the row is named.</param>
-    public WriteEffect(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, StateWriteKind write, in CompiledValueSource source, string? text, string describe, LiveRow? rowFrom = null) : base(describe: describe) {
+    /// <param name="textEdit">Whether the write is an add to a kind=Text row, which edits the text's end by the source's
+    /// whole number (<see cref="TextEdit"/>) and, unlike a numeric add, does not commute with another write.</param>
+    public WriteEffect(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, StateWriteKind write, in CompiledValueSource source, string? text, string describe, LiveRow? rowFrom = null, bool textEdit = false) : base(describe: describe) {
+        IsTextEdit = textEdit;
         Key = key;
         KeyFrom = keyFrom;
         RowFrom = rowFrom;
@@ -48,6 +51,8 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
     public int RowOrdinal { get; }
     /// <inheritdoc/>
     public CompiledValueSource Source { get; }
+    /// <summary>Gets whether the write edits a kind=Text cell's end by the source's whole number.</summary>
+    public bool IsTextEdit { get; }
     /// <summary>Gets the text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</summary>
     public string? Text { get; }
     /// <inheritdoc/>
@@ -66,10 +71,13 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
     public override void CollectWrites(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
+        // A text edit lands on the text as it stands, so two in one tick do not commute: it is ordered as a set is.
+        var isSet = ((Write == StateWriteKind.Set) || IsTextEdit);
+
         if (RowFrom is { } live) {
             live.CollectRows(
                 into: into,
-                isSet: (Write == StateWriteKind.Set)
+                isSet: isSet
             );
 
             return;
@@ -78,7 +86,7 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
         CollectWriteAccess(
             effect: this,
             into: into,
-            isSet: (Write == StateWriteKind.Set)
+            isSet: isSet
         );
     }
     /// <inheritdoc/>

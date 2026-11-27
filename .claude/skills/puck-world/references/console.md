@@ -375,8 +375,10 @@ Each local seat owns a `ConsoleTape` (`Puck.Hosting`; `ICommandObserver`,
 64-line ring), `ConsoleLineEditor`, history, and principal-bound
 `TextCommandSession`. `ConsoleInputSink` (`Puck.Launcher`) routes a text
 device to its roster seat and feeds only that seat's editor while its session
-is open. Backtick belongs to the terminal's always-active binding plane, not
-to any world page, so a page or chord override cannot remove the way out.
+is open. Backtick belongs to the terminal's always-active binding plane, which
+answers it wherever the seat's active page leaves it unbound (an engaged
+terminal's console binds it, `worlds/standard/contexts/terminal-console.puck`)
+and always while the console is open, so the backtick always closes it.
 `console [on|off]` is a terminal verb, like `quit`; a seated activation targets
 its invoking slot. Administrative stdin remains the separate
 `Principal.Console` ingress and must name its target explicitly:

@@ -168,6 +168,7 @@
 #define SDF_MESH_CLIP_PLANE_WORD        28u
 #define SDF_MESH_LEVEL_TABLE_WORD       32u
 #define SDF_MESH_SELECTION_WORD         34u
+#define SDF_MESH_ENCLOSED_FLAG          4u
 #define SDF_MESH_ABSENT_FLAG            8u
 #define SDF_MESH_DYNAMIC_FLAG           16u
 #define SDF_MESH_SLOT_BOX_FLAG          32u
@@ -182,6 +183,7 @@
 #define SDF_MESH_WORLD_MATERIAL_FLAG    0x00000008u
 #define SDF_MESH_CLIP_FLAG              0x00000010u
 #define SDF_MESH_OBJECT_KEY_SHIFT       8u
+#define SDF_MESH_GROUP_OBJECT_KEY_BIT   1048576u
 #define SDF_MESH_DISPLACEMENT_WORD      50u
 #define SDF_MESH_CLUSTER_HEADER_WORDS   2u
 #define SDF_MESH_CLUSTER_BOX_WORDS      6u
@@ -260,6 +262,9 @@
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
 
+// The overlap spans the overlap raster pass accumulates and the overlap view reads.
+#define SDF_OVERLAP_SPAN_WORDS 2u
+
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
 #define SDF_GLASS_SUM_WORDS            17u
 #define SDF_GLASS_SUM_SCALE            4096.0
@@ -293,7 +298,7 @@
 #define SDF_AIR_STEEP_LIMIT                  (-20.0)
 
 // The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
-#define SDF_DEBUG_VIEW_COUNT       18
+#define SDF_DEBUG_VIEW_COUNT       19
 #define SDF_DEBUG_VIEW_OFF         0
 #define SDF_DEBUG_VIEW_DEPTH       1
 #define SDF_DEBUG_VIEW_NORMALS     2
@@ -312,5 +317,6 @@
 #define SDF_DEBUG_VIEW_BLOOM       15
 #define SDF_DEBUG_VIEW_SHADE_COST  16
 #define SDF_DEBUG_VIEW_SHADE_TIER  17
+#define SDF_DEBUG_VIEW_OVERLAPS    18
 
 #endif // SDF_RENDER_HLSLI

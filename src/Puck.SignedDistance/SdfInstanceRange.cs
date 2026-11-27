@@ -43,6 +43,11 @@ public readonly record struct SdfInstanceRange(
     public bool RestPoseSkin { get; init; }
     /// <summary>Gets whether this instance has its own bake while sharing its motion owner's transform.</summary>
     public bool BakesSeparately { get; init; }
+    /// <summary>Gets whether the instance belongs to the same object as the instance declared just before it
+    /// (<see cref="SdfProgramBuilder.BeginObject"/>): one placed creation, whatever groups its shapes, tiles, text and glass
+    /// bake into. Its draws carry one object key, so a view reads no edge or overlap between them. It shapes no field and no
+    /// bake.</summary>
+    public bool JoinsPreviousObject { get; init; }
     /// <summary>Gets whether a dynamic bound's offset is expressed in its slot's rotating local frame.</summary>
     public bool BoundInSlotFrame { get; init; }
     /// <summary>Gets a static instance's world-axis box, where its emitter knows one tighter than its bound sphere's cube:

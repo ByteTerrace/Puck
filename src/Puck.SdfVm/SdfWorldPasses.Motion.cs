@@ -5,8 +5,8 @@ namespace Puck.SdfVm;
 // Each instance's motion scopes (SdfMotionScope): one for each raster pass whose draws its passes show. A pass signs with
 // the revision of its scope (MotionOf), so its image stands while nothing its scope's cull keeps has changed, whatever
 // else of the residency moves:
-//   - the mesh pass's   : the mesh pass and every pass that shades what it drew (the pyramid, the surface pass, shading,
-//                         the resolve, the sky and the composite, the optical tail). The instance's temporal history
+//   - the mesh pass's   : the mesh pass and every pass that shades what it drew (the pyramid, the surface pass, the
+//                         overlap pass, shading, the resolve, the sky and the composite, the optical tail). The instance's temporal history
 //                         follows this scope's poses.
 //   - the glass pass's  : the glass clear, raster and shading, judged by glass draws alone.
 // The shadows are the residency's (SdfWorldShadows), whose entries hold scopes of their own under their light boxes; the

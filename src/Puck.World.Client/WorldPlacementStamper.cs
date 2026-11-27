@@ -690,7 +690,14 @@ public static partial class WorldPlacementStamper {
             _ = builder.EndInstance();
         }
 
+        // Every instance of one stamped copy is one object (SdfInstanceRange.JoinsPreviousObject), however its shapes, tiles,
+        // text and glass bake.
         public void Visit(CreationStampInstance instance) {
+            _ = builder.BeginObject();
+            Emit(instance: instance);
+            _ = builder.EndObject();
+        }
+        private void Emit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
                 hidden: hidden,

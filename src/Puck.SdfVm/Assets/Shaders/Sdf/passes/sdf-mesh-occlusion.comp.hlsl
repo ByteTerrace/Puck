@@ -728,7 +728,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         // alone: the depth's entry and glass phases, or the exit phases.
         bool depthLayer = (header.w & 2u) == 0u;
         bool exitLayer = (header.w & 4u) == 0u;
-        bool encloses = (a.w & 4u) != 0u;
+        bool encloses = (a.w & SDF_MESH_ENCLOSED_FLAG) != 0u;
         entryIdentity = draw | (level << SDF_MESH_LEVEL_SHIFT);
         if (splitExit && opaqueEmit && depthLayer && encloses && !unboxed &&
             (sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) == 0u &&
