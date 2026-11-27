@@ -230,7 +230,7 @@ let labWingRow = (wallRowNorth - 1)
 let labWingPlan = [
   {
     id: "climbing", bay: 2, open: true, document: "labs/climbing"
-    title: "CLIMBING LAB", note: "The Moth's climb on holdable faces, a tall face to a ledge, and the slots for the wall kit and the rope net."
+    title: "CLIMBING LAB", note: "The Moth's climb on holdable faces, the gallery's rope net, and its climbing wall from the floor to a ledge."
   }
   {
     id: "light", bay: 3, open: true, document: "labs/light"
@@ -479,8 +479,10 @@ let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 let toyLatticeLooseBay = 8
 // The rope net panel: the north edge's bay whose frame holds a net that gives and climbs (architecture.puck's `latticeNet`
 // facet, gallery.md "The lattice") rather than a net drawn over a pane. Its frame and its net still close the edge to
-// every body. Kept clear of the toybox's stairs, lift and tree landings.
-let toyLatticeNetBay = 10
+// every body. Kept clear of the toybox's stairs, lift, stations and house, of every tree branch's landing and of the
+// climbing wall's bay (10, below): bay 9 has none of them, standing between the tree's
+// gate (bay 8) and the little house (bay 10), its aisle open to walk up to the net from.
+let toyLatticeNetBay = 9
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
 // centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two

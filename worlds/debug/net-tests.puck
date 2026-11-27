@@ -1,5 +1,5 @@
-// The rope net panel on level 1's north edge (gallery/shell.puck, layout.puck's toyLatticeNetBay), climbed as a player
-// climbs it: seat 1 plays the `net-climb` route (benchmark-route.puck) with the standard's `walker` program, which walks
+// The rope net panel of the climbing lab (labs/climbing.puck, the panel the gallery stands on level 1's north edge: gallery/shell.puck),
+// climbed as a player climbs it: seat 1 plays the `climb-net` route with the standard's `walker` program, which walks
 // the body straight at the net, pushes into it until the climb takes it, climbs until it is a metre up, hangs, then runs
 // back, which lets go. Rules in this test world latch how far the climb got and what the net did, reading the body's own
 // facts and the net's readings (`net(<placement>, deflection|awake|holders|pushers)`, $net:):
@@ -14,20 +14,18 @@
 // the state two runs agree on: a pushed, held and released net steps bit for bit alike.
 
 schema: "puck.world.definition.v1"
-basis: "debug"
-// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
-documentId: "debug"
-import "stopped-machines"
-import "gallery/layout"
+basis: "labs/climbing"
+documentId: "lab-climbing"
+import "labs/climbing-plan"
 import "../standard/architecture"
 
-// The rope net placement (shell.puck names it gallery-lattice-north-<toyLatticeNetBay>, bay 10, which the reads below
-// spell out), and the readings that judge it: a strand's thickness is the least dip worth calling one, and
-// the net's reach (standard/architecture.puck's ropeNet) the most any node may stand off rest.
+// The rope net placement (the lab's `climbNetPanel`), and the readings that judge it: a strand's thickness is the least
+// dip worth calling one, and the net's reach (standard/architecture.puck's ropeNet) the most any node may stand off rest.
+let netPanel = climbNetPanel
 let netStrand = ropeNet.strand
 let netReach = ropeNet.reach
-// How far over level 1's floor the body's foot is a metre up the net, and the band over the floor it stands in again.
-let netFloor = galleryWorld(0, galleryFloor[1], 0)[1]
+// How far over the lab's floor the body's foot is a metre up the net, and the band over the floor it stands in again.
+let netFloor = 0
 let netClimb = 1
 let netFloorBand = 0.3
 
@@ -50,7 +48,7 @@ state {
 }
 
 rule "net-took" {
-  when netReached == 0 and fact(body, 0, HoldingUnwalkable) == 1 and net("gallery-lattice-north-10", holders) >= 1
+  when netReached == 0 and fact(body, 0, HoldingUnwalkable) == 1 and net(netPanel, holders) >= 1
   mode: Level
   netReached = 1
 }
@@ -67,24 +65,24 @@ rule "net-dropped" {
 }
 // The most holders and the deepest dip while she is on the net; the farthest deflection ever.
 rule "net-held" {
-  when netReached >= 1 and netReached <= 2 and net("gallery-lattice-north-10", holders) > netHeld
+  when netReached >= 1 and netReached <= 2 and net(netPanel, holders) > netHeld
   mode: Level
-  netHeld = net("gallery-lattice-north-10", holders)
+  netHeld = net(netPanel, holders)
 }
 rule "net-dipped" {
-  when netReached >= 1 and netReached <= 2 and net("gallery-lattice-north-10", deflection) > netDeepest
+  when netReached >= 1 and netReached <= 2 and net(netPanel, deflection) > netDeepest
   mode: Level
-  netDeepest = net("gallery-lattice-north-10", deflection)
+  netDeepest = net(netPanel, deflection)
 }
 rule "net-farthest" {
-  when net("gallery-lattice-north-10", deflection) > netFarthest
+  when net(netPanel, deflection) > netFarthest
   mode: Level
-  netFarthest = net("gallery-lattice-north-10", deflection)
+  netFarthest = net(netPanel, deflection)
 }
 
 test "the rope net, taken, climbed a metre and let go" {
   when {
-    seat1: route.play net-climb
+    seat1: route.play climb-net
     ticks 900
   }
   expect {
@@ -92,7 +90,7 @@ test "the rope net, taken, climbed a metre and let go" {
     netHeld == 1
     netDeepest > netStrand
     netFarthest <= netReach
-    net("gallery-lattice-north-10", awake) == 0
+    net(netPanel, awake) == 0
     fact(body, 0, Grounded) == 1
   }
 }

@@ -24,72 +24,8 @@ import "../../standard/climbing"
 import "../shapes"
 import "layout"
 import "look"
+import "climbing-routes"
 import "shell"
-
-// The face's facet grid and the plates' relief and lean, gentler than the standard's so a hold seated 0.04 m out of
-// the face's plane stands proud of every plate it meets.
-let climbFacets = { columns: 3, rows: 10, relief [0.02, 0.04], tilt: 2.5, salt: 0.37 }
-let climbHoldSeat = 0.04
-
-// The volumes: each a face coordinate (metres across from the face's middle, up from its foot), its size and its tone
-// in lookClimb.volumes.
-let climbVolumes = [
-  { at [-0.85, 2.4], size: 1.2, tone: 0 }
-  { at [0.95, 5.1], size: 1.0, tone: 1 }
-  { at [-0.8, 8.6], size: 1.1, tone: 1 }
-  { at [0.75, 11.1], size: 0.9, tone: 0 }
-]
-// How far a hold at a face coordinate stands out on a volume beneath it: the volume's front, 0.09 m out at size 1,
-// wherever the hold lies inside the volume's triangle, and nothing elsewhere.
-function climbOnVolume(at, volume) = (let d = (at - volume.at) in
-(((d[1] >= (-0.38 * volume.size)) and
-  (d[1] <= (0.38 * volume.size)) and
-  (absolute(d[0]) <= ((0.45 * volume.size) * (((0.38 * volume.size) - d[1]) / (0.76 * volume.size))))) ? (0.09 *
-  volume.size) : 0))
-function climbStandOff(at) = maximum(map(climbVolumes, volume => climbOnVolume(at, volume)))
-
-// The routes, each a family's line of holds (the standard's climbRoute: a hold every `pitch` metres along its points,
-// stepping to either side of the line in turn). Sunflower is the gentle line, mostly jugs; teal climbs the west side
-// on crimps and pinches; berry the east side on slopers and pinches, wider apart. Each ends 0.4 m under the coping,
-// before the doorway.
-let climbRoutes = [
-  {
-    family: "sunflower"
-    color: lookClimb.routes.sunflower
-    holds: climbRoute(
-      [[0.1, 0.3], [-0.3, 3], [0.35, 6.2], [-0.25, 9.4], [0, 12.55]],
-      0.6,
-      0.28,
-      ["jug", "foot", "jug", "sloper", "jug", "foot"],
-      [1.1, 1, 1, 1, 1.15, 1]
-    )
-  }
-  {
-    family: "teal"
-    color: lookClimb.routes.teal
-    holds: climbRoute(
-      [[-1.5, 0.35], [-1.5, 4.5], [-1, 8], [-1.4, 10.8], [-0.95, 12.55]],
-      0.72,
-      0.24,
-      ["crimp", "pinch", "crimp", "foot"],
-      [1, 1.1, 1.2, 1]
-    )
-  }
-  {
-    family: "berry"
-    color: lookClimb.routes.berry
-    holds: climbRoute(
-      [[1.4, 0.35], [1.15, 3.5], [1.45, 6.8], [1.1, 10.2], [0.95, 12.55]],
-      0.8,
-      0.26,
-      ["sloper", "pinch", "crimp", "sloper", "foot"],
-      [1, 1, 1.1, 0.9, 1]
-    )
-  }
-]
-// Every hold of every route, with its family and colour; and each family and kind a route uses, which is one prototype.
-let climbHolds = flatMap(climbRoutes, r => map(r.holds, h => (h with { family: r.family, color: r.color })))
-let climbHoldPrototypes = distinct(map(climbHolds, h => { family: h.family, kind: h.kind, color: h.color }))
 
 // The face's and frame's palette: the standard's slots in the gallery's look, its panels and frame brushed as the
 // building's surfaces are.

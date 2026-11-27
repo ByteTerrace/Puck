@@ -213,6 +213,12 @@ gate where she can climb.
   gallery's climbing wall they meet a hold only by chance. An effector target that seeks the nearest grip a world
   marks (a hold's placement, or a material that carries a grip class) within its reach would put her hands and feet on
   the holds a route sets, and a route could then be climbed as set rather than only followed by eye.
+- **The hall's wall and net have no scenario.** The wall's and the net's scenarios (`climbing-wall-tests.puck`,
+  `net-tests.puck`) play the [climbing lab](../../worlds/debug/labs/README.md#climbing)'s copies, which stand the
+  gallery's pieces and routes at the gallery's sizes in a room of their own, so a feature is tested without the whole
+  debug world. What only the hall adds, the doorway onto level 3 and the panel in the toybox's lattice, is played by the
+  benchmark routes `climbing-wall` and `net-climb` and judged there; a scenario that reads the hall would need the
+  debug world's cold bake.
 - **The analytic cast's cost.** Each step of a cast reads every holdable collider. A world that makes everything
   holdable wants the holdable set behind the collider grid the contact solve uses (`FixedColliderGrid`).
 

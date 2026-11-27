@@ -177,8 +177,8 @@ drawn only; a clear pane threaded through it holds every body, so no body
 flies or jumps in from the void and none drops out, while the panel stays open
 to the eye.
 
-**The rope net panel.** One panel is a real net: `gallery-lattice-north-10`
-(the north edge's bay 10, layout.puck's `toyLatticeNetBay`) keeps the lattice's
+**The rope net panel.** One panel is a real net: `gallery-lattice-north-9`
+(the north edge's bay 9, layout.puck's `toyLatticeNetBay`, kept off the climbing wall's bay 10) keeps the lattice's
 frame and drops its pane, and its placement carries the standard's
 `latticeNet` facet (architecture.puck, `ropeNet`'s material): a grid of 12 by
 9 nodes from post to post and sill to head, pinned at all four members, that
@@ -190,7 +190,8 @@ under its hands with a ripple outward, and the drawn strands and knots move
 with the nodes. It settles and sleeps when no one touches it. `debug.go
 rope-net` stands a body before it; `world.nets` reads its nodes, deflection,
 holders and leaners; `world.benchmark run net-climb` plays a climb, and
-[net-tests.puck](net-tests.puck) plays the same climb headless.
+the [climbing lab](labs/README.md#climbing) holds a copy of the panel and plays the same climb headless in
+[net-tests.puck](net-tests.puck).
 
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
@@ -388,7 +389,7 @@ grown from a bouldering face into a climb of the whole hall.
 
 Bay 10 is the nave's last even bay that nothing else at the edge claims: the
 tree's branches land in bays 4, 7 and 8, its trunk stands in bay 6, the loose
-lattice panel is bay 8's and bay 12 holds the north-east stair. The displays in
+lattice panel is bay 8's, the rope net panel on level 1 is bay 9's and bay 12 holds the north-east stair. The displays in
 bays 9 and 11 stand more than a metre clear of the pad on either side.
 
 | Part | What it is | Size |
@@ -436,9 +437,10 @@ which any world can stand.
 | `gallery.shot climbing-wall-across` | Looks at the wall from level 2's south gallery, across the void |
 | `world.benchmark run climbing-wall` | Climbs it through seat 1's own controls: onto the pad, up the face, over the ledge and through the doorway |
 
-`puck test worlds/debug/climbing-wall-tests.puck` plays the same route headless
-and checks that the body held the face past levels 1 and 2, stood on the ledge
-and on level 3, never ran out of stamina, never fell and never ended a step
+`puck test worlds/debug/climbing-wall-tests.puck` plays the same climb headless on the
+[climbing lab](labs/README.md#climbing)'s copy of the wall
+and checks that the body held the face past the heights of levels 1 and 2, stood on the ledge
+and on the landing past it, never ran out of stamina, never fell and never ended a step
 inside a surface, and that a climber who lets go lands on the pad.
 
 ## The displays

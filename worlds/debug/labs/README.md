@@ -77,20 +77,34 @@ naming anything in a frame (`world.view.camera`, `world.view.pick`).
 
 [climbing.puck](climbing.puck): the Moth's climb (`climbAbility`, through her
 own [moth-climb.puck](../avatars/moth-climb.puck)) on a studio floor under a
-held midday. Three bays face the seat along one line:
+held midday. Three bays face the seat along one line, which boots before them
+facing +Z ([climbing-plan.puck](climbing-plan.puck) holds the plan):
 
 - `climb-practice`: a holdable face 6 m tall before a block whose top is floor,
   for a climb, a top-out and a mantle;
-- `climb-net`: the rope net's slot, an empty frame 3 m wide and 4 m tall where
-  the climbing net panel stands once its `net` facet lands;
-- `climb-wall`: the climbing wall's slot, a plain holdable face as tall as the
-  gallery's wall (level 0's floor to level 3's) over a ledge, where the
-  standard's climbing wall kit (`worlds/standard/climbing.puck`, on the climbing
-  lane's branch) stands once it lands, placed as the gallery places it.
+- `climb-net`: the gallery's rope net panel, a toy-lattice frame whose net is
+  the standard's rope net (the placement's `net` facet), 5 m across and 4 m
+  tall, which a body takes by walking into it, climbs and sets swinging;
+- `climb-wall`: the gallery's climbing wall at the gallery's size
+  ([climbing.md](../../../docs/plans/climbing.md)): the standard's kit
+  (`worlds/standard/climbing.puck`) as the hall stands it, with the same routes
+  ([gallery/climbing-routes.puck](../gallery/climbing-routes.puck)): a face
+  from the floor to the height of level 3, its frame and ledge, the holds, the
+  pad, and a landing past the ledge where level 3's floor stands in the hall.
 
 Places: `hero` (12 m before the faces), `climb-practice`, `climb-net`,
-`climb-wall` (3 m before each). Settled when the faces' bake is done; the climb
-itself is judged in motion (a presented burst while she climbs), not in stills.
+`climb-wall` (3 m before each); `debug.go <place>` poses a body there, facing the
+face. The regions `place-climb-wall-top` and `place-climb-net-high` end the
+routes. Settled when the bake's done line has printed; the climb itself is judged
+in motion (a presented burst while she climbs), not in stills.
+
+The routes `climb-wall` and `climb-net` play the two climbs through seat 1's
+own controls (`world.benchmark run climb-wall`), and
+[climbing-wall-tests.puck](../climbing-wall-tests.puck) and
+[net-tests.puck](../net-tests.puck) run them headless on this lab
+(`puck test worlds/debug/climbing-wall-tests.puck`). The hall's own wall and net
+are played by the debug world's routes `climbing-wall` and `net-climb`
+([benchmark-route.puck](../benchmark-route.puck)).
 
 ### Light
 
