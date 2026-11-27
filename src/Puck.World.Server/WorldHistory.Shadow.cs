@@ -82,11 +82,9 @@ public sealed partial class WorldHistory {
         );
 
         try {
-            var profiles = new WorldOwnedWorlds(
-                directory: directory,
-                machineId: m_server.Profiles.MachineId,
-                template: definition
-            );
+            // A shadow holds no account to write: it reads a detached copy of the live one, so a seek never writes or
+            // rolls back a character.
+            var profiles = m_server.Profiles.CreateReplayCopy();
 
             var (server, _) = WorldServer.FromCheckpoint(
                 authorityIdentity: m_server.AuthorityIdentity,

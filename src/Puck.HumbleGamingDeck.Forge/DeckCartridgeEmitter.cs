@@ -58,6 +58,8 @@ internal sealed class DeckCartridgeEmitter {
     private const byte CellTile = 0x1B;
     private const byte CellPalette = 0x1C;
     private const byte Attribute = 0x1D;
+    // A sixteen-bit array index, held apart from the comparison operands so an index read inside one cannot clobber it.
+    private const byte IndexWide = 0x1E;
     private const byte VariableBase = 0x20;
     private const byte WideLeft = 0xA0;
     private const byte WideRight = 0xA2;
@@ -689,6 +691,12 @@ internal sealed class DeckCartridgeEmitter {
         var inside = NewLabel();
         var done = NewLabel();
 
+        if (Wide(expression: index)) {
+            WideElement(array: array, index: index, pointer: PointerP, guard: false, outside: () => Pointer(zeroPage: PointerP, address: Void));
+
+            return;
+        }
+
         Load(expression: index);
         if (length < CartridgeLimits.ArrayLength) {
             Op(opcode: CmpImmediate, operand: length);
@@ -703,6 +711,31 @@ internal sealed class DeckCartridgeEmitter {
         LoadImmediate(value: (m_arrays[array] >> 8));
         Op(opcode: AdcImmediate, operand: 0);
         Op(opcode: StaZeroPage, operand: (PointerP + 1));
+        Mark(label: done);
+    }
+    // Points a zero-page pointer at an array element by a sixteen-bit index (a bare wide slot or a literal past a byte),
+    // or runs `outside` when the index is at or past the length: index - length borrows exactly when it is inside.
+    private void WideElement(string array, ExpressionProgram index, byte pointer, bool guard, Action outside) {
+        var length = m_layout.ArrayLengths[array];
+        var inside = NewLabel();
+        var done = NewLabel();
+
+        LoadWide(expression: index, destination: IndexWide, guard: guard);
+        Op(opcode: LdaZeroPage, operand: IndexWide);
+        Op(opcode: CmpImmediate, operand: (length & 0xFF));
+        Op(opcode: LdaZeroPage, operand: (IndexWide + 1));
+        Op(opcode: SbcImmediate, operand: (length >> 8));
+        m_program.Branch(opcode: Bcc, label: inside);
+        outside();
+        JumpTo(label: done);
+        Mark(label: inside);
+        Op(opcode: Clc);
+        Op(opcode: LdaZeroPage, operand: IndexWide);
+        Op(opcode: AdcImmediate, operand: (m_arrays[array] & 0xFF));
+        Op(opcode: StaZeroPage, operand: pointer);
+        Op(opcode: LdaZeroPage, operand: (IndexWide + 1));
+        Op(opcode: AdcImmediate, operand: (m_arrays[array] >> 8));
+        Op(opcode: StaZeroPage, operand: (pointer + 1));
         Mark(label: done);
     }
     private void Step(CartridgeStatement statement) {
@@ -1011,12 +1044,7 @@ internal sealed class DeckCartridgeEmitter {
                 return;
         }
     }
-    // Whether an operand reads two bytes: a bare wide slot, or a bare literal past a byte.
-    private bool Wide(ExpressionProgram expression) => expression.Instructions switch {
-        [{ Payload: InstructionPayload.State { Key: null } state }] => (m_variables.TryGetValue(key: state.Name.Spelling, value: out var slot) && (slot.Width == 2)),
-        [{ Payload: InstructionPayload.Constant constant }] => (constant.Value > CartridgeLimits.NarrowMaximum),
-        _ => false,
-    };
+    private bool Wide(ExpressionProgram expression) => CartridgeExpressions.ReadsWide(expression: expression, layout: m_layout);
     // Leaves a two-byte value at the destination: a bare literal or wide slot whole, anything else as a byte widened.
     private void LoadWide(ExpressionProgram expression, byte destination, bool guard = false) {
         switch (expression.Instructions) {
@@ -1113,6 +1141,21 @@ internal sealed class DeckCartridgeEmitter {
             var length = m_layout.ArrayLengths[array];
             var inside = NewLabel();
             var done = NewLabel();
+
+            if (Wide(expression: index)) {
+                var read = NewLabel();
+
+                // An index past the length reads zero, as a byte index does.
+                WideElement(array: array, index: index, pointer: PointerQ, guard: guard, outside: () => {
+                    LoadImmediate(value: 0);
+                    JumpTo(label: read);
+                });
+                Op(opcode: LdyImmediate, operand: 0);
+                Op(opcode: LdaIndirectY, operand: PointerQ);
+                Mark(label: read);
+
+                return;
+            }
 
             Load(expression: index, guard: guard);
             Op(opcode: Tax);

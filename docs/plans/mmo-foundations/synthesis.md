@@ -87,7 +87,7 @@ the memo:
    adoption asks `HomeIdentity`, which answers only for a non-peer arrival, and
    every reservation decoded from the federation wire is a peer admission
    ([puck-today, section 2](puck-today.md#2-write-back-and-the-travelling-projection)).
-   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1674-1675`):
+   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1684-1685`):
 
    ```csharp
    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
@@ -193,10 +193,10 @@ whole-population defect (Old School RuneScape's item-definition merge,
 [persistence, section 1](persistence.md#1-storing-characters)) **[record]**.
 
 **What exists.** An identity copies its template at seed **[opened]**
-(`src/Puck.World.Server/WorldOwnedWorlds.cs:691`):
+(`src/Puck.World.Server/WorldOwnedWorlds.cs:827`):
 
 ```csharp
-    private static WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
+    private WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
 ```
 
 and an identity the catalog can no longer read is set aside whole, never
@@ -308,7 +308,7 @@ assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 ```
 
 The destination's consumed-epoch fence is real and per destination
-**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2453-2455`):
+**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2463-2465`):
 
 ```csharp
                 (knownEpoch >= mobility.Epoch)
@@ -488,18 +488,21 @@ gates on is forgeable by its owner (A1) and writable by any colocated world
 (A2), and a visitor's progress abroad dies with the host (A3)
 ([attacks, critical](attacks.md#a1-the-self-owned-character)) **[record]**.
 
-**What exists.** `TryAdopt` writes every carried fact and record field through
-the identity's own write door and nothing else **[opened]**
-(`src/Puck.World.Schema/WorldIdentity.Records.cs:129-130`):
+**What exists.** `TryAdopt` writes every carried fact and crossing pool through
+the identity's own write door and nothing else, skipping a home-scoped name
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:194-198`):
 
 ```csharp
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
-            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
+            if (definition?.IsHomeScoped(name: cell.Key) == true) {
+                continue;
+            }
+            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, writer: WorldIdentityWriter.Home, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
 ```
 
 `Decide` is the other door, deny by default on a grant naming the source
 document, `Mutate` and the slot, with a required write mask **[opened]**
-(`src/Puck.World.Server/WorldOwnedWorlds.cs:307-312`):
+(`src/Puck.World.Server/WorldOwnedWorlds.cs:407-412`):
 
 ```csharp
         var principal = Grantee.Document(id: submission.SourceDocumentId);
@@ -534,12 +537,12 @@ awards in the garden lands through `WorldOwnedWorlds.TrySetFact`, the door
 `WorldRuleHost.PersistIdentityFact` and the console's `identity.fact.set` share,
 which reads no source document and never consults `Decide`
 ([puck-today, section 1](puck-today.md#1-identity-worlds)) **[record]**;
-reopened **[opened]** (`src/Puck.World.Server/WorldRuleHost.IdentityFacts.cs:214-216`):
+reopened **[opened]** (`src/Puck.World.Server/WorldRuleHost.IdentityFacts.cs:215-217`):
 
 ```csharp
     private void PersistIdentityFact(WorldIdentity identity, CellName key, long value) {
         if (
-            !Host.Profiles.TrySetFact(
+            (!Host.Profiles.TrySetFact(
 ```
 
 and the hub plan says H2 ends in-process adoption on return ("a fact set in the
@@ -559,7 +562,7 @@ receipt ([F1](synthesis-attacks.md#f1-favoured-4f-misstates-lane-b),
 through also needs a commit `Decide` does not have: it persists and answers
 `Accepted: true` even when the save failed and was only narrated, and the
 receipt's contract is "whether it applied", not whether it is recoverable
-**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:486-488`):
+**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:620-622`):
 
 ```csharp
         Persist(identity: owner);

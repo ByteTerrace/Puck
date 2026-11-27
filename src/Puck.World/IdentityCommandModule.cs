@@ -286,12 +286,15 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         )) {
             return CommandResult.Error(output: $"[identity.fact.set: refused — value '{args[1]}' is not an integer]");
         }
+        // The console is the identity's own owner: it writes any fact by its full key, home-scoped ones included.
         if (!m_worlds.TrySetFact(
             changed: out var changed,
+            durability: out var durability,
             identity: owned,
             key: key,
             reason: out var reason,
-            value: value
+            value: value,
+            writer: WorldIdentityWriter.Home
         )) {
             return CommandResult.Error(output: $"[identity.fact.set: refused — {reason}]");
         }
@@ -300,7 +303,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             provider: CultureInfo.InvariantCulture,
             handler: $"[identity.fact.set: p{player} {key}={value} in world:{owned.Id}{(changed
             ? string.Empty
-            : " (unchanged)")}]"
+            : " (unchanged)")} {durability.ToString().ToLowerInvariant()}{((reason.Length > 0) ? $" — {reason}" : string.Empty)}]"
         ));
     }
     // The identity-owned PRIVATE seat panel: identity.hud <panel-json> [player]. panel-json is required to be one

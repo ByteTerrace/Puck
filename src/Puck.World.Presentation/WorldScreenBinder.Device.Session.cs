@@ -148,6 +148,7 @@ public sealed partial class WorldScreenBinder {
     private readonly Dictionary<WorldSessionMirror, (WorldDefinition? Delivered, int Count, bool Carried)> m_narratedOverlays = new(comparer: ReferenceEqualityComparer.Instance);
     // The latest refusal of each document judged for overlays (WorldRigidAssets.AudienceRefusal), by instance, and the
     // refusal last narrated.
+    [SideTable(reason: "a presentation verdict that no product build reads, held with the host it was judged against")]
     private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, AudienceVerdict> m_audienceRefusals = new();
     private string? m_narratedAudienceRefusal;
 

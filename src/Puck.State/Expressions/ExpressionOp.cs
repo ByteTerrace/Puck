@@ -321,4 +321,12 @@ public enum ExpressionOp : byte {
     /// one call and is <c>hash(hash(a, b), c, …)</c>, so a tuple of any length hashes through one instruction per
     /// word after the first.</summary>
     Hash,
+    /// <summary>Folds a family, pushing the member whose subprogram is least (the first such member in the row's order
+    /// on a tie), in the member's own kind; members whose subprogram is absent are not candidates, and a fold with no
+    /// candidate is absent. With a row of indices, the member is the key of the nearest, cheapest or best entry of
+    /// tables keyed alike.</summary>
+    ArgMinimum,
+    /// <summary>Folds a family, pushing the member whose subprogram is greatest, as <see cref="ArgMinimum"/> chooses
+    /// the least.</summary>
+    ArgMaximum,
 }

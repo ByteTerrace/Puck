@@ -35,10 +35,11 @@ internal static class WorldOwnedWorldRegistration {
                 template: definition,
                 machineCatalog: catalog,
                 catalogFingerprint: catalogFingerprint,
-                narrationHub: serviceProvider.GetRequiredService<WorldOutputHub>()
+                narrationHub: serviceProvider.GetRequiredService<WorldOutputHub>(),
+                exclusive: true
             );
 
-            Console.Error.WriteLine(value: $"[identity] loaded {worlds.All.Count} owned worlds from {directory}");
+            Console.Error.WriteLine(value: $"[identity] loaded {worlds.All.Count} owned worlds from {directory}{(worlds.ReadOnly ? " read-only: another process holds this account, so nothing this process does to a character is saved" : string.Empty)}");
             return worlds;
         });
         return services;

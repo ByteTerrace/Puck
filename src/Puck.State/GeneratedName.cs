@@ -186,16 +186,9 @@ public static class GeneratedName {
     public static bool TryStripHead(string name, string head, out string rest) {
         ArgumentNullException.ThrowIfNull(argument: name);
         ArgumentNullException.ThrowIfNull(argument: head);
-        rest = string.Empty;
 
-        if (
-            (name.Length <= (head.Length + 1)) ||
-            (name[head.Length] != Joiner) ||
-            !name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: head
-        )
-        ) {
+        if (!HasHead(head: head, name: name)) {
+            rest = string.Empty;
             return false;
         }
 
@@ -203,6 +196,17 @@ public static class GeneratedName {
 
         return true;
     }
+    /// <summary>Returns whether <paramref name="name"/> was joined under <paramref name="head"/>: the head, the joiner,
+    /// and a non-empty rest. Allocates nothing, so a door can ask it on every write.</summary>
+    /// <param name="name">The candidate generated name.</param>
+    /// <param name="head">The first part it would have been joined under.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> opens with <paramref name="head"/> and the joiner and
+    /// carries more after them.</returns>
+    public static bool HasHead(ReadOnlySpan<char> name, ReadOnlySpan<char> head) => (
+        (name.Length > (head.Length + 1)) &&
+        (name[head.Length] == Joiner) &&
+        name.StartsWith(value: head, comparisonType: StringComparison.Ordinal)
+    );
     /// <summary>Validates a name an author wrote into a document namespace: it may carry neither reserved spelling —
     /// no <see cref="Joiner"/> past its front and no <see cref="FileJoiner"/> anywhere. A <see cref="Joiner"/> at the
     /// front is each namespace's own reserved prefix and is refused there, not here.</summary>

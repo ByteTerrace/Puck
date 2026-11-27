@@ -267,6 +267,26 @@ public static class CartridgeExpressions {
 
         return true;
     }
+    /// <summary>Returns whether an operand is read as sixteen bits: a bare read of a two-byte slot, or a lone literal past
+    /// a byte. Everywhere else a target evaluates a byte. As an array index such an operand reaches every element of an
+    /// array longer than <see cref="CartridgeLimits.ArrayLength"/>, where a byte index reaches only the first
+    /// <see cref="CartridgeLimits.ArrayLength"/>.</summary>
+    /// <param name="expression">The operand.</param>
+    /// <param name="layout">The document's state layout, which holds each slot's width.</param>
+    /// <returns><see langword="true"/> when the operand is read as sixteen bits.</returns>
+    public static bool ReadsWide(ExpressionProgram expression, CartridgeStateLayout layout) {
+        ArgumentNullException.ThrowIfNull(argument: expression);
+        ArgumentNullException.ThrowIfNull(argument: layout);
+
+        return (expression.Instructions switch {
+            [{ Payload: InstructionPayload.Constant constant }] => (constant.Value > CartridgeLimits.NarrowMaximum),
+            [{ Payload: InstructionPayload.State { Key: null } state }] => (layout.Slots.TryGetValue(
+                key: state.Name.Spelling,
+                value: out var slot
+            ) && (slot.Width == 2)),
+            _ => false,
+        });
+    }
     /// <summary>Returns the whole number a one-token literal expression carries.</summary>
     /// <param name="expression">The expression.</param>
     /// <returns>The literal, or <see langword="null"/> when the expression is anything else.</returns>

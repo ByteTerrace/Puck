@@ -210,10 +210,8 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         );
         var after = Counts();
 
-        // The world is admitted once. Each owned-world identity the restore rehydrates is its own document and
-        // carries its own validation, which retains no programs.
-        Assert.Equal((Units + checkpoint.OwnedWorlds.Documents.Sum(selector: static document =>
-            (long)WorldDefinitionValidator.UnitsIn(definition: WorldDefinitionSerialization.Deserialize(utf8Json: document.DefinitionJson)))), (after.Validations - before.Validations));
+        // The world is admitted once; an image carries no owned identity to validate.
+        Assert.Equal(Units, (after.Validations - before.Validations));
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.Equal(
             expected: captured,

@@ -244,6 +244,7 @@ public static class WorldDocumentPaths {
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "source", ["views", "graphs"]),
         new(typeof(Puck.Text.TextFontDefinition), nameof(Puck.Text.TextFontDefinition.Source), "source", ["text", "fonts"]),
         new(typeof(WorldHostDefaults), nameof(WorldHostDefaults.Icon), "icon", ["host"]),
+        new(typeof(WorldPlayerDefaults), nameof(WorldPlayerDefaults.IdentityTemplate), "identityTemplate", ["seatDefaults"]),
         new(typeof(WorldMachine), nameof(WorldMachine.ContentFolders), "contentFolders", ["machines"]),
     ];
 

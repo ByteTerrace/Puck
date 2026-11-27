@@ -3979,11 +3979,13 @@ Companions, beside the protocol's steps:
   upload is asynchronous, so the stop needs a completion that waits for a
   durable image across drains.
 - [medium] Build the rest of the [companion decision](../decisions/companions.md):
-  the destination's role declaration (`accept` the visitor's pinned driver,
-  the same pin, a substituted driver, or nothing), with `worlds/standard/`
-  declaring `accept`; the player's HUD notice on a refusal; driver grants keyed
-  by placement or role group; the faerie's lasting state in registers; `night`
-  declaring the companion role with the faerie's pin. `lane/companion-v1`
+  the destination honouring its role declaration (running the visitor's pinned
+  driver under `accept`, the same pin, a substituted driver, or refusing), so
+  the standard companion, whose body now holds the role and follows its owner's
+  seat, is driven where it arrives instead of standing inert; the player's HUD
+  notice on a refusal; driver grants keyed by placement or role group (the
+  standard `companion` template's grants still name the population slot a
+  world hands it); the companion's lasting state in registers. `lane/companion-v1`
   holds the prior art step 9 ports onto `WorldCompanionCustody.TryBinding`
   (`TryRoleVerdict`, the `WorldRole` fields, the faerie split); keep the
   branch until then.
@@ -4008,8 +4010,6 @@ images (H7), battery saves (H8) and minimal identities:
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
   a read against a working tree.
-- [medium] `WorldOwnedWorlds.IdentityBase` copies the whole host world into
-  every identity.
 
 State and server:
 
@@ -4362,8 +4362,7 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   projection. Build it when a creation-library step needs it, or delete the
   remark.
 - [low] The work sheet prices a few shapes above what one tick runs:
-  `companion-interest-*` is about 170 running-minimum rules a nearest-point
-  reduction would replace; a write whose key is not literal counts against
+  a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
 - [medium] Rule evaluation by change has four known places where a binding is
@@ -5171,7 +5170,7 @@ runs.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
-  (`worlds/debug/addons/companion.wat`).
+  (`worlds/standard/addons/companion.wat`).
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a
   long-running World: the picture depends on which cells the trace has cached
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
@@ -5457,6 +5456,12 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A value function is inlined three ways, one per tree it lands in: `DocumentLowering.InlineFunctions` substitutes
+  arguments into the body's document syntax (the cartridge operands, `CartridgeOperand.FromExpression`), the world
+  operand binder's `Inline` substitutes into operand syntax (`WorldDocumentEmitter.OperandBinder`), and
+  `WorldShadeLowering` binds parameters as constants and lowers the body under them. Each shares
+  `DocumentLowering.BindFunctionArguments` and `ExpandFunction`; one inliner over the document tree, which the
+  operand path converts to and from (`PuckParser.CreateOperand`), would serve all three.
 - A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
   (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
   (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer

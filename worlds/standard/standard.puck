@@ -9,6 +9,7 @@ import "editor"
 import "companions"
 import "physics"
 import "visitors"
+import "character"
 
 cameraFeel()
 

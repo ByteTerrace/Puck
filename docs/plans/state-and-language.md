@@ -121,8 +121,8 @@ their slot keys at admission and maintain dense slot-indexed fields, presence bi
 generation storage. Rules claim, release, and iterate generation-checked lexical
 bindings. Pair pools own bounded relationships and cascade release atomically.
 World interactions attach logical pool lifetimes to named placements or seats;
-geometry remains a host concern. An identity explicitly selects its capacity-one
-record pools for transfer, preserving private document state. Paddleball and Arena
+geometry remains a host concern. An identity holds record pools of any capacity
+and names the ones that cross a seam, preserving private document state. Paddleball and Arena
 exercise the model; rows with timed traits remain rows until records support
 those traits without changing their semantics.
 

@@ -1,0 +1,166 @@
+// The question bank every learning game draws from, by subject and level, and the rule that moves a player between
+// levels. A question is a prompt, three answers and which answer is right; a device shows the answers in an order of
+// its choosing and reads `answer` to judge. Every prompt fits `textRows` lines of `textWidth` and every answer
+// `answerWidth` (text.puck), the narrowest box a learning game draws, so a device of any size shows the bank
+// unchanged. The places and creatures the questions name are the valley's own.
+
+let subjects = ["reading", "maths", "logic"]
+let questionLevels = 3
+
+let questionBank = [
+  { subject: "reading", level: 1, prompt: "Which word rhymes with MOTH?", choices ["CLOTH", "MOON", "TREE"], answer: 0 }
+  { subject: "reading", level: 1, prompt: "Which word rhymes with MOON?", choices ["STAR", "SPOON", "SUN"], answer: 1 }
+  { subject: "reading", level: 1, prompt: "What do we call a baby dog?", choices ["CALF", "KIT", "PUPPY"], answer: 2 }
+  { subject: "reading", level: 1, prompt: "Which word is a colour?", choices ["TEAL", "FIR", "STEP"], answer: 0 }
+  {
+    subject: "reading"
+    level: 2
+    prompt: "What is the opposite of TALL?"
+    choices ["WIDE", "SHORT", "HIGH"]
+    answer: 1
+  }
+  {
+    subject: "reading"
+    level: 2
+    prompt: "Which word means the same as GLAD?"
+    choices ["HAPPY", "ANGRY", "SLOW"]
+    answer: 0
+  }
+  { subject: "reading", level: 2, prompt: "Which word is spelled right?", choices ["TRE", "TERRE", "TREE"], answer: 2 }
+  {
+    subject: "reading"
+    level: 2
+    prompt: "Yesterday the swallow ___ over the pond."
+    choices ["FLIES", "FLEW", "FLY"]
+    answer: 1
+  }
+  { subject: "reading", level: 3, prompt: "Which sound is the softest?", choices ["HUM", "ROAR", "CRASH"], answer: 0 }
+  {
+    subject: "reading"
+    level: 3
+    prompt: "The valley grew dim at dusk. DIM means..."
+    choices ["WARM", "DARK", "WET"]
+    answer: 1
+  }
+  {
+    subject: "reading"
+    level: 3
+    prompt: "Moth climbed a steep cliff. Steep means hard to..."
+    choices ["SEE", "HEAR", "CLIMB"]
+    answer: 2
+  }
+  {
+    subject: "reading"
+    level: 3
+    prompt: "Which word joins SUN to make a new word?"
+    choices ["SET", "MOON", "RED"]
+    answer: 0
+  }
+  {
+    subject: "maths"
+    level: 1
+    prompt: "3 swallows sit. 2 more land. How many swallows?"
+    choices ["4", "5", "6"]
+    answer: 1
+  }
+  {
+    subject: "maths"
+    level: 1
+    prompt: "Moth has 4 keys and finds 1 more. How many keys?"
+    choices ["5", "3", "6"]
+    answer: 0
+  }
+  {
+    subject: "maths"
+    level: 2
+    prompt: "12 plaques hang. 5 fall down. How many still hang?"
+    choices ["8", "6", "7"]
+    answer: 2
+  }
+  {
+    subject: "maths"
+    level: 2
+    prompt: "A dragonfly has 4 wings. How many have 3 of them?"
+    choices ["12", "7", "10"]
+    answer: 0
+  }
+  {
+    subject: "maths"
+    level: 3
+    prompt: "4 storeys with 6 rooms each. How many rooms?"
+    choices ["20", "24", "10"]
+    answer: 1
+  }
+  {
+    subject: "maths"
+    level: 3
+    prompt: "Three pups share 18 seeds fairly. How many each?"
+    choices ["9", "5", "6"]
+    answer: 2
+  }
+  { subject: "logic", level: 1, prompt: "What comes next? 2, 4, 6, 8, ...", choices ["10", "9", "12"], answer: 0 }
+  {
+    subject: "logic"
+    level: 1
+    prompt: "What comes next? MOON, SUN, MOON, SUN, ..."
+    choices ["STAR", "MOON", "SUN"]
+    answer: 1
+  }
+  { subject: "logic", level: 1, prompt: "Which one is NOT a bird?", choices ["SWAN", "OWL", "FIR"], answer: 2 }
+  { subject: "logic", level: 1, prompt: "Which number is odd? 2, 4, 7, 8", choices ["7", "4", "8"], answer: 0 }
+  {
+    subject: "logic"
+    level: 2
+    prompt: "Bird is to nest as bee is to..."
+    choices ["HIVE", "HONEY", "WING"]
+    answer: 0
+  }
+  { subject: "logic", level: 2, prompt: "What comes next? 1, 3, 5, 7, ...", choices ["8", "9", "10"], answer: 1 }
+  { subject: "logic", level: 2, prompt: "Fir is to cone as oak is to...", choices ["LEAF", "BARK", "ACORN"], answer: 2 }
+  {
+    subject: "logic"
+    level: 2
+    prompt: "Which one does NOT belong? POND, LAKE, SEA, ROCK"
+    choices ["ROCK", "POND", "SEA"]
+    answer: 0
+  }
+  { subject: "logic", level: 3, prompt: "What comes next? 1, 2, 4, 8, ...", choices ["10", "12", "16"], answer: 2 }
+  {
+    subject: "logic"
+    level: 3
+    prompt: "Swallows fly. Pip is a swallow. Can Pip fly?"
+    choices ["YES", "NO", "MAYBE"]
+    answer: 0
+  }
+  {
+    subject: "logic"
+    level: 3
+    prompt: "A is over B. B is over C. Which is lowest?"
+    choices ["A", "C", "B"]
+    answer: 1
+  }
+  { subject: "logic", level: 3, prompt: "What comes next? 3, 6, 9, 12, ...", choices ["14", "16", "15"], answer: 2 }
+]
+
+// Maths questions a device writes itself from its own seeded draw: at each level, an operation over two operands drawn
+// from inclusive ranges. A subtraction's ranges keep its answer at one or more. A device answers with the true result
+// and two near misses.
+let mathsDrills = [
+  { level: 1, operation: "+", left [1, 9], right [1, 9] }
+  { level: 2, operation: "-", left [10, 18], right [1, 9] }
+  { level: 3, operation: "*", left [2, 9], right [2, 9] }
+]
+
+// How a player's level follows their answers, per subject: a skill from 0 to `ceiling` rises by `gain` on a right
+// answer and falls by `loss` on a wrong one, and the level asked is one more than the skill over `perLevel`, never
+// above `questionLevels` and never below the floor of the place being played (places.puck).
+let adaptation = { ceiling: 8, perLevel: 3, gain: 1, loss: 2 }
+function questionLevel(skill, floor = 1) = maximum(
+  floor,
+  minimum(questionLevels, (1 + ((skill - floorModulo(skill, adaptation.perLevel)) / adaptation.perLevel)))
+)
+
+// The bank's questions for one subject and level, in bank order.
+function questionsOf(subject, level) = filter(questionBank, q => ((q.subject == subject) and (q.level == level)))
+// A subject's place in `subjects`.
+function subjectIndex(subject) = indexOf(subjects, subject)

@@ -47,7 +47,7 @@ public sealed class RomDataBuilder {
         }
 
         if ((m_bytes.Count + bytes.Length) > Capacity) {
-            throw new InvalidOperationException(message: $"Adding '{name}' ({bytes.Length} bytes) overruns the {Capacity}-byte data window ({m_bytes.Count} bytes already used).");
+            throw new Puck.GamingBricks.Forge.CartridgeCapacityException(message: $"Adding '{name}' ({bytes.Length} bytes) overruns the {Capacity}-byte data window ({m_bytes.Count} bytes already used).");
         }
 
         var table = new RomTable(

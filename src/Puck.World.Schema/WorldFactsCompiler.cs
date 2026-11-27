@@ -393,6 +393,120 @@ public static partial class WorldFactsCompiler {
             )
         );
     }
+    /// <summary>Returns the full key an identity fact a world's rule names is stored under: a bare name qualified by the
+    /// world's package namespace (<see cref="WorldFactsCompileContext.IdentityNamespace"/>), so a rule never chooses the
+    /// namespace it writes. A name an author already qualified (<c>&lt;package&gt;$&lt;fact&gt;</c>) is read as written,
+    /// which is how one package reads another's facts; a write so qualified must name the world's own package.</summary>
+    /// <param name="context">The compile context.</param>
+    /// <param name="fact">The fact as the rule spells it.</param>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="where">The site spelled in a refusal.</param>
+    /// <param name="write"><see langword="true"/> for a write, which only the world's own namespace admits.</param>
+    /// <returns>The stored key.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="RuleException">The fact is not a cell name (<see cref="WorldRuleRefusal.IdentityFactMalformed"/>),
+    /// or the world has no namespace or a write names another package's
+    /// (<see cref="WorldRuleRefusal.IdentityFactForeign"/>).</exception>
+    public static CellName QualifyIdentityFact(WorldFactsCompileContext context, string fact, string ruleName, string where, bool write) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (!CellName.TryParse(candidate: fact, name: out var name, reason: out var factReason)) {
+            throw new RuleException(
+                detail: $"{where} fact '{fact}' {factReason}",
+                refusal: WorldRuleRefusal.IdentityFactMalformed,
+                ruleName: ruleName
+            );
+        }
+        if (context.IdentityNamespace is not { } head) {
+            throw new RuleException(
+                detail: $"{where} names fact '{fact}', but this document lies in no package and names no document id, so its rules have no namespace to write or read an identity's facts under",
+                refusal: WorldRuleRefusal.IdentityFactForeign,
+                ruleName: ruleName
+            );
+        }
+        if (name.Value.Contains(value: GeneratedName.Joiner)) {
+            if (write && !GeneratedName.TryStripHead(head: head, name: name.Value, rest: out _)) {
+                throw new RuleException(
+                    detail: $"{where} writes fact '{fact}', which another package's namespace qualifies: a world of package '{head}' writes only its own facts, so spell the fact bare",
+                    refusal: WorldRuleRefusal.IdentityFactForeign,
+                    ruleName: ruleName
+                );
+            }
+            return name;
+        }
+
+        return CellName.Parse(candidate: GeneratedName.Qualify(head: head, name: name.Value));
+    }
+    /// <summary>Compiles one identity record effect: the body it addresses, the pool, the slot and second operand a
+    /// write, release or pair names, and each field's literal or integer expression. The pool and its fields live on the
+    /// identity's own document, which a world's compile cannot read, so they are checked as names here and against the
+    /// identity's store when the effect fires.</summary>
+    /// <param name="effect">The authored effect.</param>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="context">The compile context.</param>
+    /// <returns>The compiled effect.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="effect"/> or <paramref name="context"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="RuleException">A name is not a cell name, a field authors other than exactly one value, or the
+    /// world has no namespace to write under (<see cref="WorldRuleRefusal.IdentityRecordMalformed"/>,
+    /// <see cref="WorldRuleRefusal.IdentityFactForeign"/>).</exception>
+    public static IRuleEffect ResolveIdentityRecord(ActionEffect effect, string ruleName, WorldFactsCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: effect);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        var (verb, op, key, pool, slot, second, fields) = effect switch {
+            WorldEffect.ClaimIdentityRecord claim => ("claimIdentityRecord", WorldIdentityRecordOp.Claim, claim.Key, claim.Pool, (ExpressionProgram?)null, (ExpressionProgram?)null, claim.Fields),
+            WorldEffect.ClaimIdentityPair pair => ("claimIdentityPair", WorldIdentityRecordOp.ClaimPair, pair.Key, pair.Pool, pair.Left, pair.Right, pair.Fields),
+            WorldEffect.SetIdentityRecord write => ("setIdentityRecord", WorldIdentityRecordOp.Write, write.Key, write.Pool, write.Slot, write.Generation, (IReadOnlyList<WorldIdentityRecordValue>?)write.Fields),
+            WorldEffect.ReleaseIdentityRecord release => ("releaseIdentityRecord", WorldIdentityRecordOp.Release, release.Key, release.Pool, release.Slot, release.Generation, null),
+            _ => throw new ArgumentException(message: $"'{effect.GetType().Name}' is not an identity record effect", paramName: nameof(effect)),
+        };
+        var address = context.ResolveBodyAddress(reference: key, ruleName: ruleName, verb: verb);
+
+        if (!CellName.TryParse(candidate: pool, name: out var poolName, reason: out var poolReason)) {
+            throw new RuleException(detail: $"'{verb}' pool '{pool}' {poolReason}", refusal: WorldRuleRefusal.IdentityRecordMalformed, ruleName: ruleName);
+        }
+        if (context.IdentityNamespace is null) {
+            throw new RuleException(detail: $"'{verb}' writes identity pool '{pool}', but this document lies in no package and names no document id, so its rules have no namespace to write an identity under", refusal: WorldRuleRefusal.IdentityFactForeign, ruleName: ruleName);
+        }
+        if ((op is WorldIdentityRecordOp.Write) && (fields is not { Count: > 0 })) {
+            throw new RuleException(detail: $"'{verb}' writes no field", refusal: WorldRuleRefusal.IdentityRecordMalformed, ruleName: ruleName);
+        }
+
+        var compiled = new List<WorldIdentityRecordField>(capacity: (fields?.Count ?? 0));
+
+        foreach (var field in (fields ?? [])) {
+            if ((field is null) || !CellName.TryParse(candidate: field.Field, name: out var fieldName, reason: out var fieldReason)) {
+                throw new RuleException(detail: $"'{verb}' field '{field?.Field}' is not a cell name", refusal: WorldRuleRefusal.IdentityRecordMalformed, ruleName: ruleName);
+            }
+            if ((((field.Value is not null) ? 1 : 0) + ((field.Expression is not null) ? 1 : 0) + ((field.Text is not null) ? 1 : 0)) != 1) {
+                throw new RuleException(detail: $"'{verb}' field '{fieldName}' must author exactly one of 'value', 'expression' or 'text'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
+            }
+            compiled.Add(item: new WorldIdentityRecordField(
+                Field: fieldName,
+                Literal: field.Value,
+                Source: ((field.Expression is { } expression) ? Integer(context: context, expression: expression, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L)),
+                Text: field.Text
+            ));
+        }
+
+        return new WorldIdentityRecordEffect(
+            describe: $"{verb} body:{key}.{poolName}{((slot is null) ? string.Empty : "[…]")}",
+            fields: compiled,
+            hasSecond: (second is not null),
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            op: op,
+            pool: poolName,
+            second: ((second is { } secondProgram) ? Integer(context: context, expression: secondProgram, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L)),
+            slot: ((slot is { } slotProgram) ? Integer(context: context, expression: slotProgram, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L))
+        );
+
+        static CompiledValueSource Integer(WorldFactsCompileContext context, ExpressionProgram expression, string ruleName, string verb) => CompiledValueSource.FromExpression(
+            expression: RuleCompiler.CompileExpression(context: context, expression: expression, kind: CellKind.Int, ruleName: ruleName, verb: verb),
+            kind: CellKind.Int
+        );
+    }
     internal static IRuleEffect ResolveIdentityFact(WorldEffect.SetIdentityFact effect, string ruleName, WorldFactsCompileContext context) {
         const string Verb = "setIdentityFact";
 
@@ -402,17 +516,13 @@ public static partial class WorldFactsCompiler {
             verb: Verb
         );
 
-        if (!CellName.TryParse(
-            candidate: effect.Fact,
-            name: out var fact,
-            reason: out var factReason
-        )) {
-            throw new RuleException(
-                detail: $"'{Verb}' fact '{effect.Fact}' {factReason}",
-                refusal: WorldRuleRefusal.IdentityFactMalformed,
-                ruleName: ruleName
-            );
-        }
+        var fact = QualifyIdentityFact(
+            context: context,
+            fact: effect.Fact,
+            ruleName: ruleName,
+            where: $"'{Verb}'",
+            write: true
+        );
 
         var laneOrdinal = ResolveIdentityLane(
             context: context,

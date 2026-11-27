@@ -26,6 +26,9 @@ public static class DeckSoundCompiler {
     private const int DefaultPulseEnvelope = 0x63;
     // r3's length-counter load: any nonzero index, since every channel here halts its length counter.
     private const int LengthLoad = 0x08;
+    // The noise voice spreads C3 (semitone 36) through C6 over its sixteen periods.
+    private const int NoiseLowestSemitone = 36;
+    private const int NoiseSemitoneSpan = 36;
 
     /// <summary>Returns the APU channel a voice name plays on: 0 and 1 the pulses, 2 the triangle, 3 the noise.</summary>
     /// <param name="voice">The authored voice name, or null for pulse1.</param>
@@ -105,10 +108,11 @@ public static class DeckSoundCompiler {
         int r3;
 
         if (channel == 3) {
-            // A higher note picks a shorter noise period: the table's 37 notes spread across the sixteen periods.
-            var rank = ApuNotePeriod.Millihertz.Values.Count(predicate: value => (value < millihertz));
+            // A higher note picks a shorter noise period: the 37 notes C3 through C6 spread across the sixteen periods,
+            // and notes beyond them take the period at that end.
+            var rank = Math.Clamp(value: (ApuNotePeriod.Semitone(noteName: row.Note) - NoiseLowestSemitone), min: 0, max: NoiseSemitoneSpan);
 
-            r2 = (15 - ((rank * 15) / (ApuNotePeriod.Millihertz.Count - 1)));
+            r2 = (15 - ((rank * 15) / NoiseSemitoneSpan));
             r3 = LengthLoad;
         } else {
             var period = ApuNotePeriod.DividedPeriod(millihertz: millihertz, clockHertz: CpuClockHertz, steps: ((channel == 2) ? 32 : 16));

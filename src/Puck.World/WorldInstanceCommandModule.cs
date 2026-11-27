@@ -146,7 +146,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         yield return Simulation(
             audience: CommandAudience.Host,
             name: "world.instance.start",
-            description: $"Starts another world running in THIS process from a world document and admits it under a name: {WorldInstanceStartForms.Spelling}. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition, own population, own owned-world store — nothing shared) and mounts its declared addons. It has no seats, replay tape or machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name carrying '~' (the character joining the instance names the engine generates), a name that is not a single safe path segment (the name IS the directory its owned worlds live in), a name already running, a name whose owned-world directory would land outside the instances root, a path resolving to no file, a document the validator rejects, or an owned-world store that cannot be opened.",
+            description: $"Starts another world running in THIS process from a world document and admits it under a name: {WorldInstanceStartForms.Spelling}. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition and own population; it shares only the process's one account of characters) and mounts its declared addons. It has no seats, replay tape or machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name carrying '~' (the character joining the instance names the engine generates), a name that is not a safe name, a name already running, a path resolving to no file, or a document the validator rejects.",
             forms: WorldInstanceStartForms,
             handler: (context, args) => {
                 if (args.Count < 2) {
@@ -175,7 +175,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.ReadView(context).Definition.DocumentId} schema {started.Server.ReadView(context).Definition.Schema} capacity {started.Server.Population.Capacity} addons {(started.Server.Addons?.MountedCount ?? 0)} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {Puck.Abstractions.PuckPaths.Normalize(path: m_instances.OwnedWorldsDirectory(name: name))}]"
+                    handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.ReadView(context).Definition.DocumentId} schema {started.Server.ReadView(context).Definition.Schema} capacity {started.Server.Population.Capacity} addons {(started.Server.Addons?.MountedCount ?? 0)} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {((m_instances.AccountDirectory is { } account) ? Puck.Abstractions.PuckPaths.Normalize(path: account) : "none")}]"
                 ));
             }
         );
@@ -206,7 +206,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             bindability: CommandBindability.Unbindable,
             name: "world.instance.status",
             forms: WorldInstanceStatusForms,
-            description: $"Reports every running world instance, or one by name: {WorldInstanceStatusForms.Spelling}. Per instance: source path, document id, schema, completed ticks, population capacity, simulated count, journal dirty count and owned-worlds directory. The world this process booted with is listed like any other, under the name 'boot'. Immediate.",
+            description: $"Reports every running world instance, or one by name: {WorldInstanceStatusForms.Spelling}. Per instance: source path, document id, schema, completed ticks, population capacity, simulated count, journal dirty count and the account directory every instance shares. The world this process booted with is listed like any other, under the name 'boot'. Immediate.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     var names = m_instances.Names;
@@ -243,7 +243,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {Puck.Abstractions.PuckPaths.Normalize(path: m_instances.OwnedWorldsDirectory(name: name))} custody: {custody}{(stopping ? " (stopping)" : string.Empty)}]"
+                    handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {((m_instances.AccountDirectory is { } account) ? Puck.Abstractions.PuckPaths.Normalize(path: account) : "none")} custody: {custody}{(stopping ? " (stopping)" : string.Empty)}]"
                 ));
             },
             routing: CommandRouting.Immediate

@@ -184,15 +184,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         return type;
     }
-    private static bool InsideTheDoor(ISymbol? symbol) {
-        for (var type = ((symbol as INamedTypeSymbol) ?? symbol?.ContainingType); (type is not null); type = type.ContainingType) {
-            if (Is(name: DoorType, @namespace: DoorNamespace, type: type)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool InsideTheDoor(ISymbol? symbol) => IsWithin(symbol: symbol, @namespace: DoorNamespace, name: DoorType);
     private static bool PollsWithZeroTimeout(IInvocationOperation invocation) {
         foreach (var argument in invocation.Arguments) {
             if ((argument.Parameter is not { } parameter) || (parameter.Name.IndexOf(comparisonType: StringComparison.Ordinal, value: "imeout") < 0)) {

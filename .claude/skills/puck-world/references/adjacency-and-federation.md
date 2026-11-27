@@ -40,8 +40,8 @@ rules read its input with `channel(1, name)` exactly as they read a seat that
 booted there.
 
 **What crosses is the identity projection and nothing else.** A traveler's
-`WorldIdentityProjection` (id, name, color, the two rates, the records
-`identity.records` selects, and the facts row) is the only identity a crossing
+`WorldIdentityProjection` (id, name, color, the two rates, the crossing record
+pools `identity.travel` names, and the facts row) is the only identity a crossing
 carries, on every path: reservation and commit (`WorldTransferReservationMember.Identity`
 and `WorldTransferCommitMember.Profile` are projections), a commit retried after a
 source restart, and a colocated crossing. `WorldIdentityProjectionWire` is its one

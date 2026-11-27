@@ -1,3 +1,4 @@
+using static Puck.World.Testing.CrossingIdentityFixtures;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
@@ -203,7 +204,7 @@ public sealed partial class FederationTransferLawTests {
         if (ownedDocument) {
             profile = new WorldIdentity(document: fixture.Server.Definition with {
                 Identity = new WorldIdentityDefinition(Id: SafeName.Parse(candidate: "traveler-id"), Name: "Traveler", Color: "#123456",
-                    MoveSpeedState: CellName.Parse(candidate: "move"), TurnSpeedState: CellName.Parse(candidate: "turn"), Records: [stats]),
+                    MoveSpeedState: CellName.Parse(candidate: "move"), TurnSpeedState: CellName.Parse(candidate: "turn"), Travel: [new WorldIdentityPool(Pool: stats, Class: WorldIdentityTravel.Crossing)]),
                 StateRaw = profile.RecordState,
             }, defaults: fixture.Server.Definition.PlayerDefaults);
             Assert.True(condition: profile.TrySetFact(key: CellName.Parse(candidate: "visited"), value: 7, changed: out _, reason: out var factRefusal), userMessage: factRefusal);
@@ -229,7 +230,7 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.Equal(profile.Id, restored.Id);
         Assert.Equal(profile.ColorHex, restored.ColorHex);
-        Assert.True(condition: restored.TryReadRecord(field: score, record: stats, value: out var value));
+        Assert.True(condition: restored.TryReadRecord(field: score, pool: stats, slot: 0, value: out var value));
         Assert.Equal(42, value.AsInt);
         if (ownedDocument) {
             Assert.Equal(profile.Facts!.Cells, restored.Facts!.Cells);

@@ -263,7 +263,7 @@ public class AuthoringSugarTests {
         );
     }
     [Fact]
-    public void IdentitySelectsNamespacedCapacityOneRecordPools() {
+    public void IdentityNamesItsCrossingPoolsByTravelClass() {
         var (json, diag) = WorldSources.Lower(body: """
             identity {
                 id: "hero"
@@ -271,12 +271,16 @@ public class AuthoringSugarTests {
                 color: "#ffffff"
                 moveSpeedState: motion.move
                 turnSpeedState: motion.turn
-                records [identity.profile]
+                travel [{ pool: identity.profile, class: Crossing }]
             }
             """);
 
         Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
-        Assert.Equal("identity.profile", Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["identity"])["records"])[0]?.ToString());
+
+        var entry = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["identity"])["travel"])[0]);
+
+        Assert.Equal("identity.profile", entry["pool"]?.ToString());
+        Assert.Equal("Crossing", entry["class"]?.ToString());
     }
     [Fact]
     public void TableFamilyExpandsToNumberedTables() {
