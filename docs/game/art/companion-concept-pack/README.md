@@ -1,5 +1,210 @@
 # The Moth’s companion
 
+## Round three
+
+**Rivet** is a hovering inspection gantry from the canyon workshops. A
+little camera on a brass gimbal hangs in the open bay between two heavy
+lift shoes. The camera looks first, the frame follows, and the two cheek
+plates swing wide when Rivet wants the Moth to stop. It has the manner of
+a surveyor who wants you to see what it just found.
+
+The owner found Pip too close to EVE and asked for something more
+original than a generic happy robot. Knotwhistle went too far toward a
+nature object, and the owner rejected its indicators. Rivet takes the
+heavy plates, visible joints, and readable poses of the brief’s Firefall,
+Mega Man, and MechWarrior touchstones. Canyon orange enamel, scuffed
+edges, a cream stripe, and brass pins put it in the same workshop as the
+gallery’s pivoting sunshades. The machine is recognizable even when
+every lamp is off. [Canyon workshop direction](../valley-and-gallery.md#selected-art-treatment)
+
+### Four robot concepts
+
+![The suited Moth with four hovering workshop robots at the same scale.](r3-01-exploration.png)
+
+The four machines share a roughly 0.48 m height beside the 2.06 m suited
+Moth. Read the silhouettes first, then look for the part that tracks a
+target and the part that could signal a change of mind.
+[Moth concept pack](../moth-concept-pack/README.md)
+
+| Concept | Silhouette and character | Originality and tradeoff |
+| --- | --- | --- |
+| **A · Rivet** | Wide squared arch, two lift shoes, and one hanging camera in a clear opening. It peers around corners and physically widens to warn. | Its load-bearing arch gives it an outline distinct from EVE’s pod, BB-8’s stacked balls, the Ghost’s radiating shell, Navi’s orb, and a quadcopter’s four rotor arms. The camera and cheeks can convey independent intent. **Selected.** |
+| **B · Stile** | Upright offset survey cassette, a hinged horizontal visor, and one gimballed bell. It cranes its head like a meticulous inspector. | The stepped elbow and exposed hinge interrupt EVE’s smooth contour. The flat visor and offset deck give it edges absent from BB-8 and Navi, a clear up and down unlike the Ghost’s radial shell, and a single thrust axis instead of rotor arms. Its narrow view from behind gives the state lamps little room. |
+| **C · Spindle** | Short tiered cylinder next to an exposed flywheel, with one lens and a flat skid. It steadies itself before it takes a reading. | The off-centre vertical reel gives it an asymmetric outline unlike EVE or the Ghost. The rigid stepped drum and flat skid separate it from BB-8’s rolling body and Navi’s orb. The enclosed lift system leaves the flywheel as a side mechanism distinct from a quadcopter rotor array. The reel competes with the eye for attention. |
+| **D · Wedge** | Low trapezoidal path tender with two folding plow cheeks, a visor slit, and a short exhaust stack. It shoulders into the wind. | Faceted plow armor and a squared exhaust give it a different mass from EVE, BB-8, and Navi. Its forward sweep gives it one clear direction unlike the Ghost’s radial shell. The two cheeks fold around a single hull, giving it a continuous perimeter unlike a four-arm drone. It reads as protective immediately, but has a narrower emotional range at rest. |
+
+Rivet’s open bay gives the eye a readable silhouette against the
+background. It also lets a builder give the eye an eager look while the
+body stays still. The shoes and flat roof keep the side view identifiable
+when the bay foreshortens.
+
+### Character and scale
+
+Start at about 0.48 m tall including the antenna, 0.63 m across with both
+cheeks tucked, and 0.19 m deep. The two charcoal shoes give it stable
+contact when parked. In flight, leave clear space beside the Moth and
+bring the optic to around elbow height for a conversation. The bridge
+carries a small front grille and the antenna opposite its cream stripe.
+The camera has one circular iris and a rear heatsink. Brass pins show
+where the gimbal pitches and where the outer cheek plates swing. Each
+plate closes over a fixed bearing housing above the shoe. The shoes
+have side vents and downward-facing nozzles.
+
+The optic usually gets to a point before the hull has finished turning.
+When curious, Rivet eases into a shallow roll and holds the head cocked
+for a beat. When it finds something, it bobs up and swings both cheeks
+out. When it really means stop, it brakes low, holds the bridge square,
+and spreads those plates across the path. Its expression comes from
+these changes in weight, timing, and aperture. [Turnaround](r3-02-turnaround.png) ·
+[Scale with the Moth](r3-03-scale.png)
+
+### Integrated light language
+
+![Eight poses of Rivet with its iris and cheek lamps changing with the action.](r3-04-states.png)
+
+Read left to right across the top, then the bottom. The words below name
+the implementation states. In play, the glance, hop, lead, brace, bank,
+hold, and sag carry their meaning. The inset bars reinforce those moves
+with the number of lit sides, lit area, and timing. The iris signals
+where Rivet is looking and how hard it is concentrating.
+
+| State | Colour | Light pattern | Motion | Mechanical pose |
+| --- | --- | --- | --- | --- |
+| Idle | Dim warm ivory | Soft iris only. Both bars dark. | Barely perceptible hover drift. | Level bridge, neutral gimbal, cheeks tucked. |
+| Interest | Pale blue-white | One short lit segment on the side it checks, with a soft double swell. | Glance first, then slow roll and hold. | Asymmetric tilt, gimbal cocked a little farther than the bridge. |
+| Discovery | Bright warm white | Wide iris and both full bars swell together once, then hold briefly. | One buoyant hop and a soft settle. | Both cheeks flare in a high, open stance. |
+| Objective | Turquoise | One full-length strip on the destination side, held steadily on approach. | Turn, lead a little way, then check back. | Tucked travel stance, with the camera pointed down the route. |
+| Danger | Gold-white | Both bars fill once on entry and hold. Iris contracts. | Quick brake and a low lateral block on the safe side. | Bridge square, both cheeks spread into a wide brace, shoes low. |
+| Combat | Ember red-orange | Both bars lit with one short accent on the change of direction. Lift vents brighten under load. | Fast lateral bank with thrust directed back and down. | Cheeks swept with the lift, lens pitched into the turn. |
+| Locked target | Cold white | Small, hard iris point and two full steady bars. | Tracks the target without bob or scanning. | Square and level at a clear flank, cheeks vertical and camera aligned. |
+| Low energy | Dim amber | One short ember, separated by long pauses. Iris darkens. | Gutter once, descend, then stay down. | Both shoes planted and the camera hanging nose-down. |
+
+The authored cue picks one state from live conditions. Immediate danger
+takes precedence, followed by a forced landing, lock, combat, objective,
+discovery, ordinary low energy, interest, and idle. Hold a danger cue
+through consecutive ticks. For reduced motion, shorten the hop and bank
+while retaining the stance, light placement, and held warning. Interest
+uses a crooked inquisitive hold. The objective cue keeps a full light on
+the direction of travel. That distinction survives even when the two
+colors look alike.
+
+### Speech and marking
+
+The small dark grille on the bridge is the speaker. An amber segment
+wakes on onset, the full grille lights on a stressed syllable, and the
+cavity goes dark at a rest. A tiny nod at the gimbal can underline the
+stress. The iris keeps its aim and the cheeks can keep a warning through
+the line. Feed the grille from the scheduled speech intervals so it still
+reads with muted audio. Clear it on interruption or crossing. The mixer
+already exposes the schedule as `TextSpeechSource.Schedule`. The hookup
+from a companion utterance to this grille belongs in the prototype.
+[Speech sequence](r3-05-speech.png) · [Speech source](../../../../src/Puck.Audio/Mixing/TextSpeechSource.cs)
+
+For a gallery exhibit, Rivet stops short on the reachable side, holds
+the near strip steady, and puts a narrow beam from the iris onto the
+control. It traces a small pool on the surface so the hit reads from the
+player’s angle. In the open valley it can hover over a ground point and
+dip its head toward it. For a moving lock it holds a visible flank away
+from the Moth’s aim. Danger cancels the beam and brings Rivet back onto
+safe ground to block the approach. [Gallery marking](r3-06-gallery-mark.png) ·
+[Valley danger](r3-07-valley-danger.png)
+
+The destination’s authored cue must resolve a single live, visible local
+target for the requesting player. The approach, aim, and surface hit use
+that result together. Clear the hit on occlusion, invalidation, or a
+crossing. Let the world’s existing companion custody carry identity and
+durable permissions. Each host decides what its instance can mark. Keep
+each companion’s lights on its own body lanes and keep the projected
+guidance visible to its requesting player. A second player’s beam and a
+mark cached on another server would both give the Moth a false direction.
+[Companion custody](../../../decisions/companions.md) ·
+[Companion guidance](../../../../worlds/standard/companion.puck) ·
+[Diegetic marking](../../../decisions/play.md#in-world-consoles)
+
+### SDF build plan
+
+1. **Block out the bay and landing shoes.** Use a chamfered `Prism` with
+   a through-cut for the fixed bridge. Preserve enough thickness over
+   the opening for real depth in side view. Put a rounded prism on each
+   cheek and a dark chamfered box beneath each. Blend around fixed seams
+   within a group. Build the gimbal stem, bearings, and lens rim from
+   cylinders. Use a recessed circular inset for the optic. Paint the
+   stripe and small seams on the frame, with broad enamel wear
+   concentrated along corners. Check the CPU mesh preview from each side
+   against the turnaround and both shoes against a common rest plane.
+2. **Rig the hinges and aim.** Keep the bridge, camera gimbal, cheek
+   plates and any counter-tilting shoes in their own bake groups wherever
+   their motion separates. Use parented swings for the gimbal and armor.
+   Start with about 25° of gimbal pitch, 30° of yaw, and 35° of cheek
+   travel outward. Judge clearance at both extremes and resize the
+   existing companion flight collider for the flared pose. Check that
+   banking and braking agree with the actual direction of thrust.
+   [Rig authoring](../../../../.claude/skills/sdf-authoring/references/rig.md)
+3. **Put the cues in the materials.** Use a per-look emission lane for
+   the iris, one for each recessed cheek strip, and one for the grille.
+   Give each light a recessed emissive material slot. Use bounded paint
+   masks to shape the emitting areas. Check per-body tint and mask
+   control on two independent companions before relying on them. Use
+   short mechanical shutters for discrete iris and strip widths if
+   needed. Author the cues on the simulation tick and verify that cue
+   changes reuse the mesh and affect only the matching companion.
+   [Paint and emission](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes)
+4. **Reuse the standard companion.** Extend the authored look and the
+   existing `companion{owner}-guide` path for the approach. Check
+   `point-designation-tests.puck` for target registration and
+   `flashlight.puck` for directed light. Give the mark a lens origin and
+   a surface hit from one visibility check. Confirm in the lab that the
+   beam disappears behind a wall and stays absent until the new instance
+   resolves a local hit. Compare two viewers before enabling marks in a
+   shared gallery. If the mark renderer lacks a per-view or clipped
+   projection path, resolve that in its owning system before wiring it
+   into multiplayer. [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
+   [Directed light](../../../../worlds/standard/flashlight.puck)
+5. **Prove it from the player’s camera.** Give the companion a focused
+   debug lab reached from the gallery and reuse the Moth and the
+   standard companion there. Compile the authored document with
+   `puck compile --validate`. In the settled lab, cycle all eight cues
+   once bakes have finished, `world.residency` reads `all-landed`, and
+   the lighting has settled. Play a moving chase in daylight and at
+   dusk. Repeat with hue removed, speech muted, and reduced motion. A
+   first-time viewer should be able to describe the action without
+   labels. Walk the gallery mark
+   and valley warning in the debug world and cross with a mark active.
+   Check that a second local or remote viewer gets their own guidance and
+   that the companion takes up its destination’s cue after landing.
+   [SDF authoring checks](../../../../.claude/skills/sdf-authoring/SKILL.md#verifying)
+
+### Round-three panel audit
+
+The table records the artist’s pass. The checking partner’s independent
+pass is pending. [Review criteria](../README.md#concept-art-review) ·
+[Built-in ImageGen prompts](r3-prompts.md)
+
+| Panel | Artist’s verdict |
+| --- | --- |
+| [Exploration](r3-01-exploration.png) | Pass. Four outlines read at matched scale. Their exposed mounts look seated and the neutral hover poses agree with the common plane. Moth keeps her open hood, side braid, and heavy boots. The pale guide runs behind the figures. |
+| [Turnaround](r3-02-turnaround.png) | Pass. The pin supports the teal box in each view and the cheek pivots line up with both lift shoes. The back shows the grille and the reversed antenna and stripe. The side and three-quarter views preserve the shallow depth and solid bay walls. |
+| [Scale](r3-03-scale.png) | Pass. The two placements show a supported rest and clear hover space. The Moth’s boots share the baseline and there is daylight between her plates and Rivet’s. Its hanging gimbal, antenna and shoe pair read in both poses. |
+| [States](r3-04-states.png) | Pass. The open bay and attached eye persist through the eight poses. Shadow separation shows the hop and grounded rest. The wide brace and banking thrust distinguish danger from combat. A small point in a rigid hold reads differently from the open bright iris at the top of a hop. |
+| [Speech](r3-05-speech.png) | Pass. The matched framing fixes the bridge and shoe contacts while the gimbal nods on its stem. Amber appears inside the same grille in each voiced frame. The light stays quiet elsewhere, and the rest leaves the grille dark. |
+| [Gallery marking](r3-06-gallery-mark.png) | Pass. The ray joins the hanging iris to the real control and terminates on its surface. Rivet’s stance and scale leave space beside the Moth, whose open hood and grounded boots agree with the perspective. The light and shadows sit in the same room. |
+| [Valley danger](r3-07-valley-danger.png) | Pass. The cheeks flare on their pins with the soles below them. Rivet holds on the safe side of the rockfall and its shadow is separated from the shoes. The Moth braces on both boots. The falling dirt and rocks give the warning an immediate cause. |
+
+### Round-three open questions
+
+- The lead’s checking partner should audit the seven images before they
+  become modeller references. The artist’s pass covers stills. The lab
+  pass settles recognition in motion, especially interest versus
+  objective and discovery versus lock in glare and from behind.
+- The prototype builder should check the four body lanes, per-body tint,
+  grille timing from a world cue, and the lens-to-hit presentation with
+  two viewers. These determine the smallest reusable change to the
+  authored look or the renderer.
+- The lead should try the warning and camera clearance in play before
+  settling the width of the flare and the escort height. Keep the first
+  low-energy behavior a short rest. An interactive recharge can wait for
+  that play decision.
+
 ## Round two
 
 The owner's verdict on Pip was “a decent start, but I'd like it to be more
@@ -176,7 +381,7 @@ player's points of interest.
    and cross mid-line. The reed should follow the schedule and clear
    without disturbing the triangle.
    [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
-   [Current glow rule](../../../../worlds/debug/companion-senses.puck)
+   [Current glow rule](../../../../worlds/standard/companion.puck)
 3. **Extend the existing free-flight driver and point designation.** Keep
    bank and sail poses visual. Reuse the driver for arrival, avoidance
    and follow, and prove an actual plinth target, a reachable objective
@@ -188,7 +393,7 @@ player's points of interest.
    through the lab's Gallery portal and through a federated crossing
    with an authored unlock. The unlock should survive. Each mark should
    follow its own host's target and clear on departure.
-   [Current driver](../../../../worlds/debug/addons/companion.wat) ·
+   [Current driver](../../../../worlds/standard/addons/companion.wat) ·
    [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes)
 
 ### Panel audit
@@ -368,7 +573,7 @@ Gallery and valley. Judge motion and light once the scene has settled.
    while the companion’s grants name `companionBody`, which resolves to 52
    in the debug world. Replace that fixed sample with the cue’s own body.
    [Current prototype](../../../../worlds/debug/companion.puck) ·
-   [Senses and glow](../../../../worlds/debug/companion-senses.puck) ·
+   [Senses and glow](../../../../worlds/standard/companion.puck) ·
    [Body render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
    [Authored shading](../../../../.claude/skills/rendering/references/authored-shading.md)
 3. Extend the existing driver’s nearby exhibit and threat cues. Keep the
@@ -380,7 +585,7 @@ Gallery and valley. Judge motion and light once the scene has settled.
    that the ring lands on the selected surface, clears on occlusion, follows
    a changed lock, and survives day and night.
    A portal crossing during an excursion should drop the source mark and
-   resolve a valid cue on arrival. [Existing driver](../../../../worlds/debug/addons/companion.wat) ·
+   resolve a valid cue on arrival. [Existing driver](../../../../worlds/standard/addons/companion.wat) ·
    [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
    [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes) ·
    [Gallery lighting](../../../../worlds/debug/gallery/gallery.puck)
