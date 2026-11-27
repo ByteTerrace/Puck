@@ -865,6 +865,7 @@ internal static partial class LawRegistry {
         .. SignedByteVectorCases(),
         .. VectorFunctionsCases(),
         .. OrderStatisticsCases(),
+        .. BitmapIndexCases(),
         .. RationalPolynomialCases(),
         .. SharedKernelCases(),
     ];

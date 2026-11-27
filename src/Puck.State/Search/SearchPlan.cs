@@ -42,9 +42,17 @@ public static class SearchCapacity {
     /// ceiling counts.</summary>
     public const int MaxShapesPerJob = 16;
     /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
-    /// position's frame hash. An entry is three eight-byte words, so a table is 192 KiB, and a restart clears
-    /// it.</summary>
+    /// position's frame hash. An entry is three eight-byte words, so a table is 192 KiB. A restart discards it by
+    /// moving the job to its next generation (<see cref="TranspositionGenerations"/>).</summary>
     public const int TranspositionEntries = 8_192;
+    /// <summary>The generations a job's transposition table cycles through before wrapping, each an entry's stamp: an
+    /// entry is live only while its stamp is the job's current generation, so a restart discards the whole table by
+    /// moving to the next one.</summary>
+    public const int TranspositionGenerations = ushort.MaxValue;
+    /// <summary>The entries a restart clears as it moves to the next generation: enough that the blocks of every
+    /// generation together cover the table, so each entry is cleared before the generation that stored it comes round
+    /// again.</summary>
+    public const int TranspositionSweep = ((TranspositionEntries + (TranspositionGenerations - 1)) / TranspositionGenerations);
     /// <summary>The tree nodes one job with an outcome may grow: 48 bytes a node, 384 KiB a job.</summary>
     public const int TreeNodes = 8_192;
 }
