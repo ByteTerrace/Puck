@@ -576,7 +576,58 @@ public sealed partial class WorldPopulation {
         }
         m_entries[slot].Active = false;
         m_entries[slot].Body = null;
-        return RestoreEntryBody(captured: in captured, defaults: defaults, index: slot, seatKit: m_seatKit);
+
+        var body = RestoreEntryBody(captured: in captured, defaults: defaults, index: slot, seatKit: m_seatKit);
+
+        // The slot's own entry keeps its admission, so the kit the body was built under is kept beside it for the digest.
+        (m_predictedKits ??= new byte[WorldBodiesLimits.LocalSeatCount])[slot] = CapturedKitIndex(captured: in captured, seatKit: m_seatKit);
+        return body;
+    }
+    // The kit each local seat slot's predicted body was restored under (RestorePredicted), or null before any was.
+    private byte[]? m_predictedKits;
+
+    /// <summary>Digests the predicted body a local seat slot holds now as <see cref="PredictedBodyDigest(in WorldPopulationEntryCheckpoint, IReadOnlyList{WorldAttachedSolidCheckpoint})"/>
+    /// digests a continuation: over the kit the body runs, its own sections, its registers, profile and contact-field
+    /// observation, and the attached solid rows its step reads. A continuation that digests alike restores
+    /// (<see cref="RestorePredicted"/>) to a body whose step gives the same results; what the population holds outside the
+    /// slot's body and the attached rows is not digested. Taken between a completed step and the next.</summary>
+    /// <param name="slot">The 0-based local seat slot, which <see cref="RestorePredicted"/> filled.</param>
+    /// <returns>The digest.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is not a local seat slot.</exception>
+    /// <exception cref="InvalidOperationException">The slot holds no body <see cref="RestorePredicted"/> restored.</exception>
+    public ulong PredictedBodyDigest(int slot) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: slot, other: LocalSeatCount);
+        if ((m_predictedKits is not { } kits) || (m_entries[slot] is not { Active: true, Body: { } body } entry)) {
+            throw new InvalidOperationException(message: $"local seat slot {slot} holds no predicted body.");
+        }
+
+        EntryCheckpoint(alias: true, body: body, entry: entry, held: false, image: out var image, index: slot);
+        return WorldAuthorityCheckpointCodec.PredictedBodyDigest(
+            attached: (MovingSolids?.CaptureAttached() ?? []),
+            entry: ref image,
+            kit: kits[slot],
+            writer: (m_continuationWriter ??= new WireWriter())
+        );
+    }
+    /// <summary>Digests a captured continuation as <see cref="PredictedBodyDigest(int)"/> digests the body
+    /// <see cref="RestorePredicted"/> restores from it: equal digests mean the continuation and a predicted body restore
+    /// to the same body under this population's document.</summary>
+    /// <param name="captured">The captured entry, in this population's document.</param>
+    /// <param name="attached">The attached solid rows the continuation carries.</param>
+    /// <returns>The digest.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="attached"/> is <see langword="null"/>.</exception>
+    public ulong PredictedBodyDigest(in WorldPopulationEntryCheckpoint captured, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+        ArgumentNullException.ThrowIfNull(argument: attached);
+
+        var image = captured;
+
+        return WorldAuthorityCheckpointCodec.PredictedBodyDigest(
+            attached: attached,
+            entry: ref image,
+            kit: CapturedKitIndex(captured: in captured, seatKit: m_seatKit),
+            writer: (m_continuationWriter ??= new WireWriter())
+        );
     }
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
