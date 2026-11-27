@@ -10,7 +10,7 @@ public sealed partial class WorldBody {
     // cos 60 degrees. A representation tolerance rather than a feel knob — it separates the face the body is on,
     // turning, from a different face entirely, and one step of travel turns a real face by far less than this.
     private static readonly FixedQ4816 HoldTrackAlignment = FixedQ4816.FromDouble(value: 0.5);
-    private FixedBodyHold[] m_holds = [];
+    private FixedBodyHoldList m_holds = FixedBodyHoldList.Empty;
     private int m_holdIndex = -1;
 
     private FixedVector3 m_holdAnchor;
@@ -41,8 +41,8 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets the name of the hold this body currently holds, or <see langword="null"/> when nothing holds
     /// it.</summary>
-    public string? HoldName => (((m_holdIndex >= 0) && (m_holdIndex < m_holds.Length))
-        ? m_holds[m_holdIndex].Name
+    public string? HoldName => (Holding
+        ? m_holds.Names(index: m_holdIndex).Name
         : null
     );
     /// <summary>Gets the surface normal of the current hold, or <see cref="FixedVector3.Zero"/> when nothing holds
@@ -55,11 +55,11 @@ public sealed partial class WorldBody {
     /// nothing holds the body or its hold spends nothing.</summary>
     public FixedQ4816? HoldSpendRemaining {
         get {
-            if (!TryCurrentHold(hold: out var hold)) {
+            if (!Holding) {
                 return null;
             }
 
-            var slot = HoldSpendSlot(hold: in hold);
+            var slot = HoldSlots(index: m_holdIndex).Spend;
 
             return ((slot >= 0)
                 ? StateCounter(slot: slot)
@@ -146,50 +146,132 @@ public sealed partial class WorldBody {
         }
     }
 
-    private bool TryCurrentHold(out FixedBodyHold hold) {
-        if (
-            (m_holdIndex < 0) ||
-            (m_holdIndex >= m_holds.Length)
-        ) {
-            hold = default;
+    // Whether the body holds a row: m_holdIndex names one of m_holds.
+    private bool Holding => (((uint)m_holdIndex) < ((uint)m_holds.Length));
+    // The row the body holds, read in place; only while Holding.
+    private ref readonly FixedBodyHold HeldRow => ref m_holds[m_holdIndex];
 
+    // The register slots one hold row writes, resolved against this body's register file: what it spends, restores and
+    // times a mantle with, or -1 for none.
+    private readonly record struct HoldRowSlots(int Spend, int Restore, int Mantle);
+
+    // A view derived from m_holds and m_actionStateDefinitions, both replaced whole and never written in place, so the
+    // pair of references it was resolved against is its version. HoldSlots is its only reader and rebuilds it when
+    // either reference has moved on, so no write of either can leave a stale slot behind.
+    private HoldRowSlots[] m_holdSlots = [];
+    private FixedBodyHoldList? m_holdSlotsFor;
+    private CompiledActionStateSlot[]? m_holdSlotsAgainst;
+
+    private ref readonly HoldRowSlots HoldSlots(int index) {
+        if (!ReferenceEquals(objA: m_holdSlotsFor, objB: m_holds) || !ReferenceEquals(objA: m_holdSlotsAgainst, objB: m_actionStateDefinitions)) {
+            var slots = new HoldRowSlots[m_holds.Length];
+
+            for (var row = 0; (row < slots.Length); row++) {
+                ref readonly var names = ref m_holds.Names(index: row);
+
+                slots[row] = new HoldRowSlots(
+                    Mantle: StateSlotNamed(name: names.MantleState),
+                    Restore: StateSlotNamed(name: names.RestoreState),
+                    Spend: StateSlotNamed(name: names.SpendState)
+                );
+            }
+            m_holdSlots = slots;
+            m_holdSlotsFor = m_holds;
+            m_holdSlotsAgainst = m_actionStateDefinitions;
+        }
+        return ref m_holdSlots[index];
+    }
+    private int StateSlotNamed(string? name) => ((name is { Length: > 0 }) ? FindActionState(name: name) : -1);
+
+    // The holdable casts the ResolveHold in progress has taken, so a ray it asks twice (a take probe straight down and
+    // the held floor's track along its own normal) is traced once. Live only inside ResolveHold, across which neither the
+    // contact field nor what it leaves out changes; a cast's origin and direction are its key, so the body moving within
+    // the resolve (an arrival) asks new rays.
+    private HoldCastMemo m_holdCasts;
+
+    private struct HoldCastMemo {
+        public HoldCasts Entries;
+        public int Count;
+        public int Next;
+        public bool Live;
+    }
+
+    [System.Runtime.CompilerServices.InlineArray(4)]
+    private struct HoldCasts {
+        private HoldCast m_first;
+    }
+
+    private readonly record struct HoldCast(FixedVector3 Origin, FixedVector3 Direction, FixedQ4816 MaxDistance, bool Hit, FixedSurfaceAttachCandidate Candidate);
+
+    // Casts for the first holdable surface along a ray, through the resolve's memo while one is live. A ray already cast
+    // answers from its record: a hit at a distance within the asked reach is the same first surface whatever that reach,
+    // a hit beyond it is a miss, and a miss answers any reach no longer than the one it searched; only a miss asked
+    // further is cast again.
+    private bool TryCastHoldable(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
+
+        if (m_contactField is not { } field) {
             return false;
         }
+        if (m_holdCasts.Live) {
+            for (var index = 0; (index < m_holdCasts.Count); index++) {
+                ref readonly var cast = ref m_holdCasts.Entries[index];
 
-        hold = m_holds[m_holdIndex];
+                if ((cast.Origin != origin) || (cast.Direction != direction)) { continue; }
+                if (cast.Hit) {
+                    if (cast.Candidate.Distance > maxDistance) { return false; }
+                    candidate = cast.Candidate;
+                    return true;
+                }
+                if (maxDistance <= cast.MaxDistance) { return false; }
+            }
+        }
 
-        return true;
+        var hit = field.TryHoldableSurfaceAlongDirection(
+            candidate: out candidate,
+            direction: in direction,
+            grantedByOverride: out _,
+            maxDistance: maxDistance,
+            origin: in origin
+        );
+
+        if (m_holdCasts.Live) {
+            var slot = -1;
+
+            for (var index = 0; (index < m_holdCasts.Count); index++) {
+                if ((m_holdCasts.Entries[index].Origin == origin) && (m_holdCasts.Entries[index].Direction == direction)) { slot = index; }
+            }
+            if (slot < 0) {
+                if (m_holdCasts.Count < 4) {
+                    slot = m_holdCasts.Count++;
+                } else {
+                    slot = m_holdCasts.Next;
+                    m_holdCasts.Next = ((m_holdCasts.Next + 1) & 3);
+                }
+            }
+            m_holdCasts.Entries[slot] = new HoldCast(Candidate: candidate, Direction: direction, Hit: hit, MaxDistance: maxDistance, Origin: origin);
+        }
+        return hit;
     }
     // Casts a hold probe, starting one standoff behind the origin along its own direction. A body pressed against a
     // face by its own drive sits flush with it, and a march that starts on (or a hair inside) a surface has no
     // distance to march: backing the origin off guarantees the ray begins in open space, and the extra length is
     // added back so the reach the world authored is the reach actually searched.
     private bool TryCastHoldFrom(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) {
-        candidate = default;
-
-        if (m_contactField is not { } field) {
-            return false;
-        }
-
         var backoff = HoldStandoff;
 
-        return field.TryHoldableSurfaceAlongDirection(
+        return TryCastHoldable(
             candidate: out candidate,
             direction: in direction,
-            grantedByOverride: out _,
             maxDistance: (reach + backoff),
             origin: (origin - (direction.Normalize() * backoff))
         );
     }
     private static bool ChannelHeld(in PlayerIntent intent, int ordinal, FixedQ4816 threshold) => ((ordinal >= 0) && (intent[ordinal] >= threshold));
-    private int HoldSpendSlot(in FixedBodyHold hold) => ((hold.SpendState is { Length: > 0 } name)
-        ? FindActionState(name: name)
-        : -1
-    );
     // Whether a row may be taken (or kept) at all this tick, before any geometry is probed: its release channel is
     // not held down, its own gate is open, and whatever it spends still has something to spend.
     private bool HoldEligible(int index, in PlayerIntent intent) {
-        var hold = m_holds[index];
+        ref readonly var hold = ref m_holds[index];
 
         if (ChannelHeld(
             intent: in intent,
@@ -210,7 +292,7 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        var slot = HoldSpendSlot(hold: in hold);
+        var slot = HoldSlots(index: index).Spend;
 
         return (
             (slot < 0) ||
@@ -225,11 +307,12 @@ public sealed partial class WorldBody {
     // remainder carries in the hold's own accumulator, so a rate that does not divide the step evenly still drains
     // exactly the authored amount over time.
     private void SpendHold(in PlayerIntent intent, ulong stepTicks) {
-        if (!TryCurrentHold(hold: out var hold)) {
+        if (!Holding) {
             return;
         }
 
-        var slot = HoldSpendSlot(hold: in hold);
+        ref readonly var hold = ref HeldRow;
+        var slot = HoldSlots(index: m_holdIndex).Spend;
 
         if (slot < 0) {
             return;
@@ -274,7 +357,7 @@ public sealed partial class WorldBody {
         }
 
         ApplyRawState(
-            reason: hold.Name,
+            reason: m_holds.Names(index: m_holdIndex).Name,
             requested: (StateCounter(slot: slot) - drained).Value,
             slot: slot,
             writer: "hold"
@@ -285,18 +368,13 @@ public sealed partial class WorldBody {
     // is open. A slot already full is left unwritten, so a body resting under a restoring row with nothing to restore
     // writes no register.
     private void RestoreHold(int index, in PlayerIntent intent, ulong stepTicks) {
-        var hold = m_holds[index];
+        ref readonly var hold = ref m_holds[index];
+        var slot = HoldSlots(index: index).Restore;
 
         if (
-            (hold.RestoreState is not { Length: > 0 } name) ||
+            (slot < 0) ||
             (hold.RestorePerSecond <= FixedQ4816.Zero)
         ) {
-            return;
-        }
-
-        var slot = FindActionState(name: name);
-
-        if (slot < 0) {
             return;
         }
         if (
@@ -322,7 +400,7 @@ public sealed partial class WorldBody {
         }
 
         ApplyRawState(
-            reason: hold.Name,
+            reason: m_holds.Names(index: index).Name,
             requested: (StateCounter(slot: slot) + gained).Value,
             slot: slot,
             writer: "hold"
@@ -436,7 +514,6 @@ public sealed partial class WorldBody {
         candidate = default;
 
         if (
-            (m_contactField is not { } field) ||
             (lostNormal == FixedVector3.Zero) ||
             (lostTangent == FixedVector3.Zero)
         ) {
@@ -449,10 +526,9 @@ public sealed partial class WorldBody {
         var reach = ((hold.Reach * m_scale) + standoff);
 
         if (
-            (hold.ConeAdmitsBelow && field.TryHoldableSurfaceAlongDirection(
+            (hold.ConeAdmitsBelow && TryCastHoldable(
             candidate: out var below,
             direction: -up,
-            grantedByOverride: out _,
             maxDistance: reach,
             origin: in origin
         ) && hold.ConeAdmits(alignment: FixedVector3.Dot(
@@ -465,10 +541,9 @@ public sealed partial class WorldBody {
             return true;
         }
         if (
-            (hold.ConeAdmitsAbove && field.TryHoldableSurfaceAlongDirection(
+            (hold.ConeAdmitsAbove && TryCastHoldable(
             candidate: out var above,
             direction: in up,
-            grantedByOverride: out _,
             maxDistance: reach,
             origin: in origin
         ) && hold.ConeAdmits(alignment: FixedVector3.Dot(
@@ -495,6 +570,17 @@ public sealed partial class WorldBody {
         if (m_holds.Length == 0) {
             return;
         }
+
+        m_holdCasts.Count = 0;
+        m_holdCasts.Next = 0;
+        m_holdCasts.Live = true;
+        try {
+            ResolveHoldRows(scratch: ref scratch);
+        } finally {
+            m_holdCasts.Live = false;
+        }
+    }
+    private void ResolveHoldRows(ref BodyMotionScratch scratch) {
         if (Mantling || Wrapping) {
             // The move owns the body's translation until it lands, so no row is taken or tracked meanwhile. A mantle
             // holds no row; a wrap keeps the row it began under, already on the face it arrives at.
@@ -525,7 +611,7 @@ public sealed partial class WorldBody {
             intent: in scratch.Intent
         )) {
             for (var index = 0; (index < m_holds.Length); index++) {
-                var candidateHold = m_holds[index];
+                ref readonly var candidateHold = ref m_holds[index];
 
                 if (
                     !candidateHold.OnDrive ||
@@ -574,7 +660,7 @@ public sealed partial class WorldBody {
         }
         if (chosen < 0) {
             for (var index = 0; (index < m_holds.Length); index++) {
-                var hold = m_holds[index];
+                ref readonly var hold = ref m_holds[index];
 
                 if (!HoldEligible(
                     index: index,
@@ -647,7 +733,7 @@ public sealed partial class WorldBody {
             // that edge, not under its feet. This outranks the ordinary pass, whose probes cannot see past an edge
             // at all.
             for (var index = 0; (index < m_holds.Length); index++) {
-                var hold = m_holds[index];
+                ref readonly var hold = ref m_holds[index];
 
                 if (
                     (hold.Bond != BodyHoldBond.Surface) ||
@@ -694,7 +780,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var held = m_holds[chosen];
+        ref readonly var held = ref m_holds[chosen];
 
         if (arrive) {
             m_position = ((anchor + (normal * HoldSpan)) - (FixedVector3.UnitY * HoldProbeHeight));
@@ -1025,8 +1111,13 @@ public sealed partial class WorldBody {
     // would have spent is spent. An impulse up a face that ends above with a landing the body's sweep proves begins the
     // mantle in the firing's place.
     private bool ImpulseStopsAtFaceEdge(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
+        if (!Holding) {
+            return false;
+        }
+
+        ref readonly var hold = ref HeldRow;
+
         if (
-            !TryCurrentHold(hold: out var hold) ||
             !hold.Mantle.Exists ||
             (hold.Kind != BodyHoldKind.Pull)
         ) {
@@ -1264,9 +1355,10 @@ public sealed partial class WorldBody {
             StartYaw: FixedQ4816.Zero
         );
 
+        // `hold` is the row the body holds: a mantle begins only from the held face, which every caller guards.
         if (
-            (hold.Mantle.State is { Length: > 0 } name) &&
-            (FindActionState(name: name) is var slot and >= 0)
+            Holding &&
+            (HoldSlots(index: m_holdIndex).Mantle is var slot and >= 0)
         ) {
             ApplyRawState(
                 reason: "mantle",
@@ -1582,8 +1674,8 @@ public sealed partial class WorldBody {
     // mid-climb keeps climbing for the moment its momentum buys rather than dropping from rest.
     private void CarryPullMomentum(int next, in FixedVector3 up) {
         if (
-            !TryCurrentHold(hold: out var previous) ||
-            (previous.Kind != BodyHoldKind.Pull) ||
+            !Holding ||
+            (HeldRow.Kind != BodyHoldKind.Pull) ||
             ((next >= 0) && (m_holds[next].Kind == BodyHoldKind.Pull))
         ) {
             return;
@@ -1708,12 +1800,14 @@ public sealed partial class WorldBody {
     }
     // The ApplyHold operation: the current row's vertical law, plus its own MoveUp thrust in every bond. Pairing
     // this with ResolveHold, and authoring a hold list with one row nothing can drop, are both required for a
-    // Motion-kind program (see ValidateMotionRow/ValidateHolds), so TryCurrentHold always succeeds against a
-    // validated document; the guard exists because this method itself has no document to check that against.
+    // Motion-kind program (see ValidateMotionRow/ValidateHolds), so the body always holds a row against a validated
+    // document; the guard exists because this method itself has no document to check that against.
     private void ApplyHold(ref BodyMotionScratch scratch) {
-        if (!TryCurrentHold(hold: out var hold)) {
+        if (!Holding) {
             return;
         }
+
+        ref readonly var hold = ref HeldRow;
 
         switch (hold.Kind) {
             case BodyHoldKind.Gravity:
@@ -2066,17 +2160,17 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets a value indicating whether the current hold owns the body's vertical channel outright, so
     /// contact resolution must not fold its resolved velocity back into it.</summary>
-    private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Pull));
+    private bool HoldOwnsVerticalChannel => (Holding && (HeldRow.Kind == BodyHoldKind.Pull));
 
     // Whether the current hold owns the body's heading: a row whose forward is the face it holds (BodyHoldForward.Surface)
     // faces the body into that face for as long as it holds one, so a commanded facing (a look that steers the body) and
     // a facing snap turn the camera and never the body off its face.
-    private bool HoldOwnsHeading => (TryCurrentHold(hold: out var hold) && (hold.Forward == BodyHoldForward.Surface) && (m_holdNormal != FixedVector3.Zero));
+    private bool HoldOwnsHeading => (Holding && (HeldRow.Forward == BodyHoldForward.Surface) && (m_holdNormal != FixedVector3.Zero));
 
     /// <summary>Gets a value indicating whether the current hold is a medium, whose displacement law sets the body's
     /// vertical motion. Ground following must not run under it: the snap pulls a body that leaves a floor by less than
     /// the kit's snap reach back down to it, which pins a swimmer to the bed it is rising from.</summary>
-    private bool HoldIsMedium => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Medium));
+    private bool HoldIsMedium => (Holding && (HeldRow.Bond == BodyHoldBond.Medium));
 
     // The pull along the face normal, as a positional constraint rather than a force. A force cannot be
     // trusted here: the field depenetrates along its own nearest gradient, which for a body at a wall's foot is the
@@ -2087,8 +2181,8 @@ public sealed partial class WorldBody {
     // rate-limited, because a rate-limited correction is exactly the budget a tunnel needs.
     private void SeatToHold(ulong stepTicks) {
         if (
-            !TryCurrentHold(hold: out var hold) ||
-            (hold.Kind != BodyHoldKind.Pull) ||
+            !Holding ||
+            (HeldRow.Kind != BodyHoldKind.Pull) ||
             (m_holdNormal == FixedVector3.Zero) ||
             Wrapping
         ) {
@@ -2108,7 +2202,7 @@ public sealed partial class WorldBody {
         }
 
         var reach = FixedTickConversion.ShareOfStep(
-            perSecond: (hold.Pull * m_scale),
+            perSecond: (HeldRow.Pull * m_scale),
             stepTicks: stepTicks
         );
 
@@ -2120,8 +2214,8 @@ public sealed partial class WorldBody {
     // HoldingUnwalkable fact, stated over the world's own walkable threshold rather than any creature's idea of a wall.
     private bool HoldsUnwalkableSurface(ref SolvedGravityRead gravity) {
         if (
-            !TryCurrentHold(hold: out var hold) ||
-            (hold.Bond != BodyHoldBond.Surface) ||
+            !Holding ||
+            (HeldRow.Bond != BodyHoldBond.Surface) ||
             (m_holdNormal == FixedVector3.Zero)
         ) {
             return false;
@@ -2136,7 +2230,7 @@ public sealed partial class WorldBody {
         right: HoldGravityUp
     ) >= m_walkableThreshold);
     // Whether the body is holding itself up with no surface at all — the published Unsupported fact.
-    private bool HoldsFree() => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Free) && (hold.Lift > FixedQ4816.Zero));
+    private bool HoldsFree() => (Holding && (HeldRow.Bond == BodyHoldBond.Free) && (HeldRow.Lift > FixedQ4816.Zero));
     // The commanded WORLD move direction, unit length, or false when nothing is commanded. Reads the world-frame
     // MoveX/Y/Z triple when the world declares it (the seat has already resolved its camera into those axes), and
     // otherwise resolves the heading-framed advance/strafe pair against the body's own attitude — the same two

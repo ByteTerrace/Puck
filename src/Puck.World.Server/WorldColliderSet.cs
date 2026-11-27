@@ -85,6 +85,7 @@ public sealed partial class WorldColliderSet : IContactField {
     private readonly FixedStaticColliderSet m_excludedSet = new();
     private readonly List<FixedStaticCollider> m_excludedColliders = [];
     private readonly List<FixedStaticCollider> m_excludedHoldable = [];
+    private readonly FixedStaticColliderSet m_excludedHoldableSet = new();
     private readonly List<bool> m_excludedGripOverrides = [];
     private int m_rideExcludedRow = -1;
     // The pass bits (m_passSlots) the body whose sweeps are in progress holds, set only by HoldPasses.
@@ -126,6 +127,7 @@ public sealed partial class WorldColliderSet : IContactField {
             }
         }
         m_excludedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_excludedColliders));
+        m_excludedHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_excludedHoldable));
     }
 
     // During a ride only the support being displaced is omitted: its new pose may already enclose the start.
@@ -199,15 +201,17 @@ public sealed partial class WorldColliderSet : IContactField {
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
     // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
     // surface along the probe, if it is holdable", and the latter lets an ordinary floor shadow every holdable wall
-    // beside it. Parallel to m_holdableGrantedByOverride.
-    private readonly FixedStaticCollider[] m_holdableColliders;
+    // beside it. Parallel to m_holdableGrantedByOverride. Compiled with its own bounds and grid, so a hold probe traces
+    // only the holdable colliders near its ray; the static field itself when every collider is holdable.
+    private readonly FixedStaticContactField m_holdable;
     // Whether a per-placement WorldPlacementGrip override (rather than the world's own DefaultGrip) is what made
-    // the collider at the same index in m_holdableColliders holdable — the read-back's "which policy layer granted
-    // it" fact.
+    // the collider at the same index in m_holdable holdable — the read-back's "which policy layer granted it" fact.
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly bool m_defaultGrip;
 
+    // The holdable subset of m_attachedColliders, published with its bounds beside m_attachedSet.
     private readonly List<FixedStaticCollider> m_movingHoldable = [];
+    private readonly FixedStaticColliderSet m_movingHoldableSet = new();
     private readonly List<bool> m_movingGripOverrides = [];
 
     internal bool MovingHoldable(int row, out bool grantedByOverride) {
@@ -228,11 +232,10 @@ public sealed partial class WorldColliderSet : IContactField {
     // what it nears.
     private WorldColliderBox m_attachedMoves;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, (int[] Slots, ulong[] Rows) passes, bool movingOnly, bool defaultGrip, FixedStaticContactField? previousStatic = null) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, (int[] Slots, ulong[] Rows) passes, bool movingOnly, bool defaultGrip, FixedStaticContactField? previousStatic = null, FixedStaticContactField? previousHoldable = null) {
         m_defaultGrip = defaultGrip;
         (m_passSlots, m_rowPasses) = passes;
         m_colliders = colliders;
-        m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
         var placements = attachedRows.Select(selector: row => row.Placement.Id.ToString()).Distinct(comparer: StringComparer.Ordinal).ToArray();
@@ -268,6 +271,11 @@ public sealed partial class WorldColliderSet : IContactField {
         m_static = (((previousStatic is not null) && (previousStatic.Solver == m_solver))
             ? previousStatic
             : new FixedStaticContactField(colliders: colliders, solver: m_solver));
+        m_holdable = (holdableColliders.AsSpan().SequenceEqual(other: colliders)
+            ? m_static
+            : (((previousHoldable is not null) && (previousHoldable.Solver == m_solver) && previousHoldable.Set.Colliders.SequenceEqual(other: holdableColliders))
+                ? previousHoldable
+                : new FixedStaticContactField(colliders: holdableColliders, solver: m_solver)));
         ContactReach = tuning.ContactReach;
     }
 
@@ -736,7 +744,8 @@ public sealed partial class WorldColliderSet : IContactField {
             colliders: colliders.ToArray(),
             tuning: tuning,
             attachedRows: attachedRows, passes: PassGates(definition: definition, rows: attachedRows), movingOnly: movingOnly, defaultGrip: worldDefaultGrip,
-            previousStatic: reuseStatic
+            previousStatic: reuseStatic,
+            previousHoldable: previous?.m_holdable
         ) {
             DiagnosticColliders = diagnosticColliders.ToArray(),
             BoxCount = boxes,
@@ -1003,6 +1012,7 @@ public sealed partial class WorldColliderSet : IContactField {
         FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
         FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
         m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
+        m_movingHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable));
         RefreshExcluded();
     }
 
@@ -1282,11 +1292,10 @@ public sealed partial class WorldColliderSet : IContactField {
     // A ray cast over the static and sampled moving holdable subsets: the first holdable surface the ray meets,
     // whatever angle it meets it at, as the field provider's march answers.
     public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
-        if (!FixedSurfaceQuery.TryCast(
+        if (!m_holdable.TryCast(
             candidate: out candidate,
-            colliders: m_holdableColliders,
             direction: in direction,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: (m_excluding ? m_excludedHoldable : m_movingHoldable)),
+            dynamicColliders: (m_excluding ? m_excludedHoldableSet : m_movingHoldableSet),
             maxDistance: maxDistance,
             origin: in origin
         )) {

@@ -358,7 +358,7 @@ a live `world.row.set kits …` retune past the cap refuses instead of clamping
 silently.
 
 **Holds (`WorldMotion.Holds`, a list of `WorldHold` rows →
-`FixedBodyHold[]`) — what may hold a body, in preference order, and the only
+`FixedBodyHoldList`: each `FixedBodyHold` row beside its names) — what may hold a body, in preference order, and the only
 spelling of a vertical channel.** A kit authors an ordered list; the
 `ResolveHold` operation takes the first row the world offers and `ApplyHold`
 applies that row's vertical law and its own `thrust`. A Motion-kind kit
@@ -620,8 +620,8 @@ holdable placement answers with the floor a body is standing on.
 `IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
 answer it with a ray cast, the field by ray march (`RayHit.Normal` is documented ZERO — the
 surface orientation is a separate `TryFieldGradient` read one step back along
-the ray) and the analytic set by sphere-tracing its holdable colliders
-(`FixedSurfaceQuery.TryCast`). Which surfaces admit a hold at all is the collision row's
+the ray) and the analytic set by sphere-tracing the holdable colliders near the
+ray, found through the holdable subset's own grid (`FixedStaticContactField.TryCast`). Which surfaces admit a hold at all is the collision row's
 `defaultHold` (world-level) composed with a placement's own
 `grip: { holdable: … }` override — the placement's own surface-holdability
 facet, a distinct concept from a hold row's `Pull` kind despite the shared

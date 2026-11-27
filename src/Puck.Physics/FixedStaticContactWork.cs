@@ -52,13 +52,19 @@ public sealed class FixedStaticContactWork : WorkLedger<ShardedWorkCounterSet> {
     /// <summary>Gets the kind counting the leaps a sweep took: each is a run of slices proved clear by the boxes' closing
     /// speed (<c>FixedAabb.ClearFraction</c>) and crossed without a solve.</summary>
     public static WorkKind Leaps { get; } = new(name: "physics.contact.leaps", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting surface casts (<see cref="FixedSurfaceQuery.TryCast"/>): a hold's take, track and
+    /// edge probes.</summary>
+    public static WorkKind Casts { get; } = new(name: "physics.contact.casts", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the exact nearest-surface queries the casts spend: one per collider a cast's
+    /// bounds cull keeps and its distance bound does not skip, at each step of its trace.</summary>
+    public static WorkKind CastQueries { get; } = new(name: "physics.contact.cast-queries", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger every analytic solve counts into. Declared after the kinds, which its counter set reads as
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
 
     /// <summary>Initializes a new instance of the <see cref="FixedStaticContactWork"/> class, every kind at zero.</summary>
     public FixedStaticContactWork() : base(counters: new(
-        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed, Leaps],
+        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed, Leaps, Casts, CastQueries],
         name: SourceName
     )) { }
 
@@ -108,4 +114,12 @@ public sealed class FixedStaticContactWork : WorkLedger<ShardedWorkCounterSet> {
     public void CountLeap() => Counters.Count(kind: Leaps);
     /// <summary>Counts one field-collider query its partition narrowed (<see cref="FieldNarrowed"/>).</summary>
     public void CountNarrowed() => Counters.Count(kind: FieldNarrowed);
+    /// <summary>Counts one surface cast and the exact nearest-surface queries it spent.</summary>
+    /// <param name="queries">The nearest-surface queries.</param>
+    public void CountCast(int queries) {
+        var shard = Counters.ThreadShard;
+
+        shard.Count(kind: Casts);
+        shard.Add(amount: queries, kind: CastQueries);
+    }
 }

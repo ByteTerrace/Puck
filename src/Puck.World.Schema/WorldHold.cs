@@ -190,16 +190,24 @@ public static class WorldHoldFactory {
     /// <param name="holds">The authored rows in preference order, or <see langword="null"/> for a kit authoring
     /// none.</param>
     /// <param name="channels">The world's compiled channel table.</param>
-    /// <returns>The compiled rows, empty for a kit authoring none.</returns>
-    public static FixedBodyHold[] Compile(IReadOnlyList<WorldHold>? holds, WorldChannelTable channels) {
+    /// <returns>The compiled rows with their names, <see cref="FixedBodyHoldList.Empty"/> for a kit authoring none.</returns>
+    public static FixedBodyHoldList Compile(IReadOnlyList<WorldHold>? holds, WorldChannelTable channels) {
         if (holds is not { Count: > 0 }) {
-            return [];
+            return FixedBodyHoldList.Empty;
         }
 
         var compiled = new FixedBodyHold[holds.Count];
+        var names = new FixedBodyHoldNames[holds.Count];
 
         for (var index = 0; (index < holds.Count); index++) {
             var hold = holds[index];
+
+            names[index] = new FixedBodyHoldNames(
+                MantleState: hold.Mantle?.State,
+                Name: hold.Name,
+                RestoreState: hold.Restore?.State,
+                SpendState: hold.Spend?.State
+            );
             var cone = ((hold.Cone is { } authored)
                 ? authored.Value
                 : default
@@ -232,7 +240,6 @@ public static class WorldHoldFactory {
                 Pull: FixedQ4816.FromDouble(value: hold.Pull),
                 Kind: hold.Hold,
                 Lift: FixedQ4816.FromDouble(value: hold.Lift),
-                Name: hold.Name,
                 OnDrive: hold.OnDrive,
                 Reach: FixedQ4816.FromDouble(value: hold.Reach),
                 ReleaseOrdinal: releaseOrdinal,
@@ -245,21 +252,18 @@ public static class WorldHoldFactory {
                 ? new FixedBodyMantle(
                     Depth: FixedQ4816.FromDouble(value: mantle.Depth),
                     DurationTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)mantle.Seconds)),
-                    Height: FixedQ4816.FromDouble(value: mantle.Height),
-                    State: mantle.State
+                    Height: FixedQ4816.FromDouble(value: mantle.Height)
                 )
                 : default),
                 RestorePerSecond: FixedQ4816.FromDouble(value: (hold.Restore?.RatePerSecond ?? 0f)),
-                RestoreState: hold.Restore?.State,
                 SpendPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RatePerSecond ?? 0f)),
                 SpendRestingPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RestingRatePerSecond ?? hold.Spend?.RatePerSecond ?? 0f)),
-                SpendState: hold.Spend?.State,
                 Thrust: FixedQ4816.FromDouble(value: hold.Thrust),
                 UpLean: FixedQ4816.FromDouble(value: hold.UpLean)
             );
         }
 
-        return compiled;
+        return new FixedBodyHoldList(names: names, rows: compiled);
     }
     /// <summary>Compiles a row's vertical-channel envelope, or the inert zeroed envelope for a row with no vertical
     /// law. An unauthored rise speed compiles to <see cref="FixedQ4816.MaxValue"/> — the sentinel a gravity/lift
