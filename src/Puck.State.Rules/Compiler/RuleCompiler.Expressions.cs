@@ -473,11 +473,7 @@ public static partial class RuleCompiler {
                 arity: 1,
                 operation: operation
             );
-            RequireKind(
-                operation: operation,
-                required: CellKind.Int,
-                slot: (depth - 1)
-            );
+            MatchKinds(operation, 1, CellKind.Int);
 
             return new CompiledExpressionToken(
                 Board: new BoardNeighbourQuery(

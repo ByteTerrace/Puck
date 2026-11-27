@@ -26,7 +26,7 @@ public static partial class RuleCompiler {
             return CompiledValueSource.FromOperand(operand);
         }
         var tokens = new List<CompiledExpressionToken>();
-        RuleExpressions.AppendFeeds(tokens, operand);
+        RuleExpressions.AppendFeeds(operand: operand, into: tokens);
         tokens.Add(new CompiledExpressionToken(ExpressionOp.Operand, Operand: operand, CarrierKind: operand.ValueKind));
         tokens.Add(new CompiledExpressionToken(conversion, CarrierKind: operand.ValueKind));
         return CompiledValueSource.FromExpression(FoldConstants(tokens.ToArray(), required), required);

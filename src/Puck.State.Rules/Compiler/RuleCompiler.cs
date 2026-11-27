@@ -659,6 +659,9 @@ public static partial class RuleCompiler {
     /// <param name="verb">The authored verb, for refusal text.</param>
     /// <returns>The raw value.</returns>
     public static long LiteralToRaw(CellKind kind, decimal literal, string ruleName, string verb) {
+        if (kind == CellKind.Int && decimal.Truncate(literal) != literal) {
+            _ = ImplicitConversion(CellKind.Fixed, kind, ruleName, verb);
+        }
         try {
             return (kind switch {
                 CellKind.Int => checked((long)decimal.Round(

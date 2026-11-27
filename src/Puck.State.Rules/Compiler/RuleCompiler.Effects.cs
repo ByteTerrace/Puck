@@ -1039,15 +1039,7 @@ public static partial class RuleCompiler {
                 )
             );
 
-            if (operand.ValueKind != CellKind.Int) {
-                throw new RuleException(
-                    detail: $"'{verb}' adds '{fromState}' (kind={StateSpelling.Kind(kind: operand.ValueKind)}) to text row '{rowName}' — a text edit's number is kind=Int",
-                    refusal: RuleRefusal.EffectSourceKindMismatch,
-                    ruleName: ruleName
-                );
-            }
-
-            source = CompiledValueSource.FromOperand(operand: operand.Operand);
+            source = ConvertOperand(operand.Operand, CellKind.Int, ruleName, verb);
         }
 
         return new WriteEffect(
