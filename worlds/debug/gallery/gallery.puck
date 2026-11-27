@@ -39,6 +39,7 @@ import "layout"
 import "shell"
 import "look"
 import "flaw"
+import "holiday"
 import "toybox"
 import "tree"
 import "rentals"
@@ -1261,8 +1262,8 @@ rule "gallery-inspect-off" {
 cameras: concat(map(galleryDisplays, display => terminalCamera(
   name: $"gallery-station-{display.id}",
   anchor: { $type: "placement", placementId: $"display-{display.id}-plinth" },
-  centre: lookStation.aim,
-  halfHeight: lookStation.halfHeight,
+  centre: (lookStation.aim * displayScale),
+  halfHeight: (lookStation.halfHeight * displayScale),
   fill: lookStation.fill,
   tilt: lookStation.tilt,
   fieldOfView: lookStation.fov

@@ -3,11 +3,13 @@ using Puck.Physics;
 
 namespace Puck.World.Server;
 
-// WHERE HUMANS STAND. One scan finds the bodies humans occupy (NextHumanOccupied), one image holds where they stood
-// when it was last read (ReadOccupied), and one query answers how near the nearest of them is to a point
-// (NearestOccupiedSquared), through the sweep grid every other range query of the population uses. The population
-// reads the image before it plans a tick, for its kits' far cadences, and the host reads it when it settles a world's
-// sessions, for a surface's attention; both then ask the same query, so the two cannot disagree on who is near.
+// WHERE HUMANS STAND. One image holds where the bodies humans attend from stood when it was last read (ReadOccupied):
+// the bodies humans occupy (IsHumanOccupied) and the bodies a participant possesses (a camera a seat flies, a vehicle
+// it drives), which a human sees and hears through while its own body idles elsewhere. One query answers how near the
+// nearest of them is to a point (NearestOccupiedSquared), through the sweep grid every other range query of the
+// population uses. The population reads the image before it plans a tick, for its kits' far cadences, the host reads
+// it when it settles a world's sessions, for a surface's attention, and the tick reads it for a machine's attention;
+// all then ask the same query, so they cannot disagree on who is near.
 public sealed partial class WorldPopulation {
     // The cell the occupied image is gridded at when no kit authors a far distance: a width for the index alone, since
     // a query visits whatever cells its reach covers.
@@ -43,9 +45,10 @@ public sealed partial class WorldPopulation {
 
         return false;
     }
-    /// <summary>Reads where the bodies humans occupy stand now, replacing the image
-    /// <see cref="NearestOccupiedSquared"/> answers from. Runs between this population's steps or before a step plans
-    /// its bodies, never while a kit partition runs.</summary>
+    /// <summary>Reads where the bodies humans occupy, and the bodies a participant possesses
+    /// (<see cref="BodyProducerStandDown.Possessed"/>, as the last <see cref="SyncPossession"/> left it), stand now,
+    /// replacing the image <see cref="NearestOccupiedSquared"/> answers from. Runs between this population's steps or
+    /// before a step plans its bodies, never while a kit partition runs.</summary>
     public void ReadOccupied() {
         ThrowIfPartitioned();
         if (m_occupiedGrid is null) {
@@ -55,8 +58,11 @@ public sealed partial class WorldPopulation {
             m_occupiedCandidates = new int[Capacity];
         }
         m_occupiedCount = 0;
-        for (var index = NextHumanOccupied(from: 0); (index >= 0); index = NextHumanOccupied(from: (index + 1))) {
-            if (m_entries[index].Body is not { } body) {
+        for (var index = 0; (index < Capacity); index++) {
+            if (
+                (m_entries[index] is not { Active: true, Body: { } body } entry) ||
+                (!IsHumanOccupied(bodyIndex: index) && ((entry.ProducerState.StandDown & BodyProducerStandDown.Possessed) == BodyProducerStandDown.None))
+            ) {
                 continue;
             }
 
@@ -80,10 +86,21 @@ public sealed partial class WorldPopulation {
     /// <returns>The squared distance, or <see langword="null"/> when no occupied body stood within
     /// <paramref name="reach"/> of the point or the image holds none.</returns>
     public FixedQ4816? NearestOccupiedSquared(in FixedVector3 point, FixedQ4816 reach) =>
-        NearestOccupiedWith(candidates: m_occupiedCandidates, point: in point, reach: reach);
+        NearestOccupiedWith(candidates: m_occupiedCandidates, front: null, point: in point, reach: reach);
+    /// <summary>Reads the squared distance from a point on a face to the nearest body a human occupied when the image
+    /// was last read (<see cref="ReadOccupied"/>), among those within <paramref name="reach"/> of it that stand before
+    /// the face or no farther than <paramref name="behind"/> behind its plane.</summary>
+    /// <param name="point">The point on the face, in this world's coordinates.</param>
+    /// <param name="reach">The distance searched, at least zero.</param>
+    /// <param name="facing">The unit normal of the face, pointing to the side it faces.</param>
+    /// <param name="behind">The distance behind the face's plane a body may stand, at least zero.</param>
+    /// <returns>The squared distance, or <see langword="null"/> when no occupied body stood there or the image holds
+    /// none.</returns>
+    public FixedQ4816? NearestOccupiedBeforeSquared(in FixedVector3 point, FixedQ4816 reach, in FixedVector3 facing, FixedQ4816 behind) =>
+        NearestOccupiedWith(candidates: m_occupiedCandidates, front: (facing, behind), point: in point, reach: reach);
     // The same query over a caller's scratch, at least as long as the image holds occupied bodies, so the partitions of
     // a plan fork ask side by side: the image is read-only between two reads.
-    private FixedQ4816? NearestOccupiedWith(in FixedVector3 point, FixedQ4816 reach, int[] candidates) {
+    private FixedQ4816? NearestOccupiedWith(in FixedVector3 point, FixedQ4816 reach, int[] candidates, (FixedVector3 Facing, FixedQ4816 Behind)? front) {
         if ((m_occupiedGrid is not { } grid) || (m_occupiedCount == 0)) {
             return null;
         }
@@ -93,8 +110,12 @@ public sealed partial class WorldPopulation {
         FixedQ4816? nearest = null;
 
         for (var candidate = 0; (candidate < count); candidate++) {
-            var squared = (m_occupiedCenters[candidates[candidate]] - point).LengthSquared;
+            var offset = (m_occupiedCenters[candidates[candidate]] - point);
+            var squared = offset.LengthSquared;
 
+            if ((front is { } face) && (FixedVector3.Dot(left: offset, right: face.Facing) < -face.Behind)) {
+                continue;
+            }
             // The box holds its corners, which lie past the reach.
             if ((squared <= limit) && ((nearest is not { } least) || (squared < least))) {
                 nearest = squared;

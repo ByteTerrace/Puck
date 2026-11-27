@@ -967,7 +967,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, out CameraBloom bloom, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
+    // aimsByEye answers whether the returned camera is the seat's own first-person eye (WorldSeatView.AimsByEye).
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, out CameraBloom bloom, out bool aimsByEye, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
         // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
@@ -1244,6 +1245,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         view.NoteFieldOfView(radians: fieldOfView);
 
+        // Whether the eye and target are still the ones the clearance placed: nothing after it (a door, a screen, a
+        // tabletop, a framing row) has moved them. Only then does the clearance's cutaway hold, and only then is a
+        // first-person look this camera's own, so the image's centre is where the seat aims.
+        var ownEye = ((eye == clearedEye) && (target == clearedTarget));
+
+        aimsByEye = (presentedHere && ReferenceEquals(objA: rig, objB: chase) && view.FirstPersonLook && ownEye);
+
         return CameraSnapshot.LookAt(
             fieldOfViewRadians: fieldOfView,
             position: eye,
@@ -1256,9 +1264,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     x: MathF.Max(x: near, y: tabletopNear),
                     y: framingNear
                 ),
-                // The clearance's cutaway holds only for the eye and target it was measured on; a door or a framing that
-                // moved them since owns the near plane.
-                y: (((eye == clearedEye) && (target == clearedTarget))
+                y: (ownEye
                     ? clearanceNear
                     : 0f
                 )
@@ -2259,6 +2265,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 (settled.Index == engaged.Index)
             );
             var camera = ResolveCamera(
+                aimsByEye: out var aimsByEye,
                 bloom: out var bloom,
                 deltaSeconds: deltaSeconds,
                 engaged: engaged,
@@ -2295,6 +2302,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // aims exactly where the pixel under it was drawn from. Published before the seat's grid resolves, since
             // a following grid casts the seat's pointer through this camera.
             m_viewports.Publish(
+                aimsByEye: aimsByEye,
                 camera: in camera,
                 height: height,
                 region: region,

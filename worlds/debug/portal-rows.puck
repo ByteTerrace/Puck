@@ -3,6 +3,11 @@
 // Imported ahead of every other inhabitant, with one extra capacity slot, it takes body 573 without moving them.
 // This is a probe of the renderer, not a sculpting project: an engine limit here is fixed at its cause or handed back.
 import "../standard/kits"
+import "gallery/layout"
+
+// Its home: in the painting wing, 3.2 m out from the west of the two linked paintings (paintings.puck's `link-west`, on
+// the court's fin) and 2 m off their line, so it stands beside the pair and clear of both.
+let witnessHome = galleryWorld(((courtFin + galleryWall) + 3.2), galleryFloor[0], (2.4 + 2))
 
 prototypes {
   prototype "portal-row-witness" {
@@ -32,7 +37,7 @@ looks [{
 placements {
   placement "portal-row-witness" {
     prototype: "portal-row-witness"
-    position [54.5, 0.05, 32.5]
+    position: witnessHome
     inhabit {
       count: 1
       distribution {

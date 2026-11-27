@@ -320,6 +320,69 @@ internal sealed partial class PlayerCommandModule {
             return new CommandResult(Output: $"[body.pose: '{instance.Name}' body:{instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
         }
 
+        // The size form — body.pose size [body] — returns the body to its authored size and leaves its place alone. It
+        // follows the seat's live route, as the forms below do, so it reaches a seat's body in whichever world holds it.
+        if ((args.Count is 1 or 2) && args[0].Equals(other: SizeForm, comparisonType: StringComparison.Ordinal)) {
+            if (!WorldArgs.TryParseIndex(
+                args: in args,
+                at: 1,
+                min: 0,
+                max: (Population.Capacity - 1),
+                fallback: 0,
+                value: out var sizeIndex
+            )) {
+                return CommandResult.Error(output: $"[body.pose: body index must be an integer 0..{(Population.Capacity - 1)}]");
+            }
+            if (IsSeat(index: sizeIndex) && m_roster.IsJoined(slot: sizeIndex)) {
+                var location = seatRouter.Route(slot: sizeIndex);
+
+                if (!location.Endpoint.ClockOwnedHere || !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)) {
+                    location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
+                        Principal: context.Principal,
+                        EntityIndex: location.EntityIndex,
+                        Position: default,
+                        YawRadians: 0f,
+                        PitchRadians: 0f,
+                        RollRadians: 0f,
+                        Mode: SnapPoseMode.AuthoredSize
+                    ));
+
+                    return Echoed(
+                        args: in args,
+                        handler: $"[body.pose: body:{sizeIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} -> its authored size]"
+                    );
+                }
+            }
+
+            var (sizePlayer, sizeBody, sizeError) = ResolveTarget(
+                args: in args,
+                requiredCount: 1,
+                verb: "body.pose"
+            );
+
+            if (sizePlayer is null) {
+                return CommandResult.Error(output: sizeError!);
+            }
+            if (ReplayDriveError(verb: "body.pose") is { } sizeDriveError) {
+                return sizeDriveError;
+            }
+
+            m_link.SubmitCommand(command: new WorldCommand.SnapPose(
+                Principal: context.Principal,
+                EntityIndex: sizeBody,
+                Position: default,
+                YawRadians: 0f,
+                PitchRadians: 0f,
+                RollRadians: 0f,
+                Mode: SnapPoseMode.AuthoredSize
+            ));
+
+            return Echoed(
+                args: in args,
+                handler: $"[body.pose: body:{sizeBody} -> its authored size]"
+            );
+        }
+
         // The spawn-point form — body.pose spawn:<id> [body] — is the console mirror of the rule-side pose effect's
         // spawnPoint branch (WorldServer.Step), read against the LIVE definition so a mutated spawns section is honored.
         if (
@@ -907,6 +970,7 @@ internal sealed partial class PlayerCommandModule {
     // Parses a body.pose positional axis token: a literal "-" holds the value already read into `current`;
     // anything else must parse as a finite float, exactly like every other drive-a-player float argument.
     private const string SpawnPrefix = "spawn:";
+    private const string SizeForm = "size";
 
     private static bool TryFloatOrHold(in WireArgs args, int index, float current, out float value) {
         if (args.Is(

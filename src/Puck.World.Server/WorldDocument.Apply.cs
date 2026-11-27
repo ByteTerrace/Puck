@@ -1771,6 +1771,9 @@ public sealed partial class WorldDocument {
                             rollRadians: snap.RollRadians
                         );
                         break;
+                    case SnapPoseMode.AuthoredSize:
+                        Host.Population.RestoreAuthoredScale(definition: Host.Definition, index: command.EntityIndex);
+                        break;
                     default:
                         throw new InvalidOperationException(message: $"SnapPose mode value {((int)snap.Mode)} reached the server without codec validation.");
                 }

@@ -307,7 +307,7 @@ let displayExhibitLift = 0.3
 // living-room television set and a two-player arcade cabinet alternate. The plan keeps clear of the corner bays and the
 // walls beside them (0 and 12: the corner stairs, and the handhelds' corners to come), the lift's landing (bay 4)
 // and the endless fall's well (bay 11). A cabinet
-// stands on a gallery's third tile row in from its wall and a television set's stand on its second, so a set's rug and
+// stands on a gallery's second tile row in from its wall, as a television set's stand does, so a set's rug and
 // beanbags reach no nearer than 2.8 m to the balcony edge; each faces the nave, a south one +z (yaw 180), a north one -z
 // (yaw 0). `look` is the colourway a station wears (look.puck's lookCabinets and lookTelevisions) and `cartridge` the
 // shipped deck program it boots.
@@ -317,8 +317,8 @@ let toyboxLevel = 1
 // the magic barrier filling each level-1 branch's arch (shell.puck) lets a holder through and holds every other body.
 let wonderPasses = ["wonderPass", "wonderKey"]
 let toyboxSides = [
-  { name: "south", cabinetRow: (wallRowSouth + 2), televisionRow: (wallRowSouth + 1), yaw: 180, facing: 1 }
-  { name: "north", cabinetRow: (wallRowNorth - 2), televisionRow: (wallRowNorth - 1), yaw: 0, facing: -1 }
+  { name: "south", cabinetRow: (wallRowSouth + 1), televisionRow: (wallRowSouth + 1), yaw: 180, facing: 1 }
+  { name: "north", cabinetRow: (wallRowNorth - 1), televisionRow: (wallRowNorth - 1), yaw: 0, facing: -1 }
 ]
 let toyboxPlan = [
   { bay: 2, kind: "television", look: 0, cartridge: "moving-sprite" }
@@ -403,7 +403,7 @@ let treeLimbs = [
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
 function bayOf(x) = floor(((x - pierX(0)) / arcadePitch))
 // Every branch lands at a bay's centre, midway between two piers, so it never meets a pier and its doorway (levels 2 and
-// 3) or barrier (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
+// 3) or magic barrier (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
 let treeDoorWidth = 2
 let treeDoorPost = 0.22
 let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)

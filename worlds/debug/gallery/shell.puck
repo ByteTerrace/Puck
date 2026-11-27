@@ -567,7 +567,7 @@ function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
 // Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
-// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Its outer arch holds
+// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
 // every body, small or full size, except one holding a wonder pass (layout.puck's `wonderPasses`: the wonder key
 // switched on, rentals.puck), which walks through it and onto level 1 at its full size. Each lattice panel
 // rises in its own `shellLatticeRails` crossbars so the bars keep one spacing.
@@ -920,7 +920,7 @@ template shellPrototypes() {
     document {
       name: "gallery-barrier"
       schema: "puck.creation.v1"
-      palette: rainbowArchPalette(lookBarrier.colors, film: lookBarrier.film)
+      palette: rainbowArchPalette(lookBarrier.colors, glow: lookBarrier.glow)
       rainbowArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, hues: length(lookBarrier.colors))
     }
   }
@@ -1171,7 +1171,7 @@ template shellPlacements() {
     }
   }
   for panel in shellLatticeGates {
-    placement $"gallery-lattice-{panel.id}" {
+    placement $"gallery-{panel.id}" {
       prototype: panel.prototype
       parent: "gallery"
       position [panel.x, (galleryFloor[1] + panel.y), panel.z]

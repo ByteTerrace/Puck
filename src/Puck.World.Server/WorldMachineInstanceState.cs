@@ -13,8 +13,10 @@ namespace Puck.World.Server;
 /// <param name="Fault">The preparation refusal or queued worker's fault, if present.</param>
 /// <param name="Content">The content path the incarnation mounted, as its configuration names it, or
 /// <see langword="null"/> when it runs with no cartridge.</param>
+/// <param name="Attended">Whether anyone attended the instance at the last tick's verdict
+/// (<see cref="WorldMachine.Attention"/>); <see langword="true"/> for one that authors no attention.</param>
 public readonly record struct WorldMachineInstanceState(string Name, ulong Generation, string Engine, bool Running,
-    MachineRuntimeStatus Status, long FramesStepped, long PendingSteps, string? Fault, string? Content = null);
+    MachineRuntimeStatus Status, long FramesStepped, long PendingSteps, string? Fault, string? Content = null, bool Attended = true);
 /// <summary>A named instance's host-side pace, which no checkpoint or replay carries: what a machine's worker did on this
 /// host, read to judge whether and by how much it keeps up with real time.</summary>
 /// <param name="NativeFrames">The machine's last completed native video frame, or -1 when it reports none.</param>

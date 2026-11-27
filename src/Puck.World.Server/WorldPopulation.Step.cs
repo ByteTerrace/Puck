@@ -1252,7 +1252,7 @@ public sealed partial class WorldPopulation {
                     CadenceComesDue(period: autonomy.SteeringPeriodTicks, remaining: autonomy.SteeringRemainingTicks, stepTicks: stepTicks)
                 ) {
                     // With nobody in the world, every body is far.
-                    isFar = (NearestOccupiedWith(candidates: (work.Partitioned ? work.Occupied : m_occupiedCandidates), point: player.FixedPosition, reach: far.Beyond) is null);
+                    isFar = (NearestOccupiedWith(candidates: (work.Partitioned ? work.Occupied : m_occupiedCandidates), front: null, point: player.FixedPosition, reach: far.Beyond) is null);
                 }
                 if (isFar) {
                     motionPeriod = farMotion;

@@ -15,9 +15,11 @@ namespace Puck.World;
 /// points: the ray ends when that mouse leaves the seat or the position names no mouse (a platform that reports only
 /// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
 /// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen, no placement
-/// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell. A seat whose view is
-/// first person aims by it: its ray and its mouse's contacts cast through the view's centre, the reticle, since the
-/// mouse steers that view and the OS cursor rests where the view's drag locked it, or reports no position at all.
+/// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell. A seat whose view
+/// draws from its own first-person eye (<see cref="WorldSeatView.AimsByEye"/>) aims by it: its ray and its mouse's
+/// contacts cast through the view's centre, the reticle, since the mouse steers that view and the OS cursor rests where
+/// the view's drag locked it, or reports no position at all. A view another camera took over (a terminal's desk view, an
+/// engaged screen, a board) casts from the cursor.
 /// <para>The same cast decides each seat's pointer context (<see cref="WorldContextFamilies.Pointer"/>): <c>surface</c>
 /// while the ray lands on a pointer surface (<see cref="WorldPointerSurfaces.Lands"/>, the rectangles a <c>$pointer:</c>
 /// read maps through), <c>none</c> otherwise, re-read only while the seat holds no pointer button. So a press that lands
@@ -255,10 +257,12 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
         m_contactScratch.Clear();
     }
-    // Whether a seat aims by its view: in a first-person view the camera is the seat's eye and the reticle at the image's
-    // centre is where it points, so its mouse, which steers that view, points there rather than where the OS cursor last
-    // rested (a cursor the view's drag locked and hid, or one that never reported a position).
-    private bool AimsByView(int slot) => ((m_roster.Seat(slot: slot) is { } seat) && seat.View.FirstPersonLook);
+    // Whether a seat aims by its view: while the camera its view drew with is its own first-person eye, the reticle at
+    // the image's centre is where it points, so its mouse, which steers that view, points there rather than where the OS
+    // cursor last rested (a cursor the view's drag locked and hid, or one that never reported a position). A camera that
+    // another view took over (a terminal's desk view, a screen, a board) is no eye, and the mouse points at its cursor,
+    // whatever the seat's first-person choice.
+    private bool AimsByView(int slot) => m_viewports.Seat(slot: slot).AimsByEye;
     // The ray a client point casts through a seat's published camera: the one cast every pointing input takes. A point
     // outside the seat's view casts only when the caller allows it (a contact that touched inside keeps its lift). An
     // aimed cast goes through the view's centre (AimsByView) wherever the point lies.

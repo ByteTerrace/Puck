@@ -76,7 +76,9 @@ public sealed partial class WorldTick {
     // The one place a machine's RunsWhen is decided: after the rule frame folds, so a rule's write starts or stops its
     // machine on the tick it lands, and before the machines step (ResumeTick). The verdict is derived from the arena on
     // every tick, so a replay or a restored checkpoint gates exactly as the recorded run did. A machine's ContentBy title
-    // is decided here too, on the same terms: the host mounts a title only on the tick its cell changes.
+    // is decided here too, on the same terms: the host mounts a title only on the tick its cell changes. So is whether
+    // anyone attends a machine that authors an attention (MachineAttended), after the population's advance, so a body
+    // that walked into reach or engaged this tick resumes its machine on this tick.
     private IReadOnlyList<WorldMachine>? m_gatedMachines;
     private bool m_gatesMachines;
 
@@ -87,16 +89,20 @@ public sealed partial class WorldTick {
         if (!m_gatesMachines && (m_gatedMachines == machines)) { return; }
         m_gatedMachines = machines;
         m_gatesMachines = false;
-        // Every declared machine is told its verdict, so a row that drops its condition, or a name declared again
-        // without one, is never left gated by an earlier tick.
+
+        var occupiedRead = false;
+
+        // Every declared machine is told its verdicts, so a row that drops its condition or its attention, or a name
+        // declared again without one, is never left held back by an earlier tick.
         for (var index = 0; (index < machines.Count); index++) {
             if (machines[index] is not { } machine) { continue; }
-            m_gatesMachines |= ((machine.RunsWhen is not null) || (machine.ContentBy is not null));
+            m_gatesMachines |= ((machine.RunsWhen is not null) || (machine.ContentBy is not null) || (machine.Attention is not null));
             Host.Machines.SelectContent(
                 instance: machine.Name,
                 title: (machine.ContentBy?.Read(arena: Host.Arena, definition: definition, tick: tick, engineTick: CompletedEngineTicks) ?? 0)
             );
             Host.Machines.GateRunning(
+                attended: ((machine.Attention is not { } attention) || MachineAttended(attention: attention, definition: definition, machine: machine.Name, occupiedRead: ref occupiedRead)),
                 instance: machine.Name,
                 runs: (machine.RunsWhen?.Holds(arena: Host.Arena, definition: definition, tick: tick, engineTick: CompletedEngineTicks) ?? true)
             );

@@ -753,7 +753,34 @@ function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 // 2.85 m tall, the shelf 1.06 m up, at a standing player's hands. The marquee's panel stands 3 cm proud of its housing,
 // so the glow stays its own surface however coarsely the bake meshes the cabinet. Every shape is a rounded box,
 // cylinder or sphere joined by union, so the analytic contact collides it as drawn.
-template arcadeCabinet(base, title, em = 0.13, players = 1) {
+// A bar stool at `at` (on y 0): a round padded seat `height` up on a single post over a weighted foot disc. `seat` and
+// `metal` are its palette slots (an arcade cabinet's trim and bezel, so a cabinet's stools wear its colours).
+template barStool(label, at, seat, metal, height = 0.66, radius = 0.19) {
+  shape Cylinder $"{label}-seat" {
+    material: seat
+    position: (at + [0, (height - 0.04), 0])
+    scale [radius, 0.045, radius]
+    rounding: 0.03
+  }
+  shape Cylinder $"{label}-post" {
+    material: metal
+    position: (at + [0, ((height - 0.08) / 2), 0])
+    scale [0.025, ((height - 0.08) / 2), 0.025]
+  }
+  shape Cylinder $"{label}-ring" {
+    material: metal
+    position: (at + [0, (height * 0.38), 0])
+    scale [(radius * 0.7), 0.012, (radius * 0.7)]
+    rounding: 0.01
+  }
+  shape Cylinder $"{label}-foot" {
+    material: metal
+    position: (at + [0, 0.015, 0])
+    scale [(radius * 0.9), 0.015, (radius * 0.9)]
+    rounding: 0.01
+  }
+}
+template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   let w = cabinetHalfWidth(players)
   let panels = ((players == 2) ? [(0 - (w / 2)), (w / 2)] : [0])
   shape Box "cabinet-kick" {
@@ -862,6 +889,12 @@ template arcadeCabinet(base, title, em = 0.13, players = 1) {
       }
     }
   ]
+  // A stool before each player's controls, when asked for, far enough out for a seated player's knees.
+  if stools {
+    for (x, n) in panels {
+      barStool(label: $"cabinet-stool-{n}", at: [x, 0, 0.95], seat: (base + cabinetTrim), metal: (base + cabinetBezel))
+    }
+  }
 }
 
 // A living-room television set's materials, in slot order from `base`: the television's toy-plastic case, its trim
@@ -1052,9 +1085,9 @@ template gamePad(base, at, label) {
 }
 
 // A pad's cable from `from` (a console's port, leaving it toward +Z) to `to` (the pad's cable end): it drops to lie
-// `lie` up (on the floor, or on a rug over it) a third of the way out and runs straight along it to the pad. Visual
-// only: a body steps over it.
-template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
+// `lie` up (on the floor, or on a rug over it) a third of the way out and runs along it to the pad with `slack` metres
+// of lazy sideways bow, outward on the pad's own side, so two cables never cross. Visual only: a body steps over it.
+template padCable(base, label, from, to, lie = 0.024, radius = 0.012, slack = 0.22) {
   let drop = [(from[0] + ((to[0] - from[0]) * 0.3)), lie, (from[2] + ((to[2] - from[2]) * 0.35))]
   shape Sweep $"{label}-drop" {
     material: (base + setDark)
@@ -1073,7 +1106,7 @@ template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
     position: drop
     curve {
       a [0, 0, 0]
-      b: (((to - drop) * 0.5))
+      b: (((to - drop) * 0.5) + [((to[0] >= from[0]) ? slack : (0 - slack)), 0, 0])
       c: (to - drop)
       radiusStart: radius
       radiusEnd: radius
@@ -1089,7 +1122,8 @@ let setStandHeight = 0.42
 let setTelevisionAt = [0, setStandHeight, -0.05]
 let setConsoleAt = [0, 0.08, 0.05]
 let televisionSetPicture = (setTelevisionAt + televisionPicture)
-let setPads = [[0.45, 0.012, 1.25], [-0.45, 0.012, 1.25]]
+// Each pad lies on its own port's side (consolePort: player 0 on -X), so the cables run apart.
+let setPads = [[-0.45, 0.012, 1.25], [0.45, 0.012, 1.25]]
 template televisionSet(base, players = 2) {
   lowStand(base: base, at: [0, 0, 0], height: setStandHeight)
   television(base: base, at: setTelevisionAt)
@@ -1256,30 +1290,52 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
-// A magic barrier filling an arch: nested arches of tinted light, a rainbow, each a half disc `radius` across over a
-// rectangle down to the floor from its spring line `spring` metres up, the outermost the full opening and each next one
-// `band` metres inside it and a hair in front, so the opening reads as a rainbow standing in the arch. The outermost
-// collides; the rest are drawn only. It stands on y 0, centred on x 0, facing ±Z. Its palette from `base`: one glass
-// entry a hue, outermost first (rainbowArchPalette).
-function rainbowArchPalette(colors, film = 0.3) = map(colors, c => { color: c, roughness: 0.04, glass { depth: film, ior: 1.15 } })
-template rainbowArch(base, radius, spring, hues, band = 0.26, thickness = 0.01) {
-  for k in range(0, hues) {
-    rainbowArchLayer(base: base, k: k, radius: (radius - (k * band)), spring: spring, z: ((0 - k) * (thickness * 0.6)), thickness: thickness, drawnOnly: ((k > 0) ? true : false))
-  }
-}
-template rainbowArchLayer(base, k, radius, spring, z, thickness, drawnOnly) {
-  shape Cylinder $"rainbow-disc-{k}" {
-    detail: drawnOnly
-    material: (base + k)
-    position [0, spring, z]
+// A magic barrier filling an arch: a clear pane in the arch's shape (a half disc `radius` across over a rectangle down to
+// the floor from the spring line `spring` metres up), the part that collides, and nested inside its edge `hues` neon
+// arches, a rainbow, each a half circle on two legs, the outermost a hair inside the opening and each next `band` metres
+// inside it, drawn only. It stands on y 0, centred on x 0, facing ±Z. Its palette from `base`: the pane, then a neon a
+// hue, outermost first (rainbowArchPalette).
+function rainbowArchPalette(colors, glow = 300, pane = "#F4F8FF") = concat(
+  [{ color: pane, roughness: 0.02, glass { depth: 0.02, ior: 1.2 } }],
+  map(colors, c => { color: c, roughness: 0.3, emissive: glow })
+)
+// The point on a half circle `radius` about the spring line's middle at `degrees` from +X toward +Y.
+function rainbowArchPoint(radius, spring, degrees) = [(radius * cosine(degrees * 1deg)), (spring + (radius * sine(degrees * 1deg))), 0]
+template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segments = 6) {
+  shape Cylinder "rainbow-pane-disc" {
+    material: base
+    position [0, spring, 0]
     rotation [0.7071068, 0, 0, 0.7071068]
-    scale [radius, (thickness / 2), radius]
+    scale [radius, 0.005, radius]
   }
-  shape Box $"rainbow-legs-{k}" {
-    detail: drawnOnly
-    material: (base + k)
-    position [0, (spring / 2), z]
-    scale [radius, (spring / 2), (thickness / 2)]
+  shape Box "rainbow-pane-legs" {
+    material: base
+    position [0, (spring / 2), 0]
+    scale [radius, (spring / 2), 0.005]
+  }
+  for k in range(0, hues) {
+    let r = ((radius - 0.06) - (k * band))
+    for n in range(0, segments) {
+      shape Sweep $"rainbow-arc-{k}-{n}" {
+        detail: true
+        material: ((base + 1) + k)
+        curve {
+          a: rainbowArchPoint(r, spring, ((180 * n) / segments))
+          b: rainbowArchPoint((r / cosine((90 / segments) * 1deg)), spring, ((180 * (n + 0.5)) / segments))
+          c: rainbowArchPoint(r, spring, ((180 * (n + 1)) / segments))
+          radiusStart: tube
+          radiusEnd: tube
+        }
+      }
+    }
+    for side in [-1, 1] {
+      shape Cylinder $"rainbow-leg-{k}-{side}" {
+        detail: true
+        material: ((base + 1) + k)
+        position [(side * r), (spring / 2), 0]
+        scale [tube, (spring / 2), tube]
+      }
+    }
   }
 }
 
