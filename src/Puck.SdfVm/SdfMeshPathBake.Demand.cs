@@ -621,12 +621,16 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandReached, amount: reached);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandChanged, amount: changed);
 
-        // Measures the groups that carry a copy's geometry: its template range's, or its asset slots'.
+        // Measures the groups that carry a copy's geometry: its template range's and the one it stands in on (StandIns),
+        // or its asset slots'.
         void MeasureCopy(int copy) {
             var layout = m_copyLayout[copy];
 
             if (layout.TemplateRange is { } range) {
                 for (var instance = 0; (instance < range.InstanceCount); instance++) { MeasureOwners(dynamic: false, key: (range.FirstInstance + instance)); }
+                if ((m_standIns.Count > 0) && m_standIns.TryGetValue(key: copy, value: out var held)) {
+                    for (var instance = 0; (instance < held.InstanceCount); instance++) { MeasureOwners(dynamic: false, key: (held.FirstInstance + instance)); }
+                }
                 return;
             }
             MeasureOwners(dynamic: true, key: layout.AssetSlot);

@@ -212,10 +212,14 @@ public sealed partial class SdfMeshPathBake {
         var boxes = 1;
 
         if (!group.Done) {
+            // Built aside and published once, so a take reading the group meanwhile sees the last rank or the new one.
+            var priority = group.Priority;
+            var inView = group.InView;
+
             if (group.HasDemandBox) {
                 boxes = Math.Max(val1: 1, val2: (CopiesOf(group: group)?.Count ?? 1));
-                group.InView = MeasureSees(group: group);
-                if (measured) { group.Priority = MeasureDemand(group, priority: true); }
+                inView = MeasureSees(group: group);
+                if (measured) { priority = MeasureDemand(group, priority: true); }
             }
             if (group.Followers is { } followers) {
                 // By index: the list only grows, and only on this thread, but a worker may hand it over (TakeFollowers).
@@ -223,14 +227,22 @@ public sealed partial class SdfMeshPathBake {
                     var follower = followers[at];
 
                     if (follower.Done || !ReferenceEquals(objA: follower.Leader, objB: group)) { continue; }
-                    group.Priority = MathF.Max(x: group.Priority, y: follower.Priority);
-                    group.InView |= follower.InView;
+                    priority = MathF.Max(x: priority, y: follower.Priority);
+                    inView |= follower.InView;
                 }
             }
-            if (measured) {
-                if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
-                if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
+            // A template a copy has moved to, which the copy waits on while it still draws the one before (StandIns),
+            // bakes ahead of everything else.
+            if (AwaitedByStandIn(group: group)) {
+                priority = float.MaxValue;
+                inView = true;
             }
+            if (measured) {
+                if (group.Waiter is { } waiter) { waiter.Priority = priority; }
+                if ((group.Share is { HasWaiters: true } share)) { priority = MathF.Max(x: priority, y: Library.MostWanted(share: share)); }
+            }
+            group.Priority = priority;
+            group.InView = inView;
         }
         CountHoles(group: group, listed: true);
 

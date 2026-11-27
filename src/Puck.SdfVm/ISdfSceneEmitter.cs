@@ -44,7 +44,9 @@ public interface ISdfSceneEmitter {
     /// <summary>Gets the instance ranges of the composed program that hold static templates, each drawn only by the
     /// copies that name its range (<see cref="SdfMeshInstance.TemplateRange"/>). A template no copy names this frame
     /// (a creation a responding row can show and does not) draws nothing: without its range here its groups would draw
-    /// as ordinary static geometry, where the template was emitted.</summary>
+    /// as ordinary static geometry, where the template was emitted. A copy that moves to a template whose mesh has not
+    /// landed keeps drawing the one it drew, with the same motion identity at the same index, until it does
+    /// (<see cref="SdfMeshPathBake"/>'s stand-ins).</summary>
     IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => [];
     /// <summary>Gets the rigid copies posed by the latest pack.</summary>
     IReadOnlyList<SdfMeshInstance> MeshInstances => [];

@@ -690,7 +690,8 @@ public sealed partial class SdfMeshPathBake {
 
     private long m_copyLayoutRevision;
 
-    private readonly record struct CopyLayout(int AssetSlot, SdfMeshTemplateRange? TemplateRange, bool IsDynamic, bool HasMesh, int[] OtherAssetSlots);
+    // A template copy's scale and motion identity are what a stand-in is matched by across layouts (StandIns).
+    private readonly record struct CopyLayout(int AssetSlot, SdfMeshTemplateRange? TemplateRange, bool IsDynamic, bool HasMesh, int[] OtherAssetSlots, object? MotionIdentity, float Scale);
 
     // A changed landed product is acknowledged only after the dresser has published its draws and ownership claims.
     private long m_productRevision;
@@ -782,6 +783,7 @@ public sealed partial class SdfMeshPathBake {
             // The tiers are decided from the demand the frame before measured; this frame's measure and the groups' share
             // of priorities (Prioritize) run on the measure's lane while the frame is dressed and recorded.
             Retier(frame: frame);
+            ReleaseStandIns();
             PostMeasure();
             scope.Continue(site: BakeGate.Judge);
             JudgeFloors();
@@ -878,7 +880,9 @@ public sealed partial class SdfMeshPathBake {
         }
         // The tier the floor a group keeps was baked at.
         internal readonly int FloorTierOf(SdfMeshBakeGroup group) => Held((Group)group).KeptFloorTier;
-        internal readonly IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => Owner.CopiesOf(group: group);
+        // The copies the dresser draws a group's mesh for: the copies that name it, with a copy standing in on the template
+        // it drew while the one it names has no mesh yet (DressedCopiesOf).
+        internal readonly IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => Owner.DressedCopiesOf(group: group);
         // Records that the frame's draws stand at the captured product revision, once they are published; after the
         // release too, since it reads no group.
         internal readonly void Acknowledge() => Volatile.Write(location: ref m_owner.m_dressedRevision, value: Revision);
@@ -917,7 +921,7 @@ public sealed partial class SdfMeshPathBake {
                 var copy = frame.MeshInstances[index];
 
                 if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
-                    (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
+                    (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count) || ((copy.TemplateRange is not null) && (old.Scale != copy.Scale))) { return false; }
                 for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
                     if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
                 }
@@ -928,6 +932,8 @@ public sealed partial class SdfMeshPathBake {
     // The one membership index serves both pending-bake demand and landed draw dressing. It contains no poses:
     // a moving occurrence keeps its membership and supplies its current matrix through m_copyPoses.
     private void IndexCopies(SdfFrame frame) {
+        var previous = m_copyLayout;
+
         m_slotCopies.Clear();
         m_instanceCopies.Clear();
         m_fixedAssetSlots.Clear();
@@ -938,7 +944,7 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_copyLayout.Length); index++) {
             var copy = frame.MeshInstances[index];
 
-            m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, (copy.Mesh is not null), copy.OtherAssetSlots.ToArray());
+            m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, (copy.Mesh is not null), copy.OtherAssetSlots.ToArray(), copy.MotionIdentity, copy.Scale);
         }
         m_copyLayoutRevision++;
         m_demandCopyLayout = true;
@@ -962,13 +968,14 @@ public sealed partial class SdfMeshPathBake {
                 if (!copy.IsDynamic) { m_fixedAssetSlots.Add(item: slot); }
             }
         }
+        PlaceStandIns(frame: frame, previous: previous);
     }
     private static void AddCopyIndex(Dictionary<int, List<int>> table, int key, int copy) {
         if (!table.TryGetValue(key: key, value: out var indices)) { table.Add(key: key, value: indices = []); }
         if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(item: copy); }
     }
     private IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) {
-        if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(key: group.FirstInstance); }
+        if (!group.Dynamic) { return StandInCopiesOf(instance: group.FirstInstance, drawn: false); }
         if (!m_copyAssetSlotSet.Contains(item: group.Slot)) { return null; }
         return (m_slotCopies.TryGetValue(key: group.Slot, value: out var copies) ? copies : Array.Empty<int>());
     }

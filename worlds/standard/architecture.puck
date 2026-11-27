@@ -45,8 +45,10 @@ let plinthGlassDepth = 0.012
 // daylit hall, and the interface's colours in the kit's own palette (ochre frame, cream, teal and terracotta controls),
 // the ink lettering takes on a lit control and the two inks of a list, its chosen row lit amber. A screen's terminal
 // mode lays its own deep-teal field (`terminal`) over the glass, lit as the interface's controls are so its lettering
-// reads in daylight, and brighter scanlines (`scan`) across it.
-let consoleGlass = { color: "#081315", roughness: 0.12, specular: 0.45, emissive: 3000 }
+// reads in daylight, and brighter scanlines (`scan`) across it. The glass reflects as display glass does, an f0 of
+// 0.04 under an anti-glare coat's broad lobe: a dark field glows at only a hundred nits or so, so a face that reflects
+// much more of a daylit hall than that washes every colour on it toward the hall's.
+let consoleGlass = { color: "#081315", roughness: 0.3, specular: 0.04, emissive: 3000 }
 let consoleLook = {
   frame: "#E0A13A"
   cream: "#EFE3C8"

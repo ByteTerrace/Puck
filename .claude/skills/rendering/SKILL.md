@@ -279,7 +279,11 @@ and the bake's one copy index (`SdfMeshPathBake.CopiesOf`) answers no copies, no
 template for every creation it can show; a template that drew itself once would put
 the creations it does not show at their templates' frame, on top of the shown one, and
 the irradiance volume would trace two coincident surfaces with two materials, whichever
-the CPU and the GPU walks each meet first. `IsDynamic` selects
+the CPU and the GPU walks each meet first. A variant bakes only once a copy names it,
+so a copy moved to a template with no mesh yet keeps drawing the one it drew, and that
+template bakes ahead of every other group (`SdfMeshPathBake.StandIns.cs`): the dresser
+reads a group's copies through `FrameAccess.CopiesOf` (the stand-ins applied), demand
+through `CopiesOf` (the named copies plus those standing in). `IsDynamic` selects
 static lighting membership; `UsesRootMaterialFrame` independently selects material
 coordinates while retaining the root slot for skinning and portals. Dressing retains
 group/copy topology and immutable per-surface picking metadata across pose changes.
