@@ -25,6 +25,18 @@ clamped to [0, 0.5].
 | `PipeUnion` | `min(a, b, √(a²+b²) − r)` — a round bead along that curve | `smooth` |
 | `GrooveSubtraction` | `max(a, −b, r − √(a²+b²))` | `smooth` |
 | `PipeSubtraction` | `min(max(a,−b), √(a²+b²) − r)` | `smooth` |
+| `CubicSmoothUnion` / `CubicSmoothIntersection` / `CubicSmoothSubtraction` | the cubic smooth min: `min(a, b) − (k/6)·h³`, `h = 1 − \|a − b\|/k` | `smooth` |
+
+The smooth families blend over one band, where the operands lie within `smooth`
+of each other. The quadratic (`SmoothUnion` and its siblings) is continuous in
+slope only, so its seam's curvature steps at the band's edge and shows as a
+crease under a highlight or through glass; the cubic is continuous in curvature
+and sags a sixth of the radius at the seam rather than a quarter, so the same
+`smooth` draws a slightly tighter fillet. Every rule this file states for a
+smooth union, intersection or subtraction holds for its cubic sibling
+(`SdfFieldBlends.SmoothFamilyOf`); kinds with unbounded support (exponential,
+root, sigmoid) would never return the hard seam's answer exactly, which the
+cull bounds and the bake's instance spheres rely on, so none is offered.
 
 `StairsUnion`, `StairsSubtraction` and `Morph` compose only at a field-scope
 pop, so a shape carrying one opens a scope of its own, inside its creation's
@@ -213,7 +225,7 @@ scope and one dynamic instance. Engraving therefore cuts the creation, never
 another placement, and a group's cutter still affects only that group.
 
 **3. Static emission takes a creation scope** when it has a `noise` facet, an
-engraved text run, **or any shape blend outside `Union` and `SmoothUnion`**.
+engraved text run, **or any shape blend outside `Union`, `SmoothUnion` and `CubicSmoothUnion`**.
 The document admission rule uses that same predicate for all placements:
 `panel`,
 `trims`, and `cells` are refused on **every** shape in the creation.

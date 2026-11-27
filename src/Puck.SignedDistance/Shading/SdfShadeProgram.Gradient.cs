@@ -24,9 +24,10 @@ public sealed partial class SdfShadeProgram {
         private static Node Variable(SdfShadeType type) => new(SdfShadeOp.Input, type, [], [], uint.MaxValue, $"variable:{((int)type)}");
 
         // A live gradient op carries its noise's value in its first lane, from the same evaluation: a lattice beside its
-        // latticeGradient, and a cells channel (F1 or F2 - F1) beside that channel's cellsGradient, read that lane rather
-        // than evaluating the noise again. The lattice's value is the gradient form's trilinear sum, equal to the plain
-        // reader's nested blend to rounding; the cells channels are the same arithmetic over the same search.
+        // latticeGradient, a cell border beside its cellBorderGradient, and a cells channel (F1 or F2 - F1) beside that
+        // channel's cellsGradient, read that lane rather than evaluating the noise again. The lattice's value is the
+        // gradient form's trilinear sum, equal to the plain reader's nested blend to rounding; the cell measures are the
+        // same arithmetic over the same search.
         private void Fuse(List<(SdfShadePhase Phase, string Name, Node Value)> outputs) {
             var live = new HashSet<Node>(comparer: ReferenceEqualityComparer.Instance);
             var pending = new Stack<Node>(collection: outputs.Select(selector: static o => o.Value));
@@ -35,7 +36,7 @@ public sealed partial class SdfShadeProgram {
                 if (!live.Add(item: node)) { continue; }
                 foreach (var arg in node.Args) { pending.Push(item: arg); }
             }
-            var gradients = live.Where(predicate: static n => (n.Op is SdfShadeOp.LatticeGradient or SdfShadeOp.CellsGradient))
+            var gradients = live.Where(predicate: static n => (n.Op is SdfShadeOp.LatticeGradient or SdfShadeOp.CellsGradient or SdfShadeOp.CellBorderGradient))
                 .ToDictionary(keySelector: static n => (n.Op, n.Args[0].Key, n.Args[1].Key, n.Immediate), elementSelector: static n => n);
 
             if (gradients.Count == 0) { return; }
@@ -47,7 +48,7 @@ public sealed partial class SdfShadeProgram {
                 if (rewritten.TryGetValue(key: node, value: out var known)) { return known; }
                 Node result;
 
-                if ((node.Op == SdfShadeOp.Lattice) && gradients.TryGetValue(key: (SdfShadeOp.LatticeGradient, node.Args[0].Key, node.Args[1].Key, 0u), value: out var lattice)) {
+                if ((node.Op is SdfShadeOp.Lattice or SdfShadeOp.CellBorder) && gradients.TryGetValue(key: (((node.Op == SdfShadeOp.Lattice) ? SdfShadeOp.LatticeGradient : SdfShadeOp.CellBorderGradient), node.Args[0].Key, node.Args[1].Key, 0u), value: out var lattice)) {
                     result = Make(SdfShadeOp.Component, SdfShadeType.Float, [Rewrite(node: lattice)], 0u);
                 } else if ((node.Op == SdfShadeOp.Component) && (node.Args[0] is { Op: SdfShadeOp.Cells } cells) &&
                     gradients.TryGetValue(key: (SdfShadeOp.CellsGradient, cells.Args[0].Key, cells.Args[1].Key, node.Immediate), value: out var channel)) {
@@ -244,6 +245,8 @@ public sealed partial class SdfShadeProgram {
                         return Linear(rows: da, map: column => Make(node.Op, column, rotation));
                     case SdfShadeOp.ToLayer or SdfShadeOp.ToWorld or SdfShadeOp.DrawDirection:
                         return Linear(rows: da, map: column => Make(node.Op, column));
+                    case SdfShadeOp.CellBorder:
+                        return Each(width: 1, row: _ => Chain(gradient: Make(SdfShadeOp.CellBorderGradient, A(), B()), rows: da));
                     case SdfShadeOp.Lattice:
                         return Each(width: 1, row: _ => Chain(gradient: Make(SdfShadeOp.LatticeGradient, A(), B()), rows: da));
                     case SdfShadeOp.Cells:
@@ -328,7 +331,7 @@ public sealed partial class SdfShadeProgram {
             [System.Diagnostics.CodeAnalysis.DoesNotReturn]
             private static void Refuse(SdfShadeOp op) => Fail(code: "PUCK126", message: op switch {
                 SdfShadeOp.Shape => "A gradient's height reads 'shape' of its point, which has no derivative: a shape's coverage distance is not a height. Ramp a pattern with smoothstep instead.",
-                _ => $"A gradient's height reads '{SdfShadeOps.Get(op: op).Name}' of its point, which has no derivative. Build the height from arithmetic, the smooth functions, lattice and cells.",
+                _ => $"A gradient's height reads '{SdfShadeOps.Get(op: op).Name}' of its point, which has no derivative. Build the height from arithmetic, the smooth functions, lattice, cells and cellBorder.",
             });
         }
     }

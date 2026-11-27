@@ -487,6 +487,18 @@ let galleryCopy = {
   }
   "shape-smooth-subtraction" { title: "SMOOTH SUBTRACT", note: "The carve's rim rounded over 0.1 m into the box." }
   "shape-smooth-intersection" { title: "SMOOTH INTERSECT", note: "The intersection's edges rounded over 0.1 m." }
+  "shape-cubic-smooth-union" {
+    title: "CUBIC UNION"
+    note: "The smooth union's 0.15 m fillet with no crease where it meets the faces: a highlight runs on across the join."
+  }
+  "shape-cubic-smooth-subtraction" {
+    title: "CUBIC SUBTRACT"
+    note: "The carve's rim rounded over 0.1 m, its highlight unbroken where the rounding meets the face."
+  }
+  "shape-cubic-smooth-intersection" {
+    title: "CUBIC INTERSECT"
+    note: "The intersection's edges rounded over 0.1 m, with no crease where each rounding meets its faces."
+  }
   "shape-chamfer-union" {
     title: "CHAMFER UNION"
     note: "A flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet."
@@ -1471,6 +1483,30 @@ let blendExhibits = [
     id: "shape-smooth-intersection"
     label: "SMOOTH INTERSECT"
     blend: "SmoothIntersection"
+    smooth: 0.1
+    tool [0.1, 1.28, 0.08]
+    radius [0.4, 0.4, 0.4]
+  }
+  {
+    id: "shape-cubic-smooth-union"
+    label: "CUBIC UNION"
+    blend: "CubicSmoothUnion"
+    smooth: 0.15
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+  }
+  {
+    id: "shape-cubic-smooth-subtraction"
+    label: "CUBIC SUBTRACT"
+    blend: "CubicSmoothSubtraction"
+    smooth: 0.1
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+  }
+  {
+    id: "shape-cubic-smooth-intersection"
+    label: "CUBIC INTERSECT"
+    blend: "CubicSmoothIntersection"
     smooth: 0.1
     tool [0.1, 1.28, 0.08]
     radius [0.4, 0.4, 0.4]

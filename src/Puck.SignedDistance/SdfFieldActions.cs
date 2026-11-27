@@ -397,6 +397,9 @@ internal enum SdfIntervalBlendAction {
     ChamferIntersection,
     ChamferSubtraction,
     Union,
+    CubicSmoothUnion,
+    CubicSmoothIntersection,
+    CubicSmoothSubtraction,
 }
 
 internal enum SdfBlendGrowthAction {

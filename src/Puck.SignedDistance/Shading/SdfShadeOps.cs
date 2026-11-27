@@ -10,7 +10,7 @@ public enum SdfShadeOp {
     Equal, Less, LessEqual, Select, Saturate, Mix, Smoothstep, Step,
     Pow, Exp2, Log2, Sin, Cos, Tan, Asin, Acos, Atan, Sqrt,
     Dot, Cross, Normalize, Length, Rotate, InverseRotate, Quantize, Hash,
-    Lattice, LatticeGradient, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape, Xor, Atan2, Cells, CellsGradient,
+    Lattice, LatticeGradient, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape, Xor, Atan2, Cells, CellsGradient, CellBorder, CellBorderGradient,
 }
 /// <summary>One op's complete description. Template placeholders are a, b, c and result, never author text.</summary>
 public sealed record SdfShadeOpInfo(SdfShadeOp Op, string Name, int Arity, uint Work, string Template, bool Commutative = false);
@@ -81,6 +81,8 @@ public static class SdfShadeOps {
         D(SdfShadeOp.Atan2, "atan2", 2, 16, "atan2(a, b)"),
         D(SdfShadeOp.Cells, "cells", 2, 900, "sdfShadeCells(a, b)"),
         D(SdfShadeOp.CellsGradient, "cellsGradient", 2, 920, "sdfShadeCellsGradient(a, b, immediate)"),
+        D(SdfShadeOp.CellBorder, "cellBorder", 2, 2400, "sdfShadeCellBorder(a, b)"),
+        D(SdfShadeOp.CellBorderGradient, "cellBorderGradient", 2, 2440, "sdfShadeCellBorderGradient(a, b)"),
     });
     /// <summary>The fixed stamp. Indices are generated from this table, never supplied as author addresses.</summary>
     public static IReadOnlyList<SdfShadeInput> Inputs { get; } = Array.AsReadOnly(array: new[] {

@@ -1,5 +1,16 @@
 namespace Puck.SignedDistance;
 
+/// <summary>The polynomial smooth minimum a soft blend rounds its seam with. Every kind blends over the same band, where
+/// the operands lie within the blend's radius of each other, and returns the hard seam's answer outside it.</summary>
+public enum SdfSmoothKind {
+    /// <summary>The blend keeps a hard seam, or rounds it some other way (a chamfer, a groove, stairs).</summary>
+    None,
+    /// <summary>The quadratic smooth minimum: continuous in slope, sagging a quarter of the radius at the seam.</summary>
+    Quadratic,
+    /// <summary>The cubic smooth minimum: continuous in curvature, sagging a sixth of the radius at the seam.</summary>
+    Cubic,
+}
+
 /// <summary>Field blends and their CPU and shader facets.</summary>
 [SdfFieldCatalogue("SdfBlendOp", unsigned: true)]
 public static partial class SdfFieldBlends {
@@ -33,14 +44,45 @@ public static partial class SdfFieldBlends {
         public abstract SdfFieldResource Resources { get; }
         public abstract bool ScopeOnly { get; }
         public abstract bool Hard { get; }
+        // The smooth minimum a soft union, intersection or subtraction rounds with (SdfSmoothKind).
+        public abstract SdfSmoothKind Smoothing { get; }
     }
 
     /// <summary>Returns the external field inputs this entry needs.</summary>
     public static SdfFieldResource ResourcesOf(SdfBlendOp value) => GetResourcesOf(value: value);
 
+    /// <summary>Returns the smooth minimum a blend rounds its seam with.</summary>
+    /// <param name="value">The blend.</param>
+    /// <returns>The blend's kind, or <see cref="SdfSmoothKind.None"/> for a blend that is not a polynomial smooth union,
+    /// intersection or subtraction, or that names no blend.</returns>
+    public static SdfSmoothKind SmoothKindOf(SdfBlendOp value) => (Contains(value: value) ? SmoothingOf(value: value) : SdfSmoothKind.None);
+
+    /// <summary>Returns the blend of <paramref name="value"/>'s soft family (a smooth union, intersection or subtraction)
+    /// that rounds its seam with <paramref name="kind"/>.</summary>
+    /// <param name="value">The blend.</param>
+    /// <param name="kind">The smooth minimum to round with; <see cref="SdfSmoothKind.None"/> changes nothing.</param>
+    /// <returns>The family's blend of that kind, or <paramref name="value"/> unchanged when it is no polynomial smooth
+    /// blend.</returns>
+    public static SdfBlendOp WithSmoothKind(SdfBlendOp value, SdfSmoothKind kind) => (value, kind) switch {
+        (SdfBlendOp.SmoothUnion or SdfBlendOp.CubicSmoothUnion, SdfSmoothKind.Quadratic) => SdfBlendOp.SmoothUnion,
+        (SdfBlendOp.SmoothUnion or SdfBlendOp.CubicSmoothUnion, SdfSmoothKind.Cubic) => SdfBlendOp.CubicSmoothUnion,
+        (SdfBlendOp.SmoothIntersection or SdfBlendOp.CubicSmoothIntersection, SdfSmoothKind.Quadratic) => SdfBlendOp.SmoothIntersection,
+        (SdfBlendOp.SmoothIntersection or SdfBlendOp.CubicSmoothIntersection, SdfSmoothKind.Cubic) => SdfBlendOp.CubicSmoothIntersection,
+        (SdfBlendOp.SmoothSubtraction or SdfBlendOp.CubicSmoothSubtraction, SdfSmoothKind.Quadratic) => SdfBlendOp.SmoothSubtraction,
+        (SdfBlendOp.SmoothSubtraction or SdfBlendOp.CubicSmoothSubtraction, SdfSmoothKind.Cubic) => SdfBlendOp.CubicSmoothSubtraction,
+        _ => value,
+    };
+
+    /// <summary>Returns the quadratic blend of <paramref name="value"/>'s soft family, the one every rule about a smooth
+    /// union, intersection or subtraction's band reads, since every kind blends over that band.</summary>
+    /// <param name="value">The blend.</param>
+    /// <returns>The family's quadratic blend, or <paramref name="value"/> unchanged when it is no polynomial smooth blend.</returns>
+    public static SdfBlendOp SmoothFamilyOf(SdfBlendOp value) => WithSmoothKind(value: value, kind: SdfSmoothKind.Quadratic);
+
     [SdfFieldEntry(0)]
     private sealed class Union : Entry {
         public override bool Hard => true;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Union;
@@ -63,6 +105,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(1)]
     private sealed class SmoothUnion : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Quadratic;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothUnion;
@@ -89,6 +132,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(2)]
     private sealed class Subtraction : Entry {
         public override bool Hard => true;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Subtraction;
@@ -112,6 +156,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(3)]
     private sealed class Intersection : Entry {
         public override bool Hard => true;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Intersection;
@@ -134,6 +179,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(4)]
     private sealed class Xor : Entry {
         public override bool Hard => true;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Xor;
@@ -157,6 +203,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(5)]
     private sealed class SmoothIntersection : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Quadratic;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothIntersection;
@@ -179,6 +226,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(6)]
     private sealed class SmoothSubtraction : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Quadratic;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothSubtraction;
@@ -208,6 +256,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(7)]
     private sealed class ChamferUnion : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.ChamferUnion;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferUnion;
@@ -231,6 +280,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(8)]
     private sealed class ChamferIntersection : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferIntersection;
@@ -254,6 +304,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(9)]
     private sealed class ChamferSubtraction : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferSubtraction;
@@ -277,6 +328,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(10)]
     private sealed class GrooveUnion : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.GrooveUnion;
@@ -300,6 +352,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(11)]
     private sealed class PipeUnion : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.PipeUnion;
@@ -324,6 +377,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(12)]
     private sealed class Morph : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Morph;
@@ -348,6 +402,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(13)]
     private sealed class GrooveSubtraction : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.GrooveSubtraction;
@@ -371,6 +426,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(14)]
     private sealed class PipeSubtraction : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.PipeSubtraction;
@@ -394,6 +450,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(15)]
     private sealed class StairsUnion : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.StairsUnion;
@@ -417,6 +474,7 @@ public static partial class SdfFieldBlends {
     [SdfFieldEntry(16)]
     private sealed class StairsSubtraction : Entry {
         public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.None;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.StairsSubtraction;
@@ -433,5 +491,80 @@ public static partial class SdfFieldBlends {
         public override bool IsSubtraction => true;
         public override SdfFieldResource Resources => SdfFieldResource.None;
         public override bool ScopeOnly => true;
+    }
+
+    // The cubic kinds blend over the quadratic's band and sag less within it (SdfFieldFormulas.CubicSmoothMinimum), so
+    // each takes its quadratic sibling's facets but for its formula and its interval rule.
+
+    /// <summary>Union with a smooth seam whose curvature stays continuous (blend radius = instruction Data1.x): the
+    /// cubic smooth minimum, over the same band as <see cref="SmoothUnion"/>.</summary>
+    [SdfFieldEntry(17)]
+    private sealed class CubicSmoothUnion : Entry {
+        public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Cubic;
+        public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
+        public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
+        public override SdfFormula Formula => SdfFieldFormulas.CubicSmoothUnion;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
+        public override SdfShaderAction MaterialShader => Material(Winner, handsSlot: true);
+        public override SdfCullBoundAction CullBound => SdfCullBoundAction.SmoothUnion;
+        public override SdfCullGuardAction CullGuard => SdfCullGuardAction.SmoothUnion;
+        public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
+        public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.SmoothUnion;
+        public override SdfFormula Winner => SdfFieldFormulas.NearerWins;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothUnion;
+        public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.QuarterRadiusFloor;
+        public override bool IsIntersection => false;
+        public override bool IsSubtraction => false;
+        public override SdfFieldResource Resources => SdfFieldResource.None;
+        public override bool ScopeOnly => false;
+    }
+
+    /// <summary>Intersection with a smooth seam whose curvature stays continuous (blend radius = instruction Data1.x).
+    /// Subject to the accumulator rule on <see cref="SdfBlendOp"/>.</summary>
+    [SdfFieldEntry(18)]
+    private sealed class CubicSmoothIntersection : Entry {
+        public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Cubic;
+        public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
+        public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
+        public override SdfFormula Formula => SdfFieldFormulas.CubicSmoothIntersection;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
+        public override SdfShaderAction MaterialShader => Material(Winner, handsSlot: false);
+        public override SdfCullBoundAction CullBound => SdfCullBoundAction.LocalWithRadius;
+        public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
+        public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
+        public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Smaller;
+        public override SdfFormula Winner => SdfFieldFormulas.FartherWins;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothIntersection;
+        public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
+        public override bool IsIntersection => true;
+        public override bool IsSubtraction => false;
+        public override SdfFieldResource Resources => SdfFieldResource.None;
+        public override bool ScopeOnly => false;
+    }
+
+    /// <summary>Subtraction with a smooth carve seam whose curvature stays continuous (blend radius = instruction
+    /// Data1.x).</summary>
+    [SdfFieldEntry(19)]
+    private sealed class CubicSmoothSubtraction : Entry {
+        public override bool Hard => false;
+        public override SdfSmoothKind Smoothing => SdfSmoothKind.Cubic;
+        public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
+        public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
+        public override SdfFormula Formula => SdfFieldFormulas.CubicSmoothSubtraction;
+        public override SdfShaderAction Shader => SdfShaderAction.Of(Formula);
+        public override SdfShaderAction MaterialShader => Material(Winner, handsSlot: false);
+        public override SdfCullBoundAction CullBound => SdfCullBoundAction.LocalWithRadius;
+        public override SdfCullGuardAction CullGuard => SdfCullGuardAction.Disable;
+        public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
+        public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Subject;
+        public override SdfFormula Winner => SdfFieldFormulas.CutWins;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothSubtraction;
+        public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
+        public override bool IsIntersection => false;
+        public override bool IsSubtraction => true;
+        public override SdfFieldResource Resources => SdfFieldResource.None;
+        public override bool ScopeOnly => false;
     }
 }

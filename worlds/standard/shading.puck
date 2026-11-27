@@ -57,11 +57,13 @@ function shadeWarp(q, seed, amount) = q + amount * [
 // `surface.footprint * scale`. So an edge neither aliases in colour nor shimmers in relief, however far it is seen.
 function shadeBevel(bevel, pixel) = max(bevel, 2 * pixel)
 // Cellular pattern pieces over `cells(q, seed)`, which returns [F1, F2 - F1, id]: the distance to the nearest
-// feature, the gap to the second nearest (0 on the borders between cells), and the cell's id in [0, 1).
-// A border line `width` units wide between cells, 1 on the line: cracks, grout, scales' rims, leaf veins. Its edge
-// ramps over `bevel` times its width (0.5 by default), at least the pixel floor above.
+// feature, the gap to the second nearest (0 on the borders between cells), and the cell's id in [0, 1); and over
+// `cellBorder(q, seed)`, the true distance to the cell's border, where F2 - F1 only reads zero.
+// A border line `width` units wide between cells, 1 on the line: cracks, grout, scales' rims, leaf veins. It reads the
+// border distance, so the line is one width all along every border, `width` / 2 to each side. Its edge ramps over
+// `bevel` times its width (0.5 by default), at least the pixel floor above.
 function shadeCellBorder(q, seed, width, bevel = 0.5, pixel = surface.footprint) = 1 -
-  shadeStep(cells(q, seed).y, width, shadeBevel(width * bevel, pixel))
+  shadeStep(cellBorder(q, seed), width * 0.5, shadeBevel(width * bevel * 0.5, pixel))
 // A per-cell value in [0, 1), constant over each cell: tile, cobble and scale colours. It has no slope anywhere.
 function shadeCellId(q, seed) = cells(q, seed).z
 // A colour ramp: `stops` is a list of { at, color } in rising `at`, and `t` picks the colour between the two stops

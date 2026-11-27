@@ -14,7 +14,7 @@ public static partial class CreationStampEmitter {
     public static SdfBlendOp ContactBlend(CreationDocument document, ShapeDocument shape) {
         var blend = (shape.Blend ?? SdfBlendOp.Union);
 
-        return (((blend == SdfBlendOp.SmoothUnion) && (document.Contact == CreationContact.Shapes)) ? SdfBlendOp.Union : blend);
+        return (((SdfFieldBlends.SmoothFamilyOf(value: blend) == SdfBlendOp.SmoothUnion) && (document.Contact == CreationContact.Shapes)) ? SdfBlendOp.Union : blend);
     }
 
     /// <summary>Emits one creation's contact field, including authored blends, per-shape margin and optional relief.

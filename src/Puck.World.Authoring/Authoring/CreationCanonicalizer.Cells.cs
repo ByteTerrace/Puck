@@ -33,7 +33,7 @@ public static partial class CreationCanonicalizer {
         if (!Enum.IsDefined(value: cells.Mode)) {
             Refuse(
             field: "mode",
-            message: "cells mode must be F1 or F2MinusF1."
+            message: "cells mode must be F1, F2MinusF1 or Border."
         );
         } else if (
             !float.IsFinite(f: cells.Randomness) ||

@@ -99,3 +99,25 @@ SdfDual sdfBlendStairsSubtraction(SdfDual current, SdfDual candidate, float smoo
     SdfDual stairs = sdfdMultiply(0.5, sdfdAdd(sdfdAdd(u, current), sdfdAbs(sdfdSubtract(m, s))));
     return sdfdMax(sdfdMax(current, sdfdNegate(candidate)), sdfdNegate(stairs));
 }
+
+SdfDual sdfBlendCubicSmoothMinimum(SdfDual a, SdfDual b, float k) {
+    SdfDual gap = sdfdAbs(sdfdSubtract(b, a));
+    if ((gap.v >= k)) { return sdfdMin(a, b); }
+    SdfDual h = sdfdSubtract(1.0, sdfdDivide(gap, k));
+    return sdfdSubtract(sdfdMultiply(sdfdSubtract(sdfdAdd(a, b), gap), 0.5), sdfdDivide(sdfdMultiply(sdfdMultiply(sdfdMultiply(k, h), h), h), 6.0));
+}
+
+SdfDual sdfBlendCubicSmoothUnion(SdfDual current, SdfDual candidate, float smoothRadius) {
+    float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return sdfBlendCubicSmoothMinimum(current, candidate, k);
+}
+
+SdfDual sdfBlendCubicSmoothIntersection(SdfDual current, SdfDual candidate, float smoothRadius) {
+    float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return sdfdNegate(sdfBlendCubicSmoothMinimum(sdfdNegate(current), sdfdNegate(candidate), k));
+}
+
+SdfDual sdfBlendCubicSmoothSubtraction(SdfDual current, SdfDual candidate, float smoothRadius) {
+    float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return sdfdNegate(sdfBlendCubicSmoothMinimum(candidate, sdfdNegate(current), k));
+}

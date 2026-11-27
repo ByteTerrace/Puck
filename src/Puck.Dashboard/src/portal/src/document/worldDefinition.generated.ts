@@ -3542,9 +3542,9 @@ export type SafeName = string;
 
 export type SdfAxis = "X" | "Y" | "Z";
 
-export type SdfBlendOp = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
+export type SdfBlendOp = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction" | "CubicSmoothUnion" | "CubicSmoothIntersection" | "CubicSmoothSubtraction";
 
-export type SdfCellMode = "F1" | "F2MinusF1";
+export type SdfCellMode = "F1" | "F2MinusF1" | "Border";
 
 export type SdfExposureMode = "Manual" | "Auto";
 
