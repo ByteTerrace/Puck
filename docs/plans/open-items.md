@@ -5644,12 +5644,21 @@ confirming its site in the debug world and its work-budget share.
   `worlds/standard/` where it is a reusable design, and is verified by running
   the debug world.
 
-### Card tables in the board game room
+### The game table in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: the windowed look at the Klondike and
-FreeCell tables, close and wide, with the script in
+ordinary, the owner's direction · Next: the windowed look at the game table's
+chess, Klondike and FreeCell, close and wide, with the script in
 `worlds/debug/cardtable.md`; then Spider.
+
+- The game table is a display table (`worlds/standard/display-table.puck`)
+  whose glass draws chess from the chess table's own `board` row and plays it
+  through that game's display door (`chessPut`). Its cards are still the
+  standard deck's physical card creations lying on the glass: a card face the
+  display draws (flat, glowing like the chess icons) would read as the glass's
+  content. The chess icons (`worlds/standard/chess-icons.puck`) are a first
+  pass of convex silhouettes; the knight wants a curved neck and mane once a
+  look pass has judged them on the glass.
 
 - [medium] The standard's deck departs from the true-size ruling:
   `cards.puck` authors a card 1.76 wide and the table's look scales it

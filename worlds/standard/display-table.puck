@@ -1,0 +1,170 @@
+// A display table: a slim table whose top is a glass display that a game, a map or a console draws on, as the floor's
+// consoles draw their interfaces on their glass (architecture.puck's `faceFill` and `faceText`). A module library: it
+// hands its importers a creation template, the palette that dresses it, paints for its glass and a board of tokens that
+// follow a state row, and emits no document. Where a table stands, what its glass shows and which game its tokens
+// follow are the importing world's.
+//
+// The table is a chassis with rounded edges and a lit line round its rim, on one slim column with a collar under the
+// chassis, standing on a low foot plate trimmed at its rim. Its top is one or more display panels set flush with the bezel's inner edge: each panel wears a palette
+// slot of its own, so each carries its own paints (up to the engine's paints a slot), and a table that draws more than
+// one slot's worth splits its glass into panels. Everything that draws on the glass is a paint over that slot, never
+// geometry, so the glass shows whatever its paints' state-bound colours and texts say without a bake.
+//
+//   import "../standard/display-table"
+//   prototype "table" {
+//     document {
+//       name: "table"
+//       schema: "puck.creation.v1"
+//       palette: displayTablePalette(look, panels)
+//       displayTable(panels: panels)
+//     }
+//   }
+//
+// A panel is `{ x0, x1, z0, z1, paints }`: its extent in the placement's frame, the frame of a table placed with no yaw
+// in which +Z runs away from a reader at the table's -Z edge and +X to that reader's left, and the paints it carries.
+// The table's creation floor lies `floor` over its origin and its glass `surface` over it, so a table placed at a
+// floor's height minus `floor` stands on that floor. Paints are drawn in the world's frame, as every static placement
+// draws them, so a world places the table once and writes its paints at the world points `displayFill` and
+// `displayText` are given.
+import "architecture"
+
+// The table's materials, in slot order from `base`: the chassis, the lit line round its rim, the column and foot, their
+// trim, then one slot per display panel.
+let displayTableChassis = 0
+let displayTableEdge = 1
+let displayTableLeg = 2
+let displayTableFoot = 3
+let displayTablePanel = 4
+
+// The palette, from a look's tokens: `chassis`, `edge` and `edgeGlow` (the lit line's colour and its luminance), `leg`,
+// `foot`, `panel` (the glass's own colour where nothing is painted) and `glow` (the display's luminance: a paint shows as
+// its colour times it). `panels` gives each panel slot its paints.
+function displayTablePalette(look, panels) = concat(
+  [
+    { color: look.chassis, roughness: 0.32, specular: 0.05, coat: 0.45 }
+    { color: look.edge, roughness: 0.4, emissive: look.edgeGlow }
+    { color: look.leg, roughness: 0.28, metal: 0.9 }
+    { color: look.foot, roughness: 0.3, metal: 1 }
+  ],
+  map(
+    panels,
+    panel => { color: look.panel, roughness: 0.12, specular: 0.45, emissive: look.glow, paints: panel.paints }
+  )
+)
+
+// The shapes. `half` is the top's half extents across (x) and front to back (z); `surface` the glass's height and
+// `floor` the floor's, over the creation's origin. The bezel stands 5 mm under the glass, so the panels' edges read as
+// the screen's; the lit line runs round the chassis's side a little under its top.
+template displayTable(panels, half = [0.7, 0.76], surface = 1.3, floor = 0.5, base = 0) {
+  let chassisHalf = 0.025
+  let chassisAt = (surface - 0.005 - chassisHalf)
+  let columnHalf = [0.09, 0.06]
+  let footHalf = 0.014
+  let legTop = (chassisAt - chassisHalf)
+  let legFoot = (floor + (2 * footHalf))
+  shape Box "chassis" {
+    material: (base + displayTableChassis)
+    position [0, chassisAt, 0]
+    scale [half[0], chassisHalf, half[1]]
+    rounding: 0.012
+  }
+  shape Box "edge" {
+    material: (base + displayTableEdge)
+    position [0, (chassisAt - 0.008), 0]
+    scale [(half[0] + 0.004), 0.004, (half[1] + 0.004)]
+    rounding: 0.004
+  }
+  // A panel's extent is in the placement's frame; the author frame turns it half round (x and z negate).
+  for (panel, i) in panels {
+    shape Box $"panel-{i}" {
+      material: (base + displayTablePanel + i)
+      position [(0 - ((panel.x0 + panel.x1) / 2)), (surface - 0.006), (0 - ((panel.z0 + panel.z1) / 2))]
+      scale [((panel.x1 - panel.x0) / 2), 0.006, ((panel.z1 - panel.z0) / 2)]
+    }
+  }
+  shape Box "column" {
+    material: (base + displayTableLeg)
+    position [0, ((legTop + legFoot) / 2), 0]
+    scale [columnHalf[0], ((legTop - legFoot) / 2), columnHalf[1]]
+    chamfer: 0.012
+  }
+  shape Box "collar" {
+    material: (base + displayTableFoot)
+    position [0, (legTop - 0.012), 0]
+    scale [(columnHalf[0] + 0.015), 0.012, (columnHalf[1] + 0.015)]
+    rounding: 0.006
+  }
+  shape Box "foot" {
+    material: (base + displayTableLeg)
+    position [0, (floor + footHalf), 0]
+    scale [(half[0] * 0.5), footHalf, (half[1] * 0.55)]
+    rounding: 0.01
+  }
+  shape Box "foot-trim" {
+    material: (base + displayTableFoot)
+    position [0, (floor + 0.004), 0]
+    scale [((half[0] * 0.5) + 0.006), 0.004, ((half[1] * 0.55) + 0.006)]
+    rounding: 0.004
+  }
+}
+
+// The rotation that lays a paint flat on a level display, read from its -Z edge: the paint's +X runs to that reader's
+// right (world -X), its +Y away from the reader (world +Z) and its +Z up through the glass.
+let displayReading = [0, 0.7071068, 0.7071068, 0]
+
+// A filled rectangle on a level display, centred at the world point `at` on its glass, `half` its half extents across
+// (world x) and away (world z), its corners rounded by `round`.
+function displayFill(at, half, color, round = 0) = faceFill(at, displayReading, half, color, round)
+
+// Lettering on a level display, read from its -Z edge: `half` is the box it fits, across and away.
+function displayText(at, half, template, ink, em, align = "center") = faceText(
+  at,
+  displayReading,
+  half,
+  template,
+  ink,
+  em,
+  align
+)
+
+// A token a board shows on no cell: a millimetre box `depth` under its origin, where a display table's chassis hides
+// it.
+template displayTokenBlank(id, depth = 0.05) {
+  prototype id {
+    document {
+      name: id
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000", roughness: 1 }]
+      shape Box "blank" {
+        material: 0
+        position [0, (0 - depth), 0]
+        scale [0.001, 0.001, 0.001]
+      }
+    }
+  }
+}
+
+// A board of tokens on a display: one placement a cell, `<prefix><i>` under `parent` at `centres[i]` (a point on the
+// glass in the parent's frame), showing the prototype one of `codes` names ({ value, prototype }) while the cell
+// `keys[i]` of the state row `row` holds that value, and `blank` while it holds none of them or while `hidden` (a
+// response condition) holds. A token is a creation the cell's value picks, so a board's pieces stand drawn crisply on
+// the glass from the game's own state and a move swaps only the tokens of the cells it changed.
+template displayTokens(prefix, parent, row, keys, centres, codes, blank, hidden) {
+  for (centre, i) in centres {
+    placement $"{prefix}{i}" {
+      prototype: blank
+      parent: parent
+      position: centre
+      respond: concat(
+        [{ when: hidden, prototypeId: blank }],
+        map(
+          codes,
+          code => {
+            when: state(state: row, key: keys[i], comparison: Equal, value: code.value)
+            prototypeId: code.prototype
+          }
+        )
+      )
+    }
+  }
+}

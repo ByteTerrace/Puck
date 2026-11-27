@@ -56,6 +56,31 @@ let consoleLook = {
   field: "#081315"
 }
 
+// A paint on a display's glass, as a static placement draws its paints, in the world's frame: `at` is the world point on
+// the glass it is centred on, `rotation` the quaternion carrying a box's +Z onto the glass's outward normal (its +X then
+// runs across the glass and its +Y up it), and `half` its half extents across and up. `faceFill` fills the rectangle in
+// `color`, its corners rounded by `round`; `faceText` letters `template` (literal text and `{state.<row>.<key>}`
+// placeholders) in `ink` at an em of `em`, shrunk to fit the rectangle, `wrap` breaking lines at its width, `markup`
+// reading colour tags and `spacing` the line spacing. The box reaches `depth` either side of the glass, past any
+// rounding, so only the glass that wears the paint's palette slot takes it. The floor's consoles (shapes.puck) and the
+// display table (display-table.puck) draw their interfaces with these two.
+function faceFill(at, rotation, half, color, round = 0, depth = 0.03) = {
+  type: "Box"
+  position: at
+  rotation: rotation
+  scale [half[0], half[1], depth]
+  rounding: round
+  color: color
+}
+function faceText(at, rotation, half, template, ink, em, align = "center", wrap = false, markup = false, spacing = 1, depth = 0.03) = {
+  type: "Box"
+  position: at
+  rotation: rotation
+  scale [half[0], half[1], depth]
+  color: ink
+  text { template: template, emHeight: em, align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
+}
+
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
 // clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing
 // turntable ring set in it, and a cream console tilted back across the whole front, its face one glass screen in a cream

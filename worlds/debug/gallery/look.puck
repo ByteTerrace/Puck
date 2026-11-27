@@ -130,6 +130,52 @@ function lookTelevisionPalette(t) = [
   { color: t.beanbag, roughness: 0.7, specular: 0.03 }
   { color: t.beanbagAlt, roughness: 0.7, specular: 0.03 }
 ]
+// The board game room's display table (../cardtable.puck over the standard's displayTable): a slim teal chassis in the
+// structure's paint with a lit amber line round its rim, a brushed-steel column and foot trimmed in brass, and a top that is one
+// near-black glass the games glow on at a console's brightness (`glow`, nits: a paint shows as its colour times it). The
+// games draw in the consoles' own colours (consoleLook): `inks` are a chess board's light and dark squares, the last
+// move's two squares, the lifted piece's square and the cursor's, `off` (the bare glass, where the cards lie), then the
+// bar's buttons (the game shown lit, the others dim, the deal button and the deal button while chess is shown) and their
+// labels and the status line's ink. `spot` is a pile's outline glowing faintly on the glass. The pieces are the
+// standard's chess icons, ivory with a dark rim and charcoal with a teal one, each glowing faintly as the glass's
+// content does.
+let lookDisplayTable = {
+  chassis: lookTeal
+  edge: "#FFC46A"
+  edgeGlow: 1500
+  leg: "#C9CED6"
+  foot: lookBrass
+  panel: "#081315"
+  glow: 900
+  spot { color: "#1F4A50", roughness: 0.3, specular: 0.2, emissive: 120 }
+  inks {
+    light: "#E6D9BC"
+    dark: "#2C5A63"
+    last: "#C46A47"
+    picked: "#FFC46A"
+    cursor: "#6FB0B4"
+    off: "#081315"
+    lit: "#FFC46A"
+    dim: "#6FB0B4"
+    deal: "#EFE3C8"
+    idle: "#1A3338"
+  }
+  label: "#20160A"
+  status: "#FFC46A"
+  pieces [
+    {
+      name: "white"
+      fill { color: "#F4EEDD", roughness: 0.35, specular: 0.2, emissive: 500 }
+      rim { color: "#14171C", roughness: 0.4, specular: 0.15 }
+    }
+    {
+      name: "black"
+      fill { color: "#1A1E24", roughness: 0.35, specular: 0.2 }
+      rim { color: "#8FD8DE", roughness: 0.4, specular: 0.15, emissive: 400 }
+    }
+  ]
+}
+
 // The central tree (tree.puck): an old broadleaf's bark, a warm grey-brown streaked along the grain, with a darker
 // under-tone in its furrows and moss settling where it faces up; its shelves wear paler where feet have polished them,
 // its branches a shade warmer than the trunk, and shelf fungus in ochre to cream (dark underneath, pale on top) grows

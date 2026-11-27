@@ -1158,7 +1158,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   may show an animated creation, which the stamp pool draws while it shows; a row
   that can show one carries no distribution or mirror. Each of the gallery's
   display stations can show every exhibit of the catalog, motion ones included,
-  this way (`displayPlacements` in `worlds/debug/shapes.puck`).
+  this way (`displayPlacements` in `worlds/debug/shapes.puck`), and a display
+  table's board shows each cell's piece this way (`displayTokens` in
+  `worlds/standard/display-table.puck`; the board room's game table,
+  `worlds/debug/cardtable.puck`, draws the chess table's game with it).
 - A placement turns about its own up axis with a `turn` facet
   (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
   numeric state binding, give `phase + rate × clock` turns on top of its yaw.

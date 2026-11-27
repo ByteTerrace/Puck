@@ -5,10 +5,15 @@ import "../games/chess"
 // Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
 // board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
 // one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's board game
-// room at the east end of level 2 (gallery/gallery.puck), south-west of the Reversi table and south of the Go table: its board's
-// centre at (56.5, 9.85, 22.6), White's back rank on its -Z side, toward the south windows, and Black's on +Z, toward
-// the room's doorway aisle. chess.md beside this file says how to move a piece,
-// read the game and set the opponent.
+// room on level 2 (gallery/gallery.puck): its board's centre over the table's placement (`chessTable`), White's back rank
+// on its -Z side and Black's on +Z. chess.md beside this file says how to move a piece, read the game and set the
+// opponent. The board room's display table (cardtable.puck) draws the same game on its glass and asks its moves through
+// the display door below, so a game played at either table is one game.
+
+// What the board room's display table (cardtable.puck) reads of this game to draw it on its glass, and the door it asks
+// a move through (`chessPut`, below).
+export read board, turn, verdict, move, inCheck, aiSide, halfmoveClock, repetitionCount, chessPut
+export action chessPut
 
 // The debug world reserves 18 lower slots (4 seats, 8 visitors and 6 range targets); the 32 pieces and the board cursor take the rest.
 bodies {
@@ -468,6 +473,40 @@ rule "chess-play-put" {
   play.judging = 1
 }
 
+// The display door: a move a presentation of this game away from its table asks for, from the square `chessPut.from` to
+// `chessPut.to` (the board room's display table, cardtable.puck). It takes the put-down's path: the apply relocates and
+// poses the pieces, the board rests and is judged, and an arrangement judged illegal is put back. A request waits while
+// the board settles, a piece is held or a move is being judged, and lapses once its square holds no piece of the side to
+// move or that side is the computer's.
+rule "chess-put-move" {
+  when (chessPut.request == 1 and
+    chessPut.from == pieceCell[$each] and
+    (pieceCode[$each] * (1 - 2 * turn)) > 0 and
+    aiSide != turn and
+    chessDemo.playing == 0 and
+    ai.pending == 0 and
+    play.held < 0 and
+    play.judging == 0 and
+    settleHold == chessSettleTicks)
+  mode: Level
+  forEach: pieceCode
+  // A firing clears the request, which closes the gate for every later binding.
+  maxFirings: 1
+  ai.from = chessPut.from
+  ai.to = chessPut.to
+  ai.mover = pieceCode[$each]
+  ai.pending = 1
+  play.judging = 1
+  chessPut.request = 0
+  chessPut.accepted += 1
+}
+
+rule "chess-put-lapse" {
+  when chessPut.request == 1 and ((board[chessPut.from] * (1 - 2 * turn)) <= 0 or aiSide == turn)
+  mode: Level
+  chessPut.request = 0
+}
+
 // What the put-down is judged against, captured the tick it is made.
 rule "chess-play-before" {
   when play.judging == 1 and ai.pending == 1
@@ -637,6 +676,16 @@ state {
       returning = -1
       revert = 0
     }
+    // The display door (chess-put-move): the squares a move leaves and lands on, the request, how many it accepted, and
+    // `seated`, 1 while a seat plays this game at a display elsewhere, which holds the idle demonstration off as a seat at
+    // this table does.
+    table chessPut {
+      from = -1
+      to = -1
+      request = 0
+      accepted = 0
+      seated = 0
+    }
     row {
       name: "playBefore"
       kind: "Int"
@@ -768,11 +817,12 @@ rule "chess-demo-near-reset" {
   mode: Level
   chessDemo.near = 0
 }
+// Within 3 m of the board's centre on the table's floor (its creation's floor lies 0.5 m over its origin).
 for seat in range(0, 8) {
   rule $"chess-demo-near-{seat}" {
-    local dx = bodyPosition(body, seat, x) - 56.5
-    local dy = bodyPosition(body, seat, y) - 9.05
-    local dz = bodyPosition(body, seat, z) - 22.6
+    local dx = bodyPosition(body, seat, x) - chessTable[0]
+    local dy = bodyPosition(body, seat, y) - (chessTable[1] + 0.5)
+    local dz = bodyPosition(body, seat, z) - chessTable[2]
     when (dx * dx + dy * dy + dz * dz) < 9
     mode: Level
     chessDemo.near = 1
@@ -780,7 +830,7 @@ for seat in range(0, 8) {
 }
 
 rule "chess-demo-engaged" {
-  when board(engaged, board, 1) == 1
+  when board(engaged, board, 1) == 1 or chessPut.seated == 1
   mode: Level
   chessDemo.near = 1
 }
@@ -852,12 +902,14 @@ rule "chess-demo-loop" {
   chessDemoInk.result = "#000000"
 }
 
-// The table's slim display sits beyond Black's back rank, facing White. Each line is a text screen;
-// state-backed ink lights the verdict that actually occurred. No engine screen knows this game's vocabulary.
+// The table's slim display sits beyond Black's back rank, facing White, `up` metres over the table's origin. Each line is
+// a text screen; state-backed ink lights the verdict that actually occurred. No engine screen knows this game's
+// vocabulary.
+function chessScreenAt(up) = [chessTable[0], (chessTable[1] + up), (chessTable[2] + 1.05)]
 screens [
   {
     index: 12
-    origin [56.5, 10.55, 23.65]
+    origin: chessScreenAt(2)
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.8
@@ -870,7 +922,7 @@ screens [
   }
   {
     index: 8
-    origin [56.5, 10.36, 23.65]
+    origin: chessScreenAt(1.81)
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.8
@@ -883,7 +935,7 @@ screens [
   }
   {
     index: 9
-    origin [56.5, 10.22, 23.65]
+    origin: chessScreenAt(1.67)
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.8
@@ -896,7 +948,7 @@ screens [
   }
   {
     index: 10
-    origin [56.5, 10.08, 23.65]
+    origin: chessScreenAt(1.53)
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.8
@@ -909,7 +961,7 @@ screens [
   }
   {
     index: 11
-    origin [56.5, 9.94, 23.65]
+    origin: chessScreenAt(1.39)
     right [-1, 0, 0]
     up [0, 1, 0]
     halfWidth: 0.8
