@@ -6069,6 +6069,10 @@ export type WorldAnchorPlacement = {
    * The referenced creation's ShapeDocument.Id to ride, or null for the placement's own stamped root transform.
    */
   shapeId: number | null;
+  /**
+   * The prototype the placement must show (ShownPrototypeId) for the anchor to resolve, or null to resolve whatever it shows: a thing that belongs to one of the creations a responding row swaps between rides the row only while the row shows it.
+   */
+  showing?: string | null;
 };
 
 /**
@@ -11777,6 +11781,10 @@ export type WorldPrototype = {
    * Opaque triangles every static placement of the prototype draws beside its field, or null for none.
    */
   mesh?: WorldPrototypeMesh | null;
+  /**
+   * The lights the creation carries (WorldCreationLights): point, spot, tube and occluder lights that name no anchor, each positioned and aimed in the frame a placement draws the creation's shapes in (the placement's own frame, at its scale). Every placement showing the prototype carries them, so placing the creation places its light, moving the placement moves it, and a placement whose response shows another prototype shows that prototype's lights instead. A light of a placement that stands still (no attach, inhabit, turn or deal) is traced and occluded by the irradiance volume as an unanchored light is. null carries none.
+   */
+  lights?: (WorldRenderLight | null)[] | null;
   /**
    * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.
    */

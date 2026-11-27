@@ -34,7 +34,15 @@ public abstract record WorldAnchor {
     /// <param name="PlacementId">The referenced <see cref="WorldPlacement.Id"/> (must resolve).</param>
     /// <param name="ShapeId">The referenced creation's <c>ShapeDocument.Id</c> to ride, or <see langword="null"/> for
     /// the placement's own stamped root transform.</param>
-    public sealed record Placement([property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId, int? ShapeId) : WorldAnchor;
+    /// <param name="Showing">The prototype the placement must show (<see cref="WorldPlacement.ShownPrototypeId"/>) for
+    /// the anchor to resolve, or <see langword="null"/> to resolve whatever it shows: a thing that belongs to one of
+    /// the creations a responding row swaps between rides the row only while the row shows it.</param>
+    public sealed record Placement(
+        [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId,
+        int? ShapeId,
+        [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Showing = null
+    ) : WorldAnchor;
     /// <summary>Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also
     /// publishes the set's SPREAD (mean distance from the centroid), which a camera program's
     /// <see cref="WorldCameraProgramOp.Offset"/> consumes through its

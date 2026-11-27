@@ -21,6 +21,8 @@ import "../standard/skies"
 import "../standard/free-camera"
 import "../standard/benchmark"
 import "../standard/visitors"
+// Every player's hand torch, switched by 6 (the standard's flashlight.puck).
+import "../standard/flashlight"
 // The benchmark's route through this world (`world.benchmark run debug`).
 import "benchmark-route"
 // The trip to the moon as a route (`world.benchmark run moon`).

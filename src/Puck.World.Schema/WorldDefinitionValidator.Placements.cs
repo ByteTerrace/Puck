@@ -116,6 +116,15 @@ public static partial class WorldDefinitionValidator {
                     }
                 }
 
+                if (
+                    (placement.Showing is { } showing) &&
+                    (WorldPlacementIndex.ById(placements: placements).GetValueOrDefault(key: placement.PlacementId) is { } shown) &&
+                    !string.Equals(a: shown.PrototypeId, b: showing, comparisonType: StringComparison.Ordinal) &&
+                    !(shown.Respond ?? []).Any(predicate: response => string.Equals(a: response?.PrototypeId, b: showing, comparisonType: StringComparison.Ordinal))
+                ) {
+                    errors.Add(item: $"{path}.showing '{showing}' is not a prototype placement '{placement.PlacementId}' can show; name its prototype or one its responses show.");
+                }
+
                 break;
             case WorldAnchor.Group group:
                 if (group.Indices is { } indices) {
@@ -723,6 +732,7 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.mesh"
             );
         }
+        ValidatePrototypeLights(creation: creation, definition: definition, errors: errors, path: path);
 
         {
             var violations = Puck.World.Authoring.CreationCanonicalizer.Validate(document: creation.Document);

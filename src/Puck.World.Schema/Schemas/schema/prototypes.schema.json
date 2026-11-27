@@ -64,6 +64,17 @@
         "default": null,
         "title": "WorldPrototypeMesh"
       },
+      "lights": {
+        "description": "The lights the creation carries (WorldCreationLights): point, spot, tube and occluder lights that name no anchor, each positioned and aimed in the frame a placement draws the creation\u0027s shapes in (the placement\u0027s own frame, at its scale). Every placement showing the prototype carries them, so placing the creation places its light, moving the placement moves it, and a placement whose response shows another prototype shows that prototype\u0027s lights instead. A light of a placement that stands still (no attach, inhabit, turn or deal) is traced and occluded by the irradiance volume as an unanchored light is. null carries none.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderLight"
+        },
+        "default": null
+      },
       "document": {
         "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.",
         "title": "CreationDocument",

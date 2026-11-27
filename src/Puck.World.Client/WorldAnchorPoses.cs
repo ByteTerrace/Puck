@@ -68,6 +68,10 @@ public static class WorldAnchorPoses {
                 return TryEntity(body: entity.Index, pose: out pose, scope: in scope);
             case WorldAnchor.EntityPart part:
                 return TryPart(body: part.Index, partId: part.PartId, pose: out pose, scope: in scope);
+            case WorldAnchor.Placement { Showing: { } showing } placement when !Shows(definition: scope.Source.Definition, placementId: placement.PlacementId, prototypeId: showing):
+                pose = default;
+
+                return false;
             case WorldAnchor.Placement placement:
                 return TryPlacement(
                     placementId: placement.PlacementId,
@@ -173,6 +177,11 @@ public static class WorldAnchorPoses {
         pose = AtShape(definition: definition, orientation: frame.Rotation, placement: placement, position: frame.Position, shapeId: shapeId);
         return true;
     }
+    // Whether the row shows the prototype now: its live holding's, which the response sweep writes into the delivered row.
+    private static bool Shows(WorldDefinition definition, string placementId, string prototypeId) => (
+        (WorldDefinitionRows.FindPlacement(id: placementId, placements: definition.Placements) is { } placement) &&
+        string.Equals(a: placement.ShownPrototypeId, b: prototypeId, comparisonType: StringComparison.Ordinal)
+    );
     // A row's pose at its root, or at the named shape's rest position and facing under the root.
     private static SdfAnchor AtShape(WorldDefinition definition, WorldPlacement placement, Vector3 position, Quaternion orientation, int? shapeId) {
         if (

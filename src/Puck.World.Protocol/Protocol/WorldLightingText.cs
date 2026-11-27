@@ -425,6 +425,7 @@ public static class WorldLightingText {
     private static string DescribeLightAnchor(WorldAnchor? anchor) => anchor switch {
         WorldAnchor.Entity entity => $"entity:{entity.Index}",
         WorldAnchor.EntityPart part => $"entityPart:{part.Index}/{part.PartId}",
+        WorldAnchor.Placement { Showing: { } showing } placement => $"placement:{placement.PlacementId}/{placement.ShapeId} showing:{showing}",
         WorldAnchor.Placement placement => $"placement:{placement.PlacementId}/{placement.ShapeId}",
         _ => "none",
     };
@@ -433,7 +434,7 @@ public static class WorldLightingText {
     /// <param name="definition">The live document.</param>
     /// <returns>The complete lighting echo.</returns>
     public static string Describe(WorldDefinition definition) {
-        var lighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
+        var lighting = WorldCreationLights.Expand(definition: definition);
         var curvature = lighting?.Curvature;
         var echo = CommandEcho.Open(verb: "world.lighting")
             .Head(head: "lights")
