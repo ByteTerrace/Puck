@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -319,7 +320,7 @@ public static class SdfMeshCollapse {
     // crease. Each vertex and material its triangles carry is a sample, tracked to the triangle it is measured to.
     // Collapses run in passes: each pass lists every place's triangles, and a place a collapse moved triangles onto takes
     // part in no other collapse that pass, since its list misses them.
-    private sealed class Collapser {
+    private sealed class Collapser : IJobPartitions {
         private const byte Free = 0;
         private const byte Locked = 2;
         private const byte Slides = 1;
@@ -428,7 +429,7 @@ public static class SdfMeshCollapse {
 
         private int m_pass;
 
-        // Scratch every collapse reuses. A worker (Worker) holds its own, so every method that measures a collapse
+        // Scratch every collapse reuses. A speculating worker (the sharing constructor) holds its own, so every method that measures a collapse
         // writes only these and reads the shared tables, which no measure writes.
         private readonly List<int> m_from = [];
         // The places about the prepared fan, which every neighbour's link test reads (PrepareFrom, Links).
@@ -872,13 +873,17 @@ public static class SdfMeshCollapse {
 
             for (var start = 0; (start < count); start += SpeculativeBlock) {
                 var end = Math.Min(val1: count, val2: (start + SpeculativeBlock));
+                // A block speculates only while other threads could help, since its caller checks and partly repeats
+                // what they measured; either way the pass takes the same collapses, so only the speculated and redone
+                // counts follow the machine's load.
+                var speculating = (parallel && !PoolFork.Saturated);
 
-                if (parallel) {
+                if (speculating) {
                     speculated += Speculate(cosine: cosine, end: end, error: error, start: start);
                 }
                 for (var at = start; (at < end); at++) {
                     var place = m_candidatePlaces[at];
-                    var first = (parallel ? m_specFirst[(at - start)] : -1);
+                    var first = (speculating ? m_specFirst[(at - start)] : -1);
                     var clean = ((first >= 0) && Clean(place: place));
 
                     redone += (((first >= 0) && !clean) ? 1 : 0);
@@ -949,7 +954,7 @@ public static class SdfMeshCollapse {
         // candidate in order takes, so the levels are the same function of the mesh. A speculation measures against the
         // tables as the block's earlier commits found them; it stands only where no commit of the block since wrote
         // anything it read, which Clean decides from the places Commit stamps. Enforced by the two doors: a worker reads
-        // the shared tables and writes only its own scratch and its candidate's records (Worker), and only Commit writes
+        // the shared tables and writes only its own scratch and its candidate's records (the sharing constructor, IJobPartitions.Run), and only Commit writes
         // what a measure reads, stamping every place of both fans it changes. Where it stops: a new write a commit makes
         // outside those places, or a new read a measure makes outside the place's fan, would let a stale speculation
         // stand, so either must stamp or check its places here. Returns the candidates speculated.
@@ -974,29 +979,35 @@ public static class SdfMeshCollapse {
             m_specTarget.Resize(length: records, clear: false, preserve: false);
             m_specOutcome.Resize(length: records, clear: false, preserve: false);
             m_specThrough.Resize(length: records, clear: false, preserve: false);
-            _ = Parallel.For(
-                fromInclusive: 0,
-                toExclusive: m_speculating.Count,
-                localInit: TakeWorker,
-                body: (index, _, worker) => {
-                    var slot = m_speculating[index];
-
-                    m_specCount[slot] = worker.Evaluate(cosine: cosine, error: error, first: m_specFirst[slot], place: m_candidatePlaces[(start + slot)], owner: this);
-                    return worker;
-                },
-                localFinally: m_workers.Push
-            );
+            (m_specStart, m_specError, m_specCosine) = (start, error, cosine);
+            PoolFork.Run(body: this, partitions: PartitionRuns.Count(count: m_speculating.Count, run: SpeculativeRun));
 
             return m_speculating.Count;
         }
-        // A worker for one speculating thread: a collapser sharing this one's tables, with scratch of its own, at this
-        // pass and budget.
-        private Collapser TakeWorker() {
+        // The speculated candidates one partition of a block measures.
+        private const int SpeculativeRun = 16;
+        // The block Speculate is measuring: its first candidate and the level's bounds.
+        private int m_specStart;
+        private double m_specError;
+        private double m_specCosine;
+
+        // One partition of Speculate's block, on a worker: a collapser sharing this one's tables, with scratch of its own,
+        // at this pass and budget, measures each of the partition's candidates.
+        void IJobPartitions.Run(int partition) {
             var worker = (m_workers.TryPop(result: out var kept) ? kept : new Collapser(shared: this));
+            var (first, end) = PartitionRuns.Of(count: m_speculating.Count, partition: partition, run: SpeculativeRun);
 
             worker.m_pass = m_pass;
             worker.m_budget = m_budget;
-            return worker;
+            try {
+                for (var index = first; (index < end); index++) {
+                    var slot = m_speculating[index];
+
+                    m_specCount[slot] = worker.Evaluate(cosine: m_specCosine, error: m_specError, first: m_specFirst[slot], place: m_candidatePlaces[(m_specStart + slot)], owner: this);
+                }
+            } finally {
+                m_workers.Push(item: worker);
+            }
         }
         // Whether a speculated candidate's records still stand: no commit of the block stamped the place or a place of its
         // fan. Every target is a place of the fan, and a commit that changes a triangle stamps all its places, so a
@@ -1295,7 +1306,6 @@ public static class SdfMeshCollapse {
             var secondOpposite = m_previous[secondAt].Next;
 
             if (firstOpposite == secondOpposite) { return Outcome.Refused; }
-            if (!Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return Outcome.RefusedLinks; }
 
             // Each side of the collapsed edge keeps its own vertices: a triangle about the place takes, at the neighbour,
             // the vertex the edge's triangle on its side has there.
@@ -1350,6 +1360,9 @@ public static class SdfMeshCollapse {
                 }
                 if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Refusal(outcome: Outcome.Refused); }
             }
+            // The link test walks the neighbour's fan, so it follows the turn and facing tests over the place's own fan,
+            // which refuse most collapses; its refusal reads no other copy, so it is kept by the neighbour's revision.
+            if (!Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return Outcome.RefusedLinks; }
 
             // Each measure that refuses names the budget its refusal stands through (m_refusedThrough).
             if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Refusal(outcome: Outcome.RefusedMeasure); }
