@@ -222,13 +222,16 @@ a display station shows a catalog of shapes: the table in the display stations' 
 games with NEW GAME, the `station.game` mailbox, the status line for each chair, the board engage with two chairs and
 the pick grid, each chair's presses packed into one cell, glass paints (`displayFill`, `displayRing`, `displayText`,
 over `architecture.puck`'s `faceFill` and `faceText`, which the gallery's consoles paint with too) and
-`gameStationTokens`, a board of placements whose response facets show the token each cell of a game's state picks. Its
+`gameStationTokenBlank`, a creation that shows nothing for a placement a game needs but draws none. Its
 state is split between the world's rows, keyed by station, that paints and the console read, and the station's own,
 which a world expands in the module instance it makes per station. A game draws itself on a station from its own
 state: `../games/chess-station.puck` and `../games/patience-station.puck`. `chess-pieces.puck` is a chess set in
 miniature, the six Staunton pieces turned from primitives (`chessPiecePrototypes`, in the order of the chess
-vocabulary's piece codes, `chessPieceKinds`). The debug world's station (`../debug/game-station.md`) is the worked
-example.
+vocabulary's piece codes, `chessPieceKinds`). `holodeck.puck` is a pool of bodies a board materializes for the game it
+shows and releases when the game changes or ends: each body an inhabited placement whose count is a cell
+(`holodeckLive`), asked for and released through one door (`holodeckSet`) and posed once it exists (`holodeckStands`),
+with looks a game can change while a body stands (`holodeckLooks`). It knows no game; a station's chess pieces and cards
+are its worked pools. The debug world's station (`../debug/game-station.md`) is the worked example.
 
 `place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
 so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:

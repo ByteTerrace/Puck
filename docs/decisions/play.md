@@ -510,6 +510,53 @@ The board view stays engine-fitted until a camera program can fit a footprint.
 
 ## Tabletop
 
+**The game station is the table, and its board is a holodeck** (the owner's
+direction). The multi-game station (`worlds/standard/game-station.puck`) is
+where board and card games are played. When it shows a game that uses tokens,
+its board materializes that game's tokens as real bodies (the standard chess
+set, `worlds/standard/chess-pieces.puck`; the deck's cards): players pick them
+up, set them down and knock them over, and the game is judged from where they
+physically settle. When the game changes or ends the tokens dematerialize, so
+the board is dynamic and ephemeral but physical while it stands. The old
+physical chess table is retired with no side-by-side comparison kept, and the
+single-purpose game displays retire as the owner migrates them.
+
+**The pieces are modules an author composes** (the owner's direction), each
+named for what it does and usable without the others: game rules independent of
+presentation (`worlds/games/chess.puck`, the patience family in
+`solitaire.puck`, `klondike.puck` and `freecell.puck`); the physical reading of
+a game (chess.puck's physical judge, which reads each piece's square where its
+body settled, and the station's play over the bodies,
+`worlds/games/chess-station.puck`); geometry (the chess set, the deck's faces,
+the station's board paints and slot graph); the holodeck pool and its
+materialize and release lifecycle (`worlds/standard/holodeck.puck`); and the
+station shell (menu, chairs, glass). The holodeck knows no game, and a game's
+rules know no holodeck: the game's cells are the truth and the pool stands each
+body where its cell says, so the station composes the rules, the pool and the
+shell, and an author can take the chess rules onto a board of their own or the
+holodeck under a game of their own.
+
+**A holodeck body is an ordinary inhabitant whose count is a cell.** Each pool
+body is an inhabited placement whose count is a cell over a one-sample disc,
+so the population admits and retires it as the cell moves and `placement:<id>`
+names it (`WorldPlacementInhabit.StandsOneBody`); no new engine body lifecycle
+was built. A materialized body takes the population's highest free slot, so a
+pool never renumbers a fixed-count inhabitant, and a world sizes its population
+for the largest token game each station hosts. Options weighed: a respond swap
+on an inhabited placement (refused by the engine, and a body's look is its
+look row, not its placement's prototype), a fixed pool per piece kind (breaks
+the judge's one placement a token) and the station's former glass tokens
+(placements with no body, which nothing can knock over). A token whose look
+changes while it stands (a queened pawn) wears a look read from a Text cell and
+is asked for afresh, so the presentation reads the new creation at its
+admission.
+
+**An illegal arrangement is put back, not left standing.** On the holodeck a
+set-down and a knock are judged alike from the settled board, and an
+arrangement judged illegal is restored to the last legal one: the cells are
+written back and every body stands on its square again. A legal arrangement a
+player reaches by pushing pieces is accepted as any move is.
+
 **Both document ceilings are structural, so a collision widens them.** The
 tabletop, rigid-fidelity, and cards lanes each fit under `StateCapacity.MaxRows`
 and `RuleCapacity.MaxWorkUnitsPerTick` alone and sum past both when merged; the

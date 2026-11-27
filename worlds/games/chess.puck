@@ -21,26 +21,26 @@
 //   chessPutJudged()
 //   chessPutSettled()
 //
-// A world whose board is drawn rather than stood with pieces (a game station) passes `digital: true` to the judge and to
-// the put-down's judgement: its pieces are their cells alone, the board is always at rest, and an arrangement judged
-// illegal is put back by writing its cells. It may also expand `chessFreshGame()`, the door (`chessFresh.request`) that
-// sets every piece back and starts the game afresh. A game station's module instance holds one such game per station
-// (worlds/debug/game-stations.puck); a world holding several games names each one's search job (`chessSearch(name:)`).
-// A table of physical pieces
-// derives each piece's cell from where its body settled, keeps `chessRested` at whether its scope rests, and poses its
-// bodies back itself when a put-down is refused.
+// A world whose board is drawn rather than stood with pieces passes `digital: true` to the judge: its
+// pieces are their cells alone and the board is always at rest. A world whose pieces are bodies (a game station's
+// holodeck, chess-station.puck) leaves the judge physical: each piece's cell is read from where its body settled, once
+// the board has rested and nothing holds the game (`chessHold`). Either may start its pieces on their squares
+// (`chessGameState(placed: true)`), and pass `restoresCells: true` to the put-down's judgement, so an arrangement judged
+// illegal is put back by writing its cells (a holodeck then stands its bodies where the cells say). Either may also
+// expand `chessFreshGame()`, the door (`chessFresh.request`) that sets every piece back and starts the game afresh. A
+// world holding several games names each one's search job (`chessSearch(name:)`).
 //
 // The table declares the three vocabularies itself, each on its own lines as above: the compiler folds an enum's
 // members only from declarations the compiled source spells, so a template cannot carry them, and declaring them
 // keeps their names readable to every document built on the table.
 //
-// A physical table owns everything physical: the 32 piece placements `piece0` to `piece31` (piece n starting on
+// A world of physical pieces owns everything physical: the 32 piece placements `piece0` to `piece31` (piece n starting on
 // `initialPieceCodes[n]`'s square), their bodies and looks, the board placement whose `board` block names this
 // library's rows (`occupancy: "board"`, `move`, `plan`, `turn`, `verdict`, topology `chessBoard`), the replay or
-// placement scope `scope` names (whose physical rest gates the judge), and posing the pieces a move door relocates. The `chessBoard` grid is cell = 8 * row + column, its rows running +Z
-// and its columns +X; a rank is a row (rank 1 on the -Z side, White's) and a file runs the other way, column =
-// 7 - file. The judge reads the arrangement once the scope has rested `settleTicks` ticks. The debug world's table
-// (worlds/debug/chess.puck) is the worked example.
+// placement scope `scope` names (whose physical rest gates the judge), and posing the pieces a move door relocates. The
+// `chessBoard` grid is cell = 8 * row + column, its rows running +Z and its columns +X; a rank is a row (rank 1 on the
+// -Z side, White's) and a file runs the other way, column = 7 - file. The judge reads the arrangement once the scope has
+// rested `settleTicks` ticks. A game station's holodeck chess (chess-station.puck) is the worked example.
 
 // The back rank's piece codes from file a to h (rook, knight, bishop, queen, king, bishop, knight, rook), White
 // positive and Black negative; the board's cells hold them by column.
@@ -147,9 +147,10 @@ template chessBoardGrid(cellSize, origin, band) {
   ]
 }
 
-// The game's state rows, expanded inside a table's `state.world` block. A drawn board's pieces start on their squares; a
-// physical table's are read off the board once it first rests.
-template chessGameState(settleTicks, digital = false) {
+// The game's state rows, expanded inside a table's `state.world` block. With `placed` the pieces start on their squares
+// (a drawn board, or a holodeck that stands its bodies where the cells say); without it they are read off the board once
+// it first rests.
+template chessGameState(settleTicks, placed = false) {
   table chessInput capacity(auto) {
     from = -1
     to = -1
@@ -250,7 +251,7 @@ template chessGameState(settleTicks, digital = false) {
     capacity: 32
     min: -1
     max: 63
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: (digital ? initialPieceCells[i] : -1) })
+    cells: map(range(0, 32), i => { key: $"piece{i}", value: (placed ? initialPieceCells[i] : -1) })
   }
 
   table promotionPending capacity(2) bounds(-1..63) {
@@ -410,9 +411,10 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     match: vacant*
   }
 
+  // A held game is never read off its bodies: a holodeck releases them while it shows another game.
   if digital {} else {
     rule "tabletop-rested" {
-      local rested = physics(quiescent, scope)
+      local rested = physics(quiescent, scope) and chessHold == 0
       when chessRested != rested
       mode: Level
       chessRested = rested
@@ -434,16 +436,16 @@ template chessJudge(settleTicks, scope = "", digital = false) {
   if digital {} else {
     rules "" when settleHold == settleTicks {
       mode: "Edge"
-      rule "tabletop-derive-cell-upright" {
-        when upright(placement, $each) >= 0.5
+      // Each piece is read once as the board comes to rest: the square under an upright body, or none for a body knocked
+      // over or absent. The gate is the group's alone, so the read is judged on the settle's crossing, not every tick a
+      // body's attitude moves.
+      rule "tabletop-derive-cell" {
         forEach: pieceCode
-        pieceCell[$each] = board(cellOf, board, placement, $each)
-      }
-
-      rule "tabletop-derive-cell-tilted" {
-        when not upright(placement, $each) >= 0.5
-        forEach: pieceCode
-        pieceCell[$each] = -1
+        if upright(placement, $each) >= 0.5 {
+          pieceCell[$each] = board(cellOf, board, placement, $each)
+        } else {
+          pieceCell[$each] = -1
+        }
       }
     }
   }
@@ -1144,11 +1146,9 @@ template chessMoveDoor(settleTicks) {
     }
   }
   rule "chess-ai-relocate-en-passant" {
-    when (ai.pending == 1 and
-      absolute(ai.mover) == PieceKind.Pawn and
-      ai.to == enPassantTarget and
-      (ai.from & 7) != (ai.to & 7) and
-      pieceCell[$each] == (ai.to - 8 * (1 - 2 * turn)))
+    when ai.pending == 1 and absolute(ai.mover) == PieceKind.Pawn and ai.to == enPassantTarget and (ai.from & 7) != (
+        ai.to & 7
+      ) and pieceCell[$each] == (ai.to - 8 * (1 - 2 * turn))
     mode: Level
     forEach: pieceCode
     maxFirings: 1
@@ -1158,7 +1158,7 @@ template chessMoveDoor(settleTicks) {
     when (ai.pending == 1 and
       absolute(ai.mover) == PieceKind.King and
       absolute(ai.to - ai.from) == 2 and
-      pieceCell[$each] == (ai.from & 56) + (ai.to > ai.from ? 7 : 0))
+      pieceCell[$each] == ((ai.from & 56) + (ai.to > ai.from ? 7 : 0)))
     mode: Level
     forEach: pieceCode
     maxFirings: 1
@@ -1214,9 +1214,9 @@ template chessPutDown(settleTicks) {
   }
 }
 
-// The verdict on a put-down: an illegal arrangement is put back as it stood before it. Its codes are restored here; a
-// drawn board (`digital`) restores its cells too, and a physical table poses its pieces back, ahead of chessPutSettled.
-template chessPutJudged(settleTicks, digital = false) {
+// The verdict on a put-down: an illegal arrangement is put back as it stood before it. Its codes are restored here, and
+// with `restoresCells` its cells too (a drawn board, or a holodeck that then stands its bodies where the cells say).
+template chessPutJudged(settleTicks, restoresCells = false) {
   rule "chess-play-judged" {
     when putDown.judging == 1 and ai.pending == 0 and settleHold == settleTicks
     mode: Level
@@ -1224,7 +1224,7 @@ template chessPutJudged(settleTicks, digital = false) {
     putDown.revert = verdict == 0
   }
 
-  if digital {
+  if restoresCells {
     rule "chess-play-revert-codes" {
       when putDown.revert == 1
       mode: Level

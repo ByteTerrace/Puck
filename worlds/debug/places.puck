@@ -20,8 +20,10 @@
 // inside the hall, inside the valley.
 
 import "shapes"
+import "gallery/layout"
 import "../standard/place"
 import "labs/lab-kit"
+import "../standard/game-station"
 
 // One storey's room box: x and z spans and a level index, from 0.5 m under the level's floor to the slab above.
 function storeyPlace(name, level, x0, x1, z0, z1) = {
@@ -40,7 +42,11 @@ function groundPlace(name, x0, x1, z0, z1) = {
 let galleryPlaces = concat(
   [
     // The building as one, its forecourt's doorway outside and in, and the lobby inside the entrance.
-    { id: "hall", at [(galleryWidth / 2), 9.2, ((wingSouth + galleryDepth) / 2)], half [(galleryWidth / 2), 9.7, ((galleryDepth - wingSouth) / 2)] }
+    {
+      id: "hall"
+      at [(galleryWidth / 2), 9.2, ((wingSouth + galleryDepth) / 2)]
+      half [(galleryWidth / 2), 9.7, ((galleryDepth - wingSouth) / 2)]
+    }
     { id: "hall-entrance", at [((entranceWest + entranceEast) / 2), 1.5, 0], half [3, 2, 2.5] }
     storeyPlace("lobby", 0, wingWest, courtWest, galleryWall, naveSouth)
     // Level 0: the nave between its arcades, the north aisle behind the north one, the west hall under the bridge
@@ -73,7 +79,11 @@ let galleryPlaces = concat(
     storeyPlace("press", 0, galleryWestIn, (galleryWestIn + 4.2), 5.4, 9.6)
     storeyPlace("wonderland-threshold", 0, galleryWestIn, (galleryWestIn + 2), 17, 20)
     // The south-west stair's well (`stairs`), each corner stair's (`stairs-<corner>`) and the lift's tower, every storey.
-    { id: "stairs", at [stairCentreX(galleryStair("south-west")), 9.2, stairCentreZ(galleryStair("south-west"))], half [2.7, 9.7, 3.2] }
+    {
+      id: "stairs"
+      at [stairCentreX(galleryStair("south-west")), 9.2, stairCentreZ(galleryStair("south-west"))]
+      half [2.7, 9.7, 3.2]
+    }
     for stair in galleryStairs {
       {
         id: $"stairs-{stair.id}"
@@ -86,8 +96,21 @@ let galleryPlaces = concat(
     storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)
   ],
   // Each gallery level whole, and the lift landing before the tower's door on it.
-  map(range(0, 4), level => storeyPlace($"gallery-level-{level}", level, galleryWestIn, galleryEast, (wingSouth + galleryWall), galleryNorth)),
-  map(range(0, 4), level => storeyPlace($"lift-landing-{level}", level, (towerWest + 0.2), (towerEast - 0.2), galleryWall, 3.4))
+  map(
+    range(0, 4),
+    level => storeyPlace(
+      $"gallery-level-{level}",
+      level,
+      galleryWestIn,
+      galleryEast,
+      (wingSouth + galleryWall),
+      galleryNorth
+    )
+  ),
+  map(
+    range(0, 4),
+    level => storeyPlace($"lift-landing-{level}", level, (towerWest + 0.2), (towerEast - 0.2), galleryWall, 3.4)
+  )
 )
 
 // The valley's places, in world coordinates.
@@ -138,11 +161,11 @@ spawnPoints [
   // it, with the Advanced Brick on her right and the Humble Brick on her left: posed here, she keeps whatever size she
   // was.
   { id: "devices", position [(4 + galleryWestShift), 0.05, 30.5], yawDegrees: 90 }
-  // At White's edge of the chess table in the gallery's board game room (chess.puck), 1.6 m from the board's centre and
-  // facing it, inside the board's engage radius: the context button sits her down. The room's other tables have places
-  // of their own beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is
-  // `boardroom` (gallery/gallery.puck).
-  { id: "chess", position [37, 9.05, 8.7], yawDegrees: 180 }
+  // At the near chair of the gallery's game station (gallery/games.puck), White's side of its holodeck chess board,
+  // inside its engage radius: the context button sits her down. The board game room's tables have places of their own
+  // beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is `boardroom`
+  // (gallery/gallery.puck).
+  { id: "chess", position: gameStationChairAt(galleryGameStations[0], "near"), yawDegrees: 180 }
   // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
   // the screen's engage radius.
   { id: "desktop", position [(12.4 + galleryWestShift), 0.05, 23.7], yawDegrees: 90 }

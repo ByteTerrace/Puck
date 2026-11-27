@@ -346,7 +346,9 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
         return false;
     }
-    /// <summary>Returns the ordinal of a declared placement carrying a single-body inhabit facet.</summary>
+    /// <summary>Returns the ordinal of a declared placement whose inhabit facet stands one body
+    /// (<see cref="WorldPlacementInhabit.StandsOneBody"/>); the body may be absent at run time while a count cell holds
+    /// 0, and a read or pose of the placement then addresses no body.</summary>
     /// <param name="channel">The authored channel, for refusal text.</param>
     /// <param name="placementId">The placement's id.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -362,12 +364,9 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             )) {
                 continue;
             }
-            if (
-                (placements[ordinal].Inhabit is not { } inhabit) ||
-                (inhabit.ResolvedCount is not { Row: null, Literal: 1 })
-            ) {
+            if (placements[ordinal].Inhabit is not { StandsOneBody: true }) {
                 throw new RuleException(
-                    detail: $"'{channel}' names 'placement:{placementId}', which does not carry an inhabit facet with count 1",
+                    detail: $"'{channel}' names 'placement:{placementId}', which does not carry an inhabit facet that stands one body (a count of 1, or a count cell over a one-sample disc)",
                     refusal: WorldRuleRefusal.SpatialChannelMalformed,
                     ruleName: ruleName
                 );

@@ -1,0 +1,6 @@
+// The kit the board game room's table cursors move under (alchemy.puck, go.puck, granaries.puck, reversi.puck): volumeless
+// and overlapping, so a cursor touches no token and the rules pose it every tick. Each table imports this, so a table
+// booted on its own as a harness fixture still has it, and a world composing several declares it once.
+import "../standard/kits"
+
+heldKit(name: "boardCursor")

@@ -386,7 +386,7 @@ let toyboxStations = flatMap(toyboxSides, side => map(toyboxPlan, s => (s with {
 })))
 let toyboxMachines = map(toyboxStations, s => s.machine)
 // The stations' screen indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
-// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, one to a station in toyboxStations' order.
+// desktop.puck, granaries.puck), so the toybox's start at 20, one to a station in toyboxStations' order.
 let toyboxScreen = 20
 // Where a station stands in the building's frame, on its tile.
 function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]

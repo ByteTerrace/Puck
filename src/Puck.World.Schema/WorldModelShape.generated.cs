@@ -5213,6 +5213,7 @@ public static partial class WorldModelShape {
                 M("role", typeof(global::System.String), typeof(global::Puck.World.WorldPlacementInhabit), "Role", Read | Write, static value => ((global::Puck.World.WorldPlacementInhabit)value).Role, text: "a role name"),
                 M("follows", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldPlacementInhabit), "Follows", Read | Write, static value => ((global::Puck.World.WorldPlacementInhabit)value).Follows),
                 M("resolvedCount", typeof(global::Puck.World.WorldPlacementInhabitCount), typeof(global::Puck.World.WorldPlacementInhabit), "ResolvedCount", None),
+                M("standsOneBody", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacementInhabit), "StandsOneBody", None),
             ],
             []),
         T(typeof(global::Puck.World.WorldPlacementInhabitCount), true, JsonTypeInfoKind.None, null,
