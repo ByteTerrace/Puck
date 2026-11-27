@@ -1255,22 +1255,6 @@ public static class WorldModuleNamespace {
             ? mapped
             : name
         );
-        private static int MatchingBracket(string text, int open) {
-            var depth = 0;
-
-            for (var index = open; (index < text.Length); index++) {
-                if (text[index] == '[') {
-                    depth++;
-                } else if (
-                    (text[index] == ']') &&
-                    (--depth == 0)
-                ) {
-                    return index;
-                }
-            }
-
-            return -1;
-        }
 
         // A declared non-cell name (a topology, table, or generator name) may itself carry a dot — SafeName admits
         // one where CellName never does — so a name found whole in the map is renamed whole; only a name that is NOT
@@ -1496,7 +1480,7 @@ public static class WorldModuleNamespace {
                 var character = segment[index];
 
                 if (character == '[') {
-                    var close = MatchingBracket(
+                    var close = ExpressionSpelling.MatchingBracket(
                         open: index,
                         text: segment
                     );

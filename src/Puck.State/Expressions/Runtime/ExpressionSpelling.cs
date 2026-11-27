@@ -331,19 +331,8 @@ public static partial class ExpressionSpelling {
         ) {
             return -1;
         }
-        var depth = 0;
 
-        for (var index = bracket; (index < text.Length); index++) {
-            if (text[index] == '[') {
-                depth++;
-            } else if (
-                (text[index] == ']') &&
-                (--depth == 0)
-            ) {
-                return index;
-            }
-        }
-        return -1;
+        return MatchingBracket(open: bracket, text: text);
     }
     private static SyntaxNode? Lower(Instruction instruction, Stack<SyntaxNode> stack, IReadOnlyList<Subprogram> subprograms, string? binder) {
         switch (instruction) {
@@ -758,6 +747,26 @@ public static partial class ExpressionSpelling {
         }
 
         return (index - start);
+    }
+    /// <summary>Returns the closing square bracket that matches the one at <paramref name="open"/>, counting nested
+    /// brackets and nothing else.</summary>
+    /// <param name="text">The text.</param>
+    /// <param name="open">The offset of an opening <c>[</c>.</param>
+    /// <returns>The offset of the matching <c>]</c>, or <c>-1</c> when it never closes.</returns>
+    public static int MatchingBracket(string text, int open) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        var depth = 0;
+
+        for (var index = open; (index < text.Length); index++) {
+            if (text[index] == '[') {
+                depth++;
+            } else if ((text[index] == ']') && (--depth == 0)) {
+                return index;
+            }
+        }
+
+        return -1;
     }
     /// <summary>Splits a candidate name at typed lexical field access's exactly-one-dot rule — the same rule <see cref="TryParse(string?, out ExpressionProgram, out string)"/>
     /// applies to an unreserved, unquoted name (<c>binding.field</c> becomes a typed pool-field read). Excluding a
@@ -1893,20 +1902,7 @@ public static partial class ExpressionSpelling {
 
             return argument;
         }
-        // The closing bracket matching the one at `open`, or -1.
-        private int BracketEnd(int open) {
-            var depth = 0;
-
-            for (var index = open; (index < text.Length); index++) {
-                if (text[index] == '[') {
-                    depth++;
-                } else if ((text[index] == ']') && (--depth == 0)) {
-                    return index;
-                }
-            }
-
-            return -1;
-        }
+        private int BracketEnd(int open) => MatchingBracket(open: open, text: text);
         // The arguments of `name(`, already opened, as the reserved channel they spell.
         private string ParseChannel(string name) {
             var arguments = new List<ChannelArgument>();

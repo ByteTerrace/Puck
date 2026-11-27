@@ -46,16 +46,22 @@ every station.
   `gameStationRowInk`, and the chess board's inks), the constant tables every
   station's rules copy from, the console commands, and the decks' faces and
   kit.
-- **The station's instance**, `use gameStationGames as <id>(station: …)`, with
-  the station's id as the alias: its chairs and presses, its chess game (the
-  chess library, [`../games/chess.puck`](../games/chess.puck), in its digital
-  mode), its chess display ([`../games/chess-station.puck`](../games/chess-station.puck)),
-  and its patience collection ([`../games/solitaire.puck`](../games/solitaire.puck)
-  over [`klondike.puck`](../games/klondike.puck) and
-  [`freecell.puck`](../games/freecell.puck), laid out by
-  [`../games/patience-station.puck`](../games/patience-station.puck)). Every
-  row and rule the instance declares is the instance's own, `<id>$<name>`
+- **The station's instance**, `use gameStationGames as <id>(station: …, index: <i>)`,
+  with the station's id as the alias and `i` its place in the world's list of
+  stations: its chairs and presses, its chess game (the chess library,
+  [`../games/chess.puck`](../games/chess.puck), in its digital mode), its
+  chess display ([`../games/chess-station.puck`](../games/chess-station.puck)),
+  its Klondike ([`klondike.puck`](../games/klondike.puck)) and the patience
+  layout ([`../games/patience-station.puck`](../games/patience-station.puck)).
+  Every row and rule the instance declares is the instance's own, `<id>$<name>`
   (`world.state south3$solitaireKlondike`).
+- **The rules one set plays for every station**, `gameStationSetRules()` at the
+  world's top level: FreeCell ([`freecell.puck`](../games/freecell.puck)). Each
+  rule sweeps the stations' tables (`forEach: solitaireTable`, keyed by `i`);
+  a table's mailbox is a cell under its key (`freecellRequest[i]`) and its deck
+  and piles are members of pile families (`freecellPile8Of<i>`), so a change at
+  one station wakes and costs that station's binding alone
+  ([analysis](../../docs/reference/state/analysis.md)).
 - **The shared-chess instance**, `gameStationSharedChess`, is the same station
   but for its chess, which is the world's own game: the debug world's chess
   table ([`chess.md`](chess.md)), whose own rules judge, hold and reset it, so a
@@ -135,7 +141,8 @@ another pile plays the run there.
 | Read chess at the glass | `world.state <station>$chessStationCursor`, `<station>$chessStationPicked`, `<station>$chessStationRingCode` |
 | Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
 | Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
-| Deal or move in patience | `klondike.deal <station> 1`, `klondike.draw <station>`, `klondike.move <station> <from> <to> <card>`, `freecell.deal <station>`, `freecell.move <station> <from> <to> <card>` |
+| Deal or move in patience | `klondike.deal <station> 1`, `klondike.draw <station>`, `klondike.move <station> <from> <to> <card>`, `freecell.deal <i>`, `freecell.move <i> <from> <to> <card>` (FreeCell takes the station's number) |
+| Read a station's FreeCell | `world.state freecellRequest`, `freecellStatus`, `freecellDeals` (one cell a station), `world.state freecellPile8Of<i>` |
 | Read where each card lies | `world.state <station>$patienceSlotOf`, `world.state <station>$patienceSeat` |
 
 ## Cost
@@ -143,15 +150,17 @@ another pile plays the run there.
 Counts read from the compiled documents with the rule work sheet the World
 admits (`world.budget.rules` reads the same sheet live):
 
-| | Rows | Rules | Placements | Bodies | Sheet (work units a tick, at rest plus one change) |
-|---|---|---|---|---|---|
-| One station with its own chess | 157 | 572 | 149 | 66 | 742,907 |
-| Two | 268 | 1,131 | 297 | 120 | 1,461,472 |
-| Each further station | +111 | +559 | +148 | +54 | +718,565 |
+| | Rows | Rules | Sheet (work units a tick, at rest plus one change) |
+|---|---|---|---|
+| One station with its own chess | 177 | 325 | 555,397 |
+| Two | 282 | 616 | 1,068,789 |
+| Twelve | 1,387 | 3,537 | 6,106,017 |
 
-The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`), so the
-module-instance design admits five stations in a world of their own and none
-beside the debug world's other content. What an idle station spends is a
+FreeCell's rules are one set for every station and price about 80 thousand
+units whatever the count; chess, Klondike, the patience layout and the chairs
+are still copied into each station's instance and price about half a million a
+station. The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`),
+so twelve stations wait on moving those to the same shape. What an idle station spends is a
 different number from what the sheet admits: a station's rules are judged by
 change, so at rest they do no work; `world.budget.rules --spent` reads what
 they spent. Bringing the sheet down to admit twelve is the open item
