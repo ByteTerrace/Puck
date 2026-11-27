@@ -14,7 +14,7 @@
 //   prototype "table" {
 //     document {
 //       name: "table"
-//       schema: "puck.creation.v1"
+//       schema: "puck.creation.v2"
 //       palette: displayTablePalette(look, panels)
 //       displayTable(panels: panels)
 //     }
