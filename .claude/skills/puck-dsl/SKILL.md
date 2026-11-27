@@ -267,6 +267,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
   `&`/`|` bind above comparisons. `compareState(...)` and `compareValue(...)`
   in a source gate are refused by name; write a comparison such as `left == right`.
+  A comparison in a document value is `1` or `0` too, and a member the model
+  types `bool` reads it as truth (`WorldDocumentMembers`), so `holdable: (k == 0)`
+  needs no `? true : false` and a counted flag needs no `? 1 : 0`.
 - **One bracket rule.** `row.key` names a literal key; `row[expression]`
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
   an error. A key compile-time constants decide (`slot[k + 1]` with

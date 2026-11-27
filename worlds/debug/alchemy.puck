@@ -95,7 +95,7 @@ let recipes = [
 let elementIds = range(1, totalElements + 1)
 let alchemyTokenHomeColumn = map(elementIds, e => (e % alchemyColumns))
 let alchemyTokenHomeRow = map(elementIds, e => ((e - (e % alchemyColumns)) / alchemyColumns))
-let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starterCount)) ? 1 : 0)
+let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starterCount)))
 
 // The bodies: debug.puck imports this file ahead of Go and Reversi, so its cursor and 31 element tokens take the top 32
 // slots (`shapes.puck`'s `alchemyBodies`): `alchemyCursor` is `alchemyTop` and `alchemyToken{e}` is `alchemyTop - e`.

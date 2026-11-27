@@ -562,7 +562,9 @@ Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against
 `compareState` or `compareValue` from the expression; source gates refuse these call spellings
 and name an ordinary comparison such as `left == right` as their replacement.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so
-`cleared + (row > 0)` means the same thing on both sides of the compiler. `filter`'s lambda, a conditional's
+`cleared + (row > 0)` means the same thing on both sides of the compiler. A field the document types as a
+boolean reads that number as a gate does, so `holdable: (k == 0)` is the boolean, with no `? true : false`
+around it; a field that takes a number keeps the `1` or `0`. `filter`'s lambda, a conditional's
 condition, and a `for`'s own reads are all read back through the same truth test: a number is true when non-zero, a string
 when non-empty, a present container is true, and an absent value is false.
 

@@ -126,6 +126,11 @@ internal static class WorldDocumentMembers {
             var list = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)));
 
             if (list) { type = type.GetGenericArguments()[0]; }
+            // A comparison, `and`, `or` and `not` are worth 1 or 0, as in a rule, so arithmetic reads them as numbers; a
+            // position the model types bool reads a number as the truth a gate reads it as, zero false and any other true.
+            if (!list && (type == typeof(bool)) && (node is JsonValue truth) && !truth.TryGetValue<bool>(value: out _) && Puck.Transpiler.Lowering.DocumentLowering.TryReadNumber(node: node, number: out var number)) {
+                return JsonValue.Create(value: (number != 0));
+            }
             if (!list && FloatPositions.Contains(item: type)) {
                 if (node is JsonArray components) {
                     for (var index = 0; (index < components.Count); ++index) {
