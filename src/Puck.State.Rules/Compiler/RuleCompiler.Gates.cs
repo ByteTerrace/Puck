@@ -371,6 +371,28 @@ public static partial class RuleCompiler {
 
             return true;
         }
+        // The member a fold visits, as a key: one token the body runs in front of the read, as a computed key's are.
+        if (string.Equals(
+            a: key,
+            b: RuleFacts.FoldMemberKey,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (context.FoldMember is not CellKind.Int) {
+                throw new RuleException(
+                    detail: $"'{verb}' {keyFieldLabel} '{key}' keys by a fold's member, which needs the body of a fold over an Int row",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: ruleName
+                );
+            }
+
+            cell = new CompiledCellRef(
+                Key: default,
+                Program: [new CompiledExpressionToken(Operation: ExpressionOp.Member)],
+                RowOrdinal: -1
+            );
+
+            return true;
+        }
 
         if (reference is not null) {
             foreach (var family in context.Vocabulary.Keys) {

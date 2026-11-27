@@ -14908,14 +14908,19 @@
       "additionalProperties": false
     },
     "ShapeNonNullable15": {
+      "enum": [
+        "All",
+        "Any",
+        "Count",
+        "Sum",
+        "ArgMinimum",
+        "ArgMaximum"
+      ]
+    },
+    "ShapeNonNullable16": {
       "properties": {
         "op": {
-          "enum": [
-            "All",
-            "Any",
-            "Count",
-            "Sum"
-          ]
+          "$ref": "#/$defs/ShapeNonNullable15"
         },
         "family": {
           "type": "string"
@@ -14935,7 +14940,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable16": {
+    "ShapeNonNullable17": {
       "type": "object",
       "required": [
         "zone"
@@ -14947,7 +14952,7 @@
         }
       }
     },
-    "ShapeNonNullable17": {
+    "ShapeNonNullable18": {
       "type": "object",
       "required": [
         "expression"
@@ -14959,7 +14964,7 @@
         }
       }
     },
-    "ShapeNonNullable18": {
+    "ShapeNonNullable19": {
       "anyOf": [
         {
           "type": "string"
@@ -14968,14 +14973,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable16"
+          "$ref": "#/$defs/ShapeNonNullable17"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable17"
+          "$ref": "#/$defs/ShapeNonNullable18"
         }
       ]
     },
-    "ShapeNonNullable19": {
+    "ShapeNonNullable20": {
       "type": "object",
       "required": [
         "channel"
@@ -14988,12 +14993,12 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable18"
+            "$ref": "#/$defs/ShapeNonNullable19"
           }
         }
       }
     },
-    "ShapeNonNullable20": {
+    "ShapeNonNullable21": {
       "type": "object",
       "required": [
         "binding",
@@ -15009,7 +15014,7 @@
         }
       }
     },
-    "ShapeNonNullable21": {
+    "ShapeNonNullable22": {
       "type": "object",
       "required": [
         "pool",
@@ -15037,17 +15042,17 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable19"
-        },
-        {
           "$ref": "#/$defs/ShapeNonNullable20"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
-    "ShapeNonNullable22": {
+    "ShapeNonNullable23": {
       "properties": {
         "op": {
           "enum": [
@@ -15067,7 +15072,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable23": {
+    "ShapeNonNullable24": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -15085,7 +15090,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable24": {
+    "ShapeNonNullable25": {
       "properties": {
         "$type": {
           "const": "literal"
@@ -15100,7 +15105,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable25": {
+    "ShapeNonNullable26": {
       "properties": {
         "$type": {
           "const": "embed"
@@ -15118,7 +15123,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable26": {
+    "ShapeNonNullable27": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -15126,17 +15131,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable23"
-        },
-        {
           "$ref": "#/$defs/ShapeNonNullable24"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable27": {
+    "ShapeNonNullable28": {
       "properties": {
         "op": {
           "enum": [
@@ -15146,10 +15151,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable26"
+          "$ref": "#/$defs/ShapeNonNullable27"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable26"
+          "$ref": "#/$defs/ShapeNonNullable27"
         }
       },
       "required": [
@@ -15159,7 +15164,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable28": {
+    "ShapeNonNullable29": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -15182,17 +15187,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable22"
+          "$ref": "#/$defs/ShapeNonNullable23"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable27"
+          "$ref": "#/$defs/ShapeNonNullable28"
         }
       ]
     },
-    "ShapeNonNullable29": {
+    "ShapeNonNullable30": {
       "type": "object",
       "required": [
         "instructions"
@@ -15207,7 +15212,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable28",
+            "$ref": "#/$defs/ShapeNonNullable29",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -15225,7 +15230,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable28",
+            "$ref": "#/$defs/ShapeNonNullable29",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -15233,12 +15238,12 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable29"
+            "$ref": "#/$defs/ShapeNonNullable30"
           }
         }
       }
     },
-    "ShapeNonNullable30": {
+    "ShapeNonNullable31": {
       "type": "object",
       "required": [
         "zone"
@@ -15250,7 +15255,7 @@
         }
       }
     },
-    "ShapeNonNullable31": {
+    "ShapeNonNullable32": {
       "type": "object",
       "required": [
         "expression"
@@ -15262,7 +15267,7 @@
         }
       }
     },
-    "ShapeNonNullable32": {
+    "ShapeNonNullable33": {
       "anyOf": [
         {
           "type": "string"
@@ -15271,14 +15276,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable30"
+          "$ref": "#/$defs/ShapeNonNullable31"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable31"
+          "$ref": "#/$defs/ShapeNonNullable32"
         }
       ]
     },
-    "ShapeNonNullable33": {
+    "ShapeNonNullable34": {
       "type": "object",
       "required": [
         "channel"
@@ -15291,7 +15296,7 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable32"
+            "$ref": "#/$defs/ShapeNonNullable33"
           }
         }
       }
@@ -15304,13 +15309,13 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable33"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable20"
+          "$ref": "#/$defs/ShapeNonNullable34"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
@@ -15388,7 +15393,7 @@
       "additionalProperties": false,
       "title": "ActionPredicateCompareState"
     },
-    "ShapeNonNullable34": {
+    "ShapeNonNullable35": {
       "properties": {
         "op": {
           "enum": [
@@ -15408,7 +15413,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable35": {
+    "ShapeNonNullable36": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -15426,7 +15431,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable36": {
+    "ShapeNonNullable37": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -15434,17 +15439,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable35"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable24"
+          "$ref": "#/$defs/ShapeNonNullable36"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable37": {
+    "ShapeNonNullable38": {
       "properties": {
         "op": {
           "enum": [
@@ -15454,10 +15459,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable36"
+          "$ref": "#/$defs/ShapeNonNullable37"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable36"
+          "$ref": "#/$defs/ShapeNonNullable37"
         }
       },
       "required": [
@@ -15467,7 +15472,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable38": {
+    "ShapeNonNullable39": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -15490,17 +15495,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable34"
+          "$ref": "#/$defs/ShapeNonNullable35"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable37"
+          "$ref": "#/$defs/ShapeNonNullable38"
         }
       ]
     },
-    "ShapeNonNullable39": {
+    "ShapeNonNullable40": {
       "type": "object",
       "required": [
         "instructions"
@@ -15515,7 +15520,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable38",
+            "$ref": "#/$defs/ShapeNonNullable39",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -15533,7 +15538,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable38",
+            "$ref": "#/$defs/ShapeNonNullable39",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -15541,12 +15546,12 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable39"
+            "$ref": "#/$defs/ShapeNonNullable40"
           }
         }
       }
     },
-    "ShapeNonNullable40": {
+    "ShapeNonNullable41": {
       "type": "object",
       "required": [
         "zone"
@@ -15558,7 +15563,7 @@
         }
       }
     },
-    "ShapeNonNullable41": {
+    "ShapeNonNullable42": {
       "type": "object",
       "required": [
         "expression"
@@ -15570,7 +15575,7 @@
         }
       }
     },
-    "ShapeNonNullable42": {
+    "ShapeNonNullable43": {
       "anyOf": [
         {
           "type": "string"
@@ -15579,14 +15584,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable40"
+          "$ref": "#/$defs/ShapeNonNullable41"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable41"
+          "$ref": "#/$defs/ShapeNonNullable42"
         }
       ]
     },
-    "ShapeNonNullable43": {
+    "ShapeNonNullable44": {
       "type": "object",
       "required": [
         "channel"
@@ -15599,7 +15604,7 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable42"
+            "$ref": "#/$defs/ShapeNonNullable43"
           }
         }
       }
@@ -15612,17 +15617,17 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable43"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable20"
+          "$ref": "#/$defs/ShapeNonNullable44"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
-    "ShapeNonNullable44": {
+    "ShapeNonNullable45": {
       "properties": {
         "op": {
           "enum": [
@@ -15642,7 +15647,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable45": {
+    "ShapeNonNullable46": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -15660,7 +15665,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable46": {
+    "ShapeNonNullable47": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -15668,17 +15673,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable45"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable24"
+          "$ref": "#/$defs/ShapeNonNullable46"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable47": {
+    "ShapeNonNullable48": {
       "properties": {
         "op": {
           "enum": [
@@ -15688,10 +15693,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable46"
+          "$ref": "#/$defs/ShapeNonNullable47"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable46"
+          "$ref": "#/$defs/ShapeNonNullable47"
         }
       },
       "required": [
@@ -15701,7 +15706,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable48": {
+    "ShapeNonNullable49": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -15724,17 +15729,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable44"
+          "$ref": "#/$defs/ShapeNonNullable45"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable47"
+          "$ref": "#/$defs/ShapeNonNullable48"
         }
       ]
     },
-    "ShapeNonNullable49": {
+    "ShapeNonNullable50": {
       "type": "object",
       "required": [
         "instructions"
@@ -15749,7 +15754,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable48",
+            "$ref": "#/$defs/ShapeNonNullable49",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -15768,7 +15773,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable48",
+            "$ref": "#/$defs/ShapeNonNullable49",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -15776,7 +15781,7 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable49"
+            "$ref": "#/$defs/ShapeNonNullable50"
           }
         }
       }

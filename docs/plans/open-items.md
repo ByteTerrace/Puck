@@ -3984,11 +3984,13 @@ Companions, beside the protocol's steps:
   upload is asynchronous, so the stop needs a completion that waits for a
   durable image across drains.
 - [medium] Build the rest of the [companion decision](../decisions/companions.md):
-  the destination's role declaration (`accept` the visitor's pinned driver,
-  the same pin, a substituted driver, or nothing), with `worlds/standard/`
-  declaring `accept`; the player's HUD notice on a refusal; driver grants keyed
-  by placement or role group; the faerie's lasting state in registers; `night`
-  declaring the companion role with the faerie's pin. `lane/companion-v1`
+  the destination honouring its role declaration (running the visitor's pinned
+  driver under `accept`, the same pin, a substituted driver, or refusing), so
+  the standard companion, whose body now holds the role and follows its owner's
+  seat, is driven where it arrives instead of standing inert; the player's HUD
+  notice on a refusal; driver grants keyed by placement or role group (the
+  standard `companion` template's grants still name the population slot a
+  world hands it); the companion's lasting state in registers. `lane/companion-v1`
   holds the prior art step 9 ports onto `WorldCompanionCustody.TryBinding`
   (`TryRoleVerdict`, the `WorldRole` fields, the faerie split); keep the
   branch until then.
@@ -4367,8 +4369,7 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   projection. Build it when a creation-library step needs it, or delete the
   remark.
 - [low] The work sheet prices a few shapes above what one tick runs:
-  `companion-interest-*` is about 170 running-minimum rules a nearest-point
-  reduction would replace; a write whose key is not literal counts against
+  a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
 - [medium] Rule evaluation by change has four known places where a binding is
@@ -5176,7 +5177,7 @@ runs.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
-  (`worlds/debug/addons/companion.wat`).
+  (`worlds/standard/addons/companion.wat`).
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a
   long-running World: the picture depends on which cells the trace has cached
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
