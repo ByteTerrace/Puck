@@ -5450,6 +5450,12 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Go and Reversi (`worlds/debug/go.puck`, `reversi.puck`) are whole documents of the gallery's board game room, so the board
+  games lab (`worlds/debug/labs/board-games.puck`) cannot stand them: each imports the gallery's shape catalog, derives its
+  body slots from `galleryPopulation` and the other tables' counts, grants `Drive` over those absolute body indices and
+  stands at level-2 coordinates. Turning each into a module that takes a table position and a body base, as
+  `physicalChessTable` does, lets the lab stand them and their scenarios (`go-tests.puck`, `reversi-tests.puck`, and
+  `chess-tests.puck`'s absolute coordinates) leave the whole debug world.
 - Two types answer "is this raw value one of a set or inside a range": `CompiledActionStateEnvelope` (`Puck.Physics`,
   a register's runtime envelope: `Contains` by a linear search, and `Clamp`, which substitutes the initial value for a
   set miss) and `ValueBounds` (`Puck.State.Rules`, the rule analysis's bound: a sorted set or a range, with inclusion
