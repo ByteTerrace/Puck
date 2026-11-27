@@ -1226,7 +1226,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (c, p) in ((players == 2) ? panels : []) {
       {
         text: $"P{p + 1}"
-        position: cabinetDeckAt((c + (((p * 2) - 1) * 0.42)), 0.46, 0.015)
+        position: cabinetDeckAt((c + (((p * 2) - 1) * 0.455)), 0.42, 0.015)
         rotation: rotate([1, 0, 0], -72.54)
         emHeight: 0.075
         depth: 0.008
