@@ -615,7 +615,8 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Finest.Dims, x: x, y: y, z: z);
         var probe = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
 
-        Assert.Equal(expected: SdfMeshIrradianceProbe.WrittenFlag, actual: probe[0]);
+        // The key's low bits carry the lighting epoch the probe was relit under.
+        Assert.Equal(expected: SdfMeshIrradianceProbe.WrittenFlag, actual: (probe[0] & ~SdfMeshIrradianceProbe.EpochMask));
         Assert.Equal((uint)x, probe[SdfMeshIrradianceProbe.CellWord]);
         Assert.Equal((uint)y, probe[SdfMeshIrradianceProbe.CellWord + 1]);
         Assert.Equal((uint)z, probe[SdfMeshIrradianceProbe.CellWord + 2]);
@@ -883,7 +884,17 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.Equal(expected: SdfMeshConvergenceStage.None, actual: volume.Convergence.Stage);
         Assert.True(condition: (phases > 2), userMessage: $"phases={phases}");
         Assert.Contains(collection: expired.AsSpan(start: 0, length: count).ToArray(), filter: static record => (record.Reason.Subsystem == SdfMeshIrradiance.SourceName) && record.OnPump && (record.BudgetTicks == 0L));
-        Assert.Equal(expected: expected, actual: words);
+        // The dimming is a jump of the light, so the drained volume's keys carry a later lighting epoch than the fresh one's;
+        // the light itself must agree word for word.
+        Assert.Equal(expected: WithoutEpochs(words: expected), actual: WithoutEpochs(words: words));
+    }
+    // A volume's words with each probe key's lighting epoch cleared (SdfMeshIrradianceProbe.EpochMask): what its light and
+    // geometry are, whatever lighting history led to them.
+    private static uint[] WithoutEpochs(uint[] words) {
+        var cleared = words.ToArray();
+
+        for (var at = 0; (at < cleared.Length); at += SdfMeshIrradianceProbe.ProbeWords) { cleared[at] &= ~SdfMeshIrradianceProbe.EpochMask; }
+        return cleared;
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>

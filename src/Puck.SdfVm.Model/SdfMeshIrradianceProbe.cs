@@ -72,6 +72,12 @@ public static class SdfMeshIrradianceProbe {
     public const uint WrittenFlag = (1u << 30);
     /// <summary>The flag of a probe no candidate could move into the open.</summary>
     public const uint InvalidFlag = (1u << 31);
+    /// <summary>The key word's low bits: the lighting epoch the probe was last relit under, the count of lighting jumps
+    /// (a clock scrubbed, a lamp switched) the volume had captured then, wrapped to these bits. The relight's bounce and
+    /// the camera sample read a probe only of the current epoch, so no light from before a jump reaches a probe relit
+    /// after it; the views read every written probe whatever its epoch. Within 2^24, so it rides a float lane of the
+    /// relight's lighting rows exactly.</summary>
+    public const uint EpochMask = ((1u << 20) - 1u);
     /// <summary>The receiver's normal bias in metres, smaller than the thinnest wall, independent of probe spacing.</summary>
     public const float NormalBias = 0.05f;
     /// <summary>A probe's surface map reach in cell diagonals: with <see cref="NormalBias"/> added, the farthest
