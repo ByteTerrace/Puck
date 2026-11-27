@@ -156,7 +156,9 @@ let structureAcross = [0.7071, 0, 0, 0.7071]
 // by default it splays from the shaft, tapering on its sides only.
 // The height of a pier's plinth (branchedPier), matched to a wall's skirting so the skirting runs into it.
 let pierPlinthHeight = 0.34
-template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null) {
+// `reach` [-x, +x] is how far the haunch runs each way along the arcade (span both ways by default); a pier against an end
+// wall stops that side inside the wall, and a side shorter than the span takes no arch.
+template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null, reach = null) {
   if foot != null {
     shape Prism "pier-foot" {
       material: (base + structureTeal)
@@ -198,14 +200,15 @@ template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null
     scale [shaft, (height / 2), depth]
     chamfer: 0.06
   }
+  let haunchReach = ((reach == null) ? [span, span] : reach)
   shape Box "pier-haunch" {
     material: (base + structureTeal)
-    position [0, (height - ((span - shaft) + 0.3) / 2), 0]
-    scale [span, (((span - shaft) + 0.3) / 2), (depth * 0.82)]
+    position [((haunchReach[1] - haunchReach[0]) / 2), (height - ((span - shaft) + 0.3) / 2), 0]
+    scale [((haunchReach[0] + haunchReach[1]) / 2), (((span - shaft) + 0.3) / 2), (depth * 0.82)]
     chamfer: 0.04
     detail: true
   }
-  for side in [-1, 1] {
+  for side in filter([-1, 1], side => (haunchReach[((side + 1) / 2)] >= span)) {
     shape Cylinder $"pier-arch-{side}" {
       blend: SmoothSubtraction
       smooth: 0.05

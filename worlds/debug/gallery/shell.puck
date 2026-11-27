@@ -518,10 +518,21 @@ template shellForecourt() {
 // The kit pieces that stand on the plan, each a list gallery.puck stamps: the arcades' piers on every level, the
 // balcony edges round the nave's void and round the fall's well, the terrace's edge, and the furniture.
 // A pier's prototype: the hall's teal, or on level 1 the toybox's pastel for its place along the arcade.
-function shellPierPrototype(k, b) = ((k == 1) ? $"gallery-pier-toy-{(b % length(lookToyPiers))}" : "gallery-pier")
+// The arcade's end piers stand half a tile from the end walls, so their haunch runs that far and half a wall into it on the
+// wall's side instead of a full span through it: "-neg" stops the haunch's -x side, "-pos" its +x side. The two rows face
+// opposite ways, so which variant an end takes depends on its row as well as its end (checked from outside both ends).
+let shellPierWallReach = (shellTileHalf + (galleryWall / 2))
+let shellPierEnds = [
+  { suffix: "", reach: null }
+  { suffix: "-neg", reach: [shellPierWallReach, (arcadePitch / 2)] }
+  { suffix: "-pos", reach: [(arcadePitch / 2), shellPierWallReach] }
+]
+function shellPierEnd(b, yaw) = ((b == 0) ? ((yaw == 0) ? "-pos" : "-neg") : ((b == galleryBays) ? ((yaw == 0) ? "-neg" : "-pos") : ""))
+function shellPierKind(k, b) = ((k == 1) ? $"gallery-pier-toy-{(b % length(lookToyPiers))}" : "gallery-pier")
+function shellPierPrototype(k, b, yaw) = $"{shellPierKind(k, b)}{shellPierEnd(b, yaw)}"
 let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b => [
-  { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b) }
-  { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b) }
+  { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b, 180) }
+  { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b, 0) }
 ]))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece. Level
 // 2's balcony edges take them; level 1's are its lattice (below).
@@ -795,21 +806,24 @@ template shellPrototypes() {
   }
 
   // The kit, each piece one creation however many times the plan stamps it.
-  prototype "gallery-pier" {
-    document {
-      name: "gallery-pier"
-      schema: "puck.creation.v1"
-      palette: shellStructure
-      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
-    }
-  }
-  for (tone, n) in lookToyPiers {
-    prototype $"gallery-pier-toy-{n}" {
+  // Each pier comes whole and as the two end variants (shellPierEnds), whose haunch stops inside the end wall on one side.
+  for (end, e) in shellPierEnds {
+    prototype $"gallery-pier{end.suffix}" {
       document {
-        name: $"gallery-pier-toy-{n}"
+        name: $"gallery-pier{end.suffix}"
         schema: "puck.creation.v1"
-        palette [shellBrushed((structurePalette[0] with { color: tone }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
-        branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
+        palette: shellStructure
+        branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf], reach: end.reach)
+      }
+    }
+    for (tone, n) in lookToyPiers {
+      prototype $"gallery-pier-toy-{n}{end.suffix}" {
+        document {
+          name: $"gallery-pier-toy-{n}{end.suffix}"
+          schema: "puck.creation.v1"
+          palette [shellBrushed((structurePalette[0] with { color: tone }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
+          branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf], reach: end.reach)
+        }
       }
     }
   }
@@ -1084,7 +1098,7 @@ template shellPlacements() {
         prototype: "gallery-nave-pier"
         parent: "gallery"
         position [(galleryEast - shellTileHalf), galleryFloor[tier], z]
-        yawDegrees: 90
+        yawDegrees: 270
       }
     }
   }
