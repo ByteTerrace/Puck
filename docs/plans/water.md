@@ -583,35 +583,24 @@ read them as unknown.
 
 ### Option 3 as built
 
-**What landed.** A pixel shades up to two glass interfaces. The glass target's
-depth test keeps one record, the nearest front face, and a depth test keeps one
-extremum, so the second record is in the glass sums, which grow from 8 to 16
-words a pixel (`SdfWorldPackage.GlassSumWords`, `frame/sdf-glass.hlsli`): every
-front face before the opaque hit counts itself and claims one of three entries
-(draw plus one, triangle) while one is free, and every back face raises the
-nearest back face, an atomic maximum of its distance's complemented bits.
-`glass-shade` names the second interface as the held front face nearest along
-the pixel's ray other than the target's (`sdfGlassSecondInterface`), splits the
-glass distance at the nearest back face (the near interface absorbs its own
-material over its share, the far one the rest of the distance and optical
-depth), shades both by one loop body (flow through `sdfShadeFlow`, contact,
-medium, the probe reflection, the light walk), and composes the far interface
-inside the near one's transmission. The pass counts each interface it shades as
-a work step (`march.steps` in `world.counters gpu`).
+**What landed.** A pixel shades several glass interfaces: the glass target's
+nearest front face and the faces after it in the glass sums' layer list, the
+nearest `SdfWorldPackage.GlassLayers` front faces in distance order, which the
+raster keeps by 64-bit atomic maximum whatever its order
+([the handbook's layer list](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)).
+`glass-shade` splits the glass distance at the nearest back face and among the
+later interfaces (`sdfGlassShare`), shades every interface by one loop body
+(flow through `sdfShadeFlow`, contact, medium, emission, the probe reflection,
+the light walk) and composes them front to back. The pass counts each interface
+it shades as a work step (`march.steps` in `world.counters gpu`).
 
 **Invariant and its door.** A pixel reads the lit image once: one
 `sdfGlassLitAt` (or the frost's one disc) after the interface loop, at the
-point both refractions displace; the loop body has no read. The second
-interface is exact and independent of raster order up to three front faces
-before the opaque hit, since every one is held and the choice is by distance
-with ties to the lower draw and triangle; `SdfGlassSumsDeviceLawTests` checks
-the entries as a set and the rest of the words exactly in 24 orders. Where it
-stops: a third front face's glass absorbs within the far interface's share and
-what lies beyond the second interface is the opaque image; past three front
-faces the record names no second interface and the near one alone is shaded.
-A 64-bit atomic k-buffer would lift the count but needs 64-bit buffer elements
-through the interface generator and int64 atomics on both backends, and DXC
-lowers `RWByteAddressBuffer`'s 64-bit atomics to 32-bit ones on SPIR-V.
+point every refraction displaces; the loop body has no read. The layer list is
+independent of raster order; `SdfGlassSumsDeviceLawTests` checks every word of
+a pixel exactly in 24 orders. Where it stops: a front face past the list's
+length absorbs within the last interface's share and what lies beyond the last
+shaded interface is the opaque image.
 
 **Owed.** The glass passes' GPU time before and after in a quiet window.
 
