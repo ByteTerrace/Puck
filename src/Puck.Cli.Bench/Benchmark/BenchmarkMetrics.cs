@@ -78,6 +78,22 @@ internal static class BenchmarkMetrics {
         return metrics;
     }
 
+    /// <summary>Reads the numbers of a run's remote authority window as named metrics: its ticks, their rate, the owed steps
+    /// it shed, the cost of a tick and each named tick part's mean per tick.</summary>
+    /// <param name="authority">The run's <c>authority</c> member, as <c>host.frames ticks end</c> wrote it.</param>
+    /// <returns>The metrics by name, in ordinal name order.</returns>
+    public static SortedDictionary<string, BenchmarkMetric> OfAuthority(JsonObject authority) {
+        var metrics = new SortedDictionary<string, BenchmarkMetric>(comparer: StringComparer.Ordinal);
+
+        Add(metrics, "ticks", authority["ticks"], "count", BenchmarkReadingKind.Cadence);
+        Add(metrics, "ticksPerSecond", authority["ticksPerSecond"], "per second", BenchmarkReadingKind.Load);
+        Add(metrics, "shed", authority["shed"], "count", BenchmarkReadingKind.Load);
+        foreach (var name in Distribution) { Add(metrics, $"tickMs.{name}", (authority["tickMs"] as JsonObject)?[name], "ms", BenchmarkReadingKind.Load); }
+        foreach (var (name, value) in (authority["partsMeanMs"] as JsonObject ?? [])) { Add(metrics, $"partsMeanMs.{name}", value, "ms", BenchmarkReadingKind.Load); }
+
+        return metrics;
+    }
+
     /// <summary>Names a GPU pass in a metric: the node's name and the pass with the slash between them written as a colon,
     /// so a metric name never holds a pointer's separator.</summary>
     /// <param name="pass">The pass as <c>world.gpu-timing</c> prints it.</param>

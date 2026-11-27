@@ -26,7 +26,7 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances,
         boundary.PublishOnClose(publish: () => {
             if (!step.StepInProgress) {
                 step.CollectDeliveries();
-                collect();
+                using (HostFrameWork.Measure(HostFrameWorkPart.TickPresentation)) { collect(); }
             }
         });
 

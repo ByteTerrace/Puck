@@ -267,37 +267,29 @@ public static partial class BenchmarkCommand {
         throw new InvalidOperationException($"the seat's body was not handed to the remote authority within {RemoteTimeout.TotalSeconds:0} s: the World's last topology was {last}{((listen is null) ? string.Empty : $"; the authority answers world.rate with {listen}")}");
     }
 
-    // The completed ticks the remote authority's boot instance reports through world.rate, or null with no authority
-    // this verb started (in process, or one already listening) or no readable answer.
-    private static ulong? AuthorityCompletedTicks(SweepWorld? authority) {
-        const string Field = "completed-ticks ";
-
-        if (authority?.Run("world.rate", 10) is not { Ok: true } answer) {
+    // Opens a window over the ticks of the remote authority this verb started (host.frames ticks begin), so its own tick
+    // accounting covers the span the route plays. False with no such authority or no answer.
+    private static bool BeginAuthorityWindow(SweepWorld? authority) => (authority?.Run("host.frames ticks begin", 10).Ok == true);
+    // Closes the authority's tick window and reads what it held: the ticks it completed and their rate, the steps it shed,
+    // the cost of a tick and the frame thread's named tick parts (HostTickWindow.Describe). Null with no authority or no
+    // readable answer.
+    private static JsonObject? EndAuthorityWindow(SweepWorld? authority, string name, Action<string> print) {
+        if (authority?.Run("host.frames ticks end", 10) is not { Ok: true } answer) {
             return null;
         }
-        var start = answer.Output.IndexOf(value: Field, comparisonType: StringComparison.Ordinal);
 
-        if (start < 0) {
+        var jsonStart = answer.Output.IndexOf(value: '{');
+        var jsonEnd = answer.Output.LastIndexOf(value: '}');
+
+        if ((jsonStart < 0) || (jsonEnd <= jsonStart) || (JsonNode.Parse(json: answer.Output[jsonStart..(jsonEnd + 1)]) is not JsonObject window)) {
             return null;
         }
-        start += Field.Length;
-        var end = start;
 
-        while ((end < answer.Output.Length) && char.IsAsciiDigit(c: answer.Output[end])) {
-            end++;
-        }
-        return (ulong.TryParse(s: answer.Output.AsSpan(start: start, length: (end - start)), provider: CultureInfo.InvariantCulture, result: out var ticks) ? ticks : null);
-    }
-    // Prints the ticks the remote authority's boot instance completed over a route beside the chapters' charged budgets,
-    // and records them in the run's report.
-    private static void ReportAuthorityTicks(ulong? before, ulong? after, Outcome outcome, Action<string> print) {
-        if ((before is not { } from) || (after is not { } to) || (to < from)) {
-            return;
-        }
-        print(string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: the remote authority's boot instance completed {(to - from)} ticks over {outcome.Name} (world.rate completed-ticks {from} to {to}); each chapter's charged ticks leave out the waits its budget pauses for\n"));
-        if (outcome.Run is { } run) {
-            run["authorityCompletedTicks"] = (to - from);
-        }
+        var tick = window["tickMs"];
+
+        print(string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: the remote authority completed {window["ticks"]} ticks over {name} in {BenchmarkSummary.Number(window["seconds"]):0.0} s ({BenchmarkSummary.Number(window["ticksPerSecond"]):0.0} a second, {window["shed"]} shed); a tick cost mean {BenchmarkSummary.Number(tick?["mean"]):0.00}, p99 {BenchmarkSummary.Number(tick?["p99"]):0.00}, max {BenchmarkSummary.Number(tick?["max"]):0.00} ms\n"));
+
+        return window;
     }
     // The first transfer refusal the client's standard error names, or null.
     private static string? RefusedTransfer(string log) {

@@ -2,6 +2,7 @@ using Puck.Maths;
 using Puck.Hosting;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.Text.Json.Nodes;
 
 namespace Puck.Launcher;
 
@@ -193,6 +194,28 @@ public sealed class HostFrameRecording {
     public double Milliseconds(long ticks) => ((ticks * 1000.0) / Frequency);
     /// <summary>Converts named work's stopwatch ticks to milliseconds.</summary>
     public static double WorkMilliseconds(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+    /// <summary>Writes named parts as a JSON object of milliseconds, the form every report of frame-thread work shares.</summary>
+    /// <param name="parts">The parts' stopwatch ticks.</param>
+    /// <param name="first">The first part written.</param>
+    /// <param name="end">The part after the last written.</param>
+    /// <param name="total">The milliseconds the parts are read against, which adds an <c>other</c> member holding what
+    /// no part names, or <see langword="null"/> to write the parts alone.</param>
+    /// <param name="divisor">What each part is divided by, such as the ticks a window ran for a mean per tick.</param>
+    /// <returns>The object, one member per part by its name.</returns>
+    public static JsonObject DescribeParts(in HostFrameWorkTimes parts, HostFrameWorkPart first, HostFrameWorkPart end, double? total = null, double divisor = 1.0) {
+        var result = new JsonObject();
+        var remaining = total;
+
+        for (var part = (int)first; part < (int)end; part++) {
+            var milliseconds = (WorkMilliseconds(parts[part]) / divisor);
+
+            result[((HostFrameWorkPart)part).ToString()] = milliseconds;
+            remaining -= milliseconds;
+        }
+        if (remaining is { } other) { result["other"] = other; }
+
+        return result;
+    }
     /// <summary>Reads the statistics of a span of the recording.</summary>
     /// <param name="from">The first iteration.</param>
     /// <param name="to">The end of the span, exclusive.</param>

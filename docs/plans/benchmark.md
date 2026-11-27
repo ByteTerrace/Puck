@@ -517,6 +517,39 @@ the replica tier, which carries everything.
   remote authority `simulateMs` is what the process still simulates locally,
   which today is its whole boot world: `--connect` moves the seat's body and
   stops nothing ([open items](open-items.md#the-benchmark)).
+- Each chapter's `frameThread.simulatePartsMs`: the simulate phase's total
+  milliseconds by named part. Besides the authority's tick parts
+  (`TickIngress` to `TickReplay`) it names what the host's step does around
+  them, which is all a client of a remote authority runs: `TickCommandSnapshot`
+  (the input router's commands for the tick), `TickSourceWatch`,
+  `TickObservation` (the authorities' stream and route deliveries applied on
+  the pump), `TickRoutes` (seat route changes, remote joins and pending
+  transfers, whose crossings wait on the remote authority), `TickSeatIntents`
+  (the seat views advanced and the seats' intents submitted),
+  `TickBootSettle`, `TickInstances` (the other instances, waits for their
+  ticks included), `TickPublish` (the completed tick published to console
+  waits, captures, scripted lines and the route's seat driver, which plans and
+  steers there), `TickHostPost` and `TickPresentation` (what the frame reads of
+  the authorities copied for it). `other` is the simulate phase not in a named
+  part; a tick executing on the step thread beside the frame counts in its own
+  parts and not in the phase, so the parts can sum past it.
+- `authority`, on a run whose pair this verb started (`--remote local` and
+  `--remote issued`): the remote authority's own tick accounting over the span
+  the route played, read from the authority's console (`host.frames ticks
+  begin` as the route starts playing and `ticks end` as it ends;
+  `HostTickWindow`). It holds `ticks` completed, `seconds` and
+  `ticksPerSecond`, `shed` (owed steps dropped), `tickMs` (the mean, median,
+  99th percentile and maximum cost of one tick: what the step thread spent
+  executing it), `partsMs` (each tick part's total over the window) and
+  `partsMeanMs` (per tick), `tickTotalMs` and `simulatePhaseMs`. The same parts
+  are the in-process run's, written by one function
+  (`HostFrameRecording.DescribeParts`). The window's edges take the iteration
+  in progress exactly (its work so far is subtracted at the start and added at
+  the end), and a tick still executing when the window closes belongs to the
+  window that closes after it. `puck benchmark` prints a line for it, lists it
+  in `summary.md` and writes its numbers into `report.json`'s metrics as
+  `<leg>.<backend>.authority.*`. An `--remote <ip:port>` leg reads no
+  authority: the verb holds no console on a host it did not start.
 - `visits` name the world a place was entered in when it is not the boot
   world, so a remote chapter's places read `<endpoint>:<place>`.
 - A chapter's `stateHash` is absent against a remote authority: a client has

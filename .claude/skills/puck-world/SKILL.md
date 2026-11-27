@@ -34,7 +34,10 @@ outer step. Keep the shared console operation on held/no-step iterations and
 hosts with no simulation as well as between ticks; ready immediate control work
 must progress while simulation submissions and session barriers wait for a tick.
 `host.frames` includes an independent tick lane and `steps.shed`; `world.rate
-shed` reads the same host-lifetime counter.
+shed` reads the same host-lifetime counter. `host.frames ticks begin` and
+`ticks end` bracket a window of the simulation's ticks and echo it as one JSON
+object (ticks, rate, shed, tick cost, named tick parts); `puck benchmark` reads
+a headless remote authority this way.
 
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
 `debug.puck`, basis `avatars/moth`), is the only live world, with the
