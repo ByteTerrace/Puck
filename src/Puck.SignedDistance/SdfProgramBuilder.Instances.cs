@@ -3,6 +3,9 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
+    // The instances the open object has declared (BeginObject), or -1 while no object is open: every instance after an
+    // object's first joins it (SdfInstanceRange.JoinsPreviousObject).
+    private int m_objectInstances = -1;
     private bool m_openInstanceBakesSeparately;
     private bool m_openInstanceBoundInSlotFrame;
     private bool m_openInstanceRestPoseSkin;
@@ -321,8 +324,11 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, Operands = m_openInstanceOperands, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, JoinsPreviousObject = (m_objectInstances > 0), Operands = m_openInstanceOperands, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
+        if (m_objectInstances >= 0) {
+            m_objectInstances++;
+        }
         ResetOpenInstance();
 
         return this;
@@ -355,6 +361,29 @@ public sealed partial class SdfProgramBuilder {
         ).EndInstance();
     }
 
+    /// <summary>Opens an object: every instance declared until the matching <see cref="EndObject"/> belongs to one object,
+    /// such as one placed creation whose shapes, text and glass bake into several groups
+    /// (<see cref="SdfInstanceRange.JoinsPreviousObject"/>). An instance declared outside any object is an object of its
+    /// own.</summary>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">An object is already open.</exception>
+    public SdfProgramBuilder BeginObject() {
+        if (m_objectInstances >= 0) {
+            throw new InvalidOperationException(message: "BeginObject was called with an object already open (unbalanced Begin/EndObject).");
+        }
+        m_objectInstances = 0;
+        return this;
+    }
+    /// <summary>Closes the object <see cref="BeginObject"/> opened.</summary>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">No object is open.</exception>
+    public SdfProgramBuilder EndObject() {
+        if (m_objectInstances < 0) {
+            throw new InvalidOperationException(message: "EndObject was called with no open object (unbalanced Begin/EndObject).");
+        }
+        m_objectInstances = -1;
+        return this;
+    }
     // Closes the open instance's per-emission state: the instance's first instruction, its box and the flags only
     // BeginInstanceDynamic sets. EndInstance and Clear both run it, so no emission inherits a previous one's.
     private void ResetOpenInstance() {

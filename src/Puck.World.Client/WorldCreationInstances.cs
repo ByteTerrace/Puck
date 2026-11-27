@@ -833,6 +833,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             var firstInstance = builder.InstanceCount;
 
             live.Hidden = Isolation.HiddenFor(document: live.Creation.EngineDocument, prototype: live.Creation.Id.Value);
+            // Every instance of one registration is one object (SdfInstanceRange.JoinsPreviousObject), however its moving
+            // parts, text and glass bake.
+            _ = builder.BeginObject();
             EmitOne(
                 builder: builder,
                 colors: colors,
@@ -842,6 +845,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 screenMaterials: CarriedScreenMaterials(live: live, screens: screens),
                 textCatalog: textCatalog
             );
+            _ = builder.EndObject();
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
         Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()), Isolation);

@@ -14,7 +14,8 @@ namespace Puck.SdfVm;
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
 /// <param name="Exposures">The views' exposures, or <see langword="null"/> to expose every view by one.</param>
 /// <param name="ShadeDefaultFirst">The default program's first vector in the appearance allocation.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0);
+/// <param name="DebugOptions">What the debug view reads beside its mode.</param>
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0, DebugViewOptions DebugOptions = default);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
 /// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
@@ -32,6 +33,7 @@ public static partial class SdfFrameBlock {
     private static readonly int CurvatureInkLow = Offset(member: SdfWorldPackage.CurvatureInkLow);
     private static readonly int CurvatureRim = Offset(member: SdfWorldPackage.CurvatureRim);
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
+    private static readonly int DebugOptions = Offset(member: SdfWorldPackage.DebugOptions);
     private static readonly int DisableAmbientOcclusion = Offset(member: SdfWorldPackage.DisableAmbientOcclusion);
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
     private static readonly int ScreenFidelity = Offset(member: SdfWorldPackage.ScreenFidelity);
@@ -250,6 +252,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
+        WriteVector4(block: block, offset: DebugOptions, value: new Vector4(x: tables.DebugOptions.Tolerance, y: (tables.DebugOptions.Bodies ? 1f : 0f), z: 0f, w: 0f));
         WriteIndirectControls(block: block, frame: frame);
         var lights = frame.Lights;
         var curvature = lights.Curvature;

@@ -343,6 +343,7 @@ public static partial class SdfWorldPackage {
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
+        Value(name: DebugOptions, type: ShaderValueType.Float4),
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
@@ -525,6 +526,7 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ReflectionHistory, type: ShaderValueType.Float4),
         Read(element: ShaderValueType.Uint, name: ReflectionDepth),
         Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
+        Read(element: ShaderValueType.Uint, name: OverlapSpans),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

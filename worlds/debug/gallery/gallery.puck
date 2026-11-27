@@ -1277,14 +1277,89 @@ cameras: concat(map(galleryDisplays, display => terminalCamera(
 // tap and nothing turns the camera, E or Backspace (the pad's RB or B) steps back, and the camera eases back to the chase
 // camera. The station view's eye stands behind her at the spawn point, so its near plane cuts her away: along the view,
 // her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
+//
+// Engaged, the backtick opens the display's console (../../standard/contexts/terminal-console.puck), a typed line that
+// works the display she stands at as its screen does: `show <exhibit>` (or `shape <exhibit>`, its prototype name) shows
+// an exhibit on its turntable, `list` names the groups and `list <group>` a group's exhibits, `turntable on` and
+// `turntable off` set it turning or stop it, `speed <-3..3>` sets its pace and the way it turns (0 stops it), and `help`
+// says so. A command posts its action to the display's terminal mailbox, which the gallery-console-command rules below
+// carry into the same cells a tap on the screen writes (gallerySelect, and the turntable's mailbox), so a typed command
+// and a press leave the same state.
+let galleryConsoleActions = { show: 1, turn: 2, pace: 3 }
+let galleryConsoleSpeeds = filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0))
+let galleryConsole = {
+  title: "DISPLAY CONSOLE"
+  greeting ["type help for the commands this display answers"]
+  unknown ["not a command this display answers; type help"]
+  commands: concat(
+    [
+      {
+        line: "help"
+        reply [
+          "show <exhibit>     show an exhibit on this turntable"
+          "                   (shape <exhibit> too; list names them)"
+          "list               name the groups"
+          "list <group>       name a group's exhibits"
+          "turntable on|off   set the turntable turning, or stop it"
+          $"speed <-{turntableSpeeds}..{turntableSpeeds}>      its pace and way round; 0 stops it"
+        ]
+      }
+      { line: "list", reply: concat(["groups (list <group> names its exhibits):"], terminalWrap(map(galleryDisplays, display => display.id))) }
+    ],
+    map(galleryDisplays, display => { line: $"list {display.id}", reply: terminalWrap(display.names) }),
+    flatMap(galleryCatalog, entry => map(["show", "shape"], verb => {
+      line: $"{verb} {entry.name}"
+      action: galleryConsoleActions.show
+      value: entry.index
+      reply [$"showing {galleryCopy[entry.name].title}"]
+    })),
+    [
+      { line: "turntable on", action: galleryConsoleActions.turn, value: 1, reply ["the turntable turns"] }
+      { line: "turntable off", action: galleryConsoleActions.turn, value: 0, reply ["the turntable stops"] }
+      { line: "speed 0", action: galleryConsoleActions.pace, value: 0, reply ["the turntable stops"] }
+    ],
+    map(galleryConsoleSpeeds, speed => {
+      line: $"speed {speed}"
+      action: galleryConsoleActions.pace
+      value: speed
+      reply [$"pace {turntablePace(speed)}"]
+    })
+  )
+}
 terminalPlay(
   terminals: map(galleryDisplays, display => {
     at: displayWorld(display, displayStand)
     camera: $"gallery-station-{display.id}"
     spawn: $"display-{display.id}"
   }),
-  near: 2.6
+  near: 2.6,
+  console: galleryConsole
 )
+
+// A display's terminal mailbox (terminalAction and terminalValue, keyed by its terminal number, its place in
+// galleryDisplays from 1) carried into the cells its screen writes: show selects the exhibit as a tap on its row does,
+// and turn and pace post to the turntable's mailbox as its buttons do.
+for (display, index) in galleryDisplays {
+  let key = display.id
+  let number = $"{index + 1}"
+  rule $"gallery-console-command-{key}" {
+    local action = terminalAction[number]
+    local value = terminalValue[number]
+    when action != 0
+    mode: Level
+    if action == galleryConsoleActions.show {
+      gallerySelect[key] = clamp(value, 0, galleryLast)
+    }
+    if action == galleryConsoleActions.turn {
+      galleryTurnAt[key] = (value == 1) ? galleryTurnCodes.on : galleryTurnCodes.off
+    }
+    if action == galleryConsoleActions.pace {
+      galleryTurnTo[key] = value
+      galleryTurnAt[key] = galleryTurnCodes.pace
+    }
+    terminalAction[number] = 0
+  }
+}
 
 commands [
   {
@@ -1441,28 +1516,46 @@ for display in galleryDisplays {
       }
       galleryPress[key] = 0
     }
-    // A lift on a button: PREV and NEXT turn the list a page, the turntable's buttons post to its mailbox (1 slower,
-    // 2 hold or release, 3 faster).
+    // A lift on a button: PREV and NEXT turn the list a page, the turntable's buttons post to its mailbox
+    // (galleryTurnCodes: slower, hold or release, faster).
     if contact(each, phase) == 3 and (contact(each, region, prev) + contact(each, region, next) + contact(each, region, slower) + contact(each, region, hold) + contact(each, region, faster)) > 0 {
       galleryScroll[key] = clamp(galleryScroll[key] + (consoleRows * (contact(each, region, next) - contact(each, region, prev))), 0, consoleScrollLast)
-      galleryTurnAt[key] = contact(each, region, slower) + (2 * contact(each, region, hold)) + (3 * contact(each, region, faster))
+      galleryTurnAt[key] = (galleryTurnCodes.slower * contact(each, region, slower)) + (galleryTurnCodes.hold * contact(each, region, hold)) + (galleryTurnCodes.faster * contact(each, region, faster))
     }
   }
-  // The turntable's mailbox: slower and faster step the signed speed, passing from the slowest pace one way to the
-  // slowest the other way round, and set it turning; hold stops or restarts it where it stands. The rate its turn facet
-  // reads changes with the phase rebased by the same write (phase += (rate - new rate) × clock), so the angle the facet
-  // computes from the gallery clock carries on from where it stood.
+  // The turntable's mailbox (galleryTurnCodes): slower and faster step the signed speed, passing from the slowest pace
+  // one way to the slowest the other way round, and set it turning; hold stops or restarts it where it stands; on and off
+  // set it turning or stop it; and pace sets the signed speed galleryTurnTo holds, a speed of 0 stopping it. The rate its
+  // turn facet reads changes with the phase rebased by the same write (phase += (rate - new rate) × clock), so the angle
+  // the facet computes from the gallery clock carries on from where it stood.
   rule $"gallery-turn-{key}" {
-    when galleryTurnAt[key] != 0
+    local code = galleryTurnAt[key]
+    local to = galleryTurnTo[key]
+    when code != 0
     mode: Level
-    if galleryTurnAt[key] == 2 {
+    if code == galleryTurnCodes.hold {
       galleryTurnPlay[key] = 1 - galleryTurnPlay[key]
-    } else {
-      galleryTurnSpeed[key] = clamp(galleryTurnSpeed[key] + galleryTurnAt[key] - 2, 0 - turntableSpeeds, turntableSpeeds)
+    }
+    if code == galleryTurnCodes.on {
+      galleryTurnPlay[key] = 1
+    }
+    if code == galleryTurnCodes.off {
+      galleryTurnPlay[key] = 0
+    }
+    if code == galleryTurnCodes.slower or code == galleryTurnCodes.faster {
+      galleryTurnSpeed[key] = clamp(galleryTurnSpeed[key] + code - 2, 0 - turntableSpeeds, turntableSpeeds)
       if galleryTurnSpeed[key] == 0 {
-        galleryTurnSpeed[key] = galleryTurnAt[key] - 2
+        galleryTurnSpeed[key] = code - 2
       }
       galleryTurnPlay[key] = 1
+    }
+    if code == galleryTurnCodes.pace {
+      if to == 0 {
+        galleryTurnPlay[key] = 0
+      } else {
+        galleryTurnSpeed[key] = clamp(to, 0 - turntableSpeeds, turntableSpeeds)
+        galleryTurnPlay[key] = 1
+      }
     }
     setState(state: galleryTurnNext, key: $"{key}", fromState: galleryTurnRates, fromKey: $"$cell:galleryTurnSpeed:{key}")
     if galleryTurnPlay[key] == 0 {

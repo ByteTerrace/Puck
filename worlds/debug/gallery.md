@@ -221,8 +221,11 @@ the devices' loans do. `body.where` shows the body; `world.state rentalKeyShown`
 reads every key.
 
 **The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
-L-shaped counter round the open corner of each spiral stair (south-east and
-north-west), so the plan reads the same turned half round. Each counter lends
+L-shaped kiosk round the open corner of each spiral stair (south-east and
+north-west), so the plan reads the same turned half round: a cobalt counter
+under a sunflower lip, each device standing in its own lit cubby with a number
+plate below it, a lit header naming the arm over a candy-pink canopy, and a
+blade sign at the corner over the returns tray. Each counter lends
 12 Humble Gaming Bricks on one arm and 12 Advanced Gaming Bricks on the other,
 one colourway each, 48 devices in the world. The context button before a
 device rents it: the device leaves the counter and rides the renter's hip. The
@@ -429,9 +432,41 @@ display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expa
 - `gallery.station <display>` still films a display from the station view
   without using it.
 
+The owner asked for a restricted console at the stations: pressing the
+backtick while at one opens a console that sends shape changes straight to
+that station. So while she uses a display, the backtick opens its console (the
+standard's terminal console,
+[terminal-console.puck](../standard/contexts/terminal-console.puck), with the
+gallery's command set `galleryConsole` in
+[gallery/gallery.puck](gallery/gallery.puck)), a panel in her view that takes
+every key she types, and the backtick closes it again (Escape is the pause
+menu's, so it stays unbound). It answers only these lines, and only for the
+display she stands at:
+
+| Line | What it does |
+|---|---|
+| `show <exhibit>`, `shape <exhibit>` | Shows an exhibit (its prototype name) on this display's turntable, as a tap on its row does. |
+| `list` | Names the groups. |
+| `list <group>` | Names a group's exhibits. |
+| `turntable on`, `turntable off` | Sets the turntable turning, or stops it. |
+| `speed <-3..3>` | Sets the turntable's pace and the way it turns; 0 stops it. |
+| `help` | Names the commands. |
+
+Any other line answers that it is not a command here and changes nothing. A
+command posts its action to the display's terminal mailbox, and the
+`gallery-console-command-<display>` rule carries it into the cells the screen
+writes (`gallerySelect`, and the turntable's mailbox with `galleryTurnCodes`),
+so a typed command and a press on the glass leave the same state. The typed
+text reaches the simulation only as the seat's `terminalText` input events,
+which the authority admits only while the console is open, and the console's
+rules can write only the mailbox of the display she is engaged with, so no line
+reaches a console verb or another display.
+
 Read the state with `world.state terminalNear` and `world.state terminalAt`
 (keyed by body index: the display's place in `galleryDisplays` plus one, 0 for
-none) and `player.bindings 1` (`group=terminal` while engaged).
+none), `player.bindings 1` (`group=terminal` while engaged,
+`group=terminal-console` while the console is open), and the console's rows
+(`world.state terminalLine`, `terminalReply0`, `terminalAction`).
 
 Every part of a display is an engine mechanism a world authors:
 

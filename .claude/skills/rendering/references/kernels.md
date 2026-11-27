@@ -349,8 +349,8 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect|rates|rate-flash`
-selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light; `rates` is the final image with each item a `world.rates` lever holds tinted by its tier, and `rate-flash` tints each only on the frames it updates) (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect|rates|rate-flash|overlaps`
+selects a diagnostic image (`overlaps` is the final image dimmed with each surface another placed object's solid passes into glowing by the overlap's depth, read from the overlap raster pass a view adds only in that mode, `SdfWorldPackage.WithOverlaps`, `frame/sdf-overlaps.hlsli`; `ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light; `rates` is the final image with each item a `world.rates` lever holds tinted by its tier, and `rate-flash` tints each only on the frames it updates) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
 isolates the raster. The tier views read an `SdfUpdateRateCode` the host writes
 only while one shows (`SdfFrame.SlotRateCodes`, `SdfFrame.ScreenRateCodes`): a

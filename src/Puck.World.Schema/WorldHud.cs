@@ -211,6 +211,66 @@ public sealed record WorldHudPanel(
         get => m_elements;
         init => m_elements = (value ?? []);
     }
+
+    /// <summary>Enumerates every binding token the panel reads: each element's binding and template placeholders, and
+    /// each <c>state</c> predicate of its visibility, in document order. A token may be a literal or malformed; a
+    /// template that does not parse contributes nothing.</summary>
+    /// <returns>The tokens.</returns>
+    public IEnumerable<string> ReadTokens() {
+        foreach (var element in Elements) {
+            if (element is null) {
+                continue;
+            }
+
+            if (element.Binding is { Length: > 0 } binding) {
+                yield return binding;
+            }
+
+            if (
+                (element.Template is { Length: > 0 } template) &&
+                HudTemplate.TryEnumeratePlaceholders(
+                error: out _,
+                placeholders: out var placeholders,
+                template: template
+            )
+            ) {
+                foreach (var placeholder in placeholders) {
+                    yield return placeholder;
+                }
+            }
+        }
+
+        foreach (var token in StateTokens(predicate: Visible)) {
+            yield return token;
+        }
+
+        static IEnumerable<string> StateTokens(OverlayPredicate? predicate) {
+            IEnumerable<OverlayPredicate> inner;
+
+            switch (predicate) {
+                case OverlayPredicate.State state:
+                    yield return state.Binding;
+                    yield break;
+                case OverlayPredicate.All all:
+                    inner = all.Predicates;
+                    break;
+                case OverlayPredicate.Any any:
+                    inner = any.Predicates;
+                    break;
+                case OverlayPredicate.Not not:
+                    inner = [not.Predicate];
+                    break;
+                default:
+                    yield break;
+            }
+
+            foreach (var child in inner) {
+                foreach (var token in StateTokens(predicate: child)) {
+                    yield return token;
+                }
+            }
+        }
+    }
 }
 /// <summary>The drawn pointer cursor's per-world presentation policy — feel numbers each world plausibly wants
 /// different (a fast world reaches farther, an underwater world reads better with a larger glow), so they are

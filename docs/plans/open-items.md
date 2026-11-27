@@ -3326,13 +3326,6 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
-- [high] The toybox's handheld rental counters fail the visual bar (the
-  owner, live: "clearly lame"): each is a flat L of an ochre box under a pink
-  top with the 48 handhelds stood along it, reading as an out-of-place desk,
-  not a shop stall. A rebuild gives it a stall's form and character in the
-  gallery's direction (a lit, branded rental kiosk with cubbies the devices sit
-  in), keeping `rentals.puck`'s renting rules, cubby positions and counts.
-  Briefed only once the owner has walked the floor.
 - [med] The endless fall's opening in level 1's floor is tabled (the owner,
   live): `fallOpen` (layout.puck) closes the hole and its rails while the wing's
   fall paintings below stand. Revisit the fall as a whole before turning it on.
@@ -5947,7 +5940,19 @@ the model.
   supplies no `SurfaceTexts`, as it emits no creation text run). The slots are
   a fixed band of the decal buffer (`SdfSurfaceTextLayout.MaxTexts`).
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
-  submits through `chat.whisper` and `chat.log` (`ChatCommandModule`).
+  submits through `chat.whisper` and `chat.log` (`ChatCommandModule`). The
+  standard's terminal console (`worlds/standard/contexts/terminal-console.puck`)
+  is the pattern: a `Text` channel a family offers while a body cell is open, a
+  line built in a `Text` cell, and a per-seat world HUD panel keyed `$body`.
+- [medium] A rule sweeps one owner's input events (`forEach: inputEvents(<seat>)`
+  takes a compile-time seat), so the terminal console unrolls a rule per local
+  seat and a visitor's body at a terminal cannot type into it. Let one rule
+  sweep every player's step events (each event bound with its owner), as
+  `$players` sweeps their bodies.
+- [low] The terminal console closes only on the backtick: Escape is the host's,
+  reserved for the pause menu ([play decisions](../decisions/play.md#the-game)).
+  When the pause menu lands (hub plan H4), decide whether opening it closes an
+  open terminal console, so Escape still leaves the console in one press.
 - Cross-check the Triton's reports against several independent sources (SDL
   is one second opinion, never the specification), then rewrite the input
   reference's Triton section to cite them:

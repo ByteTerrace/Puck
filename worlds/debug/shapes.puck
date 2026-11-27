@@ -176,6 +176,10 @@ let turntableSpeeds = 3
 let turntableSpeed = 1
 let turntableRate = (1 / turntableSecondsPerTurn)
 let turntableHolds = ["PLAY", "PAUSE"]
+// What a display's turntable mailbox (galleryTurnAt) asks of it: a pace slower or faster (the console's < and >, which
+// step the speed by code - 2), hold or release it (its pause and play button), set it turning or stop it, or take the
+// signed speed galleryTurnTo holds.
+let galleryTurnCodes = { slower: 1, hold: 2, faster: 3, on: 4, off: 5, pace: 6 }
 function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / speed} S  >" : $"<  {turntableSecondsPerTurn / (0 - speed)} S")
 
 // Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
@@ -845,13 +849,15 @@ template displayState() {
   displayCells(name: "galleryDragged", values: map(galleryDisplays, display => 0))
   displayCells(name: "galleryStepAt", values: map(galleryDisplays, display => 0))
   // The turntable: its signed pace (turntableSpeeds either way), whether it turns, the rate and phase its turn facet
-  // reads, the mailbox its buttons and the gallery.turn commands write, and the two labels its console shows.
+  // reads, the mailbox its buttons, the gallery.turn commands and the display console write (galleryTurnCodes) with the
+  // pace a pace request asks for, and the two labels its console shows.
   displayCells(name: "galleryTurnSpeed", values: map(galleryDisplays, display => turntableSpeed))
   displayCells(name: "galleryTurnPlay", values: map(galleryDisplays, display => 1))
   displayCells(name: "galleryTurnRate", kind: "Fixed", values: map(galleryDisplays, display => $"{turntableSpeed * turntableRate}"))
   displayCells(name: "galleryTurnPhase", kind: "Fixed", values: map(galleryDisplays, display => "0"))
   displayCells(name: "galleryTurnNext", kind: "Fixed", values: map(galleryDisplays, display => "0"))
   displayCells(name: "galleryTurnAt", values: map(galleryDisplays, display => 0))
+  displayCells(name: "galleryTurnTo", values: map(galleryDisplays, display => 0))
   displayCells(name: "galleryTurnHold", kind: "Text", values: map(galleryDisplays, display => turntableHolds[1]))
   displayCells(name: "galleryTurnPace", kind: "Text", values: map(galleryDisplays, display => turntablePace(turntableSpeed)))
   row {
