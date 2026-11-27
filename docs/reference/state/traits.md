@@ -254,7 +254,13 @@ above the highest power of a shaped link's pieces, one for an unshaped link), so
 document never meets the run-time guard. The guard covers a rate written into
 an arena afterwards: a parent whose exact value passes
 `StateAdvance.MaxExactValueBits` a part reads as unavailable, and its child holds
-its base, the same answer on every machine.
+its base, the same answer on every machine. A curve answers only where that read
+never caps: a chain whose parent could read as unavailable at any tick the curve
+covers has no curve, so a recipient predicting by the curve never disagrees with
+the authority, and takes updates instead. The text of a rate coefficient, a piece
+start or an anchor's coefficient is measured against the bit bound before it is
+parsed (`Rational.TryParseBounded`), so a very long string is refused without
+being read.
 
 ## Smooth a value for presentation
 

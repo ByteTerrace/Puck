@@ -194,6 +194,42 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
 
         return true;
     }
+    /// <summary>Tests, without evaluating, whether the polynomial's value at every whole number from zero to a bound has a
+    /// reduced numerator and denominator within a number of bits (<see cref="Rational.FitsBits"/>). The test is
+    /// sufficient and not necessary: over the common denominator <c>D</c> of the coefficients the value at <c>x</c> is
+    /// <c>P(x) / D</c> with <c>P</c> integral, so the reduced denominator is at most <c>D</c> and the reduced numerator at
+    /// most <c>|P(x)|</c>, which the sum of the coefficients' magnitudes times powers of the bound caps.</summary>
+    /// <param name="maxArgument">The greatest argument, zero or greater.</param>
+    /// <param name="maxBits">The most bits either part of a value may take.</param>
+    /// <returns><see langword="true"/> when every value at a whole argument in <c>[0, maxArgument]</c> is proven to
+    /// fit; <see langword="false"/> when one may not.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxArgument"/> is negative.</exception>
+    public bool ValuesFitBits(BigInteger maxArgument, int maxBits) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: maxArgument);
+
+        var denominator = BigInteger.One;
+
+        foreach (var coefficient in m_coefficients) {
+            var next = coefficient.Denominator;
+
+            denominator = ((denominator / BigInteger.GreatestCommonDivisor(left: denominator, right: next)) * next);
+
+            if (denominator.GetBitLength() > maxBits) { return false; }
+        }
+
+        var bound = BigInteger.Zero;
+        var power = BigInteger.One;
+
+        foreach (var coefficient in m_coefficients) {
+            bound += ((BigInteger.Abs(value: coefficient.Numerator) * (denominator / coefficient.Denominator)) * power);
+
+            if (bound.GetBitLength() > maxBits) { return false; }
+
+            power *= maxArgument;
+        }
+
+        return true;
+    }
     /// <summary>Returns the derivative, by the power rule.</summary>
     /// <returns>The derivative; the zero polynomial for a constant.</returns>
     public RationalPolynomial Derivative() => new(trimmed: DerivativeOf(coefficients: m_coefficients));

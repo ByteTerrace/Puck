@@ -198,7 +198,7 @@ public sealed record WorldClockAnchor(
             var coefficients = new Rational[curve.Count];
 
             for (var power = 0; (power < curve.Count); power++) {
-                if ((curve[power] is not { } text) || !Rational.TryParse(text: text, value: out coefficients[power])) {
+                if ((curve[power] is not { } text) || !Rational.TryParseBounded(text: text, maxBits: MaxCurveCoefficientBits, value: out coefficients[power])) {
                     return null;
                 }
             }

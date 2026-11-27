@@ -154,12 +154,8 @@ public sealed record StateAdvance(
                 reason = $"rate[{index}] is null";
                 return false;
             }
-            if (!Rational.TryParse(text: piece.From, value: out starts[index])) {
-                reason = $"rate[{index}].from '{piece.From}' is not an exact rational (digits with an optional decimal fraction, or a quotient such as 5/8)";
-                return false;
-            }
-            if (!starts[index].FitsBits(maxBits: MaxCurveCoefficientBits)) {
-                reason = $"rate[{index}].from spells a numerator or denominator over {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
+            if (!Rational.TryParseBounded(text: piece.From, maxBits: MaxCurveCoefficientBits, value: out starts[index])) {
+                reason = $"rate[{index}].from {Rational.Excerpt(text: piece.From)} is not an exact rational (digits with an optional decimal fraction, or a quotient such as 5/8) whose numerator and denominator each fit {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
                 return false;
             }
             if ((piece.Coefficients is not { Count: > 0 } coefficients) || (coefficients.Count > (MaxRateDegree + 1))) {
@@ -170,12 +166,8 @@ public sealed record StateAdvance(
             var exact = new Rational[coefficients.Count];
 
             for (var power = 0; (power < coefficients.Count); power++) {
-                if (!Rational.TryParse(text: coefficients[power], value: out exact[power])) {
-                    reason = $"rate[{index}].coefficients[{power}] '{coefficients[power]}' is not an exact rational";
-                    return false;
-                }
-                if (!exact[power].FitsBits(maxBits: MaxCurveCoefficientBits)) {
-                    reason = $"rate[{index}].coefficients[{power}] spells a numerator or denominator over {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
+                if (!Rational.TryParseBounded(text: coefficients[power], maxBits: MaxCurveCoefficientBits, value: out exact[power])) {
+                    reason = $"rate[{index}].coefficients[{power}] {Rational.Excerpt(text: coefficients[power])} is not an exact rational whose numerator and denominator each fit {MaxCurveCoefficientBits} bits (StateAdvance.MaxCurveCoefficientBits)";
                     return false;
                 }
             }
@@ -268,7 +260,9 @@ public sealed record StateAdvance(
     /// <param name="depth">The nesting depth this read stands at; zero for a read that is not a parent's.</param>
     /// <returns><see langword="true"/> when the value follows a polynomial from <paramref name="engineTick"/>: the
     /// engine tick stands at or after the epoch, every parent reads, the value stands inside the envelope, and the curve
-    /// fits <see cref="MaxCurveCoefficients"/> and <see cref="MaxCurveCoefficientBits"/>. A chain whose composed degree
+    /// fits <see cref="MaxCurveCoefficients"/> and <see cref="MaxCurveCoefficientBits"/>. A parent whose exact value the
+    /// exact read could treat as unavailable (past <see cref="MaxExactValueBits"/>) at the epoch or at any later tick
+    /// refuses the curve, so a curve is only answered where it equals the exact read. A chain whose composed degree
     /// would pass the bound is refused before it is composed, so the work is bounded whatever the chain's depth.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
     public bool TryValueCurve(StateRow row, long baseValue, ulong engineTick, long epochEngineTick, IStateClockCells? cells, out RationalPolynomial curve, int depth = 0) {
@@ -314,7 +308,10 @@ public sealed record StateAdvance(
             if (!integral.Fits(maxBits: MaxCurveCoefficientBits, maxDegree: MaxCurveDegree) || (integral.ComposedDegree(inner: parent) > MaxCurveDegree)) {
                 return false;
             }
-            if (!TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch) || !atEpoch.FitsBits(maxBits: MaxExactValueBits)) {
+            if (!BuildsOnThrough(parent: parent, engineTick: engineTick)) {
+                return false;
+            }
+            if (!TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var atEpoch) || !BuildsOn(value: atEpoch)) {
                 return false;
             }
 
@@ -431,12 +428,22 @@ public sealed record StateAdvance(
         }
         // A parent whose exact value has outgrown the bound reads as unavailable, as one that does not read does: the
         // evaluation below costs by the size of what it reads, and a nested chain grows it by its degree per link.
-        if (!from.FitsBits(maxBits: MaxExactValueBits) || !to.FitsBits(maxBits: MaxExactValueBits)) {
+        if (!BuildsOn(value: from) || !BuildsOn(value: to)) {
             return Rational.Zero;
         }
 
         return Accumulation(from: from, to: to);
     }
+    // The one test of whether a parent's exact value is one a nested read builds on, at a tick. The exact read applies it at
+    // the epoch and at the read; the value curve applies it over its whole span (BuildsOnThrough), so a curve is answered
+    // only for a chain the exact read would never treat as unavailable.
+    private static bool BuildsOn(Rational value) => value.FitsBits(maxBits: MaxExactValueBits);
+    // BuildsOn at every engine tick a curve counted from engineTick can be read at, up to the last the clock can name; a
+    // proof by bound, so a curve it cannot prove is refused and its recipient takes authoritative updates instead.
+    private static bool BuildsOnThrough(RationalPolynomial parent, ulong engineTick) => parent.ValuesFitBits(
+        maxArgument: (ulong.MaxValue - engineTick),
+        maxBits: MaxExactValueBits
+    );
     // A nested advance's read: the base plus the exact accumulation truncated toward zero into the carrier, the sum
     // saturated into long as a whole and clamped into the envelope.
     private long ComputeNestedValue(StateRow row, long baseValue, ulong currentEngineTick, long epochEngineTick, IStateClockCells? cells) {
