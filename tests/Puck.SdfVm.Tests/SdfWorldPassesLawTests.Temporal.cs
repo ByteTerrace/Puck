@@ -301,7 +301,8 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
     }
     // A view that asks for temporal reconstruction runs the temporal fragment even at native scale: a resolve after views,
-    // the sky and the composite after it, and history the next frame reads, one image and one surface a frame slot at the output extent.
+    // the sky and the composite after it, and history the next frame reads: an image and a surface at the output extent, and
+    // the probe lookup's gathers at the render extent's tiles.
     [Fact]
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
@@ -319,7 +320,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Display}", actualString: plan.Passes[^1].Name);
         var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
+        Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.ProbeHistory}"]);
         Assert.Contains(collection: resolve.Accesses, filter: static access => access.PreviousFrame);
         Assert.True(condition: rig.Temporal());
         // Every render advances the sequence with no capture converging.
@@ -556,75 +557,82 @@ public sealed partial class SdfWorldPassesLawTests {
 
         public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false, bool glass = false, int displayHertz = 0) {
             m_gpu = new UploadModelGpu(clock: m_clock);
+            // The residencies, the runtime and the feed own native storage that has no finalizer, so a construction that throws
+            // (a volume that never settles) releases what it built before it propagates.
+            try {
+                var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
+                var frame = Frame() with { EnableCadenceGate = cadence };
 
-            var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
-            var frame = Frame() with { EnableCadenceGate = cadence };
+                if (glass) { frame = frame with { Program = GlassProgram() }; }
 
-            if (glass) { frame = frame with { Program = GlassProgram() }; }
+                if (lights is not null) { frame = frame with { Lights = lights }; }
 
-            if (lights is not null) { frame = frame with { Lights = lights }; }
+                frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
 
-            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
+                frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
+                sky?.Invoke(obj: frame.Sky);
+                m_sourceFrame = frame;
+                Selected = Residency(name: "first");
+                Second = (secondResidency ? Residency(name: "second") : null);
+                Passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: Selected, View: ViewIndex));
+                var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
 
-            frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
-            sky?.Invoke(obj: frame.Sky);
-            m_sourceFrame = frame;
-            Selected = Residency(name: "first");
-            Second = (secondResidency ? Residency(name: "second") : null);
-            Passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: Selected, View: ViewIndex));
-            var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
+                packages.Register(factory: Passes, package: RenderGraphPackageCatalog.SdfWorld);
+                RenderGraphRead[] reads = [.. (feed ? new[] { new RenderGraphRead(Producer: "feed") } : []),
+                    .. (environment ? new[] { new RenderGraphRead(Producer: SdfTestView.EnvironmentInstance, Kind: ShaderPipelineResourceKind.Buffer) } : [])];
+                RenderGraphInstance[] instances = [
+                    new RenderGraphInstance(ExternalPackage: RenderGraphPackageCatalog.SdfWorld, Name: "world",
+                        Passes: SdfWorldPackage.Fragment.Passes.Count, Reads: reads, Refresh: RenderGraphRefresh.EveryFrame),
+                ];
 
-            packages.Register(factory: Passes, package: RenderGraphPackageCatalog.SdfWorld);
-            RenderGraphRead[] reads = [.. (feed ? new[] { new RenderGraphRead(Producer: "feed") } : []),
-                .. (environment ? new[] { new RenderGraphRead(Producer: SdfTestView.EnvironmentInstance, Kind: ShaderPipelineResourceKind.Buffer) } : [])];
-            RenderGraphInstance[] instances = [
-                new RenderGraphInstance(ExternalPackage: RenderGraphPackageCatalog.SdfWorld, Name: "world",
-                    Passes: SdfWorldPackage.Fragment.Passes.Count, Reads: reads, Refresh: RenderGraphRefresh.EveryFrame),
-            ];
+                if (environment) {
+                    m_environment = new SdfSkyEnvironmentPasses(views: Passes);
+                    m_environment.Register(name: SdfTestView.EnvironmentInstance, residency: Selected, view: 0);
+                    packages.Register(factory: m_environment, package: RenderGraphPackageCatalog.SkyEnvironment);
+                    instances = [.. instances, new RenderGraphInstance(ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment,
+                        Name: SdfTestView.EnvironmentInstance, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: [], Output: ShaderPipelineResourceKind.Buffer,
+                        Refresh: RenderGraphRefresh.EveryFrame)];
+                }
 
-            if (environment) {
-                m_environment = new SdfSkyEnvironmentPasses(views: Passes);
-                m_environment.Register(name: SdfTestView.EnvironmentInstance, residency: Selected, view: 0);
-                packages.Register(factory: m_environment, package: RenderGraphPackageCatalog.SkyEnvironment);
-                instances = [.. instances, new RenderGraphInstance(ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment,
-                    Name: SdfTestView.EnvironmentInstance, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: [], Output: ShaderPipelineResourceKind.Buffer,
-                    Refresh: RenderGraphRefresh.EveryFrame)];
-            }
-
-            if (feed) {
-                m_feed = new TaintingFeed(gpu: m_gpu);
-                packages.RegisterProducer(factory: _ => m_feed, package: Feed);
-                instances = [new RenderGraphInstance(ExternalPackage: Feed, Name: "feed", Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame), .. instances];
-            }
-            Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: instances, refusal: out var setRefusal, set: out var set), userMessage: setRefusal?.Message);
-            Assert.True(condition: RenderGraphRuntime.TryCreate(
-                deviceContext: m_gpu, graphs: new RenderGraphRuntimeGraph?[instances.Length], hostsOnDirectX: false,
-                packages: packages, pipelines: pipelines.Pipelines, refusal: out var refusal,
-                root: "world", runtime: out var runtime, set: set), userMessage: refusal?.Message);
-            Runtime = runtime!;
-            // A paced display shows each frame for one refresh of a fixed signal at its rate.
-            m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0,
-                FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
-                Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
-                StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
-            // The pipelines build on the thread pool, so the rig waits on them under the liveness bound.
-            TestLiveness.Until(step: () => {
+                if (feed) {
+                    m_feed = new TaintingFeed(gpu: m_gpu);
+                    packages.RegisterProducer(factory: _ => m_feed, package: Feed);
+                    instances = [new RenderGraphInstance(ExternalPackage: Feed, Name: "feed", Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame), .. instances];
+                }
+                Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: instances, refusal: out var setRefusal, set: out var set), userMessage: setRefusal?.Message);
+                Assert.True(condition: RenderGraphRuntime.TryCreate(
+                    deviceContext: m_gpu, graphs: new RenderGraphRuntimeGraph?[instances.Length], hostsOnDirectX: false,
+                    packages: packages, pipelines: pipelines.Pipelines, refusal: out var refusal,
+                    root: "world", runtime: out var runtime, set: set), userMessage: refusal?.Message);
+                Runtime = runtime!;
+                // A paced display shows each frame for one refresh of a fixed signal at its rate.
+                m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0,
+                    FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
+                    Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
+                    StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
+                // The pipelines build on the thread pool, so the rig waits on them under the liveness bound.
+                TestLiveness.Until(step: () => {
+                    Produce();
+                    return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
+                        (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending);
+                }, reason: () => $"{Selected.NotReadyReason} ready={Selected.IsReady} resolved={Passes.HasRenderedResolvedView(instance: "world")} extent={World.Extent} candidate={World.IsBuildingCandidate} bake={Selected.MeshPathBake.Pending}", wait: Selected.WaitPipelineBuilds);
+                // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
+                // counts frames: each publication renders the view again (SdfWorldTables.UpdateTablesSignature).
+                SettleLighting();
+                // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
+                // law counts frames from a rig the periodic lighting work has nothing more to change.
+                for (var settled = 0; (settled < SettledFrames); settled++) { Produce(); }
+                SettleLighting();
                 Produce();
-                return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
-                    (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending);
-            }, reason: () => $"{Selected.NotReadyReason} ready={Selected.IsReady} resolved={Passes.HasRenderedResolvedView(instance: "world")} extent={World.Extent} candidate={World.IsBuildingCandidate} bake={Selected.MeshPathBake.Pending}", wait: Selected.WaitPipelineBuilds);
-            // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
-            // counts frames: each publication renders the view again (SdfWorldTables.UpdateTablesSignature).
-            SettleLighting();
-            // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
-            // law counts frames from a rig the periodic lighting work has nothing more to change.
-            for (var settled = 0; (settled < SettledFrames); settled++) { Produce(); }
-            SettleLighting();
-            Produce();
 
-            SdfWorldResidency Residency(string name) => new(
-                frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
-                height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
+                SdfWorldResidency Residency(string name) => new(
+                    frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
+                    height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
+            }
+            catch {
+                Dispose();
+                throw;
+            }
         }
 
         public IReadOnlyList<UploadModelBufferBarrier> BufferBarriers => m_gpu.BufferBarriers;
@@ -710,10 +718,11 @@ public sealed partial class SdfWorldPassesLawTests {
                 binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
         }
         public void Dispose() {
-            Runtime.Dispose();
+            // A constructor that threw part-way disposes through here, so a field it never reached is null.
+            Runtime?.Dispose();
             m_feed?.Dispose();
             m_environment?.Dispose();
-            Selected.Dispose();
+            Selected?.Dispose();
             Second?.Dispose();
         }
 

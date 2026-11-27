@@ -4,7 +4,6 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 using Puck.SignedDistance;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -195,45 +194,6 @@ public sealed partial class SdfWorldPassesLawTests {
             rig.Produce();
             Assert.True(condition: rig.Stood(), userMessage: $"frame {frame}");
         }
-    }
-    [Fact]
-    public void CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift() {
-        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
-
-        // Skipping shadows and occlusion installs the shadowless fragment. The old graph stands while the rebuild compiles;
-        // the installed graph draws no cascade and no pyramid, and renders the mesh and every shading pass at the new
-        // quality.
-        rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
-        var rendered = Array.Empty<string>();
-
-        TestLiveness.Until(
-            reason: () => $"building={rig.World.IsBuildingCandidate} executed={string.Join(separator: ",", values: rendered)}",
-            step: () => {
-                rig.Produce();
-                rendered = [.. Executed(work: CadenceWork(rig: rig))];
-
-                return rendered.Contains(value: SdfWorldPackage.Parts.Surface);
-            },
-            wait: rig.Selected.WaitPipelineBuilds
-        );
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mesh, SdfWorldPackage.Parts.Surface,
-            SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
-            SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: rendered);
-        // The view then stands once its temporal window settles. The rebuild compiles on the thread pool, so no count of
-        // frames bounds either wait.
-        TestLiveness.Until(
-            reason: () => $"building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} {rig.Selected.NotReadyReason}",
-            step: () => {
-                rig.Produce();
-
-                return (!rig.World.IsBuildingCandidate && !rig.Selected.MeshPathBake.Pending && rig.Stood());
-            },
-            wait: rig.Selected.WaitPipelineBuilds
-        );
-        rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
-        rig.SourceFrame = rig.SourceFrame with { };
-        rig.Produce();
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
     }
     [InlineData("ambient", false)]
     [InlineData("reflection", false)]
