@@ -208,10 +208,12 @@ function canopySurface(leaves, seed) = {
   shade: canopy(leaves[0], leaves[2], seed, 0.9, landscapeTurn, 0.35, 0.22)
 }
 
-// An author-frame point tipped by `lean` (radians about author Z, through the foot) and carried into a sweep's local
-// frame, which rides the shape's converted pose: author +X and +Z are local -X and -Z.
+// A tree's rows are written in a tree frame a half turn about up from its creation's, as a terrain sector's are
+// (terrain.puck): treePoint is where a row's point stands in the creation once tipped by `lean` (radians about the tree
+// frame's Z, through the foot). A sweep reads its curve's points through it too, unturned, so a limb ends where the row
+// it reaches into stands.
 function leanTurn(lean) = rotate([0, 0, 1], lean * 1rad)
-function leanLocal(p, lean) = rotatePoint(leanTurn(lean), p) * [-1, 1, -1]
+function treePoint(p, lean) = rotatePoint(leanTurn(lean), p) * [-1, 1, -1]
 
 // A crown of separate leaf clusters rather than one blob: `count` lobes on a dome `radius` metres across and `height`
 // metres tall over `centre`, laid in a sunflower spiral (each the golden angle round from the last, at a radius that
@@ -317,10 +319,11 @@ template leafyClumps(label, prototype, origin, centre, radius, height, count, si
 
 // One grouped-shape tree: a tapered, gently bowed trunk flaring into a few buttress roots, tapering limbs whose ends are
 // buried inside the canopy, and overlapping crown masses blended wide into one canopy and coloured as one mass. Rows
-// are authored upright; `lean` tips the trunk, limbs and crowns, never the roots.
+// are authored upright in the tree frame (treePoint); `lean` tips the trunk, limbs and crowns, never the roots.
 // trunk { base, top, height, bow }: radii at the foot and the top, the height of its buried top, and its sideways bow
-// in author X. roots [{ yaw, reach, r }]: each a sweep from inside the trunk out and down into the ground. branches
-// [{ a, c, r }]: each a sweep from a inside the trunk to c inside a crown, tapering from r. crowns [{ position, r }].
+// in the tree frame's X. roots [{ yaw, reach, r }]: each a sweep from inside the trunk out and down into the ground.
+// branches [{ a, c, r }]: each a sweep from a inside the trunk to c inside a crown, tapering from r. crowns
+// [{ position, r }].
 // `clump` is the leaf-mass relief in metres and `clumpFrequency` its features per metre, `smooth` the crowns' blend radius.
 template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.42, clump = 0.16, clumpFrequency = 1.1, barkUnder = [
   "#4E3D2B", "#735537"
@@ -356,12 +359,11 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       }
       shape Sweep "trunk" {
         position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
         material: 0
         curve {
-          a: leanLocal([0, -0.15, 0], lean)
-          b: leanLocal([trunk.bow, trunk.height * 0.45, 0.4 * trunk.bow], lean)
-          c: leanLocal([0.3 * trunk.bow, trunk.height, 0], lean)
+          a: treePoint([0, -0.15, 0], lean)
+          b: treePoint([trunk.bow, trunk.height * 0.45, 0.4 * trunk.bow], lean)
+          c: treePoint([0.3 * trunk.bow, trunk.height, 0], lean)
           radiusStart: trunk.base
           radiusEnd: trunk.top
         }
@@ -369,14 +371,13 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       for (root, i) in roots {
         shape Sweep $"root-{i}" {
           position [0, 0, 0]
-          rotation: rotate([0, 1, 0], 180)
           material: 0
           blend: SmoothUnion
           smooth: 0.3
           curve {
             a [0, root.reach * 0.5, 0]
-            b: polarPoint(-0.55 * root.reach, root.yaw * 1rad, 0.12)
-            c: polarPoint(0 - root.reach, root.yaw * 1rad, -0.24)
+            b: polarPoint(0.55 * root.reach, root.yaw * 1rad, 0.12)
+            c: polarPoint(root.reach, root.yaw * 1rad, -0.24)
             radiusStart: root.r
             radiusEnd: root.r * 0.5
           }
@@ -385,14 +386,13 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       for (branch, i) in branches {
         shape Sweep $"branch-{i}" {
           position [0, 0, 0]
-          rotation: rotate([0, 1, 0], 180)
           material: 1
           blend: SmoothUnion
           smooth: 0.2
           curve {
-            a: leanLocal(branch.a, lean)
-            b: leanLocal((branch.a + branch.c) / 2 + [0, 0.25 * (branch.c[1] - branch.a[1]), 0], lean)
-            c: leanLocal(branch.c, lean)
+            a: treePoint(branch.a, lean)
+            b: treePoint((branch.a + branch.c) / 2 + [0, 0.25 * (branch.c[1] - branch.a[1]), 0], lean)
+            c: treePoint(branch.c, lean)
             radiusStart: branch.r
             radiusEnd: branch.r * 0.45
           }
@@ -401,7 +401,7 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       for (crown, i) in crowns {
         shape Superellipsoid $"crown-{i}" {
           exponent: landscapeExponent
-          position: (rotatePoint(leanTurn(lean), crown.position) * [-1, 1, -1])
+          position: treePoint(crown.position, lean)
           scale: crown.r
           material: 2
           blend: SmoothUnion

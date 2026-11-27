@@ -302,14 +302,13 @@ prototypes {
       for n in range(0, floor((treeCrown.count / treeCrownLimbEvery))) {
         let into = leafClusterAt(treeCrown.centre, treeCrown.radius, treeCrown.height, treeCrown.count, ((n * treeCrownLimbEvery) + 2), treeCrown.turn)
         shape Sweep $"crown-limb-{n}" {
-          rotation: rotate([0, 1, 0], 180)
           material: treeTwig
           blend: SmoothUnion
           smooth: 0.3
           curve {
-            a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
-            b: leanLocal(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
-            c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
+            a: treePoint([0, (treeTrunk.top - 1.6), 0], 0)
+            b: treePoint(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
+            c: treePoint([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
             radiusStart: 0.36
             radiusEnd: 0.08
           }
@@ -322,14 +321,13 @@ prototypes {
           let n = (m * treeTierLimbEvery)
           let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
           shape Sweep $"tier-limb-{k}-{n}" {
-            rotation: rotate([0, 1, 0], 180)
             material: treeTwig
             blend: SmoothUnion
             smooth: 0.2
             curve {
-              a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
-              b: leanLocal(treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)), 0)
-              c: leanLocal([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
+              a: treePoint([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
+              b: treePoint(treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)), 0)
+              c: treePoint([(into[0] * 0.97), (into[1] - 0.1), (into[2] * 0.97)], 0)
               radiusStart: 0.2
               radiusEnd: 0.05
             }

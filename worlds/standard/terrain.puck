@@ -15,7 +15,9 @@
 
 import "shading"
 
-// A sector-frame point and turn as the creation holds them, and the placement yaw that points the sector at a bearing.
+// A sector-frame point as the creation holds it; the turn of a shape a half turn about its own up leaves unchanged (a
+// box, an ellipsoid, a superellipsoid), as the creation holds it, where any other shape's is
+// compose(rotate([0, 1, 0], 180), q); and the placement yaw that points the sector at a bearing.
 function sectorPoint(p) = p * [-1, 1, -1]
 function sectorTurn(q) = q * [-1, 1, -1, 1]
 function sectorYaw(compass) = compass + 180

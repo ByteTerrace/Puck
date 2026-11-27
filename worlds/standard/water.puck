@@ -359,7 +359,7 @@ function onSlope(c, yaw) = compose(turnByCosine([1, 0, 0], c, -1), rotate([0, 1,
 
 // A glacier is a body of ice that melts by shrinking with the gauge `state.<gauge>` (the linear fraction of the melt clock
 // left, so the volume is its cube) about `origin`: put the origin at the glacier's head on its bed and the toe retreats up
-// the valley as the ice thins. Its `shapes` are ordinary shape rows (each with its own `name`), positioned in the wall
+// the valley as the ice thins. Its `shapes` are ordinary shape rows (each with its own `name`), posed in the wall's sector
 // frame, so the caller sculpts the ice with the whole shape vocabulary: masses unioned first, then the slots, scallops and
 // channels carved from them. `relief`, a creation `noise` row or null, melts the whole surface into one irregular skin;
 // a body that must stay smooth (the meltwater it sheds) is a second glacierMass at the same origin with no relief.
@@ -372,7 +372,7 @@ template glacierMass(id, shapes, gauge = "glacierLength", origin = [0, 0, 0], pa
       sizeBy: $"state.{gauge}"
       noise: relief
       shapes: map(shapes, shape => shape with {
-        position [origin[0] - shape.position[0], shape.position[1] - origin[1], origin[2] - shape.position[2]]
+        position: sectorPoint(shape.position - origin)
         rotation: compose(rotate([0, 1, 0], 180), ({ rotation [0, 0, 0, 1] } with shape).rotation)
       })
     }
