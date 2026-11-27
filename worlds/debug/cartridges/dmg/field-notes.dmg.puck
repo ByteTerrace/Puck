@@ -1,0 +1,24 @@
+schema: "puck.cartridge.v1"
+
+import "../shared/field-notes"
+
+target: "dmg"
+
+// Four shades, light to dark. The monochrome machine shades every cell from the first background palette and every
+// sprite from the first or second object palette by its palette's low bit: the Moth's hood and the swallow and pup
+// take the first, her suit, the dragonfly and the key the second.
+let shades = [32767, 21140, 10570, 0]
+
+palettes {
+  background: map(range(0, 8), n => shades)
+  object [
+    shades
+    [32767, 21140, 32767, 0]
+    shades
+    [32767, 21140, 32767, 0]
+    shades
+    [32767, 21140, 32767, 0]
+  ]
+}
+
+fieldNotes()

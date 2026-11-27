@@ -5458,6 +5458,12 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A value function is inlined three ways, one per tree it lands in: `DocumentLowering.InlineFunctions` substitutes
+  arguments into the body's document syntax (the cartridge operands, `CartridgeOperand.FromExpression`), the world
+  operand binder's `Inline` substitutes into operand syntax (`WorldDocumentEmitter.OperandBinder`), and
+  `WorldShadeLowering` binds parameters as constants and lowers the body under them. Each shares
+  `DocumentLowering.BindFunctionArguments` and `ExpandFunction`; one inliner over the document tree, which the
+  operand path converts to and from (`PuckParser.CreateOperand`), would serve all three.
 - A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
   (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
   (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer

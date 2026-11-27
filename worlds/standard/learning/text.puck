@@ -1,0 +1,120 @@
+// The text contract every learning game shares, whatever device draws it: one alphabet, one 8 by 8 glyph for each of
+// its letters, and the compile-time functions that turn authored text into glyph codes and lay it out in a device's
+// text box. A code is a glyph's place in `glyphs`, so code 0 is the space and a device draws code c from its own tile
+// `fontBase + c`. Authors write natural case; the alphabet holds capitals, so a lower-case letter folds to its capital
+// and a character outside the alphabet reads as `?`.
+
+let glyphs = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,?!'-+=:/*_"
+let glyphScalars = scalars(glyphs)
+let glyphSpace = 0
+let glyphDigitZero = indexOf(glyphScalars, 48)
+
+// Each glyph's rows, top to bottom: `#` is ink and `.` paper. A glyph keeps its right column and bottom row clear, so
+// glyphs set side by side and line under line never touch. `*` is drawn as the multiplication sign and `_` as the
+// blank a fill-in question leaves.
+let glyphRows = [
+  ["........", "........", "........", "........", "........", "........", "........", "........"]
+  [".####...", "#....#..", "#....#..", "######..", "#....#..", "#....#..", "#....#..", "........"]
+  ["#####...", "#....#..", "#....#..", "#####...", "#....#..", "#....#..", "#####...", "........"]
+  [".####...", "#....#..", "#.......", "#.......", "#.......", "#....#..", ".####...", "........"]
+  ["####....", "#...#...", "#....#..", "#....#..", "#....#..", "#...#...", "####....", "........"]
+  ["######..", "#.......", "#.......", "#####...", "#.......", "#.......", "######..", "........"]
+  ["######..", "#.......", "#.......", "#####...", "#.......", "#.......", "#.......", "........"]
+  [".####...", "#....#..", "#.......", "#..###..", "#....#..", "#....#..", ".####...", "........"]
+  ["#....#..", "#....#..", "#....#..", "######..", "#....#..", "#....#..", "#....#..", "........"]
+  [".###....", "..#.....", "..#.....", "..#.....", "..#.....", "..#.....", ".###....", "........"]
+  ["...###..", "....#...", "....#...", "....#...", "#...#...", "#...#...", ".###....", "........"]
+  ["#...#...", "#..#....", "#.#.....", "##......", "#.#.....", "#..#....", "#...#...", "........"]
+  ["#.......", "#.......", "#.......", "#.......", "#.......", "#.......", "######..", "........"]
+  ["#....#..", "##..##..", "#.##.#..", "#.##.#..", "#....#..", "#....#..", "#....#..", "........"]
+  ["#....#..", "##...#..", "#.#..#..", "#..#.#..", "#...##..", "#....#..", "#....#..", "........"]
+  [".####...", "#....#..", "#....#..", "#....#..", "#....#..", "#....#..", ".####...", "........"]
+  ["#####...", "#....#..", "#....#..", "#####...", "#.......", "#.......", "#.......", "........"]
+  [".####...", "#....#..", "#....#..", "#....#..", "#..#.#..", "#...#...", ".###.#..", "........"]
+  ["#####...", "#....#..", "#....#..", "#####...", "#..#....", "#...#...", "#....#..", "........"]
+  [".####...", "#....#..", "#.......", ".####...", ".....#..", "#....#..", ".####...", "........"]
+  ["#####...", "..#.....", "..#.....", "..#.....", "..#.....", "..#.....", "..#.....", "........"]
+  ["#....#..", "#....#..", "#....#..", "#....#..", "#....#..", "#....#..", ".####...", "........"]
+  ["#....#..", "#....#..", "#....#..", ".#..#...", ".#..#...", "..##....", "..##....", "........"]
+  ["#....#..", "#....#..", "#....#..", "#.##.#..", "#.##.#..", "##..##..", "#....#..", "........"]
+  ["#....#..", ".#..#...", "..##....", "..##....", "..##....", ".#..#...", "#....#..", "........"]
+  ["#...#...", "#...#...", ".#.#....", "..#.....", "..#.....", "..#.....", "..#.....", "........"]
+  ["######..", ".....#..", "....#...", "...#....", "..#.....", ".#......", "######..", "........"]
+  [".####...", "#...##..", "#..#.#..", "#.#..#..", "##...#..", "#....#..", ".####...", "........"]
+  ["..#.....", ".##.....", "..#.....", "..#.....", "..#.....", "..#.....", ".###....", "........"]
+  [".####...", "#....#..", ".....#..", "...##...", "..#.....", ".#......", "######..", "........"]
+  [".####...", "#....#..", ".....#..", "..###...", ".....#..", "#....#..", ".####...", "........"]
+  ["....#...", "...##...", "..#.#...", ".#..#...", "######..", "....#...", "....#...", "........"]
+  ["######..", "#.......", "#####...", ".....#..", ".....#..", "#....#..", ".####...", "........"]
+  ["..###...", ".#......", "#.......", "#####...", "#....#..", "#....#..", ".####...", "........"]
+  ["######..", ".....#..", "....#...", "...#....", "..#.....", "..#.....", "..#.....", "........"]
+  [".####...", "#....#..", "#....#..", ".####...", "#....#..", "#....#..", ".####...", "........"]
+  [".####...", "#....#..", "#....#..", ".#####..", ".....#..", "....#...", ".###....", "........"]
+  ["........", "........", "........", "........", "........", ".##.....", ".##.....", "........"]
+  ["........", "........", "........", "........", ".##.....", ".##.....", "..#.....", ".#......"]
+  [".####...", "#....#..", ".....#..", "...##...", "..#.....", "........", "..#.....", "........"]
+  ["..#.....", "..#.....", "..#.....", "..#.....", "..#.....", "........", "..#.....", "........"]
+  ["..#.....", "..#.....", ".#......", "........", "........", "........", "........", "........"]
+  ["........", "........", "........", ".####...", "........", "........", "........", "........"]
+  ["........", "..#.....", "..#.....", "#####...", "..#.....", "..#.....", "........", "........"]
+  ["........", "........", "#####...", "........", "#####...", "........", "........", "........"]
+  ["........", ".##.....", ".##.....", "........", ".##.....", ".##.....", "........", "........"]
+  [".....#..", "....#...", "....#...", "...#....", "..#.....", "..#.....", ".#......", "........"]
+  ["........", "#...#...", ".#.#....", "..#.....", ".#.#....", "#...#...", "........", "........"]
+  ["........", "........", "........", "........", "........", "........", "######..", "........"]
+]
+
+// The glyph code a Unicode scalar draws as: its place in the alphabet, a lower-case letter folded to its capital, and
+// anything the alphabet lacks drawn as `?`.
+function glyphCode(scalar) = let found = indexOf(
+  glyphScalars,
+  (((scalar >= 97) and (scalar <= 122)) ? (scalar - 32) : scalar)
+) in
+((found < 0) ? indexOf(glyphScalars, 63) : found)
+function textCodes(text) = map(scalars(text), scalar => glyphCode(scalar))
+// The glyph codes of a whole number's decimal digits, most significant first.
+function numberCodes(number) = textCodes($"{number}")
+// A glyph's rows as a device's pixel strings, with paper and ink drawn as the given palette digits.
+function glyphPixels(code, paper = "0", ink = "1") = map(
+  glyphRows[code],
+  row => join(map(scalars(row), s => ((s == 35) ? ink : paper)), "")
+)
+
+function textLast(list) = slice(list, -1)[0]
+function textInit(list) = slice(list, 0, -1)
+// A run of codes split at its spaces into words, each a list of codes; runs of spaces leave no empty word.
+function codeWords(codes) = filter(
+  reduce(
+    codes,
+    [[]],
+    (words, c) => ((c == glyphSpace) ? concat(words, [[]]) : concat(textInit(words), [concat(textLast(words), [c])]))
+  ),
+  word => (length(word) > 0)
+)
+// Text broken into lines of at most `width` codes at its spaces. A word longer than the width stands alone on its
+// line, past the width: the content keeps every word within the narrowest device's width (`textWidth`).
+function wrapCodes(codes, width) = reduce(
+  codeWords(codes),
+  [[]],
+  (lines, word) => ((length(textLast(lines)) == 0) ? concat(textInit(lines), [word]) :
+    ((((length(textLast(lines)) + 1) + length(word)) <= width) ? concat(
+      textInit(lines),
+      [concat(textLast(lines), [glyphSpace], word)]
+    ) : concat(lines, [word])))
+)
+function padCodes(codes, width) = concat(
+  slice(codes, 0, width),
+  map(range(0, maximum(0, (width - length(codes)))), i => glyphSpace)
+)
+// Text laid out as a fixed block of `lines` lines of `width` codes, row after row, spaces filling every short line
+// and every missing line; lines past the block are dropped.
+function textBlock(text, width, lines) = let wrapped = wrapCodes(textCodes(text), width) in
+flatMap(range(0, lines), r => padCodes(((r < length(wrapped)) ? wrapped[r] : []), width))
+// How many lines text needs at a width.
+function textLines(text, width) = length(wrapCodes(textCodes(text), width))
+
+// The narrowest text box a learning game draws, which every authored text fits: a prompt or clue in `textRows`
+// lines of `textWidth`, and an answer in `answerWidth`.
+let textWidth = 18
+let textRows = 3
+let answerWidth = 5

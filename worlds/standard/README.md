@@ -23,6 +23,15 @@ props write them.
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 
+[learning/](learning/) is the content the learning games share, whatever machine
+or world draws it: one alphabet with its glyphs and text layout (`text.puck`),
+the question bank and maths drills by subject and level with the rule that
+adapts the level (`questions.puck`), clues that name a scene's spots
+(`clues.puck`), critters and treasures (`finds.puck`), and the places and the
+progress record that travels between devices (`places.puck`). Each is a library
+of `let`s and functions; a cartridge imports it by relative path. The
+[Field Notes design](../../docs/game/edutainment/README.md) holds the contract.
+
 [agreement.puck](agreement.puck) is an agreement between two worlds, each owning
 its half: `agreementOffers` in the offering world (the offer and its lease, whom
 it admits, the partner's grant it follows, and whether the agreement stands),
