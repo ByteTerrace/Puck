@@ -129,7 +129,9 @@ routes [
   {
     name: "debug"
     program: "walker"
-    captures ["place-stage", "place-hall-entrance", "place-lobby", "place-nave", "place-painting-room", "place-wonderland"]
+    captures [
+      "place-stage", "place-hall-entrance", "place-lobby", "place-nave", "place-painting-room", "place-wonderland"
+    ]
     chapters: concat(
       [
         {
@@ -166,7 +168,7 @@ routes [
             face(90, 0.5)
             { $type: "cross", headingDegrees: 90, until: "place-wonderland", pace: "walk", metres: 4 }
             goTo(wonderAt(3.6), "walk", 0.2)
-            { $type: "rest", seconds: 4, lookAt [(1.4 + galleryWestShift), 0.6, 30.5] }
+            { $type: "rest", seconds: 4, lookAt [deckAt[0], 0.6, deckAt[2]] }
             goTo(wonderAt(8.7), "walk", 0.08)
             face(270, 0.5)
             { $type: "cross", headingDegrees: 270, until: "place-west-hall", pace: "walk", metres: 3 }
