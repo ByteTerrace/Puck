@@ -54,8 +54,9 @@ public static partial class WorldDefinitionFileSource {
 
     private static ImageCacheKey CacheKey(string path, string fingerprint, IWorldDocumentSource source) =>
         new(Path: PuckPaths.Normalize(path: path), Fingerprint: fingerprint, Source: source.GetType());
-    // A chain link read through any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
-    private static string DecodeJson(byte[] bytes) => Puck.Confinement.FileContent.Text(content: bytes);
+    // A chain link read through any IWorldDocumentSource parses as its text decoded like a load through
+    // File.ReadAllText would, read as UTF-8 without decoding it to text (FileContent.Utf8).
+    private static JsonNode? ParseJson(byte[] bytes) => JsonNode.Parse(utf8Json: Puck.Confinement.FileContent.Utf8(content: bytes).Span);
     // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
     private static bool TryReadDocument(IWorldDocumentSource source, string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
         if (!source.TryRead(

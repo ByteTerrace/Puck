@@ -1570,7 +1570,7 @@ public static partial class DocumentLowering {
                 _ => string.Empty,
             });
 
-            return (((declared.Length > 0) && scope.TryLowerBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
+            return (((declared.Length > 0) && scope.TryReadBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
                 ? NamedDeclaration(name: renamed, statement: statement)
                 : statement
             );
@@ -1584,7 +1584,7 @@ public static partial class DocumentLowering {
 
         if (
             string.IsNullOrEmpty(value: written) ||
-            !scope.TryLowerBinding(
+            !scope.TryReadBinding(
             written,
             out var nameValue
         )
@@ -2016,7 +2016,7 @@ public static partial class DocumentLowering {
 
         var templateName = call.Name;
 
-        if (scope.TryLowerBinding(call.Name, out var indirectName) && (indirectName is JsonValue indirectValue) && indirectValue.TryGetValue<string>(value: out var boundName)) {
+        if (scope.TryReadBinding(call.Name, out var indirectName) && (indirectName is JsonValue indirectValue) && indirectValue.TryGetValue<string>(value: out var boundName)) {
             templateName = boundName;
         }
 

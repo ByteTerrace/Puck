@@ -5437,6 +5437,22 @@ their lane order; this packet keeps the single duplicates and leads.
   `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
   `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
   form-aware child walk would fold in too.
+- The document evaluator copies its whole environment to bind one name: a lambda call
+  (`DocumentBuiltins.ApplyOwned`), a fold, a `let` expression and each `for` iteration build a new
+  `Dictionary<string, JsonNode?>` from `DocumentScope.Locals`, and `DocumentScope.Derive`, `BindArgument`,
+  `WithConstants` and `WithBasePath` copy their tables per scope. A gallery compile's allocation trace (`puck host
+  allocations` over a `dotnet-trace` gc-verbose run) puts these sites above every JSON cost left in the pipeline. A
+  persistent environment (a binding chained to its parent scope, looked up by walking a short chain) replaces the
+  copies; `Locals` is a public mutable `Dictionary` today, so its callers in `Puck.World.Transpiler` move with it.
+- `DocumentScope.TryLowerBindingAt` answers a let placed at a position as a `DeepClone` of its memo, outside the
+  budget's copy door (`DocumentEvaluationBudget.Take`), so the copy is charged only by the caller's `Adopt` and drops
+  the `NoteWrittenBeside` records the door carries. Answering the memo borrowed and letting `LowerValue` take it would
+  route it through the door; whether a carried record changes a document is the question that change answers.
+- Two reflection-based serializer calls are left in the document pipeline: `WorldDocumentOrigins.Capture`
+  (`JsonSerializer.SerializeToElement` of a `JsonNode`, once per scalar while origins are tracked) and
+  `DocumentReferences` in `Puck.World.Authoring` (a string serialized to JSON and parsed back to build a reference
+  value). Each moves to a `JsonTypeInfo` from the context that already holds the graph, or to the value built
+  directly.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)

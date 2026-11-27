@@ -11,7 +11,7 @@ public static partial class WorldDefinitionFileSource {
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ShapeBasis)),
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ShapeImport)),
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ShapeOwn)),
-            ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(DecodeJson)),
+            ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ParseJson)),
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(HoldLayer)),
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ReadLayer)),
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(WriteLayer)),

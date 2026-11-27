@@ -76,9 +76,18 @@ public static class CanonicalJsonDocument {
         return Write(options: WriterOptions, newline: true, state: node, write: static (writer, node) => node.WriteTo(writer: writer));
     }
 
-    // The one door every serializer writes through: the document into native storage (OwnedBufferWriter), so no step of a
-    // large document's write is a managed array, then the canonical trailing newline when asked, copied out once.
-    private static byte[] Write<TState>(JsonWriterOptions options, bool newline, TState state, Action<Utf8JsonWriter, TState> write) {
+    /// <summary>Writes JSON into native storage (<see cref="OwnedBufferWriter{T}"/>), so no step of a large document's
+    /// write grows a managed array, then copies the bytes out once: the one door every serializer here writes
+    /// through.</summary>
+    /// <typeparam name="TState">The state <paramref name="write"/> reads.</typeparam>
+    /// <param name="options">The writer's options: its escaping and indentation.</param>
+    /// <param name="newline">Whether the bytes end with the canonical trailing newline.</param>
+    /// <param name="state">The state handed to <paramref name="write"/>.</param>
+    /// <param name="write">The writing, given the writer and <paramref name="state"/>.</param>
+    /// <returns>The written UTF-8 bytes.</returns>
+    public static byte[] Write<TState>(JsonWriterOptions options, bool newline, TState state, Action<Utf8JsonWriter, TState> write) {
+        ArgumentNullException.ThrowIfNull(argument: write);
+
         using var output = new OwnedBufferWriter<byte>();
 
         using (var writer = new Utf8JsonWriter(bufferWriter: output, options: options)) { write(arg1: writer, arg2: state); }
