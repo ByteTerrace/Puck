@@ -35,6 +35,13 @@ public sealed partial class StateArena {
 
         var row = DocumentRow(rowOrdinal: rowOrdinal);
         var cursor = 0;
+        // The row's old value, and the rows nested on it, read the row as it stood before the declaration; every other
+        // row reads as the arena holds it.
+        IStateClockCells clocks = ((previous is null) ? this : new RedeclaredClockCells(arena: this, previous: previous));
+
+        if (!m_catalog.NestedClocks(rowOrdinal: rowOrdinal).IsEmpty) {
+            SettleNested(cells: clocks, parentOrdinal: rowOrdinal, time: in time);
+        }
 
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
             var slot = CellSlotAt(layout: layout, position: (cursor - 1));
@@ -276,7 +283,7 @@ public sealed partial class StateArena {
     // which reading of a cycling cell the destination needs: a phase, when the new behavior is itself a cycle that
     // will re-derive its own output from one, or the value the rotation displayed, which is what every other
     // destination — including none — must not move.
-    private static long SettledOldValue(StateRow? previous, StateCell? previousCell, in EffectiveBehavior oldBehavior, long fallback, bool asCyclePhase, in ArenaTime time) {
+    private long SettledOldValue(StateRow? previous, StateCell? previousCell, in EffectiveBehavior oldBehavior, long fallback, bool asCyclePhase, in ArenaTime time) {
         var baseValue = (previousCell?.Value.Raw ?? fallback);
         var clock = previousCell?.Clock;
 
@@ -306,6 +313,7 @@ public sealed partial class StateArena {
         if (oldBehavior.Advance is { } advance) {
             return advance.ComputeCurrentValue(
                 baseValue: baseValue,
+                cells: this,
                 currentEngineTick: time.EngineTick,
                 epochEngineTick: (clock?.EpochEngineTick ?? 0L),
                 row: previous

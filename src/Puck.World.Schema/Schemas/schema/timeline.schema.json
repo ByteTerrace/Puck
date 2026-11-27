@@ -69,15 +69,24 @@
                 "description": "The phase at Tick, a whole turn being 2^64.",
                 "type": "integer"
               },
-              "rate": {
-                "description": "The phase one authoritative tick adds, wrapping; zero for a clock held still.",
+              "base": {
+                "description": "The row\u0027s stored raw base the curve accumulates over; zero for a clock held still.",
                 "type": "integer",
                 "default": 0
               },
-              "step": {
-                "description": "The engine ticks one authoritative tick spans; zero exactly when Rate is.",
-                "type": "integer",
-                "default": 0
+              "curve": {
+                "description": "The accumulation over Base, in raw units, as exact rational coefficients of a polynomial in the engine ticks elapsed since Tick, constant term first; absent for a clock held still.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "default": null
               }
             },
             "required": [

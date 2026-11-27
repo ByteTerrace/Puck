@@ -16,8 +16,11 @@ namespace Puck.World.Transpiler.Lowering;
 // expansion. This vocabulary only assigns meanings to stamp reads, runtime slots and phase output assignments.
 internal sealed class WorldShadeLowering {
     // Both stand in a tree as leaves: a bound source is lowered under the scope it carries, never where it stands.
+    // A value lowered lazily where it is read, as if at the place it was bound: `Expanding` holds the functions being
+    // expanded at that place (DocumentLowering.ExpandAsBound).
     private sealed record Bound(ExpressionNode Source, DocumentScope Scope) : ExpressionNode {
         public Dictionary<SdfShadeType, SdfShadeExpression> Values { get; } = [];
+        public string[] Expanding { get; } = DocumentLowering.ExpandingFunctions(scope: Scope);
 
         public override IReadOnlyList<SyntaxNode> Children() => [];
         public override SyntaxNode MapChildren(ISyntaxMap map) => this;
@@ -302,7 +305,7 @@ internal sealed class WorldShadeLowering {
                 var expectedKey = expected ?? 0;
                 if ((expected is null || !SdfShadeOps.IsUInt(expected.Value)) && bound.Values.TryGetValue(0, out var inferred)) { return inferred; }
                 if (!bound.Values.TryGetValue(expectedKey, out var value)) {
-                    value = Expression(bound.Source, bound.Scope, expected);
+                    value = DocumentLowering.ExpandAsBound(scope: bound.Scope, atBinding: bound.Expanding, expand: () => Expression(bound.Source, bound.Scope, expected));
                     bound.Values.Add(expectedKey, value);
                 }
                 return value;
@@ -330,6 +333,7 @@ internal sealed class WorldShadeLowering {
                 return Read(name: id.Name);
             case MemberAccessExpressionNode member:
                 if ((Qualified(node: member) is { } qualified) && SdfShadeOps.Inputs.Any(predicate: i => (i.Name == qualified))) { return Read(name: qualified); }
+                if ((member.Target is IndexExpressionNode or MemberAccessExpressionNode) && TryStructuralLiteral(expression: member, scope: scope, expected: expected, literal: out var record)) { return record; }
                 if ((member.Member.Length == 1) && ("xyzw".IndexOf(value: member.Member[0]) is var component) && (component >= 0)) {
                     return new("component", [Expression(member.Target, scope)], Name: component.ToString(provider: CultureInfo.InvariantCulture));
                 }
@@ -340,6 +344,10 @@ internal sealed class WorldShadeLowering {
                     throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(example: "'lanes.slot[2]'", fix: "Index with a whole number from 0 to 3 that is known when the program is compiled", problem: "A shade lane selector is not a whole number from 0 to 3"));
                 }
                 return Read(name: $"{Qualified(node: index.Target)}{lane}");
+            case IndexExpressionNode structuralIndex when TryStructuralLiteral(expression: structuralIndex, scope: scope, expected: expected, literal: out var item):
+                return item;
+            case CallExpressionNode { Name: "reduce" } fold when ((fold.Arguments.Count == 3) && (fold.Arguments[2].Value is LambdaExpressionNode { Parameters.Count: 2 } step)):
+                return Reduce(fold: fold, step: step, scope: scope, expected: expected);
             case LiteralExpressionNode or ColorExpressionNode:
                 return Literal(DocumentLowering.EvaluateValue(expression, scope), expected);
             case ArrayExpressionNode array:
@@ -379,10 +387,42 @@ internal sealed class WorldShadeLowering {
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
                     call.Name == "hash" ? SdfShadeType.UInt3 :
-                    ((((call.Name is "lattice" or "latticeGradient" or "lines") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
+                    ((((call.Name is "lattice" or "latticeGradient" or "lines" or "cells") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
                     call.Name == "select" && i > 0 ? expected : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Rewrite it with the shade operations, names and numbers a shade program admits", problem: "This expression uses something a shade program has no word for"));
         }
+    }
+    // A compile-time reduce over a structural array unrolls into one expression: the running value is the shade
+    // expression folded so far and each item enters as its value, so `reduce(range(0, octaves), ...)` lowers to the
+    // program the hand-unrolled sum would (ergonomic is optimal).
+    private SdfShadeExpression Reduce(CallExpressionNode fold, LambdaExpressionNode step, DocumentScope scope, SdfShadeType? expected) {
+        var items = (DocumentLowering.EvaluateValue(RequireStructural(expression: fold.Arguments[0].Value, scope: scope), scope) as JsonArray)
+            ?? throw new SdfShadeException(code: "PUCK127", message: DiagnosticText.Compose(example: "'reduce(range(0, octaves), 0, (sum, i) => ...)'", fix: "Reduce over an array the compiler knows, such as a range of structural numbers", problem: "A shade 'reduce' runs over something that is not an array known when the program is compiled"));
+        var running = Expression(fold.Arguments[1].Value, scope, expected);
+
+        foreach (var value in items) {
+            var held = new Bound(fold.Arguments[1].Value, scope);
+            held.Values.Add(0, running);
+            var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal) {
+                [step.Parameters[0]] = held,
+                [step.Parameters[1]] = Structural.Syntax(value: value),
+            };
+            running = Expression(step.Body, scope.WithConstants(constants), expected);
+        }
+        return running;
+    }
+    // Reads a member or element of compile-time data (`stops[i].color`, `size[0]`) as the literal it evaluates to, or
+    // answers false when the expression reads anything the program supplies at run time.
+    private bool TryStructuralLiteral(ExpressionNode expression, DocumentScope scope, SdfShadeType? expected, out SdfShadeExpression literal) {
+        literal = null!;
+        if (Qualified(node: expression) is { } name && SdfShadeOps.Inputs.Any(predicate: i => i.Name.StartsWith(value: name, comparisonType: StringComparison.Ordinal))) { return false; }
+        JsonNode? value;
+        try { value = DocumentLowering.EvaluateValue(RequireStructural(expression: expression, scope: scope), scope); }
+        catch (SdfShadeException) { return false; }
+        catch (DocumentEvaluationException) { return false; }
+        if (value is not (JsonValue or JsonArray)) { return false; }
+        literal = Literal(value, expected);
+        return true;
     }
     private static string? Qualified(ExpressionNode node) => node switch {
         IdentifierExpressionNode id => id.Name,

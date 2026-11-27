@@ -161,6 +161,92 @@ public readonly record struct Rational : IComparable<Rational> {
         );
     }
 
+    /// <summary>Parses an exact rational from its text: an optional sign and digits with an optional decimal fraction
+    /// (<c>-12.5</c>), or a quotient of two integers (<c>7/3</c>, <c>-7/3</c>), the form <see cref="ToString"/> writes.
+    /// No whitespace, exponent or group separator is read.</summary>
+    /// <param name="text">The text.</param>
+    /// <param name="value">The value, reduced; zero when the text spells none.</param>
+    /// <returns><see langword="true"/> when the whole text spells a rational with a nonzero denominator.</returns>
+    public static bool TryParse(ReadOnlySpan<char> text, out Rational value) {
+        value = Zero;
+
+        var slash = text.IndexOf(value: '/');
+
+        if (slash >= 0) {
+            if (
+                !TryParseInteger(text: text[..slash], value: out var numerator) ||
+                !TryParseInteger(text: text[(slash + 1)..], value: out var denominator) ||
+                denominator.IsZero
+            ) {
+                return false;
+            }
+
+            value = new(
+                Numerator: numerator,
+                Denominator: denominator
+            );
+
+            return true;
+        }
+
+        var point = text.IndexOf(value: '.');
+
+        if (point < 0) {
+            if (!TryParseInteger(text: text, value: out var whole)) { return false; }
+
+            value = whole;
+
+            return true;
+        }
+
+        var integral = text[..point];
+        var negative = ((integral.Length > 0) && (integral[0] == '-'));
+        var digits = (((integral.Length > 0) && (integral[0] is '+' or '-')) ? integral[1..] : integral);
+        var fraction = text[(point + 1)..];
+
+        // Both sides of the point are bare digits: the sign stands before the whole number, and only there.
+        if (
+            !IsDigits(text: digits) ||
+            !IsDigits(text: fraction) ||
+            !TryParseInteger(text: digits, value: out var integralDigits) ||
+            !TryParseInteger(text: fraction, value: out var fractionDigits)
+        ) {
+            return false;
+        }
+
+        var scale = BigInteger.Pow(
+            value: 10,
+            exponent: fraction.Length
+        );
+        var magnitude = ((integralDigits * scale) + fractionDigits);
+
+        value = new(
+            Numerator: (negative ? -magnitude : magnitude),
+            Denominator: scale
+        );
+
+        return true;
+
+        static bool IsDigits(ReadOnlySpan<char> text) => ((text.Length > 0) && !text.ContainsAnyExceptInRange(
+            highInclusive: '9',
+            lowInclusive: '0'
+        ));
+        static bool TryParseInteger(ReadOnlySpan<char> text, out BigInteger value) => BigInteger.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out value,
+            style: NumberStyles.AllowLeadingSign,
+            value: text
+        );
+    }
+    /// <summary>Parses an exact rational from its text (<see cref="TryParse"/>).</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The value, reduced.</returns>
+    /// <exception cref="FormatException">The text spells no rational.</exception>
+    public static Rational Parse(ReadOnlySpan<char> text) => (TryParse(text: text, value: out var value)
+        ? value
+        : throw new FormatException(message: $"'{text}' is not an exact rational: write digits with an optional decimal fraction, or a quotient such as 7/3.")
+    );
+
     /// <summary>Returns the absolute value.</summary>
     public Rational Abs() => ((Numerator.Sign < 0)
         ? -this
@@ -175,6 +261,18 @@ public readonly record struct Rational : IComparable<Rational> {
     public bool Equals(Rational other) => ((Numerator == other.Numerator) && (Denominator == other.Denominator));
     /// <summary>Returns the greatest integer no larger than this value.</summary>
     public BigInteger Floor() => Numerator.FloorDivide(divisor: Denominator);
+    /// <summary>Returns the value's fractional part, <c>value - Floor()</c>, in <c>[0, 1)</c> at either sign.</summary>
+    public Rational Fraction() => new(
+        Numerator: (Numerator - (Floor() * Denominator)),
+        Denominator: Denominator
+    );
+    /// <summary>Returns the integer nearest zero no farther from zero than this value: <see cref="Floor"/> at or above
+    /// zero and <see cref="Ceiling"/> below it, so a value and its negation truncate to an integer and its
+    /// negation.</summary>
+    public BigInteger Truncate() => BigInteger.Divide(
+        dividend: Numerator,
+        divisor: Denominator
+    );
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         value1: Numerator,

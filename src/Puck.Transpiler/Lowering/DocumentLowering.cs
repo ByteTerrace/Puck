@@ -621,6 +621,37 @@ public static partial class DocumentLowering {
         }
     }
 
+    /// <summary>The functions being expanded where <paramref name="scope"/> is read now: what a lazily lowered argument
+    /// records when it is bound, so <see cref="ExpandAsBound"/> can lower it later as if at its call site.</summary>
+    /// <param name="scope">The scope whose expansion stack is read.</param>
+    /// <returns>A copy of the names being expanded.</returns>
+    public static string[] ExpandingFunctions(DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        return ((scope.Annotations.GetValueOrDefault(key: CallingFunctionsKey) is HashSet<string> calling) ? [.. calling] : []);
+    }
+    /// <summary>Lowers a lazily bound argument as if at its call site: the functions expanded since it was bound (the
+    /// callee reading it, and anything the callee called) are set aside for the duration, so `f(f(x))` is two calls,
+    /// never a recursion, while a function that really reaches itself is still refused.</summary>
+    /// <param name="scope">The scope whose expansion stack is adjusted.</param>
+    /// <param name="atBinding">What <see cref="ExpandingFunctions"/> answered when the argument was bound.</param>
+    /// <param name="expand">The lowering of the argument.</param>
+    /// <typeparam name="T">The lowering's result.</typeparam>
+    /// <returns>What <paramref name="expand"/> returned.</returns>
+    public static T ExpandAsBound<T>(DocumentScope scope, IReadOnlyCollection<string> atBinding, Func<T> expand) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        ArgumentNullException.ThrowIfNull(argument: atBinding);
+        ArgumentNullException.ThrowIfNull(argument: expand);
+        if ((scope.Annotations.GetValueOrDefault(key: CallingFunctionsKey) is not HashSet<string> calling) || (calling.Count == atBinding.Count)) { return expand(); }
+        var since = calling.Where(predicate: name => !atBinding.Contains(value: name)).ToArray();
+
+        foreach (var name in since) { calling.Remove(item: name); }
+        try {
+            return expand();
+        } finally {
+            foreach (var name in since) { calling.Add(item: name); }
+        }
+    }
+
     // A call of a value function at compile time: the body evaluated with each parameter bound to its argument's value
     // (or its default's), as locals the body reads and nothing else does.
     private static JsonNode? CallFunction(CallExpressionNode call, FunctionExpressionNode function, string? fieldKey, DocumentScope scope) {

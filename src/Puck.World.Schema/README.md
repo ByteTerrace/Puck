@@ -1729,9 +1729,10 @@ rewriting the stored base—the read side of the envelope duality (a computed
 value clamps; an explicit write is decided by `TryAdmitWrite`, refusing or
 saturating per the row's `overflow` policy).
 
-`StateAdvance.ComputeCurrentValue` has one application site,
-`StateReader`'s known-cell computation, and that is the whole design: both
-the name and compiled-handle read entrances, a rule's
+`StateAdvance.ComputeCurrentValue` is applied on reads by one evaluator, the
+arena's live number read (`StateArena.TryReadLive` and its siblings, which hand
+a nested advance the arena as the cells it reads its parent from), and that is
+the whole design: both the name and compiled-handle read entrances, a rule's
 `compareState`, a HUD gauge, `world.state`'s read-backs and the
 `UpsertStateCell` **Add compose arm** all resolve through it, so a reader and a
 writer can never disagree about what an advancing row holds. In particular an

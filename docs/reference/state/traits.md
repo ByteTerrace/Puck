@@ -179,6 +179,57 @@ rewrites the stored base or its epoch. `stamina` above reads 10 once it has
 accumulated that far, however long it keeps running. A value that must wrap
 around, such as an angle, belongs in a cycle.
 
+### Run a clock on another clock
+
+An advance can run on another row instead of the engine's seconds. `by` names
+the parent: a slot row that advances itself (a clock held still declares a rate
+of zero). The rate is then per unit of the parent, and `rate` may shape it as a
+piecewise polynomial in the parent's phase, the fractional part of its value,
+one unit a turn. Each piece starts at an exact share of the turn and lists its
+coefficients, constant term first, as exact rationals (`"0.5"`, `"5/8"`):
+
+```puck
+// The outpost's own seconds: the day's pace, slowed to half for an hour either
+// side of the pass at hour 15 and evenly back (stars.puck's starWellTime).
+row {
+  name: "outpostTime"
+  kind: "Fixed"
+  value: "0"
+  advance {
+    perSecondNumerator: 1440
+    perSecondDenominator: 1
+    by: "day"
+    rate [
+      { from: "0", coefficients ["1"] }
+      { from: "14/24", coefficients ["8", "-12"] }
+      { from: "15/24", coefficients ["-7", "12"] }
+      { from: "16/24", coefficients ["1"] }
+    ]
+  }
+}
+```
+
+Between two parent values the row gains the rate times the shape's exact
+integral from one to the other (`StateAdvance.Accumulation`, over
+`PeriodicPiecewisePolynomial`), so it reads in closed form at any tick: whole
+turns of the parent count as whole turns of the shape's integral, and a parent
+that is itself nested composes, since a polynomial of a polynomial is a
+polynomial. A world that stood unwatched for a week reads it with one
+evaluation, as `WorldTick.Lapse` relies on. The affine advance is the case with
+no parent and no shape, and both truncate the same exact accumulation toward
+zero into the row's carrier.
+
+A nested row follows its parent's motion, not its jumps. A write that moves the
+parent's line, a value set or a redeclared rate, first settles every row nested
+on it at the write's tick (`StateArena.TryWriteLive`, `TrySettleRedeclared`,
+over `StateCatalog.NestedClocks`), so the child's accumulation is continuous
+across the write: holding the parent holds the child, and seeking the parent
+moves the child no further than it had run. A settle keeps the child's carrier
+resolution, so each one drops under one raw unit of accumulation. The validator
+refuses a parent that is not an advancing slot row, a keyed or pooled nested
+cell, a chain that returns to itself and a chain deeper than
+`StateAdvance.MaxNestingDepth`.
+
 ## Smooth a value for presentation
 
 A **dynamics** trait gives a cell a smoothed reading for display. The stored

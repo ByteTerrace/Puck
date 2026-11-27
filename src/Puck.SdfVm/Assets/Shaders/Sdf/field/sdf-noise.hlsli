@@ -122,14 +122,17 @@ precise float sdfPeriodicFbm3(float3 q, uint seed, uint octaves, float gain) {
 
     return (value / max(total, 1.0e-6));
 }
-// Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
+// The nearest two features of the exact 27-cell Worley lattice: their squared distances and offsets, and the nearest
+// feature's cell hash. The one search behind the field's cellular relief (sdfCellDistanceGrad) and the shade
+// program's `cells` (sdfShadeCells).
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.
-precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
+void sdfCellNearest(float3 q, uint seed, float randomness, out float first, out float second, out float3 firstDelta, out float3 secondDelta, out uint firstHash) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = q - cellFloor;
-    float first = 1.0e20, second = 1.0e20;
-    float3 firstDelta = 0.0, secondDelta = 0.0;
+    first = 1.0e20; second = 1.0e20;
+    firstDelta = 0.0; secondDelta = 0.0;
+    firstHash = 0u;
     [loop] for (int z = -1; z <= 1; z++) {
         [loop] for (int y = -1; y <= 1; y++) {
             [loop] for (int x = -1; x <= 1; x++) {
@@ -140,18 +143,36 @@ precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomne
                 float squared = dot(delta, delta);
                 if (squared < first) {
                     second = first; secondDelta = firstDelta;
-                    first = squared; firstDelta = delta;
+                    first = squared; firstDelta = delta; firstHash = hash.x;
                 } else if (squared < second) {
                     second = squared; secondDelta = delta;
                 }
             }
         }
     }
+}
+// Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
+precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
+    float first, second;
+    float3 firstDelta, secondDelta;
+    uint firstHash;
+    sdfCellNearest(q, seed, randomness, first, second, firstDelta, secondDelta, firstHash);
     first = sqrt(first); second = sqrt(second);
     gradient = first > 1.0e-12 ? firstDelta / first : 0.0;
     if (mode == SDF_CELL_MODE_F1) return first;
     gradient = (second > 1.0e-12 ? secondDelta / second : 0.0) - gradient;
     return second - first;
+}
+// A shade program's `cells(point, seed)`: the cellular pattern at `point` (one cell per unit) as [F1, F2 - F1, id],
+// where F1 is the distance to the nearest feature, F2 - F1 falls to 0 on the borders between cells, and id is the
+// nearest cell's hash in [0, 1), the same for every point of that cell.
+float3 sdfShadeCells(float3 q, uint seed) {
+    float first, second;
+    float3 firstDelta, secondDelta;
+    uint firstHash;
+    sdfCellNearest(q, seed, 1.0, first, second, firstDelta, secondDelta, firstHash);
+    first = sqrt(first); second = sqrt(second);
+    return float3(first, second - first, float(firstHash >> 8u) * (1.0 / 16777216.0));
 }
 // The cellular field alone, for a reader that takes no gradient (the fixed-point reader's is SdfFieldEvaluator.SampleCells).
 precise float sdfCellDistance(float3 q, uint seed, uint mode, float randomness) {

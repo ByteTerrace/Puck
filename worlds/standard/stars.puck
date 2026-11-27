@@ -80,6 +80,24 @@ function pairTurn(clock, separation, inclination = 0, node = 0, phase = 0, eccen
   phase: phase
 }
 
+// The advance of a row that counts a place's own seconds near a star that passes it: the row runs on `clock`, a state
+// row one turn of which is one turn of the star past the place (a day), at `secondsPerTurn` of the place's seconds a
+// turn, and runs slow as a clock deep in the star's well does, evenly down to `1 - depth` of that pace at `passHour` of
+// the turn's `hours`, over `window` hours either side, and back. `window` is less than `passHour` and less than `hours`
+// less `passHour`. The rate follows the day's phase, so the row reads in closed form at any tick: a state clock over it
+// keys whatever keeps the place's own time.
+function starWellTime(clock, secondsPerTurn, passHour, window = 1, depth = 0.5, hours = 24) = {
+  perSecondNumerator: secondsPerTurn
+  perSecondDenominator: 1
+  by: clock
+  rate [
+    { from: "0", coefficients ["1"] }
+    { from: $"{passHour - window}/{hours}", coefficients [$"{1 + ((depth * (passHour - window)) / window)}", $"{0 - ((depth * hours) / window)}"] }
+    { from: $"{passHour}/{hours}", coefficients [$"{(1 - depth) - ((depth * passHour) / window)}", $"{(depth * hours) / window}"] }
+    { from: $"{passHour + window}/{hours}", coefficients ["1"] }
+  ]
+}
+
 // A star's light in a world of its system: the directional light named by the star's `light`, coming from the star where
 // `turns` put it about `focus` (the system's centre in this world's coordinates). `turns` are the orbits it rides in
 // order, each about the point the ones before it reach; none stands the star at `focus`. The light gives the star's

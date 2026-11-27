@@ -66,6 +66,13 @@ public static class FixedDirectedRounding {
             denominator: denominator,
             numerator: numerator
         ).Ceiling;
+    /// <summary>Returns the least integer at or above <c>value / 2^shift</c>: the ceiling's half of an arithmetic
+    /// shift, which floors.</summary>
+    /// <param name="value">The value, above <see cref="Int128.MinValue"/>.</param>
+    /// <param name="shift">The power of two divided by, from zero to 126.</param>
+    /// <returns><c>⌈value / 2^shift⌉</c>, exact: the negated floor of the negated value.</returns>
+    public static Int128 CeilingShift(Int128 value, int shift) =>
+        -((-value) >> shift);
     /// <summary>Returns the greatest raw at or below the exact real value of a double, the directed-down inbound seam
     /// of a conservative enclosure.</summary>
     /// <param name="value">The double whose exact value is bounded.</param>

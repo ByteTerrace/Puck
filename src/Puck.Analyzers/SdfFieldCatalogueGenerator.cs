@@ -281,6 +281,34 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
                 break;
         }
         source.Append(duals);
+
+        // The box walk's side: each formula's affine overload (SdfFormula's affine lowering over FixedAffineForm), and a
+        // dispatch over the entries that have one; an entry without one answers the unbounded form, and the box walk
+        // takes its interval rule there.
+        var affines = SdfFormula.EmitAllFixedAffine(out var affineCovered, formulas.Select(static item => item.Formula).Distinct().ToArray());
+        void AffineSwitch(string signature, string subject, string property, string fallback, Func<SdfFormula, bool>? admits = null) {
+            source.AppendLine($"    private static {signature} => {subject} switch {{");
+            foreach (var (entry, _, formula) in formulas.Where(item => item.Property == property && affineCovered.Contains(item.Formula) && admits?.Invoke(item.Formula) != false)) {
+                source.AppendLine($"        {discriminator}.{entry.Name} => {formula.Dispatch(shader: false)},");
+            }
+            source.AppendLine($"        _ => {fallback},");
+            source.AppendLine("    };");
+        }
+        switch (discriminator) {
+            case "SdfShapeType":
+                AffineSwitch("FixedAffineForm EvaluateShape(in CompiledInstruction instruction, FixedAffineForm3 p, ref PowerWork powerWork)", "((SdfShapeType)instruction.Shape)", "Formula", "FixedAffineForm.Entire");
+                break;
+            case "SdfBlendOp":
+                AffineSwitch("FixedAffineForm BlendShape(FixedAffineForm current, FixedAffineForm candidate, uint blend, FixedQ4816 smoothRadius, FixedQ4816 operand)", "((SdfBlendOp)blend)", "Formula", "FixedAffineForm.Entire");
+                break;
+            case "SdfOp":
+                AffineSwitch("FixedAffineForm3 MapPoint(in CompiledInstruction instruction, FixedAffineForm3 p)", "instruction.Op", "Formula", "AffineEntirePoint",
+                    static formula => formula.ResultType == SdfFormulaType.Vector3);
+                AffineSwitch("FixedAffineForm EditField(in CompiledInstruction instruction, FixedAffineForm3 p, FixedAffineForm distance)", "instruction.Op", "Formula", "FixedAffineForm.Entire",
+                    static formula => formula.ResultType == SdfFormulaType.Scalar && !formula.FixedState("weight").Any());
+                break;
+        }
+        source.Append(affines);
         source.AppendLine("}");
         context.AddSource(catalogue + ".Formulas.g.cs", source.ToString());
     }

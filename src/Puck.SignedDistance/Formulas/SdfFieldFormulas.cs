@@ -9,7 +9,8 @@ namespace Puck.SignedDistance;
 // The field's shared primitive and blend formulas: each lowers to the query evaluator's fixed-point method and the
 // kernels' precise function of the same name (sdfX in HLSL, SdfX in C#). A catalogue entry selects one by naming its
 // field here (SdfFieldShapes, SdfFieldBlends); the Roslyn generator reads that field from its own compiled copy of this
-// source, so both readers lower one object. Interval enclosures stay hand-written facets on each entry.
+// source, so both readers lower one object. Interval enclosures stay hand-written facets on each entry; the affine
+// enclosure the box walk meets them with is a lowering of these formulas (SdfFormula's affine reader).
 // Helpers precede the formulas that call them: static fields initialize in textual order.
 internal static partial class SdfFieldFormulas {
     /// <summary>The top of the exponents whose superellipsoid power norm is clamped to its certified band.</summary>

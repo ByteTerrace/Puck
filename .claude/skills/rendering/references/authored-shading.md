@@ -482,6 +482,15 @@ hold budget. After an unknown control outcome, read the current state before
 moving a camera or issuing the next capture.
 
 `latticeGradient` uses `sdfLatticeNoiseGradient3`, shared with the old flow layer.
+`cells(point, seed)` returns `[F1, F2 - F1, id]` from `sdfShadeCells`, which shares
+`sdfCellNearest`, the one 27-cell Worley search, with the field's cellular relief
+(`sdfCellDistanceGrad`). The standard package's pattern library in
+`worlds/standard/shading.puck` (`shadeFbm`, `shadeRidged`, `shadeTurbulence`,
+`shadeWarp`, `shadeCellBorder`, `shadeCellId`, `shadeRamp`, `shadeBrick`) builds
+on it. Inside a shade program, a `reduce` over a structural array unrolls at
+compile time (`WorldShadeLowering.Reduce`), and an element or member of
+compile-time data (`stops[i].color`, `size[0]`) reads as its literal, so those
+helpers cost what their hand-unrolled forms would.
 `shape` is a coverage-distance operation: within its footprint neighbourhood it
 evaluates the admitted primitive, and outside its bounding box it returns the
 positive box lower bound, as the paint path skips that exterior. It is not an
