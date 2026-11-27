@@ -113,10 +113,13 @@ resolved body while effects address the logical instance through their lexical
 left/right bindings. Release removes the old lifetime; reclaim reads the new
 lifetime's current enum value. There is no second carrier mode.
 
-Identity-owned records are the capacity-one pools that `identity.records` selects.
-They cross a seam as part of the identity projection (`WorldIdentityProjection`,
-written by `WorldIdentityProjectionWire`), alongside the identity's facts row;
-the owned document never travels. Their typed fields are not squeezed into the
+An identity's record store is every pool and pair pool its owned document
+declares, at any capacity, and `identity.travel` names the ones that cross a seam
+(`WorldIdentityTravel.Crossing`); the rest stay home. Crossing pools travel as
+part of the identity projection (`WorldIdentityProjection`, written by
+`WorldIdentityProjectionWire`), alongside the identity's facts row; the owned
+document never travels. A world's rules write the store through
+`WorldOwnedWorlds.TryCommit` ([worlds](../reference/state/worlds.md#owned-identity-records)). Their typed fields are not squeezed into the
 integer-only identity fact lane (`WorldIdentityFactLane`). Receivers validate
 record shapes and values (`WorldIdentityRecords.Validate`) and refuse a payload
 that cannot be represented rather than discarding fields. A colocated local seat

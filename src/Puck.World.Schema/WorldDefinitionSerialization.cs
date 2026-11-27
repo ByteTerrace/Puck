@@ -310,6 +310,10 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.Pose))]
 [JsonSerializable(typeof(WorldEffect.PoseCell))]
 [JsonSerializable(typeof(WorldEffect.SetIdentityFact))]
+[JsonSerializable(typeof(WorldEffect.ClaimIdentityRecord))]
+[JsonSerializable(typeof(WorldEffect.ClaimIdentityPair))]
+[JsonSerializable(typeof(WorldEffect.SetIdentityRecord))]
+[JsonSerializable(typeof(WorldEffect.ReleaseIdentityRecord))]
 [JsonSerializable(typeof(WorldEffect.SetBodyState))]
 [JsonSerializable(typeof(WorldEffect.HoldProducer))]
 [JsonSerializable(typeof(WorldEffect.ReleaseProducer))]
@@ -1346,7 +1350,8 @@ public static partial class WorldDefinitionSerialization {
         }
     }
     /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path), through
-    /// <see cref="Puck.Confinement.AtomicFile"/>, so a failed write leaves the previous file complete.</summary>
+    /// <see cref="Puck.Confinement.AtomicFile.WriteAllBytesDurably"/>, so a failed write leaves the previous file complete
+    /// and a save that returns is on stable storage.</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path.</param>
     /// <returns>The number of bytes written.</returns>
@@ -1358,7 +1363,7 @@ public static partial class WorldDefinitionSerialization {
 
         var bytes = SerializeBeside(definition: definition, path: path);
 
-        Puck.Confinement.AtomicFile.WriteAllBytes(
+        Puck.Confinement.AtomicFile.WriteAllBytesDurably(
             bytes: bytes,
             path: path
         );
@@ -1373,7 +1378,8 @@ public static partial class WorldDefinitionSerialization {
     /// written; a delta that cannot reproduce the document — or a stack that cannot be peeked or composed —
     /// degrades to the flat <see cref="Save"/> with <paramref name="note"/> naming why. A target file that does not
     /// exist, or declares neither, is the ordinary flat save. Either write goes through
-    /// <see cref="Puck.Confinement.AtomicFile"/>, so a failed write leaves the previous file complete.</summary>
+    /// <see cref="Puck.Confinement.AtomicFile.WriteAllBytesDurably"/>, so a failed write leaves the previous file complete
+    /// and a save that returns is on stable storage.</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path — also the file whose derivation is preserved.</param>
     /// <param name="basisPath">The absolute basis path the write preserved, or <see langword="null"/> when the
@@ -1520,7 +1526,7 @@ public static partial class WorldDefinitionSerialization {
             );
         }
 
-        Puck.Confinement.AtomicFile.WriteAllBytes(
+        Puck.Confinement.AtomicFile.WriteAllBytesDurably(
             bytes: bytes,
             path: path
         );

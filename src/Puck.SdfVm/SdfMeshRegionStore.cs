@@ -45,6 +45,10 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private const int LandingSlots = 4;
     private const int UploadSlots = 4;
 
+    /// <summary>Gets the descriptor pools a store creates with its region: the region's own copy pool and its moves' and
+    /// gathers' pools, over the landing and upload slots.</summary>
+    public static GpuDescriptorPoolSizes[] DescriptorPools => GpuRegion.OwnedPoolSizes(slotCount: (LandingSlots + UploadSlots), runCopies: true);
+
     private readonly Lock m_gate = new();
     private readonly IGpuDeviceContext m_device;
     private readonly IGpuComputePipeline m_copyPipeline;
@@ -595,8 +599,19 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <summary>Gets how many meshes draws name that the arena refuses under its limit.</summary>
     internal int RefusedCount { get { lock (m_gate) { return m_arena.Refused.Count; } } }
     /// <summary>Gets whether every copy the region owed has been recorded, submitted and completed: no move or carry
-    /// waits for an upload, and none an upload recorded is still in flight.</summary>
-    internal bool CopiesComplete { get { lock (m_gate) { return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && (m_inFlight == 0)); } } }
+    /// waits for an upload, and none an upload recorded is still in flight. An upload slot whose submission the queue's
+    /// timeline shows completed comes back first, so the answer follows the queue rather than the last service; reading
+    /// the timeline never waits.</summary>
+    internal bool CopiesComplete {
+        get {
+            lock (m_gate) {
+                if (!m_disposed && (m_inFlight > 0) && (m_retired.Count > 0)) {
+                    m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose());
+                }
+                return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && (m_inFlight == 0));
+            }
+        }
+    }
 
     // Called only during a background admission on the frame thread. An owed geometry is never bound. `unplaced` tells a
     // refusal for the scene's own meshes (one the region does not place or whose words do not stand, which only a scene
@@ -659,11 +674,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 return false;
             }
             m_region.Flush(slot: slot);
-
-            var copies = new GpuRegionCopyRecording(recorder: recorder, readers: readers, begin: () => commandBuffer);
-
-            copies.Record(flushed: true, handsToReaders: true, region: m_region, slot: slot);
-            _ = copies.Finish();
+            GpuRegionCopyRecording.RecordFlushed(commandBuffer: commandBuffer, readers: readers, recorder: recorder, region: m_region, slot: slot);
             m_unsubmitted++;
             m_retired.Hold(item: new UploadSlot(store: this, slot: slot), pendingUse: () => (m_unsubmitted > 0));
             m_inFlight++;

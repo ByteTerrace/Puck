@@ -10,7 +10,7 @@ public sealed partial class WorldServer {
 
     /// <inheritdoc cref="WorldPersistence.FromCheckpoint"/>
     [Replaces(root: typeof(StateArena))]
-    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) =>
+    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool bindHomeSeats = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) =>
         WorldPersistence.FromCheckpoint(
             drawKeys: drawKeys,
             adjacencies: adjacencies,
@@ -20,7 +20,7 @@ public sealed partial class WorldServer {
             instanceIdentity: instanceIdentity,
             machines: machines,
             profiles: profiles,
-            restoreOwnedIdentities: restoreOwnedIdentities
+            bindHomeSeats: bindHomeSeats
         );
     /// <inheritdoc cref="WorldPersistence.FoldJournal"/>
     public void FoldJournal() => m_persistence.FoldJournal();

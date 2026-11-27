@@ -45,6 +45,11 @@ public sealed class SdfWorldPipelineCatalogLawTests {
         Assert.True(condition: second.Produce(context: in context));
 
         second.Dispose();
+        // A residency on a device releases from the device's retirement, once no submission reads its objects, and waits
+        // for no build: its leases go to the catalog's retired builds, discarded as each finishes. The host's teardown
+        // drains both, the retirement first, before the device goes.
+        gpu.Services.Retirement.Drain();
+        pipelines.RetiredBuilds.Drain();
         Assert.Equal(expected: 0, actual: pipelines.Pipelines.SharedPipelines);
     }
     [Fact]

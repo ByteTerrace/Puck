@@ -275,7 +275,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             }
             return catalog;
         }
-        // A world with seats and no owned identities still needs a neutral boot profile.
+        // A world whose account holds no character (it names no identity template and authors no seed) still needs a
+        // neutral boot profile; a world importing the standard mints its template's first character instead.
         return m_localSeats > 0 ? [WorldIdentity.FromProjection(
             new WorldIdentityProjection("seat1", "seat1", m_playerDefaults.NeutralColor, MoveSpeed: null, TurnSpeed: null),
             m_playerDefaults

@@ -14,7 +14,7 @@ namespace Puck.World;
 /// addressing the lights the document authors. A placement of a lit creation needs one frame for its lights to ride
 /// (<see cref="Carries"/>); the validator refuses one that expands into many.</remarks>
 public static class WorldCreationLights {
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldRenderLighting?[]> Expanded = new();
+    private static readonly WorldDocumentDerivedTable<WorldRenderLighting?[]> Expanded = new();
 
     /// <summary>Returns the world's lighting section with its keys applied (<see cref="WorldRenderKeys.Expand(WorldRenderLighting?)"/>)
     /// and its creations' lights appended, once per definition.</summary>
@@ -25,7 +25,7 @@ public static class WorldCreationLights {
     public static WorldRenderLighting? Expand(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Expanded.GetValue(key: definition, derive: static definition => [Compose(definition: definition, lighting: WorldRenderKeys.Expand(lighting: definition.Render.Lighting))])[0];
+        return Expanded.GetValue(definition: definition, derive: static definition => [Compose(definition: definition, lighting: WorldRenderKeys.Expand(lighting: definition.Render.Lighting))])[0];
     }
     /// <summary>Returns a lighting section with the definition's creations' lights appended to its lights. A section
     /// that lists no lights renders the pinned sun, so the creations' lights append to the pinned sun.</summary>

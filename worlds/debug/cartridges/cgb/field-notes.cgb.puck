@@ -1,0 +1,38 @@
+schema: "puck.cartridge.v1"
+
+import "../shared/field-notes"
+
+target: "cgb"
+
+// The valley in the selected direction's colours: a green floor under warm cream and ochre cliffs, teal water, the
+// gallery's cream and teal door, and the Moth in dusty lavender and ivory. Background palettes follow the module's
+// order (grass, earth, water, fir, stone, flowers, wood, panel); object palettes are her hood and face, her suit, the
+// swallow, the dragonfly, the hound pup and the key.
+function rgb(r, g, b) = ((floor(r / 8) + (32 * floor(g / 8))) + (1024 * floor(b / 8)))
+let meadow = rgb(156, 207, 106)
+let lavender = rgb(177, 134, 182)
+let charcoal = rgb(40, 36, 44)
+let cream = rgb(240, 226, 190)
+
+palettes {
+  background [
+    [meadow, rgb(111, 174, 76), rgb(63, 127, 58), rgb(31, 63, 42)]
+    [rgb(242, 226, 184), rgb(217, 167, 92), rgb(168, 100, 58), rgb(74, 46, 34)]
+    [rgb(168, 224, 224), rgb(79, 179, 184), rgb(31, 111, 127), rgb(18, 58, 74)]
+    [meadow, rgb(63, 143, 90), rgb(31, 95, 66), rgb(66, 44, 30)]
+    [meadow, rgb(200, 196, 180), rgb(111, 143, 90), rgb(63, 64, 64)]
+    [meadow, rgb(242, 160, 192), rgb(242, 208, 96), rgb(63, 127, 58)]
+    [meadow, rgb(232, 184, 96), rgb(168, 100, 58), rgb(58, 36, 24)]
+    [rgb(246, 239, 216), rgb(47, 111, 120), lavender, rgb(42, 34, 48)]
+  ]
+  object [
+    [0, lavender, rgb(140, 90, 60), charcoal]
+    [0, lavender, rgb(240, 232, 214), charcoal]
+    [0, rgb(31, 95, 110), cream, rgb(160, 72, 40)]
+    [0, rgb(60, 150, 200), rgb(210, 240, 240), rgb(30, 40, 60)]
+    [0, rgb(205, 140, 70), cream, charcoal]
+    [0, rgb(240, 200, 60), rgb(255, 245, 190), rgb(110, 70, 30)]
+  ]
+}
+
+fieldNotes()

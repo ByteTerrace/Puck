@@ -158,7 +158,7 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 items: array.Initial,
                 path: (path + ".initial"),
                 min: 1,
-                max: CartridgeLimits.ArrayLength
+                max: CartridgeLimits.ArrayByteCount
             )) {
                 continue;
             }
@@ -442,9 +442,12 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
             return;
         }
 
-        Value(
+        // A bare two-byte slot or a literal past a byte is read as sixteen bits, which is how an index reaches past an
+        // array's first CartridgeLimits.ArrayLength elements; every other index is a byte expression.
+        Expression(
             path: (path + ".index"),
-            value: index
+            value: index,
+            wide: true
         );
         if (
             (Literal(value: index) is { } literal) &&
@@ -1389,10 +1392,31 @@ internal sealed partial class CartridgeValidation(CartridgeDocument document) {
                 break;
             case "map":
                 Reject(
-                    allowed: "row column tile palette",
+                    allowed: "row column tile palette surface",
                     path: path,
                     value: value
                 );
+                // A write lands in the scrolling background's map unless it names the panel, whose own map is what a
+                // dialog or a status line over the moving world is drawn into at run time.
+                if (value.Surface is { } mapSurface) {
+                    if (Array.IndexOf(
+                        array: CartridgeLimits.MapSurfaces,
+                        value: mapSurface
+                    ) < 0) {
+                        Error(
+                            message: "Expected background or panel.",
+                            path: (path + ".surface")
+                        );
+                    } else if (
+                        (mapSurface == "panel") &&
+                        (document.Window is null)
+                    ) {
+                        Error(
+                            message: "Writing the panel needs a declared window.",
+                            path: (path + ".surface")
+                        );
+                    }
+                }
                 Value(
                     value: value.Row,
                     path: (path + ".row")

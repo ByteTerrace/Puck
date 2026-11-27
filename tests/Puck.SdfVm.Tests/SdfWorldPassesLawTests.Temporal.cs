@@ -541,6 +541,8 @@ public sealed partial class SdfWorldPassesLawTests {
         private readonly VirtualClock m_clock = VirtualClock.ForDevice();
         // The frames that carry the clock past the volume's lighting interval (a tenth of a second).
         private const int SettledFrames = 8;
+        // The most uploads one shadow redraw is spread over (SdfMeshOcclusion.MaxSlices), which bounds a first redraw.
+        private const int MostShadowShares = 256;
         // The most frames the volume's first lighting, or a relight, may take to settle. Each frame is a round trip of the
         // probe service's jobs (the rig waits out host work between frames), and a first lighting traces and relights every
         // probe of the window at the jobs' unmeasured prior rates.
@@ -561,7 +563,12 @@ public sealed partial class SdfWorldPassesLawTests {
             // (a volume that never settles) releases what it built before it propagates.
             try {
                 var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
-                var frame = Frame() with { EnableCadenceGate = cadence };
+                // A cadence rig holds the shadows as a World does (SdfUpdateRates.ShadowDistant): with the levers off every
+                // static layer is drawn again on every upload, so no pass that samples the shadows could stand.
+                var frame = Frame() with {
+                    EnableCadenceGate = cadence,
+                    UpdateRates = (cadence ? (SdfUpdateRates.ShadowFar | SdfUpdateRates.ShadowDistant) : SdfUpdateRates.None),
+                };
 
                 if (glass) { frame = frame with { Program = GlassProgram() }; }
 
@@ -622,6 +629,12 @@ public sealed partial class SdfWorldPassesLawTests {
                 // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
                 // law counts frames from a rig the periodic lighting work has nothing more to change.
                 for (var settled = 0; (settled < SettledFrames); settled++) { Produce(); }
+                // A held world's shadows spread their first redraws over several uploads; a cadence law counts frames once
+                // they stand.
+                for (var shadowed = 0; (cadence && (Selected.Tables is { ShadowsStand: false })); shadowed++) {
+                    Assert.True(condition: (shadowed < MostShadowShares), userMessage: $"The world's shadows never stood: {Selected.Tables.DescribeShadows()}");
+                    Produce();
+                }
                 SettleLighting();
                 Produce();
 

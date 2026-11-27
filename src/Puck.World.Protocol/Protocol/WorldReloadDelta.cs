@@ -26,6 +26,7 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
     // The next revision a delta reproduces over the revision it was cut from, kept beside that revision by the process
     // that cut it: reconstruction is a function of the two revisions alone, so an authority in that process holding
     // the same revision and pins takes this result in place of deriving it again.
+    [SideTable(reason: "records the revision a cut produced beside the one it was cut from; no product build reads it")]
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Reconstruction> Reconstructions = new();
 
     private sealed record Reconstruction(string BaseHash, string TargetHash, WorldDefinition Next);

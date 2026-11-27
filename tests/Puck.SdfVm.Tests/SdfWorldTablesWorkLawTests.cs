@@ -25,11 +25,12 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void TheUploadPassesArePinned() {
         Assert.Equal(
-            expected: ["fillers", "upload", "environment"],
+            // The world's shadows draw in the residency's upload, ahead of every view (SdfWorldShadows).
+            expected: ["fillers", "upload", "environment", "shadows"],
             actual: SdfWorldTables.PassLabels.ToArray()
         );
         Assert.Equal(
-            expected: [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic],
+            expected: [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.PerBackendDeterministic],
             actual: SdfWorldTables.PassClasses.ToArray()
         );
     }
@@ -112,17 +113,20 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void TheDescriptorPoolsTheTablesStateAreThePoolsTheyCreate() {
         using var rig = new Rig();
 
-        // Tables create region-copy, mesh-region-copy, strided-history-copy and World pools. Admission also reserves the
-        // bake and probe clients' pools, which the residency creates after the tables; a standalone tables fixture has none.
+        // Tables create region-copy, the first attached tables the presentation's mesh-region store's (its region's copy,
+        // moves and gathers), then strided-history-copy and World pools, then one for each shadow entry the world cannot
+        // shadow without, which the shadows take when they are made. Admission also reserves the bake and probe clients'
+        // pools, which the residency creates after the tables; a standalone tables fixture has none.
         var copyPool = SdfWorldTables.DescriptorPools[1];
-        var meshCopyPool = SdfWorldTables.DescriptorPools[2];
+        var stridedPool = GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2);
+        var shadowPools = SdfWorldTables.DescriptorPools[^6..^2];
 
         Assert.Equal(
-            expected: [copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2), SdfWorldTables.DescriptorPoolSizes],
+            expected: [copyPool, .. SdfMeshRegionStore.DescriptorPools, stridedPool, SdfWorldTables.DescriptorPoolSizes, .. shadowPools],
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
+            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, .. SdfMeshRegionStore.DescriptorPools, stridedPool, .. shadowPools],
             actual: SdfWorldTables.DescriptorPools[..^2]
         );
     }
@@ -185,10 +189,19 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         AssertFirstUpload(rig);
 
+        // The world's shadows spread their first redraws over several uploads; once they stand, a still upload, which the
+        // one after it publishes, writes, copies and dispatches nothing.
+        var uploads = 2L;
+
+        for (; !rig.Engine.ShadowsStand; uploads++) {
+            Assert.True(condition: (uploads < 600L), userMessage: "The world's shadows never stood.");
+            rig.Render();
+        }
+        rig.Render();
         rig.Render();
         var sample = new GpuWorkSample();
         Assert.True(rig.Engine.Work.TryReadCompleted(sample));
-        Assert.Equal(2, sample.Submission);
+        Assert.Equal((uploads + 1L), sample.Submission);
         foreach (var kind in new[] { GpuWork.HostVisibleUploadBytes, GpuWork.Copies, GpuWork.Dispatches }) {
             var column = GpuWork.SubmissionKinds.IndexOf(kind);
             for (var pass = 0; pass < sample.PassCount; pass++) {
@@ -374,6 +387,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 occlusion: Occlusion,
                 regionCopy: RegionCopy.Compute!
             );
+            // Under the levers a World presents with (WorldRenderSettings): with them off every static shadow layer is drawn
+            // again on every upload (SdfUpdateRates.ShadowDistant), so no upload would be still.
             Frame = new SdfFrame(
                 Program: program,
                 ProgramChanged: false,
@@ -393,7 +408,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                         Y: 0f
                     )
                 )]
-            ) { ShadeDefault = shadeDefault };
+            ) { ShadeDefault = shadeDefault, UpdateRates = SdfUpdateRates.All };
         }
 
         public GpuPassPipelineCache Cache { get; } = new();

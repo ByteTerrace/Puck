@@ -23,6 +23,15 @@ props write them.
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 
+[learning/](learning/) is the content the learning games share, whatever machine
+or world draws it: one alphabet with its glyphs and text layout (`text.puck`),
+the question bank and maths drills by subject and level with the rule that
+adapts the level (`questions.puck`), clues that name a scene's spots
+(`clues.puck`), critters and treasures (`finds.puck`), and the places and the
+progress record that travels between devices (`places.puck`). Each is a library
+of `let`s and functions; a cartridge imports it by relative path. The
+[Field Notes design](../../docs/game/edutainment/README.md) holds the contract.
+
 [agreement.puck](agreement.puck) is an agreement between two worlds, each owning
 its half: `agreementOffers` in the offering world (the offer and its lease, whom
 it admits, the partner's grant it follows, and whether the agreement stands),
@@ -31,6 +40,14 @@ it admits, the partner's grant it follows, and whether the agreement stands),
 its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
+
+[companion.puck](companion.puck) is the companion, one per owner: `companionDesign`
+once (its creation, flight kit, the world's interests and the guide commands),
+then `companion(owner, slot, position)` for each owner's seat. Its rules project
+what it senses and where a guide sends it into the owner's sense row, and its
+pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
+`companionUnlock` and `companionSight` keep what it learns on its owner's
+identity. The debug world's faerie is one (`../debug/companion.puck`).
 
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.

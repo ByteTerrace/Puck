@@ -411,6 +411,7 @@ public sealed partial class SdfWorldTables : IDisposable {
             handle: m_pool,
             release: m_bindings.DestroyPool
         );
+        ReserveShadowPools(scope: scope);
 
         // The World set per ring slot, which every view's compute passes bind, is allocated and written the first time
         // one is bound (WorldSet).
@@ -496,6 +497,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_meshClaims?.Dispose(); m_meshClaims = null;
         m_shadows?.Dispose();
         m_shadows = null;
+        DestroyShadowPools();
         DisposeRetired(completed: ulong.MaxValue);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {

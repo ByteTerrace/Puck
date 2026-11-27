@@ -248,6 +248,9 @@ public class RuleCompileContext : IRuleCostContext {
     // Scope identity keeps pattern-local token bindings separate from the enclosing rule's bindings.
     // Each entry keeps the locals its program read, so a reuse records them as a fresh compile would (LocalReads).
     internal Dictionary<(string Text, BoundKey[]? Scope), (CompiledCellRef Reference, int[] Locals)> KeyExpressions { get; } = [];
+    // The kind of the member the fold whose body is compiling visits, or null outside a fold body: what a key spelled
+    // RuleFacts.FoldMemberKey reads.
+    internal CellKind? FoldMember { get; set; }
 
     /// <summary>Resets the per-compile scope between rules.</summary>
     public void ClearScope() {

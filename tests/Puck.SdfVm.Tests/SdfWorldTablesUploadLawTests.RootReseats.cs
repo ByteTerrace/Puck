@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -94,16 +95,25 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Engine.SubmitUpload();
         rig.Engine.GpuWork.Pump(tables: rig.Engine);
     }
-    // Renders a frame until the mesh region owes none of its meshes.
+    // Renders a frame until the mesh region owes none of its meshes, each frame waiting out the landing words a worker
+    // packs, so the frames, not the pool's timing, bound it.
     internal static void LandRootCut(Rig rig, SdfFrame frame) {
         RenderRootCut(frame: frame, rig: rig);
-        for (var count = 0; (rig.Engine.MeshesLanding || rig.Engine.DrawsAwaitMeshes); count++) {
-            Assert.True(condition: (count < 64));
-            RenderRootCut(frame: frame, rig: rig);
-        }
+        TestLiveness.Within(
+            building: () => rig.Engine.MeshesPacking,
+            frames: 64,
+            reason: () => rig.Engine.MeshResidencyPending(),
+            step: () => {
+                if (!rig.Engine.MeshesLanding && !rig.Engine.DrawsAwaitMeshes) { return true; }
+                RenderRootCut(frame: frame, rig: rig);
+                return false;
+            }
+        );
     }
 
-    private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: rig.Engine.MeshRegionBytes, part: "mesh-region"))[(SdfMeshRecord.SelectionWord + 11)];
+    // The root draw's staged generation, in its record (the selection's third row's last word), which the residency's own
+    // draw-record table holds apart from the presentation's mesh region.
+    private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocalOf(part: "mesh-draws"))[(SdfMeshRecord.SelectionWord + 11)];
     private static float RootCutPreviousMemberY(Rig rig) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "previous-dynamic-transforms", sizeBytes: (3 * DynamicTransformBytes)))[13];
     // The root draw rides slot 0: its previous pose is its unit scale in the previous pose table and slot 0's previous row.
     private static void AssertRootCutPrevious(Rig rig, float x) {

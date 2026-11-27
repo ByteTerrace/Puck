@@ -23,6 +23,20 @@ internal static class NamedTypes {
             (definition.ContainingNamespace?.ToDisplayString() == @namespace)
         );
     }
+    /// <summary>Returns whether a symbol is the named type or is declared inside it, at any depth of nesting.</summary>
+    /// <param name="symbol">The symbol, or <see langword="null"/>.</param>
+    /// <param name="namespace">The namespace's display name.</param>
+    /// <param name="name">The type's name, without arity.</param>
+    /// <returns><see langword="true"/> when the symbol or one of its containing types is that type.</returns>
+    public static bool IsWithin(ISymbol? symbol, string @namespace, string name) {
+        for (var type = ((symbol as INamedTypeSymbol) ?? symbol?.ContainingType); (type is not null); type = type.ContainingType) {
+            if (Is(type: type, @namespace: @namespace, name: name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Returns whether a symbol carries an attribute of the named type, matched by its full display name so a
     /// mark linked into each project as source is recognised whichever assembly declares the copy.</summary>
     /// <param name="symbol">The symbol.</param>

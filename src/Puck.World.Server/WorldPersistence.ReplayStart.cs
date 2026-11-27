@@ -28,10 +28,10 @@ public sealed partial class WorldPersistence {
     /// <summary>Restores a replay's starting checkpoint into this authority, reinstalling the
     /// definition's geometry, machines and population first when the run edited its configuration.</summary>
     /// <param name="checkpoint">The checkpoint captured when the replay probe attached.</param>
-    /// <param name="restoreOwnedIdentities">Whether to restore owned documents; tapes retain only projected identities.</param>
+    /// <param name="bindHomeSeats">Whether to bind each local home seat to the identity the account owns; a tape keeps its seats on the projections it pinned.</param>
     /// <param name="documentDirectory">The tape's asset directory, or null to use this authority's directory.</param>
     [Replaces(root: typeof(StateArena))]
-    public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
+    public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool bindHomeSeats = true, string? documentDirectory = null) {
         using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             var keys = Host.DrawKeys;
@@ -72,11 +72,11 @@ public sealed partial class WorldPersistence {
                 if (machines is not null) { WorldDocument.CommitAndFinish(host: Host.Machines, plan: machines); }
                 Host.Document.InstallReplayStart(authority: authority, compilation: admission.Compilation, definition: definition, solidRevision: checkpoint.Server.SolidRevision, solids: solids);
                 RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
-                    restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan, validated: validated);
+                    bindHomeSeats: bindHomeSeats, preparedAddons: addonPlan, validated: validated);
                 return;
             }
             RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
-                restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);
+                bindHomeSeats: bindHomeSeats, preparedAddons: addonPlan);
         }
     }
 }

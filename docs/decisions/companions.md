@@ -150,10 +150,53 @@ role per instance drives every arriving companion of that role, under that
 world's fuel and budget; placement capacity bounds how many a world takes, and
 a full world refuses at reservation.
 
+## The standard companion
+
+The companion is the standard package's (`worlds/standard/companion.puck`), so
+any world imports it, and one serves each owner. The owner's ruling that it is a
+diegetic marker ([play](play.md#the-game)) and that worlds will unlock and
+interact with it across worlds shaped three choices.
+
+**Behaviour is authored, the flight is the driver's.** A companion is three
+layers: the data a world offers it (its interests, the threats and sounds it
+senses), its authored rules (what it notices, where a guide sends it, how it
+glows), and the pinned addon that flies the body. The rules project everything
+the driver needs into the owner's sense row each tick, so an author directs the
+companion by writing rules and data, never WAT. The driver keeps what an addon
+does well: the integer flight decisions, the breadcrumb route through doors and
+stairs, seeded idling and evasion. It identifies its body and its owner from the
+grants it is disclosed (the body it drives is itself, the other body it observes
+is its owner), so nothing in it names a body number.
+
+**The guide outranks curiosity.** The guide is a point, a body or a place (a
+place is its point) with a mode: hover over it, hover and pulse, or lead the
+owner toward it. Quests, lock-on and a player's marks write it as cells, a short
+mark lapses on its own, and the driver flies to it ahead of any curiosity or of
+the owner's route, giving way only to an evasion or a portal approach. Interests
+are a table the world fills, keyed by index, and the nearest within reach is
+found by one fold (`argmin`, [expressions](../reference/state/expressions.md#fold-over-a-row)),
+not a rule per point.
+
+**What it learns is its owner's.** An unlock (an ability, a piece of knowledge)
+is a fact on the owner's identity, written by any world through the one fact
+door and read by every world the owner visits, since an identity's facts travel
+with it. The companion's own state stays registers and rows, which cross with
+its body. The standard's facts carry a `companion` prefix until identity records
+gain package namespaces ([what a visited world may write](worlds-and-federation.md#what-a-visited-world-may-write));
+an unlock then becomes a record field in the standard's namespace, and only the
+standard's unlock templates change. The debug world's garden teaches sight
+(`companionSight`), which the gallery reads.
+
+Each companion's body holds the `companion` role and follows its owner's seat,
+so the custody path above carries it with its owner. What the standard does not
+yet have: a destination that runs the visitor's driver for the role (the
+protocol's step 9), and grants keyed by placement, so a world still names its
+companion's population slot to the driver's grants.
+
 ## Building it
 
 The faerie's lasting state moves into registers, and its driver grants are
-placement- or group-keyed rather than `body:42`. The
+placement- or group-keyed rather than by body slot. The
 [companion protocol plan](../plans/companion-redesign.md#9-build-plan) owns the
 remaining custody transitions, lifetime handling, and debug-world trip; the
 [Transfers, federation and server packet](../plans/open-items.md#transfers-federation-and-server)

@@ -261,6 +261,37 @@ requires the enclosing expression to compute in that kind. The folded row must
 be Int or Fixed. A fold nests at most once, so one binder is in scope at a
 time. The work sheet prices a fold as the row's capacity times its body's cost.
 
+`argmin(row, x -> score)` and `argmax(row, x -> score)` choose a member: the
+cell value whose score is least (or greatest), the first in the row's order on a
+tie, in the row's own kind. A member whose score is absent is no candidate, and
+a fold with no candidate is absent, so `argmin(…) ?? -1` names "none". The score
+may be Int or Fixed.
+
+Inside a fold over an Int row, the binder written bare in brackets keys another
+row by the member: `x[i]` reads the cell of `x` whose key is the member `i`. So
+a row of indices folds a whole table of records kept as rows keyed alike, and
+one `argmin` finds the nearest point:
+
+```puck
+state {
+  world {
+    table points { "0" = 0, "1" = 1, "2" = 2 }
+    table px { "0" = 1.0, "1" = 5.0, "2" = -3.0 }
+    table pz { "0" = 0.0, "1" = 2.0, "2" = 1.0 }
+    slot nearestX = 0.0
+  }
+}
+
+rule "nearest" {
+  local nearest = argmin(points, i -> (px[i] - 4) * (px[i] - 4) + pz[i] * pz[i]) ?? -1
+  when nearest >= 0
+  nearestX = px[nearest]
+}
+```
+
+The document spells that key `$fold` (`RuleFacts.FoldMemberKey`). A key
+computed from the member (`x[i + 1]`) is refused: write the member bare.
+
 `count(hand)` with no body is the reduction described in
 [Reductions](#reductions); `count(hand, c -> c > 2)` is a fold.
 

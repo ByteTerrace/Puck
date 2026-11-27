@@ -191,7 +191,7 @@ public readonly record struct CompiledExpressionToken {
     }
 }
 /// <summary>A compiled fold: the one row whose cells are reduced, and the body evaluated once per cell the row holds.</summary>
-/// <param name="Operation">All, Any, Count, or Sum.</param>
+/// <param name="Operation">All, Any, Count, Sum, ArgMinimum, or ArgMaximum.</param>
 /// <param name="RowOrdinal">The folded row's catalog ordinal, the one row the fold reads.</param>
 /// <param name="Describe">The row's authored name, for a refusal that quotes what the author wrote.</param>
 /// <param name="MemberKind">The kind a cell reads as.</param>

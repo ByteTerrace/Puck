@@ -533,7 +533,7 @@ public static partial class WorldDocumentEmitter {
                 var argument = call.Arguments[index];
 
                 if (argument.Name is { } name) { m_text.Append(value: name).Append(value: ": "); }
-                var form = ((((index == 0) && (call.Name is "all" or "any" or "count" or "sum")) ||
+                var form = ((((index == 0) && (call.Name is "all" or "any" or "count" or "sum" or "argmin" or "argmax")) ||
                     ((index > 0) && (call.Name is "boardShift" or "boardRay" or "boardImage")) ||
                     (argument.Name is "where" or "space")) ? DocumentValueForm.Name : DocumentValueForm.Expression);
 

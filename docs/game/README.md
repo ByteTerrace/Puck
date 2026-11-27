@@ -17,6 +17,8 @@ These pages describe the design those worlds carry.
 
 - [The press](press.md)—the debug world's typing game: its design and what it wires.
 
+- [Field Notes](edutainment/README.md)—the learning games on the emulated machines: one world across the Deck, the Brick and the Advanced Brick, and the shared content they read.
+
 - [Play](../plans/play.md)—the programme that sequences the game's remaining engineering, its waves, the federation remainder, the group finder, and MCP.
 
 - [Art and visual design](art/README.md)—character briefs, concept packages, and visual references.

@@ -584,10 +584,10 @@ public static class WorldProjection {
         );
     }
 
-    private static readonly CodeDerivedTable<WorldDefinition, Dictionary<string, string>> KeyedClockTable = new();
+    private static readonly WorldDocumentDerivedTable<Dictionary<string, string>> KeyedClockTable = new();
 
     private static Dictionary<string, string> KeyedClocksFor(WorldDefinition definition) => KeyedClockTable.GetValue(
-        key: definition,
+        definition: definition,
         derive: static candidate => KeyedClocks(definition: candidate, values: WorldKeyedValues.AuthoredBy(definition: candidate).Keyed)
     );
 
@@ -1576,7 +1576,7 @@ public static class WorldProjectionContent {
     }
 
     private static readonly CodeDerivedTable<WorldPrototype, DerivedPrototype> DerivedPrototypes = new();
-    private static readonly CodeDerivedTable<WorldDefinition, Dictionary<ContentPin, WorldPrototype>> KnownPrototypes = new();
+    private static readonly WorldDocumentDerivedTable<Dictionary<ContentPin, WorldPrototype>> KnownPrototypes = new();
 
     /// <summary>Gets the content pin of a disclosed prototype's canonical document and mesh.</summary>
     /// <param name="prototype">The prototype.</param>
@@ -1607,27 +1607,24 @@ public static class WorldProjectionContent {
         return created;
     }
 
-    private static Dictionary<ContentPin, WorldPrototype> KnownOf(WorldDefinition definition) {
-        if (KnownPrototypes.TryGetValue(key: definition, value: out var cached)) {
-            return cached;
-        }
+    private static Dictionary<ContentPin, WorldPrototype> KnownOf(WorldDefinition definition) => KnownPrototypes.GetValue(
+        definition: definition,
+        derive: static candidate => {
+            var table = new Dictionary<ContentPin, WorldPrototype>();
 
-        var table = new Dictionary<ContentPin, WorldPrototype>();
+            foreach (var prototype in candidate.Creations) {
+                if ((prototype is null) || WorldStateDocumentValues.HasReference(graph: prototype)) {
+                    continue;
+                }
 
-        foreach (var prototype in definition.Creations) {
-            if ((prototype is null) || WorldStateDocumentValues.HasReference(graph: prototype)) {
-                continue;
+                var derived = DerivedOf(prototype: prototype, serialized: out _);
+
+                _ = table.TryAdd(key: derived.Pin, value: prototype);
             }
 
-            var derived = DerivedOf(prototype: prototype, serialized: out _);
-
-            _ = table.TryAdd(key: derived.Pin, value: prototype);
+            return table;
         }
-
-        KnownPrototypes.AddOrUpdate(key: definition, value: table);
-
-        return table;
-    }
+    );
 
     private static bool TryKnownPrototype(ContentPin pin, WorldDefinition? known, WorldDefinition? fallbackKnown, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldPrototype? prototype) {
         if ((known is not null) && KnownOf(definition: known).TryGetValue(key: pin, value: out prototype)) {

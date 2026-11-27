@@ -5568,14 +5568,19 @@
       "additionalProperties": false
     },
     "ShapeNonNullable15": {
+      "enum": [
+        "All",
+        "Any",
+        "Count",
+        "Sum",
+        "ArgMinimum",
+        "ArgMaximum"
+      ]
+    },
+    "ShapeNonNullable16": {
       "properties": {
         "op": {
-          "enum": [
-            "All",
-            "Any",
-            "Count",
-            "Sum"
-          ]
+          "$ref": "#/$defs/ShapeNonNullable15"
         },
         "family": {
           "type": "string"
@@ -5595,7 +5600,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable16": {
+    "ShapeNonNullable17": {
       "type": "object",
       "required": [
         "zone"
@@ -5607,7 +5612,7 @@
         }
       }
     },
-    "ShapeNonNullable17": {
+    "ShapeNonNullable18": {
       "type": "object",
       "required": [
         "expression"
@@ -5619,7 +5624,7 @@
         }
       }
     },
-    "ShapeNonNullable18": {
+    "ShapeNonNullable19": {
       "anyOf": [
         {
           "type": "string"
@@ -5628,14 +5633,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable16"
+          "$ref": "#/$defs/ShapeNonNullable17"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable17"
+          "$ref": "#/$defs/ShapeNonNullable18"
         }
       ]
     },
-    "ShapeNonNullable19": {
+    "ShapeNonNullable20": {
       "type": "object",
       "required": [
         "channel"
@@ -5648,12 +5653,12 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable18"
+            "$ref": "#/$defs/ShapeNonNullable19"
           }
         }
       }
     },
-    "ShapeNonNullable20": {
+    "ShapeNonNullable21": {
       "type": "object",
       "required": [
         "binding",
@@ -5669,7 +5674,7 @@
         }
       }
     },
-    "ShapeNonNullable21": {
+    "ShapeNonNullable22": {
       "type": "object",
       "required": [
         "pool",
@@ -5697,17 +5702,17 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable19"
-        },
-        {
           "$ref": "#/$defs/ShapeNonNullable20"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
-    "ShapeNonNullable22": {
+    "ShapeNonNullable23": {
       "properties": {
         "op": {
           "enum": [
@@ -5727,7 +5732,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable23": {
+    "ShapeNonNullable24": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -5745,7 +5750,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable24": {
+    "ShapeNonNullable25": {
       "properties": {
         "$type": {
           "const": "literal"
@@ -5760,7 +5765,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable25": {
+    "ShapeNonNullable26": {
       "properties": {
         "$type": {
           "const": "embed"
@@ -5778,7 +5783,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable26": {
+    "ShapeNonNullable27": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -5786,17 +5791,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable23"
-        },
-        {
           "$ref": "#/$defs/ShapeNonNullable24"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable27": {
+    "ShapeNonNullable28": {
       "properties": {
         "op": {
           "enum": [
@@ -5806,10 +5811,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable26"
+          "$ref": "#/$defs/ShapeNonNullable27"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable26"
+          "$ref": "#/$defs/ShapeNonNullable27"
         }
       },
       "required": [
@@ -5819,7 +5824,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable28": {
+    "ShapeNonNullable29": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -5842,17 +5847,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable22"
+          "$ref": "#/$defs/ShapeNonNullable23"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable27"
+          "$ref": "#/$defs/ShapeNonNullable28"
         }
       ]
     },
-    "ShapeNonNullable29": {
+    "ShapeNonNullable30": {
       "type": "object",
       "required": [
         "instructions"
@@ -5867,7 +5872,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable28",
+            "$ref": "#/$defs/ShapeNonNullable29",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -5885,7 +5890,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable28",
+            "$ref": "#/$defs/ShapeNonNullable29",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -5893,12 +5898,12 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable29"
+            "$ref": "#/$defs/ShapeNonNullable30"
           }
         }
       }
     },
-    "ShapeNonNullable30": {
+    "ShapeNonNullable31": {
       "type": "object",
       "required": [
         "zone"
@@ -5910,7 +5915,7 @@
         }
       }
     },
-    "ShapeNonNullable31": {
+    "ShapeNonNullable32": {
       "type": "object",
       "required": [
         "expression"
@@ -5922,7 +5927,7 @@
         }
       }
     },
-    "ShapeNonNullable32": {
+    "ShapeNonNullable33": {
       "anyOf": [
         {
           "type": "string"
@@ -5931,14 +5936,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable30"
+          "$ref": "#/$defs/ShapeNonNullable31"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable31"
+          "$ref": "#/$defs/ShapeNonNullable32"
         }
       ]
     },
-    "ShapeNonNullable33": {
+    "ShapeNonNullable34": {
       "type": "object",
       "required": [
         "channel"
@@ -5951,7 +5956,7 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable32"
+            "$ref": "#/$defs/ShapeNonNullable33"
           }
         }
       }
@@ -5964,13 +5969,13 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable33"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable20"
+          "$ref": "#/$defs/ShapeNonNullable34"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
@@ -6048,7 +6053,7 @@
       "additionalProperties": false,
       "title": "ActionPredicateCompareState"
     },
-    "ShapeNonNullable34": {
+    "ShapeNonNullable35": {
       "properties": {
         "op": {
           "enum": [
@@ -6068,7 +6073,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable35": {
+    "ShapeNonNullable36": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -6086,7 +6091,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable36": {
+    "ShapeNonNullable37": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -6094,17 +6099,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable35"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable24"
+          "$ref": "#/$defs/ShapeNonNullable36"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable37": {
+    "ShapeNonNullable38": {
       "properties": {
         "op": {
           "enum": [
@@ -6114,10 +6119,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable36"
+          "$ref": "#/$defs/ShapeNonNullable37"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable36"
+          "$ref": "#/$defs/ShapeNonNullable37"
         }
       },
       "required": [
@@ -6127,7 +6132,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable38": {
+    "ShapeNonNullable39": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -6150,17 +6155,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable34"
+          "$ref": "#/$defs/ShapeNonNullable35"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable37"
+          "$ref": "#/$defs/ShapeNonNullable38"
         }
       ]
     },
-    "ShapeNonNullable39": {
+    "ShapeNonNullable40": {
       "type": "object",
       "required": [
         "instructions"
@@ -6175,7 +6180,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable38",
+            "$ref": "#/$defs/ShapeNonNullable39",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -6193,7 +6198,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable38",
+            "$ref": "#/$defs/ShapeNonNullable39",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -6201,12 +6206,12 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable39"
+            "$ref": "#/$defs/ShapeNonNullable40"
           }
         }
       }
     },
-    "ShapeNonNullable40": {
+    "ShapeNonNullable41": {
       "type": "object",
       "required": [
         "zone"
@@ -6218,7 +6223,7 @@
         }
       }
     },
-    "ShapeNonNullable41": {
+    "ShapeNonNullable42": {
       "type": "object",
       "required": [
         "expression"
@@ -6230,7 +6235,7 @@
         }
       }
     },
-    "ShapeNonNullable42": {
+    "ShapeNonNullable43": {
       "anyOf": [
         {
           "type": "string"
@@ -6239,14 +6244,14 @@
           "type": "number"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable40"
+          "$ref": "#/$defs/ShapeNonNullable41"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable41"
+          "$ref": "#/$defs/ShapeNonNullable42"
         }
       ]
     },
-    "ShapeNonNullable43": {
+    "ShapeNonNullable44": {
       "type": "object",
       "required": [
         "channel"
@@ -6259,7 +6264,7 @@
         "arguments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable42"
+            "$ref": "#/$defs/ShapeNonNullable43"
           }
         }
       }
@@ -6272,17 +6277,17 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable43"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable20"
+          "$ref": "#/$defs/ShapeNonNullable44"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable21"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
         }
       ]
     },
-    "ShapeNonNullable44": {
+    "ShapeNonNullable45": {
       "properties": {
         "op": {
           "enum": [
@@ -6302,7 +6307,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable45": {
+    "ShapeNonNullable46": {
       "properties": {
         "$type": {
           "const": "cell"
@@ -6320,7 +6325,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable46": {
+    "ShapeNonNullable47": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -6328,17 +6333,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable45"
-        },
-        {
-          "$ref": "#/$defs/ShapeNonNullable24"
+          "$ref": "#/$defs/ShapeNonNullable46"
         },
         {
           "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
         }
       ]
     },
-    "ShapeNonNullable47": {
+    "ShapeNonNullable48": {
       "properties": {
         "op": {
           "enum": [
@@ -6348,10 +6353,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable46"
+          "$ref": "#/$defs/ShapeNonNullable47"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable46"
+          "$ref": "#/$defs/ShapeNonNullable47"
         }
       },
       "required": [
@@ -6361,7 +6366,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable48": {
+    "ShapeNonNullable49": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -6384,17 +6389,17 @@
           "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable15"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable44"
+          "$ref": "#/$defs/ShapeNonNullable45"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable47"
+          "$ref": "#/$defs/ShapeNonNullable48"
         }
       ]
     },
-    "ShapeNonNullable49": {
+    "ShapeNonNullable50": {
       "type": "object",
       "required": [
         "instructions"
@@ -6409,7 +6414,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable48",
+            "$ref": "#/$defs/ShapeNonNullable49",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -6428,7 +6433,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable48",
+            "$ref": "#/$defs/ShapeNonNullable49",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -6436,7 +6441,7 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable49"
+            "$ref": "#/$defs/ShapeNonNullable50"
           }
         }
       }
@@ -10282,6 +10287,193 @@
       "additionalProperties": false,
       "title": "WorldEffectSetIdentityFact"
     },
+    "WorldIdentityRecordValue": {
+      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "field": {
+          "description": "The record field.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The numeric literal.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The integer expression.",
+          "default": null
+        },
+        "text": {
+          "description": "The text literal.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "title": "WorldIdentityRecordValue"
+    },
+    "WorldEffectClaimIdentityRecord": {
+      "description": "Claims the lowest free slot of a record pool on the identity a world-addressed body drives under, and writes its fields after the record\u0027s defaults: a note, a mark, an item, a quest\u0027s progress. The claim lands with the firing and is rewound with it; once the firing commits, an owned identity saves it and a visitor carries it on its travelling records. The writing world\u0027s package must be admitted for the pool (another package\u0027s pool and a home-scoped one refuse).",
+      "properties": {
+        "$type": {
+          "const": "claimIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectClaimIdentityRecord"
+    },
+    "WorldEffectClaimIdentityPair": {
+      "description": "Claims a pair joining two live instances of an identity\u0027s pools (a link between two notes, a tag on a note) and writes its fields, as ClaimIdentityRecord claims an instance.",
+      "properties": {
+        "$type": {
+          "const": "claimIdentityPair"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pair pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The left endpoint\u0027s slot, an integer expression evaluated when the effect fires."
+        },
+        "right": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The right endpoint\u0027s slot, an integer expression evaluated when the effect fires."
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "left",
+        "right"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectClaimIdentityPair"
+    },
+    "WorldEffectSetIdentityRecord": {
+      "description": "Writes fields of the live instance in one slot of an identity\u0027s record pool, each under the field\u0027s own kind and bounds. With a Generation, a slot whose lifetime has moved on refuses rather than writing the instance that replaced it.",
+      "properties": {
+        "$type": {
+          "const": "setIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The slot, an integer expression evaluated when the effect fires."
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          }
+        },
+        "generation": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The lifetime the write names, or null for whichever is live.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "slot",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectSetIdentityRecord"
+    },
+    "WorldEffectReleaseIdentityRecord": {
+      "description": "Releases the live instance in one slot of an identity\u0027s record pool, and every pair it is an endpoint of; the slot\u0027s generation advances, so a reference to the released lifetime reads absent.",
+      "properties": {
+        "$type": {
+          "const": "releaseIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The slot, an integer expression evaluated when the effect fires."
+        },
+        "generation": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The lifetime the release names, or null for whichever is live.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "slot"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectReleaseIdentityRecord"
+    },
     "WorldEffectSetBodyState": {
       "description": "Writes one state.body counter of a world-addressed body: the register a kit\u0027s own setState writes, in the arena\u0027s participant lane, settled through the register\u0027s envelope. The register is the body\u0027s, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.",
       "properties": {
@@ -10456,6 +10648,18 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSetIdentityFact"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectClaimIdentityRecord"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectClaimIdentityPair"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSetIdentityRecord"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectReleaseIdentityRecord"
         },
         {
           "$ref": "#/$defs/WorldEffectSetBodyState"
@@ -13217,7 +13421,7 @@
       "additionalProperties": false,
       "title": "WorldChannelSelection"
     },
-    "ShapeNonNullable50": {
+    "ShapeNonNullable51": {
       "anyOf": [
         {
           "type": "integer"
@@ -13362,7 +13566,7 @@
       },
       "additionalProperties": false
     },
-    "ShapeNonNullable51": {
+    "ShapeNonNullable52": {
       "type": "object",
       "properties": {
         "epochTick": {

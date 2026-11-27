@@ -28,4 +28,21 @@ public readonly record struct WorldDocumentSubmission(string SourceDocumentId, s
 /// <param name="Submission">The request.</param>
 /// <param name="Accepted">Whether it applied.</param>
 /// <param name="Reason">Why it applied or was refused.</param>
-public readonly record struct WorldDocumentSubmissionReceipt(WorldDocumentSubmission Submission, bool Accepted, string Reason);
+/// <param name="Durability">How far an accepted write reached: held in memory, on the owner's disk before this receipt
+/// was issued, or applied in memory with a save that failed. <see cref="WorldWriteDurability.Refused"/> for a refused
+/// one.</param>
+public readonly record struct WorldDocumentSubmissionReceipt(WorldDocumentSubmission Submission, bool Accepted, string Reason, WorldWriteDurability Durability = WorldWriteDurability.Refused);
+/// <summary>How far a write to an owned identity reached before its receipt was issued.</summary>
+public enum WorldWriteDurability : byte {
+    /// <summary>The write was refused and changed nothing.</summary>
+    Refused,
+    /// <summary>The write is held in memory and has no store to reach: a traveller's travelling row, which its owner
+    /// adopts when it comes home, or a catalog that persists nothing (a replay's copy, a read-only account).</summary>
+    Applied,
+    /// <summary>The write, and the award id that credits it, reached the owner's disk in one durable write before the
+    /// receipt was issued: a crash after it keeps the write.</summary>
+    Durable,
+    /// <summary>The write is applied in memory, but its save failed: a crash before a later save loses it, and a
+    /// relaunch reads the identity as its last durable save left it.</summary>
+    Uncertain,
+}

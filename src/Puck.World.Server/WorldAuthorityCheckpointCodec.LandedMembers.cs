@@ -3,66 +3,6 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static byte[] EncodeOwnedWorlds(WorldOwnedWorldsCheckpoint section) {
-        var writer = new WireWriter();
-
-        writer.WriteArray(
-            items: section.Documents,
-            writeItem: static (w, document) => {
-                w.WriteBlock(value: document.DefinitionJson);
-                w.WriteByte(value: ((byte)document.Anchor));
-                w.WriteNullableString(value: document.RelativeDirectory);
-            }
-        );
-        writer.WriteInt64(value: section.Revision);
-
-        return writer.ToArray();
-    }
-    // An owned document names its asset directory only relative to a root the restoring host supplies, so a decoded
-    // directory is a forward-slashed path that is not rooted and never climbs out of that root.
-    private static WorldOwnedDocumentCheckpoint ReadOwnedDocument(ref WireReader reader) {
-        var definitionJson = reader.ReadBlock(field: "owned world document", maxBytes: MaxSectionBytes);
-        var anchor = reader.ReadByte();
-        var relative = reader.ReadNullableString(field: "owned world asset directory", maxBytes: MaxStringBytes);
-
-        if (
-            !reader.Failed &&
-            ((anchor > ((byte)WorldOwnedDocumentAnchor.World)) ||
-            ((anchor == ((byte)WorldOwnedDocumentAnchor.None)) != (relative is null)) ||
-            ((relative is not null) && !WorldCheckpointPaths.IsRelativeUnderRoot(path: relative)))
-        ) {
-            reader.Fail(
-                detail: $"owned world asset directory (anchor {anchor}, '{relative}') is not a forward-slashed path under its root",
-                refusal: WireRefusal.PayloadMalformed
-            );
-        }
-
-        return new WorldOwnedDocumentCheckpoint(
-            Anchor: ((WorldOwnedDocumentAnchor)anchor),
-            DefinitionJson: definitionJson,
-            RelativeDirectory: relative
-        );
-    }
-    private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) => TryDecodeSection(
-        bytes: bytes,
-        name: "owned worlds",
-        read: ReadOwnedWorlds,
-        reason: out reason,
-        section: out section
-    );
-    private static WorldOwnedWorldsCheckpoint ReadOwnedWorlds(ref WireReader reader) {
-        var documents = reader.ReadArray(
-            field: "owned worlds documents",
-            readItem: static (ref WireReader r) => ReadOwnedDocument(reader: ref r),
-            maximum: MaxCollectionCount
-        );
-        var revision = reader.ReadInt64();
-
-        return new WorldOwnedWorldsCheckpoint(
-            Documents: documents,
-            Revision: revision
-        );
-    }
     // ---- host row section ----
 
     private static void WriteLandedMember(WireWriter writer, WorldLandedMemberCheckpoint member) {

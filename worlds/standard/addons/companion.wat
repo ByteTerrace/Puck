@@ -1,9 +1,13 @@
-;; The faerie flies a colliding body through Drive and Observe. Forward/strafe/rise are existing input roles.
-;; The 64-crumb route retains stairs, doors, lifts and portal approaches. Seeded idle choices, loops, pauses,
-;; face/exhibit/light/screen curiosity, neighbour clearance and predictive swat evasions are integer guest decisions.
-;; companion-senses.puck projects the world's observations. There is no guest pose or document mutation.
+;; The standard companion's driver (companion.puck): it flies a colliding body through Drive and Observe, following
+;; its owner. Forward/strafe/rise are existing input roles. Its grants name the bodies: the one it drives is itself,
+;; and the other one it observes is its owner, so nothing here names a body number. The 64-crumb route retains stairs,
+;; doors, lifts and portal approaches. Seeded idle choices, loops, pauses, curiosity, neighbour clearance and predictive
+;; swat evasions are integer guest decisions; a priority guide point (the `guide` sense, which quests, lock-on and
+;; marks write through the world's authored rules) outranks curiosity and the route. The world's rules project its
+;; observations into the sense row `companionSense<owner>`. There is no guest pose or document mutation.
 ;; Memory: descriptors 0x100, rings 0x1000/0x2000, trail 0x3000, senses 0x5000, request map 0x5400,
-;; row name 0x6000, length-prefixed keys 0x6100. Q48.16 at the ABI; persistent Puck.Maths PCG stream 1.
+;; row name 0x6000 (its last byte the owner's digit), length-prefixed keys 0x6100. Q48.16 at the ABI; persistent
+;; Puck.Maths PCG stream 1.
 (module
   (memory (export "memory") 1)
 
@@ -25,18 +29,20 @@
   (global $observeSelf (mut i32) (i32.const 0))
   (global $observeSelfIndex (mut i32) (i32.const 0))
   (global $observeSelfGeneration (mut i32) (i32.const 0))
-  (global $observeMoth (mut i32) (i32.const 0))
-  (global $observeMothIndex (mut i32) (i32.const 0))
-  (global $observeMothGeneration (mut i32) (i32.const 0))
+  (global $observeOwner (mut i32) (i32.const 0))
+  (global $observeOwnerIndex (mut i32) (i32.const 0))
+  (global $observeOwnerGeneration (mut i32) (i32.const 0))
+  ;; The owner's body, from the observed body that is not this one; -1 until it is disclosed.
+  (global $ownerBody (mut i64) (i64.const -1))
 
   ;; Last tick's pose query ordinals, -1 when none was asked.
-  (global $askedMoth (mut i32) (i32.const -1))
+  (global $askedOwner (mut i32) (i32.const -1))
   (global $askedSelf (mut i32) (i32.const -1))
   ;; This batch's answered positions, and which of parts 0 (x, y) and 1 (z) arrived.
-  (global $mothX (mut i64) (i64.const 0))
-  (global $mothY (mut i64) (i64.const 0))
-  (global $mothZ (mut i64) (i64.const 0))
-  (global $mothParts (mut i32) (i32.const 0))
+  (global $ownerX (mut i64) (i64.const 0))
+  (global $ownerY (mut i64) (i64.const 0))
+  (global $ownerZ (mut i64) (i64.const 0))
+  (global $ownerParts (mut i32) (i32.const 0))
   (global $selfX (mut i64) (i64.const 0))
   (global $selfY (mut i64) (i64.const 0))
   (global $selfZ (mut i64) (i64.const 0))
@@ -105,16 +111,16 @@
   (func $crumb (param $k i32) (result i32)
     (i32.add (i32.const 0x3000) (i32.mul (i32.and (local.get $k) (i32.const 63)) (i32.const 24))))
 
-  ;; Drops a crumb where the Moth stands when she has moved half a metre from the last one, and restarts the trail
+  ;; Drops a crumb where its owner stands when she has moved half a metre from the last one, and restarts the trail
   ;; when she is more than 6 m from it.
   (func $trail
     (local $last i32) (local $dx i64) (local $dy i64) (local $dz i64) (local $moved i64) (local $at i32)
     (if (i32.gt_u (global.get $trailHead) (i32.const 0))
       (then
         (local.set $last (call $crumb (i32.sub (global.get $trailHead) (i32.const 1))))
-        (local.set $dx (i64.sub (global.get $mothX) (i64.load (local.get $last))))
-        (local.set $dy (i64.sub (global.get $mothY) (i64.load offset=8 (local.get $last))))
-        (local.set $dz (i64.sub (global.get $mothZ) (i64.load offset=16 (local.get $last))))
+        (local.set $dx (i64.sub (global.get $ownerX) (i64.load (local.get $last))))
+        (local.set $dy (i64.sub (global.get $ownerY) (i64.load offset=8 (local.get $last))))
+        (local.set $dz (i64.sub (global.get $ownerZ) (i64.load offset=16 (local.get $last))))
         (local.set $moved (call $isqrt (i64.add (i64.add
           (i64.mul (local.get $dx) (local.get $dx))
           (i64.mul (local.get $dy) (local.get $dy)))
@@ -123,9 +129,9 @@
         (if (i64.gt_s (local.get $moved) (i64.const 0x60000))
           (then (global.set $trailNext (global.get $trailHead))))))
     (local.set $at (call $crumb (global.get $trailHead)))
-    (i64.store (local.get $at) (global.get $mothX))
-    (i64.store offset=8 (local.get $at) (global.get $mothY))
-    (i64.store offset=16 (local.get $at) (global.get $mothZ))
+    (i64.store (local.get $at) (global.get $ownerX))
+    (i64.store offset=8 (local.get $at) (global.get $ownerY))
+    (i64.store offset=16 (local.get $at) (global.get $ownerZ))
     (global.set $trailHead (i32.add (global.get $trailHead) (i32.const 1)))
     ;; The ring holds 64 crumbs; a trail longer than that loses its oldest.
     (if (i32.gt_u (i32.sub (global.get $trailHead) (global.get $trailNext)) (i32.const 64))
@@ -216,7 +222,7 @@
         (global.set $senseGeneration (i32.load16_u offset=6 (local.get $cell)))))))
     (if (i32.ge_u (local.get $o) (i32.const 32)) (then (return)))
     (local.set $slot (i32.load (i32.add (i32.const 0x5400) (i32.shl (local.get $o) (i32.const 2)))))
-    (if (i32.ge_u (local.get $slot) (i32.const 21)) (then (return)))
+    (if (i32.ge_u (local.get $slot) (i32.const 24)) (then (return)))
     ;; Numeric reads repeat their allowing grant verdict (1..3); text reads use Applied (10).
     (if (i32.or (i32.lt_u (i32.load8_u offset=8 (local.get $cell)) (i32.const 1))
           (i32.gt_u (i32.load8_u offset=8 (local.get $cell)) (i32.const 3))) (then
@@ -237,10 +243,11 @@
           (i64.extend_i32_u (i32.load8_u (local.get $p))) (i64.const 0)))
         (i32.store (i32.add (i32.const 0x5400) (i32.shl (local.get $o) (i32.const 2))) (local.get $i))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br_if $read (i32.lt_u (local.get $i) (i32.const 21)))))
-      (else (if (i32.lt_s (global.get $askedSense) (i32.const 0)) (then
+        (br_if $read (i32.lt_u (local.get $i) (i32.const 24)))))
+      ;; The sense row is the owner's own, so it is asked for once the owner is known.
+      (else (if (i32.and (i32.lt_s (global.get $askedSense) (i32.const 0)) (i64.ge_s (global.get $ownerBody) (i64.const 0))) (then
         (global.set $askedSense (call $emit (i32.const 2) (i32.const 1) (i32.const 0) (i32.const 0)
-          (i32.const 5) (i64.const 0x6000) (i64.const 2) (i64.const 14))))))))
+          (i32.const 5) (i64.const 0x6000) (i64.const 2) (i64.const 15))))))))
 
   ;; A predicted swept point, shared by authored hand threats and body approaches. Dodge direction includes a
   ;; seeded lateral choice, so repeated swats produce different coherent evasions, with a bounded return deadline.
@@ -279,11 +286,11 @@
       (i64.mul (local.get $side) (i64.div_s (i64.mul (local.get $dx) (i64.const 32768)) (local.get $length))))))
     (global.set $dodgeY (i64.add (global.get $selfY) (i64.add (i64.const 16384)
       (i64.div_s (i64.mul (local.get $dy) (i64.const 22938)) (local.get $length)))))
-    ;; A perpendicular escape must not cut through the Moth. Reflect an inward choice across our current point;
+    ;; A perpendicular escape must not cut through its owner. Reflect an inward choice across our current point;
     ;; this preserves the seeded variation while sending its entire first leg away from her occupied capsule.
     (if (i64.lt_s (i64.add
-          (call $mul (i64.sub (global.get $dodgeX) (global.get $selfX)) (i64.sub (global.get $selfX) (global.get $mothX)))
-          (call $mul (i64.sub (global.get $dodgeZ) (global.get $selfZ)) (i64.sub (global.get $selfZ) (global.get $mothZ))))
+          (call $mul (i64.sub (global.get $dodgeX) (global.get $selfX)) (i64.sub (global.get $selfX) (global.get $ownerX)))
+          (call $mul (i64.sub (global.get $dodgeZ) (global.get $selfZ)) (i64.sub (global.get $selfZ) (global.get $ownerZ))))
         (i64.const 0)) (then
       (global.set $dodgeX (i64.sub (i64.mul (global.get $selfX) (i64.const 2)) (global.get $dodgeX)))
       (global.set $dodgeZ (i64.sub (i64.mul (global.get $selfZ) (i64.const 2)) (global.get $dodgeZ)))))
@@ -293,7 +300,7 @@
     (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5)
       (i64.const 0x6040) (i64.const 5) (i64.const 0))))
 
-  ;; A straight leg toward a goal must not cross the Moth's capsule: the clearance below acts only within 0.75 m, too
+  ;; A straight leg toward a goal must not cross its owner's capsule: the clearance below acts only within 0.75 m, too
   ;; late to turn a flight at speed. When the leg from our point to (gx, gz) passes within 1 m of her axis while we fly
   ;; at her height, the goal becomes a point on that circle: 45 degrees round from our bearing, on the goal's side,
   ;; or the near point when the goal itself lies inside it. Re-chosen every tick, the detour orbits her until clear.
@@ -304,10 +311,10 @@
     (local $px i64) (local $pz i64) (local $dx i64) (local $dz i64) (local $pd i64) (local $dd i64)
     (local $pp i64) (local $near i64) (local $length i64) (local $ux i64) (local $uz i64) (local $side i64)
     (global.set $skirted (i32.const 0))
-    (if (i64.ge_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $mothY) (i64.const 65536))))
+    (if (i64.ge_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $ownerY) (i64.const 65536))))
         (i64.const 78643)) (then (return)))
-    (local.set $px (i64.sub (global.get $selfX) (global.get $mothX)))
-    (local.set $pz (i64.sub (global.get $selfZ) (global.get $mothZ)))
+    (local.set $px (i64.sub (global.get $selfX) (global.get $ownerX)))
+    (local.set $pz (i64.sub (global.get $selfZ) (global.get $ownerZ)))
     (local.set $pp (i64.add (call $mul (local.get $px) (local.get $px)) (call $mul (local.get $pz) (local.get $pz))))
     ;; Directly over her axis there is no bearing to skirt from: the capsule clearance below owns that escape. Anywhere
     ;; else, inside the circle too, the detour holds until the leg points away from her, so it never lapses to the
@@ -327,11 +334,11 @@
       (then
         ;; The goal is the leg's nearest point to her: skirt only when it lies inside the circle.
         (local.set $near (i64.add
-          (call $mul (i64.sub (local.get $gx) (global.get $mothX)) (i64.sub (local.get $gx) (global.get $mothX)))
-          (call $mul (i64.sub (local.get $gz) (global.get $mothZ)) (i64.sub (local.get $gz) (global.get $mothZ)))))
+          (call $mul (i64.sub (local.get $gx) (global.get $ownerX)) (i64.sub (local.get $gx) (global.get $ownerX)))
+          (call $mul (i64.sub (local.get $gz) (global.get $ownerZ)) (i64.sub (local.get $gz) (global.get $ownerZ)))))
         (if (i64.ge_s (local.get $near) (i64.const 65536)) (then (return)))
-        (global.set $skirtX (i64.add (global.get $mothX) (local.get $ux)))
-        (global.set $skirtZ (i64.add (global.get $mothZ) (local.get $uz))))
+        (global.set $skirtX (i64.add (global.get $ownerX) (local.get $ux)))
+        (global.set $skirtZ (i64.add (global.get $ownerZ) (local.get $uz))))
       (else
         (local.set $near (i64.sub (local.get $pp) (i64.div_s (i64.mul (local.get $pd) (local.get $pd)) (local.get $dd))))
         (if (i64.ge_s (local.get $near) (i64.const 65536)) (then (return)))
@@ -339,9 +346,9 @@
         (local.set $side (i64.const 1))
         (if (i64.lt_s (i64.sub (call $mul (local.get $px) (local.get $dz)) (call $mul (local.get $pz) (local.get $dx))) (i64.const 0))
           (then (local.set $side (i64.const -1))))
-        (global.set $skirtX (i64.add (global.get $mothX) (call $mul (i64.const 46341)
+        (global.set $skirtX (i64.add (global.get $ownerX) (call $mul (i64.const 46341)
           (i64.sub (local.get $ux) (i64.mul (local.get $side) (local.get $uz))))))
-        (global.set $skirtZ (i64.add (global.get $mothZ) (call $mul (i64.const 46341)
+        (global.set $skirtZ (i64.add (global.get $ownerZ) (call $mul (i64.const 46341)
           (i64.add (local.get $uz) (i64.mul (local.get $side) (local.get $ux))))))))
     (global.set $skirted (i32.const 1)))
 
@@ -349,19 +356,19 @@
     (local $dx i64) (local $dy i64) (local $dz i64) (local $gx i64) (local $gy i64) (local $gz i64)
     (local $distance i64) (local $length i64) (local $at i32) (local $fx i64) (local $fz i64)
     (local $mx i64) (local $my i64) (local $mz i64) (local $moving i32) (local $speed i64)
-    (local $gain i64) (local $route i32)
+    (local $gain i64) (local $route i32) (local $guided i32)
     (if (i32.eqz (global.get $seeded)) (then
       (global.set $seeded (i32.const 1))
       (drop (call $next)) (global.set $rng (i64.add (global.get $rng) (i64.const 314159))) (drop (call $next))
-      (global.set $lastMX (global.get $mothX)) (global.set $lastMY (global.get $mothY)) (global.set $lastMZ (global.get $mothZ))
+      (global.set $lastMX (global.get $ownerX)) (global.set $lastMY (global.get $ownerY)) (global.set $lastMZ (global.get $ownerZ))
       (global.set $restX (global.get $selfX)) (global.set $restZ (global.get $selfZ))
       (global.set $lastSX (global.get $selfX)) (global.set $lastSZ (global.get $selfZ))))
-    (local.set $mx (i64.sub (global.get $mothX) (global.get $lastMX)))
-    (local.set $my (i64.sub (global.get $mothY) (global.get $lastMY)))
-    (local.set $mz (i64.sub (global.get $mothZ) (global.get $lastMZ)))
+    (local.set $mx (i64.sub (global.get $ownerX) (global.get $lastMX)))
+    (local.set $my (i64.sub (global.get $ownerY) (global.get $lastMY)))
+    (local.set $mz (i64.sub (global.get $ownerZ) (global.get $lastMZ)))
     (local.set $speed (call $norm (local.get $mx) (local.get $my) (local.get $mz)))
-    (local.set $distance (call $planar (global.get $selfX) (global.get $selfZ) (global.get $mothX) (global.get $mothZ)))
-    ;; Keep the entry approach when the Moth crosses a portal, instead of cutting across to its exit.
+    (local.set $distance (call $planar (global.get $selfX) (global.get $selfZ) (global.get $ownerX) (global.get $ownerZ)))
+    ;; Keep the entry approach when its owner crosses a portal, instead of cutting across to its exit.
     (if (i64.gt_s (local.get $speed) (i64.const 393216)) (then
       (if (i32.and
           (i64.gt_s (call $planar (i64.const 0) (i64.const 0) (global.get $lastDX) (global.get $lastDZ)) (i64.const 655))
@@ -392,7 +399,7 @@
       (global.set $wanderX (i64.sub (call $random (i32.const 52428)) (i64.const 26214)))
       (global.set $wanderZ (i64.sub (call $random (i32.const 52428)) (i64.const 26214)))
       (global.set $wanderY (i64.sub (call $random (i32.const 15728)) (i64.const 7864)))))
-    ;; Heading from the Moth's quaternion; side-and-behind keeps her face and hands comfortably clear.
+    ;; Heading from its owner's quaternion; side-and-behind keeps her face and hands comfortably clear.
     (local.set $fx (i64.sub (i64.const 0) (i64.mul (i64.const 2) (call $mul (global.get $qy) (global.get $qw)))))
     (local.set $fz (i64.sub (i64.mul (i64.const 2) (call $mul (global.get $qy) (global.get $qy))) (i64.const 65536)))
     ;; Keep the actual approach as the resting anchor, so stopping on a narrow stair never asks for a side offset
@@ -401,7 +408,7 @@
       (global.set $restX (global.get $selfX)) (global.set $restZ (global.get $selfZ))))
     (local.set $gx (global.get $restX))
     (local.set $gz (global.get $restZ))
-    (local.set $gy (i64.add (global.get $mothY) (i64.const 98304)))
+    (local.set $gy (i64.add (global.get $ownerY) (i64.const 98304)))
     (if (i32.and (i32.eqz (local.get $moving)) (i64.lt_s (local.get $distance) (i64.const 196608))) (then
       (if (i32.ne (global.get $mode) (i32.const 0)) (then
         (local.set $gx (i64.add (local.get $gx) (global.get $wanderX)))
@@ -415,18 +422,17 @@
         (local.set $gz (i64.add (local.get $gz) (call $mul (i64.const 26214)
           (call $wave (i64.add (i64.add (global.get $tick) (global.get $phase)) (i64.div_u (global.get $period) (i64.const 4))) (global.get $period)))))))
       (if (i32.eq (global.get $mode) (i32.const 3)) (then
-        ;; A brief look near the nearest exhibit, light, screen or portal. Never leave the Moth's 4 m neighbourhood.
+        ;; A brief look near the nearest exhibit, light, screen or portal. Never leave its owner's 4 m neighbourhood.
         (if (i64.gt_s (call $s (i32.const 10)) (i64.const 0)) (then
           (local.set $gx (call $s (i32.const 7))) (local.set $gy (call $s (i32.const 8))) (local.set $gz (call $s (i32.const 9)))))))
       (if (i32.eq (global.get $mode) (i32.const 4)) (then
-        (local.set $gx (i64.add (global.get $mothX) (call $mul (local.get $fz) (i64.const 58982))))
-        (local.set $gz (i64.sub (global.get $mothZ) (call $mul (local.get $fx) (i64.const 58982))))
-        (local.set $gy (i64.add (global.get $mothY) (i64.const 111411)))))))
+        (local.set $gx (i64.add (global.get $ownerX) (call $mul (local.get $fz) (i64.const 58982))))
+        (local.set $gz (i64.sub (global.get $ownerZ) (call $mul (local.get $fx) (i64.const 58982))))
+        (local.set $gy (i64.add (global.get $ownerY) (i64.const 111411)))))))
     ;; Start and run: lead a little. The kit's release response carries the final motion into a stop.
     (if (local.get $moving) (then
       (local.set $gx (i64.add (local.get $gx) (i64.mul (local.get $mx) (i64.const 5))))
       (local.set $gz (i64.add (local.get $gz) (i64.mul (local.get $mz) (i64.const 5))))))
-    (local.set $gx (i64.add (local.get $gx) (call $mul (call $s (i32.const 15)) (i64.const 22938))))
     ;; While moving, beyond 1.8 m, or on another height, keep the route: thread doors, stairs and the lift opening.
     (if (i32.or (local.get $moving) (i32.or
           (i64.gt_s (local.get $distance) (i64.const 117965))
@@ -447,8 +453,8 @@
         (local.set $gy (i64.add (i64.load offset=8 (local.get $at)) (i64.const 98304)))
         (local.set $gz (i64.load offset=16 (local.get $at))))
         (else
-          (local.set $gx (global.get $mothX)) (local.set $gz (global.get $mothZ))))))
-    ;; Keep a metre of comfort while the Moth moves, but leave the crumb cursor ready for her next doorway.
+          (local.set $gx (global.get $ownerX)) (local.set $gz (global.get $ownerZ))))))
+    ;; Keep a metre of comfort while its owner moves, but leave the crumb cursor ready for her next doorway.
     (if (i32.and (local.get $moving) (i64.lt_s (local.get $distance) (i64.const 65536))) (then
       (local.set $gx (global.get $selfX)) (local.set $gz (global.get $selfZ))))
     ;; A nearby sound briefly turns a curiosity toward its source, without leaving the current floor.
@@ -457,13 +463,19 @@
           (call $s (i32.const 16)) (call $s (i32.const 18))) (i64.const 262144)) (then
         (local.set $gx (i64.div_s (i64.add (local.get $gx) (call $s (i32.const 16))) (i64.const 2)))
         (local.set $gz (i64.div_s (i64.add (local.get $gz) (call $s (i32.const 18))) (i64.const 2)))))))
+    ;; A priority guide point outranks curiosity, sound and the route: the world's rules place it (hovering over a
+    ;; mark, leading toward an objective), and this flies there at a guiding pace. A portal approach and every
+    ;; evasion and clearance below still take precedence.
+    (if (i64.gt_s (call $s (i32.const 15)) (i64.const 0)) (then
+      (local.set $gx (call $s (i32.const 21))) (local.set $gy (call $s (i32.const 22))) (local.set $gz (call $s (i32.const 23)))
+      (local.set $guided (i32.const 1))))
     (if (i64.gt_s (global.get $portalEnd) (global.get $tick)) (then
       (local.set $gx (global.get $portalX)) (local.set $gy (global.get $portalY)) (local.set $gz (global.get $portalZ))))
     ;; Predict a swat before it reaches the body. The caller supplies world point + world velocity, nothing else.
     (if (i64.gt_s (call $s (i32.const 0)) (i64.const 0)) (then
       (call $threat (call $s (i32.const 1)) (call $s (i32.const 2)) (call $s (i32.const 3))
         (call $s (i32.const 4)) (call $s (i32.const 5)) (call $s (i32.const 6)))))
-    ;; Neighbour clearance: avoid every nearby body's projected centre, including the Moth while face-inspecting.
+    ;; Neighbour clearance: avoid every nearby body's projected centre, including its owner while face-inspecting.
     (if (i64.ge_s (call $s (i32.const 14)) (i64.const 0)) (then
       ;; A moving body supplies the same threat point and velocity as a future tracked hand. Ignore target switches
       ;; and teleports (more than 1 m between samples), which are not physical swings through the faerie's space.
@@ -484,6 +496,7 @@
         (local.set $gz (i64.add (local.get $gz) (i64.div_s (i64.mul (local.get $dz) (i64.const 19661)) (local.get $length))))))))
     (local.set $gain (i64.const 3))
     (if (local.get $route) (then (local.set $gain (i64.const 24))))
+    (if (local.get $guided) (then (local.set $gain (i64.const 8))))
     (if (i64.lt_s (global.get $tick) (global.get $startleEnd)) (then
       (local.set $gain (i64.const 2))))
     (if (i64.lt_s (global.get $tick) (global.get $dodgeEnd)) (then
@@ -491,21 +504,21 @@
       (local.set $gain (i64.const 10))))
     (if (i32.and (i64.gt_u (global.get $verticalEnd) (global.get $tick))
           (i64.lt_s (local.get $distance) (i64.const 163840))) (then
-      (local.set $gy (i64.add (global.get $mothY) (i64.const 98304)))))
+      (local.set $gy (i64.add (global.get $ownerY) (i64.const 98304)))))
     (call $skirt (local.get $gx) (local.get $gz))
     (if (global.get $skirted) (then (local.set $gx (global.get $skirtX)) (local.set $gz (global.get $skirtZ))))
-    ;; Keep clear of the Moth's whole occupied capsule, including during an evasion or vertical ride. A centre
+    ;; Keep clear of its owner's whole occupied capsule, including during an evasion or vertical ride. A centre
     ;; sampled at torso height alone does not protect the ends of a tall body while a platform moves it.
     (if (i32.and (i64.lt_s (local.get $distance) (i64.const 49152))
-          (i64.lt_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $mothY) (i64.const 65536))))
+          (i64.lt_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $ownerY) (i64.const 65536))))
             (i64.const 78643))) (then
-      (local.set $dx (i64.sub (global.get $selfX) (global.get $mothX)))
-      (local.set $dz (i64.sub (global.get $selfZ) (global.get $mothZ)))
+      (local.set $dx (i64.sub (global.get $selfX) (global.get $ownerX)))
+      (local.set $dz (i64.sub (global.get $selfZ) (global.get $ownerZ)))
       (local.set $length (call $planar (i64.const 0) (i64.const 0) (local.get $dx) (local.get $dz)))
       (if (i64.lt_s (local.get $length) (i64.const 1024)) (then
         (local.set $dx (i64.const -65536)) (local.set $dz (i64.const 0)) (local.set $length (i64.const 65536))))
-      (local.set $gx (i64.add (global.get $mothX) (i64.div_s (i64.mul (local.get $dx) (i64.const 58982)) (local.get $length))))
-      (local.set $gz (i64.add (global.get $mothZ) (i64.div_s (i64.mul (local.get $dz) (i64.const 58982)) (local.get $length))))))
+      (local.set $gx (i64.add (global.get $ownerX) (i64.div_s (i64.mul (local.get $dx) (i64.const 58982)) (local.get $length))))
+      (local.set $gz (i64.add (global.get $ownerZ) (i64.div_s (i64.mul (local.get $dz) (i64.const 58982)) (local.get $length))))))
     (local.set $dx (i64.sub (local.get $gx) (global.get $selfX)))
     (local.set $dy (i64.sub (local.get $gy) (global.get $selfY)))
     (local.set $dz (i64.sub (local.get $gz) (global.get $selfZ)))
@@ -516,7 +529,7 @@
       (else (global.set $stalled (i32.const 0))))
     (if (i32.gt_u (global.get $stalled) (i32.const 12)) (then (local.set $dy (i64.add (local.get $dy) (i64.const 19661)))))
     ;; Proportional velocity, bounded in all three axes together. Drive's rise channel is the same free-flight
-    ;; MoveUp role the Moth already uses; there is no guest pose write or artificial attachment.
+    ;; MoveUp role its owner already uses; there is no guest pose write or artificial attachment.
     (local.set $dx (i64.mul (local.get $dx) (local.get $gain)))
     (local.set $dy (i64.mul (local.get $dy) (local.get $gain)))
     (local.set $dz (i64.mul (local.get $dz) (local.get $gain)))
@@ -525,7 +538,7 @@
     (call $act (i32.const 1) (i64.div_s (i64.shl (local.get $dx) (i64.const 16)) (local.get $length)))
     (call $act (i32.const 0) (i64.div_s (i64.shl (i64.sub (i64.const 0) (local.get $dz)) (i64.const 16)) (local.get $length)))
     (call $act (i32.const 2) (i64.div_s (i64.shl (local.get $dy) (i64.const 16)) (local.get $length)))
-    (global.set $lastMX (global.get $mothX)) (global.set $lastMY (global.get $mothY)) (global.set $lastMZ (global.get $mothZ))
+    (global.set $lastMX (global.get $ownerX)) (global.set $lastMY (global.get $ownerY)) (global.set $lastMZ (global.get $ownerZ))
     (global.set $lastSX (global.get $selfX)) (global.set $lastSZ (global.get $selfZ))
     (global.set $lastNear (i64.ge_s (call $s (i32.const 14)) (i64.const 0)))
     (global.set $nearX (call $s (i32.const 11))) (global.set $nearY (call $s (i32.const 12)))
@@ -537,7 +550,7 @@
     (local $ordinal i32) (local $verdict i32) (local $part i32) (local $body i64)
     (global.set $out (i32.const 0))
     (i64.store (i32.const 0x5000) (i64.const 0))
-    (global.set $mothParts (i32.const 0))
+    (global.set $ownerParts (i32.const 0))
     (global.set $selfParts (i32.const 0))
     (local.set $i (i32.const 0))
     (block $drained
@@ -557,8 +570,8 @@
                 (local.set $disclosed (i32.const 1))
                 (global.set $drive (i32.const 0))
                 (global.set $observeSelf (i32.const 0))
-                (global.set $observeMoth (i32.const 0))
-                (global.set $askedMoth (i32.const -1))
+                (global.set $observeOwner (i32.const 0))
+                (global.set $askedOwner (i32.const -1))
                 (global.set $askedSelf (i32.const -1))))
             (local.set $body (i64.load offset=24 (local.get $cell)))
             (if (i64.eq (i64.load offset=16 (local.get $cell)) (i64.const 1))
@@ -567,13 +580,20 @@
                 (global.set $driveIndex (i32.load16_u offset=4 (local.get $cell)))
                 (global.set $driveGeneration (i32.load16_u offset=6 (local.get $cell)))
                 (global.set $selfBody (local.get $body))))
+            ;; Drive's set is disclosed before Observe's, so the self body is known here: any other observed body is
+            ;; the owner, a local seat's body (0..9), whose digit names the sense row.
             (if (i64.eq (i64.load offset=16 (local.get $cell)) (i64.const 2))
               (then
-                (if (i64.eqz (local.get $body))
+                (if (i32.and (i64.ne (local.get $body) (global.get $selfBody)) (i64.lt_u (local.get $body) (i64.const 10)))
                   (then
-                    (global.set $observeMoth (i32.const 1))
-                    (global.set $observeMothIndex (i32.load16_u offset=4 (local.get $cell)))
-                    (global.set $observeMothGeneration (i32.load16_u offset=6 (local.get $cell))))
+                    (if (i64.ne (local.get $body) (global.get $ownerBody)) (then
+                      (global.set $ownerBody (local.get $body))
+                      (i32.store8 (i32.const 0x600E) (i32.add (i32.const 48) (i32.wrap_i64 (local.get $body))))
+                      (global.set $sense (i32.const 0))
+                      (global.set $askedSense (i32.const -1))))
+                    (global.set $observeOwner (i32.const 1))
+                    (global.set $observeOwnerIndex (i32.load16_u offset=4 (local.get $cell)))
+                    (global.set $observeOwnerGeneration (i32.load16_u offset=6 (local.get $cell))))
                   (else
                     (global.set $observeSelf (i32.const 1))
                     (global.set $observeSelfIndex (i32.load16_u offset=4 (local.get $cell)))
@@ -586,20 +606,20 @@
             (local.set $part (i32.load8_u offset=9 (local.get $cell)))
             (if (i32.and (i32.ge_u (local.get $verdict) (i32.const 1)) (i32.le_u (local.get $verdict) (i32.const 3)))
               (then
-                (if (i32.eq (local.get $ordinal) (global.get $askedMoth))
+                (if (i32.eq (local.get $ordinal) (global.get $askedOwner))
                   (then
                     (if (i32.eqz (local.get $part))
                       (then
-                        (global.set $mothX (i64.load offset=16 (local.get $cell)))
-                        (global.set $mothY (i64.load offset=24 (local.get $cell)))))
+                        (global.set $ownerX (i64.load offset=16 (local.get $cell)))
+                        (global.set $ownerY (i64.load offset=24 (local.get $cell)))))
                     (if (i32.eq (local.get $part) (i32.const 1))
-                      (then (global.set $mothZ (i64.load offset=16 (local.get $cell)))))
+                      (then (global.set $ownerZ (i64.load offset=16 (local.get $cell)))))
                     (if (i32.eq (local.get $part) (i32.const 2))
                       (then (global.set $qy (i64.load offset=24 (local.get $cell)))))
                     (if (i32.eq (local.get $part) (i32.const 3))
                       (then (global.set $qw (i64.load offset=24 (local.get $cell)))))
                     (if (i32.le_u (local.get $part) (i32.const 1))
-                      (then (global.set $mothParts (i32.or (global.get $mothParts)
+                      (then (global.set $ownerParts (i32.or (global.get $ownerParts)
                         (i32.shl (i32.const 1) (local.get $part))))))))
                 (if (i32.eq (local.get $ordinal) (global.get $askedSelf))
                   (then
@@ -616,19 +636,19 @@
         (br $read)))
     (call $readSenses)
     ;; Ask both poses every tick: an answer that never came back was starved, not refused.
-    (global.set $askedMoth (i32.const -1))
+    (global.set $askedOwner (i32.const -1))
     (global.set $askedSelf (i32.const -1))
-    (if (global.get $observeMoth)
-      (then (global.set $askedMoth (call $askPose (global.get $observeMothIndex) (global.get $observeMothGeneration)))))
+    (if (global.get $observeOwner)
+      (then (global.set $askedOwner (call $askPose (global.get $observeOwnerIndex) (global.get $observeOwnerGeneration)))))
     (if (global.get $observeSelf)
       (then (global.set $askedSelf (call $askPose (global.get $observeSelfIndex) (global.get $observeSelfGeneration)))))
     (if (i32.and (global.get $drive)
-          (i32.and (i32.eq (global.get $mothParts) (i32.const 3)) (i32.eq (global.get $selfParts) (i32.const 3))))
+          (i32.and (i32.eq (global.get $ownerParts) (i32.const 3)) (i32.eq (global.get $selfParts) (i32.const 3))))
       (then (call $steer)))
     (global.get $out))
 
   (data (i32.const 0x5400) "\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff")
-  (data (i32.const 0x6000) "companionSense")
+  (data (i32.const 0x6000) "companionSense0")
   (data (i32.const 0x6040) "evade")
   (data (i32.const 24832) "\06active")
   (data (i32.const 24848) "\01x")
@@ -645,10 +665,13 @@
   (data (i32.const 25024) "\02ny")
   (data (i32.const 25040) "\02nz")
   (data (i32.const 25056) "\04near")
-  (data (i32.const 25072) "\04turn")
+  (data (i32.const 25072) "\05guide")
   (data (i32.const 25088) "\02sx")
   (data (i32.const 25104) "\02sy")
   (data (i32.const 25120) "\02sz")
   (data (i32.const 25136) "\05sound")
-  (data (i32.const 25152) "\04door")
+  (data (i32.const 25152) "\04mode")
+  (data (i32.const 25168) "\02gx")
+  (data (i32.const 25184) "\02gy")
+  (data (i32.const 25200) "\02gz")
 )

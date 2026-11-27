@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -1982,11 +1982,11 @@ export type ExpressionProgram = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable28[];
+  instructions: ShapeNonNullable29[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable29[];
+  subprograms?: ShapeNonNullable30[];
   [k: string]: unknown;
 };
 
@@ -1997,11 +1997,11 @@ export type ExpressionProgramNonNullable = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable38[];
+  instructions: ShapeNonNullable39[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable39[];
+  subprograms?: ShapeNonNullable40[];
   [k: string]: unknown;
 };
 
@@ -2012,11 +2012,11 @@ export type ExpressionProgramNonNullable2 = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable48[];
+  instructions: ShapeNonNullable49[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable49[];
+  subprograms?: ShapeNonNullable50[];
   [k: string]: unknown;
 };
 
@@ -4504,27 +4504,24 @@ export type ShapeNonNullable14 = {
   value: number;
 };
 
-export type ShapeNonNullable15 = {
-  op: "All" | "Any" | "Count" | "Sum";
+export type ShapeNonNullable15 = "All" | "Any" | "Count" | "Sum" | "ArgMinimum" | "ArgMaximum";
+
+export type ShapeNonNullable16 = {
+  op: ShapeNonNullable15;
   family: string;
   binder: string;
   subprogram: number;
 };
 
-export type ShapeNonNullable16 = {
+export type ShapeNonNullable17 = {
   zone: unknown;
 };
 
-export type ShapeNonNullable17 = {
+export type ShapeNonNullable18 = {
   expression: unknown;
 };
 
-export type ShapeNonNullable18 = string | number | ShapeNonNullable16 | ShapeNonNullable17;
-
-export type ShapeNonNullable19 = {
-  channel: string;
-  arguments?: ShapeNonNullable18[];
-};
+export type ShapeNonNullable19 = string | number | ShapeNonNullable17 | ShapeNonNullable18;
 
 export type ShapeNonNullable2 = {
   at: number;
@@ -4533,54 +4530,53 @@ export type ShapeNonNullable2 = {
 };
 
 export type ShapeNonNullable20 = {
+  channel: string;
+  arguments?: ShapeNonNullable19[];
+};
+
+export type ShapeNonNullable21 = {
   binding: string;
   field: string;
 };
 
-export type ShapeNonNullable21 = {
+export type ShapeNonNullable22 = {
   pool: string;
   slot: number;
   field: string;
 };
 
-export type ShapeNonNullable22 = {
+export type ShapeNonNullable23 = {
   op: "Operand";
   name: StateChannelRef;
   key?: StateChannelRef;
 };
 
-export type ShapeNonNullable23 = {
+export type ShapeNonNullable24 = {
   $type: "cell";
   name: StateChannelRef;
   key?: StateChannelRef;
 };
 
-export type ShapeNonNullable24 = {
+export type ShapeNonNullable25 = {
   $type: "literal";
   value: string;
 };
 
-export type ShapeNonNullable25 = {
+export type ShapeNonNullable26 = {
   $type: "embed";
   text: string;
   space?: string;
 };
 
-export type ShapeNonNullable26 = ShapeNonNullable23 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+export type ShapeNonNullable27 = ShapeNonNullable24 | ShapeNonNullable25 | ShapeNonNullable26 | null;
 
-export type ShapeNonNullable27 = {
+export type ShapeNonNullable28 = {
   op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable26;
-  right: ShapeNonNullable26;
+  left: ShapeNonNullable27;
+  right: ShapeNonNullable27;
 };
 
-export type ShapeNonNullable28 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable22 | ShapeNonNullable27 | null;
-
-export type ShapeNonNullable29 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable28[];
-};
+export type ShapeNonNullable29 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable16 | ShapeNonNullable23 | ShapeNonNullable28 | null;
 
 export type ShapeNonNullable3 = {
   clock: string;
@@ -4588,47 +4584,47 @@ export type ShapeNonNullable3 = {
 };
 
 export type ShapeNonNullable30 = {
-  zone: ExpressionProgram;
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable29[];
 };
 
 export type ShapeNonNullable31 = {
+  zone: ExpressionProgram;
+};
+
+export type ShapeNonNullable32 = {
   expression: ExpressionProgram;
 };
 
-export type ShapeNonNullable32 = string | number | ShapeNonNullable30 | ShapeNonNullable31;
-
-export type ShapeNonNullable33 = {
-  channel: string;
-  arguments?: ShapeNonNullable32[];
-};
+export type ShapeNonNullable33 = string | number | ShapeNonNullable31 | ShapeNonNullable32;
 
 export type ShapeNonNullable34 = {
+  channel: string;
+  arguments?: ShapeNonNullable33[];
+};
+
+export type ShapeNonNullable35 = {
   op: "Operand";
   name: unknown;
   key?: unknown;
 };
 
-export type ShapeNonNullable35 = {
+export type ShapeNonNullable36 = {
   $type: "cell";
   name: unknown;
   key?: unknown;
 };
 
-export type ShapeNonNullable36 = ShapeNonNullable35 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+export type ShapeNonNullable37 = ShapeNonNullable36 | ShapeNonNullable25 | ShapeNonNullable26 | null;
 
-export type ShapeNonNullable37 = {
+export type ShapeNonNullable38 = {
   op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable36;
-  right: ShapeNonNullable36;
+  left: ShapeNonNullable37;
+  right: ShapeNonNullable37;
 };
 
-export type ShapeNonNullable38 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable34 | ShapeNonNullable37 | null;
-
-export type ShapeNonNullable39 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable38[];
-};
+export type ShapeNonNullable39 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable16 | ShapeNonNullable35 | ShapeNonNullable38 | null;
 
 export type ShapeNonNullable4 = {
   at: number;
@@ -4639,56 +4635,62 @@ export type ShapeNonNullable4 = {
 };
 
 export type ShapeNonNullable40 = {
-  zone: ExpressionProgramNonNullable;
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable39[];
 };
 
 export type ShapeNonNullable41 = {
+  zone: ExpressionProgramNonNullable;
+};
+
+export type ShapeNonNullable42 = {
   expression: ExpressionProgramNonNullable;
 };
 
-export type ShapeNonNullable42 = string | number | ShapeNonNullable40 | ShapeNonNullable41;
-
-export type ShapeNonNullable43 = {
-  channel: string;
-  arguments?: ShapeNonNullable42[];
-};
+export type ShapeNonNullable43 = string | number | ShapeNonNullable41 | ShapeNonNullable42;
 
 export type ShapeNonNullable44 = {
+  channel: string;
+  arguments?: ShapeNonNullable43[];
+};
+
+export type ShapeNonNullable45 = {
   op: "Operand";
   name: StateChannelRefNonNullable2;
   key?: StateChannelRefNonNullable2;
 };
 
-export type ShapeNonNullable45 = {
+export type ShapeNonNullable46 = {
   $type: "cell";
   name: StateChannelRefNonNullable2;
   key?: StateChannelRefNonNullable2;
 };
 
-export type ShapeNonNullable46 = ShapeNonNullable45 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+export type ShapeNonNullable47 = ShapeNonNullable46 | ShapeNonNullable25 | ShapeNonNullable26 | null;
 
-export type ShapeNonNullable47 = {
+export type ShapeNonNullable48 = {
   op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable46;
-  right: ShapeNonNullable46;
+  left: ShapeNonNullable47;
+  right: ShapeNonNullable47;
 };
 
-export type ShapeNonNullable48 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable44 | ShapeNonNullable47 | null;
-
-export type ShapeNonNullable49 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable48[];
-};
+export type ShapeNonNullable49 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable16 | ShapeNonNullable45 | ShapeNonNullable48 | null;
 
 export type ShapeNonNullable5 = {
   clock: string;
   keys: ShapeNonNullable4[];
 };
 
-export type ShapeNonNullable50 = number | string | boolean;
+export type ShapeNonNullable50 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable49[];
+};
 
-export type ShapeNonNullable51 = {
+export type ShapeNonNullable51 = number | string | boolean;
+
+export type ShapeNonNullable52 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -4931,17 +4933,17 @@ export type StateCellClock = {
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRef = string | ShapeNonNullable19 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRef = string | ShapeNonNullable20 | ShapeNonNullable21 | ShapeNonNullable22;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable = string | ShapeNonNullable33 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRefNonNullable = string | ShapeNonNullable34 | ShapeNonNullable21 | ShapeNonNullable22;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable2 = string | ShapeNonNullable43 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRefNonNullable2 = string | ShapeNonNullable44 | ShapeNonNullable21 | ShapeNonNullable22;
 
 /**
  * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
@@ -7873,6 +7875,52 @@ export type WorldEffectApplyRigidImpulse = {
 };
 
 /**
+ * Claims a pair joining two live instances of an identity's pools (a link between two notes, a tag on a note) and writes its fields, as ClaimIdentityRecord claims an instance.
+ */
+export type WorldEffectClaimIdentityPair = {
+  $type?: "claimIdentityPair";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pair pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The left endpoint's slot, an integer expression evaluated when the effect fires.
+   */
+  left: ExpressionProgramNonNullable2;
+  /**
+   * The right endpoint's slot, an integer expression evaluated when the effect fires.
+   */
+  right: ExpressionProgramNonNullable2;
+  /**
+   * The fields to write, in order.
+   */
+  fields?: (WorldIdentityRecordValue | null)[] | null;
+};
+
+/**
+ * Claims the lowest free slot of a record pool on the identity a world-addressed body drives under, and writes its fields after the record's defaults: a note, a mark, an item, a quest's progress. The claim lands with the firing and is rewound with it; once the firing commits, an owned identity saves it and a visitor carries it on its travelling records. The writing world's package must be admitted for the pool (another package's pool and a home-scoped one refuse).
+ */
+export type WorldEffectClaimIdentityRecord = {
+  $type?: "claimIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The fields to write, in order.
+   */
+  fields?: (WorldIdentityRecordValue | null)[] | null;
+};
+
+/**
  * Consumes the named matched event range only when the enclosing rule commits.
  */
 export type WorldEffectConsumeInput = {
@@ -8059,6 +8107,29 @@ export type WorldEffectPoseCell = {
 };
 
 /**
+ * Releases the live instance in one slot of an identity's record pool, and every pair it is an endpoint of; the slot's generation advances, so a reference to the released lifetime reads absent.
+ */
+export type WorldEffectReleaseIdentityRecord = {
+  $type?: "releaseIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The slot, an integer expression evaluated when the effect fires.
+   */
+  slot: ExpressionProgramNonNullable2;
+  /**
+   * The lifetime the release names, or null for whichever is live.
+   */
+  generation?: ExpressionProgramNonNullable2;
+};
+
+/**
  * Releases a world-addressed body's producer from a HoldProducer hold; releasing a body that is not held does nothing.
  */
 export type WorldEffectReleaseProducer = {
@@ -8155,6 +8226,33 @@ export type WorldEffectSetIdentityFact = {
    * A bounded integer expression evaluated at fire time.
    */
   expression?: ExpressionProgramNonNullable2;
+};
+
+/**
+ * Writes fields of the live instance in one slot of an identity's record pool, each under the field's own kind and bounds. With a Generation, a slot whose lifetime has moved on refuses rather than writing the instance that replaced it.
+ */
+export type WorldEffectSetIdentityRecord = {
+  $type?: "setIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The slot, an integer expression evaluated when the effect fires.
+   */
+  slot: ExpressionProgramNonNullable2;
+  /**
+   * The fields to write, in order.
+   */
+  fields: (WorldIdentityRecordValue | null)[];
+  /**
+   * The lifetime the write names, or null for whichever is live.
+   */
+  generation?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -9601,9 +9699,13 @@ export type WorldIdentityDefinition = {
    */
   facts?: WorldIdentityFacts | null;
   /**
-   * Gets the immutable selection of identity-owned record pools.
+   * Gets the immutable travel classes of the identity's crossing pools.
    */
-  records?: CellName[] | null;
+  travel?: (WorldIdentityPool | null)[] | null;
+  /**
+   * Gets the immutable list of home-scoped facts and pools.
+   */
+  homeScoped?: CellName[] | null;
 };
 
 export type WorldIdentityFacts = {
@@ -9615,6 +9717,39 @@ export type WorldIdentityFacts = {
    * How many distinct facts the row holds; a write past it refuses by name.
    */
   capacity: number;
+};
+
+export type WorldIdentityPool = {
+  /**
+   * The pool's name on the identity's document.
+   */
+  pool: CellName;
+  /**
+   * Its travel class.
+   */
+  class: WorldIdentityTravel;
+};
+
+/**
+ * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.
+ */
+export type WorldIdentityRecordValue = {
+  /**
+   * The record field.
+   */
+  field: string;
+  /**
+   * The numeric literal.
+   */
+  value?: number | null;
+  /**
+   * The integer expression.
+   */
+  expression?: ExpressionProgramNonNullable2;
+  /**
+   * The text literal.
+   */
+  text?: string | null;
 };
 
 export type WorldIdentitySeed = {
@@ -9631,6 +9766,8 @@ export type WorldIdentitySeed = {
    */
   color: string;
 };
+
+export type WorldIdentityTravel = "Home" | "Crossing";
 
 export type WorldImport = {
   /**
@@ -11514,6 +11651,7 @@ export type WorldPlayerDefaults = {
   pickerNeutralColor?: string | null;
   pickerNeutralBlend?: number;
   seatCameraFeel?: WorldSeatCameraFeel | null;
+  identityTemplate?: string | null;
 };
 
 /**
@@ -15520,13 +15658,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable50;
+  value?: ShapeNonNullable51;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable50;
+    value: ShapeNonNullable51;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -15534,7 +15672,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable51;
+    clock?: ShapeNonNullable52;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -15674,7 +15812,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable51;
+  clock?: ShapeNonNullable52;
   /**
    * The vector space name.
    */

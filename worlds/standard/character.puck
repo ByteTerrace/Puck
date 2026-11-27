@@ -1,0 +1,14 @@
+// The character a seat drives under: the identity template every character an account mints starts as
+// (identity.puck), and the fact lane through which a world's rules read and write the character's facts
+// (`setIdentityFact`, `$identity:<body>:<fact>`). The lane holds one cell per seated body and fact, keyed
+// `<body>-<package>$<fact>`; a world reads only what a seat's character carries, and writes only its own package's facts.
+
+seatDefaults {
+  identityTemplate: "identity.puck"
+}
+
+state {
+  world {
+    table identity capacity(1024) {}
+  }
+}

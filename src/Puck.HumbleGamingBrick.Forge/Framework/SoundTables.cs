@@ -37,23 +37,21 @@ public static class SoundTables {
     // Duty bits (NR11/NR21 bits 7-6).
     private const byte DutyQuarter = 0x40;
     private const byte DutyThreeQuarters = 0xC0;
-    private const int NoteA3 = 220_000;
-    private const int NoteA4 = 440_000;
-    private const int NoteA5 = 880_000;
-    private const int NoteB3 = 246_942;
-    private const int NoteB4 = 493_883;
-    private const int NoteC4 = 261_626;
-    private const int NoteC5 = 523_251;
-    private const int NoteC6 = 1_046_502;
-    private const int NoteD4 = 293_665;
-    private const int NoteD5 = 587_330;
-    private const int NoteE4 = 329_628;
-    private const int NoteE5 = 659_255;
-    // Note frequencies in millihertz (equal temperament, A4 = 440 Hz) — integers so the period math is exact and the
-    // built streams are byte-identical across runs.
-    private const int NoteG3 = 195_998;
-    private const int NoteG4 = 391_995;
-    private const int NoteG5 = 783_991;
+    private static readonly int NoteA3 = ApuNotePeriod.MillihertzFor(noteName: "A3");
+    private static readonly int NoteA4 = ApuNotePeriod.MillihertzFor(noteName: "A4");
+    private static readonly int NoteA5 = ApuNotePeriod.MillihertzFor(noteName: "A5");
+    private static readonly int NoteB3 = ApuNotePeriod.MillihertzFor(noteName: "B3");
+    private static readonly int NoteB4 = ApuNotePeriod.MillihertzFor(noteName: "B4");
+    private static readonly int NoteC4 = ApuNotePeriod.MillihertzFor(noteName: "C4");
+    private static readonly int NoteC5 = ApuNotePeriod.MillihertzFor(noteName: "C5");
+    private static readonly int NoteC6 = ApuNotePeriod.MillihertzFor(noteName: "C6");
+    private static readonly int NoteD4 = ApuNotePeriod.MillihertzFor(noteName: "D4");
+    private static readonly int NoteD5 = ApuNotePeriod.MillihertzFor(noteName: "D5");
+    private static readonly int NoteE4 = ApuNotePeriod.MillihertzFor(noteName: "E4");
+    private static readonly int NoteE5 = ApuNotePeriod.MillihertzFor(noteName: "E5");
+    private static readonly int NoteG3 = ApuNotePeriod.MillihertzFor(noteName: "G3");
+    private static readonly int NoteG4 = ApuNotePeriod.MillihertzFor(noteName: "G4");
+    private static readonly int NoteG5 = ApuNotePeriod.MillihertzFor(noteName: "G5");
 
     /// <summary>A tiny single pulse tick — cursor/menu movement.</summary>
     public const byte EffectCursor = 4;

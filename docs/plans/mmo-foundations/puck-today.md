@@ -97,7 +97,7 @@ otherwise writes **[opened]** (`src/Puck.World.Schema/WorldIdentity.cs:503-508`,
 ```
 
 The write lands on the owned document, or on the travelling row of an identity
-rebuilt from a projection **[opened]** (`src/Puck.World.Schema/WorldIdentity.cs:569-578`):
+rebuilt from a projection **[opened]** (`src/Puck.World.Schema/WorldIdentity.cs:615-624`):
 
 ```csharp
     // The facts row lives on the owned document, or on the travelling row of an identity that arrived as a projection.
@@ -138,13 +138,11 @@ So on a visitor, the only writer of facts is a rule's `setIdentityFact` effect
 
 Records are the identity's explicitly owned record pools
 (`WorldIdentity.RecordState`, `src/Puck.World.Schema/WorldIdentity.Records.cs:12-24`)
-**[opened]**. `WorldIdentity.TryWriteRecord` has one caller in `src/`, which
-is `WorldIdentity.TryAdopt` (`src/Puck.World.Schema/WorldIdentity.Records.cs:141`;
-a search for `TryWriteRecord(` over `src/` finds only its definition at `:70`
-and that call) **[opened]**. No rule effect or verb writes an identity record
-on a visitor today, although the architecture page says a destination's
-"record write changes that copy" (`docs/architecture/worlds.md:795-796`)
-**[inference]** from the search.
+**[opened]**. When this survey was taken, a record field was written only by
+adoption and no rule wrote one; the identity store has since replaced that
+door: rules claim, write and release an identity's records through a stage
+(`WorldIdentityStage`) the account installs
+([owned identity records](../../reference/state/worlds.md#owned-identity-records)).
 
 A destination reading a carried fact into its rule lane skips non-integers,
 because the profile is foreign **[opened]**
@@ -161,18 +159,18 @@ because the profile is foreign **[opened]**
 
 ### Adoption and `Decide`
 
-`WorldIdentity.TryAdopt` writes every carried fact through `TrySetFact` and
-every field of the owned record pools through `TryWriteRecord`, and records
-the first refusal **[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:127-133`):
+`WorldIdentity.TryAdopt` writes every carried fact through `TrySetFact`, as the
+identity's own owner, skipping a home-scoped one, and records the first refusal
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:194-200`):
 
 ```csharp
-        var refused = string.Empty;
-
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
-            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
+            if (definition?.IsHomeScoped(name: cell.Key) == true) {
+                continue;
+            }
+            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, writer: WorldIdentityWriter.Home, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
                 refused = $"fact '{cell.Key}': {factReason}";
             }
-        }
 ```
 
 `WorldOwnedWorlds.TryAdopt` refuses an identity the catalog does not own, then
@@ -180,7 +178,7 @@ adopts and saves (`src/Puck.World.Server/WorldOwnedWorlds.cs:1341-1364`)
 **[opened]**. `WorldOwnedWorlds.Decide` is a different door: it gates a write
 by another document into an owned identity's durable slot on a grant naming
 that document, `Mutate` and the slot, plus a required write mask
-**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:307-322`):
+**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:407-422`):
 
 ```csharp
         var principal = Grantee.Document(id: submission.SourceDocumentId);
@@ -218,9 +216,9 @@ Puck directory **[opened]** (`src/Puck.World.Server/WorldStateRoot.cs:7-9`):
 /// (<see cref="Puck.Abstractions.PuckUserDirectory"/>) only in its own composition root; a hosted silo takes its
 ```
 
-Each non-boot instance has its own catalog directory under `instances/<name>/owned-worlds`
-(`WorldInstanceHost.OwnedWorldsDirectory`, `src/Puck.World.Server/WorldInstanceHost.cs:472-483`)
-**[opened]**. `WorldOwnedWorlds.TrySave` writes the file with no signature or
+When this survey was taken, each non-boot instance had its own catalog directory
+under `instances/<name>/owned-worlds`; every instance now shares the boot row's
+account (`WorldInstanceHost.AccountDirectory`). `WorldOwnedWorlds.TrySave` writes the file with no signature or
 seal (`src/Puck.World.Server/WorldOwnedWorlds.cs:1126-1194`) **[opened]**.
 
 ### How they sync
