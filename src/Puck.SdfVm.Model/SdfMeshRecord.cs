@@ -45,6 +45,9 @@ public static class SdfMeshRecord {
     /// carrying <see cref="SlotBoxFlag"/>, in its frame slot's frame before the slot's pose, the record's scale and its
     /// carry.</summary>
     public const int SelectionWord = 34;
+    /// <summary>The selection flag for a draw that encloses a solid (<c>SdfMeshDraw.EnclosesSolid</c>): a closed mesh wound
+    /// outward under a matrix that keeps its winding, so its faces say where a ray enters and leaves it.</summary>
+    public const uint EnclosedFlag = 4u;
     /// <summary>The selection flag for a row with no standing mesh. Its other words, including generation and
     /// placement, are zero; selection rejects it before reading them and the hit resolver rejects its empty indices.</summary>
     public const uint AbsentFlag = 8u;
@@ -106,6 +109,9 @@ public static class SdfMeshRecord {
     /// <summary>The object key's largest value: the bits a visibility record keeps of it
     /// (<see cref="SdfVisibility.ObjectKeyBits"/>), which the flags word holds above <see cref="ObjectKeyShift"/>.</summary>
     public const uint ObjectKeyMask = ((1u << SdfVisibility.ObjectKeyBits) - 1u);
+    /// <summary>The object key bit a bake group's key carries and a placed copy's never does: the keys split the range in
+    /// two halves (<c>SdfMeshDresser</c>), so a kernel tells a rigid copy's draw from a group's by its key alone.</summary>
+    public const uint GroupObjectKeyBit = ((ObjectKeyMask >> 1) + 1u);
     /// <summary>The flag a record carries when its draw is clipped by a plane (a nonzero <see cref="ClipPlaneWord"/>),
     /// so a reader that only asks whether a point lies beside the cut reads the plane for such a draw alone.</summary>
     public const uint ClipFlag = 16u;

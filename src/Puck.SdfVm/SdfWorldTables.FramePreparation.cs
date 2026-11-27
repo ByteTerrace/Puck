@@ -216,6 +216,8 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
+    /// <summary>Gets or sets what the debug view reads beside its mode, which every pass block carries.</summary>
+    public DebugViewOptions DebugOptions { get; set; } = DebugViewOptions.Default;
     /// <summary>Gets or sets the exposures of the views of the latest packed frame, which their pass blocks carry; none
     /// exposes every view by one.</summary>
     public SdfViewExposures? ViewExposures { get; set; }
@@ -224,6 +226,7 @@ public sealed partial class SdfWorldTables {
     /// armed), the debug view mode and the views' exposures.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
+        DebugOptions: DebugOptions,
         Exposures: ViewExposures,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: (m_hitBoundForced ? 0u : MeshDrawCount),

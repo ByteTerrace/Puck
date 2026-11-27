@@ -66,6 +66,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.ViewsReflectionsWritten,
         SdfWorldPackage.ReflectionDepth,
         SdfWorldPackage.ReflectionDepthWritten,
+        SdfWorldPackage.OverlapSpans,
     ];
     // Each layer of the world's shared shadows (SdfWorldShadows) a compute pass samples: its entry, whether it is the exit
     // layer, and the binding.
@@ -198,6 +199,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private SdfShadeDispatch? m_shadePlan;
 
     private readonly SdfShadeSlots m_shade;
+    // The overlap pass's pipeline (SdfMeshRasterPass.OverlapKey), which the pass leases for itself, so a view that shows no
+    // overlap view never builds it, with the residency it was leased through and released to; null for every other part.
+    private readonly SdfPassPipelineSlot? m_overlapRaster;
+    private readonly GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_overlapLease;
+    private readonly SdfWorldResidency? m_overlapResidency;
 
     // What the frame's decision chose for its emission.
     private struct Decided {
@@ -206,8 +212,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         public IGpuBuffer? Sums;
         public ulong ClearStart;
         public ulong ClearEnd;
-        // A raster part's draw.
+        // A raster part's draw, and for the overlap pass whether its pipeline is built.
         public bool Occlude;
+        public bool OverlapsReady;
         public SdfMeshCull Cull;
         public SdfMeshDetail Detail;
         // The views pass's kernels, pinned for the recording's submission.
@@ -374,6 +381,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             }
             m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots, cascade: false,
                 sight: ((m_part == SdfWorldPackage.Parts.Mesh) ? owner.PortalSightOf(instance: context.Instance) : null));
+            if (IsOverlaps) {
+                m_overlapResidency = view.Residency;
+                m_overlapLease = m_overlapResidency.AcquireOverlapRaster(device: tables.Device);
+                m_overlapRaster = new SdfPassPipelineSlot(lease: m_overlapLease);
+            }
         } catch {
             foreach (var framebuffer in m_framebuffers) {
                 framebuffer?.Dispose();
@@ -391,10 +403,15 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
     }
 
-    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, or the glass pass, which
-    // draws the glass draws alone. The shadows are the residency's, drawn by its upload (SdfWorldShadows).
-    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass);
+    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, the glass pass, which
+    // draws the glass draws alone, or the overlap pass, which draws the opaque ones again into the overlap spans. The shadows
+    // are the residency's, drawn by its upload (SdfWorldShadows).
+    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass or SdfWorldPackage.Parts.Overlaps);
     private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
+    private bool IsOverlaps => (m_part is SdfWorldPackage.Parts.Overlaps);
+    // Whether the part reads each pixel's visibility record, its one input, and accumulates into the buffer that is its
+    // third output: the glass and overlap passes.
+    private bool Accumulates => (IsGlass || IsOverlaps);
     // The interface every compute part's pass set is laid out by.
     private static ShaderInterfaceLayout PassLayout => SdfWorldInterfaces.WorldLayout;
 
@@ -435,6 +452,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
         m_lateRenderPass?.Dispose();
         m_occlusion?.Dispose();
+        if (m_overlapLease is not null) {
+            m_overlapResidency!.ReleaseOverlapRaster(lease: m_overlapLease);
+        }
 
         if (m_meshPool != 0) {
             m_context.Services.Bindings.DestroyPool(poolHandle: m_meshPool);
@@ -618,7 +638,16 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         // The world's shared cascades, each through the camera its layers were drawn from (SdfWorldShadows).
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: tables.CascadesOf(frame: frame, view: view));
         if (IsMesh) {
-            m_owner.NoteDrawn(height: height, instance: m_context.Instance, part: m_part, width: width);
+            // The overlap pass draws under the mesh pass's scope and cull, which the mesh pass notes.
+            if (!IsOverlaps) {
+                m_owner.NoteDrawn(height: height, instance: m_context.Instance, part: m_part, width: width);
+            }
+            // The overlap pass clears its spans whether or not its pipeline has finished building, so views never reads
+            // a frame's spans it did not write.
+            if (IsOverlaps) {
+                m_decided.Sums = recording.Outputs[2].Buffer!;
+                m_decided.OverlapsReady = m_overlapRaster!.PollRefusing();
+            }
             m_decided.Occlude = (frame.MeshCull is SdfMeshCullLevel.Occlusion or SdfMeshCullLevel.Camera);
             m_decided.Cull = SdfWorldPasses.CullOf(frame: frame, height: height, view: view, width: width);
             // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
@@ -934,13 +963,22 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        var pipeline = (IsGlass ? tables.GlassPipeline : tables.MeshPipeline);
+        if (IsOverlaps) {
+            ClearOverlapSpans(recording: in recording);
+            if (!m_decided.OverlapsReady) {
+                return;
+            }
+        }
+
+        var pipeline = (IsGlass ? tables.GlassPipeline : (IsOverlaps ? m_overlapRaster!.Built.Graphics! : tables.MeshPipeline));
         var meshSet = MeshSetOf(slot: slot, tables: tables);
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
         var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
         var occlusion = ((count > 0) ? m_occlusion : null);
-        var twoPhase = (occlude && !IsGlass);
+        // Only the mesh pass culls by occlusion: the glass pass draws what lies before the opaque hit, and the overlap
+        // pass must draw what the opaque image hides.
+        var twoPhase = (occlude && (m_part == SdfWorldPackage.Parts.Mesh));
         var targetIndex = TargetIndexOf(target: target);
 
         if (targetIndex >= 0) {
@@ -974,6 +1012,21 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
     }
+    // Zeroes the overlap spans, every pixel's none, before the raster's faces take their maxima: the planner leaves the
+    // buffer ready for the fragment stage's writes, and the clear hands it back the same way.
+    private void ClearOverlapSpans(in RenderGraphPackageRecording recording) {
+        var recorder = recording.Recorder;
+        var commandBuffer = recording.CommandBuffer;
+        var spans = m_decided.Sums!;
+
+        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: spans.BufferHandle,
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.FragmentShader,
+            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+        recorder.ClearStorageBuffer(commandBuffer, spans.BufferHandle, spans.SizeBytes);
+        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: spans.BufferHandle,
+            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.FragmentShader);
+    }
     // Writes a mesh set's tables and counters, stages the selection's draws into it and records the selection's first
     // step: the set and its two selection sets are one group's (meshSet), and `target` is the image the selection's second
     // phase samples.
@@ -995,17 +1048,18 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             counters: WorkCountersOf(recording: in recording).Buffer,
             set: set
         );
-        // The glass pass reads each pixel's opaque hit, its one input, and accumulates into the glass sums, its
-        // third output; the mesh pass binds the dummy at both.
+        // The glass and overlap passes read each pixel's opaque hit, their one input, and accumulate into the glass sums
+        // or the overlap spans, their third output, through the raster accumulation binding; the mesh pass binds the
+        // dummy at both.
         tables.WriteMeshBuffer(
             bound: ref m_meshSetBuffers[meshSet][MeshSetVisibility],
-            buffer: (IsGlass ? recording.Inputs[0].Buffer! : tables.DummyBuffer),
+            buffer: (Accumulates ? recording.Inputs[0].Buffer! : tables.DummyBuffer),
             member: SdfWorldPackage.VisibilityRecords,
             set: set
         );
         tables.WriteMeshBuffer(
             bound: ref m_meshSetBuffers[meshSet][MeshSetGlassSums],
-            buffer: (IsGlass ? recording.Outputs[2].Buffer! : tables.DummyBuffer),
+            buffer: (Accumulates ? recording.Outputs[2].Buffer! : tables.DummyBuffer),
             member: SdfWorldPackage.GlassSumsWritten,
             set: set
         );
@@ -1169,6 +1223,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflections,
         SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepth,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
+        SdfWorldPackage.Parts.OverlapSpans => SdfWorldPackage.OverlapSpans,
         _ => null,
     };
     // The cell edge of the reflection records among a pass's ports, read from the allocation the graph declares for them
