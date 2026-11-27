@@ -67,7 +67,7 @@ function shadeRamp(t, stops) = reduce(
 // all in the same units as `p`. Returns [mortar coverage (1 in a joint), brick value in [0, 1)], the value the same
 // everywhere on one brick; every other course is offset by half a brick.
 function shadeBrick(p, size, mortar, seed) = shadeBrickAt(
-  [p.x / size[0] + 0.5 * (floor(p.y / size[1]) - 2 * floor(floor(p.y / size[1]) * 0.5)), p.y / size[1]],
+  [p.x / size[0] + shadeFrac(floor(p.y / size[1]) * 0.5), p.y / size[1]],
   [mortar / size[0], mortar / size[1]],
   seed
 )

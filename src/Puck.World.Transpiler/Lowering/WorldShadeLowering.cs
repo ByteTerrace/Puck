@@ -16,8 +16,11 @@ namespace Puck.World.Transpiler.Lowering;
 // expansion. This vocabulary only assigns meanings to stamp reads, runtime slots and phase output assignments.
 internal sealed class WorldShadeLowering {
     // Both stand in a tree as leaves: a bound source is lowered under the scope it carries, never where it stands.
+    // A value lowered lazily where it is read, as if at the place it was bound: `Expanding` holds the functions being
+    // expanded at that place (DocumentLowering.ExpandAsBound).
     private sealed record Bound(ExpressionNode Source, DocumentScope Scope) : ExpressionNode {
         public Dictionary<SdfShadeType, SdfShadeExpression> Values { get; } = [];
+        public string[] Expanding { get; } = DocumentLowering.ExpandingFunctions(scope: Scope);
 
         public override IReadOnlyList<SyntaxNode> Children() => [];
         public override SyntaxNode MapChildren(ISyntaxMap map) => this;
@@ -302,7 +305,7 @@ internal sealed class WorldShadeLowering {
                 var expectedKey = expected ?? 0;
                 if ((expected is null || !SdfShadeOps.IsUInt(expected.Value)) && bound.Values.TryGetValue(0, out var inferred)) { return inferred; }
                 if (!bound.Values.TryGetValue(expectedKey, out var value)) {
-                    value = Expression(bound.Source, bound.Scope, expected);
+                    value = DocumentLowering.ExpandAsBound(scope: bound.Scope, atBinding: bound.Expanding, expand: () => Expression(bound.Source, bound.Scope, expected));
                     bound.Values.Add(expectedKey, value);
                 }
                 return value;
