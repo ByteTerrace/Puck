@@ -367,10 +367,12 @@ internal sealed class CreationFrameMigration : PuckMigration {
         return null;
     }
 
+    // Whether statements write a creation's shapes themselves: shapes inside a prototype's document belong to that
+    // document, which carries its own schema.
     private static bool BuildsShapes(IReadOnlyList<StatementNode> statements) {
         foreach (var statement in statements) {
             if (statement is BlockNode { Identifier: "shape" }) { return true; }
-            if ((statement is not TemplateNode) && BuildsShapes(statements: ChildStatements(statement: statement).ToList())) { return true; }
+            if ((statement is not (TemplateNode or BlockNode { Identifier: "document" or "prototype" })) && BuildsShapes(statements: ChildStatements(statement: statement).ToList())) { return true; }
         }
 
         return false;

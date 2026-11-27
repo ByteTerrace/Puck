@@ -84,7 +84,7 @@ public sealed class InPlaceCarryPresentationLawTests {
     // A flat door creation whose glass is shape 0, turned a quarter about +X by `angle` in engine terms.
     private static WorldPrototype Door(string id, float angle) {
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: CreationFrame.ToAuthor(document: new CreationDocument(
+            document: (new CreationDocument(
                 Schema: CreationDocument.CurrentSchema,
                 Name: id,
                 Palette: null,

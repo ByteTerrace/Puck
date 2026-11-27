@@ -72,7 +72,7 @@ public sealed class AbsentDerivationLawTests {
                 {
                   "id": "pip",
                   "document": {
-                    "schema": "puck.creation.v1",
+                    "schema": "puck.creation.v2",
                     "name": "pip",
                     "palette": [{ "color": "#CCCCCC", "emissive": 0, "specular": 0, "roughness": 0 }],
                     "shapes": [

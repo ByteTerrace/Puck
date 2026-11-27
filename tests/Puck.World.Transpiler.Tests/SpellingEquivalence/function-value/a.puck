@@ -12,7 +12,7 @@ function pose(at, s) = {
 prototypes {
   prototype "p" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "p"
       frames [pose(1, 2)]
       shape Box "b" {

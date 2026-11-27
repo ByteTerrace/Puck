@@ -3,7 +3,7 @@ schema: "puck.world.definition.v1"
 documentId: "shade-pair"
 shade template program() { surface { roughness: material.roughness != clock } }
 prototypes { prototype "p" { document {
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette [{ color: "#808080", shade: program() }]
   shape Box "box" { scale [1, 1, 1] }
 } } }

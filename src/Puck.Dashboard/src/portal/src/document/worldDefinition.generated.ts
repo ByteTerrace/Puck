@@ -1458,7 +1458,7 @@ export type CreationCameraDocument = {
    */
   shapeId: number;
   /**
-   * The eye offset from the anchored shape's frame origin, in the creation's author frame (see CreationFrame).
+   * The eye offset from the anchored shape's frame origin, in the creation's frame.
    */
   position: DocumentVector3;
   /**
@@ -1551,7 +1551,7 @@ export type CreationContact = "Drawn" | "Shapes";
 
 export type CreationDocument = {
   /**
-   * The document version tag (puck.creation.v1).
+   * The document version tag (puck.creation.v2).
    */
   schema?: string | null;
   /**
@@ -1743,7 +1743,7 @@ export type CreationEffectorTargetDocument = {
    */
   kind: string;
   /**
-   * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. KindShape (optional): the way the tip approaches the point, carried by Shape's motion; its reverse is the normal an effector's align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.
+   * KindSurface: the probe direction in the creation's frame, so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. KindShape (optional): the way the tip approaches the point, carried by Shape's motion; its reverse is the normal an effector's align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.
    */
   direction?: DocumentVector3;
   /**
@@ -1759,7 +1759,7 @@ export type CreationEffectorTargetDocument = {
    */
   index?: number | null;
   /**
-   * KindBody: the offset from that body's root (or its Part), in the creation's author frame, riding the target's attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape's motion (null = the shape's own origin).
+   * KindBody: the offset from that body's root (or its Part), in the creation's frame, riding the target's attitude (null = the point exactly). KindShape: a point in the creation at rest, in its frame, that rides Shape's motion (null = the shape's own origin).
    */
   offset?: DocumentVector3;
   /**
@@ -2818,7 +2818,7 @@ export type PaletteEntryDocumentVariant2 = {
 };
 
 /**
- * A palette slot's flow layer: the slot's shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader's frame, as the other palette layers are: for a creation, its engine frame (the author frame's x and z negated), turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.
+ * A palette slot's flow layer: the slot's shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader's frame, as the other palette layers are: for a creation, its own frame, turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.
  */
 export type PaletteFlowDocument = {
   /**
@@ -4073,7 +4073,7 @@ export type ShapeDisplaceDocument = {
 };
 
 /**
- * The persisted form of a placed shape. Position and Rotation are authored in the creation's author frame — see CreationFrame — and Scale is the primitive's size directly: see CreationGeometry's unit table.
+ * The persisted form of a placed shape. Position and Rotation are in the creation's frame, the engine's own (+Y up, −Z the creation's front, +X its right), and Scale is the primitive's size directly: see CreationGeometry's unit table.
  */
 export type ShapeDocument = {
   /**
@@ -4089,7 +4089,7 @@ export type ShapeDocument = {
    */
   type: SdfSolidPrimitive;
   /**
-   * The shape's position (the author frame's workbench space).
+   * The shape's position, in the creation's frame.
    */
   position: DocumentVector3;
   /**
@@ -4149,7 +4149,7 @@ export type ShapeDocument = {
    */
   parent?: string | null;
   /**
-   * The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector's solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.
+   * The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector's solve turns a bone about it (Joint). In the creation's frame, like every other point here. It changes no pose on its own.
    */
   joint?: DocumentVector3;
   /**
@@ -4233,7 +4233,7 @@ export type ShapeDocument = {
    */
   morph?: ShapeMorphDocument | null;
   /**
-   * How the shape's surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box's front face (+Z in the author frame). The light is the mean of the material's painted albedo times its emissive over the face, so a console's interface or a marquee's lettering lights the room in its own colours, and the shape keeps its material and paints.
+   * How the shape's surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box's face (its local +Z). The light is the mean of the material's painted albedo times its emissive over the face, so a console's interface or a marquee's lettering lights the room in its own colours, and the shape keeps its material and paints.
    */
   lightsAs?: ShapeLightForm | null;
 };
@@ -4743,7 +4743,7 @@ export type ShapeSlideDocument = {
    */
   driver: string;
   /**
-   * The slide direction, in the creation's author frame; normalized at canonicalization.
+   * The slide direction, in the creation's frame; normalized at canonicalization.
    */
   axis: DocumentVector3;
   /**
@@ -4769,11 +4769,11 @@ export type ShapeSwingDocument = {
    */
   driver: string;
   /**
-   * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
+   * The joint the shape turns about, in the creation's frame — a shoulder or a hip, not the shape's own centre.
    */
   pivot: DocumentVector3;
   /**
-   * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
+   * The rotation axis, in the creation's frame; normalized at canonicalization. A positive angle turns right-handed about it.
    */
   axis: DocumentVector3;
   /**
@@ -11785,7 +11785,7 @@ export type WorldPrototype = {
 
 export type WorldPrototypeMesh = {
   /**
-   * The vertex positions, in the author frame.
+   * The vertex positions, in the creation's frame.
    */
   vertices: [number, number, number][];
   /**

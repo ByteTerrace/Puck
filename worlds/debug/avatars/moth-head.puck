@@ -51,8 +51,8 @@ function mothBlinkFrame(at, s) = {
     mothBlinkPose,
     row => {
       id: row[0]
-      position: map([row[1], row[2], row[3]], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-      rotation [0, 0, 0, 1]
+      position: (map([row[1], row[2], row[3]], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+      rotation [0, 1, 0, 0]
     }
   )
 }
@@ -117,7 +117,8 @@ function mothLidPaints(s) = [
 template mothHairLock(name, id, a, b, c, radiusStart, radiusEnd, s, at, parentName, hair) {
   shape Sweep $"{name}" {
     id: id
-    position: map(a, (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map(a, (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: hair
     blend: "SmoothUnion"
     smooth: 0.028 * s
@@ -138,7 +139,8 @@ template mothHairLock(name, id, a, b, c, radiusStart, radiusEnd, s, at, parentNa
 template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, iris, pupil, glint, hair) {
   shape Prism $"socket-{name}" {
     id: baseId
-    position: map([side * 0.07656, 1.74842, 0.20745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07656, 1.74842, 0.20745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.049, 0.034, 0.06], v => v * s)
     material: skin
     blend: "SmoothSubtraction"
@@ -152,7 +154,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"eye-{name}" {
     id: baseId + 1
-    position: map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.06, 0.058, 0.044], v => v * s)
     material: white
     group: eyeGroup
@@ -162,7 +165,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Prism $"eyeOpening-{name}" {
     id: baseId + 2
-    position: map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.048, 0.033, 0.065], v => v * s)
     material: white
     blend: "Intersection"
@@ -175,7 +179,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"iris-{name}" {
     id: baseId + 3
-    position: map([side * 0.07456, 1.74842, 0.23045], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07456, 1.74842, 0.23045], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.023, 0.028, 0.006], v => v * s)
     material: iris
     parent: parentName
@@ -184,7 +189,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"pupil-{name}" {
     id: baseId + 4
-    position: map([side * 0.07456, 1.74842, 0.23545], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07456, 1.74842, 0.23545], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0105, 0.016, 0.004], v => v * s)
     material: pupil
     parent: parentName
@@ -193,7 +199,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"catchlight-{name}" {
     id: baseId + 5
-    position: map([side * 0.06856, 1.76042, 0.23945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.06856, 1.76042, 0.23945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0044, 0.0052, 0.002], v => v * s)
     material: glint
     parent: parentName
@@ -202,7 +209,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"catchlightSmall-{name}" {
     id: baseId + 6
-    position: map([side * 0.08556, 1.73642, 0.23745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.08556, 1.73642, 0.23745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0018, 0.0022, 0.0015], v => v * s)
     material: glint
     parent: parentName
@@ -211,7 +219,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Sweep $"upperLid-{name}" {
     id: baseId + 7
-    position: map([side * 0.02956, 1.74842, 0.21645], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.02956, 1.74842, 0.21645], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: hair
     parent: parentName
     curve {
@@ -225,7 +234,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Sweep $"lowerLid-{name}" {
     id: baseId + 8
-    position: map([side * 0.02956, 1.74842, 0.21645], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.02956, 1.74842, 0.21645], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     parent: parentName
     curve {
@@ -239,7 +249,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Sweep $"lash-{name}" {
     id: baseId + 9
-    position: map([side * 0.11656, 1.76542, 0.21945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.11656, 1.76542, 0.21945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: hair
     parent: parentName
     curve {
@@ -253,7 +264,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Sweep $"brow-{name}" {
     id: baseId + 10
-    position: map([side * 0.02992, 1.8241, 0.22005], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.02992, 1.8241, 0.22005], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: hair
     parent: parentName
     curve {
@@ -270,7 +282,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
   shape Superellipsoid $"blinkCover-{name}" {
     id: baseId
-    position: map([side * 0.07656, 1.74842, 0.09945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07656, 1.74842, 0.09945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.056, 0.04, 0.021], v => v * s)
     material: skin
     parent: parentName
@@ -279,7 +292,8 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
 
   shape Sweep $"blinkCrease-{name}" {
     id: baseId + 1
-    position: map([side * 0.07656 - 0.043, 1.74842, 0.11245], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([side * 0.07656 - 0.043, 1.74842, 0.11245], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: hair
     parent: parentName
     curve {
@@ -297,7 +311,8 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
 template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair) {
   shape Superellipsoid "face" {
     id: 32
-    position: map([0, 1.7405, 0.10575], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.7405, 0.10575], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.176, 0.165, 0.13275], v => v * s)
     material: skin
     group: 6
@@ -307,7 +322,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "neck" {
     id: 33
-    position: map([0, 1.5579, 0.05625], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.5579, 0.05625], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.07, 0.075, 0.055], v => v * s)
     material: skin
     blend: "SmoothUnion"
@@ -319,8 +335,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Box "jaw-1" {
     id: 34
-    position: map([-0.227, 1.526, 0.1], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    rotation [0, 0, -0.2955202, 0.9553365]
+    position: (map([-0.227, 1.526, 0.1], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation [-0.2955202, 0.9553365, 0, 0]
     scale: map([0.18, 0.11, 0.3], v => v * s)
     material: skin
     blend: "SmoothSubtraction"
@@ -331,8 +347,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Box "jaw1" {
     id: 35
-    position: map([0.227, 1.526, 0.1], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    rotation [0, 0, 0.2955202, 0.9553365]
+    position: (map([0.227, 1.526, 0.1], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation [0.2955202, 0.9553365, 0, 0]
     scale: map([0.18, 0.11, 0.3], v => v * s)
     material: skin
     blend: "SmoothSubtraction"
@@ -345,7 +361,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
   // centimetres across bakes on a lattice of its own size, where the face's group bakes at the coarsest cell.
   shape Sweep "noseBridge" {
     id: 36
-    position: map([0, 1.7295, 0.2275], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.7295, 0.2275], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.02 * s
@@ -362,7 +379,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "nose" {
     id: 37
-    position: map([0, 1.6915, 0.2415], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.6915, 0.2415], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0135, 0.0105, 0.0105], v => v * s)
     material: skin
     group: 14
@@ -372,7 +390,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "noseWing-left" {
     id: 79
-    position: map([0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0075, 0.007, 0.0075], v => v * s)
     material: skin
     blend: "SmoothUnion"
@@ -384,7 +403,8 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "noseWing-right" {
     id: 80
-    position: map([-0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([-0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     scale: map([0.0075, 0.007, 0.0075], v => v * s)
     material: skin
     blend: "SmoothUnion"
@@ -396,7 +416,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "nostril-1" {
     id: 38
-    position: map([-0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([-0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
     scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
     parent: parentName
@@ -405,7 +425,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "nostril1" {
     id: 39
-    position: map([0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
     scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
     parent: parentName
@@ -417,7 +437,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Superellipsoid "scalp" {
     id: 76
-    position: map([0, 1.7735, 0.0855], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.7735, 0.0855], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
     scale: map([0.1958, 0.1892, 0.1575], v => v * s)
     material: hair
     group: 9
@@ -429,7 +449,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
   // as hair lying on the head rather than a sawn shell.
   shape Box "scalpBottom" {
     id: 77
-    position: map([0, 1.68, 0.25], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.68, 0.25], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
     scale: map([0.4, 0.141, 0.22], v => v * s)
     material: hair
     blend: "SmoothSubtraction"
@@ -440,7 +460,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
 
   shape Box "scalpFront" {
     id: 78
-    position: map([0, 1.88, 0.435], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: (map([0, 1.88, 0.435], (v, k) => at[k] + (v - mothHeadPivot[k]) * s) * [-1, 1, -1])
     scale: map([0.4, 0.4, 0.24925], v => v * s)
     material: hair
     blend: "SmoothSubtraction"

@@ -80,7 +80,7 @@ template displayPlinth(base) {
     for z in [-1, 1] {
       shape Box $"plinth-panel-{x}-{z}" {
         material: (base + plinthOchre)
-        position [x, 0.42, (z * 0.615)]
+        position [-x, 0.42, (z * -0.615)]
         scale [0.265, 0.2, 0.03]
         chamfer: 0.012
       }
@@ -90,7 +90,7 @@ template displayPlinth(base) {
     for x in [-1, 1] {
       shape Box $"plinth-side-{z}-{x}" {
         material: (base + plinthOchre)
-        position [(x * 0.835), 0.42, z]
+        position [(x * -0.835), 0.42, -z]
         scale [0.03, 0.2, 0.285]
         chamfer: 0.012
       }
@@ -114,23 +114,23 @@ template displayPlinth(base) {
   }
   shape Box "plinth-console" {
     material: (base + plinthCream)
-    position: plinthConsole
-    rotation: plinthFace
+    position: (plinthConsole * [-1, 1, -1])
+    rotation: (plinthFace * [-1, 1, -1, 1])
     scale [plinthConsoleHalf[0], plinthConsoleHalf[1], plinthConsoleDepth]
     chamfer: 0.03
   }
   shape Box "plinth-glass" {
     material: (base + plinthScreen)
-    position: plinthOnFace(0, 0, 0)
-    rotation: plinthFace
+    position: (plinthOnFace(0, 0, 0) * [-1, 1, -1])
+    rotation: (plinthFace * [-1, 1, -1, 1])
     scale [plinthGlassHalf[0], plinthGlassHalf[1], plinthGlassDepth]
     rounding: 0.01
   }
   // The brass lip under the glass, where a hand rests on the console.
   shape Box "plinth-lip" {
     material: (base + plinthBrass)
-    position: plinthOnFace(0, (0.02 - plinthConsoleHalf[1]), 0.006)
-    rotation: plinthFace
+    position: (plinthOnFace(0, (0.02 - plinthConsoleHalf[1]), 0.006) * [-1, 1, -1])
+    rotation: (plinthFace * [-1, 1, -1, 1])
     scale [(plinthGlassHalf[0] - 0.04), 0.01, 0.01]
     rounding: 0.008
   }
@@ -203,7 +203,7 @@ template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null
   let haunchReach = ((reach == null) ? [span, span] : reach)
   shape Box "pier-haunch" {
     material: (base + structureTeal)
-    position [((haunchReach[1] - haunchReach[0]) / 2), (height - ((span - shaft) + 0.3) / 2), 0]
+    position [(0 - ((haunchReach[1] - haunchReach[0]) / 2)), (height - ((span - shaft) + 0.3) / 2), 0]
     scale [((haunchReach[0] + haunchReach[1]) / 2), (((span - shaft) + 0.3) / 2), (depth * 0.82)]
     chamfer: 0.04
     detail: true
@@ -213,8 +213,8 @@ template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null
       blend: SmoothSubtraction
       smooth: 0.05
       material: (base + structureTeal)
-      position [(side * span), ((height - 0.3) - (span - shaft)), 0]
-      rotation: structureAcross
+      position [(0 - (side * span)), ((height - 0.3) - (span - shaft)), 0]
+      rotation: (structureAcross * [-1, 1, -1, 1])
       scale [(span - shaft), depth, (span - shaft)]
       detail: true
     }
@@ -269,31 +269,31 @@ function windowHubHeight(height, sill) = (sill + (height * 0.36))
 template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
   shape Box "bay-head" {
     material: (base + kitCream)
-    position [0, ((sill + height) + 0.3), 0.03]
+    position [0, ((sill + height) + 0.3), -0.03]
     scale [((width / 2) + 0.48), 0.3, ((wall / 2) + 0.13)]
     rounding: 0.09
   }
   shape Box "bay-sill" {
     material: (base + kitCream)
-    position [0, (sill - 0.24), 0.05]
+    position [0, (sill - 0.24), -0.05]
     scale [((width / 2) + 0.48), 0.24, ((wall / 2) + 0.19)]
     rounding: 0.07
   }
   for side in [-1, 1] {
     shape Box $"bay-jamb-{side}" {
       material: (base + kitOchre)
-      position [(side * ((width / 2) + 0.22)), (sill + (height / 2)), 0.01]
+      position [(0 - (side * ((width / 2) + 0.22))), (sill + (height / 2)), -0.01]
       scale [0.22, (height / 2), ((wall / 2) + 0.06)]
       chamfer: 0.03
     }
     shape Box $"bay-frame-{side}" {
       material: (base + kitTeal)
-      position [(side * ((width / 2) - 0.05)), (sill + (height / 2)), 0]
+      position [(0 - (side * ((width / 2) - 0.05))), (sill + (height / 2)), 0]
       scale [0.05, (height / 2), 0.055]
     }
     shape Box $"bay-mullion-{side}" {
       material: (base + kitTeal)
-      position [(side * (width / 4)), (sill + (height * 0.18)), 0]
+      position [(0 - (side * (width / 4))), (sill + (height * 0.18)), 0]
       scale [0.028, (height * 0.18), 0.045]
     }
   }
@@ -316,7 +316,7 @@ template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
   }
   shape Box "bay-bracket" {
     material: (base + kitTeal)
-    position [0, windowHubHeight(height, sill), 0.14]
+    position [0, windowHubHeight(height, sill), -0.14]
     scale [0.06, 0.06, 0.1]
   }
 }
@@ -333,29 +333,29 @@ template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150
   ]
   shape Cylinder "shade-hub" {
     material: (base + kitHub)
-    position [0, 0, 0.03]
-    rotation: structureAcross
+    position [0, 0, -0.03]
+    rotation: compose(rotate([0, 1, 0], 180), structureAcross)
     scale [0.3, 0.045, 0.3]
     rounding: 0.02
   }
   shape Cylinder "shade-rim" {
     material: (base + kitBrass)
-    position [0, 0, 0.05]
-    rotation: structureAcross
+    position [0, 0, -0.05]
+    rotation: (structureAcross * [-1, 1, -1, 1])
     scale [0.33, 0.018, 0.33]
   }
   shape Cylinder "shade-boss" {
     material: (base + kitBrass)
-    position [0, 0, 0.1]
-    rotation: structureAcross
+    position [0, 0, -0.1]
+    rotation: (structureAcross * [-1, 1, -1, 1])
     scale [0.09, 0.03, 0.09]
     rounding: 0.015
   }
   for i in range(0, leaves) {
     shape Prism $"shade-leaf-{i}" {
       material: (base + (((i % 2) == 0) ? kitShade : kitShadeDeep))
-      position [0, ((radius / 2) + 0.16), (0.1 + (0.02 * i))]
-      rotation [0, 0, 1, 0]
+      position [0, ((radius / 2) + 0.16), (0 - (0.1 + (0.02 * i)))]
+      rotation [1, 0, 0, 0]
       scale [((radius * leaf) / 2), (radius / 2), 0.008]
       taper: 0.16
       swings [
@@ -373,12 +373,12 @@ template balustrade(base, length = 4, posts = 3, height = 1.1) {
   for i in range(0, posts) {
     shape Box $"rail-post-{i}" {
       material: (base + kitTeal)
-      position [((((i + 0.5) / posts) - 0.5) * length), ((height - 0.06) / 2), 0]
+      position [(0 - ((((i + 0.5) / posts) - 0.5) * length)), ((height - 0.06) / 2), 0]
       scale [0.03, ((height - 0.06) / 2), 0.045]
     }
     shape Box $"rail-foot-{i}" {
       material: (base + kitTeal)
-      position [((((i + 0.5) / posts) - 0.5) * length), 0.05, 0]
+      position [(0 - ((((i + 0.5) / posts) - 0.5) * length)), 0.05, 0]
       scale [0.07, 0.05, 0.075]
       chamfer: 0.012
     }
@@ -436,7 +436,7 @@ template stairFlight(label, material, x0, x1, foot, head, y0, rise, risers, soff
     let far = (stairStepHeight(n, count, size0, size1) / run)
     shape Box $"{label}-{n}" {
       material: material
-      position [((x0 + x1) / 2), ((top + bottom) / 2), (foot + (((head - foot) * (near + far)) / 2))]
+      position [(0 - ((x0 + x1) / 2)), ((top + bottom) / 2), (0 - (foot + (((head - foot) * (near + far)) / 2)))]
       scale [((x1 - x0) / 2), ((top - bottom) / 2), ((absolute((head - foot)) * (far - near)) / 2)]
     }
   }
@@ -488,33 +488,33 @@ template switchbackStair(base, width = 5, depth = 6.25, landing = 2.5, rise = 4.
   )
   shape Box "stair-landing" {
     material: (base + kitTerracotta)
-    position [0, (half - 0.15), (back + (landing / 2))]
+    position [0, (half - 0.15), (0 - (back + (landing / 2)))]
     scale [(width / 2), 0.15, (landing / 2)]
   }
   shape Box "stair-spine" {
     material: (base + kitTeal)
-    position [0, (guardTop / 2), (back + ((landing + depth) / 2))]
+    position [0, (guardTop / 2), (0 - (back + ((landing + depth) / 2)))]
     scale [(spine / 2), (guardTop / 2), ((depth - landing) / 2)]
   }
   shape Box "stair-glass" {
     material: (base + kitGlass)
-    position [((width / 2) + 0.03), (guardTop / 2), (0 - 0.06)]
+    position [(0 - ((width / 2) + 0.03)), (guardTop / 2), 0.06]
     scale [0.012, (guardTop / 2), ((depth / 2) - 0.06)]
   }
   shape Box "stair-post" {
     material: (base + kitTeal)
-    position [((width / 2) + 0.03), (guardTop / 2), (front - 0.06)]
+    position [(0 - ((width / 2) + 0.03)), (guardTop / 2), (0.06 - front)]
     scale [0.05, (guardTop / 2), 0.06]
   }
   if (guard == 1) {
     shape Box "stair-guard-glass" {
       material: (base + kitGlass)
-      position [((spine + (width / 2)) / 2), (rise + (rail / 2)), (front + 0.05)]
+      position [(0 - ((spine + (width / 2)) / 2)), (rise + (rail / 2)), (0 - (front + 0.05))]
       scale [(((width / 2) - (spine / 2)) / 2), (rail / 2), 0.012]
     }
     shape Box "stair-guard-hand" {
       material: (base + kitBrass)
-      position [((spine + (width / 2)) / 2), (rise + rail), (front + 0.05)]
+      position [(0 - ((spine + (width / 2)) / 2)), (rise + rail), (0 - (front + 0.05))]
       scale [(((width / 2) - (spine / 2)) / 2), 0.04, 0.05]
       rounding: 0.035
     }
@@ -554,7 +554,7 @@ template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, t
     let inner = (newel / 2)
     shape Box $"spiral-tread-{n}" {
       material: (base + kitTerracotta)
-      position: polarPoint(((inner + outer) / 2), angle, ((rise * height) - (thickness / 2)))
+      position: (polarPoint(((inner + outer) / 2), angle, ((rise * height) - (thickness / 2))) * [-1, 1, -1])
       rotation: rotate([0, 1, 0], (90 - angle))
       scale [(((radius * sine(half)) / cosine(half)) + 0.02), (thickness / 2), ((outer - inner) / 2)]
     }
@@ -565,7 +565,7 @@ template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, t
     let foot = (rise / (2 * risers))
     shape Box $"spiral-pane-{n}" {
       material: (base + kitGlass)
-      position: polarPoint((radius - 0.05), angle, (top + ((rail - foot) / 2)))
+      position: (polarPoint((radius - 0.05), angle, (top + ((rail - foot) / 2))) * [-1, 1, -1])
       rotation: rotate([0, 1, 0], (90 - angle))
       scale [rim, ((rail + foot) / 2), 0.012]
     }
@@ -575,6 +575,7 @@ template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, t
     let top = ((rise * n) / risers)
     shape Sweep $"spiral-rail-{n}" {
       position [0, 0, 0]
+      rotation: rotate([0, 1, 0], 180)
       material: (base + kitBrass)
       curve {
         a: polarPoint((radius - 0.05), angle, (top + rail))
@@ -616,11 +617,11 @@ template planter(base, length = 1.7) {
     shape Prism $"planter-blade-{i}" {
       material: (base + (((i % 2) == 0) ? kitLeafDeep : kitLeaf))
       position [
-        ((0 - (length * 0.27)) - ((sine((blade.lean * 0.017453293)) * blade.tall) / 2)),
-        (0.6 + ((cosine((blade.lean * 0.017453293)) * blade.tall) / 2)),
-        (0.02 * (i - 2.5))
-      ]
-      rotation: turnAfter(turnAbout([0, 0, 1], blade.lean), turnAbout([0, 1, 0], blade.turn))
+  (((sine((blade.lean * 0.017453293)) * blade.tall) / 2) - (0 - (length * 0.27))),
+  (0.6 + ((cosine((blade.lean * 0.017453293)) * blade.tall) / 2)),
+  (-0.02 * (i - 2.5))
+]
+      rotation: (turnAfter(turnAbout([0, 0, 1], blade.lean), turnAbout([0, 1, 0], blade.turn)) * [-1, 1, -1, 1])
       scale [0.07, (blade.tall / 2), 0.014]
       taper: 0.1
       detail: true
@@ -632,15 +633,15 @@ template planter(base, length = 1.7) {
   ] {
     shape Ellipsoid $"planter-leaf-{i}" {
       material: (base + (((i % 2) == 0) ? kitLeaf : kitLeafDeep))
-      position [(leaf.x + (length * 0.04)), leaf.y, (0.04 - (0.05 * (i % 2)))]
-      rotation: turnAbout([0, 0, 1], leaf.tilt)
+      position [(0 - (leaf.x + (length * 0.04))), leaf.y, ((0.05 * (i % 2)) - 0.04)]
+      rotation: (turnAbout([0, 0, 1], leaf.tilt) * [-1, 1, -1, 1])
       scale [leaf.size, (leaf.size * 0.62), 0.03]
       detail: true
     }
     shape Box $"planter-stem-{i}" {
       material: (base + kitLeafDeep)
-      position [(leaf.x * 0.5 + (length * 0.04)), (0.62 + ((leaf.y - 0.62) / 2)), 0]
-      rotation: turnAbout([0, 0, 1], (0 - (leaf.x * 40)))
+      position [(0 - (leaf.x * 0.5 + (length * 0.04))), (0.62 + ((leaf.y - 0.62) / 2)), 0]
+      rotation: (turnAbout([0, 0, 1], (0 - (leaf.x * 40))) * [-1, 1, -1, 1])
       scale [0.012, ((leaf.y - 0.62) / 2), 0.012]
       detail: true
     }
@@ -648,7 +649,7 @@ template planter(base, length = 1.7) {
   for (tuft, i) in [[0.42, 0.7, 0.1], [0.55, 0.74, -0.08], [0.66, 0.69, 0.06], [0.5, 0.78, 0.02], [0.36, 0.69, -0.1], [0.61, 0.8, -0.02]] {
     shape Sphere $"planter-tuft-{i}" {
       material: (base + kitLeafPale)
-      position [((tuft[0] / 0.85) * ((length / 2) - 0.12)), tuft[1], tuft[2]]
+      position [(0 - ((tuft[0] / 0.85) * ((length / 2) - 0.12))), tuft[1], (0 - tuft[2])]
       scale [0.1, 0.1, 0.1]
       detail: true
     }
@@ -660,7 +661,7 @@ template bench(base, length = 2) {
   for (z, i) in [-0.16, 0, 0.16] {
     shape Box $"bench-slat-{i}" {
       material: (base + kitTimber)
-      position [0, 0.44, z]
+      position [0, 0.44, -z]
       scale [(length / 2), 0.04, 0.072]
       rounding: 0.02
     }
@@ -668,14 +669,14 @@ template bench(base, length = 2) {
   for side in [-1, 1] {
     shape Box $"bench-trestle-{side}" {
       material: (base + kitTeal)
-      position [(side * ((length / 2) - 0.28)), 0.3, 0]
+      position [(0 - (side * ((length / 2) - 0.28))), 0.3, 0]
       scale [0.1, 0.1, 0.22]
       chamfer: 0.03
     }
     for foot in [-1, 1] {
       shape Box $"bench-foot-{side}-{foot}" {
         material: (base + kitTeal)
-        position [(side * ((length / 2) - 0.28)), 0.11, (foot * 0.16)]
+        position [(0 - (side * ((length / 2) - 0.28))), 0.11, (foot * -0.16)]
         scale [0.1, 0.11, 0.06]
         chamfer: 0.025
       }
@@ -690,14 +691,14 @@ template bench(base, length = 2) {
 template banner(base, width = 0.9, drop = 2.3) {
   shape Box "banner-rod" {
     material: (base + kitBrass)
-    position [0, 0, 0.12]
+    position [0, 0, -0.12]
     scale [((width / 2) + 0.14), 0.022, 0.022]
     rounding: 0.02
   }
   for side in [-1, 1] {
     shape Box $"banner-bracket-{side}" {
       material: (base + kitTeal)
-      position [(side * ((width / 2) + 0.05)), 0, 0.06]
+      position [(0 - (side * ((width / 2) + 0.05))), 0, -0.06]
       scale [0.035, 0.07, 0.07]
       chamfer: 0.015
     }
@@ -705,30 +706,31 @@ template banner(base, width = 0.9, drop = 2.3) {
   for x in [-0.32, 0, 0.32] {
     shape Box $"banner-loop-{x}" {
       material: (base + kitShadeDeep)
-      position [(x * (width / 0.9)), -0.07, 0.12]
+      position [(0 - (x * (width / 0.9))), -0.07, -0.12]
       scale [0.045, 0.09, 0.03]
     }
   }
   shape Box "banner-cloth" {
     material: (base + kitShade)
-    position [0, (-0.14 - (drop / 2)), 0.12]
+    position [0, (-0.14 - (drop / 2)), -0.12]
     scale [(width / 2), (drop / 2), 0.008]
   }
   shape Prism "banner-diamond" {
     material: (base + kitCream)
-    position [0, (-0.14 - (drop * 0.34)), 0.12]
+    position [0, (-0.14 - (drop * 0.34)), -0.12]
+    rotation: rotate([0, 1, 0], 180)
     scale [(width * 0.2), (width * 0.3), 0.013]
     profile { kind: "Polygon", sides: 4 }
   }
   shape Prism "banner-arrow" {
     material: (base + kitCream)
-    position [0, (-0.14 - (drop * 0.68)), 0.12]
+    position [0, (-0.14 - (drop * 0.68)), -0.12]
     scale [(width * 0.3), (width * 0.22), 0.013]
     taper: 0
   }
   shape Box "banner-stem" {
     material: (base + kitCream)
-    position [0, (-0.14 - (drop * 0.84)), 0.12]
+    position [0, (-0.14 - (drop * 0.84)), -0.12]
     scale [(width * 0.07), (drop * 0.09), 0.013]
   }
 }
@@ -794,24 +796,24 @@ function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 template barStool(label, at, seat, metal, height = 0.66, radius = 0.19) {
   shape Cylinder $"{label}-seat" {
     material: seat
-    position: (at + [0, (height - 0.04), 0])
+    position: ((at * [-1, 1, -1]) + [0, (height - 0.04), 0])
     scale [radius, 0.045, radius]
     rounding: 0.03
   }
   shape Cylinder $"{label}-post" {
     material: metal
-    position: (at + [0, ((height - 0.08) / 2), 0])
+    position: ((at * [-1, 1, -1]) + [0, ((height - 0.08) / 2), 0])
     scale [0.025, ((height - 0.08) / 2), 0.025]
   }
   shape Cylinder $"{label}-ring" {
     material: metal
-    position: (at + [0, (height * 0.38), 0])
+    position: ((at * [-1, 1, -1]) + [0, (height * 0.38), 0])
     scale [(radius * 0.7), 0.012, (radius * 0.7)]
     rounding: 0.01
   }
   shape Cylinder $"{label}-foot" {
     material: metal
-    position: (at + [0, 0.015, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.015, 0])
     scale [(radius * 0.9), 0.015, (radius * 0.9)]
     rounding: 0.01
   }
@@ -826,8 +828,8 @@ template cabinetSideSlab(label, x, material, z0, z1, y0, y1, points, half = 0.06
   let hy = ((y1 - y0) / 2)
   shape Prism $"{label}" {
     material: material
-    position [x, cy, cz]
-    rotation: rotate([0, 1, 0], -90)
+    position [-x, cy, -cz]
+    rotation: rotate([0, 1, 0], 90)
     scale [hz, hy, half]
     profile {
       kind: "Convex"
@@ -860,32 +862,32 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   // neon underglow, and the hood.
   shape Box "cabinet-kick" {
     material: (base + cabinetBezel)
-    position [0, 0.08, -0.1]
+    position [0, 0.08, 0.1]
     scale [w, 0.08, 0.4]
     rounding: 0.03
   }
   shape Box "cabinet-kick-glow" {
     material: (base + cabinetNeon)
-    position [0, 0.125, 0.3]
+    position [0, 0.125, -0.3]
     scale [(w - 0.06), 0.012, 0.008]
     rounding: 0.006
     detail: true
   }
   shape Box "cabinet-body" {
     material: (base + cabinetBody)
-    position [0, 0.55, -0.04]
+    position [0, 0.55, 0.04]
     scale [w, 0.39, 0.46]
     rounding: 0.04
   }
   shape Box "cabinet-apron" {
     material: (base + cabinetTrim)
-    position [0, 0.93, 0.55]
+    position [0, 0.93, -0.55]
     scale [w, 0.07, 0.15]
     rounding: 0.03
   }
   shape Box "cabinet-underglow" {
     material: (base + cabinetNeon)
-    position [0, 0.85, 0.55]
+    position [0, 0.85, -0.55]
     scale [(w - 0.1), 0.01, 0.12]
     rounding: 0.006
     detail: true
@@ -919,14 +921,14 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     )
     shape Box $"cabinet-well-{side}" {
       material: (base + cabinetBezel)
-      position [(side * 0.725), 1.775, 0.1675]
+      position [(side * -0.725), 1.775, -0.1675]
       scale [0.015, 0.605, 0.1675]
       rounding: 0.008
     }
     shape Box $"cabinet-glass-lip-{side}" {
       material: (base + cabinetBezel)
-      position: cabinetGlassAt((side * 0.6925), 0, 0.014)
-      rotation: cabinetGlassRot
+      position: (cabinetGlassAt((side * 0.6925), 0, 0.014) * [-1, 1, -1])
+      rotation: (cabinetGlassRot * [-1, 1, -1, 1])
       scale [0.0325, 0.54, 0.014]
       rounding: 0.01
     }
@@ -960,7 +962,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   for side in [-1, 1] {
     shape Box $"cabinet-bay-line-{side}" {
       material: (base + cabinetNeon)
-      position [(side * 0.775), 1.79, 0.342]
+      position [(side * -0.775), 1.79, -0.342]
       scale [0.01, 0.49, 0.006]
       rounding: 0.005
       detail: true
@@ -968,7 +970,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     if ((w - 0.73) > 0.2) {
       shape Box $"cabinet-stile-inlay-{side}" {
         material: (base + cabinetTrim)
-        position [(side * ((w + 0.73) / 2 + 0.03)), 1.78, 0.34]
+        position [(0 - (side * ((w + 0.73) / 2 + 0.03))), 1.78, -0.34]
         scale [(((w - 0.73) / 2) - 0.08), 0.46, 0.012]
         rounding: 0.01
       }
@@ -976,29 +978,29 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   }
   shape Box "cabinet-bay-line-top" {
     material: (base + cabinetNeon)
-    position [0, 2.455, 0.342]
+    position [0, 2.455, -0.342]
     scale [0.785, 0.009, 0.006]
     rounding: 0.005
     detail: true
   }
   shape Box "cabinet-well-top" {
     material: (base + cabinetBezel)
-    position [0, 2.365, 0.1675]
+    position [0, 2.365, -0.1675]
     scale [0.74, 0.015, 0.1675]
     rounding: 0.008
   }
   shape Box "cabinet-glass-mask" {
     material: (base + cabinetBezel)
-    position: cabinetGlassAt(0, 0, -0.03)
-    rotation: cabinetGlassRot
+    position: (cabinetGlassAt(0, 0, -0.03) * [-1, 1, -1])
+    rotation: (cabinetGlassRot * [-1, 1, -1, 1])
     scale [0.725, 0.6, 0.03]
     rounding: 0.01
   }
   for (b, i) in [0.57, -0.57] {
     shape Box $"cabinet-glass-lip-{i}" {
       material: (base + cabinetBezel)
-      position: cabinetGlassAt(0, b, 0.014)
-      rotation: cabinetGlassRot
+      position: (cabinetGlassAt(0, b, 0.014) * [-1, 1, -1])
+      rotation: (cabinetGlassRot * [-1, 1, -1, 1])
       scale [0.725, 0.03, 0.014]
       rounding: 0.01
     }
@@ -1006,13 +1008,14 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   // The marquee: a housing frame, the glowing panel proud of it carrying the title, and a speaker grille either side.
   shape Box "cabinet-marquee-frame" {
     material: (base + cabinetTrim)
-    position [0, 2.7, 0.525]
+    position [0, 2.7, -0.525]
     scale [(w - 0.3), 0.16, 0.018]
     rounding: 0.014
   }
   shape Box "cabinet-marquee-panel" {
     material: (base + cabinetGlow)
-    position [0, 2.7, 0.53]
+    position [0, 2.7, -0.53]
+    rotation: rotate([0, 1, 0], 180)
     scale [(w - 0.32), 0.14, 0.02]
     // The glowing panel, its lettering included, lights what stands before the cabinet.
     lightsAs: Face
@@ -1020,14 +1023,14 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   for side in [-1, 1] {
     shape Box $"cabinet-grille-{side}" {
       material: (base + cabinetBezel)
-      position [(side * (w - 0.17)), 2.7, 0.526]
+      position [(0 - (side * (w - 0.17))), 2.7, -0.526]
       scale [0.12, 0.14, 0.012]
       rounding: 0.01
     }
     for (y, i) in [-0.09, -0.045, 0, 0.045, 0.09] {
       shape Box $"cabinet-grille-{side}-slat-{i}" {
         material: (base + cabinetMetal)
-        position [(side * (w - 0.17)), (2.7 + y), 0.542]
+        position [(0 - (side * (w - 0.17))), (2.7 + y), -0.542]
         scale [0.1, 0.01, 0.01]
         rounding: 0.006
         detail: true
@@ -1107,7 +1110,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     )
     shape Prism $"cabinet-art-badge-{side}" {
       material: (base + cabinetBody)
-      position [face, 0.5, -0.02]
+      position [-face, 0.5, 0.02]
       rotation: rotate([0, 1, 0], -90)
       scale [0.26, 0.26, 0.012]
       profile {
@@ -1116,7 +1119,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Prism $"cabinet-art-badge-core-{side}" {
       material: (base + cabinetNeon)
-      position [face, 0.5, -0.02]
+      position [-face, 0.5, 0.02]
       rotation: rotate([0, 1, 0], -90)
       scale [0.17, 0.17, 0.016]
       profile {
@@ -1126,7 +1129,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (strip, i) in [[0.58, 0.38, 0.446], [0.96, 0.095, 0.724], [1.9, 0.58, 0.366], [2.69, 0.15, 0.526]] {
       shape Box $"cabinet-molding-{side}-{i}" {
         material: (base + cabinetNeon)
-        position [sx, strip[0], strip[2]]
+        position [-sx, strip[0], (0 - strip[2])]
         scale [0.066, strip[1], 0.008]
         rounding: 0.006
         detail: true
@@ -1138,59 +1141,59 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   // rows of three to its right (cabinetButtonLayout), which a body walks through.
   shape Box "cabinet-deck" {
     material: (base + cabinetBezel)
-    position: cabinetDeckAt(0, 0.27, -0.04)
-    rotation: cabinetDeckRot
+    position: (cabinetDeckAt(0, 0.27, -0.04) * [-1, 1, -1])
+    rotation: (cabinetDeckRot * [-1, 1, -1, 1])
     scale [w, 0.04, 0.27]
     rounding: 0.02
   }
   shape Cylinder "cabinet-deck-lip" {
     material: (base + cabinetTrim)
-    position: cabinetDeckAt(0, 0.54, 0)
-    rotation: rotate([0, 0, 1], 90)
+    position: (cabinetDeckAt(0, 0.54, 0) * [-1, 1, -1])
+    rotation: rotate([0, 0, -1], 90)
     scale [0.026, w, 0.026]
   }
   for (c, p) in panels {
     shape Box $"cabinet-panel-{p}" {
       material: (base + cabinetShelf)
-      position: cabinetDeckAt(c, cabinetPanelMid, 0)
-      rotation: cabinetDeckRot
+      position: (cabinetDeckAt(c, cabinetPanelMid, 0) * [-1, 1, -1])
+      rotation: (cabinetDeckRot * [-1, 1, -1, 1])
       scale [cabinetPanelHalf[0], 0.015, cabinetPanelHalf[1]]
       rounding: 0.012
     }
     shape Cylinder $"cabinet-stick-base-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.32), 0.33, 0.023)
-      rotation: cabinetDeckRot
+      position: (cabinetDeckAt((c - 0.32), 0.33, 0.023) * [-1, 1, -1])
+      rotation: (cabinetDeckRot * [-1, 1, -1, 1])
       scale [0.075, 0.008, 0.075]
       rounding: 0.004
       detail: true
     }
     shape Cylinder $"cabinet-stick-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.32), 0.33, 0.101)
-      rotation: cabinetDeckRot
+      position: (cabinetDeckAt((c - 0.32), 0.33, 0.101) * [-1, 1, -1])
+      rotation: (cabinetDeckRot * [-1, 1, -1, 1])
       scale [0.017, 0.07, 0.017]
       detail: true
     }
     shape Sphere $"cabinet-stick-ball-{p}" {
       material: (base + cabinetButton)
-      position: cabinetDeckAt((c - 0.32), 0.33, 0.221)
+      position: (cabinetDeckAt((c - 0.32), 0.33, 0.221) * [-1, 1, -1])
       scale [0.065, 0.065, 0.065]
       detail: true
     }
     for (b, i) in cabinetButtonLayout {
       shape Cylinder $"cabinet-button-collar-{p}-{i}" {
         material: (base + cabinetMetal)
-        position: cabinetDeckAt((c + b[0]), b[1], 0.021)
-        rotation: cabinetDeckRot
+        position: (cabinetDeckAt((c + b[0]), b[1], 0.021) * [-1, 1, -1])
+        rotation: (cabinetDeckRot * [-1, 1, -1, 1])
         scale [0.064, 0.006, 0.064]
         rounding: 0.003
         detail: true
       }
       shape Cylinder $"cabinet-button-{p}-{i}" {
         material: (base + (((i % 2) == 0) ? cabinetButtonAlt : cabinetButton))
-        position: cabinetDeckAt((c + b[0]), b[1], 0.03)
-        rotation: cabinetDeckRot
+        position: (cabinetDeckAt((c + b[0]), b[1], 0.03) * [-1, 1, -1])
+        rotation: (cabinetDeckRot * [-1, 1, -1, 1])
         scale [0.052, 0.012, 0.052]
         rounding: 0.009
         detail: true
@@ -1200,8 +1203,8 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   textRuns [
     {
       text: title
-      position [0, (2.7 - ((textCapHeight * em) / 2)), 0.552]
-      rotation [0, 0, 0, 1]
+      position [0, (2.7 - ((textCapHeight * em) / 2)), -0.552]
+      rotation [0, 1, 0, 0]
       emHeight: em
       depth: 0.008
       mode: "emboss"
@@ -1212,8 +1215,8 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (c, p) in ((players == 2) ? panels : []) {
       {
         text: $"P{p + 1}"
-        position: cabinetDeckAt((c + (((p * 2) - 1) * (cabinetPanelHalf[0] - cabinetMarkMargin))), ((cabinetPanelMid + cabinetPanelHalf[1]) - cabinetMarkMargin), 0.015)
-        rotation: rotate([1, 0, 0], -72.54)
+        position: (cabinetDeckAt((c + (((p * 2) - 1) * (cabinetPanelHalf[0] - cabinetMarkMargin))), ((cabinetPanelMid + cabinetPanelHalf[1]) - cabinetMarkMargin), 0.015) * [-1, 1, -1])
+        rotation: compose(rotate([0, 1, 0], 180), rotate([1, 0, 0], -72.54))
         emHeight: 0.075
         depth: 0.008
         mode: "emboss"
@@ -1254,27 +1257,27 @@ function televisionPictureHalves(aspect) = pictureHalvesIn(televisionPictureHalf
 template television(base, at) {
   shape Box "television-case" {
     material: (base + setCase)
-    position: (at + [0, 0.78, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.78, 0])
     scale [0.8, 0.78, 0.42]
     rounding: 0.12
   }
   shape Box "television-tube" {
     material: (base + setCase)
-    position: (at + [0, 0.78, -0.5])
+    position: ((at * [-1, 1, -1]) + [0, 0.78, 0.5])
     scale [0.58, 0.52, 0.2]
     rounding: 0.12
   }
   shape Box "television-bezel" {
     material: (base + setDark)
-    position: (at + [0, televisionPicture[1], 0.4])
+    position: ((at * [-1, 1, -1]) + [0, televisionPicture[1], -0.4])
     scale [(televisionPictureHalf[0] + 0.06), (televisionPictureHalf[1] + 0.06), 0.03]
     rounding: 0.025
   }
   for (x, i) in [0.45, 0.63] {
     shape Cylinder $"television-knob-{i}" {
       material: (base + setTrim)
-      position: (at + [x, 0.2, 0.43])
-      rotation: rotate([1, 0, 0], 90)
+      position: ((at * [-1, 1, -1]) + [-x, 0.2, -0.43])
+      rotation: rotate([-1, 0, 0], 90)
       scale [0.055, 0.03, 0.055]
       rounding: 0.01
       detail: true
@@ -1282,27 +1285,27 @@ template television(base, at) {
   }
   shape Sphere "television-lamp" {
     material: (base + setLamp)
-    position: (at + [-0.62, 0.2, 0.42])
+    position: ((at * [-1, 1, -1]) + [0.62, 0.2, -0.42])
     scale [0.025, 0.025, 0.025]
     detail: true
   }
   shape Sphere "television-dome" {
     material: (base + setDark)
-    position: (at + [0, 1.56, -0.12])
+    position: ((at * [-1, 1, -1]) + [0, 1.56, 0.12])
     scale [0.13, 0.1, 0.13]
   }
   for side in [-1, 1] {
     let ear = rotate([0, 0, 1], (side * -28))
     shape Cylinder $"television-ear-{side}" {
       material: (base + setDark)
-      position: (at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.42, 0]))
-      rotation: ear
+      position: ((at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.42, 0])) * [-1, 1, -1])
+      rotation: (ear * [-1, 1, -1, 1])
       scale [0.014, 0.42, 0.014]
       detail: true
     }
     shape Sphere $"television-ear-tip-{side}" {
       material: (base + setTrim)
-      position: (at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.86, 0]))
+      position: ((at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.86, 0])) * [-1, 1, -1])
       scale [0.04, 0.04, 0.04]
       detail: true
     }
@@ -1314,21 +1317,21 @@ template television(base, at) {
 template lowStand(base, at, width = 0.95, height = 0.42, depth = 0.45) {
   shape Box "stand-top" {
     material: (base + setStand)
-    position: (at + [0, (height - 0.025), 0])
+    position: ((at * [-1, 1, -1]) + [0, (height - 0.025), 0])
     scale [width, 0.025, depth]
     rounding: 0.02
   }
   for side in [-1, 1] {
     shape Box $"stand-side-{side}" {
       material: (base + setStand)
-      position: (at + [(side * (width - 0.05)), ((height - 0.05) / 2), 0])
+      position: ((at * [-1, 1, -1]) + [(0 - (side * (width - 0.05))), ((height - 0.05) / 2), 0])
       scale [0.05, ((height - 0.05) / 2), (depth - 0.02)]
       rounding: 0.02
     }
   }
   shape Box "stand-shelf" {
     material: (base + setStand)
-    position: (at + [0, 0.06, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.06, 0])
     scale [(width - 0.1), 0.02, (depth - 0.03)]
   }
 }
@@ -1340,25 +1343,25 @@ function consolePort(p) = [((p == 0) ? -0.12 : 0.12), 0.06, 0.249]
 template deckConsole(base, at) {
   shape Box "console-shell" {
     material: (base + setConsole)
-    position: (at + [0, 0.07, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.07, 0])
     scale [0.32, 0.07, 0.24]
     rounding: 0.03
   }
   shape Box "console-slot" {
     material: (base + setDark)
-    position: (at + [0, 0.14, -0.05])
+    position: ((at * [-1, 1, -1]) + [0, 0.14, 0.05])
     scale [0.16, 0.006, 0.05]
   }
   shape Box "console-cartridge" {
     material: (base + setTrim)
-    position: (at + [0, 0.2, -0.05])
+    position: ((at * [-1, 1, -1]) + [0, 0.2, 0.05])
     scale [0.14, 0.065, 0.03]
     rounding: 0.01
   }
   for (x, i) in [0.17, 0.25] {
     shape Box $"console-key-{i}" {
       material: (base + setTrim)
-      position: (at + [x, 0.142, 0.14])
+      position: ((at * [-1, 1, -1]) + [-x, 0.142, -0.14])
       scale [0.03, 0.008, 0.02]
       rounding: 0.004
       detail: true
@@ -1366,14 +1369,14 @@ template deckConsole(base, at) {
   }
   shape Sphere "console-lamp" {
     material: (base + setLamp)
-    position: (at + [-0.25, 0.1, 0.235])
+    position: ((at * [-1, 1, -1]) + [0.25, 0.1, -0.235])
     scale [0.013, 0.013, 0.013]
     detail: true
   }
   for p in [0, 1] {
     shape Box $"console-port-{p}" {
       material: (base + setDark)
-      position: (at + consolePort(p) + [0, 0, -0.006])
+      position: (((at + consolePort(p)) * [-1, 1, -1]) + [0, 0, 0.006])
       scale [0.035, 0.022, 0.006]
       detail: true
     }
@@ -1387,7 +1390,7 @@ let padCableEnd = [0, 0.022, -0.07]
 template gamePad(base, at, label) {
   shape Box $"{label}-shell" {
     material: (base + setPad)
-    position: (at + [0, 0.022, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.022, 0])
     scale [0.16, 0.022, 0.07]
     rounding: 0.02
     detail: true
@@ -1395,7 +1398,7 @@ template gamePad(base, at, label) {
   for (s, i) in [[0.035, 0.012], [0.012, 0.035]] {
     shape Box $"{label}-dpad-{i}" {
       material: (base + setDark)
-      position: (at + [0.09, 0.046, 0])
+      position: ((at * [-1, 1, -1]) + [-0.09, 0.046, 0])
       scale [s[0], 0.005, s[1]]
       detail: true
     }
@@ -1403,7 +1406,7 @@ template gamePad(base, at, label) {
   for (b, i) in [[-0.07, 0.016], [-0.115, -0.014]] {
     shape Cylinder $"{label}-button-{i}" {
       material: (base + setButton)
-      position: (at + [b[0], 0.046, b[1]])
+      position: ((at * [-1, 1, -1]) + [(0 - b[0]), 0.046, (0 - b[1])])
       scale [0.018, 0.005, 0.018]
       detail: true
     }
@@ -1411,7 +1414,7 @@ template gamePad(base, at, label) {
   for (x, i) in [-0.02, 0.02] {
     shape Box $"{label}-key-{i}" {
       material: (base + setDark)
-      position: (at + [x, 0.045, 0.02])
+      position: ((at * [-1, 1, -1]) + [-x, 0.045, -0.02])
       scale [0.012, 0.004, 0.006]
       detail: true
     }
@@ -1425,7 +1428,8 @@ template padCable(base, label, from, to, lie = 0.024, radius = 0.012, slack = 0.
   let drop = [(from[0] + ((to[0] - from[0]) * 0.3)), lie, (from[2] + ((to[2] - from[2]) * 0.35))]
   shape Sweep $"{label}-drop" {
     material: (base + setDark)
-    position: from
+    position: (from * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     curve {
       a [0, 0, 0]
       b: ([from[0], lie, (from[2] + 0.15)] - from)
@@ -1437,7 +1441,8 @@ template padCable(base, label, from, to, lie = 0.024, radius = 0.012, slack = 0.
   }
   shape Sweep $"{label}-run" {
     material: (base + setDark)
-    position: drop
+    position: (drop * [-1, 1, -1])
+    rotation: rotate([0, 1, 0], 180)
     curve {
       a [0, 0, 0]
       b: (((to - drop) * 0.5) + [((to[0] >= from[0]) ? slack : (0 - slack)), 0, 0])
@@ -1478,13 +1483,13 @@ let loungeBeanbagAlt = 3
 template rug(base, at, half) {
   shape Box "rug-border" {
     material: (base + loungeRugBorder)
-    position: (at + [0, 0.005, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.005, 0])
     scale [half[0], 0.005, half[1]]
     rounding: 0.004
   }
   shape Box "rug-field" {
     material: (base + loungeRug)
-    position: (at + [0, 0.006, 0])
+    position: ((at * [-1, 1, -1]) + [0, 0.006, 0])
     scale [(half[0] - 0.14), 0.006, (half[1] - 0.14)]
     rounding: 0.005
   }
@@ -1495,15 +1500,15 @@ template beanbag(base, label, at, yaw = 0, slot = 0) {
   let turn = rotate([0, 1, 0], yaw)
   shape Superellipsoid $"{label}-seat" {
     material: (base + slot)
-    position: (at + [0, 0.22, 0])
-    rotation: turn
+    position: ((at * [-1, 1, -1]) + [0, 0.22, 0])
+    rotation: (turn * [-1, 1, -1, 1])
     scale [0.5, 0.22, 0.5]
     exponent: 2.4
   }
   shape Superellipsoid $"{label}-back" {
     material: (base + slot)
-    position: (at + rotatePoint(turn, [0, 0.45, -0.3]))
-    rotation: compose(turn, rotate([1, 0, 0], -18))
+    position: ((at + rotatePoint(turn, [0, 0.45, -0.3])) * [-1, 1, -1])
+    rotation: compose((turn * [-1, 1, -1, 1]), rotate([-1, 0, 0], -18))
     scale [0.44, 0.3, 0.2]
     exponent: 2.4
   }
@@ -1552,7 +1557,7 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     let fold = { cell: [cell, cell], limit: [ceiling(((length / 2) / cell)), ceiling((height / cell))] }
     shape Box "lattice-net-strand" {
       material: (base + latticeBar)
-      rotation: rotate([0, 0, 1], 45deg)
+      rotation: compose(rotate([0, 1, 0], 180), rotate([0, 0, 1], 45deg))
       scale [(cell * 0.72), (net.strand / 2), (net.strand / 2)]
       rounding: (net.strand * 0.45)
       domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit, materialStride: (latticeRail - latticeBar))]
@@ -1561,7 +1566,8 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     for corner in [-1, 1] {
       shape Sphere $"lattice-net-knot-{corner}" {
         material: (base + latticeFrame)
-        position [((corner * cell) / 2), ((corner * cell) / 2), 0]
+        position [(0 - ((corner * cell) / 2)), ((corner * cell) / 2), 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [(net.strand * 0.8), (net.strand * 0.8), (net.strand * 0.8)]
         domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit)]
         detail: true
@@ -1578,7 +1584,8 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   for side in [-1, 1] {
     shape Box $"lattice-post-{side}" {
       material: (base + latticeFrame)
-      position [((side * length) / 2), (height / 2), 0]
+      position [(0 - ((side * length) / 2)), (height / 2), 0]
+      rotation: rotate([0, 1, 0], 180)
       scale [(frame / 2), (height / 2), (frame / 2)]
       rounding: (frame / 6)
     }
@@ -1586,6 +1593,7 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   shape Box "lattice-head" {
     material: (base + latticeFrame)
     position [0, (height - (frame / 2)), 0]
+    rotation: rotate([0, 1, 0], 180)
     scale [(length / 2), (frame / 2), (frame / 2)]
     rounding: (frame / 6)
   }
@@ -1609,6 +1617,7 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     shape Box "lattice-upright" {
       material: (base + latticeBar)
       position [0, (height / 2), 0]
+      rotation: rotate([0, 1, 0], 180)
       scale [(bar / 2), (height / 2), (bar / 2)]
       domain [repeat(spacing: [pitch, 1, 1], limit: [((cells / 2) - 1), 0, 0])]
     }
@@ -1617,6 +1626,7 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     shape Box "lattice-rail" {
       material: (base + latticeRail)
       position [0, (height / 2), 0]
+      rotation: rotate([0, 1, 0], 180)
       scale [(length / 2), (rail / 2), (rail / 2)]
       rounding: (rail / 4)
       domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
@@ -1639,7 +1649,7 @@ template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segme
   shape Cylinder "rainbow-pane-disc" {
     material: base
     position [0, spring, 0]
-    rotation [0.7071068, 0, 0, 0.7071068]
+    rotation [-0.7071068, 0, 0, 0.7071068]
     scale [radius, 0.005, radius]
   }
   shape Box "rainbow-pane-legs" {
@@ -1651,6 +1661,7 @@ template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segme
     let r = ((radius - 0.06) - (k * band))
     for n in range(0, segments) {
       shape Sweep $"rainbow-arc-{k}-{n}" {
+        rotation: rotate([0, 1, 0], 180)
         detail: true
         material: ((base + 1) + k)
         curve {
@@ -1666,7 +1677,7 @@ template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segme
       shape Cylinder $"rainbow-leg-{k}-{side}" {
         detail: true
         material: ((base + 1) + k)
-        position [(side * r), (spring / 2), 0]
+        position [(0 - (side * r)), (spring / 2), 0]
         scale [tube, (spring / 2), tube]
       }
     }
@@ -1693,27 +1704,27 @@ template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
   let cord = ((drop - pendantShadeHeight) - 0.03)
   shape Cylinder "pendant-rose" {
     material: (base + pendantShade)
-    position: (at + [0, -0.015, 0])
+    position: ((at * [-1, 1, -1]) + [0, -0.015, 0])
     scale [0.07, 0.015, 0.07]
     rounding: 0.005
     detail: true
   }
   shape Cylinder "pendant-cord" {
     material: (base + pendantCord)
-    position: (at + [0, (0 - (0.03 + (cord / 2))), 0])
+    position: ((at * [-1, 1, -1]) + [0, (0 - (0.03 + (cord / 2))), 0])
     scale [0.006, (cord / 2), 0.006]
     detail: true
   }
   shape Cylinder "pendant-shade" {
     material: (base + pendantShade)
-    position: (at + [0, (0 - (drop - (pendantShadeHeight / 2))), 0])
+    position: ((at * [-1, 1, -1]) + [0, (0 - (drop - (pendantShadeHeight / 2))), 0])
     scale [shade, (pendantShadeHeight / 2), shade]
     rounding: 0.02
     detail: true
   }
   shape Cylinder "pendant-glow" {
     material: (base + pendantGlow)
-    position: (at + [0, (0 - (drop + 0.008)), 0])
+    position: ((at * [-1, 1, -1]) + [0, (0 - (drop + 0.008)), 0])
     scale [glow, 0.008, glow]
     rounding: 0.004
     detail: true
@@ -1739,26 +1750,26 @@ template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32
     blend: Subtraction
     material: (base + kitTeal)
     position [0, ((height + (lintel * 0.4)) - doorArchRadius(width, (lintel * 0.4))), 0]
-    rotation: rotate([1, 0, 0], 90deg)
+    rotation: rotate([-1, 0, 0], 90deg)
     scale [doorArchRadius(width, (lintel * 0.4)), ((depth / 2) + 0.05), doorArchRadius(width, (lintel * 0.4))]
   }
   for side in [-1, 1] {
     shape Box $"door-post-{side}" {
       material: (base + kitTeal)
-      position [(side * ((width / 2) + (post / 2))), ((height + lintel) / 2), 0]
+      position [(0 - (side * ((width / 2) + (post / 2)))), ((height + lintel) / 2), 0]
       scale [(post / 2), ((height + lintel) / 2), (depth / 2)]
       rounding: (post / 6)
     }
     shape Box $"door-inlay-{side}" {
       detail: true
       material: (base + kitBrass)
-      position [(side * ((width / 2) + (post / 2))), (height * 0.55), 0]
+      position [(0 - (side * ((width / 2) + (post / 2)))), (height * 0.55), 0]
       scale [0.018, (height * 0.38), ((depth / 2) + 0.006)]
     }
     shape Box $"door-cap-{side}" {
       detail: true
       material: (base + kitBrass)
-      position [(side * ((width / 2) + (post / 2))), ((height + lintel) + 0.04), 0]
+      position [(0 - (side * ((width / 2) + (post / 2)))), ((height + lintel) + 0.04), 0]
       scale [((post / 2) + 0.03), 0.04, ((depth / 2) + 0.03)]
       rounding: 0.02
     }

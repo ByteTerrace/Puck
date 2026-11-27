@@ -123,7 +123,7 @@ motion phase?
 - **[opened]** The engine already classifies every frame-bearing field of a
   creation once: `CreationFrame`
   (`src/Puck.World.Authoring/Authoring/CreationFrame.cs`) is "THE one place a
-  puck.creation.v1 document crosses between the author's frame and the
+  puck.creation.v2 document crosses between the author's frame and the
   engine's", and its `Apply` names each field that converts (shape position,
   rotation and joint; a swing's axis and pivot; a slide's axis; a symmetry
   normal; effector direction and offset; frames, cameras, root text runs and

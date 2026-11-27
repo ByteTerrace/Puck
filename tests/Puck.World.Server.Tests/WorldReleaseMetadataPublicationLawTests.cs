@@ -658,7 +658,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                     """));
                 tree["prototypes"] ??= new JsonArray();
                 tree["prototypes"]!.AsArray().Add(item: JsonNode.Parse("""
-                    {"id":"draw-actor","document":{"schema":"puck.creation.v1","name":"actor","shapes":[],"drivers":[{"name":"stride","signal":"planarTravel","cadence":"state.cadence"}]}}
+                    {"id":"draw-actor","document":{"schema":"puck.creation.v2","name":"actor","shapes":[],"drivers":[{"name":"stride","signal":"planarTravel","cadence":"state.cadence"}]}}
                     """));
                 Assert.True(
                     condition: WorldDefinitionLoader.TryReadPublishable(

@@ -384,7 +384,7 @@ prototypes {
     document {
       name: "floor"
       palette [{ color: "#000000" }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "ground" {
         material: 0
         position [0, 0, 0]
@@ -396,7 +396,7 @@ prototypes {
   prototype "hidden" {
     document {
       name: "hidden"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#000000" }]
       shapes []
     }
@@ -406,7 +406,7 @@ prototypes {
   prototype "rock" {
     document {
       name: "rock"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         { color: "#4A3F3A", roughness: 0.9, specular: 0.05 }
         { color: "#8C857B", roughness: 0.7, specular: 0.1 }

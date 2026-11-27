@@ -98,7 +98,7 @@ prototypes {
     document {
       name: "marble"
       palette [{ color: "#E9E2D0", roughness: 0.25, specular: 0.5 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Sphere "ball" {
         material: 0
         position [0, 0, 0]

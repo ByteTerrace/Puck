@@ -10,107 +10,12 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>Proves the <see cref="CreationFrame"/> author↔engine conversion and the <see cref="CreationGeometry"/>
+/// <summary>Proves the <see cref="CreationGeometry"/>
 /// unit-size table against the compiled fixed-point solid field — the same field <see cref="WorldSolidField"/>
 /// compiles for contact resolution.</summary>
-public sealed class CreationAuthorFrameLawTests {
+public sealed class CreationGeometryLawTests {
     private static readonly FixedQ4816 SurfaceTolerance = FixedQ4816.FromDouble(value: 0.01);
 
-    /// <summary>A text run authored on a shape's +Z face converts to the engine's −Z side, and the compiled solid
-    /// field agrees the shape's surface sits exactly there — the render conversion and the collision compiler read
-    /// the same author-frame document through the same <see cref="CreationFrame"/> transform.</summary>
-    [Fact]
-    public void AuthoredPlusZFaceConvertsToTheEngineMinusZSideAndTheSolidFieldAgrees() {
-        var sphere = new ShapeDocument(
-            Id: 0,
-            Name: "core",
-            Type: SdfSolidPrimitive.Sphere,
-            Position: new Vector3(
-                x: 0f,
-                y: 1f,
-                z: 5f
-            ),
-            Rotation: Quaternion.Identity,
-            Scale: Vector3.One,
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: 0
-        );
-        var faceRun = new TextRunDocument(
-            Text: "K",
-            Position: new Vector3(
-                x: 0f,
-                y: 1f,
-                z: 6f
-            ), // the sphere's authored +Z face (center + unit radius)
-            Rotation: Quaternion.Identity,
-            EmHeight: 0.3f,
-            Depth: 0.02f,
-            Mode: TextRunDocument.ModeEmboss,
-            Material: 0);
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: "faced",
-            Palette: null,
-            Shapes: [sphere],
-            Frames: null,
-            TextRuns: [faceRun]
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "faced"
-        );
-        var creation = new WorldPrototype(
-            Id: "faced",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-
-        // The render conversion: the same function WorldPrototype.EngineDocument caches for every stamp/collision
-        // consumer.
-        var engineRun = CreationFrame.ToEngine(document: canonical.Document).TextRuns![0];
-
-        Assert.True(
-            (engineRun.Position.Z < 0f),
-            userMessage: $"an authored +Z face run converted to the engine +Z side; z={engineRun.Position.Z:0.###}"
-        );
-
-        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var definition = source with {
-            CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(
-                Id: "faced",
-                PrototypeId: creation.Id,
-                Position: Vector3.Zero,
-                YawDegrees: 0f,
-                Scale: 1f,
-                Solid: new WorldSolid(Margin: 0f)
-            )],
-        };
-
-        Assert.True(
-            condition: WorldSolidField.TryBuild(
-                definition: definition,
-                built: out var field,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        var surfacePoint = FixedVector3.FromVector3(value: engineRun.Position);
-
-        Assert.True(condition: field!.Probe(
-            distance: out var distance,
-            gradient: out _,
-            material: out _,
-            position: in surfacePoint
-        ));
-        Assert.True(
-            (FixedQ4816.Abs(value: distance) < SurfaceTolerance),
-            userMessage: $"the compiled solid field disagrees with the render conversion at the authored front point; distance={((double)distance):0.####}"
-        );
-    }
     /// <summary>A capsule authored <c>scale {0.5,1,0.5}</c> compiles to radius 0.5 (the equator probe) and a
     /// 1-unit cylindrical section (the top-cap probe combines radius + length, isolating length by subtraction) —
     /// <see cref="CreationGeometry"/>'s unit table read literally.</summary>

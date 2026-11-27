@@ -217,7 +217,7 @@ public sealed class WorldCompositionLinksTests {
         var archPrototype = new JsonObject {
             ["id"] = "arch",
             ["document"] = new JsonObject {
-                ["schema"] = "puck.creation.v1",
+                ["schema"] = "puck.creation.v2",
                 ["name"] = "arch",
                 ["palette"] = new JsonArray(new JsonObject { ["color"] = "#808080" }),
                 ["shapes"] = new JsonArray(new JsonObject {
@@ -279,7 +279,7 @@ public sealed class WorldCompositionLinksTests {
             source: """
                 module islandRoom() {
                   prototypes [{ id: "arch", document {
-                    schema: "puck.creation.v1",
+                    schema: "puck.creation.v2",
                     palette [{ color: "#808080" }],
                     shapes [{ id: 0, type: "Box", position [0, 0, 0], rotation [0, 0, 0, 1], scale [1, 2, 0.1], material: 0, blend: "Union", smooth: 0 }],
                     behavior { faces [{ name: "portal", shapeId: 0 }] }

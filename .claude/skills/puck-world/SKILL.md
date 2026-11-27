@@ -475,7 +475,7 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 | `src/Puck.World.Presentation` | The frame's side: the types a produced frame runs (the screen binder, the render root, the audio director, `WorldIterationClock`, `WorldHudBindingResolver`, `WorldRenderProbe`, `WorldDiagnosticOverlay`, the pointer and overlay feeds) and the values the authority publishes for them at each collect (`WorldPresentationFeed`: `WorldTickRecord`, `WorldMachineTable`, `WorldObservationTable`, `WorldDiagnosticCopy`). References Client, never Server, Machines or a backend |
 | `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
 | `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompileSession` (the one door into `WorldCompiler`), `Vocabulary/` |
-| `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
+| `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v2` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
 | `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder; it ships no world (the debug world is the package `worlds/debug/`) |
 | `src/Puck.World.Silo` | The hosted multi-world silo (Orleans activation lifecycle only; game traffic rides the World's own wire) |
 | `src/Puck.World.Browser` | The engine in a browser tab: a `browser-wasm` publish of Schema, State and the `.puck` toolchain |

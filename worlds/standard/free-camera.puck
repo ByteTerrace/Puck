@@ -80,7 +80,7 @@ template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "f
     prototype $"{bead}" {
       document {
         name: "free camera"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette [{ color: "#8FD9FF", roughness: 0.3, specular: 0.2 }]
         shape Sphere "lens" {
           material: 0

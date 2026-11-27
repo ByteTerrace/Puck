@@ -139,7 +139,7 @@ public class DecompilerSugarTests {
     public void ShapesBlockElidesDefaultsAndKeepsNonDefaults() {
         const string Json = """
         {
-            "schema": "puck.creation.v1",
+            "schema": "puck.creation.v2",
             "shapes": [
                 {
                     "id": 0,

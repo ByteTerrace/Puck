@@ -63,7 +63,7 @@ public readonly record struct FixedCreationStampTransform(
 /// dimension in world units. A quotient of a scaled extent by the shape's scale would carry the extent's rounding.</param>
 public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shape, FixedVector3 Center, FixedVector3 HalfExtents, FixedQ4816 UniformScale, FixedVector3 PlaneNormal, FixedQuaternion Rotation, FixedVector3 LocalHalfExtents, FixedQ4816 StampScale);
 /// <summary>
-/// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
+/// Emits and expands <c>puck.creation.v2</c> shape geometry under one materialized stamp transform.
 /// </summary>
 public static partial class CreationStampEmitter {
     // The degeneracy floor on a scale axis, SdfSolidGeometry.MinimumScale in the fixed domain. Q48.16 resolves 1/65536,

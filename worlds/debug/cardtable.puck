@@ -166,25 +166,25 @@ template cardOutline(name, color) {
     document {
       name: name
       palette [{ color: color, roughness: 0.4, specular: 0.3 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "near" {
-        material: 0
-        position [0, 0, -0.0804]
-        scale [0.0578, 0.002, 0.003]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0, 0.0804]
         scale [0.0578, 0.002, 0.003]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0, -0.0804]
+        scale [0.0578, 0.002, 0.003]
+      }
       shape Box "left" {
         material: 0
-        position [-0.0578, 0, 0]
+        position [0.0578, 0, 0]
         scale [0.003, 0.002, 0.0834]
       }
       shape Box "right" {
         material: 0
-        position [0.0578, 0, 0]
+        position [-0.0578, 0, 0]
         scale [0.003, 0.002, 0.0834]
       }
     }
@@ -276,7 +276,7 @@ prototypes {
     document {
       name: "cardSpotHidden"
       palette [{ color: "#17422A", roughness: 0.9, specular: 0.02 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "spot" {
         material: 0
         position [0, -0.01, 0]
@@ -290,7 +290,7 @@ prototypes {
     document {
       name: "cardSpot"
       palette [{ color: "#17422A", roughness: 0.9, specular: 0.02 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "spot" {
         material: 0
         position [0, 0, 0]

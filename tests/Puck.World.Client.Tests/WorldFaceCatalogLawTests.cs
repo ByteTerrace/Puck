@@ -35,9 +35,7 @@ public sealed class WorldFaceCatalogLawTests {
         y: 2f,
         z: 0.15f
     );
-    // The engine rotation whose author-frame form (the fixture converts through CreationFrame.ToAuthor, a premultiply by
-    // the half turn) is the identity: the shape a world authors without a rotation, which the engine door turns by the
-    // half turn.
+    // A half turn about up: a screen shape turned to face its creation's front (−Z), since a box's face is its local +Z.
     private static Quaternion HalfTurnedFromIdentityAuthor { get; } = new(
         w: 0f,
         x: 0f,
@@ -129,10 +127,8 @@ public sealed class WorldFaceCatalogLawTests {
                     )]
             )
         );
-        // The literals above describe the geometry this suite wants in ENGINE terms; converting them to the author
-        // frame here (the inverse CreationFrame applies at the engine door) keeps every assertion below unchanged.
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: CreationFrame.ToAuthor(document: document),
+            document: document,
             source: "door"
         );
 
