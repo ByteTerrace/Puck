@@ -1,48 +1,51 @@
 // Chess on a game station's glass (../standard/game-station.puck): the board drawn as paints on the glass, the pieces
-// as tokens of the standard's chess set (../standard/chess-pieces.puck) on its squares, and the seat's play, all read
-// from and written to the one chess game the world composes (chess.puck's rows: a drawn board's chess-game.puck, or a
-// physical table's own). A module library: a world expands its templates beside the station's, with the chess game's
-// place in the station's catalog (`game`).
+// as tokens of the standard's chess set (../standard/chess-pieces.puck) on its squares, and the chairs' play, all read
+// from and written to the station's own chess game (chess.puck in its digital mode, expanded in the station's module
+// instance). A module library, in two parts: what the world holds once or keys by station (the pieces' prototypes, the
+// board's paints and the inks they read), and what each station's instance holds (its tokens, its cursors and its rules):
 //
 //   import "chess-station"
 //   prototypes { gameStationPrototype(station: s, catalog: c, boardPanels: chessStationPanels(s))  chessStationPrototypes() }
-//   placements { chessStationTokens(station: s, game: 0) }
-//   state { world { chessStationState(stations [s]) } }
-//   chessStationRules(station: s, game: 0, ordinal: 0)
+//   state { world { chessStationDisplayState(stations [s]) } }
+//   module games(station) {
+//     placements { chessStationTokens(station: station, game: 0) }
+//     state { world { chessStationState(station: station) } }
+//     chessStationRules(station: station, game: 0)
+//   }
 //
-// The board is 14 cm squares filling the board area, its columns running +X and its rows +Z from the seat, so a
-// square's cell is the chess board's own (8 * row + column): rank 1 nearest the seat and the a-file (column 7) at the
-// seat's left, White's side. A square is two paints: its fill, light or dark, whose colour is the station's board ink
-// (the bare glass while another game is shown, so the board comes and goes in two writes), and over it a ring whose
-// colour is the square's own: the bare glass at rest, so it draws the board's grid, and lit for the cursor, the lifted
-// piece and the last move. The seat points at a square or steps the cursor; a pick on a piece of the side to move lifts
-// it, a pick on another square asks the game's display door (`chessPut`) for the move, and a pick on the lifted piece or
-// the cancel button puts it down. The door judges the move as it judges any other, and the glass draws the board the
-// game then holds.
+// The board is 15 cm squares centred on the board area, its columns running +X and its rows +Z from the near chair, so
+// a square's cell is the chess board's own (8 * row + column): rank 1 nearest the near chair and the a-file (column 7)
+// at its left, White's side. The near chair plays White and the far chair Black; the computer plays whichever side no
+// one sits for (Black when no one sits at all, and neither while both chairs are taken). Anyone else watches. A square
+// is two paints: its fill, light or dark, whose colour is the station's board ink (the bare glass while another game is
+// shown, so the board comes and goes in two writes), and over it a ring whose colour is the square's own: the bare glass
+// at rest, so it draws the board's grid, and lit for a chair's cursor, a lifted piece and the last move. A chair points
+// at a square or steps its cursor; on its side's turn a pick on its own piece lifts it, a pick on another square asks
+// the game's display door (`chessPut`) for the move, and a pick on the lifted piece or the cancel button puts it down.
+// The door judges the move as it judges any other, and the glass draws the board the game then holds. NEW GAME starts
+// the game afresh (chess.puck's `chessFreshGame`).
 import "../standard/game-station"
 import "../standard/chess-pieces"
 
-let chessStationSquare = 0.14
-// A square's span in pick cells, the pieces' scale (the standard's set stands on a 10 cm square), and the board's near
-// right corner as a pick cell of the station's grid.
-let chessStationCells = 5
-let chessStationPieceScale = 1.4
-let chessStationColumn0 = 0
-let chessStationRow0 = 4
-let chessStationX0 = (gameStationBoard.x0 + (gameStationCell * chessStationColumn0))
-let chessStationZ0 = (gameStationBoard.z0 + (gameStationCell * chessStationRow0))
+let chessStationSquare = 0.15
+// The pieces' scale (the standard's set stands on a 10 cm square) and the board's near right corner.
+let chessStationPieceScale = 1.5
+let chessStationX0 = (gameStationBoardMid[0] - (4 * chessStationSquare))
+let chessStationZ0 = (gameStationBoardMid[1] - (4 * chessStationSquare))
 // A square's centre in the station's frame, [x, z], and whether it is light (row + column even: column 0 of rank 1 is
-// h1, so a1 is dark at the seat's left).
+// h1, so a1 is dark at the near chair's left).
 function chessStationSquareAt(cell) = [
   (chessStationX0 + (chessStationSquare * ((cell % 8) + 0.5))),
   (chessStationZ0 + (chessStationSquare * (floor(cell / 8) + 0.5)))
 ]
 let chessStationParity = map(range(0, 64), cell => ((floor(cell / 8) + (cell % 8)) % 2))
 // The rings' codes, which name their inks in `chessStationInks`.
-let chessStationRings = { last: 2, picked: 3, cursor: 4, rest: 5 }
+let chessStationRings = { last: 2, picked: 3, cursor: 4, rest: 5, rival: 6 }
 let chessStationLineTexts = [
   "WHITE TO MOVE", "BLACK TO MOVE", "WHITE IS IN CHECK", "BLACK IS IN CHECK", "THE COMPUTER IS MOVING", "DRAWN"
 ]
+// The chairs and the side each plays: the near chair White (turn 0), the far chair Black (turn 1).
+let chessStationChairs = [{ name: "near", side: 0, turn: 0 }, { name: "far", side: 2, turn: 1 }]
 
 // The pieces' two sides: ivory with amber trim, charcoal with teal trim, each glowing faintly as the glass's content does.
 let chessStationPieces = [
@@ -65,24 +68,24 @@ let chessStationCodes = flatMap(range(0, 2), s => map(range(0, 6), k => {
 function chessStationSquarePaints(station, cell) = [
   displayFill(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
-    [0.068, 0.068],
+    [0.073, 0.073],
     ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInk.{station.id}-light" :
       $"state.chessStationBoardInk.{station.id}-dark"),
     0.004
   )
   displayRing(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
-    [0.06, 0.06],
+    [0.066, 0.066],
     $"state.chessStationRingInk.{station.id}-{cell}",
-    0.008
+    0.009
   )
 ]
 
-// The board area's panels for a station's prototype: two ranks a panel, from the board area's near edge to the glass's
-// far edge, so each carries 32 paints.
+// The board area's panels for a station's prototype: two ranks a panel, from the board area's near edge to its far
+// edge, so each carries 32 paints.
 function chessStationPanels(station) = map([0, 2, 4, 6], first => {
   z0: ((first == 0) ? gameStationBoard.z0 : (chessStationZ0 + (chessStationSquare * first)))
-  z1: ((first == 6) ? gameStationGlass.z1 : (chessStationZ0 + (chessStationSquare * (first + 2))))
+  z1: ((first == 6) ? gameStationBoard.z1 : (chessStationZ0 + (chessStationSquare * (first + 2))))
   paints: flatMap(range((8 * first), (8 * (first + 2))), cell => chessStationSquarePaints(station, cell))
 })
 
@@ -91,64 +94,9 @@ template chessStationPrototypes() {
   gameStationTokenBlank(id: "chessStationBlank")
 }
 
-// The pieces on a station's squares, while the station shows chess (its catalog index `game`).
-template chessStationTokens(station, game) {
-  gameStationTokens(
-    prefix: $"{station.id}-chess-",
-    station: station,
-    game: game,
-    row: board,
-    keys: map(range(0, 64), cell => $"{cell}"),
-    centres: map(range(0, 64), cell => chessStationSquareAt(cell)),
-    codes: chessStationCodes,
-    blank: "chessStationBlank",
-    scale: chessStationPieceScale
-  )
-}
-
-// One cell a station, keyed by its id.
-template chessStationCells(name, stations, value, kind = "Int") {
-  row {
-    name: name
-    kind: kind
-    capacity: length(stations)
-    cells: map(stations, station => { key: station.id, value: value })
-  }
-}
-
-// The stations' chess state, keyed by station id: the cursor's square, the lifted piece's square (-1 for none), the last
-// pointed pick cell, whether the board was last drawn shown, and the status line's last code; and keyed `<id>-<cell>`
-// each square's cell, its station's ordinal, and its ring's code and ink.
-template chessStationState(stations, look = gameStationLook) {
-  chessStationCells(name: "chessStationCursor", stations: stations, value: 11)
-  chessStationCells(name: "chessStationPicked", stations: stations, value: -1)
-  chessStationCells(name: "chessStationPointer", stations: stations, value: -1)
-  chessStationCells(name: "chessStationShown", stations: stations, value: 1)
-  chessStationCells(name: "chessStationStatus", stations: stations, value: -1)
-  row {
-    name: "chessStationCellNo"
-    kind: Int
-    capacity: (64 * length(stations))
-    cells: flatMap(stations, station => map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: cell }))
-  }
-  row {
-    name: "chessStationOf"
-    kind: Int
-    capacity: (64 * length(stations))
-    cells: flatMap(
-      range(0, length(stations)),
-      s => map(range(0, 64), cell => { key: $"{stations[s].id}-{cell}", value: s })
-    )
-  }
-  row {
-    name: "chessStationRingCode"
-    kind: Int
-    capacity: (64 * length(stations))
-    cells: flatMap(
-      stations,
-      station => map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: chessStationRings.rest })
-    )
-  }
+// What the world holds for the stations' boards: each square's ring ink, keyed `<station>-<cell>`, each station's two
+// square inks, and the inks and status lines every station's rules copy from.
+template chessStationDisplayState(stations, look = gameStationLook) {
   row {
     name: "chessStationRingInk"
     kind: Text
@@ -174,6 +122,7 @@ template chessStationState(stations, look = gameStationLook) {
       { key: "3", value: look.picked }
       { key: "4", value: look.cursor }
       { key: "5", value: look.off }
+      { key: "6", value: look.rival }
     ]
   }
   row {
@@ -184,87 +133,169 @@ template chessStationState(stations, look = gameStationLook) {
   }
 }
 
-// The seat's play at a station showing chess (its catalog index `game`; `ordinal` its place in the stations the state
-// was declared for).
-template chessStationRules(station, game, ordinal) {
+// The pieces on a station's squares, while the station shows chess (its catalog index `game`), inside its instance.
+template chessStationTokens(station, game) {
+  gameStationTokens(
+    prefix: "chess-",
+    station: station,
+    game: game,
+    row: board,
+    keys: map(range(0, 64), cell => $"{cell}"),
+    centres: map(range(0, 64), cell => chessStationSquareAt(cell)),
+    codes: chessStationCodes,
+    blank: "chessStationBlank",
+    scale: chessStationPieceScale
+  )
+}
+
+// A station's chess state, inside its instance: each chair's cursor, lifted square (-1 for none) and last pointed pick
+// cell, whether the board was last drawn shown and the status line's last code; and keyed `<station>-<cell>` (the
+// world's ring ink's own keys) each square's cell and its ring's code.
+template chessStationState(station) {
+  table chessStationCursor capacity(auto) {
+    near = 11
+    far = 51
+  }
+  table chessStationPicked capacity(auto) {
+    near = -1
+    far = -1
+  }
+  table chessStationPointer capacity(auto) {
+    near = -1
+    far = -1
+  }
+  table chessStationShow capacity(auto) {
+    shown = 1
+    status = -1
+  }
+  row {
+    name: "chessStationCellNo"
+    kind: Int
+    capacity: 64
+    cells: map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: cell })
+  }
+  row {
+    name: "chessStationRingCode"
+    kind: Int
+    capacity: 64
+    cells: map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: chessStationRings.rest })
+  }
+}
+
+// The chairs' play at a station showing chess (its catalog index `game`), inside its instance. Every rule here is the
+// glass's, live only (`search(ply) == 0`): the computer's search judges the game's own rules, never these. A station
+// that owns its game (`owns`, the station's own digital chess) holds it while another game is shown, gives the computer
+// the empty chair's side and starts it afresh on NEW GAME; a station showing a physical table's game (the debug world's
+// chess table, whose own rules hold, seat and reset it) only tells that table whether a seat plays it here
+// (`chessSeated`), and its moves wait while the table's own player holds a piece up (chess.puck's `chessGrip`).
+template chessStationRules(station, game, owns = true) {
   let key = station.id
+  let pick = gameStationBits.pick
 
-  // The pointer puts the cursor on the square under it whenever it moves onto another pick cell over the board.
-  rule $"chess-station-{key}-point" {
-    local pointed = gameStationPointer[key]
-    local column = gameStationColumn(pointed) - chessStationColumn0
-    local row = gameStationRow(pointed) - chessStationRow0
-    local onBoard = (pointed >= 0) and (column >= 0) and (column < 40) and (row >= 0) and (row < 40)
-    when gameStationGame[key] == game and pointed != chessStationPointer[key]
-    mode: Level
-    if onBoard {
-      chessStationCursor[key] = (
-        8 * ((row - row % chessStationCells) / chessStationCells) +
-        (column - column % chessStationCells) / chessStationCells
-      )
+  if owns {
+    // While another game is shown the chess game holds: the computer searches nothing and the doors take nothing.
+    rule $"chess-station-{key}-hold" {
+      local held = gameStationGame[key] != game
+      when search(ply) == 0 and chessHold != held
+      mode: Level
+      chessHold = held
     }
-    chessStationPointer[key] = pointed
+
+    // The computer plays the side whose chair stands empty: Black with both empty, neither with both taken.
+    rule $"chess-station-{key}-sides" {
+      local white = gameStationChair.near != 0
+      local black = gameStationChair.far != 0
+      local side = white ? (black ? -1 : 1) : (black ? 0 : 1)
+      when search(ply) == 0 and aiSide != side
+      mode: Level
+      aiSide = side
+    }
+
+    // NEW GAME sets every piece back and starts the game afresh.
+    rule $"chess-station-{key}-new" {
+      when search(ply) == 0 and gameStationGame[key] == game and (gameStationEdges.near & gameStationBits.action) != 0
+      mode: Level
+      chessFresh.request = 1
+      chessStationPicked.near = -1
+      chessStationPicked.far = -1
+    }
+  } else {
+    // The table's idle demonstration waits while a seat plays its game here.
+    rule $"chess-station-{key}-seated" {
+      local seated = (gameStationGame[key] == game) and ((gameStationChair.near != 0) or (gameStationChair.far != 0))
+      when search(ply) == 0 and chessSeated != seated
+      mode: Level
+      chessSeated = seated
+    }
   }
 
-  // A step moves the cursor a square in the seat's own frame (the standard tabletop context's step): ahead toward Black,
-  // right toward the h-file.
-  rule $"chess-station-{key}-step" {
-    local edges = gameStationEdges[key]
-    local ahead = ((edges & gameStationBits.ahead) != 0) - ((edges & gameStationBits.behind) != 0)
-    local right = ((edges & gameStationBits.right) != 0) - ((edges & gameStationBits.left) != 0)
-    when gameStationGame[key] == game and (ahead or right)
-    mode: Level
-    chessStationCursor[key] = seatStepCell($"{key}Cells", chessStationCursor[key], 8, 8, ahead, right)
-  }
-
-  // A pick lifts a piece of the side to move, lifts another of that side in its place, puts the lifted piece back on its
-  // own square, or asks for the move from the lifted piece's square to the cursor's.
-  rule $"chess-station-{key}-pick" {
-    local cursor = chessStationCursor[key]
-    local picked = chessStationPicked[key]
-    local own = (board[cursor] * (1 - 2 * turn)) > 0
-    local ours = (aiSide != turn) and (chessPut.request == 0)
-    when gameStationGame[key] == game and (gameStationEdges[key] & gameStationBits.pick) != 0
-    mode: Level
-    if picked < 0 {
-      if own and ours {
-        chessStationPicked[key] = cursor
+  for chair in chessStationChairs {
+    // The pointer puts the chair's cursor on the square under it whenever it moves onto another pick cell over the board.
+    rule $"chess-station-{key}-point-{chair.name}" {
+      local pointed = gameStationPointer[chair.name]
+      local x = gameStationCellX(pointed) - chessStationX0
+      local z = gameStationCellZ(pointed) - chessStationZ0
+      local onBoard = (pointed >= 0) and (x >= 0) and (x < 8 * chessStationSquare) and (z >= 0) and
+        (z < 8 * chessStationSquare)
+      when search(ply) == 0 and gameStationGame[key] == game and pointed != chessStationPointer[chair.name]
+      mode: Level
+      if onBoard {
+        chessStationCursor[chair.name] = 8 * toInt(z / chessStationSquare) + toInt(x / chessStationSquare)
       }
-    } else if cursor == picked {
-      chessStationPicked[key] = -1
-    } else if own {
-      chessStationPicked[key] = cursor
-    } else {
-      chessPut.from = picked
-      chessPut.to = cursor
-      chessPut.request = 1
+      chessStationPointer[chair.name] = pointed
     }
-  }
 
-  // The lifted piece is put down by the cancel button, by standing up or by another game taking the glass, and once its
-  // square no longer holds a piece of the side to move, as when the move it was lifted for is played.
-  rule $"chess-station-{key}-cancel" {
-    local picked = chessStationPicked[key]
-    when picked >= 0 and ((gameStationEdges[key] & gameStationBits.cancel) != 0 or
-        board(engaged, $"{key}Cells", 1) == 0 or
-        gameStationGame[key] != game or
-        (board[picked] * (1 - 2 * turn)) <= 0)
-    mode: Level
-    chessStationPicked[key] = -1
-  }
+    // A step moves the chair's cursor a square in its own frame: ahead away from the chair, right to its right.
+    rule $"chess-station-{key}-step-{chair.name}" {
+      local edges = gameStationEdges[chair.name]
+      local ahead = ((edges & gameStationBits.ahead) != 0) - ((edges & gameStationBits.behind) != 0)
+      local right = ((edges & gameStationBits.right) != 0) - ((edges & gameStationBits.left) != 0)
+      when search(ply) == 0 and gameStationGame[key] == game and (ahead or right)
+      mode: Level
+      chessStationCursor[chair.name] = seatStepCellOn(chair.side, chessStationCursor[chair.name], 8, 8, ahead, right)
+    }
 
-  // The chess game's idle demonstration, where its board is a physical table, waits while a seat plays it here.
-  rule $"chess-station-{key}-seated" {
-    local seated = (gameStationGame[key] == game) and (board(engaged, $"{key}Cells", 1) == 1)
-    when chessSeated != seated
-    mode: Level
-    chessSeated = seated
+    // On its side's turn, a pick lifts a piece of that side, lifts another in its place, puts the lifted piece back on
+    // its own square, or asks for the move from the lifted piece's square to the cursor's.
+    rule $"chess-station-{key}-pick-{chair.name}" {
+      local cursor = chessStationCursor[chair.name]
+      local picked = chessStationPicked[chair.name]
+      local own = (board[cursor] * (1 - 2 * turn)) > 0
+      local ours = (turn == chair.turn) and (aiSide != turn) and (chessPut.request == 0)
+      when search(ply) == 0 and gameStationGame[key] == game and (gameStationEdges[chair.name] & pick) != 0
+      mode: Level
+      if picked < 0 {
+        if own and ours {
+          chessStationPicked[chair.name] = cursor
+        }
+      } else if cursor == picked {
+        chessStationPicked[chair.name] = -1
+      } else if own and ours {
+        chessStationPicked[chair.name] = cursor
+      } else if ours {
+        chessPut.from = picked
+        chessPut.to = cursor
+        chessPut.request = 1
+      }
+    }
+
+    // The lifted piece is put down by the cancel button, by standing up, by another game taking the glass, and once its
+    // square no longer holds a piece of the side to move, as when the move it was lifted for is played.
+    rule $"chess-station-{key}-cancel-{chair.name}" {
+      local picked = chessStationPicked[chair.name]
+      when search(ply) == 0 and picked >= 0 and ((gameStationEdges[chair.name] & gameStationBits.cancel) != 0 or
+          gameStationChair[chair.name] == 0 or
+          gameStationGame[key] != game or
+          (board[picked] * (1 - 2 * turn)) <= 0)
+      mode: Level
+      chessStationPicked[chair.name] = -1
+    }
   }
 
   // The board's fills show while chess is shown and take the bare glass's colour otherwise: two writes when it changes.
   rule $"chess-station-{key}-board" {
     local shown = gameStationGame[key] == game
-    when chessStationShown[key] != shown
+    when search(ply) == 0 and chessStationShow.shown != shown
     mode: Level
     if shown {
       setState(state: chessStationBoardInk, key: $"{key}-light", fromState: chessStationInks, fromKey: light)
@@ -273,27 +304,28 @@ template chessStationRules(station, game, ordinal) {
       setState(state: chessStationBoardInk, key: $"{key}-light", fromState: chessStationInks, fromKey: 5)
       setState(state: chessStationBoardInk, key: $"{key}-dark", fromState: chessStationInks, fromKey: 5)
     }
-    chessStationShown[key] = shown
+    chessStationShow.shown = shown
   }
 
-  // The rings: each square's shows, in order of precedence, the lifted piece, the cursor while the seat sits here, the
-  // last legal move's two squares, and otherwise the bare glass, as does every ring while chess is not shown. A ring is
-  // written only when what it shows changes, at most two a tick, so a cursor's step relights its two squares at once.
+  // The rings: each square's shows, in order of precedence, a lifted piece, the near chair's cursor and the far chair's
+  // while someone sits there, the last legal move's two squares, and otherwise the bare glass, as does every ring while
+  // chess is not shown. A ring is written only when what it shows changes, at most four a tick, so a cursor's step
+  // relights its two squares at once.
   rule $"chess-station-{key}-rings" {
     local cell = chessStationCellNo[$each]
     local shown = gameStationGame[key] == game
-    local seated = shown and (board(engaged, $"{key}Cells", 1) == 1)
     local want = (
       (shown == 0) ? chessStationRings.rest :
-      (chessStationPicked[key] == cell) ? chessStationRings.picked :
-      (seated and (chessStationCursor[key] == cell)) ? chessStationRings.cursor :
+      ((chessStationPicked.near == cell) or (chessStationPicked.far == cell)) ? chessStationRings.picked :
+      ((gameStationChair.near != 0) and (chessStationCursor.near == cell)) ? chessStationRings.cursor :
+      ((gameStationChair.far != 0) and (chessStationCursor.far == cell)) ? chessStationRings.rival :
       ((verdict == 1) and ((move.from == cell) or (move.to == cell))) ? chessStationRings.last :
       chessStationRings.rest
     )
-    when chessStationOf[$each] == ordinal and chessStationRingCode[$each] != want
+    when search(ply) == 0 and chessStationRingCode[$each] != want
     mode: Level
     forEach: chessStationRingCode
-    maxFirings: 2
+    maxFirings: 4
     chessStationRingCode[$each] = want
     setState(state: chessStationRingInk, key: $each, fromState: chessStationInks, fromKey: chessStationRingCode[$each])
   }
@@ -307,16 +339,11 @@ template chessStationRules(station, game, ordinal) {
       (inCheck[turn] == 1) ? (2 + turn) :
       turn
     )
-    when chessStationStatus[key] != code
+    when search(ply) == 0 and chessStationShow.status != code
     mode: Level
-    chessStationStatus[key] = code
+    chessStationShow.status = code
     if code >= 0 {
-      setState(
-        state: gameStationStatus,
-        key: $"{key}",
-        fromState: chessStationLines,
-        fromKey: $"$cell:chessStationStatus:{key}"
-      )
+      setState(state: gameStationStatus, key: $"{key}", fromState: chessStationLines, fromKey: chessStationShow.status)
     }
   }
 }

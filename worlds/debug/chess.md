@@ -8,10 +8,11 @@ centre is at (37, 9.85, 10.3), over the table's placement (`chessTable` in
 floor. White's back rank is on the table's -Z side and Black's on the +Z side.
 `chess.puck` holds it and `debug.puck` imports it whole (`import "chess"`); the
 rules it plays by are the shared [`../games/chess.puck`](../games/chess.puck)
-library, whose templates the table expands. The room's game table
+library, whose templates the table expands. The gallery's first game station
 ([`game-station.md`](game-station.md)) draws this same game on its glass and plays it
 through the display door below, so a move made at either table moves the
-pieces here.
+pieces here; while a seated player here holds a piece up (`chessGrip`), the
+door takes no move from the glass.
 
 The board reads as a real one from each side: from White's seat a1 is the dark
 corner at her left, h1 the light one at her right, and the queen stands on her

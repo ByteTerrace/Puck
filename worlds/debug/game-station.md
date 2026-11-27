@@ -2,91 +2,167 @@
 
 The debug world set's game station is the standard's
 ([`../standard/game-station.puck`](../standard/game-station.puck)): a table in
-the display stations' family whose top is one glass display that plays a
-catalog of games, one at a time, as a display station's turntable shows a
-catalog of shapes. Its table has a cream cap bevelled at the rim, the
-console glass set in it, a glowing line under the cap's lip, an ochre apron
-with a teal seam, a brass rail along the player's edge, and a cream column on
-a teal foot. The glass stands 0.95 m over the floor and is 1.72 m across by
-1.6 m deep.
+the display stations' family whose top is one glass display that swaps games
+through its menu, as a display station's turntable swaps shapes. Its table has
+a cream cap bevelled at the rim, the console glass set in it, a glowing line
+under the cap's lip, an ochre apron with a teal seam, a brass rail along each
+chair's edge, and a cream column on a teal foot. The glass stands 0.95 m over
+the floor and is 1.72 m across by 1.6 m deep.
 
-Two worlds stand one:
+## The owner's rulings
 
-- [`game-station-root.puck`](game-station-root.puck) stands a station alone
-  on a small floor under a clear day, for iterating on it. Boot it with
-  `--world worlds/debug/game-station-root.puck`: the seat starts at the
-  station's chair (spawn `hero`), and the station's id is `station`.
-- The gallery's board game room ([`gallery/games.puck`](gallery/games.puck))
-  stands one where the card table stood, at the west end of the row of tables
-  toward the balustrade, so it appears in the debug world and in
-  [`gallery-root.puck`](gallery-root.puck) alike. `debug.go cards` stands the
-  seat at its chair (spawn `cards`), and the station's id is `boardroom`.
+- **Every station is a digital game table with its own games.** A station swaps
+  games through its menu (chess, Klondike, FreeCell) and keeps its own state for
+  each game it can show, so swapping games or playing at one station never
+  touches another. The gallery is planned to hold twelve, as it holds twelve
+  display stations.
+- **Two seats for chess.** A player in the far chair plays the other side; with
+  no one there the computer plays it. Anyone else watches. Patience stays one
+  player's.
+- **NEW GAME works for every game**, chess included.
+- **A station move waits while a physical table's player holds a piece.** Where
+  a station shows a physical table's game, the game's display door takes no
+  move while the table's seated player has a piece up.
+- **Every operation is bounded in memory and CPU**, and twelve stations at once
+  stay cheap: an idle station does no rule work, a station's rules wake only on
+  its own input or its game's state, the computer's search runs bounded and
+  only for the station whose turn it is, and shared data (piece and card
+  meshes, the catalog, the status lines) exists once.
+- **The layout is centred on the glass**, sized to read from the chair, and the
+  menu and status line read clearly. The washed-out glass and streaked
+  reflections in gallery daylight are a renderer defect owned elsewhere; the
+  station's own contrast and sizing are its own.
 
-The set's catalog ([`game-stations.puck`](game-stations.puck)) lists chess,
-Klondike and FreeCell. Each game keeps one implementation of its rules:
+## How a station is built
 
-- Chess is the chess library ([`../games/chess.puck`](../games/chess.puck)),
-  drawn by [`../games/chess-station.puck`](../games/chess-station.puck). The
-  debug world plays the chess table's own game ([`chess.md`](chess.md)), so a
-  move at the glass moves the physical pieces too. `gallery-root.puck` and
-  `game-station-root.puck` compose chess as a drawn board
-  ([`../games/chess-game.puck`](../games/chess-game.puck)).
-- Klondike and FreeCell are the patience collection
-  ([`../games/solitaire.puck`](../games/solitaire.puck) over
-  [`klondike.puck`](../games/klondike.puck) and
-  [`freecell.puck`](../games/freecell.puck)), laid out by
-  [`../games/patience-station.puck`](../games/patience-station.puck) with the
-  standard deck. The deck's 54 bodies come from
-  [`game-station-deck.puck`](game-station-deck.puck), which `debug.puck`
-  imports ahead of every other population so every body keeps its index.
+[`game-stations.puck`](game-stations.puck) is the set's library: the catalog,
+the module instance a station holds its games in, and what the world holds for
+every station.
 
-## Playing at the station
+- **The world's part**, expanded once over the list of stations: each station's
+  table prototype (its paints read the world's rows by the station's id), its
+  placement and pick grid, the rows its paints and the console read
+  (`gameStationGame`, `gameStationPick`, `gameStationStatus`,
+  `gameStationRowInk`, and the chess board's inks), the constant tables every
+  station's rules copy from, the console commands, and the decks' faces and
+  kit.
+- **The station's instance**, `use gameStationGames as <id>(station: …)`, with
+  the station's id as the alias: its chairs and presses, its chess game (the
+  chess library, [`../games/chess.puck`](../games/chess.puck), in its digital
+  mode), its chess display ([`../games/chess-station.puck`](../games/chess-station.puck)),
+  and its patience collection ([`../games/solitaire.puck`](../games/solitaire.puck)
+  over [`klondike.puck`](../games/klondike.puck) and
+  [`freecell.puck`](../games/freecell.puck), laid out by
+  [`../games/patience-station.puck`](../games/patience-station.puck)). Every
+  row and rule the instance declares is the instance's own, `<id>$<name>`
+  (`world.state south3$solitaireKlondike`).
+- **The shared-chess instance**, `gameStationSharedChess`, is the same station
+  but for its chess, which is the world's own game: the debug world's chess
+  table ([`chess.md`](chess.md)), whose own rules judge, hold and reset it, so a
+  move at the glass moves the table's pieces too.
 
-Walk up to the station and press the context button (E, or the pad's RB)
-within 2.5 m of its centre: the seat sits down at the station's -Z edge facing
-+Z, wherever it stood, and the camera eases to the glass from there. The same
-button stands it up.
+Three worlds stand stations:
 
-At the player's left the glass lists the catalog under GAMES. A tap on a row
-shows that game, and NEW GAME at the list's foot starts the game shown afresh
-(a patience game deals again). The status line along the near edge says whose
-move it is in chess, or which patience game lies on the glass, a deal under
-way, or a solved game.
+- [`game-station-root.puck`](game-station-root.puck) stands one station with its
+  own chess (id `station`) on a small floor. Boot it with
+  `--world worlds/debug/game-station-root.puck`: seat 1 starts at the near chair
+  (spawn `hero`) and seat 2 at the far chair (spawn `rival`).
+- The gallery's game floor on level 3 ([`gallery/games.puck`](gallery/games.puck))
+  plans twelve stations, six on each gallery
+  ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`, clear of
+  the corner stairs, the terrace, the lift's landing, the wonder keys' stand
+  and the tree's north branch). It stands the first, `south3`, in its
+  shared-chess form; the rest wait on the work sheet ([Cost](#cost)).
+  `debug.go cards` stands the seat at its near chair.
+- The test worlds ([`klondike-tests.puck`](klondike-tests.puck),
+  [`freecell-tests.puck`](freecell-tests.puck)) stand stations of their own on
+  `gameStationRoom`, the root's small room.
+
+## The glass
+
+From the near chair the glass reads, nearest first:
+
+- the menu, a row of buttons across the whole width: GAMES at the left, a
+  button a game (the game shown lit amber, the others teal) and NEW GAME;
+- the status line above it, lettered in amber on the dark glass;
+- the board area, the glass's whole width, which every game centres on;
+- along the far edge, the status line again, lettered to read from the far
+  chair.
+
+The menu's lettering is embossed in the table and the status lines are text
+paints; each line of capitals is centred on its box by the text's `anchor`
+(`capMiddle`), never by hand offsets.
+
+- **Chess** draws 15 cm squares centred on the board area, the pieces standing
+  on them at 1.5 times the standard set's size. The near chair plays White, the
+  far chair Black. The near chair's cursor ring is pale cyan, the far chair's
+  pink, a lifted piece's amber and the last legal move's two squares
+  terracotta.
+- **Klondike and FreeCell** lay their cards (16 by 23 cm) centred on the board
+  area: the top row along the far side and the columns fanning toward the near
+  chair.
+
+## Playing at a station
+
+Walk up to a station and press the context button (E, or the pad's RB) within
+2.5 m of its centre: the seat sits down in the chair at the edge it faces most
+squarely and the camera eases to the glass from there. The same button stands
+it up.
 
 | Device | Move the cursor | Lift, play or tap | Put back | Stand up |
 |---|---|---|---|---|
-| Mouse | Point at a square, a card or a row | Click | Right-click, or click what you lifted | E |
+| Mouse | Point at a square, a card or a button | Click | Right-click, or click what you lifted | E |
 | Keyboard | W A S D or the arrows | Space or Enter | Escape or Backspace | E |
 | Pad | Left stick or d-pad | South (A) | East (B) | RB |
 
-In chess, a pick on a piece of the side to move lifts it (its square's ring
-lights amber), and a pick on another square asks the chess game's display door
-(`chessPut`) for the move. The door judges it as it judges any move, and an
-illegal one is put back. The cursor's ring is pale cyan, and the last legal
-move's two squares terracotta. The seat plays every side the computer does not
-(`aiSide`, Black by default).
-
-In patience, the pointer reaches any card of a fan and the keys stand on a
-column's last card. A pick on a face-up card lifts it and every card after it
-(an amber outline marks it), and a pick on another pile plays the run there; a
-pick on Klondike's stock draws, or turns the waste over once the stock is empty.
+A tap on a game's button shows that game; NEW GAME starts the game shown
+afresh (chess sets every piece back, patience deals again). In chess, on your
+side's turn a pick on your piece lifts it and a pick on another square asks the
+game's display door (`chessPut`) for the move, which the game judges as it
+judges any move. The computer plays the side whose chair stands empty (Black
+when no one sits at all, neither when both chairs are taken). In patience, the
+pointer reaches any card of a fan and the keys stand on a column's last card;
+a pick on a face-up card lifts it and every card after it, and a pick on
+another pile plays the run there.
 
 ## From the console
 
 | To | Console line |
 |---|---|
-| Show a game | `station.game <station> chess`, `klondike` or `freecell` (`station`, or `boardroom` in the gallery) |
-| Read the game shown, the seat's presses and its pointer | `world.state gameStationGame`, `gameStationEdges`, `gameStationPointer` |
-| Read the status line | `world.state gameStationStatus` |
-| Read chess at the glass: the cursor, the lifted square, each ring's code (2 last move, 3 lifted, 4 cursor, 5 at rest) | `world.state chessStationCursor`, `chessStationPicked`, `chessStationRingCode` |
-| Ask for a chess move as the glass does | `world.state.cell.set chessPut from 11`, `to 27`, then `request 1` |
-| Deal or move in patience | `klondike.deal 1`, `klondike.draw`, `klondike.move <from> <to> <card>`, `freecell.deal`, `freecell.move <from> <to> <card>` |
-| Read where each card lies and the seat's cursor | `world.state patienceSlotOf`, `world.state patienceSeat` |
+| Show a game | `station.game <station> chess`, `klondike` or `freecell` |
+| Read every station's game, status and menu | `world.state gameStationGame`, `gameStationStatus`, `gameStationRowInk` |
+| Read who sits where and their presses | `world.state <station>$gameStationChair`, `<station>$gameStationEdges`, `<station>$gameStationPointer` |
+| Read chess at the glass | `world.state <station>$chessStationCursor`, `<station>$chessStationPicked`, `<station>$chessStationRingCode` |
+| Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
+| Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
+| Deal or move in patience | `klondike.deal <station> 1`, `klondike.draw <station>`, `klondike.move <station> <from> <to> <card>`, `freecell.deal <station>`, `freecell.move <station> <from> <to> <card>` |
+| Read where each card lies | `world.state <station>$patienceSlotOf`, `world.state <station>$patienceSeat` |
+
+## Cost
+
+Counts read from the compiled documents with the rule work sheet the World
+admits (`world.budget.rules` reads the same sheet live):
+
+| | Rows | Rules | Placements | Bodies | Sheet (work units a tick, at rest plus one change) |
+|---|---|---|---|---|---|
+| One station with its own chess | 157 | 572 | 149 | 66 | 742,907 |
+| Two | 268 | 1,131 | 297 | 120 | 1,461,472 |
+| Each further station | +111 | +559 | +148 | +54 | +718,565 |
+
+The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`), so the
+module-instance design admits five stations in a world of their own and none
+beside the debug world's other content. What an idle station spends is a
+different number from what the sheet admits: a station's rules are judged by
+change, so at rest they do no work; `world.budget.rules --spent` reads what
+they spent. Bringing the sheet down to admit twelve is the open item
+"Twelve game stations on the work sheet" in
+[the open items](../../docs/plans/open-items.md#card-tables-in-the-board-game-room).
 
 ## Tests
 
 [`klondike-tests.puck`](klondike-tests.puck) and
-[`freecell-tests.puck`](freecell-tests.puck) hold the patience scenarios, each
-booted in the whole debug world with the board game room's station showing its
-game; [`chess-tests.puck`](chess-tests.puck) holds the chess table's. Run them
-with `puck test <file> --reproduce --jobs 1`.
+[`freecell-tests.puck`](freecell-tests.puck) hold the patience scenarios on
+stations of their own, reading only what every seeded deal shares;
+`freecell-tests.puck` also stands two stations and claims a game at one never
+touches the other. [`chess-tests.puck`](chess-tests.puck) holds the chess
+table's. Run them with `puck test <file> --reproduce --jobs 1`.

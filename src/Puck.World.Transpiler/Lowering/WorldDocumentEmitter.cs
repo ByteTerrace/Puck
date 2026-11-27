@@ -1241,7 +1241,7 @@ public static partial class WorldDocumentEmitter {
                 annotations[catalogName] = catalog.ToImmutable().ToBuilder();
             }
         }
-        foreach (var sharedName in new[] { "IncludeTests", "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases" }) {
+        foreach (var sharedName in new[] { "IncludeTests", "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases", DocumentLowering.MemberContextKey }) {
             if (scope.Annotations.TryGetValue(key: sharedName, value: out var value)) { annotations[sharedName] = value; }
         }
         return annotations;

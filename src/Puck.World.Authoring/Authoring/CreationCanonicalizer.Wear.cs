@@ -101,6 +101,9 @@ public static partial class CreationCanonicalizer {
                 if ((text.LineSpacing is { } lineSpacing) && !((lineSpacing >= TextRunDocument.MinLineSpacing) && (lineSpacing <= TextRunDocument.MaxLineSpacing))) {
                     Refuse(field: "text.lineSpacing", message: $"lineSpacing must be within [{TextRunDocument.MinLineSpacing}, {TextRunDocument.MaxLineSpacing}].");
                 }
+                if (TextRunDocument.AnchorOf(anchor: text.Anchor) is null) {
+                    Refuse(field: "text.anchor", message: $"anchor '{text.Anchor}' must be one of {string.Join(separator: ", ", values: TextRunDocument.AnchorNames)}.");
+                }
                 if ((text.EffectUnit is { } unit) && (!float.IsFinite(f: unit) || (unit < 0f))) {
                     Refuse(field: "text.effectUnit", message: "effectUnit must be finite and non-negative.");
                 }

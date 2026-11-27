@@ -3114,7 +3114,7 @@ export type PalettePaintRepeatDocument = {
 };
 
 /**
- * The lettering a text paint draws (Text): text laid out in the paint's box, on its local XY plane (+X the advance, +Y the ascent), and drawn as the paint's colour on every surface of the slot the box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the world's text font catalog each frame, so a placeholder's cell changing rewrites the lettering with no new program and no bake. The block is centred on the box's height and placed across its width by Align.
+ * The lettering a text paint draws (Text): text laid out in the paint's box, on its local XY plane (+X the advance, +Y the ascent), and drawn as the paint's colour on every surface of the slot the box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the world's text font catalog each frame, so a placeholder's cell changing rewrites the lettering with no new program and no bake. The block is placed across the box's width by Align and on its height by Anchor.
  */
 export type PalettePaintTextDocument = {
   /**
@@ -3157,6 +3157,10 @@ export type PalettePaintTextDocument = {
    * The length, in the paint frame's units, of one unit of a markup effect's amplitude (a shake's or wave's travel, a caret's lift); null = a thirty-second of EmHeight.
    */
   effectUnit?: number | null;
+  /**
+   * Which line of the block stands on the box's middle, one of AnchorNames (capMiddle centres a line of capitals on it); null centres the whole laid-out block, its ascent to its descent.
+   */
+  anchor?: string | null;
 };
 
 export type PaletteRadialPaintDocument = {

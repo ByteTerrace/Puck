@@ -114,9 +114,9 @@ public sealed class WorldSurfaceTexts {
 
         return held.Frame;
     }
-    // Lays a paint's resolved text out in its box: the block centred on the box's height, placed across its width by the
-    // text's alignment, and shrunk to the box when the text asks to fit. Every length is in the paint frame's units,
-    // about the box's centre.
+    // Lays a paint's resolved text out in its box: the anchored line (or, with no anchor, the whole block) on the box's
+    // middle, placed across its width by the text's alignment, and shrunk to the box when the text asks to fit. Every
+    // length is in the paint frame's units, about the box's centre.
     private Laid Lay(PalettePaintDocument paint, string text, FontAtlas atlas) {
         var authored = paint.Text!;
         var bound = paint.ToPaint(resolve: static _ => Vector3.Zero).Shape.Bound;
@@ -138,9 +138,10 @@ public sealed class WorldSurfaceTexts {
             TextAlignment.Right => half.X,
             _ => 0f,
         });
-        // The first baseline stands at zero and the block runs from the ascender above it down its whole height.
+        // An anchored layout already stands its anchor line at zero (TextLayout). Otherwise the first baseline stands at
+        // zero and the block runs from the ascender above it down its whole height.
         var top = (atlas.Metrics.Ascender * authored.EmHeight);
-        var lift = -((top - (0.5f * layout.Height)) * fit);
+        var lift = ((authored.Anchor is null) ? -((top - (0.5f * layout.Height)) * fit) : 0f);
         var moves = false;
         var spans = new int[layout.Placements.Count];
 

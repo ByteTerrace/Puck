@@ -6394,6 +6394,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
 | `state.world[].field.material.paints[].text.font` | `PalettePaintTextDocument.Font` | a font name |
 | `state.world[].field.material.paints[].text.align` | `PalettePaintTextDocument.Align` | a text alignment |
+| `state.world[].field.material.paints[].text.anchor` | `PalettePaintTextDocument.Anchor` | a text anchor |
 | `state.world[].field.material.paints[].repeat.tone` | `PalettePaintRepeatDocument.Tone` | a color literal |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |

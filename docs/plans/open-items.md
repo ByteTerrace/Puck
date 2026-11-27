@@ -3365,17 +3365,25 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
-- [high] FreeCell on the game station grows without bound: freecell-tests' World on the RTX 2060 reached 6.1 GB
-  private after 5.5 minutes, still climbing about 100 MB every 4 s, and the memory guard killed it. klondike-tests
-  peaked at 4.4 GB. Find what accumulates (the solver's search, a journal, or a per-tick allocation) and bound it.
+- [high] FreeCell on the game station grew without bound: freecell-tests' World on the RTX 2060 reached 6.1 GB
+  private after 5.5 minutes, still climbing about 100 MB every 4 s, and the memory guard killed it; klondike-tests
+  peaked at 4.4 GB. Those runs booted the whole debug world for each scenario. The tests now boot stations of their
+  own (`gameStationRoom`, worlds/debug/game-stations.puck), and no cause was named by reading: the search is
+  preallocated and bounded per step (`ArenaSearch.StepJob`), the response sweep's memo is keyed by placement, and the
+  patience rules write only while `patienceSync.left` counts down. Measure the station worlds' `host.memory collect`
+  over a few thousand ticks; if it still climbs, a heap snapshot names what holds it.
 - [med] A station's console opened during a cold bake still shows bare glass for a while: the stand-in
   (`SdfMeshPathBake.StandIns`) holds the interface picture, then releases before the terminal's painted product
   draws. Once the bake settles, the terminal reads correctly (teal field, lettering). Find which product the
   release accepts that carries no paints.
-- [high] The chess opponent's search is unbounded: on the RTX 2060 partner's machine, chess-tests'
-  World peaked at 8.7 GB working set and 10.4 GB private over 28 minutes, never moved, and kept the turn
-  (verdict 0, turn White at tick 601). The one-ply opponent's search needs a hard node and memory bound
-  and an answer within a tick budget; a game's AI must never hold a world's memory.
+- [high] The chess opponent never moved in chess-tests on the RTX 2060 partner's machine (verdict 0, turn White at
+  tick 601) while the World grew to 10.4 GB private over 28 minutes. The search itself is bounded: its arrays are
+  allocated once per job and every step spends at most its allowance (`ArenaSearch.StepJob`, `TryCheckWork`). What
+  can starve it is a restart every tick: a job restarts whenever one of its input rows, the arena's key ledger or its
+  byte charge moves (`ArenaSearch.InputStamp`, `LedgerFold`), so a row that grows or a key minted each tick keeps it
+  from ever landing. Read `state.search` status (`Work`, `Faults`, restarts) and `world.counters state` beside
+  `host.memory` on that run: a ledger or byte charge that moves each tick is the cause of both symptoms. The game
+  station no longer joins the table's judge (its rules are live-only, `search(ply) == 0`).
 - [med] The endless fall's opening in level 1's floor is tabled (the owner,
   live): `fallOpen` (layout.puck) closes the hole and its rails while the wing's
   fall paintings below stand. Revisit the fall as a whole before turning it on.
@@ -5711,15 +5719,33 @@ confirming its site in the debug world and its work-budget share.
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: the windowed look at the game table's
+ordinary, the owner's direction · Next: twelve game stations on the work sheet (below); the windowed look at the game station's
 chess, Klondike and FreeCell, close and wide, on `worlds/debug/game-station-root.puck` (`worlds/debug/game-station.md`);
 then Spider.
 
-- The game station (`worlds/standard/game-station.puck`) plays one game instance per world: chess's and the patience
-  collection's rows are not namespaced, and a world holds one deck, so two stations would share one chess game and only
-  one could lay out patience. Per-station games want the rules as modules a world instantiates per station (`use … as`).
-- A chess station has no NEW GAME: the chess library has no door that starts a fresh game, so the list's NEW GAME does
-  nothing while chess is shown.
+- [high] Twelve game stations on the work sheet: each station holding its own games is a module instance
+  (`gameStationGames`, worlds/debug/game-stations.puck), and each prices about 0.72 million work units a tick on the
+  rule sheet (worlds/debug/game-station.md, "Cost"), so twelve price 8.6 million against the tick's 4.2 million and the
+  gallery stands one (`south3`, sharing the chess table's game). The sheet prices every instance's every rule at rest
+  plus one change, and copies of one mechanism per station are the shape the rules-over-sets decision warns against
+  (docs/decisions/state-and-language.md#rules-over-sets). The fix: each mechanism one rule sweeping the stations,
+  keyed by station, so a change at one station opens one binding and the sheet prices one station's worth whatever the
+  count. The piles (klondike.puck, freecell.puck) and the chess board are named rows, so it starts with keyed piles or
+  station-keyed zones; the chess library's per-piece sweeps (`chess-ai-revision`, `chess-ai-relocate`,
+  `chess-put-before`, `chess-play-revert-codes`, `chess-fresh-pieces`, 32 bindings each) are the dearest lines.
+- [medium] Card bodies cost every body sweep: each station's deck is 54 bodies, and rules sweeping `$bodies` price
+  per body (`fall-recovery` grew from 575 to 1,169 bindings with twelve decks). A card drawn as a token placement a
+  pile slot (as the chess pieces are) carries no body, but a slot's 53 faces as responses make the document large;
+  weigh a placement whose shown creation is a cell's value without a response list.
+- [medium] The computer's search runs on the tick thread, bounded per step and only while `aiEnabled` (its side's turn,
+  the game shown). Running it off the tick, over a copy of the job's rows, keeps a step from ever landing in a frame.
+- [low] A `rules "" when … { }` group drops a template call in its body without a word (the chess templates vanished
+  when wrapped); it should refuse what it cannot carry.
+- [low] A library function shadows a polymorphic arm of the same name: `star(item: any())` in a pattern called the
+  standard's `star` sky function once a world imported skies; the patience games now spell their patterns with the
+  `pattern` statement.
+- [low] A grid of more than `TopologyCompilation.MaxCells` cells reached the arena layout as "the section does not
+  declare" the topology; the validator should name the cell ceiling.
 - [medium] The standard's deck departs from the true-size ruling:
   `cards.puck` authors a card 1.76 wide and the table's look scales it
   (`cardScale`), so the card bakes at the resolution of a 1.76 m object and
