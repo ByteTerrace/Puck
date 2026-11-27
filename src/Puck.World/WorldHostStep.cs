@@ -20,6 +20,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     // Test exports publish LAST, before world.at drains this tick's lines: captures and exports both describe
     // the completed state, never a half-applied mixture of this tick's submissions.
     private readonly Action<ulong> m_publishStep = tick => {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.TickPublish);
         var scriptTick = instances.HostScriptTick(bootServer: server);
 
         waitGate.PublishTick(tick: tick);
@@ -108,13 +109,22 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             m_completedHostSteps = stepTick;
             if (pending is not null) { return false; }
 
-            m_instances.ScanBootBoundaryTriggers();
-            m_instances.SettleBootScreenSessions(stepped: true);
+            using (HostFrameWork.Measure(HostFrameWorkPart.TickBootSettle)) {
+                m_instances.ScanBootBoundaryTriggers();
+                m_instances.SettleBootScreenSessions(stepped: true);
+            }
         } else {
-            _ = m_server.DrainAdministrative();
-            m_instances.SettleBootScreenSessions(stepped: false);
+            ulong scriptTick;
+            bool idle;
 
-            if (m_instances.TryAdvanceIdleClientBoot(stepTicks: context.StepTicks, scriptTick: out var scriptTick)) {
+            using (HostFrameWork.Measure(HostFrameWorkPart.TickBootSettle)) {
+                _ = m_server.DrainAdministrative();
+                m_instances.SettleBootScreenSessions(stepped: false);
+                idle = m_instances.TryAdvanceIdleClientBoot(stepTicks: context.StepTicks, scriptTick: out scriptTick);
+            }
+            if (idle) {
+                using var publish = HostFrameWork.Measure(HostFrameWorkPart.TickPublish);
+
                 m_completedHostEngineTicks += context.StepTicks;
                 m_completedHostSteps++;
                 m_waitGate.PublishTick(tick: m_completedHostSteps);
@@ -181,12 +191,16 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             if (!StepBoot(in context, m_stepsBoot, deadline, collectBy)) { return false; }
             m_phase = StepPhase.Rows;
         }
-        if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
-        roster.PublishProfiles(m_server.CaptureRosterProfiles());
-        _ = m_seatRouter.DeliverRouteChanges();
-        afterInstances?.Invoke();
-        m_instances.FinishSeatIntents();
-        extensions.Pump(tick: Tick);
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickInstances)) {
+            if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
+        }
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickHostPost)) {
+            roster.PublishProfiles(m_server.CaptureRosterProfiles());
+            DeliverRouteChanges();
+            afterInstances?.Invoke();
+            m_instances.FinishSeatIntents();
+            extensions.Pump(tick: Tick);
+        }
         m_phase = StepPhase.Prepare;
         WorldTickWork.Process.Add(kind: WorldTickWork.HostSteps, amount: 1L);
         return true;
@@ -195,19 +209,27 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// <summary>Replays deliveries recorded off the pump while the boundary window was closed and delivers any seat
     /// route changes they seeded. Call on the pump inside a settled boundary window.</summary>
     public void CollectDeliveries() {
-        m_instances.CollectDeliveries();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickObservation)) { m_instances.CollectDeliveries(); }
+        DeliverRouteChanges();
+    }
+
+    private void DeliverRouteChanges() {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.TickRoutes);
+
         _ = m_seatRouter.DeliverRouteChanges();
     }
 
     private void PrepareStep(in FixedStepContext context) {
-        sourceWatch.Poll();
-        reload.Poll();
-        m_instances.CollectDeliveries();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickSourceWatch)) {
+            sourceWatch.Poll();
+            reload.Poll();
+        }
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickObservation)) { m_instances.CollectDeliveries(); }
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
         // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
         // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before
         // this step's intents, after the transfer drain commits, and after the other instances step.
-        _ = m_seatRouter.DeliverRouteChanges();
+        DeliverRouteChanges();
 
         // Computed first, before intents are submitted below: whether boot will actually step THIS call decides
         // whether its seats' input is consumed now or held untouched. context.StepTicks is threaded in so
@@ -220,20 +242,24 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // is this stepper's own contiguous next-tick coordinate (frozen while boot does not step), matching what
         // WorldServerStepShell.Step is about to report as the completed tick — never context.Tick + 1, the pump's
         // raw un-frozen cursor.
-        m_instances.PrepareBootSeatIntents(
-            stepsBoot: m_stepsBoot,
-            tick: (Tick + 1UL),
-            stepTicks: context.StepTicks
-        );
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickSeatIntents)) {
+            m_instances.PrepareBootSeatIntents(
+                stepsBoot: m_stepsBoot,
+                tick: (Tick + 1UL),
+                stepTicks: context.StepTicks
+            );
+        }
 
         // The host-level pending-transfer FIFO's one fixed drain point — before either the boot instance or any
         // other instance steps this tick, mirroring where WorldServer.DrainPendingOps sits relative to the rest of
         // WorldServer.Step. A transfer is a host act, so it settles at this host's one fixed point rather than
         // inline with whichever instance's step produced it; a transfer drained here was enqueued by a per-step
         // portal scan during the PREVIOUS call, so it lands and is advanced exactly once, this same tick.
-        _ = m_instances.FollowRemoteJoin();
-        m_instances.DrainPendingTransfers();
-        _ = m_seatRouter.DeliverRouteChanges();
-        m_instances.SubmitExternallyClockedSeatIntents();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickRoutes)) {
+            _ = m_instances.FollowRemoteJoin();
+            m_instances.DrainPendingTransfers();
+        }
+        DeliverRouteChanges();
+        using (HostFrameWork.Measure(HostFrameWorkPart.TickSeatIntents)) { m_instances.SubmitExternallyClockedSeatIntents(); }
     }
 }
