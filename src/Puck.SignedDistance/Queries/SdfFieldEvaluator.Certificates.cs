@@ -12,7 +12,9 @@ namespace Puck.SignedDistance.Queries;
 //   centre to C (and that distance plus ω).
 //
 // Each is derived from the compiled fixed-point instructions, never from the float program, by following the chain of
-// point transforms from its reset to the shape the way the walks apply them:
+// point transforms from its reset to the shape the way the walks apply them. Under the render reading each also holds the
+// field whose parameters are the packed floats (CompiledInstruction's THE PARAMETER ENCLOSURES): a lane off the grid
+// widens each step by what any parameter its enclosure holds can move the point or the candidate, as each step says.
 //
 // - A Translate subtracts exactly.
 // - A Rotate is the fused kernel over the quantized quaternion q̃: its exact linear map is M = n²·R̂ + (1 − n²)·I for
@@ -48,15 +50,15 @@ public sealed partial class SdfFieldEvaluator {
         bool Boxed, bool BoxCentred,
         double BoxGain, double BoxRadius, double BoxSpread
     ) {
-        // The same certificate for a candidate scaled by s > 0 and rounded once (a scope's pop), after subtracting a
-        // blend slack from the field it scales.
-        public ShapeReach Scaled(double scale, double slack) => ((scale > 0.0)
+        // The same certificate for a candidate scaled by an s > 0 in [low, high] and rounded once (a scope's pop), after
+        // subtracting a blend slack from the field it scales: a gain takes the least scale, a radius the greatest.
+        public ShapeReach Scaled(double low, double high, double slack) => ((high > 0.0)
             ? this with {
-                BoxGain = (BoxGain * scale),
-                BoxRadius = (((BoxRadius + slack) * scale) + RawUnit),
-                BoxSpread = (BoxSpread * scale),
-                Gain = (Gain * scale),
-                Radius = (((Radius + slack) * scale) + RawUnit),
+                BoxGain = (BoxGain * low),
+                BoxRadius = (((BoxRadius + slack) * high) + RawUnit),
+                BoxSpread = (BoxSpread * high),
+                Gain = (Gain * low),
+                Radius = (((Radius + slack) * high) + RawUnit),
             }
             : this with { BoxRadius = (BoxRadius + slack), Radius = (Radius + slack) });
     }
@@ -104,13 +106,22 @@ public sealed partial class SdfFieldEvaluator {
         public void Translate(in CompiledInstruction instruction) {
             var (x, y, z) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
             var length = Length(x: x, y: y, z: z);
+            // A translation off the grid moves the local point, and the box's centre and half-extents, by at most its
+            // enclosure's widths.
+            var spread = LaneSpread(first: instruction.Bounds0X, second: instruction.Bounds0Y, third: instruction.Bounds0Z);
+
+            if (double.IsInfinity(d: spread)) {
+                Known = false;
+
+                return;
+            }
 
             OriginX += ((((M00 * x) + (M01 * y)) + (M02 * z)) * Scale);
             OriginY += ((((M10 * x) + (M11 * y)) + (M12 * z)) * Scale);
             OriginZ += ((((M20 * x) + (M21 * y)) + (M22 * z)) * Scale);
-            PointA += (PointB * length);
-            BoxA += (BoxB * length);
-            BoxDA += (BoxDB * length);
+            PointA += ((PointB * length) + spread);
+            BoxA += ((BoxB * length) + spread);
+            BoxDA += ((BoxDB * length) + spread);
         }
         public void Rotate(in CompiledInstruction instruction) {
             var (x, y, z, w) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z), ((double)instruction.Data0W));
@@ -123,10 +134,13 @@ public sealed partial class SdfFieldEvaluator {
                 return;
             }
 
-            var deviation = Math.Abs(value: (1.0 - normSquared));
-            var growth = (1.0 + (2.0 * deviation));
-            var rounding = ((Sqrt3 * (Math.Sqrt(d: vectorSquared) + 1.0)) * RawUnit);
             var width = EntryWidth(rotation: RotationBounds.Of(instruction: in instruction));
+            // ‖M − R̂‖ for the raws' map, and, for a quaternion off the grid, what any map of its enclosure adds: each entry
+            // of such a map and of the raws' lies in the enclosed entry (RotationBounds over the enclosure), so their
+            // difference's spectral norm is at most its Frobenius norm, three times the widest entry's width.
+            var deviation = ((2.0 * Math.Abs(value: (1.0 - normSquared))) + (instruction.ExactData0 ? 0.0 : (3.0 * width)));
+            var growth = (1.0 + deviation);
+            var rounding = ((Sqrt3 * (Math.Sqrt(d: vectorSquared) + 1.0)) * RawUnit);
             // The walk's linear map over the conjugate (u = −v): (1 − 2|u|²)·I + 2·u·uᵀ + 2w·[u]×.
             var (ux, uy, uz) = (-x, -y, -z);
             var diagonal = (1.0 - (2.0 * vectorSquared));
@@ -154,7 +168,7 @@ public sealed partial class SdfFieldEvaluator {
             var r21 = (2.0 * ((qy * qz) + (qx * qw)));
             var r22 = (1.0 - (2.0 * ((qx * qx) + (qy * qy))));
             var zero = FixedQ4816.Zero;
-            var halfTurn = ((instruction.Data0W == zero) && (
+            var halfTurn = (instruction.ExactData0 && (instruction.Data0W == zero) && (
                 ((FixedQ4816.Abs(value: instruction.Data0X) == FixedQ4816.One) && (instruction.Data0Y == zero) && (instruction.Data0Z == zero)) ||
                 ((FixedQ4816.Abs(value: instruction.Data0Y) == FixedQ4816.One) && (instruction.Data0X == zero) && (instruction.Data0Z == zero)) ||
                 ((FixedQ4816.Abs(value: instruction.Data0Z) == FixedQ4816.One) && (instruction.Data0X == zero) && (instruction.Data0Y == zero))));
@@ -172,9 +186,9 @@ public sealed partial class SdfFieldEvaluator {
             BoxDA = (((rows * BoxDA) + ((width * Sqrt3) * BoxA)) + (RotationBoxRaws * RawUnit));
             BoxDB = ((rows * BoxDB) + ((width * Sqrt3) * (1.0 + BoxB)));
             BoxA *= growth;
-            BoxB = ((growth * BoxB) + (2.0 * deviation));
+            BoxB = ((growth * BoxB) + deviation);
             PointA = ((growth * PointA) + rounding);
-            PointB = ((growth * PointB) + (2.0 * deviation));
+            PointB = ((growth * PointB) + deviation);
             Turned |= !halfTurn;
         }
         public void ScaleBy(in CompiledInstruction instruction) {
@@ -192,19 +206,33 @@ public sealed partial class SdfFieldEvaluator {
             }
 
             var scale = ((double)instruction.Data0W);
+            // Axes off the grid each divide by some magnitude in [low, high] about the raws' one: a local point or box
+            // centre within ρ = (high − low)/low of the raws' image, relative to its own distance, and a half-extent and
+            // a distance scale over the whole range.
+            var (low, high) = ScaleRange(instruction: in instruction);
 
+            if (!(low > 0.0)) {
+                Known = false;
+
+                return;
+            }
+
+            var spread = ((high - low) / low);
             var (sx, sy, sz) = (((double)Math.Sign(value: instruction.Data0X.Value)), ((double)Math.Sign(value: instruction.Data0Y.Value)), ((double)Math.Sign(value: instruction.Data0Z.Value)));
 
             (M00, M01, M02, M10, M11, M12, M20, M21, M22) = ((M00 * sx), (M01 * sy), (M02 * sz), (M10 * sx), (M11 * sy), (M12 * sz), (M20 * sx), (M21 * sy), (M22 * sz));
-            (P00, P01, P02, P10, P11, P12, P20, P21, P22) = ((P00 / scale), (P01 / scale), (P02 / scale), (P10 / scale), (P11 / scale), (P12 / scale), (P20 / scale), (P21 / scale), (P22 / scale));
+            (P00, P01, P02, P10, P11, P12, P20, P21, P22) = ((P00 / low), (P01 / low), (P02 / low), (P10 / low), (P11 / low), (P12 / low), (P20 / low), (P21 / low), (P22 / low));
             Scale *= scale;
-            PointA = ((PointA / scale) + RawUnit);
-            BoxA /= scale;
-            BoxDA = ((BoxDA / scale) + RawUnit);
-            PointScaleLow = ((PointScaleLow * scale) - (0.5 * RawUnit));
-            PointScaleHigh = ((PointScaleHigh * scale) + (0.5 * RawUnit));
-            BoxScaleLow = ((BoxScaleLow * scale) - RawUnit);
-            BoxScaleHigh = ((BoxScaleHigh * scale) + RawUnit);
+            PointA = ((PointA / low) + RawUnit);
+            PointB = ((PointB * (1.0 + spread)) + spread);
+            BoxA /= low;
+            BoxB = ((BoxB * (1.0 + spread)) + spread);
+            BoxDA = ((BoxDA / low) + RawUnit);
+            BoxDB *= (1.0 + spread);
+            PointScaleLow = ((PointScaleLow * low) - (0.5 * RawUnit));
+            PointScaleHigh = ((PointScaleHigh * high) + (0.5 * RawUnit));
+            BoxScaleLow = ((BoxScaleLow * low) - RawUnit);
+            BoxScaleHigh = ((BoxScaleHigh * high) + RawUnit);
 
             if ((PointScaleLow <= 0.0) || (BoxScaleLow <= 0.0)) {
                 Known = false;
@@ -294,14 +322,14 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfCertificateChainAction.Rotate: {
-                        if (!IsIdentityRotation(instruction: in instruction)) {
+                        if (!(instruction.ExactData0 && IsIdentityRotation(instruction: in instruction))) {
                             chain.Rotate(instruction: in instruction);
                         }
 
                         break;
                     }
                 case SdfCertificateChainAction.Scale: {
-                        if (!IsUnitScale(instruction: in instruction)) {
+                        if (!(instruction.ExactData0 && IsUnitScale(instruction: in instruction))) {
                             chain.ScaleBy(instruction: in instruction);
                         }
 
@@ -329,7 +357,36 @@ public sealed partial class SdfFieldEvaluator {
     // containing sphere; the superellipsoid supplies its own field gain and rounding slack. The box rules of
     // Sphere, Box, Cylinder and Torus read each coordinate's range once, so each endpoint of their interval is the exact
     // field at a point of the box, rounded outward by a floor or ceiling root.
+    // Under the render reading, a shape whose lanes or side table lie off the grid: its certificate over its raws, widened
+    // by what its floats can move the field by (ParameterReach) and by the point rule's own slack once more, since that
+    // slack bounds the rounded raws' field and the floats' field is exact.
     private static LocalCertificate? TryLocalCertificate(in CompiledInstruction instruction) {
+        var raw = RawCertificate(instruction: in instruction);
+
+        if ((raw is not { } certificate) || instruction.Exact) {
+            return raw;
+        }
+
+        var reach = (ParameterReach(instruction: in instruction) + certificate.PointSlack);
+
+        return certificate with {
+            BoxRadius = (certificate.Boxed ? (certificate.BoxRadius + reach) : certificate.BoxRadius),
+            Radius = (certificate.Radius + reach),
+        };
+    }
+    // What a shape's floats off the grid can move a covered shape's field by: each covered field moves by at most its
+    // outline's displacement, at most twice for a signed one, and each lane moves the outline by at most its own change
+    // times √3 (a box's half-extents together, a capsule's end, a trapezoid's half-widths and height), so three times the
+    // sum of the lanes' widths bounds it, and a side table's points move by at most a raw each (TableOutlineReach).
+    private static double ParameterReach(in CompiledInstruction instruction) {
+        var widths = ((((Width(lane: instruction.Bounds0X) + Width(lane: instruction.Bounds0Y)) + (Width(lane: instruction.Bounds0Z) + Width(lane: instruction.Bounds0W))) +
+            ((Width(lane: instruction.Bounds1X) + Width(lane: instruction.Bounds1Y)) + (Width(lane: instruction.Bounds1Z) + Width(lane: instruction.Bounds1W)))) * 3.0);
+
+        return ((widths + (instruction.TableInexact ? (4.0 * RawUnit) : 0.0)) * (1.0 + DoublePadding));
+
+        static double Width(FixedInterval lane) => (lane.IsUnbounded ? double.PositiveInfinity : (((double)lane.Upper) - ((double)lane.Lower)));
+    }
+    private static LocalCertificate? RawCertificate(in CompiledInstruction instruction) {
         const double Slack = (4.0 * RawUnit);
 
         switch (SdfFieldShapes.CertificateOf(value: (SdfShapeType)instruction.Shape)) {
@@ -451,15 +508,24 @@ public sealed partial class SdfFieldEvaluator {
             return null;
         }
 
-        var minimum = Math.Min(val1: rx, val2: Math.Min(val1: ry, val2: rz));
-        var maximum = Math.Max(val1: rx, val2: Math.Max(val1: ry, val2: rz));
+        // The least radius at its least and the greatest at its greatest over the radii's enclosures: the gain falls and
+        // the radius rises as the enclosures widen, so the certificate holds for every radius they hold.
+        var (bx, by, bz) = (instruction.Bounds0X, instruction.Bounds0Y, instruction.Bounds0Z);
+
+        if (bx.IsUnbounded || by.IsUnbounded || bz.IsUnbounded || (bx.Lower.Value <= 0L) || (by.Lower.Value <= 0L) || (bz.Lower.Value <= 0L)) {
+            return null;
+        }
+
+        var minimum = Math.Min(val1: bx.Lower.Value, val2: Math.Min(val1: by.Lower.Value, val2: bz.Lower.Value));
+        var maximum = Math.Max(val1: bx.Upper.Value, val2: Math.Max(val1: by.Upper.Value, val2: bz.Upper.Value));
+        var minimumReach = Math.Min(val1: bx.Upper.Value, val2: Math.Min(val1: by.Upper.Value, val2: bz.Upper.Value));
         // E: SuperellipsoidScaledRatio rounds the exact p*s/r once, to nearest, at most half a raw; one whole raw outward.
         return new LocalCertificate(
             BoxLoss: 0.0, BoxRadius: 0.0, Boxed: false,
             CenterX: 0.0, CenterY: 0.0, CenterZ: 0.0,
             PointGain: ((((double)minimum) / maximum) / Sqrt3),
             PointSlack: RawUnit,
-            Radius: (minimum * RawUnit)
+            Radius: (minimumReach * RawUnit)
         );
     }
     // SdfTrapezoidSolid's geometry, its profile T in the (x, y) plane of half-widths r1 below and r2 above and half-height
@@ -497,7 +563,8 @@ public sealed partial class SdfFieldEvaluator {
         var inner = Length(x: (2.0 * widest), y: h, z: 0.0);
         var lift = Math.Abs(value: ((double)instruction.Data0W));
         var rounding = Math.Abs(value: ((double)instruction.Data1W));
-        var extruded = (instruction.Data1Y > Half);
+        // Extrusion only where the lift's enclosure is past one half: the revolution's radius, the sum, is the larger.
+        var extruded = (!instruction.Bounds1Y.IsUnbounded && (instruction.Bounds1Y.Lower > Half));
         var margin = (((2.0 * inner) + h) + (16.0 * RawUnit));
 
         return new LocalCertificate(
@@ -510,6 +577,41 @@ public sealed partial class SdfFieldEvaluator {
             PointSlack: ((((2.0 * outline) + (slant * projection)) + (512.0 * RawUnit)) + (4.0 * RawUnit)),
             Radius: ((extruded ? Length(x: profile, y: lift, z: 0.0) : (lift + profile)) + rounding)
         );
+    }
+    // The length of three lanes' enclosure widths, in units, padded past the double's rounding: how far a vector those
+    // lanes hold can lie from their raws. Infinite for an unbounded lane.
+    private static double LaneSpread(FixedInterval first, FixedInterval second, FixedInterval third) {
+        if (first.IsUnbounded || second.IsUnbounded || third.IsUnbounded) {
+            return double.PositiveInfinity;
+        }
+
+        static double Width(FixedInterval lane) => (((double)lane.Upper) - ((double)lane.Lower));
+
+        return (Length(x: Width(lane: first), y: Width(lane: second), z: Width(lane: third)) * (1.0 + DoublePadding));
+    }
+    // The least and greatest magnitude a Scale's axes and distance scale reach over their enclosures, padded outward past
+    // the double's rounding; the raws' magnitude on the grid, and a non-positive least where an enclosure reaches zero.
+    private static (double Low, double High) ScaleRange(in CompiledInstruction instruction) {
+        if (instruction.ExactData0) {
+            var scale = ((double)instruction.Data0W);
+
+            return (scale, scale);
+        }
+
+        var (low, high) = (double.PositiveInfinity, 0.0);
+
+        foreach (var lane in ((ReadOnlySpan<FixedInterval>)[instruction.Bounds0X, instruction.Bounds0Y, instruction.Bounds0Z, instruction.Bounds0W])) {
+            if (lane.IsUnbounded) {
+                return (0.0, double.PositiveInfinity);
+            }
+
+            var (lower, upper) = (((double)lane.Lower), ((double)lane.Upper));
+
+            low = Math.Min(val1: low, val2: ((lower > 0.0) ? lower : ((upper < 0.0) ? -upper : 0.0)));
+            high = Math.Max(val1: high, val2: Math.Max(val1: Math.Abs(value: lower), val2: Math.Abs(value: upper)));
+        }
+
+        return ((low * (1.0 - DoublePadding)), (high * (1.0 + DoublePadding)));
     }
     // The widest entry of a rotation's enclosed linear map, in units.
     private static double EntryWidth(in RotationBounds rotation) {

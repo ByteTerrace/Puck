@@ -23,9 +23,11 @@ namespace Puck.SdfVm;
 // a sign change across a cell (Refine's narrowing, SdfSampledLattice's crossed cells, rings, sheet and gap tests), so it
 // judges the lattice exactly as it judges the fully sampled one. Enforced by the one function that classifies a box
 // (Classify): its only skip is an enclosure that excludes [-band, band] over the block's samples widened by one cell on
-// every side and padded past every float position the kernel computes. Where it stops: the enclosure is of the CPU
-// evaluator's field, so a group whose GPU field the CPU cannot read (glyph thickening, a sampled snapshot, slot lanes, an
-// op the render reading refuses) samples every block, and the band absorbs the two readers' rounding apart.
+// every side and padded past every float position the kernel computes. The render reading's bounds take every
+// parameter as the enclosure of the packed float the kernel reads (SdfFieldEvaluator's parameter enclosures), so the
+// enclosure holds the field over the kernel's parameters, not only over the raws the CPU's point walk rounds them to.
+// Where it stops: a group whose GPU field the CPU cannot read (glyph thickening, a sampled snapshot, slot lanes, an op
+// the render reading refuses) samples every block, and the band absorbs the two readers' arithmetic rounding apart.
 public sealed partial class SdfMeshPathBake {
     // A block's edge, in samples.
     private const int BoundBlock = 4;

@@ -75,6 +75,17 @@ public readonly record struct FixedInterval {
         lower: value,
         upper: value
     );
+    /// <summary>Returns the smallest interval on the raw grid holding the exact value of a double: its floor and its
+    /// ceiling (<see cref="FixedDirectedRounding.TryFloorFromDouble"/>), one value when the double lies on the grid. It
+    /// is the enclosure a bound takes of a parameter whose nearest raw (<see cref="FixedQ4816.FromDouble"/>, which lies
+    /// in it) another reader replaces by the double itself, as a kernel reads a packed float.</summary>
+    /// <param name="value">The double whose exact value is enclosed.</param>
+    /// <returns>The enclosure; <see cref="Entire"/> when the double is not finite or either end leaves the
+    /// carrier.</returns>
+    public static FixedInterval Enclosing(double value) => ((FixedDirectedRounding.TryFloorFromDouble(result: out var floor, value: value) &&
+        FixedDirectedRounding.TryCeilingFromDouble(result: out var ceiling, value: value))
+        ? new(lower: floor, upper: ceiling)
+        : Entire);
     /// <summary>Returns the smallest interval holding two values, in either order.</summary>
     /// <param name="first">One value.</param>
     /// <param name="second">The other value.</param>
@@ -343,6 +354,44 @@ public readonly record struct FixedInterval {
         return new FixedInterval(
             lower: FixedVector3.SegmentParameter(point: lower, segment: segment),
             upper: FixedVector3.SegmentParameter(point: upper, segment: segment));
+    }
+    /// <summary>Encloses the projection parameter <c>clamp(p·s / s·s, 0, 1)</c> of every point in a two-dimensional box
+    /// onto every segment from the origin whose endpoint lies in a box of endpoints (see
+    /// <see cref="SegmentParameter(FixedInterval, FixedInterval, FixedInterval, FixedInterval, FixedInterval, FixedInterval)"/>).</summary>
+    /// <param name="x">The point's X interval.</param>
+    /// <param name="y">The point's Y interval.</param>
+    /// <param name="segmentX">The endpoint's X interval.</param>
+    /// <param name="segmentY">The endpoint's Y interval.</param>
+    /// <returns>The enclosure, inside <c>[0, 1]</c> for a bounded box; <see cref="Entire"/> for an unbounded input.</returns>
+    public static FixedInterval SegmentParameter(FixedInterval x, FixedInterval y, FixedInterval segmentX, FixedInterval segmentY) =>
+        SegmentParameter(x: x, y: y, z: FromPoint(value: FixedQ4816.Zero), segmentX: segmentX, segmentY: segmentY, segmentZ: FromPoint(value: FixedQ4816.Zero));
+    /// <summary>Encloses the projection parameter <c>clamp(p·s / s·s, 0, 1)</c> of every point in a three-dimensional box
+    /// onto every segment from the origin whose endpoint lies in a box of endpoints: an endpoint known only to within its
+    /// enclosure, as a bound reads a parameter another reader takes as a float. A degenerate endpoint box is the fixed
+    /// segment's exact hull (<see cref="SegmentParameter(FixedInterval, FixedInterval, FixedInterval, FixedVector3)"/>);
+    /// otherwise the quotient of the dot product's and the squared length's intervals, clamped, and the whole parameter
+    /// range where that quotient is unbounded, since a clamped parameter never leaves it.</summary>
+    /// <param name="x">The point's X interval.</param>
+    /// <param name="y">The point's Y interval.</param>
+    /// <param name="z">The point's Z interval.</param>
+    /// <param name="segmentX">The endpoint's X interval.</param>
+    /// <param name="segmentY">The endpoint's Y interval.</param>
+    /// <param name="segmentZ">The endpoint's Z interval.</param>
+    /// <returns>The enclosure, inside <c>[0, 1]</c> for a bounded box; <see cref="Entire"/> for an unbounded input.</returns>
+    public static FixedInterval SegmentParameter(FixedInterval x, FixedInterval y, FixedInterval z, FixedInterval segmentX, FixedInterval segmentY, FixedInterval segmentZ) {
+        if (x.IsUnbounded || y.IsUnbounded || z.IsUnbounded || segmentX.IsUnbounded || segmentY.IsUnbounded || segmentZ.IsUnbounded) {
+            return Entire;
+        }
+
+        if ((segmentX.Lower == segmentX.Upper) && (segmentY.Lower == segmentY.Upper) && (segmentZ.Lower == segmentZ.Upper)) {
+            return SegmentParameter(x: x, y: y, z: z, segment: new FixedVector3(X: segmentX.Lower, Y: segmentY.Lower, Z: segmentZ.Lower));
+        }
+
+        var quotient = ((((x * segmentX) + (y * segmentY)) + (z * segmentZ)) / ((Square(value: segmentX) + Square(value: segmentY)) + Square(value: segmentZ)));
+
+        return (quotient.IsUnbounded
+            ? new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One)
+            : Clamp(value: quotient, minimum: FixedQ4816.Zero, maximum: FixedQ4816.One));
     }
     /// <summary>Returns the interval of every Euclidean length <c>√(x² + y²)</c>, decided on the exact sums of squares
     /// and rooted once in each direction, so it holds every <see cref="FixedVector2"/> length the box reaches.</summary>
