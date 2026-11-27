@@ -10,7 +10,10 @@
 //   late        no waypoint reached after its time (its distance at a slow walk, plus a turn)
 //   fell        no airborne run longer than `treeWalkAirborne` once the walk is under way
 //   stuck       no run of driven steps that did not move the body longer than `treeWalkStuck`
-//   refused     no step-up refused: no riser the body cleared at its step height and could not stand on
+//   refused     no step-up refused: no riser the body cleared at its step height and could not stand on; a
+//               failing walk also reports the first refusal's outcome (5 no landing, 6 nothing it may stand on),
+//               the edge clearance and normal of the face it met, and where the body stood (`kinematics`' refusal
+//               witnesses), each line reading its value
 //   deep        no step that ended a contact solve still pushing as deep as the walker's contact skin
 //   flat        every climbing stretch between two tread waypoints took at least one step-up
 //   landed      the body stood on each landing's balcony floor when it reached it, grounded
@@ -64,6 +67,14 @@ state {
     slot treeWalkDeepAt = treeWalkNone
     slot treeWalkFlatAt = treeWalkNone
     slot treeWalkRefusalBase = 0
+    slot treeWalkRefusalOutcome = 0
+    slot treeWalkRefusalHeight = 0.0
+    slot treeWalkRefusalNormalX = 0.0
+    slot treeWalkRefusalNormalY = 0.0
+    slot treeWalkRefusalNormalZ = 0.0
+    slot treeWalkRefusalX = 0.0
+    slot treeWalkRefusalY = 0.0
+    slot treeWalkRefusalZ = 0.0
     slot treeWalkStepMark = 0
     table treeWalkLanded {
       for k in treeWalkLandings {
@@ -131,6 +142,14 @@ rule "tree-walk-refused" {
     kinematics(body, 0, stepRefusals) > treeWalkRefusalBase)
   mode: Level
   treeWalkRefusedAt = treeWalkReached
+  treeWalkRefusalOutcome = kinematics(body, 0, refusalOutcome)
+  treeWalkRefusalHeight = kinematics(body, 0, refusalHeight)
+  treeWalkRefusalNormalX = kinematics(body, 0, refusalNormalX)
+  treeWalkRefusalNormalY = kinematics(body, 0, refusalNormalY)
+  treeWalkRefusalNormalZ = kinematics(body, 0, refusalNormalZ)
+  treeWalkRefusalX = kinematics(body, 0, refusalX)
+  treeWalkRefusalY = kinematics(body, 0, refusalY)
+  treeWalkRefusalZ = kinematics(body, 0, refusalZ)
 }
 rule "tree-walk-deep" {
   when treeWalkReached >= 0 and treeWalkDeepAt == treeWalkNone and kinematics(body, 0, depth) >= treeWalkSkin
@@ -151,6 +170,14 @@ test "the tree's walkway, foot to the last landing" {
     treeWalkFellAt == treeWalkNone
     treeWalkStuckAt == treeWalkNone
     treeWalkRefusedAt == treeWalkNone
+    treeWalkRefusalOutcome == 0
+    treeWalkRefusalHeight == 0
+    treeWalkRefusalNormalX == 0
+    treeWalkRefusalNormalY == 0
+    treeWalkRefusalNormalZ == 0
+    treeWalkRefusalX == 0
+    treeWalkRefusalY == 0
+    treeWalkRefusalZ == 0
     treeWalkDeepAt == treeWalkNone
     treeWalkFlatAt == treeWalkNone
     for k in treeWalkLandings {

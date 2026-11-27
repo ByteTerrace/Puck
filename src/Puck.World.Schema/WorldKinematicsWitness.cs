@@ -34,13 +34,31 @@ public enum WorldKinematicsWitness : byte {
     /// <summary>The deepest push, in metres past the skin's resting band, a contact solve still applied in its last
     /// pass: how far inside a surface the body ever ended a step.</summary>
     Penetration,
+    /// <summary>The latest refused step-up's outcome (<c>FixedStepUpOutcome</c>: 5 found no landing, 6 landed on
+    /// nothing it may stand on); zero before any refusal.</summary>
+    RefusalOutcome,
+    /// <summary>The edge clearance, in metres, the latest refused step's blocked sweep reported for the face it met.</summary>
+    RefusalHeight,
+    /// <summary>The x component of the face's unit normal the latest refused step met.</summary>
+    RefusalNormalX,
+    /// <summary>The y component of the face's unit normal the latest refused step met.</summary>
+    RefusalNormalY,
+    /// <summary>The z component of the face's unit normal the latest refused step met.</summary>
+    RefusalNormalZ,
+    /// <summary>The x coordinate, in metres, of where the body stood when its latest step-up was refused.</summary>
+    RefusalX,
+    /// <summary>The y coordinate, in metres, of where the body stood when its latest step-up was refused.</summary>
+    RefusalY,
+    /// <summary>The z coordinate, in metres, of where the body stood when its latest step-up was refused.</summary>
+    RefusalZ,
 }
 /// <summary>Spells and reads <see cref="WorldKinematicsWitness"/> names as a world rule writes them
 /// (<c>kinematics(body, 0, stepUps)</c>).</summary>
 public static class WorldKinematicsVocabulary {
     private static readonly string[] Names = [
         "stepUps", "stepRefusals", "stepRise", "snaps", "leaves", "landings", "airborne", "airborneLongest", "stuck",
-        "stuckLongest", "slopeRefusals", "depth", "penetration",
+        "stuckLongest", "slopeRefusals", "depth", "penetration", "refusalOutcome", "refusalHeight", "refusalNormalX",
+        "refusalNormalY", "refusalNormalZ", "refusalX", "refusalY", "refusalZ",
     ];
 
     /// <summary>Gets every witness name, in the order of <see cref="WorldKinematicsWitness"/>.</summary>
@@ -67,7 +85,10 @@ public static class WorldKinematicsVocabulary {
     public static CellKind KindOf(WorldKinematicsWitness witness) => (witness switch {
         WorldKinematicsWitness.StepRise or WorldKinematicsWitness.Airborne or WorldKinematicsWitness.AirborneLongest or
             WorldKinematicsWitness.Stuck or WorldKinematicsWitness.StuckLongest or WorldKinematicsWitness.Depth or
-            WorldKinematicsWitness.Penetration => CellKind.Fixed,
+            WorldKinematicsWitness.Penetration or WorldKinematicsWitness.RefusalHeight or
+            WorldKinematicsWitness.RefusalNormalX or WorldKinematicsWitness.RefusalNormalY or
+            WorldKinematicsWitness.RefusalNormalZ or WorldKinematicsWitness.RefusalX or WorldKinematicsWitness.RefusalY or
+            WorldKinematicsWitness.RefusalZ => CellKind.Fixed,
         _ => CellKind.Int,
     });
 }
