@@ -226,10 +226,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
             }
 
             m_carryUnsubmitted |= m_region.OwesCarry;
-            var copies = new GpuRegionCopyRecording(recorder: recorder, readers: readers, begin: () => commandBuffer);
-
-            copies.Record(flushed: true, handsToReaders: true, region: m_region, slot: slot);
-            _ = copies.Finish();
+            GpuRegionCopyRecording.RecordFlushed(commandBuffer: commandBuffer, readers: readers, recorder: recorder, region: m_region, slot: slot);
 
             var carried = m_staged.ToArray();
 

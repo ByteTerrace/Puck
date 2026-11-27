@@ -658,11 +658,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 return false;
             }
             m_region.Flush(slot: slot);
-
-            var copies = new GpuRegionCopyRecording(recorder: recorder, readers: readers, begin: () => commandBuffer);
-
-            copies.Record(flushed: true, handsToReaders: true, region: m_region, slot: slot);
-            _ = copies.Finish();
+            GpuRegionCopyRecording.RecordFlushed(commandBuffer: commandBuffer, readers: readers, recorder: recorder, region: m_region, slot: slot);
             m_unsubmitted++;
             m_retired.Hold(item: new UploadSlot(store: this, slot: slot), pendingUse: () => (m_unsubmitted > 0));
             m_inFlight++;

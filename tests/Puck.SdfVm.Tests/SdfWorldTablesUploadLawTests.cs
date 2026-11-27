@@ -34,8 +34,20 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     private const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
     // A run-table entry, (block offset, first thread) in uints, staged for every run a copy carries.
     private const int RunEntryBytes = 8;
-    // The header and run-table reserve at the front of each staging buffer: 256 runs × 2 uints.
+    // A staged region slot's request buffer, which takes the header and run table: 256 runs × 2 uints. The changed words go
+    // to the region's staging ring, a buffer apart.
     private const int StagingReserveBytes = (HeaderBytes + (GpuRegion.MaxCopyRuns * RunEntryBytes));
+
+    // Asserts that one staged flush of a program edit wrote its header and runs into the slot's request buffer and its
+    // changed words, at least one and at most the program's, into the staging ring.
+    private static void AssertProgramFlush((ulong SizeBytes, long Written)[] writes, SdfProgram edited) {
+        Assert.Equal(expected: 2, actual: writes.Length);
+        var request = Assert.Single(collection: writes, predicate: static write => (write.SizeBytes == StagingReserveBytes));
+        var words = Assert.Single(collection: writes, predicate: static write => (write.SizeBytes != StagingReserveBytes));
+
+        Assert.InRange(actual: request.Written, high: StagingReserveBytes, low: (HeaderBytes + RunEntryBytes));
+        Assert.InRange(actual: words.Written, high: (edited.WordCount * sizeof(uint)), low: sizeof(uint));
+    }
 
     [Fact]
     public void AProgramPastOneDispatchRowUploadsByteExact() {
@@ -83,12 +95,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Twelve per-frame tables; mesh and shadow handoffs are staged. The other ten (program, transforms, screen
-        // surfaces and mappings, volumes, decals, lights, sky, sky layers, frame-sampled) each use one aperture buffer
-        // per ring slot, and a transform move copies nothing.
+        // Fourteen per-frame tables; the draw records and shadow handoffs are staged. The other twelve (program,
+        // transforms, screen surfaces and mappings, volumes, decals, lights, occluders, sky, sky layers, frame-sampled
+        // and the field views' entries) each use one aperture buffer per ring slot, and a transform move copies nothing.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (10 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (12 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -287,12 +299,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
 
         var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
-        var writes = rig.Gpu.HostWrites();
 
-        // One ring slot's program staging buffer takes the changed words, their runs and the header, and the copy
+        // One ring slot's request buffer takes the header and runs and the staging ring the changed words, and the copy
         // leaves the device-local program exactly the edited words.
-        Assert.Equal(expected: (programBytes + StagingReserveBytes), actual: Assert.Single(collection: writes).SizeBytes);
-        Assert.InRange(actual: writes[0].Written, high: (StagingReserveBytes + (edited.WordCount * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
+        AssertProgramFlush(edited: edited, writes: rig.Gpu.HostWrites());
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: edited.CopyWords()).ToArray(),
             actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
@@ -328,7 +338,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
 
-        Assert.InRange(actual: Assert.Single(collection: rig.Gpu.HostWrites()).Written, high: (StagingReserveBytes + (edited.WordCount * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
+        AssertProgramFlush(edited: edited, writes: rig.Gpu.HostWrites());
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: edited.CopyWords()).ToArray(),
             actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
@@ -552,10 +562,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         }
 
         // The descriptor band (a row a screen, then a row a surface text), then the screens' cell pool, whose first run the
-        // only grid claims.
+        // only grid claims, then the surface texts' shared pool of glyph and grid entries.
         var cellBase = (SdfWorldTables.MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
         var table = new uint[(((cellBase + (SdfWorldTables.MaxScreenDecalScreens * SdfWorldTables.MaxScreenDecalCells)) +
-            ((SdfSurfaceTextLayout.MaxTexts * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph)) * 4)];
+            SdfSurfaceTextLayout.PoolEntries) * 4)];
 
         uint[] Table() => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(uint))))).ToArray();
 
@@ -756,7 +766,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.DoesNotContain(expected: (SdfResidencySelector.RegionOwner + "/mesh-region"), collection: rig.Gpu.HostVisibleFamilies);
     }
 
-    // One 64×64 view looking at the origin, at the given time, carrying the given transforms.
+    // One 64×64 view looking at the origin, at the given time, carrying the given transforms, under the levers a World
+    // presents with (WorldRenderSettings): with them off every static shadow layer is drawn again on every upload
+    // (SdfUpdateRates.ShadowDistant), so no upload of the residency would be still.
     internal static SdfFrame Frame(SdfProgram program, float time, DynamicTransform[] transforms) => new(
         Program: program,
         ProgramChanged: false,
@@ -778,6 +790,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         )]
     ) {
         DynamicTransforms = transforms,
+        UpdateRates = SdfUpdateRates.All,
     };
 
     // The transforms packed as the device-local table holds them: position and material scale, quaternion, lanes.
@@ -1085,9 +1098,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 Render(meshDraws: meshDraws, time: time);
             }
         }
-        // Renders until every ring slot has taken its first frame, so later frames read steady-state writes.
+        // Renders until every ring slot has taken its first frame and the world's shadows stand (their first redraws spread
+        // over several uploads), so later frames read steady-state writes.
         public void Warm() {
             for (var frame = 0; (frame <= SdfWorldTables.FrameRingSize); frame++) {
+                Render(time: 0f);
+            }
+            for (var frame = 0; !Engine.ShadowsStand; frame++) {
+                Assert.True(condition: (frame < MostLandingFrames), userMessage: "The world's shadows never stood.");
                 Render(time: 0f);
             }
         }

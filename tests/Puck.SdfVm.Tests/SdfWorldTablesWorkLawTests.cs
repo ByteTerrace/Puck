@@ -30,7 +30,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             actual: SdfWorldTables.PassLabels.ToArray()
         );
         Assert.Equal(
-            expected: [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic],
+            expected: [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.PerBackendDeterministic],
             actual: SdfWorldTables.PassClasses.ToArray()
         );
     }
@@ -189,10 +189,19 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         AssertFirstUpload(rig);
 
+        // The world's shadows spread their first redraws over several uploads; once they stand, a still upload, which the
+        // one after it publishes, writes, copies and dispatches nothing.
+        var uploads = 2L;
+
+        for (; !rig.Engine.ShadowsStand; uploads++) {
+            Assert.True(condition: (uploads < 600L), userMessage: "The world's shadows never stood.");
+            rig.Render();
+        }
+        rig.Render();
         rig.Render();
         var sample = new GpuWorkSample();
         Assert.True(rig.Engine.Work.TryReadCompleted(sample));
-        Assert.Equal(2, sample.Submission);
+        Assert.Equal((uploads + 1L), sample.Submission);
         foreach (var kind in new[] { GpuWork.HostVisibleUploadBytes, GpuWork.Copies, GpuWork.Dispatches }) {
             var column = GpuWork.SubmissionKinds.IndexOf(kind);
             for (var pass = 0; pass < sample.PassCount; pass++) {
@@ -378,6 +387,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 occlusion: Occlusion,
                 regionCopy: RegionCopy.Compute!
             );
+            // Under the levers a World presents with (WorldRenderSettings): with them off every static shadow layer is drawn
+            // again on every upload (SdfUpdateRates.ShadowDistant), so no upload would be still.
             Frame = new SdfFrame(
                 Program: program,
                 ProgramChanged: false,
@@ -397,7 +408,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                         Y: 0f
                     )
                 )]
-            ) { ShadeDefault = shadeDefault };
+            ) { ShadeDefault = shadeDefault, UpdateRates = SdfUpdateRates.All };
         }
 
         public GpuPassPipelineCache Cache { get; } = new();

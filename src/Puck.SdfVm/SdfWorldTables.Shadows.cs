@@ -55,6 +55,9 @@ public sealed partial class SdfWorldTables {
     /// <summary>Describes the world's shadow entries for <c>world.residency</c>.</summary>
     /// <returns>The description, empty before the shadows exist.</returns>
     public string DescribeShadows() => (m_shadows?.Describe() ?? string.Empty);
+    /// <summary>Gets whether the world's shadows stand: every entry a view reads has drawn its layers and owes nothing, so
+    /// an upload of a frame that moves nothing draws no shadow; <see langword="true"/> before the shadows exist.</summary>
+    public bool ShadowsStand => (m_shadows?.Stands ?? true);
 
     // Starts a frame of the residency: the shadows decide the next upload's work afresh.
     internal void BeginShadowFrame() => m_shadows?.BeginFrame();

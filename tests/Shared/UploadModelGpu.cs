@@ -37,6 +37,7 @@ internal sealed class UploadModelGpu :
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly ConcurrentDictionary<nint, MemoryBuffer> m_buffers = new();
     private readonly List<UploadModelBufferBarrier> m_bufferBarriers = [];
+    private readonly Dictionary<string, ulong> m_copiedInto = new(comparer: StringComparer.Ordinal);
 
     private readonly FakeGpuDevice m_inner;
 
@@ -132,6 +133,11 @@ internal sealed class UploadModelGpu :
         part: part,
         sizeBytes: sizeBytes
     ).Memory;
+    /// <summary>Gets the bytes of the one live device-local buffer created under an object-name part, whatever its size.</summary>
+    /// <param name="part">The object-name part; exactly one live device-local buffer must carry it.</param>
+    /// <returns>The buffer's current contents.</returns>
+    public byte[] DeviceLocalOf(string part) => m_buffers.Values.Single(predicate: buffer =>
+        (!buffer.Uniform && !buffer.HostVisible && string.Equals(a: buffer.Part, b: part, comparisonType: StringComparison.Ordinal))).Memory;
 
     /// <summary>Gets the host-visible buffers created in the device-local aperture
     /// (<see cref="IGpuBufferFactory.CreateHostVisibleDeviceLocal"/>) and still live.</summary>
@@ -191,6 +197,18 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets the host-visible bytes written to storage buffers since the last <see cref="ResetTallies"/>.</summary>
     /// <returns>The byte count.</returns>
     public long HostBytes() => m_buffers.Values.Where(predicate: static buffer => !buffer.Uniform).Sum(selector: buffer => buffer.Written);
+    /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/> to the storage buffers created
+    /// under an object-name part, so a law reads one table's writes whatever else the upload records.</summary>
+    /// <param name="part">The object-name part.</param>
+    /// <returns>The byte count.</returns>
+    public long HostBytes(string part) => m_buffers.Values
+        .Where(predicate: buffer => (!buffer.Uniform && buffer.HostVisible && string.Equals(a: buffer.Part, b: part, comparisonType: StringComparison.Ordinal)))
+        .Sum(selector: static buffer => buffer.Written);
+    /// <summary>Gets the raw buffer-copy bytes recorded into the buffers created under an object-name part since the last
+    /// <see cref="ResetTallies"/>.</summary>
+    /// <param name="part">The destination's object-name part.</param>
+    /// <returns>The byte count.</returns>
+    public ulong BufferCopyBytesInto(string part) => (m_copiedInto.TryGetValue(key: part, value: out var bytes) ? bytes : 0UL);
     /// <summary>Gets the bytes written to uniform blocks since the last <see cref="ResetTallies"/>.</summary>
     /// <returns>The byte count.</returns>
     public long BlockBytes() => m_buffers.Values.Where(predicate: static buffer => buffer.Uniform).Sum(selector: buffer => buffer.Written);
@@ -202,6 +220,7 @@ internal sealed class UploadModelGpu :
 
         UploadCopies = 0;
         BufferCopyBytes = 0;
+        m_copiedInto.Clear();
         BufferDescriptorWrites = 0;
     }
     public void WaitIdle() { }
@@ -256,7 +275,7 @@ internal sealed class UploadModelGpu :
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         _ = HostVisibleFamilies.Add(item: name.MemoryFamily());
 
-        return Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+        return Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform), part: name.Part);
     }
 
     /// <summary>Gets the families every host-visible buffer was created under.</summary>
@@ -338,6 +357,9 @@ internal sealed class UploadModelGpu :
         m_buffers[sourceBufferHandle].Memory.AsSpan(length: checked((int)sizeBytes), start: checked((int)sourceOffsetBytes))
             .CopyTo(destination: m_buffers[destinationBufferHandle].Memory.AsSpan(start: checked((int)destinationOffsetBytes)));
         BufferCopyBytes += sizeBytes;
+        if (m_buffers[destinationBufferHandle].Part is { } part) {
+            m_copiedInto[part] = (BufferCopyBytesInto(part: part) + sizeBytes);
+        }
     }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {

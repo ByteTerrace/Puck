@@ -1710,8 +1710,10 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_moves = CreateRunCopy(detail: "moves", mode: CopyMoveMode);
         m_gathers = CreateRunCopy(detail: "gathers", mode: CopyGatherMode);
     }
+    // A run copy's request buffers are host-visible, so they are named as the region's staging is, never as its
+    // destination, which the memory account charges to the region's own owner.
     private GpuRegionRunCopy CreateRunCopy(string detail, uint mode) {
-        var name = (m_name.IsEmpty ? default : new GpuObjectName(owner: m_name.Owner!, part: m_name.Part!, detail: detail));
+        var name = (m_stagingName.IsEmpty ? default : new GpuObjectName(owner: m_stagingName.Owner!, part: m_stagingName.Part!, detail: detail));
 
         return new GpuRegionRunCopy(bindings: m_bindings, buffers: m_buffers, pipeline: m_copyPipeline!, recorder: m_recorder, name: in name,
             slotCount: SlotCount, mode: mode);

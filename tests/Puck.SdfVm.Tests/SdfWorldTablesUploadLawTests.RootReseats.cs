@@ -103,7 +103,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         }
     }
 
-    private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: rig.Engine.MeshRegionBytes, part: "mesh-region"))[(SdfMeshRecord.SelectionWord + 11)];
+    // The root draw's staged generation, in its record (the selection's third row's last word), which the residency's own
+    // draw-record table holds apart from the presentation's mesh region.
+    private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocalOf(part: "mesh-draws"))[(SdfMeshRecord.SelectionWord + 11)];
     private static float RootCutPreviousMemberY(Rig rig) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "previous-dynamic-transforms", sizeBytes: (3 * DynamicTransformBytes)))[13];
     // The root draw rides slot 0: its previous pose is its unit scale in the previous pose table and slot 0's previous row.
     private static void AssertRootCutPrevious(Rig rig, float x) {

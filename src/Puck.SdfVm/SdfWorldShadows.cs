@@ -212,6 +212,19 @@ internal sealed class SdfWorldShadows : IDisposable {
     public long ContentRevision => m_contentRevision;
     /// <summary>Gets the device bytes every layer and glass extinction buffer of the world's shadows holds.</summary>
     public long Bytes => m_bytes;
+    /// <summary>Gets whether every entry views read stands: each has drawn its layers and owes no redraw, share, rectangle
+    /// or glass extinction, so the next upload of a frame that moves nothing draws no shadow.</summary>
+    public bool Stands {
+        get {
+            if (!m_distant.Stands) { return false; }
+            foreach (var anchor in m_anchors) {
+                foreach (var entry in anchor.Entries) {
+                    if (!entry.Stands) { return false; }
+                }
+            }
+            return true;
+        }
+    }
 
     /// <summary>Returns the cascade set a view of the frame reads: the entries of its anchor and the world's distant entry,
     /// each through the camera its layers were drawn from, or none for a view that skips shadows.</summary>
@@ -1254,6 +1267,8 @@ internal sealed class SdfWorldShadows : IDisposable {
         // The vertices this upload's share of the wanted redraw is expected to draw: the entry's measured whole over its
         // shares, else another anchor's of the same entry, else the whole budget.
         public long ShareVertices => ((m_redraw is { } redraw) && (Estimate is var whole and > 0L)) ? ((whole + redraw.Slices - 1L) / redraw.Slices) : UploadVertices;
+        // Whether the entry, where a view reads it, has drawn its layers and owes nothing a later upload would draw.
+        public bool Stands => (!m_holds || (m_stands && (m_redraw is null) && m_owed.IsEmpty && !m_owedOptical));
         // The vertices a whole redraw of the entry is expected to draw: its own last measurement, else its index's.
         private long Estimate => ((m_wholeVertices > 0L) ? m_wholeVertices : m_owner.m_indexVertices[Index]);
         // The vertices a rectangle of the entry is expected to draw a texel: what its rectangles measured, else its whole
