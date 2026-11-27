@@ -24,24 +24,45 @@ function shadeLane(index) = index == 0 ? lanes.slot0 : index == 1 ? lanes.slot1 
 // The pattern library: the building blocks a material's look composes, each one formula, with the ergonomic forms
 // lowering to the same program as a hand-unrolled one. Points are in pattern units: one lattice or cell per unit.
 //
+// Band limiting: an octave whose features fall under about two pixels cannot be sampled, so it aliases into shimmer. A
+// lattice octave at `lacunarity^i` times the base frequency spans `pixel * lacunarity^i` cells a pixel, `pixel` being the
+// footprint in the pattern's own units (the contract of `shadeBevel` below: the default, `surface.footprint`, is right for
+// a point in metres, and a point scaled by `scale` passes `surface.footprint * scale`). Each octave fades by `shadeFade` of
+// that rate, as the flow, foliage and terrain programs fade their own noise, so the noise loses its fine octaves as it
+// recedes and converges on its mean. `filterScale` scales the rate: 1 fades at the pixel's own sampling limit, more blurs
+// sooner, and 0 keeps every octave at any distance. A sum is not renormalised, since a signed octave averages to zero.
+function shadeOctaveFade(pixel, filterScale, octave, lacunarity) = shadeFade(pixel * filterScale * pow(lacunarity, octave))
+// A faded octave of a noise whose mean is not zero fades to that mean, not to zero.
+function shadeBandLimited(value, mean, fade) = mean + fade * (value - mean)
 // Fractal noise: `octaves` (a whole number fixed when the document compiles) of the lattice, each at `lacunarity` times
-// the frequency and `gain` times the amplitude of the one before, normalised to about [-1, 1].
-function shadeFbm(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+// the frequency and `gain` times the amplitude of the one before, normalised to about [-1, 1] and faded by its footprint.
+function shadeFbm(q, seed, octaves = 4, gain = 0.5, lacunarity = 2, pixel = surface.footprint, filterScale = 1) = reduce(
   range(0, octaves),
   0,
-  (sum, i) => sum + pow(gain, i) * lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))
+  (sum, i) => sum + pow(gain, i) * shadeOctaveFade(pixel, filterScale, i, lacunarity) *
+    lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))
 ) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
-// Ridged noise in [0, 1]: sharp crests where the lattice crosses zero, the look of veins, ridges and creases.
-function shadeRidged(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+// Ridged noise in [0, 1]: sharp crests where the lattice crosses zero, the look of veins, ridges and creases. A faded
+// octave takes the mean of the ridge term, about 0.54, so the pattern flattens to its average level.
+function shadeRidged(q, seed, octaves = 4, gain = 0.5, lacunarity = 2, pixel = surface.footprint, filterScale = 1) = reduce(
   range(0, octaves),
   0,
-  (sum, i) => sum + pow(gain, i) * pow(1 - abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))), 2)
+  (sum, i) => sum + pow(gain, i) * shadeBandLimited(
+    pow(1 - abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))), 2),
+    0.54,
+    shadeOctaveFade(pixel, filterScale, i, lacunarity)
+  )
 ) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
-// Turbulence in [0, 1]: the summed magnitude of the octaves, billowing like smoke or marble's swirl.
-function shadeTurbulence(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+// Turbulence in [0, 1]: the summed magnitude of the octaves, billowing like smoke or marble's swirl. A faded octave takes
+// the mean magnitude of the lattice, about 0.31.
+function shadeTurbulence(q, seed, octaves = 4, gain = 0.5, lacunarity = 2, pixel = surface.footprint, filterScale = 1) = reduce(
   range(0, octaves),
   0,
-  (sum, i) => sum + pow(gain, i) * abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i)))
+  (sum, i) => sum + pow(gain, i) * shadeBandLimited(
+    abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))),
+    0.31,
+    shadeOctaveFade(pixel, filterScale, i, lacunarity)
+  )
 ) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
 // Domain warp: `q` pushed by `amount` along three decorrelated lattices, so any pattern read at the result flows and
 // swirls (feed it to fBm, cells or a ramp).
@@ -102,9 +123,9 @@ shade template paint(color) {
 // Relief: the surface lit as if `height` (a function of a point, in metres) raised it along its normal, by `amount`
 // times. The compiler differentiates the height exactly, so any pattern makes relief with no slope written by hand:
 // `relief(q => -0.004 * shadeCellBorder(q * 3, uint(5), 0.06, pixel: surface.footprint * 3), 1)` carves cracks, and
-// `relief(q => 0.01 * shadeFbm(q * 4, uint(7)), 1)` roughens a face. Only slope makes relief: a hard step (floor, step,
-// a cell's id) is flat on both sides of its jump and gives none, so an edge carves a groove only where it ramps
-// (the bevel of shadeCellBorder and shadeBrick). The height stands in the world (`world` 1) or, with `world` 0, in the
+// `relief(q => 0.01 * shadeFbm(q * 4, uint(7), pixel: surface.footprint * 4), 1)` roughens a face, its octaves fading
+// with distance. Only slope makes relief: a hard step (floor, step, a cell's id) is flat on both sides of its jump and
+// gives none, so an edge carves a groove only where it ramps (the bevel of shadeCellBorder and shadeBrick). The height stands in the world (`world` 1) or, with `world` 0, in the
 // draw's own frame (`surface.objectPosition`), so every copy of a creation carries the same relief; that frame's slope is
 // turned to the world without its scale, which a uniformly scaled copy's relief keeps. The normal tilts at most
 // `steepest` radians, which bounds the shadow cascades it can ask for. It writes the normal only: placed after a row's

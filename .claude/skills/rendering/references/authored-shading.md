@@ -508,7 +508,11 @@ from `gradient` over `flowPattern`, its shifts and weights held at the point's v
 `shadeWarp`, `shadeCellBorder`, `shadeCellId`, `shadeRamp`, `shadeBrick`) builds
 on it, and its `relief` template tilts a normal by any height's gradient. The edge
 helpers ramp over an authored `bevel` floored at two pixels' footprint
-(`shadeBevel`), since a hard step has no slope to carve; a template argument may
+(`shadeBevel`), since a hard step has no slope to carve, and the noises fade each octave by
+its footprint (`shadeOctaveFade`: `shadeFade` of `pixel * filterScale * lacunarity^i`, the lattice octave's cells a
+pixel; a faded octave of a noise with a nonzero mean fades to that mean, `shadeBandLimited`). Every octave
+still runs its lattice, since the program is straight-line and has no branch that skips an instruction, and the
+`pixel` a caller passes is in the pattern's own units (`surface.footprint * scale`), as the edge helpers'. A template argument may
 be a function (`WorldShadeLowering.BindParameter` binds it as written), which is how
 `relief` takes its height. Inside a shade program, a `reduce` over a structural array unrolls at
 compile time (`WorldShadeLowering.Reduce`), and an element or member of

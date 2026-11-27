@@ -47,7 +47,7 @@ prototypes {
   prototype "relief-fbm" {
     document {
       schema: "puck.creation.v2"
-      palette [reliefStone with { shade: relief(q => 0.012 * shadeFbm(q * 4, uint(7), octaves: 5), 1) }]
+      palette [reliefStone with { shade: relief(q => 0.012 * shadeFbm(q * 4, uint(7), octaves: 5, pixel: surface.footprint * 4), 1) }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
       }
@@ -110,7 +110,7 @@ prototypes {
   prototype "relief-sphere" {
     document {
       schema: "puck.creation.v2"
-      palette [reliefStone with { shade: relief(q => 0.02 * shadeRidged(q * 3, uint(11)), 1) }]
+      palette [reliefStone with { shade: relief(q => 0.02 * shadeRidged(q * 3, uint(11), pixel: surface.footprint * 3), 1) }]
       shape Sphere "sphere" {
         scale [0.7, 0.7, 0.7]
       }

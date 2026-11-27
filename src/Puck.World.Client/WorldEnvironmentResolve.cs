@@ -842,6 +842,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             into.FogDensity = Scalar(fallback: SdfSky.DefaultFogDensity, field: WorldValueFields.FogDensity, mirror: mirror, scalar: fog.Density, site: fogSite);
             into.FogColorAuthored = (fog.Color is not null);
             into.FogColor = (Rgb(color: fog.Color, fallback: Vector3.Zero, mirror: mirror) * Scalar(fallback: SdfSky.DefaultLuminance, field: WorldValueFields.FogLuminance, mirror: mirror, scalar: fog.Luminance, site: fogSite));
+            into.FogAnisotropy = Scalar(fallback: 0f, field: WorldValueFields.FogAnisotropy, mirror: mirror, scalar: fog.Anisotropy, site: fogSite);
             (into.FogBase, into.FogFalloff) = Height(height: fog.Height, mirror: mirror, site: (fogSite with { Inner = "fog.height" }));
         }
         if (atmosphere.Haze is { } haze) {

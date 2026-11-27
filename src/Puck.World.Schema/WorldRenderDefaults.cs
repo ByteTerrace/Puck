@@ -1411,11 +1411,15 @@ public sealed record WorldRenderAtmosphere(
 /// <param name="Height">The height fog's profile. Absent is a fog alike at every height.</param>
 /// <param name="Luminance">The luminance, in nits, an authored <paramref name="Color"/> of one in-scatters at. Absent is
 /// <c>SdfSky.DefaultLuminance</c>; a fog that reads the sky takes the sky's own.</param>
+/// <param name="Anisotropy">The Henyey-Greenstein anisotropy of the light of the bodies that cast light (every
+/// directional light) which the fog scatters toward the eye, in <c>[0, 0.9]</c>: the fog glows about them, brightest
+/// toward a low sun, the more sharply the higher it is. Absent or zero scatters none, so the fog is its colour alone.</param>
 public sealed record WorldRenderFog(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Density = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAirHeight? Height = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Luminance = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Luminance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Anisotropy = null
 );
 /// <summary>An air kind's height profile: its density falls by a factor of e over each <paramref name="Falloff"/> world
 /// units above <paramref name="Base"/>, and rises as much below it, so a ray's optical depth through it has a closed

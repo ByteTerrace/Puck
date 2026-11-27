@@ -632,8 +632,12 @@ authored one is exactly the kinds it states, each off at zero:
 
 - The **fog**, `density` per world unit, alike at every height or, with a
   `height` profile, falling by a factor of e over each `falloff` above its
-  `base`. It in-scatters the sky in the pixel's direction, or its own `color`.
-  It ends at the sky, which is its colour at infinity.
+  `base`. It in-scatters the sky in the pixel's direction, or its own `color`,
+  and, with a positive `anisotropy`, the light of every directional light by a
+  Henyey-Greenstein phase of that anisotropy, so it glows about the sun (the
+  same `sdfAirBodies` the haze uses, with the fog's own anisotropy). Zero, the
+  default, in-scatters none of it. It ends at the sky, which is its colour at
+  infinity.
 - The **haze**, aerial perspective, takes its `amount` of the light along a
   level ray the far distance long and in-scatters the sky and the light of every
   directional light, which is what a light-casting body binds, by a

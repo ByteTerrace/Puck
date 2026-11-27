@@ -404,6 +404,7 @@ public static class WorldLightingText {
                 .Field(key: "fog", value: "on")
                 .Field(key: "fogDensity", value: Describe(value: fog.Density))
                 .Field(key: "fogColor", value: ((fog.Color is null) ? "sky" : Describe(color: fog.Color)))
+                .Field(key: "fogAnisotropy", value: Describe(value: fog.Anisotropy))
                 .Field(key: "fogHeight", value: Height(height: fog.Height))
             : echo.Field(key: "fog", value: "none"));
         echo = ((atmosphere.Haze is { } haze)
