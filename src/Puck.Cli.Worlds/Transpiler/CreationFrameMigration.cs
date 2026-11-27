@@ -99,7 +99,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
     private readonly HashSet<SyntaxNode> m_reachedByNew = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<string> m_refusals = [];
     // A shape statement may drop its half turn only when every shape it compiles to may: (source, offset) to verdict.
-    private readonly Dictionary<(string Path, int Offset), bool> m_dropVerdicts = [];
+    private readonly List<(string Path, int Offset, string? Name, bool Verdict)> m_dropVerdicts = [];
     private readonly HashSet<string> m_slotFramedPrototypes = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, List<Definition>> m_topLevel = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<SyntaxNode, string> m_pathOf = new(comparer: ReferenceEqualityComparer.Instance);
@@ -242,19 +242,39 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
     // A compiled shape is attributed to the statement its source map names: the shape statement itself, or, for a shape a
     // template built inside another template's expansion, the call or block that expanded it. Each verdict therefore
-    // holds for every shape statement that statement can expand to, so a shape that must keep its half turn keeps it
-    // wherever the map placed it.
+    // holds for every shape statement that statement can expand to and whose name can spell the shape's, so a shape that
+    // must keep its half turn keeps it wherever the map placed it.
     private void PropagateVerdicts() {
-        foreach (var ((path, offset), verdict) in m_dropVerdicts) {
+        foreach (var (path, offset, name, verdict) in m_dropVerdicts) {
             if (Innermost(path: path, offset: offset) is not { } node) {
                 if (!verdict) { m_refusals.Add(item: $"{path}: a shape that must keep its half turn was authored at offset {offset}, which no statement holds"); }
                 continue;
             }
 
             foreach (var shape in Expansion(node: node, path: path, visited: new HashSet<SyntaxNode>(comparer: ReferenceEqualityComparer.Instance))) {
+                if (!CanName(shape: shape, name: name)) { continue; }
                 m_shapeVerdicts[shape] = (m_shapeVerdicts.TryGetValue(key: shape, value: out var held) ? (held && verdict) : verdict);
             }
         }
+    }
+
+    // Whether a shape statement can write a shape named `name` (null: unnamed). A header name read from a template's
+    // parameter or written as an expression can spell anything.
+    private static bool CanName(BlockNode shape, string? name) {
+        if (shape.Target is null) { return (name is null); }
+        if (shape.NameExpression is InterpolatedStringNode interpolated) {
+            if (name is null) { return false; }
+
+            var pattern = string.Concat(values: interpolated.Segments.Select(selector: static segment => ((segment is InterpolationSegment.Literal literal)
+                ? System.Text.RegularExpressions.Regex.Escape(str: literal.Text)
+                : ".*")));
+
+            return System.Text.RegularExpressions.Regex.IsMatch(input: name, pattern: $"^{pattern}$", options: System.Text.RegularExpressions.RegexOptions.Singleline);
+        }
+        if (shape.NameExpression is not null) { return true; }
+        if (shape.Name is null) { return (name is null); }
+
+        return (!shape.NameQuoted || (shape.Name == name));
     }
 
     private StatementNode? Innermost(string path, int offset) {
@@ -677,12 +697,17 @@ internal sealed class CreationFrameMigration : PuckMigration {
             var context = new CreationContext(creation: creation, slotFramed: IsSlotFramed(creation: creation, prototypeId: prototypeId, framed: m_slotFramedPrototypes));
 
             for (var index = 0; (index < shapes.Count); index++) {
-                if ((shapes[index] is not JsonObject shape) || !map.TryGetOrigin(jsonPointer: $"{pointer}/shapes/{index}", origin: out var origin)) { continue; }
+                if (shapes[index] is not JsonObject shape) { continue; }
 
-                var key = (Path.GetFullPath(path: (origin.SourcePath ?? path)), origin.Span.Offset);
                 var droppable = context.MayDrop(shape: shape, index: index);
+                var name = ((shape["name"] is JsonValue n) && n.TryGetValue<string>(value: out var text)) ? text : null;
 
-                m_dropVerdicts[key] = (m_dropVerdicts.TryGetValue(key: key, value: out var held) ? (held && droppable) : droppable);
+                if (!map.TryGetOrigin(jsonPointer: $"{pointer}/shapes/{index}", origin: out var origin)) {
+                    if (!droppable) { m_refusals.Add(item: $"{path}: shape {pointer}/shapes/{index} must keep its half turn, and the compile names no source for it"); }
+                    continue;
+                }
+
+                m_dropVerdicts.Add(item: (Path.GetFullPath(path: (origin.SourcePath ?? path)), origin.Span.Offset, name, droppable));
             }
         }
     }
@@ -767,8 +792,15 @@ internal sealed class CreationFrameMigration : PuckMigration {
         }
 
         public bool MayDrop(JsonObject shape, int index) {
-            if ((shape["type"] is not JsonValue type) || !type.TryGetValue<string>(value: out var typeName) || !SymmetricTypes.Contains(item: typeName)) { return false; }
-            if (AsymmetricShapeMembers.Any(predicate: member => (shape[member] is not null))) { return false; }
+            if ((shape["type"] is not JsonValue type) || !type.TryGetValue<string>(value: out var typeName)) { return false; }
+
+            // A prism's outline lies in its local x and y and its depth along z, centred: a trapezoid, a rectangle or an
+            // ellipse reads the same mirrored in x, so the prism cannot tell its half turn.
+            var symmetricPrism = (typeName == "Prism") && (shape["lift"] is null)
+                && ((shape["profile"] is null) || ((shape["profile"]?["kind"] is JsonValue kind) && kind.TryGetValue<string>(value: out var kindName) && (kindName is "Trapezoid" or "RoundedRectangle" or "Ellipse" or "ChamferedRectangle")));
+
+            if (!SymmetricTypes.Contains(item: typeName) && !symmetricPrism) { return false; }
+            if (AsymmetricShapeMembers.Any(predicate: member => (shape[member] is not null) && !(symmetricPrism && (member is "profile" or "taper")))) { return false; }
 
             var id = ((shape["id"] is JsonValue idValue) && idValue.TryGetValue<long>(value: out var authored)) ? authored : index;
 
