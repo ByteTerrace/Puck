@@ -546,7 +546,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         }));
     }
     [Fact]
-    public void OccluderUsesTheGeneralLightTableAndMissingAnchorsDisableIt() {
+    public void AnOccluderRowAuthorsASphereOfTheOccludersAndMissingAnchorsDropIt() {
         var defaults = BaseDefaults() with {
             Lighting = new(Lights: [
             new WorldRenderLight.Occluder(
@@ -565,12 +565,12 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         var missing = Resolve(
             defaults,
             track: track
-        ).Lights[0];
-
-        Assert.Equal(
-            actual: missing.Weight,
-            expected: 0f
         );
+
+        // The row keeps its place among the lights and lights nothing; with no pose its sphere is dropped.
+        Assert.Equal(actual: missing.Lights[0].Weight, expected: 0f);
+        Assert.Equal(actual: missing.Lights[0].Kind, expected: SdfLightKind.Occluder);
+        Assert.Equal(actual: missing.Occluders.Count, expected: 0);
         var live = Resolve(
             defaults,
             track: track,
@@ -582,28 +582,19 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 ),
                 Quaternion.Identity
             )
-        ).Lights[0];
+        );
 
-        Assert.Equal(
-            actual: live.Weight,
-            expected: 0.6f
-        );
-        Assert.Equal(
-            actual: live.DynamicSlot,
-            expected: SdfProgram.NoDynamicTransformSlot
-        );
-        Assert.Equal(
-            actual: live.Kind,
-            expected: SdfLightKind.Occluder
-        );
-        Assert.Equal(
-            new Vector3(
-                x: 9f,
-                y: 3f,
-                z: 4f
-            ),
-            live.Direction
-        );
+        Assert.Equal(actual: live.Lights[0].Weight, expected: 0f);
+        Assert.Equal(actual: live.Occluders.Count, expected: 1);
+
+        var occluder = live.Occluders[0];
+
+        Assert.Equal(actual: occluder.Shape, expected: SdfOccluderShape.Sphere);
+        Assert.Equal(actual: occluder.Strength, expected: 0.6f);
+        Assert.Equal(actual: occluder.Shadow, expected: 0.6f);
+        Assert.Equal(actual: occluder.Radius, expected: 2f);
+        Assert.Equal(actual: occluder.Reach, expected: 6f);
+        Assert.Equal(new Vector3(x: 9f, y: 3f, z: 4f), occluder.Center);
     }
     [Fact]
     public void PointLightAnchorComposesItsOffsetIntoTheResolvedPose() {

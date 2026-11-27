@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/266c7f30785ae81dc83764ec590fc247b65f20f8be5dede0a193eeedfdb58b0f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/a8f2755e2234161b4bc02c0aae92ea768bac64c13705689e1acb7ed5562febd2). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -84,6 +84,21 @@ struct SdfShadowHandoff {
     [[vk::offset(12)]] float Weight;
 };
 
+struct SdfOccluder {
+    [[vk::offset(0)]] float3 Center;
+    [[vk::offset(12)]] float Strength;
+    [[vk::offset(16)]] float3 AxisX;
+    [[vk::offset(28)]] uint Shape;
+    [[vk::offset(32)]] float3 AxisY;
+    [[vk::offset(44)]] float Radius;
+    [[vk::offset(48)]] float3 AxisZ;
+    [[vk::offset(60)]] float Reach;
+    [[vk::offset(64)]] float Shadow;
+    [[vk::offset(68)]] float Softness;
+    [[vk::offset(72)]] int OwnSlot;
+    [[vk::offset(76)]] uint OwnSlots;
+};
+
 // The Frame group: descriptor set 0, register space 0.
 struct SdfMeshBakeFrame {
     [[vk::offset(0)]] float2 pointer;
@@ -125,6 +140,8 @@ struct SdfMeshBakeFrame {
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
 [[vk::binding(24, 1)]] StructuredBuffer<float4> sdfFieldEntries : register(t24, space1);
+[[vk::binding(25, 1)]] StructuredBuffer<SdfOccluder> sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb : register(t25, space1);
+#define sdfOccluders sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfMeshBakePass {

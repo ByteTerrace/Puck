@@ -108,23 +108,47 @@ public sealed class SdfPhotometryLawTests {
         lights.Set(index: 3, light: new SdfLight(Color: Vector3.One, Direction: Vector3.UnitY, Kind: SdfLightKind.Directional, Param: 0f, Shadows: false, Weight: 1f));
         lights.Set(index: 4, light: new SdfLight(Color: Vector3.One, Direction: Vector3.UnitY, Kind: SdfLightKind.Directional, Param: 0f, Shadows: false, Weight: 0f));
         lights.Set(index: 5, light: new SdfLight(Color: Vector3.One, Direction: new Vector3(x: 0f, y: 0f, z: 10f), DynamicSlot: 0, Kind: SdfLightKind.Point, Param: 1f, Shadows: false, Weight: 1f));
-        lights.Set(index: 6, light: new SdfLight(Color: Vector3.Zero, Direction: new Vector3(x: 0f, y: 0f, z: 10f), Kind: SdfLightKind.Occluder, Param: 1f, Shadows: false, Weight: 1f));
-        lights.Set(index: 7, light: new SdfLight(Color: Vector3.Zero, Direction: new Vector3(x: 0f, y: 0f, z: 2f), Kind: SdfLightKind.Occluder, Param: 1f, Shadows: false, Weight: 1f));
+        lights.Set(index: 6, light: new SdfLight(Color: Vector3.Zero, Direction: new Vector3(x: 0f, y: 0f, z: 10f), Kind: SdfLightKind.Occluder, Param: 1f, Shadows: false, Weight: 0f));
+        lights.Set(index: 7, light: new SdfLight(Color: Vector3.Zero, Direction: new Vector3(x: 0f, y: 0f, z: 2f), Kind: SdfLightKind.Occluder, Param: 1f, Shadows: false, Weight: 0f));
         Point(index: 8, position: new Vector3(x: 0f, y: 0f, z: -10f), range: 0f);
         lights.Count = 9;
 
-        // Ahead, wrapping the eye, a directional, a light riding a transform and an occluder whose reach covers the eye
-        // are shaded; one behind past its range, a dark directional, an occluder far behind and a light of no range are
-        // not.
-        Assert.Equal(expected: ((UInt128)0b0_1010_1101), actual: SdfLightSelection.Select(camera: in camera, exposure: 1f, far: 100f, lights: lights));
+        // Ahead, wrapping the eye, a directional and a light riding a transform are shaded; one behind past its range, a
+        // dark directional, an occluder row's place, which lights nothing, and a light of no range are not.
+        Assert.Equal(expected: ((UInt128)0b0_0010_1101), actual: SdfLightSelection.Select(camera: in camera, exposure: 1f, far: 100f, lights: lights));
         // A far plane before a light's sphere leaves it out.
         Assert.False(condition: SdfLightSelection.Reaches(camera: in camera, exposure: 1f, far: 5f, light: lights[0]));
         // A view exposed so dimly that the light wrapping the eye gives a white surface past 1.6 m less than the cutoff
         // leaves it out: its reach there no longer holds the eye, and it lies behind the view.
-        Assert.Equal(expected: ((UInt128)0b0_1010_1001), actual: SdfLightSelection.Select(camera: in camera, exposure: 0.01f, far: 100f, lights: lights));
+        Assert.Equal(expected: ((UInt128)0b0_0010_1001), actual: SdfLightSelection.Select(camera: in camera, exposure: 0.01f, far: 100f, lights: lights));
         Assert.Equal(expected: (SdfPhotometry.RangeOf(exposure: 0.01f, weight: 1f) * (1f + SdfLightSelection.CutoffMargin)), actual: SdfLightSelection.ReachAt(exposure: 0.01f, light: lights[2]));
 
         void Point(int index, Vector3 position, float range) =>
             lights.Set(index: index, light: new SdfLight(Color: Vector3.One, Direction: position, Kind: SdfLightKind.Point, Param: range, Shadows: false, Weight: 1f));
+    }
+    // An occluder is shaded by a view whose frustum its sphere of reach meets, and a creation's box fits the solid its
+    // proportions suggest: a sphere near a cube, a capsule along a long axis whose short sides are alike, else the box.
+    [Fact]
+    public void AViewShadesTheOccludersWhoseReachItSeesAndABoxFitsItsSolid() {
+        var camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: Vector3.Zero, target: -Vector3.UnitZ, viewportHeight: 100f, viewportWidth: 100f);
+        var occluders = new SdfOccluders();
+
+        Assert.True(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = new Vector3(x: 0f, y: 0f, z: -5f), Radius = 1f, Reach = 2f, Strength = 1f }));
+        Assert.True(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = new Vector3(x: 0f, y: 0f, z: 10f), Radius = 1f, Reach = 2f, Strength = 1f }));
+        Assert.True(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = new Vector3(x: 0f, y: 0f, z: 1.5f), Radius = 1f, Reach = 2f, Shadow = 1f }));
+        // No strength, or no reach, adds nothing and is refused.
+        Assert.False(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = Vector3.Zero, Radius = 1f, Reach = 2f }));
+        Assert.False(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = Vector3.Zero, Radius = 1f, Strength = 1f }));
+        Assert.Equal(expected: ((UInt128)0b101), actual: SdfLightSelection.SelectOccluders(camera: in camera, far: 100f, occluders: occluders));
+
+        Assert.Equal(expected: SdfOccluderShape.Sphere, actual: SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: new Vector3(x: 0.5f, y: 1.1f, z: 0.5f), low: new Vector3(x: -0.5f, y: 0f, z: -0.5f))!.Value.Shape);
+        var capsule = SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: new Vector3(x: 0.4f, y: 2f, z: 0.25f), low: new Vector3(x: -0.4f, y: 0f, z: -0.25f))!.Value;
+
+        Assert.Equal(expected: SdfOccluderShape.Capsule, actual: capsule.Shape);
+        Assert.Equal(expected: 0f, actual: capsule.AxisX.X);
+        Assert.Equal(expected: 0f, actual: capsule.AxisX.Z);
+        Assert.Equal(expected: (1f - capsule.Radius), actual: capsule.AxisX.Y, precision: 5);
+        Assert.Equal(expected: SdfOccluderShape.Box, actual: SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: new Vector3(x: 0.32f, y: 0.14f, z: 0.24f), low: new Vector3(x: -0.32f, y: 0f, z: -0.24f))!.Value.Shape);
+        Assert.Null(SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: Vector3.One, low: new Vector3(x: 0f, y: 1f, z: 0f)));
     }
 }

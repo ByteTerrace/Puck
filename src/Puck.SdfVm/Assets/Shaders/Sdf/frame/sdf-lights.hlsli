@@ -27,13 +27,13 @@ uint worldShadowHandoffCount() {
 bool sdfLightRanged(uint kind) {
     return ((kind == SDF_LIGHT_POINT) || (kind == SDF_LIGHT_LINE));
 }
-// Whether a light sits at a position worldPointLightPosition reads: a ranged light or an occluder. KEEP IN SYNC with
+// Whether a light sits at a position worldPointLightPosition reads: a ranged light. KEEP IN SYNC with
 // SdfLight.IsPositional.
 bool sdfLightPositional(uint kind) {
-    return (sdfLightRanged(kind) || (kind == SDF_LIGHT_OCCLUDER));
+    return sdfLightRanged(kind);
 }
 
-// A point, line or occluder light's current world-space position (a line's midpoint): the live dynamic transform its slot names (an anchored
+// A point or line light's current world-space position (a line's midpoint): the live dynamic transform its slot names (an anchored
 // light tracking a moving shape), or the authored static position when unanchored. Falls back to the static position on
 // a kernel that binds no per-frame dynamic-transform table.
 float3 worldPointLightPosition(SdfLight light) {
@@ -160,7 +160,7 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 
     return dot(outside, outside);
 }
-// Whether a point, spot or occluder light at `position` can add anything at a point of the box `low`..`high` in a pixel
+// Whether a point, spot or line light at `position` can add anything at a point of the box `low`..`high` in a pixel
 // pass: whether the box meets the sphere of its reach, for a spot whether the sphere about the box meets its cone, and
 // whether a point or spot light's bound over the box reaches the view's cutoff. A point or spot light gives a point at
 // most its weight times its window at the box's nearest point over that point's squared distance, times the largest
@@ -176,7 +176,7 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 // the line gives a point of it at most its weight times its length, under its window there, over that distance squared
 // (sdfLineReach), and it has no cone.
 bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high) {
-    float reach = ((sdfLightRanged(light.Kind) ? light.Param : (SDF_LIGHT_OCCLUDER_REACH * light.Param)) * (1.0 + SdfLightReachMargin));
+    float reach = (light.Param * (1.0 + SdfLightReachMargin));
     float nearest = sdfBoxDistanceSquared(position, low, high);
 
     if (light.Kind == SDF_LIGHT_LINE) {

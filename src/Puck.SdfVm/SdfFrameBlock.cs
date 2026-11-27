@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
+using Puck.Maths;
 using Puck.Shaders;
 using static Puck.Shaders.ShaderParameterWriter;
 using Puck.SignedDistance;
@@ -66,6 +67,8 @@ public static partial class SdfFrameBlock {
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
+    private static readonly int OccluderCount = Offset(member: SdfWorldPackage.OccluderCount);
+    private static readonly int OccluderMask = Offset(member: SdfWorldPackage.OccluderMask);
     private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
     private static readonly int LightScale = Offset(member: SdfWorldPackage.LightScale);
     private static readonly int ToonMode = Offset(member: SdfWorldPackage.ToonMode);
@@ -114,11 +117,11 @@ public static partial class SdfFrameBlock {
     // the instance's temporal sample and the preceding view, laid out by this one writer and copied by name, so every pass
     // reads them as the world passes do.
     internal static void WriteInto(Span<byte> passBlock, ReadOnlySpan<Copy> copies, in SdfPassValues tables, SdfFrame frame, int view,
-        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled, SdfWorldResidency residency, UInt128? lightMask = null) {
+        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled, SdfWorldResidency residency, UInt128? lightMask = null, UInt128? occluderMask = null) {
         Span<byte> block = stackalloc byte[SizeBytes];
 
         block.Clear();
-        Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height, lightMask: lightMask);
+        Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height, lightMask: lightMask, occluderMask: occluderMask);
         WriteMeshIrradiance(block: block, volume: residency.MeshIrradianceParameters);
         WriteTemporal(block: block, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: temporalEnabled);
         WritePreviousView(block: block, view: temporal.PreviousView, valid: temporal.HasPreviousView);
@@ -212,8 +215,8 @@ public static partial class SdfFrameBlock {
     /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens and mesh draws the
     /// tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
-    /// light count and shadow slots (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
-    /// node writes it.</summary>
+    /// light count and shadow slots (<see cref="SdfLights"/>), its analytic occluders' count and mask
+    /// (<see cref="SdfOccluders"/>), and its curvature shading. The extent is not written: the node writes it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="tables">The values of the tables that packed <paramref name="frame"/>.</param>
     /// <param name="frame">The frame.</param>
@@ -222,8 +225,10 @@ public static partial class SdfFrameBlock {
     /// <param name="height">The view's render height, in pixels.</param>
     /// <param name="lightMask">The view's preselected light mask (<see cref="SdfWorldTables.LightMaskOf"/>), or
     /// <see langword="null"/> to select lights from <paramref name="frame"/> directly.</param>
+    /// <param name="occluderMask">The view's preselected occluder mask (<see cref="SdfWorldTables.OccluderMaskOf"/>), or
+    /// <see langword="null"/> to select occluders from <paramref name="frame"/> directly.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height, UInt128? lightMask = null) {
+    public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height, UInt128? lightMask = null, UInt128? occluderMask = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Blocks);
 
@@ -272,7 +277,17 @@ public static partial class SdfFrameBlock {
         }
 
         for (var word = 0; (word < 4); word++) {
-            WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
+            WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: BitWords.Word32(mask: mask, word: word));
+        }
+
+        var occluders = frame.Occluders;
+        var occluding = (occluderMask ?? ((occluders.Count > 0)
+            ? SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: occluders)
+            : UInt128.Zero));
+
+        WriteUInt32(block: block, offset: OccluderCount, value: ((uint)occluders.Count));
+        for (var word = 0; (word < 4); word++) {
+            WriteUInt32(block: block, offset: (OccluderMask + (word * sizeof(uint))), value: BitWords.Word32(mask: occluding, word: word));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: LightScale, value: (tables.Exposures?.LightScaleOf(view: view) ?? 1f));

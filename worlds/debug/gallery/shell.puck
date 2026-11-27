@@ -10,6 +10,7 @@
 
 import "../../standard/bounds"
 import "../../standard/architecture"
+import "../../standard/occlusion"
 import "../shapes"
 import "layout"
 import "look"
@@ -971,6 +972,7 @@ template shellPrototypes() {
     }
   }
   prototype "gallery-planter" {
+    occlusion: propOcclusion
     document {
       name: "gallery-planter"
       schema: "puck.creation.v2"
@@ -979,6 +981,7 @@ template shellPrototypes() {
     }
   }
   prototype "gallery-bench" {
+    occlusion: propOcclusion
     document {
       name: "gallery-bench"
       schema: "puck.creation.v2"

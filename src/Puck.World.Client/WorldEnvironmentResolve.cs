@@ -31,6 +31,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private static readonly SdfLights Pinned = SdfLights.Default();
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
+    // How many of its radii an occluder row darkens out to.
+    private const float OccluderRowReachRadii = 3f;
     private readonly List<(int Slot, double Value)> m_bound = [];
     private readonly WorldClockReads m_clocks = new();
     // The literal rates the last resolution wrote into the stack, which a moved presented tick advances in place.
@@ -44,6 +46,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
     private readonly SdfLights m_resolvedLights = new();
     private readonly SdfSky m_resolvedSky = new();
+    // The occluders render.lighting's occluder rows author, each with the anchor it rides (null for none), and the two
+    // tables the resolutions hand out in turn, as the lights are.
+    private readonly SdfOccluders m_resolvedOccluders = new();
+    private readonly List<WorldAnchor?> m_occluderAnchors = [];
+    private readonly SdfOccluders[] m_outputOccluders = [new SdfOccluders(), new SdfOccluders()];
 
     private WorldDefinition? m_definition;
     private int m_generation;
@@ -148,6 +155,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         var lights = m_outputLights[m_outputIndex];
         var sky = m_outputSky[m_outputIndex];
+        var occluders = m_outputOccluders[m_outputIndex];
 
         m_outputIndex ^= 1;
         lights.CopyFrom(source: m_resolvedLights);
@@ -159,11 +167,49 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             output: lights,
             resolveLightAnchor: resolveLightAnchor
         );
+        ApplyOccluderAnchors(output: occluders, resolveLightAnchor: resolveLightAnchor);
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
         ApplySources(lights: lights, mirror: mirror, sky: sky);
-        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes);
+        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes) { Occluders = occluders };
+    }
+    // An occluder row's place among the lights, which lights nothing (its pinned light's weight is zero), and its sphere,
+    // which joins the occluders: the old row's radius and weight, darkening out to three of its radii.
+    private SdfLight OccluderRow(WorldRenderLight.Occluder occluder, SdfLight pinned, WorldStateMirror mirror, in WorldValueSite lightSite) {
+        var radius = Scalar(fallback: 1f, field: WorldValueFields.OccluderRadius, mirror: mirror, scalar: occluder.Radius, site: lightSite);
+        var weight = Scalar(fallback: 0f, field: WorldValueFields.OccluderWeight, mirror: mirror, scalar: occluder.Weight, site: lightSite);
+
+        if (m_resolvedOccluders.TryAdd(occluder: new SdfOccluder {
+            Center = Position(fallback: Vector3.Zero, mirror: mirror, position: occluder.Position),
+            Radius = radius,
+            Reach = (OccluderRowReachRadii * radius),
+            Shadow = weight,
+            Shape = SdfOccluderShape.Sphere,
+            Strength = weight,
+        })) {
+            m_occluderAnchors.Add(item: occluder.Anchor);
+        }
+
+        return pinned;
+    }
+    // The authored occluders, each anchored one riding its anchor's pose this frame, or dropped where the anchor resolves
+    // nothing, as an anchored light goes dark.
+    private void ApplyOccluderAnchors(SdfOccluders output, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
+        output.Clear();
+        for (var index = 0; (index < m_resolvedOccluders.Count); index++) {
+            var occluder = m_resolvedOccluders[index];
+
+            if (m_occluderAnchors[index] is { } anchor) {
+                if (resolveLightAnchor?.Invoke(anchor) is not { } pose) {
+                    continue;
+                }
+
+                occluder = occluder.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f);
+            }
+
+            _ = output.TryAdd(occluder: in occluder);
+        }
     }
 
     // Two lighting sections that light alike: the same section, or sections whose members and lights compare equal, as a
@@ -247,7 +293,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                 WorldRenderLight.Point point => point.Anchor,
                 WorldRenderLight.Spot spot => spot.Anchor,
                 WorldRenderLight.Tube tube => tube.Anchor,
-                WorldRenderLight.Occluder occluder => occluder.Anchor,
                 _ => null,
             };
 
@@ -600,6 +645,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         into.CopyFrom(source: ((lighting?.Lights is null)
             ? Pinned
             : Empty));
+        m_resolvedOccluders.Clear();
+        m_occluderAnchors.Clear();
         m_resolvedSky.CopyFrom(source: Unauthored);
 
         if (lighting?.Lights is { } lights) {
@@ -679,27 +726,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 site: lightSite
                             ),
                         },
-                        WorldRenderLight.Occluder occluder => pinned with {
-                            Direction = Position(
-                                fallback: pinned.Direction,
-                                mirror: mirror,
-                                position: occluder.Position
-                            ),
-                            Param = Scalar(
-                                fallback: pinned.Param,
-                                mirror: mirror,
-                                scalar: occluder.Radius,
-                                field: WorldValueFields.OccluderRadius,
-                                site: lightSite
-                            ),
-                            Weight = Scalar(
-                                fallback: pinned.Weight,
-                                mirror: mirror,
-                                scalar: occluder.Weight,
-                                field: WorldValueFields.OccluderWeight,
-                                site: lightSite
-                            ),
-                        },
+                        // An occluder row keeps its place among the lights, lighting nothing, and authors a sphere of the
+                        // occluders table.
+                        WorldRenderLight.Occluder occluder => OccluderRow(lightSite: in lightSite, mirror: mirror, occluder: occluder, pinned: pinned),
                         WorldRenderLight.Point point => Ranged(exposure: exposure, light: pinned with {
                             Shadows = ((point.Anchor is null) ? 1u : 0u),
                             Color = Chroma(
@@ -1217,4 +1246,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 /// <param name="Exposure">The camera exposure the frame's views map luminance to the display by.</param>
 /// <param name="Lanes">The world's render lanes (<c>render.lanes</c>, <see cref="SdfLanes"/> 4 to 7) at the presented
 /// tick, which the frame carries as <see cref="SdfFrame.WorldLanes"/>.</param>
-public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect, SdfExposure Exposure, Vector4 Lanes = default);
+public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect, SdfExposure Exposure, Vector4 Lanes = default) {
+    /// <summary>Gets the analytic occluders render.lighting's occluder rows author, posed for this frame; reused every
+    /// other call, as <see cref="Lights"/> is, and a consumer may append the creations' occluders to it before the frame
+    /// takes it.</summary>
+    public SdfOccluders Occluders { get; init; } = SdfOccluders.Empty;
+}

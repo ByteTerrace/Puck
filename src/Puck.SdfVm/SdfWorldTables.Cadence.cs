@@ -75,7 +75,7 @@ public sealed partial class SdfWorldTables {
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         SdfWorldPackage.ToonMode, SdfWorldPackage.DisplayPixels, SdfWorldPackage.InkEdges,
-        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
+        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.OccluderCount, SdfWorldPackage.OccluderMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
         SdfWorldPackage.ViewsRate, SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
@@ -98,7 +98,7 @@ public sealed partial class SdfWorldTables {
     // A memo stands only while every input the block reads is the one it was built from. The block reads the frame, the
     // view, the tables' pass values and the shadows' cameras. FitOf and InputsOf, the one door to the memo, hold each:
     //   - the frame object      : compared by reference on every read.
-    //   - the frame's contents  : the frame and the objects it borrows (its view list, its lights and shadow slots) are
+    //   - the frame's contents  : the frame and the objects it borrows (its view list, its lights, occluders and shadow slots) are
     //                             written by its producer's capture, so the epoch moves wherever one can change while
     //                             these tables hold a frame: the residency's frame start and capture (ForgetViewInputs),
     //                             Pack and UpdateTablesSignature.
@@ -118,6 +118,9 @@ public sealed partial class SdfWorldTables {
         public long LightMaskEpoch = -1;
         public float LightMaskExposure = float.NaN;
         public UInt128 LightMask;
+        public SdfFrame? OccluderMaskFrame;
+        public long OccluderMaskEpoch = -1;
+        public UInt128 OccluderMask;
         public bool Built;
         public SdfPassValues Values;
         public long Exposures;
@@ -173,6 +176,52 @@ public sealed partial class SdfWorldTables {
 
         return inputs.LightMask;
     }
+    /// <summary>Returns the mask of the analytic occluders a view shades (<see cref="SdfLightSelection.SelectOccluders(SdfOccluders, in Puck.Abstractions.Cameras.CameraSnapshot, float)"/>),
+    /// computed once a frame for each view and shared by every pass block and signature that reads it; the mask sits in
+    /// the lighting signature's members, and the records it keeps in the view's lighting inputs.</summary>
+    /// <param name="frame">The frame the tables hold.</param>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
+    /// <returns>The view's occluder mask; every occluder of a frame with no view.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public UInt128 OccluderMaskOf(SdfFrame frame, int view) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        var count = frame.Occluders.Count;
+
+        if (count == 0) {
+            return UInt128.Zero;
+        }
+        if (frame.Views.Count == 0) {
+            return ((count >= SdfOccluders.MaxOccluders) ? ~UInt128.Zero : ((UInt128.One << count) - UInt128.One));
+        }
+
+        var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
+        var inputs = ViewInputsOf(index: index);
+
+        if (!ReferenceEquals(objA: inputs.OccluderMaskFrame, objB: frame) || (inputs.OccluderMaskEpoch != m_viewInputsEpoch)) {
+            var camera = frame.Views[index].Camera;
+
+            inputs.OccluderMask = SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: frame.Occluders);
+            inputs.OccluderMaskFrame = frame;
+            inputs.OccluderMaskEpoch = m_viewInputsEpoch;
+        }
+
+        return inputs.OccluderMask;
+    }
+    // The records of the occluders a view's mask keeps, which its shading reads: a view stands while every occluder it
+    // shades stands, whatever the occluders it does not shade do.
+    private static ulong OccluderRecordsSignature(SdfOccluders occluders, UInt128 mask) {
+        var hash = Fnv1aHash.Create();
+        var records = occluders.Records;
+
+        foreach (var index in BitWords.Members(mask: mask)) {
+            if (index < records.Length) {
+                hash.Add(values: MemoryMarshal.AsBytes(span: records.Slice(start: index, length: 1)));
+            }
+        }
+
+        return hash.Value;
+    }
     /// <summary>Returns the world's cascade set as a view reads it (<see cref="SdfWorldShadows.CascadesOf"/>): every entry
     /// through the camera the world's shared layers were drawn from, or none for a view that skips shadows or while the
     /// pipelines the shadows draw with still build.</summary>
@@ -221,7 +270,9 @@ public sealed partial class SdfWorldTables {
         block.Clear();
         // The draw count stands in a signature only as none or some: each row added or removed is judged by every scope
         // (NoteStagedRow, NoteUnnamedRow), so a list that grows where a pass draws nothing leaves the pass standing.
-        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, lightMask: LightMaskOf(frame: frame, view: clamped), tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: clamped, width: 0u);
+        var occluderMask = OccluderMaskOf(frame: frame, view: clamped);
+
+        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, lightMask: LightMaskOf(frame: frame, view: clamped), occluderMask: occluderMask, tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: clamped, width: 0u);
         SdfFrameBlock.WriteMeshShadows(block: block, cascades: in cascades);
         inputs.Whole = Fnv1aHash.Compute(values: block);
 
@@ -239,7 +290,11 @@ public sealed partial class SdfWorldTables {
         AddMembers(block: scratch, hash: ref composite, members: CompositeValues);
         inputs.Composite = composite.Value;
         ClearMembers(block: scratch, members: CompositeValues);
-        inputs.Lighting = Fnv1aHash.Compute(values: scratch);
+        var lightingInputs = Fnv1aHash.Create();
+
+        lightingInputs.Add(value: Fnv1aHash.Compute(values: scratch));
+        lightingInputs.Add(value: OccluderRecordsSignature(mask: occluderMask, occluders: frame.Occluders));
+        inputs.Lighting = lightingInputs.Value;
         var shadow = Fnv1aHash.Create();
 
         AddMembers(block: scratch, hash: ref shadow, members: ShadowValues);

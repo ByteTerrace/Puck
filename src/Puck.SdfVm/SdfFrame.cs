@@ -412,6 +412,12 @@ public sealed record SdfFrame(
         }
         init => m_content = (m_content with { Lights = value });
     }
+    /// <summary>The analytic occluders (<see cref="SdfFrameContent.Occluders"/>); an empty table when the producer
+    /// supplies none.</summary>
+    public SdfOccluders Occluders {
+        get => (m_content.Occluders ?? SdfOccluders.Empty);
+        init => m_content = (m_content with { Occluders = value });
+    }
     /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>

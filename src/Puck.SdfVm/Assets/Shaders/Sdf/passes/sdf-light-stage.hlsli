@@ -186,6 +186,15 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // material relaxes it toward 1; wrap = 0 leaves it as it is.
             float ambientOcclusion = s.ambient;
             ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
+            // The analytic occluders that reach the tile (sdfOccludersAmbient) take their share of the ambient, indirect and
+            // reflected environment light, which the screen-space estimate cannot see past the screen or its radius; the
+            // lights' visibility keeps the screen-space estimate alone, and takes the occluders' soft shadows instead.
+#if defined(SDF_VIEWS_OMIT_LIGHTS)
+            float analyticOcclusion = 1.0;
+#else
+            float analyticOcclusion = sdfOccludersAmbient(lights.occluders, surfacePoint, normal, s.frameSlot);
+#endif
+            float ambientLight = (ambientOcclusion * analyticOcclusion);
 
             // The irradiance volume is the indirect light, gathered once about the surface: its enabled sky source
             // replaces the unoccluded harmonic ambient (disabling that source retains the authored ambient look), its
@@ -216,8 +225,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.cascaded = cascaded;
             shadeSurface.probed = sdfMeshAnswers(probes);
             shadeSurface.probes = probes;
+            shadeSurface.occluders = lights.occluders;
+            shadeSurface.frameSlot = s.frameSlot;
 
-            float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
+            float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientLight;
             float3 ambientTerm = radiance;
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
@@ -258,13 +269,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
             float3 indirect = sdfViewsIndirectSeen(probes, normal);
             float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
-                * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
+                * lerp(1.0, ambientOcclusion, passGroup.indirectContact) * analyticOcclusion);
             color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal) * diffuseShare;
             // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface, where no
             // indirect light is applied. It never adds a second approximation to the volume's light.
             if (passGroup.indirectApply.w <= 0.0) {
                 float fill = 1.0 - max(dot(normal, keyDirection), 0.0);
-                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion * diffuseShare;
+                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientLight * diffuseShare;
             }
 
             // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
@@ -283,13 +294,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 float3 environment = sdfViewsScreenReflection(p, surfacePoint, s.normal, s.t, sky, sdfViewsReflectionSeen(probes, reflectDirection, sky));
 
                 reflectionTerm = environment;
-                environmentTerm = ((environment * specularAlbedo) * ambientOcclusion);
+                environmentTerm = ((environment * specularAlbedo) * ambientLight);
                 color += environmentTerm;
             }
 #endif
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
-            // material's specular answers. The occluders then dim reflected light; self-emission stays.
+            // material's specular answers. An authored light phase's attenuation then dims reflected light; self-emission stays.
             color += rim;
             color += specular;
 

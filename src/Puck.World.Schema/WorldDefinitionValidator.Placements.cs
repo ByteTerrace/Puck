@@ -732,6 +732,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
         ValidatePrototypeLights(creation: creation, definition: definition, errors: errors, path: path);
+        ValidatePrototypeOcclusion(creation: creation, errors: errors, path: path);
 
         {
             var violations = Puck.World.Authoring.CreationCanonicalizer.Validate(document: creation.Document);

@@ -83,7 +83,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_owner.RecordHits(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, tables: tables);
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
             width: recording.RenderWidth, height: recording.RenderHeight, temporal: m_owner.SkyTemporalOf(instance: m_context.Instance), temporalEnabled: m_temporal, residency: residency,
-            lightMask: tables.LightMaskOf(frame: frame, view: index));
+            lightMask: tables.LightMaskOf(frame: frame, view: index), occluderMask: tables.OccluderMaskOf(frame: frame, view: index));
         var set = m_sets.PassSet(slot: recording.Slot);
 
         m_work.Write(passSet: set, recording: recording);

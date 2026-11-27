@@ -1763,7 +1763,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             var detail = ((frame.MeshDetail == SdfMeshDetailLevel.Auto) ? SdfMeshDetail.Of(cascade: in detailCamera, texels: m_texels) : SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)));
 
             block.Clear();
-            SdfFrameBlock.Write(block: block, frame: frame, height: (uint)m_texels, lightMask: tables.LightMaskOf(frame: frame, view: 0), tables: tables.PassValues, view: 0, width: (uint)m_texels);
+            SdfFrameBlock.Write(block: block, frame: frame, height: (uint)m_texels, lightMask: tables.LightMaskOf(frame: frame, view: 0), occluderMask: tables.OccluderMaskOf(frame: frame, view: 0), tables: tables.PassValues, view: 0, width: (uint)m_texels);
             SdfFrameBlock.WriteShadowCamera(block: block, camera: in blockCamera, texels: m_texels, aspect: aspect);
             SdfFrameBlock.WriteWorkCounterRow(block: block, row: GpuKernelCounters.DisabledRow);
             SdfFrameBlock.WriteWorkCounterDetailRow(block: block, row: GpuKernelCounters.DisabledRow);

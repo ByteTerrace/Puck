@@ -4,8 +4,8 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-// The lights and sky's three record tables (the lights, the sky block and its layer table) owe only changed
-// words. Active handoff controls reserve their own staged
+// The lights and sky's record tables (the lights, the analytic occluders, the sky block and its layer table) owe only
+// changed words. Active handoff controls reserve their own staged
 // region and upload whole records. The World set binds each generated record table, and a kernel references only
 // the tables its pass reads.
 public sealed partial class SdfWorldTables {
@@ -13,8 +13,11 @@ public sealed partial class SdfWorldTables {
     private const int SkyRegionIndex = 8;
     private const int SkyLayerRegionIndex = 9;
     private const int ShadowHandoffRegionIndex = 10;
+    private const int OccluderRegionIndex = 13;
 
     private readonly SdfLight[] m_lightRecords = new SdfLight[SdfLights.MaxLights];
+    private readonly SdfOccluder[] m_occluderRecords = new SdfOccluder[SdfOccluders.MaxOccluders];
+    private readonly GpuRegion m_occluderRegion;
     private readonly SdfSkyBlock[] m_skyRecord = new SdfSkyBlock[1];
     private readonly SdfSkyLayer[] m_skyLayerRecords = new SdfSkyLayer[SdfSky.MaxLayers];
     private readonly int[] m_skyAuthoredIndices = new int[SdfSky.MaxLayers];
@@ -53,6 +56,8 @@ public sealed partial class SdfWorldTables {
             lights: frame.Lights
         );
         _ = m_lightRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_lightRecords.AsSpan()), offset: 0);
+        frame.Occluders.Pack(records: m_occluderRecords);
+        _ = m_occluderRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_occluderRecords.AsSpan()), offset: 0);
         _ = m_skyRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyRecord.AsSpan()), offset: 0);
         _ = m_skyLayerRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyLayerRecords.AsSpan()), offset: 0);
         // The irradiance volume lights by the physical environment when its sky source is on.
@@ -61,6 +66,7 @@ public sealed partial class SdfWorldTables {
     // Writes the generated record buffers and the shared sky environment map into a ring slot's World set.
     private void WriteLightAndSkySet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_lightRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Lights, set: set);
+        WriteWorldBuffer(buffer: m_occluderRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Occluders, set: set);
         WriteWorldBuffer(buffer: m_skyRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Sky, set: set);
         WriteWorldBuffer(buffer: m_skyLayerRegion.Buffer(slot: slot), member: SdfKernelInterfaces.SkyLayers, set: set);
         WriteWorldBuffer(buffer: m_skyEnvironment.Coefficients, member: SdfKernelInterfaces.SkyCoefficients, set: set);

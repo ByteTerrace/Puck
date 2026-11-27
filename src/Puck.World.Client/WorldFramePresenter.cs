@@ -211,6 +211,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
     private readonly WorldValueDomainGuard m_domains;
     private readonly WorldEnvironmentResolve m_environment;
+    // The analytic occluders the world's creations cast, appended to the authored ones each frame.
+    private readonly WorldCreationOccluders m_creationOccluders = new();
 
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
@@ -2536,6 +2538,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             skyQuality: WorldSkyLayers.TierOf(tier: m_settings.SkyQuality)
         );
 
+        // The creations' occluders join the authored ones, posed as the frame draws their placements and bodies.
+        m_creationOccluders.AppendTo(
+            eye: ((m_frameViews.Count > 0) ? m_frameViews[0].Camera.Position : Vector3.Zero),
+            occluders: lighting.Occluders,
+            scope: AnchorScope()
+        );
+
         var staticVolumesRev = m_emitter.StaticVolumesRevision;
         var poolVolumesRev = m_animator.VolumesRevision;
         var rigidVolumesRev = m_animator.RigidVolumesRevision;
@@ -2585,6 +2594,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at
                 // its clock's presented phase (a world.row.set render lands on the next frame).
                 Lights = lighting.Lights,
+                Occluders = lighting.Occluders,
                 Exposure = WorldRenderSettings.Pinned(exposure: lighting.Exposure, pin: m_settings.ExposurePin),
                 Sky = lighting.Sky,
                 // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state

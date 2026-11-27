@@ -359,7 +359,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
         declarations.Tuning(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
         declarations.Tuning(name: "SDF_LIGHT_RANGE_THRESHOLD", value: SdfPhotometry.RangeThreshold);
-        declarations.Real(name: "SDF_LIGHT_OCCLUDER_REACH", value: SdfLightSelection.OccluderReach);
+        declarations.Count(name: "SDF_MAX_OCCLUDERS", value: SdfOccluders.MaxOccluders);
         declarations.Tuning(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
         declarations.Tuning(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
@@ -378,6 +378,7 @@ public static class SdfIsaHlsl {
         declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
         declarations.Members<SdfUpdateRateCode>(prefix: "SDF_RATE");
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
+        declarations.Members<SdfOccluderShape>(prefix: "SDF_OCCLUDER");
         declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
         declarations.Section(title: "The visibility record's identity fields and the record passes' workgroup edge (SdfVisibility).");
         declarations.Count(name: "SDF_VISIBILITY_KIND_SHIFT", value: SdfVisibility.KindShift);

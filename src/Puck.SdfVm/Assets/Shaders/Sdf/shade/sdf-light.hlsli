@@ -9,6 +9,7 @@
 #define SHADE_SDF_LIGHT_HLSLI
 #include "Shared/luma.hlsli"
 #include "../frame/sdf-lights.hlsli"
+#include "../frame/sdf-occluders.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
@@ -121,13 +122,11 @@ static const uint SdfLightScreen = 0x100u;
 struct SdfLightSource {
     uint kind;
     float3 color;
-    // A directional's illuminance over pi, a point's intensity over pi, a rim's luminance, an occluder's attenuation, a
-    // screen's face area over pi.
+    // A directional's illuminance over pi, a point's intensity over pi, a rim's luminance, a screen's face area over pi.
     float weight;
-    // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position; a line's
-    // midpoint.
+    // A directional's unit direction toward the light; a point's or a screen's world position; a line's midpoint.
     float3 position;
-    // A rim's exponent, a point's or a screen's range, or an occluder's radius.
+    // A rim's exponent, or a point's or a screen's range.
     float param;
     // A screen's face normal.
     float3 facing;
@@ -141,7 +140,9 @@ struct SdfLightSource {
 // visibility and coverage (the K row's lanes, sdfShadowVisibility) and which of them the surface pass queried, whether the
 // view's cascades drew it, and the irradiance volume's probes about it, which occlude a traced point or spot light, and a
 // shadowing directional wherever no cascade holds the point (probed is false while the volume is off, and every such
-// light goes unoccluded).
+// light goes unoccluded), and the analytic occluders that reach it (`occluders`, a mask of sdfOccluders) with the frame
+// slot its draw rides (`frameSlot`, SDF_TRANSFORM_SLOT_NONE for none), which shadow a ranged light, a screen or an
+// emitter face (sdfOccludersShadow) but never a body's own surface.
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -156,6 +157,8 @@ struct SdfShadeSurface {
     bool cascaded;
     bool probed;
     SdfMeshProbes probes;
+    uint4 occluders;
+    int frameSlot;
 };
 
 // The probes' answer for a light at a surface: the share of the probes about it that see the light (sdfMeshLightVisibility)
@@ -265,7 +268,7 @@ float3 sdfLightTransmission(SdfShadeSurface surface, SdfLightShadowing shadowing
 }
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
-// reflected light by (1 unless it occludes).
+// reflected light by (1 unless an authored light phase writes one).
 struct SdfLightResponse {
     float3 diffuse;
     float3 specular;
@@ -302,17 +305,21 @@ uint sdfScreenLightCount() {
 // are the view's (the pass block's lightMask, SdfLightSelection, and every screen) or subsets of them no wider than a
 // workgroup (views narrows them to each tile's lights, sdfViewsTileLights), so every lane of a wave takes the same steps,
 // and a light a mask leaves out costs nothing: the walk never visits it. A mask may leave out only a light that adds
-// nothing where the walk's lanes shade.
+// nothing where the walk's lanes shade. Beside them the analytic occluders that reach the same points (`occluders`, one
+// bit a record of sdfOccluders, frame/sdf-occluders.hlsli), which the light stage and the walk's shadows read by the
+// same rule: a mask may leave out only an occluder that adds nothing there.
 struct SdfLightMasks {
     uint4 lights;
     uint4 screens;
+    uint4 occluders;
 };
-// The view's masks: every light the view shades and every bound screen.
+// The view's masks: every light and occluder the view shades and every bound screen.
 SdfLightMasks sdfViewLightMasks() {
     SdfLightMasks masks;
 
     masks.lights = passGroup.lightMask;
     masks.screens = uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+    masks.occluders = passGroup.occluderMask;
 
     return masks;
 }
@@ -320,7 +327,8 @@ SdfLightMasks sdfViewLightMasks() {
 // lane's: the box about the active lanes' points, and every light of the view's mask that sdfLightReachesBox keeps over
 // it (a directional or a rim reaches everything and is kept), its lights shared out among the active lanes and their
 // answers joined across the wave, with no group memory and no barrier. Every active lane must call it, each with the
-// point its walk shades, and walk the masks it answers; the screens stay the view's. A light it leaves out adds nothing
+// point its walk shades, and walk the masks it answers; the screens stay the view's, and the occluders narrow by their
+// spheres of reach as the lights do (sdfOccluderReachesBox). A light it leaves out adds nothing
 // at any of those points, on the rule a views tile leaves one out by (sdfViewsTileLights). Views' tiles bound their
 // walks as tightly already (a wave's box narrowed a hall's visits by under one in a hundred), so glass alone reads it.
 SdfLightMasks sdfWaveLightMasks(float3 position) {
@@ -353,6 +361,29 @@ SdfLightMasks sdfWaveLightMasks(float3 position) {
         kept |= WaveActiveBitOr(bit);
     }
     masks.lights = kept;
+
+    // The occluders likewise, by their spheres of reach (sdfOccluderReachesBox); a view with none reads no record.
+    if (any(masks.occluders != 0u)) {
+        uint occluderCount = worldOccluderCount();
+        uint4 reaching = uint4(0u, 0u, 0u, 0u);
+
+        [loop]
+        for (uint first = 0u; (first < occluderCount); first += active) {
+            uint index = (first + rank);
+            uint4 bit = uint4(0u, 0u, 0u, 0u);
+
+            if (index < occluderCount) {
+                uint word = (index / 32u);
+                uint flag = (1u << (index % 32u));
+
+                if (((sdfComponent(masks.occluders, word) & flag) != 0u) && sdfOccluderReachesBox(sdfOccluders[index], low, high)) {
+                    bit = uint4(((word == 0u) ? flag : 0u), ((word == 1u) ? flag : 0u), ((word == 2u) ? flag : 0u), ((word == 3u) ? flag : 0u));
+                }
+            }
+            reaching |= WaveActiveBitOr(bit);
+        }
+        masks.occluders = reaching;
+    }
 
     return masks;
 }
@@ -471,10 +502,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 //   directional; the windowed inverse square and the spot's cone for a point, sdfPointReach) and its visibility
 //   (sdfLightInputs);
 // - a rim its view-dependent silhouette brighten;
-// - an occluder a Gaussian dimming of reflected light, facing the surface;
 // - a screen its glow toward what sits in front of its face: a Lambertian face of luminance L and area A casts
 //   E = L * A * cos / (d^2 + A / pi) on a surface facing it, exact on the axis of a disc of that area, eased to zero at
-//   its range as a point light is (sdfLightWindow).
+//   its range as a point light is (sdfLightWindow), under its visibility.
 // A specular lobe's scale is the light's illuminance, pi times its weight, since sdfMaterialSpecular answers the BRDF
 // times the cosine. A wrap of 0 reduces each wrapped term to max(n.l, 0).
 // The one evaluation of a light's direction, reach, probe share and visibility, which the default response and an
@@ -484,8 +514,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // probes' answer, so every receiver of one light asks the same question. A point or spot light takes the probes' answer:
 // a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes record every shadowing directional
 // too) takes the share of the probes about the surface that see it (sdfMeshLightVisibility), which resolves only the
-// probes' spacing, times the surface's ambient occlusion; an untraced one takes the ambient occlusion alone. One for every
-// other kind. The authored stamp requests every term its program can read: a point light's visibility whether or not it
+// probes' spacing, times the surface's ambient occlusion; an untraced one takes the ambient occlusion alone. A point,
+// spot or line light, a screen and an emitter face then take the analytic occluders' soft shadow toward them
+// (sdfOccludersShadow). One for every other kind. The authored stamp requests every term its program can read: a point light's visibility whether or not it
 // lights, and the probe share of every traced light only for a program that reads `light.probeShare` (`probeShare`,
 // SdfShadeReads.ProbeShare), since a directional's visibility otherwise reads the probes only where no cascade holds the
 // point. Ordinary shading requests only the terms its light kind uses, preserving the no-program path's work.
@@ -599,6 +630,21 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         inputs.visibility = sdfLightVisibility(surface, shadowing, light.index, (traced && lit), known);
         inputs.transmitted = sdfLightTransmission(surface, shadowing);
     }
+    // The analytic occluders' soft shadow toward a light with a place (sdfOccludersShadow): a point or spot light's
+    // position, which has no size; a line's point nearest the surface, taken as a disc as wide as its half segment; a
+    // screen's or an emitter face's centre, a disc of the face's area. Never a directional's, whose cascades shadow it.
+    if (positional && lit && any(surface.occluders != 0u)) {
+        float3 target = light.position;
+        float radius = 0.0;
+
+        if (light.kind == SDF_LIGHT_LINE) {
+            target = (surface.position + sdfLineNearestOffset(light.record, light.position, surface.position));
+            radius = max(length(light.record.SpotAxis), light.record.SpotOffset);
+        } else if (light.kind == SdfLightScreen) {
+            radius = sqrt(max(light.weight, 0.0));
+        }
+        inputs.visibility *= sdfOccludersShadow(surface.occluders, surface.position, target, radius, surface.frameSlot);
+    }
     if (light.kind != SDF_LIGHT_LINE) {
         inputs.specularDirection = inputs.direction;
         inputs.specularScale = (SDF_PI * inputs.reach);
@@ -642,17 +688,8 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         if ((replaced & SdfLightReplacesRim) == 0u) {
             response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));
         }
-    } else if (light.kind == SDF_LIGHT_OCCLUDER) {
-        if ((light.weight > 0.0) && ((replaced & SdfLightReplacesAttenuation) == 0u)) {
-            float3 delta = (light.position - surface.position);
-            float distanceSquared = dot(delta, delta);
-            float facing = ((distanceSquared > 1.0e-12) ? saturate(dot(normal, (delta * rsqrt(distanceSquared)))) : 1.0);
-            float radius = max(light.param, 1.0e-6);
-
-            response.attenuation = (1.0 - saturate(((light.weight * exp((-distanceSquared / (radius * radius)))) * facing)));
-        }
     } else if ((light.kind == SdfLightScreen) && ((replaced & SdfLightReplacesDiffuse) == 0u)) {
-        response.diffuse = light.color * (light.weight * max(dot(normal, inputs.direction), 0.0) * inputs.reach);
+        response.diffuse = light.color * (light.weight * max(dot(normal, inputs.direction), 0.0) * inputs.reach * inputs.visibility);
     }
 
     return response;
