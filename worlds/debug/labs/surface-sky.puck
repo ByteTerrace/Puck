@@ -10,9 +10,19 @@ import "../../standard/skies"
 let surfaceSunHour = 8.5
 let surfaceNoonElevation = 50
 let surfaceHourAngle = ((surfaceSunHour - 12) * sunRadiansPerHour)
-let surfaceHeading = (atan2(sine(surfaceHourAngle), (cosine(surfaceHourAngle) * cosine(surfaceNoonElevation * sunRadiansPerDegree))) / sunRadiansPerDegree)
+let surfaceHeading = (atan2(
+  sine(surfaceHourAngle),
+  (cosine(surfaceHourAngle) * cosine(surfaceNoonElevation * sunRadiansPerDegree))
+) /
+  sunRadiansPerDegree)
 
-dayCycle(daySeconds: 86400, start: surfaceSunHour, noonElevation: surfaceNoonElevation, heading: surfaceHeading, cloudiness: 0.1)
+dayCycle(
+  daySeconds: 86400,
+  start: surfaceSunHour,
+  noonElevation: surfaceNoonElevation,
+  heading: surfaceHeading,
+  cloudiness: 0.1
+)
 
 render {
   atmosphere {

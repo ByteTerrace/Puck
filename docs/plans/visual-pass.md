@@ -27,7 +27,7 @@ builds the missing feature properly.
 
 ## What comes first
 
-The display stations stay as they are; they are iterated in their own root worlds (`shape-station-root.puck`,
+The display stations stay as they are; they are iterated in their own root worlds (`labs/shapes.puck`,
 `game-station-root.puck`).
 
 1. **The tree.** It is already the staircase: its branches are the paths to most of the gallery. The main problem

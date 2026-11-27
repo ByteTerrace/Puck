@@ -15,6 +15,23 @@ import "../../standard/visitors"
 let labFrameColor = "#245F5C"
 let labFramePost = 0.1
 
+// `debug.go <place> [body]`: poses a body at one of the world's spawn points and hands the view back to the play layout's
+// chase camera, so one line reaches any place from anywhere. The debug world (../places.puck) and every lab author it
+// from here, each with its own `help` naming its places and the place a bare `debug.go` goes to (`home`).
+function goCommand(help, home = "hero") = {
+  name: "debug.go"
+  help: help
+  parameters [
+    { name: "place", kind: Spawn, default: home }
+    { name: "body", kind: Body, default: "0" }
+  ]
+  lines [
+    "body.pose spawn:{place} {body}"
+    "view.override camera auto"
+    "view.override layout play"
+  ]
+}
+
 // The way back: a reference to the debug world (this package's entry, beside this directory) as the destination
 // `gallery`, and the `arrival` frame at `at`, turned `yaw`, whose glass leads to the wing's door `lab-<id>`. The window
 // a wing's door shows observes the lab whole as a session, and a body that walks in arrives as a visitor with the

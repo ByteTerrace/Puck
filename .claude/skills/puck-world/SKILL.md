@@ -778,7 +778,7 @@ step count. In a paced run the pump can drain a released command between steps o
 Use the unpaced recipe for individual ticks; its machine-queue backpressure still contributes to simulate time.
 Rendered phases are zero.
 
-**Test a feature in its lab.** Boot the lab that holds the feature (`worlds/debug/labs/<lab>.puck`, also reached through the gallery's lab wing), not the whole debug world (AGENTS.md, the labs ruling). A lab bakes in minutes and settles. Judge a look only once the bake's `[sdf.mesh-bake] done` line has printed, `world.residency` reads `all-landed`, `world.shaders.tier` shows no program `compiling`, and the lighting counters hold steady across two reads. Mark any earlier capture partial. Boot `worlds/debug` for composition, seams and the benchmark route.
+**Test a feature in its lab.** Boot the lab that holds the feature (`worlds/debug/labs/<lab>.puck`, also reached through the gallery's lab wing; [the lab book](../../../worlds/debug/labs/README.md) says what each tests and how to boot it), not the whole debug world (AGENTS.md, the labs ruling). A lab bakes in minutes and settles. Judge a look only once the bake's `[sdf.mesh-bake] done` line has printed, `world.residency` reads `all-landed`, `world.shaders.tier` shows no program `compiling`, and the lighting counters hold steady across two reads. Mark any earlier capture partial. Boot `worlds/debug` for composition, seams and the benchmark route.
 
 A World you drive call by call is a `puck_world_start` World
 ([above](#the-live-world-is-shared)). A whole script piped through stdin, with

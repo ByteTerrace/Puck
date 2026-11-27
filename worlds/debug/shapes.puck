@@ -176,7 +176,7 @@ let galleryDisplayRows = [
 // `floor` the height of its floor in that frame, `site` where the frame stands in the world (a static creation's paints and
 // a terminal's reach are in world coordinates), `parent` the placement that frame is (null for none), and `homes` the groups
 // whose exhibits it is home to (the exhibits whose paints, or whose reach, name the place the exhibit stands at). A world
-// that stands one station of its own gives the station templates its own row (shape-station-root.puck).
+// that stands one station of its own gives the station templates its own row (labs/shapes.puck).
 let galleryDisplays = map(
   galleryDisplayRows,
   display => (display with {

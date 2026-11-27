@@ -18,6 +18,7 @@ documentId: "lab-climbing"
 import "../still-noon"
 import "../set-controls"
 import "../noclip"
+import "../ship-rows"
 import "../gallery/layout"
 import "lab-kit"
 
@@ -57,6 +58,12 @@ spawnPoints [
   { id: "climb-practice", position [climbBayX[0], 0, (climbFaceZ + 3)], yawDegrees: 0 }
   { id: "climb-net", position [climbBayX[1], 0, (climbFaceZ + 3)], yawDegrees: 0 }
   { id: "climb-wall", position [climbBayX[2], 0, (climbFaceZ + 3)], yawDegrees: 0 }
+]
+
+commands [
+  goCommand(
+    help: "Poses a body at one of the climbing lab's places (hero, climb-practice, climb-net, climb-wall, or any spawn point) and returns the view to the play layout's chase camera."
+  )
 ]
 
 labFloor(halfX: 16, halfZ: 16)

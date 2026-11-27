@@ -20,6 +20,7 @@ documentId: "lab-light"
 import "../still-noon"
 import "../set-controls"
 import "../noclip"
+import "../ship-rows"
 import "../gallery/look"
 import "../../standard/bounds"
 import "../../standard/architecture"
@@ -95,6 +96,12 @@ spawnPoints: concat(
   map(lightRooms, room => { id: $"light-{room.id}", position [lightDoorX(room), 0, (room.z1 + 3)], yawDegrees: 0 })
 )
 
+commands [
+  goCommand(
+    help: "Poses a body at one of the light lab's places (hero, light-occluders, light-night, light-stained, light-barrier, light-haze, or any spawn point) and returns the view to the play layout's chase camera."
+  )
+]
+
 labFloor(halfX: 40, halfZ: 40)
 labWayBack(id: "light", at: [0, 0, 10], yaw: 0)
 citizenLooks(coats: ["#7A4E8C"], hats: ["#2F2A26"])
@@ -111,7 +118,7 @@ template lightShell(room) {
       y1: lightHeight,
       z0: room.z1,
       z1: (room.z1 + lightWall),
-      openings [{ a0: room.door[0], a1: room.door[1], y0: 0, y1: room.doorTop }],
+      openings: [{ a0: room.door[0], a1: room.door[1], y0: 0, y1: room.doorTop }],
       slot: 0
     )
   }
@@ -123,11 +130,31 @@ template lightShell(room) {
     y1: lightHeight,
     z0: (room.z0 - lightWall),
     z1: room.z0,
-    openings [],
+    openings: [],
     slot: 0
   )
-  wallAlongZ(label: "west", x0: (room.x0 - lightWall), x1: room.x0, y0: 0, y1: lightHeight, z0: room.z0, z1: room.z1, openings [], slot: 0)
-  wallAlongZ(label: "east", x0: room.x1, x1: (room.x1 + lightWall), y0: 0, y1: lightHeight, z0: room.z0, z1: room.z1, openings: room.east, slot: 0)
+  wallAlongZ(
+    label: "west",
+    x0: (room.x0 - lightWall),
+    x1: room.x0,
+    y0: 0,
+    y1: lightHeight,
+    z0: room.z0,
+    z1: room.z1,
+    openings: [],
+    slot: 0
+  )
+  wallAlongZ(
+    label: "east",
+    x0: room.x1,
+    x1: (room.x1 + lightWall),
+    y0: 0,
+    y1: lightHeight,
+    z0: room.z0,
+    z1: room.z1,
+    openings: room.east,
+    slot: 0
+  )
   boundsBox(
     label: "roof",
     x0: (room.x0 - lightWall),
@@ -142,9 +169,9 @@ template lightShell(room) {
 
 prototypes {
   for room in lightRooms {
-    prototype $"light-{room.id}" {
+    prototype $"light-room-{room.id}" {
       document {
-        name: $"light-{room.id}"
+        name: $"light-room-{room.id}"
         schema: "puck.creation.v2"
         palette [
           { color: "#D9D4CA", roughness: 0.85, specular: 0.04 }
@@ -186,7 +213,12 @@ prototypes {
       }
     }
     lights [
-      point(name: "bulb", position: [0, (0 - (lightBulbDrop + lightBulbRadius + 0.02)), 0], temperature: 2700K, power: lightBulbPower)
+      point(
+        name: "bulb",
+        position: [0, (0 - (lightBulbDrop + lightBulbRadius + 0.02)), 0],
+        temperature: 2700K,
+        power: lightBulbPower
+      )
     ]
   }
 
@@ -308,7 +340,14 @@ prototypes {
     document {
       name: "light-barrier"
       schema: "puck.creation.v2"
-      palette: filmArchPalette(lookBarrier.film, [0, lightArchSpring, 0], lookBarrier.tints, pane: lookBarrier.pane, glow: lookBarrier.glow, step: lookBarrier.step)
+      palette: filmArchPalette(
+        lookBarrier.film,
+        [0, lightArchSpring, 0],
+        lookBarrier.tints,
+        pane: lookBarrier.pane,
+        glow: lookBarrier.glow,
+        step: lookBarrier.step
+      )
       filmArch(base: 0, radius: lightArchRadius, spring: lightArchSpring, films: length(lookBarrier.tints))
     }
   }
@@ -316,8 +355,8 @@ prototypes {
 
 placements {
   for room in lightRooms {
-    placement $"light-{room.id}" {
-      prototype: $"light-{room.id}"
+    placement $"light-room-{room.id}" {
+      prototype: $"light-room-{room.id}"
       position [0, 0, 0]
       solid
     }
@@ -406,7 +445,7 @@ screens [
     halfHeight: lightScreen.halfHeight
     halfDepth: 0.005
     round: 0
-    source: producer(id: "testPattern")
+    source: producer(id: "testPattern", settings: { width: 480, height: 280 })
     luminance: 150nit
     route {
       engageable: false

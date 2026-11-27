@@ -246,11 +246,11 @@ let labWingPlan = [
   }
   {
     id: "tree", bay: 9, open: false, document: "labs/tree"
-    title: "TREE LAB", note: "The gallery's tree on its own, and a walker to climb its treads and branches."
+    title: "TREE LAB", note: "The gallery's tree on its own, its treads and branches to walk."
   }
   {
-    id: "board-games", bay: 10, open: false, document: "labs/board-games"
-    title: "BOARD GAME LAB", note: "Physical chess, the game station, Go and Reversi on one floor."
+    id: "board-games", bay: 10, open: true, document: "labs/board-games"
+    title: "BOARD GAME LAB", note: "The physical chess table beside a game station playing chess, Klondike and FreeCell, on one floor."
   }
 ]
 // Whether level 0's north wall keeps its bench or planter at plan x `x`: none stands behind a lab's door.

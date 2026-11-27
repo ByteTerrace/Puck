@@ -56,7 +56,14 @@ spawnPoints: concat(
   stationSpawns(stations)
 )
 
-commands: galleryCommands
+commands: concat(
+  galleryCommands,
+  [
+    goCommand(
+      help: "Poses a body at one of the shape lab's places (hero and gallery at the console, an exhibit's name before it, or any spawn point) and returns the view to the play layout's chase camera."
+    )
+  ]
+)
 
 bodies {
   capacity: (seatPopulation + visitorPopulation)

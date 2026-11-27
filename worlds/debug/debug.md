@@ -271,6 +271,8 @@ case, `stage` when omitted:
 | `portal-garden`, `portal-night` | Before the garden and night paintings | -Z; walk ahead to cross |
 | `portal-link` | Before the west painting of the linked pair, on the east fin | -X; walk ahead to come out of the east one |
 | `portal-fall` | North of the floor painting | -Z; walk ahead to drop in |
+| `lab-wing` | At the west end of the lab wing in the gallery's north aisle ([labs/README.md](labs/README.md)) | East, along the doors |
+| `lab-climbing`, `lab-light`, `lab-surface`, `lab-shapes`, `lab-tree`, `lab-board-games` | Before each lab's door in the north aisle | +Z; walk ahead to cross into the lab |
 | `gallery` | On the forecourt, outside the gallery's entrance | +Z, through the door |
 | `lift`, `stairs` | In the lift car (call it with `gallery.lift 0`) and on the south-west stair's first half landing | +Z out of the car; -X across the landing to the second flight |
 | `camera-course`, `camera-tunnel`, `camera-colonnade` | (-28, 0, 18.8), (-28, 0, 30.2) and (-27.5, 0, 33.8), before the course's L-corridor, tunnel and colonnade | +X, into the structure |

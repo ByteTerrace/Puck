@@ -23,9 +23,10 @@
 // either here would stand the gallery beside it until they take a table position and a body base the way
 // `physicalChessTable` does.
 //
-// The portal hook is the id `board-games`. The gallery's lab wing connects it with one painting row named `board-games`
-// whose destination is the reference `board-games` (this document), and a crossing arrives at the spawn point
-// `board-games`, between the chess table and the station, facing the station.
+// The portal hook is the id `board-games`: the gallery's lab wing (../lab-wing.puck) stands its door `lab-board-games`
+// from the row of that id in ../gallery/layout.puck's `labWingPlan`, and a crossing comes out of this lab's `arrival`
+// frame (lab-kit.puck's `labWayBack`), behind the spawn point `board-games` between the chess table and the station,
+// walking toward the station; walking back into the frame returns to the wing.
 //
 // `board-games-stress.puck` beside this file is the same chess table twelve times, each playing itself.
 
@@ -38,6 +39,7 @@ import "../../standard/skies"
 import "../../standard/inputs"
 import "../chess-table"
 import "../game-stations"
+import "lab-kit"
 
 metadata {
   title: "Board games lab"
@@ -58,6 +60,9 @@ spawnPoints [
   { id: "board-games", position [-3, 0, -5], yawDegrees: 180 }
   { id: "chess", position [chessTable[0], 0, (chessTable[2] - 1.6)], yawDegrees: 180 }
 ]
+
+// The way back to the lab wing, 2.5 m behind the hook's spawn point, its front toward the station.
+labWayBack(id: "board-games", at: [-3, 0, -7.5], yaw: 180)
 
 state {
   // The chess game's vocabularies (../chess-table.puck's header).

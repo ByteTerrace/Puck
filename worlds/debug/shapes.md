@@ -19,7 +19,7 @@ the building, a module under one root placement: its shell, floors, stairs,
 lift, lights, level boards, the displays (it expands `displayPlacements()`,
 `displayState()` and `shapeStation()` for them), tour and keys.
 [gallery.md](gallery.md) draws its plan and says what stands where.
-[`shape-station-root.puck`](shape-station-root.puck) boots one station alone
+The shape lab, [`labs/shapes.puck`](labs/shapes.puck), boots one station alone
 ([a station on its own](#a-station-on-its-own)).
 
 Each exhibit stands on a display station's turntable, one of a group the
@@ -236,7 +236,7 @@ full size.
 
 ## A station on its own
 
-[`shape-station-root.puck`](shape-station-root.puck) boots one display station
+The shape lab, [`labs/shapes.puck`](labs/shapes.puck), boots one display station
 on a bare floor under a still midday sky ([`still-noon.puck`](still-noon.puck)),
 for iterating on the station, its console or an exhibit without the building. It
 is the same station the gallery stands twelve of, expanded by the same
@@ -244,13 +244,13 @@ templates from one display row:
 
 - `shapes.puck`'s `galleryPrototypes`, `galleryState`, `displayState` and
   `displayPlacements` and `shape-station.puck`'s `shapeStation` each take a
-  `displays` list that defaults to the gallery's `galleryDisplays`. The root
-  passes `[station]`, a row with the same members (`id`, `title`, `default`,
+  `displays` list that defaults to the gallery's `galleryDisplays`. The
+  lab passes `[station]`, a row with the same members (`id`, `title`, `default`,
   `x`, `z`, `yaw`, `level`) and the frame it stands in: `floor` (its floor's
   height), `site` (where that frame stands in the world, which a terminal's reach
   and a static creation's paints need) and `parent` (the placement that frame is,
   or null for the world's own). `homes` names the groups whose exhibits the display
-  is home to: the root's is every group, so the paint and IK exhibits, which stand
+  is home to: the lab's is every group, so the paint and IK exhibits, which stand
   a paint or a reach at the place they are shown, stand it at its one turntable.
 - The console lists the whole catalog, so swapping shapes is one tap: the groups
   (`galleryDisplayRows`) are the catalog, and a display is only where one stands.
@@ -262,13 +262,13 @@ templates from one display row:
   `gallery.station`), the left mouse button taps the glass, and the backtick
   turns the screen into its hidden console as in the gallery.
 
-Boot it with the `puck` server's `puck_world_start` (`document: "worlds/debug/shape-station-root.puck"`, windowed for
+Boot it with the `puck` server's `puck_world_start` (`document: "worlds/debug/labs/shapes.puck"`, windowed for
 the console), or
-`dotnet run --project src/Puck.World -c Release -- --world worlds/debug/shape-station-root.puck --devices none`.
+`dotnet run --project src/Puck.World -c Release -- --world worlds/debug/labs/shapes.puck --devices none`.
 A saved `.puck` edit reloads live (`world.reload`, or the World's source watch):
 an exhibit's shapes and the console's rows and rules take effect without a
 restart, and the exhibit's mesh bakes again where it changed. An edit under
-`../standard/` reloads the same way. `puck compile worlds/debug/shape-station-root.puck --validate`
+`../standard/` reloads the same way. `puck compile worlds/debug/labs/shapes.puck --validate`
 checks it without booting. The station's own pieces live in `shapes.puck` (the
 console's geometry, paints and state, from `consoleRows` on), `shape-station.puck`
 (the rules, terminal and station view) and the standard's

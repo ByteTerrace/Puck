@@ -1,6 +1,6 @@
 // The shape station's rules and its hands: what a seat does at a display's console, as one template a world expands
 // for the displays it stands (shapes.puck holds the stations' look, state and placements). The gallery expands it for its
-// twelve (gallery/gallery.puck) and shape-station-root.puck for one on a bare floor. A library: it hands its importers a
+// twelve (gallery/gallery.puck) and labs/shapes.puck for one on a bare floor. A library: it hands its importers a
 // template and emits no document.
 //
 // Every display is a terminal (../standard/contexts/terminal.puck): a player standing before its console presses the

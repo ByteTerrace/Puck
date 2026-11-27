@@ -67,9 +67,12 @@ template labDoor(label, title, note) {
   ]
 }
 
-references: map(labOpen, lab => { document: lab.document, name: $"lab-{lab.id}" })
+references: map(labOpen, lab => { document: $"{lab.document}", name: $"lab-{lab.id}" })
 
-destinations: map(labOpen, lab => { durability: persisted, name: $"lab-{lab.id}", reference: $"lab-{lab.id}", scope: global })
+destinations: map(
+  labOpen,
+  lab => { durability: persisted, name: $"lab-{lab.id}", reference: $"lab-{lab.id}", scope: global }
+)
 
 prototypes {
   for lab in labWingPlan {
@@ -105,10 +108,17 @@ placements {
 
 // `lab-wing` stands at the aisle's west end looking east down the doors; `lab-<id>` stands before each door, facing it.
 spawnPoints: concat(
-  [{ id: "lab-wing", parent: "gallery", position [bayX(1), galleryFloor[0], tileZ((arcadeRowNorth + 2))], yawDegrees: 250 }],
+  [
+    {
+      id: "lab-wing"
+      parent: gallery
+      position [bayX(1), galleryFloor[0], tileZ((arcadeRowNorth + 2))]
+      yawDegrees: 250
+    }
+  ],
   map(labWingPlan, lab => {
     id: $"lab-{lab.id}"
-    parent: "gallery"
+    parent: gallery
     position: (labDoorAt(lab) + [0, 0, -3.2])
     yawDegrees: 180
   })

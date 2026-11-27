@@ -21,6 +21,7 @@
 
 import "shapes"
 import "../standard/place"
+import "labs/lab-kit"
 
 // One storey's room box: x and z spans and a level index, from 0.5 m under the level's floor to the slab above.
 function storeyPlace(name, level, x0, x1, z0, z1) = {
@@ -46,6 +47,15 @@ let galleryPlaces = concat(
     // (the map of the lobby's old furniture: the desktop, the press, the painting into Wonderland), and the painting
     // wing east of the lobby (paintings.puck).
     storeyPlace("nave", 0, naveWest, galleryEast, naveSouth, naveNorth)
+    // The lab wing's stretch of the north aisle (lab-wing.puck), from its first door's bay to its last's.
+    storeyPlace(
+      "lab-wing",
+      0,
+      pierX(minimum(map(labWingPlan, lab => lab.bay))),
+      pierX((maximum(map(labWingPlan, lab => lab.bay)) + 1)),
+      naveNorth,
+      galleryNorth
+    )
     storeyPlace("north-aisle", 0, galleryWestIn, galleryEast, naveNorth, galleryNorth)
     storeyPlace("west-hall", 0, galleryWestIn, naveWest, galleryWall, naveNorth)
     storeyPlace("painting-room", 0, courtWest, galleryEast, galleryWall, naveSouth)
@@ -144,17 +154,8 @@ spawnPoints [
 ]
 
 commands [
-  {
-    name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-city, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
-    parameters [
-      { name: "place", kind: Spawn, default: "stage" }
-      { name: "body", kind: Body, default: "0" }
-    ]
-    lines [
-      "body.pose spawn:{place} {body}"
-      "view.override camera auto"
-      "view.override layout play"
-    ]
-  }
+  goCommand(
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-city, portal-link, portal-fall, lab-wing, lab-<lab> before each lab's door, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera.",
+    home: "stage"
+  )
 ]

@@ -59,13 +59,26 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle between the north-west and north-east stairs, holding the lab wing ([the labs](labs/README.md)): a door onto each lab, three either side of the tree's bay |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | none (every display is on level 0) |
 | 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
+
+## The lab wing
+
+Level 0's north aisle holds a freestanding door for each lab, the small
+worlds under [labs/](labs/README.md) that each test one behaviour on its own
+([lab-wing.puck](lab-wing.puck)). The doors stand on the aisle's second tile
+row in from the north wall, their glass toward the nave and their plaques at
+their right, in arcade bays 2 to 4 and 8 to 10, so the tree's bay stays open
+across the aisle and the corner stairs stay clear. Level 0's north wall keeps
+no bench or planter behind a door. Walk into a door's glass to stand in its
+lab, and walk back into the lab's `arrival` frame to come out of the door.
+[layout.puck](gallery/layout.puck)'s `labWingPlan` holds one row a lab, and
+[the lab book](labs/README.md) lists them.
 
 ## The toybox
 
