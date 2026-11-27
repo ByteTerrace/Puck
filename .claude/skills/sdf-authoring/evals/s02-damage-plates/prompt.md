@@ -37,7 +37,7 @@ looks [
 prototypes {
   prototype "subject" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "subject"
       palette [
         { color: "#141312", specular: 0.05, roughness: 0.7 }

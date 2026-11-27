@@ -12,7 +12,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.World;
 
 /// <summary>
-/// One creation asset row — a whole <c>puck.creation.v1</c> document embedded inline, in canonical form, in the world
+/// One creation asset row — a whole <c>puck.creation.v2</c> document embedded inline, in canonical form, in the world
 /// file with its identity hash pinned beside it. The document and hash must come from the same
 /// <see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}"/>: the compose boundary canonicalizes on upsert
 /// and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a
@@ -58,9 +58,9 @@ public sealed record WorldPrototype(
         }
     } = Document;
     /// <summary>Gets the creation's rig (<see cref="CreationRig"/>), compiled once from <see cref="Document"/> normalized
-    /// (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and slide axes, explicit gates, clamped amplitudes) and
-    /// converted from the author frame to the engine frame (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>):
-    /// every writer of each shape's pose, what the pose reads, and its reach. Every consumer of motion reads this. Cached
+    /// (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and slide axes, explicit gates, clamped amplitudes), in
+    /// the engine's frame, which is the frame a creation is authored in: every writer of each shape's pose, what the pose
+    /// reads, and its reach. Every consumer of motion reads this. Cached
     /// on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit, and shared by every row
     /// whose document has the same canonical bytes (<see cref="CanonicalHash"/>): the rows of one creation that each world
     /// a process runs carries, the authority's and its presentation's, hold one rig and one engine document.</summary>
@@ -70,7 +70,7 @@ public sealed record WorldPrototype(
     // A rig is a function of its document's canonical form, which the canonical hash names.
     private static readonly Puck.Abstractions.CodeDerivedSharedValues<string, CreationRig> SharedRigs = new();
 
-    private static CreationRig Compile(CreationDocument document) => CreationRig.Compile(document: Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: document)));
+    private static CreationRig Compile(CreationDocument document) => CreationRig.Compile(document: CreationCanonicalizer.Normalize(document: document));
     // The rig every row of this document's canonical bytes shares; a document the canonicalizer refuses has no such name,
     // and compiles a rig of its own, which the validator then refuses by name. So does a document that names a shade
     // program its world's table has not handed it yet (a row a mutation submits, read before the compose boundary
@@ -85,7 +85,7 @@ public sealed record WorldPrototype(
         return SharedRigs.GetValue(derive: static document => Compile(document: document), key: key, state: Document);
     }
     /// <summary>Gets the creation as every render, collision, and anchor consumer reads it, never
-    /// <see cref="Document"/>: normalized, in the engine frame, with its shapes' swings and slides removed because
+    /// <see cref="Document"/>: normalized, with its shapes' swings and slides removed because
     /// <see cref="Rig"/> plays them (<see cref="CreationRig.Document"/>), so a loaded row and an upserted one animate
     /// alike and no reader can move a shape around the rig.</summary>
     [JsonIgnore]
@@ -158,24 +158,19 @@ public sealed record WorldPrototype(
         }
     })[0];
 }
-/// <summary>A prototype's mesh: an indexed triangle list in its creation's author frame, the frame
+/// <summary>A prototype's mesh: an indexed triangle list in its creation's frame, the frame
 /// <see cref="WorldPrototype.Document"/>'s shapes are authored in. Each triangle is three entries of
 /// <see cref="Indices"/> naming <see cref="Vertices"/>, counter-clockwise seen from its front. The triangles shade with
 /// the creation's palette entry <see cref="Material"/>, and a placement draws them with its position, yaw, scale and
 /// mirror, as it places the creation's shapes.</summary>
-/// <param name="Vertices">The vertex positions, in the author frame.</param>
+/// <param name="Vertices">The vertex positions, in the creation's frame.</param>
 /// <param name="Indices">Three vertex indices per triangle.</param>
 /// <param name="Material">The index of the creation palette entry the triangles shade with.</param>
 public sealed record WorldPrototypeMesh(
     IReadOnlyList<Vector3> Vertices,
     IReadOnlyList<uint> Indices,
     int Material = 0
-) {
-    /// <summary>Gets <see cref="Vertices"/> converted to the engine frame
-    /// (<see cref="Puck.World.Authoring.CreationFrame.PointToEngine"/>), which every consumer reads.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<Vector3> EngineVertices => [.. Vertices.Select(selector: Puck.World.Authoring.CreationFrame.PointToEngine)];
-}
+);
 /// <summary>A reflection plane in a placement's local frame.</summary>
 /// <param name="Normal">The plane normal.</param>
 /// <param name="Offset">The signed plane offset along the normalized <paramref name="Normal"/>.</param>

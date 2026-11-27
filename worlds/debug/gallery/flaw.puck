@@ -42,7 +42,7 @@ template flawPrototype() {
   prototype "gallery-flaw" {
     document {
       name: "gallery-flaw"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: concat(
         map(range(0, flawSteps), step => { color: flawTint(step), roughness: 0.5, emissive: lookFlaw.coreNits }),
         [{ color: lookFlaw.glass, roughness: lookFlaw.frost, glass { depth: lookFlaw.depth, ior: 1.5 } }]
@@ -50,7 +50,8 @@ template flawPrototype() {
       // Each sweep stands at its piece's start, its curve relative to that point.
       for q in flawPieces {
         shape Sweep $"core-{q.index}" {
-          position: flawAuthor(q.a)
+          position: (flawAuthor(q.a) * [-1, 1, -1])
+          rotation: rotate([0, 1, 0], 180)
           material: flawStep(q.at)
           curve {
             a [0, 0, 0]
@@ -61,7 +62,8 @@ template flawPrototype() {
           }
         }
         shape Sweep $"sleeve-{q.index}" {
-          position: flawAuthor(q.a)
+          position: (flawAuthor(q.a) * [-1, 1, -1])
+          rotation: rotate([0, 1, 0], 180)
           material: flawSteps
           curve {
             a [0, 0, 0]
@@ -77,9 +79,10 @@ template flawPrototype() {
   prototype "gallery-flaw-collar" {
     document {
       name: "gallery-flaw-collar"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: lookFlawCollar.color, roughness: lookFlawCollar.roughness, metal: 1 }]
       shape Cylinder "sleeve" {
+        rotation: rotate([0, 1, 0], 180)
         material: 0
         scale [flawCollarSleeve, (flawSlab / 2), flawCollarSleeve]
       }
@@ -87,11 +90,13 @@ template flawPrototype() {
         shape Cylinder $"ring-{side}" {
           material: 0
           position [0, (side * ((flawSlab + lookFlawCollar.lip) / 2)), 0]
+          rotation: rotate([0, 1, 0], 180)
           scale [lookFlawCollar.rim, (lookFlawCollar.lip / 2), lookFlawCollar.rim]
           chamfer: lookFlawCollar.bevel
         }
       }
       shape Cylinder "bore" {
+        rotation: rotate([0, 1, 0], 180)
         blend: Subtraction
         material: 0
         scale [lookFlawCollar.bore, (flawSlab + lookFlawCollar.lip), lookFlawCollar.bore]

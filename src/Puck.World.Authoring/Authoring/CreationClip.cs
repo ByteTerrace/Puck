@@ -62,8 +62,7 @@ public sealed record CreationClipPoseDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipTurnDocument>? Turn = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Vector3? Slide = null
 );
-/// <summary>One step of a key's turn, written as a swing is: an axis in the creation's frame and an angle about it. It
-/// crosses the author frame as a swing's axis does (its axis flips and its angle does not).</summary>
+/// <summary>One step of a key's turn, written as a swing is: an axis in the creation's frame and an angle about it.</summary>
 /// <param name="Axis">The axis, non-zero; its length is ignored.</param>
 /// <param name="Angle">The angle in radians, right-handed about <paramref name="Axis"/>.</param>
 public sealed record CreationClipTurnDocument(Vector3 Axis, float Angle);

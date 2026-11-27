@@ -120,15 +120,15 @@ motion phase?
   Domain … leav[es] nowhere for its OWN swing/slide to compose, so they are
   refused alongside a domain list at validation". A limb that swings cannot
   be a fold.
-- **[opened]** The engine already classifies every frame-bearing field of a
-  creation once: `CreationFrame`
-  (`src/Puck.World.Authoring/Authoring/CreationFrame.cs`) is "THE one place a
-  puck.creation.v1 document crosses between the author's frame and the
-  engine's", and its `Apply` names each field that converts (shape position,
-  rotation and joint; a swing's axis and pivot; a slide's axis; a symmetry
-  normal; effector direction and offset; frames, cameras, root text runs and
-  volumes) and each that does not, with the reason. A mirror needs exactly
-  this classification plus a rule per field kind.
+- **[opened]** Every frame-bearing field of a creation is classified once in
+  the creation frame migration's rule
+  ([puck-dsl](../../.claude/skills/puck-dsl/SKILL.md#the-creation-frame-migration)):
+  shape position, rotation and joint; a swing's axis and pivot; a slide's axis;
+  a symmetry normal; effector direction and offset; frames, cameras, root text
+  runs and volumes; and each field that is not frame-bearing, with the reason.
+  A mirror needs exactly this classification plus a rule per field kind, in a
+  `CreationMirror` of its own in `Puck.World.Authoring` that becomes the one home
+  of the classification once the migration retires.
 
 **The options.**
 
@@ -141,7 +141,7 @@ motion phase?
    halves, a pair of static ear discs. Wrong for anything that needs its own
    name, material or motion. Kept for what it is.
 3. *A `mirror` block in the language, lowered to plain rows through
-   `CreationFrame`.* The block is a compile-time loop over two sides, like a
+   `CreationMirror`.* The block is a compile-time loop over two sides, like a
    `for` over two elements, whose second expansion's lowered rows pass
    through a reflection the engine's frame class owns. Every field the
    reflection knows how to mirror is mirrored; a member it has no rule for is
@@ -168,7 +168,7 @@ mirror x as side {                       // side.name "Left"|"Right", side.sign 
 mirror x as side ["L", "R"] { … }        // optional side names
 ```
 
-- The plane is one of the author frame's axis planes through the creation's
+- The plane is one of the creation frame's axis planes through the creation's
   origin (`x`, `y`, `z`), the frame the author already thinks in
   (`sdf-authoring`: +X the subject's own left). An `at <offset>` form for a
   plane off the origin is admitted when a creation needs it; nothing this
@@ -176,12 +176,12 @@ mirror x as side ["L", "R"] { … }        // optional side names
 - The block expands twice with `side` bound, exactly as `for` expands
   (`DocumentLowering.ExpandForStatements`), and the second expansion's rows
   are read as `ShapeDocument`s (`CreationDocumentJson.Read`) and passed
-  through `CreationFrame`'s new `Mirror(axis)`, a sibling of `ToEngine`/`ToAuthor`
-  in the one class that already names every frame-bearing field. The author
+  through a mirror across the axis plane (the proposed `CreationMirror`)
+  in the one class that names every frame-bearing field. The author
   writes side-dependent design (`side.index`, `side.name`, `side.sign`) only
   where the two sides differ by design: a gait phase, an off-suit material, a
   name. Geometry is never mirrored by hand inside the block.
-- `CreationFrame`'s `Mirror` across the plane with normal `n` (a unit axis):
+- `CreationMirror` across the plane with normal `n` (a unit axis):
   a position `p` reflects (`p − 2 (p·n) n`); a rotation `q = (v, w)` becomes
   `q_m = (−(v − 2 (v·n) n)… )`, concretely for the X plane `(x, −y, −z, w)`;
   a direction reflects like a position; a swing's angle keeps its sign
@@ -213,7 +213,7 @@ mirror x as side ["L", "R"] { … }        // optional side names
 (creations) sits in the schema-agnostic core's lowering. The answer: the
 block's expansion is the core's `for`; only the reflection is the vocabulary's,
 reached through `IDocumentVocabulary` the way row validation already is, and
-`CreationFrame` keeps the one classification. The second case: two documents
+`CreationMirror` keeps the one classification. The second case: two documents
 (a mirror block and a `symmetry` fold) can mean one geometry at two costs. True
 and intended: the fold is one bake member, the block is two shapes with their
 own names and motion; the cost corpus the open items ask for records the pair
@@ -286,7 +286,7 @@ and how does anyone read a rotation back?
    order; `between(from, to)`, the shortest turn; `frame(forward, up)`, the
    turn taking local +Z onto `forward` and local +Y toward `up` (the author
    frame's own axes, so "the front faces this way, the top faces that way");
-   `yawPitchRoll(yaw, pitch, roll)` in degrees about the author frame's Y, X
+   `yawPitchRoll(yaw, pitch, roll)` in degrees about the creation frame's Y, X
    and Z; and `turned(rotation, vector)` to carry a point or axis by a turn
    (posing a bent limb from measurements on the straight one, which
    `turns.puck`'s `turnPoint` did). Each folds in double like `DocumentScalars`,
@@ -300,7 +300,7 @@ and how does anyone read a rotation back?
 stops a blade standing edge-on. `puck creation shape` already prints one line
 per shape with its type, profile, scale and lowering
 (`docs/reference/cli.md:3500`). The step adds `--frame`: each shape's local
-axes in author-frame words ("local +Y toward [0.12, 0.98, 0.10], up and a
+axes in creation-frame words ("local +Y toward [0.12, 0.98, 0.10], up and a
 little forward; local +Z toward …") and its oriented half-extents by author
 axis ("thin along the front axis: 3 mm"), computed from `SdfSolidGeometry.HalfExtent`
 turned by the rotation. A prism whose thin axis points at the camera the view
@@ -437,7 +437,7 @@ back to source?
   through the same folding as the source, so the live loop and the file share
   one spelling. The editor plan owns this as part of E1's verbs.
 - A live `world.flip <creation> <shape> x` writes the mirrored row through
-  the same `CreationFrame`'s `Mirror`, so the editor's flip and the language's
+  the same `CreationMirror`, so the editor's flip and the language's
   `mirror` cannot disagree. The editor plan owns the verb; this plan owns the
   door.
 - Selection, gizmos and the editor camera extended from placements to a
@@ -479,8 +479,8 @@ the console and in the file. Both are already decisions 3 and 4.
 
 | Design | Invariant | Enforced by | Where the guarantee stops |
 |---|---|---|---|
-| `mirror` block | A mirrored row carries no member the reflection has no rule for | `CreationFrame`'s `Mirror` is a total function over `ShapeDocument`'s members: each member is in its handled set or its refused set, and the lowering reports the refused set by name (a new PUCK code) | A new `ShapeDocument` member added without a rule is caught only by a law that enumerates the record's members against the two sets (`CreationFrameMirrorLawTests`); until that law exists, review |
-| `mirror` block | One classification of frame-bearing fields | The reflection lives in `CreationFrame`, the class `ToEngine`/`ToAuthor` already own; no second table | A field converted by `CreationFrame` but mirrored elsewhere would be a second table; the scan's duplicate check and review |
+| `mirror` block | A mirrored row carries no member the reflection has no rule for | `CreationMirror` is a total function over `ShapeDocument`'s members: each member is in its handled set or its refused set, and the lowering reports the refused set by name (a new PUCK code) | A new `ShapeDocument` member added without a rule is caught only by a law that enumerates the record's members against the two sets (`CreationMirrorLawTests`); until that law exists, review |
+| `mirror` block | One classification of frame-bearing fields | The reflection lives in `CreationMirror`, the one classification; no second table | A field classified there but mirrored elsewhere would be a second table; the scan's duplicate check and review |
 | Rotation builtins | Every spelling lowers to one canonical quaternion | `WorldDocumentMembers` runs `CanonicalFloat` and `CanonicalizeRotation` on every `DocumentQuaternion`-typed member (`WorldDocumentMembers.cs:49`); a builtin's result is a literal by the time it arrives | Members typed otherwise (the open item's text runs, placements and frames) until their types carry `DocumentQuaternion` |
 | Rotation builtins | A degenerate turn is refused by name at compile | The builtin's evaluation, like `DocumentScalars`' refusal of a non-finite result | None past compile: the document holds a literal |
 | `relativeTo` | The compiled document holds absolutes only | `WorldDocumentMembers` refuses an unconsumed member by name, so a `relativeTo` the lowering failed to consume fails the compile | None |
@@ -501,9 +501,9 @@ decides. The order follows the defects: mirroring and orientation first, since
 they recur in every creation; relative placement next, since it depends on the
 rotation folding; the readouts ride the first two.
 
-### S1: the `mirror` block and `CreationFrame`'s `Mirror`
+### S1: the `mirror` block and `CreationMirror`
 
-1. a `Mirror(ShapeDocument, axis)` method on `CreationFrame` beside `ToEngine`/`ToAuthor`,
+1. a `Mirror(ShapeDocument, axis)` method on `CreationMirror`,
    with the per-member rules of decision 1 and the refused set, and a law
    enumerating `ShapeDocument`'s members against both sets.
 2. The parser's `mirror <x|y|z> as <name> [["a", "b"]] { }` block (a
@@ -540,7 +540,7 @@ a `mirror` block is refused by name.
 3. The open item's missing sign canonicalization: text runs, placements and
    animation frames lower their rotation through the one helper, with the
    corpus pair `run-and-frame-rotation-sign` extended to cover them.
-4. `puck creation shape --frame`: each shape's local axes in author-frame
+4. `puck creation shape --frame`: each shape's local axes in creation-frame
    words and its oriented half-extents by author axis, the thin axis named.
 5. `world.save`'s inverse for `turn` (axis kept, angle solved) and
    `yawPitchRoll` (decomposed), and the named refusal, with the printed
@@ -584,7 +584,7 @@ relative offset.
   absolute placement compiled to.
 - **Editor steps handed to [the editor plan](editor.md):** `world.row.set`
   and `world.row.step` taking a `.puck` expression with units; `world.flip`
-  through `CreationFrame`'s `Mirror`; E2, E7 and E8 with a creation's shape as a
+  through `CreationMirror`; E2, E7 and E8 with a creation's shape as a
   second selection target.
 
 ## 6. Process evidence into checks
@@ -618,7 +618,7 @@ builder's, headless and mechanical, so the critic sees fewer regressions.
 - The `symmetry`, `polar` (with `mirror`), `repeat`, `wallpaper` and `jitter`
   domain folds (`ShapeDomainOp.cs`): a fold is one shape and refuses a swing or
   slide, so it answers static symmetric detail and not a limb (decision 1).
-- `CreationFrame` (`CreationFrame.cs`): the one frame classification, which
+- The creation frame migration's rule (`CreationFrameMigration.cs`): the one frame classification, which
   the reflection joins rather than duplicating (decision 1).
 - `DocumentLowering.ExpandForStatements` and `ExpandTemplate`
   (`DocumentLowering.cs:1444`, `:1505`): the expansion the `mirror` block

@@ -86,33 +86,31 @@ public sealed partial class WorldBody {
     }
 
     // The step's first part: captures the body for a refusal, opens the kit transaction when transactional, and
-    // resolves the merged intent. False for a body that takes no ordinary step this tick (parked, carried, or rigid,
-    // whose step is prepared here for the population's solve).
+    // resolves the merged intent. False for a body that takes no ordinary step this tick: one that cannot
+    // (TakesOrdinaryStep), or one that could not when the tick's input pass ran, whose observation was therefore never
+    // admitted.
     private bool TryBeginStep(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, bool transactional, out StepStart start) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         start = default;
-        if (PopulationSleeping) { return false; }
+        if (m_inputPassTick != tick) {
+            throw new InvalidOperationException(message: $"Body {entityIndex} was stepped on tick {tick} before the tick's input pass admitted its observation.");
+        }
+        if (!TakesOrdinaryStep) {
+            if (!PopulationSleeping) {
+                // The swept portal-crossing scan's segment start. A carried body's pose is derived from its carrier
+                // (WorldBody.FollowCarrier, after both advance passes), so its own step does nothing more. A rigid kit
+                // hands the whole step to the population's rigid solve: it is prepared here and solved with every other
+                // rigid body once all of them have advanced (WorldPopulation.Rigid.cs).
+                m_previousPosition = m_position;
+                if (m_carriedByIndex < 0) { PrepareRigidStep(entityIndex: entityIndex, stepTicks: stepTicks); }
+            }
+            return false;
+        }
 
         // Captured before ExecuteProgram can move m_position — the swept portal-crossing scan's segment start for this
         // step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
-
-        // A carried body's pose and rigid velocity are DERIVED from its carrier every tick (WorldBody.FollowCarrier,
-        // called from WorldPopulation.UpdateCarriedBodies after both advance passes complete), so its own step is a
-        // no-op rather than running gravity/contact against a pose FollowCarrier is about to overwrite.
-        if (m_carriedByIndex >= 0) {
-            return false;
-        }
-
-        // A rigid kit hands the whole step to the population's rigid solve instead of the grounded/free motion program:
-        // no intent, action track, or hold list applies to a passive rigid entity. The step is prepared here and solved
-        // with every other rigid body once all of them have advanced (WorldPopulation.Rigid.cs).
-        if (m_rigid is not null) {
-            PrepareRigidStep(
-                entityIndex: entityIndex,
-                stepTicks: stepTicks
-            );
-
+        if (!m_inputPassSteps) {
             return false;
         }
         start.PreviousOrientation = m_orientation;
@@ -151,23 +149,31 @@ public sealed partial class WorldBody {
         return true;
     }
 
-    // Whether the step has a producer observation for the input runtime to admit: the body takes an ordinary step
-    // (TryBeginStep's own test) and its source names the producer whose image is staged.
-    private bool AdmitsProducerObservation => (
-        !PopulationSleeping && (m_carriedByIndex < 0) && (m_rigid is null) &&
-        InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (m_stateLane?.Input is not null)
-    );
+    // Whether the body takes an ordinary step: it is not parked, not carried (its pose follows its carrier) and not
+    // rigid (the population's solve steps it). The one test the input pass and the step both read.
+    private bool TakesOrdinaryStep => (!PopulationSleeping && (m_carriedByIndex < 0) && (m_rigid is null));
 
-    /// <summary>Admits the producer's staged observation through the input runtime: producer observations enter
-    /// history before motion, just like external input, and a refused sweep does not erase an accepted observation or
-    /// turn the same held sample into another press on the following tick. The one part of a step that touches the
-    /// input runtime when the step is local, so the population admits every moving body on the stepping thread before
-    /// any of them moves.</summary>
+    // What the tick's input pass found (AdmitProducerObservation): the tick it ran on, and whether the body could take
+    // an ordinary step then. A body resolves an intent only on a tick whose pass found it could, so it never moves on
+    // an observation the input runtime did not admit; TryBeginStep is the one reader and throws when no pass ran. Both
+    // are rewritten by every pass before any step reads them, so they are no part of the body's continuation.
+    private ulong m_inputPassTick;
+    private bool m_inputPassSteps;
+
+    /// <summary>Runs the body's part of a tick's input pass: decides whether the body takes an ordinary step this tick
+    /// and, when it does and its source names the producer whose image is staged, admits that observation through the
+    /// input runtime. Producer observations enter history before motion, just like external input, and a refused sweep
+    /// does not erase an accepted observation or turn the same held sample into another press on the following tick.
+    /// The one part of a step that touches the input runtime when the step is local, so the population runs every
+    /// moving body's pass on the stepping thread before any of them moves, and <see cref="Advance"/> refuses a body
+    /// whose pass did not run.</summary>
     /// <param name="entityIndex">The body's population index.</param>
     /// <param name="tick">The explicit simulation tick.</param>
     internal void AdmitProducerObservation(int entityIndex, ulong tick) {
-        if (AdmitsProducerObservation) {
-            var admitted = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+        m_inputPassTick = tick;
+        m_inputPassSteps = TakesOrdinaryStep;
+        if (m_inputPassSteps && InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (m_stateLane?.Input is { } input)) {
+            var admitted = input.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
 
             if (admitted != InputImages.Producer) { InputImagesEdit.Producer = admitted; }
         }

@@ -670,6 +670,14 @@ is filed with `puck measure`.
   [step 3's check](streaming-and-memory.md#step-3-one-reservation) states
   what each should show.
 
+**The creation frame migration retires** once no branch holds a
+`puck.creation.v1` creation (the unlanded branches below and every lane begun
+before the engine frame landed run `puck migrate frame worlds` after merging):
+delete `CreationFrameMigration`, its registration in `PuckMigrations`,
+`CreationDocument.RetiredSchema` and the refusal `CreationCanonicalizer.Validate`
+gives it, and [puck-dsl](../../.claude/skills/puck-dsl/SKILL.md#the-creation-frame-migration)'s
+section.
+
 **Unlanded branches on origin**, each kept on purpose:
 
 | Branch | Holds | Waits for |
@@ -738,7 +746,7 @@ Open calls, each with its sides:
 - **The mirror construct.** G16 as recorded: each limb a template over `side`,
   with nothing new in the language. Or the
   [modeling authoring plan](modeling-authoring.md)'s `mirror` block, lowered
-  through `CreationFrame`, on the evidence that three lanes hand-mirrored three
+  through `CreationMirror`, on the evidence that three lanes hand-mirrored three
   creatures; it would supersede G16. It rides on the owner's review of that
   plan, which comes before its slices are dispatched.
 - **Which of the Moth's halves is right** where they do not mirror: the right

@@ -698,7 +698,8 @@ template frameRing(name, outer, inner, z, depth, material) {
     { tag: "right", x: (outer["w"] + inner["w"]) / 2, y: 0, hw: (outer["w"] - inner["w"]) / 2, hh: y0 }
   ] {
     shape Prism $"""{name}-{strip["tag"]}""" {
-      position [strip["x"] * frameScale, strip["y"] * frameScale, z]
+      position [(0 - (strip["x"] * frameScale)), strip["y"] * frameScale, -z]
+      rotation: rotate([0, 1, 0], 180)
       scale [strip["hw"] * frameScale, strip["hh"] * frameScale, depth]
       material: material
       profile {
@@ -716,7 +717,8 @@ template frameRing(name, outer, inner, z, depth, material) {
     { tag: "bl", qx: -1, qy: -1, outerClockwise: true, innerClockwise: false }
   ] {
     shape Prism $"""{name}-{corner["tag"]}""" {
-      position [corner["qx"] * cx * frameScale, corner["qy"] * cy * frameScale, z]
+      position [(0 - (corner["qx"] * cx * frameScale)), corner["qy"] * cy * frameScale, -z]
+      rotation: rotate([0, 1, 0], 180)
       scale [half * frameScale, half * frameScale, depth]
       material: material
       profile {
@@ -787,9 +789,9 @@ let ornamentBead = { radius: 0.0048, spacing: 0.048, inset: 0.063, z: -0.0232, d
 
 template cardFaceOrnaments() {
   shape Cylinder "front-bead-rail-horizontal" {
-    position [0, cardHalfHeight - ornamentBead["inset"], ornamentBead["z"]]
+    position [0, cardHalfHeight - ornamentBead["inset"], (0 - ornamentBead["z"])]
     scale [ornamentBead["radius"], ornamentBead["depth"], ornamentBead["radius"]]
-    rotation [0.70710678, 0, 0, 0.70710678]
+    rotation [0, 0.70710678, -0.70710678, 0]
     material: 2
     domain [
       symmetry(normal: [0, 1, 0])
@@ -797,12 +799,12 @@ template cardFaceOrnaments() {
     ]
   }
   shape Cylinder "front-bead-rail-vertical" {
-    position [cardHalfWidth - ornamentBead["inset"], 0, ornamentBead["z"]]
+    position [ornamentBead["inset"] - cardHalfWidth, 0, (0 - ornamentBead["z"])]
     scale [ornamentBead["radius"], ornamentBead["depth"], ornamentBead["radius"]]
-    rotation [0.70710678, 0, 0, 0.70710678]
+    rotation [0, 0.70710678, -0.70710678, 0]
     material: 2
     domain [
-      symmetry(normal: [1, 0, 0])
+      symmetry(normal: [-1, 0, 0])
       repeat(spacing: [1, ornamentBead["spacing"], 1], limit: [0, 23, 0])
     ]
   }
@@ -811,7 +813,7 @@ template cardFaceOrnaments() {
 // The court field: the plate each court figure's layers stand on.
 template courtField() {
   shape Prism "court-field" {
-    position [0, 0, -0.022]
+    position [0, 0, 0.022]
     scale [0.59, 0.925, 0.002]
     material: 3
     profile {
@@ -846,7 +848,7 @@ template cardBase(backMat) {
   cardFaceBorder()
   cardFaceOrnaments()
   shape Prism "back-plate" {
-    position [0, 0, 0.021]
+    position [0, 0, -0.021]
     scale [0.79, 1.15, 0.002]
     material: backMat
     profile {
@@ -855,7 +857,7 @@ template cardBase(backMat) {
     }
   }
   shape Prism "back-hairline" {
-    position [0, 0, 0.022]
+    position [0, 0, -0.022]
     scale [0.73, 1.09, 0.002]
     material: 2
     profile {
@@ -864,7 +866,7 @@ template cardBase(backMat) {
     }
   }
   shape Prism "back-inner-field" {
-    position [0, 0, 0.023]
+    position [0, 0, -0.023]
     scale [0.71, 1.07, 0.002]
     material: backMat
     profile {
@@ -873,7 +875,7 @@ template cardBase(backMat) {
     }
   }
   shape Prism "back-medallion" {
-    position [0, 0, 0.024]
+    position [0, 0, -0.024]
     scale [0.24, 0.32, 0.002]
     material: 2
     profile {
@@ -882,7 +884,7 @@ template cardBase(backMat) {
     }
   }
   shape Prism "back-medallion-inner" {
-    position [0, 0, 0.025]
+    position [0, 0, -0.025]
     scale [0.18, 0.24, 0.002]
     material: backMat
     profile {
@@ -891,33 +893,33 @@ template cardBase(backMat) {
     }
   }
   shape Box "back-diamond" {
-    position [0, 0, 0.026]
+    position [0, 0, -0.026]
     scale [0.08, 0.08, 0.002]
-    rotation [0, 0, 0.38268343, 0.92387953]
+    rotation [0, 0, -0.38268343, 0.92387953]
     material: 2
   }
   shape Box "back-rosette-tl" {
-    position [-0.24, 0.42, 0.024]
+    position [0.24, 0.42, -0.024]
     scale [0.06, 0.06, 0.002]
-    rotation [0, 0, 0.38268343, 0.92387953]
+    rotation [0, 0, -0.38268343, 0.92387953]
     material: 2
   }
   shape Box "back-rosette-tr" {
-    position [0.24, 0.42, 0.024]
+    position [-0.24, 0.42, -0.024]
     scale [0.06, 0.06, 0.002]
-    rotation [0, 0, 0.38268343, 0.92387953]
+    rotation [0, 0, -0.38268343, 0.92387953]
     material: 2
   }
   shape Box "back-rosette-bl" {
-    position [-0.24, -0.42, 0.024]
+    position [0.24, -0.42, -0.024]
     scale [0.06, 0.06, 0.002]
-    rotation [0, 0, 0.38268343, 0.92387953]
+    rotation [0, 0, -0.38268343, 0.92387953]
     material: 2
   }
   shape Box "back-rosette-br" {
-    position [0.24, -0.42, 0.024]
+    position [-0.24, -0.42, -0.024]
     scale [0.06, 0.06, 0.002]
-    rotation [0, 0, 0.38268343, 0.92387953]
+    rotation [0, 0, -0.38268343, 0.92387953]
     material: 2
   }
 }
@@ -1018,9 +1020,9 @@ let spadeStemContour = {
 // The rim of a mark drawn from a closed path: its outline stroked by the rim width, whose inner half the core covers.
 template pathRim(name, contour, x, y, frame, flipped, z, depth, material) {
   shape Prism name {
-    position [x, y, z]
+    position [-x, y, -z]
     scale [frame, frame, depth]
-    rotation: flipped ? [1, 0, 0, 0] : [0, 1, 0, 0]
+    rotation: compose(rotate([0, 1, 0], 180), flipped ? [1, 0, 0, 0] : [0, 1, 0, 0])
     material: material
     profile {
       kind: "Path"
@@ -1045,9 +1047,9 @@ template pathRim(name, contour, x, y, frame, flipped, z, depth, material) {
 
 template pathCore(name, contour, x, y, frame, flipped, z, depth, material) {
   shape Prism name {
-    position [x, y, z]
+    position [-x, y, -z]
     scale [frame, frame, depth]
-    rotation: flipped ? [1, 0, 0, 0] : [0, 1, 0, 0]
+    rotation: compose(rotate([0, 1, 0], 180), flipped ? [1, 0, 0, 0] : [0, 1, 0, 0])
     material: material
     profile {
       kind: "Path"
@@ -1071,9 +1073,9 @@ template clubMark(name, x, y, size, flipped, rimZ, coreZ, rimDepth, coreDepth, r
   ] {
     for (lobe, i) in clubLobes {
       shape Cylinder $"""{name}-{layer["tag"]}-{lobe["tag"]}""" {
-        position [x + side * size * lobe["cx"], y + facing * size * lobe["cy"], layer["z"]]
+        position [(0 - (x + side * size * lobe["cx"])), y + facing * size * lobe["cy"], (0 - layer["z"])]
         scale [size * (lobe["r"] + layer["grow"]), layer["depth"], size * (lobe["r"] + layer["grow"])]
-        rotation [0.70710678, 0, 0, 0.70710678]
+        rotation [0, 0.70710678, -0.70710678, 0]
         material: layer["material"]
       }
     }
@@ -1225,9 +1227,8 @@ template suitMark(name, suit, x, y, size, flipped = 0, rimZ = -0.0215, coreZ = -
 
 template cardIndices(rankPath, suit) {
   shape Prism "rank-tl" {
-    position [0.69, 1.0, -0.0225]
+    position [-0.69, 1.0, 0.0225]
     scale [0.17, 0.125, 0.0055]
-    rotation [0, 1, 0, 0]
     material: suit["mat"]
     profile {
       kind: "Path"
@@ -1236,9 +1237,9 @@ template cardIndices(rankPath, suit) {
     }
   }
   shape Prism "rank-br" {
-    position [-0.69, -1.0, -0.0225]
+    position [0.69, -1.0, 0.0225]
     scale [0.17, 0.125, 0.0055]
-    rotation [1, 0, 0, 0]
+    rotation [0, 0, -1, 0]
     material: suit["mat"]
     profile {
       kind: "Path"
@@ -1273,8 +1274,8 @@ function courtRowRound(row) = minimum(courtFraction(row) * (courtRelief + row[5]
 template courtLayers(half, isLower, turned, rows) {
   for row in rows {
     shape Prism $"{half}-{row[0]}" {
-      position: signed(isLower, [row[1], row[2], courtZ], turned ? [-1, -1, 1] : [1, -1, 1])
-      rotation: courtRowRotation(isLower, row)
+      position: (signed(isLower, [row[1], row[2], courtZ], turned ? [-1, -1, 1] : [1, -1, 1]) * [-1, 1, -1])
+      rotation: compose(rotate([0, 1, 0], 180), courtRowRotation(isLower, row))
       scale [row[3], row[4], courtRelief + row[5] * courtStep]
       material: row[6]
       blend: courtBlend(row)
@@ -1652,7 +1653,7 @@ template courtQueen(suit) {
     )
   }
   shape Prism "sash-inlay" {
-    position [0, 0, courtZ]
+    position [0, 0, -courtZ]
     rotation [0, 1, 0, 0]
     scale [0.59, 0.022, courtRelief + 0 * courtStep]
     material: 7
@@ -1664,7 +1665,7 @@ template courtQueen(suit) {
     }
   }
   shape Prism "sash-edge-upper" {
-    position [0, 0.0285, courtZ]
+    position [0, 0.0285, -courtZ]
     rotation [0, 1, 0, 0]
     scale [0.582, 0.0065, courtRelief + 1 * courtStep]
     material: 1
@@ -1676,7 +1677,7 @@ template courtQueen(suit) {
     }
   }
   shape Prism "sash-edge-lower" {
-    position [0, -0.0285, courtZ]
+    position [0, -0.0285, -courtZ]
     rotation [0, 1, 0, 0]
     scale [0.582, 0.0065, courtRelief + 1 * courtStep]
     material: 1
@@ -1688,8 +1689,7 @@ template courtQueen(suit) {
     }
   }
   shape Prism "sash-medallion" {
-    position [0, 0, courtZ]
-    rotation [0, 1, 0, 0]
+    position [0, 0, -courtZ]
     scale [0.04, 0.04, courtRelief + 2 * courtStep]
     material: 1
     blend: "Union"
@@ -1722,7 +1722,7 @@ template courtQueen(suit) {
     }
   }
   shape Prism "sash-gem" {
-    position [0, 0, courtZ]
+    position [0, 0, -courtZ]
     rotation [0, 1, 0, 0]
     scale [0.022, 0.022, courtRelief + 3 * courtStep]
     material: 9
@@ -1900,7 +1900,7 @@ template courtKing() {
 template makeAce(id, pal, backMat, suit) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)
@@ -1913,7 +1913,7 @@ template makeAce(id, pal, backMat, suit) {
 template makePipCard(id, pal, backMat, rankGlyph, suit, pips) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)
@@ -1928,7 +1928,7 @@ template makePipCard(id, pal, backMat, rankGlyph, suit, pips) {
 template makeJack(id, pal, backMat, suit) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)
@@ -1943,7 +1943,7 @@ template makeJack(id, pal, backMat, suit) {
 template makeQueen(id, pal, backMat, suit) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)
@@ -1958,7 +1958,7 @@ template makeQueen(id, pal, backMat, suit) {
 template makeKing(id, pal, backMat, suit) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)
@@ -1973,7 +1973,7 @@ template makeKing(id, pal, backMat, suit) {
 template makeBack(id, pal, backMat) {
   prototype id {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette: pal
       cardBase(backMat: backMat)

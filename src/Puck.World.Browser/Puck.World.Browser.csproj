@@ -62,7 +62,7 @@
              half of the browser-parity baseline, not by the trim analyzer, which none of the three assemblies pass.
              IL2070/IL2075/IL2026/IL3050 are recorded once as the accepted baseline (see the project README) rather
              than fixed member-by-member: none of the flagged call sites (schema/name-registry reflection, the
-             puck.creation.v1 embedded-document converter, JsonNode diffing in WorldDocumentBasis) are reachable from
+             puck.creation.v2 embedded-document converter, JsonNode diffing in WorldDocumentBasis) are reachable from
              this project's own Engine/Exports surface today. -->
         <NoWarn>$(NoWarn);IL2026;IL2070;IL2075;IL3050</NoWarn>
         <!-- Parlot (Puck.Transpiler's scanner) collapses its trim analysis to one IL2104 for the package. Every warning

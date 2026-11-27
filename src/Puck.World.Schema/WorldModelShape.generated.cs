@@ -5474,7 +5474,6 @@ public static partial class WorldModelShape {
                 M("vertices", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.Numerics.Vector3>), typeof(global::Puck.World.WorldPrototypeMesh), "Vertices", Read | Write | Required, static value => ((global::Puck.World.WorldPrototypeMesh)value).Vertices),
                 M("indices", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.UInt32>), typeof(global::Puck.World.WorldPrototypeMesh), "Indices", Read | Write | Required, static value => ((global::Puck.World.WorldPrototypeMesh)value).Indices),
                 M("material", typeof(global::System.Int32), typeof(global::Puck.World.WorldPrototypeMesh), "Material", Read | Write, static value => ((global::Puck.World.WorldPrototypeMesh)value).Material),
-                M("engineVertices", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.Numerics.Vector3>), typeof(global::Puck.World.WorldPrototypeMesh), "EngineVertices", None),
             ],
             []),
         T(typeof(global::Puck.World.WorldQualityPreset), true, JsonTypeInfoKind.Object, null,

@@ -13,12 +13,12 @@ prototypes {
   prototype "portal-row-witness" {
     mesh {
       material: 1
-      vertices [[0, 1.6, 0], [0.45, 0.95, 0], [0, 0.3, 0], [-0.45, 0.95, 0], [0, 0.95, 0.45], [0, 0.95, -0.45]]
+      vertices [[0, 1.6, 0], [-0.45, 0.95, 0], [0, 0.3, 0], [0.45, 0.95, 0], [0, 0.95, -0.45], [0, 0.95, 0.45]]
       indices [0, 4, 1, 0, 3, 4, 0, 5, 3, 0, 1, 5, 2, 1, 4, 2, 4, 3, 2, 3, 5, 2, 5, 1]
     }
     document {
       name: "Portal row witness"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       frames [{ name: "rest", transforms [] }]
       palette [{ color: "#397C83", roughness: 0.5 }, { color: "#D9A344", roughness: 0.3, metal: 0.65 }]
       shape Box "keel" {

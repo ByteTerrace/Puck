@@ -151,7 +151,7 @@ function starPull(of, placement, reach, blend = 0, priority = 1) = {
 // whose value scales the surface's light, for a star that can dim; absent, it shines whole.
 template starSurface(of, name = "star", churn = 6, cells = 5, cover = 0.35, lane = null) {
   name: name
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette [
     {
       color: of.surface
@@ -177,6 +177,7 @@ template starSurface(of, name = "star", churn = 6, cells = 5, cover = 0.35, lane
   shape Sphere "photosphere" {
     material: 0
     position [0, 0, 0]
+    rotation: rotate([0, 1, 0], 180)
     scale [of.radius, of.radius, of.radius]
   }
 }

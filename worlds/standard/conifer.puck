@@ -45,7 +45,7 @@ function firFiberLanes(clock, names = firFiberLaneNames) = map(range(0, length(n
 template firTree(id, height = 1, spread = 1, tiers = 5, needles = firNeedles, bark = "#4A3424", lights = false, bulbs = firBulbs, bulbCount = 46, bulbGlow = 70, fiber = false, fibers = firFibers, fiberLanes = firFiberLaneNames, fiberCount = 150, fiberGlow = 90) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: fiber ? "fir-tree-fiber" : (lights ? "fir-tree-lit" : "fir-tree")
       palette: concat(
         [{ color: bark, roughness: 0.95, specular: 0.02 }],
@@ -100,11 +100,11 @@ template firTree(id, height = 1, spread = 1, tiers = 5, needles = firNeedles, ba
           let s = firSlope(k, tiers)
           shape Superellipsoid $"bulb-{k}" {
             exponent: 2
-            position: polarPoint(
-              firRim(t, tiers) * spread * (1 - s) + 0.07,
-              360 * firSpreadU(k),
-              (firBase(t, tiers) + 2 * firHalf(t, tiers) * s) * height
-            )
+            position: (polarPoint(
+  firRim(t, tiers) * spread * (1 - s) + 0.07,
+  360 * firSpreadU(k),
+  (firBase(t, tiers) + 2 * firHalf(t, tiers) * s) * height
+) * [-1, 1, -1])
             scale [0.055, 0.085, 0.055]
             material: 1 + length(needles) + k % length(bulbs)
           }
@@ -116,11 +116,11 @@ template firTree(id, height = 1, spread = 1, tiers = 5, needles = firNeedles, ba
           let t = firTier(k, tiers)
           let s = firSlope(k, tiers) - 0.12
           shape Sphere $"fiber-{k}" {
-            position: polarPoint(
-              (firRim(t, tiers) - 0.04) * spread * (1 - 0.6 * s) + 0.02,
-              360 * firSpreadU(k),
-              (firHem(t, tiers) + 2.2 * firHalf(t, tiers) * s) * height
-            )
+            position: (polarPoint(
+  (firRim(t, tiers) - 0.04) * spread * (1 - 0.6 * s) + 0.02,
+  360 * firSpreadU(k),
+  (firHem(t, tiers) + 2.2 * firHalf(t, tiers) * s) * height
+) * [-1, 1, -1])
             scale [0.03, 0.03, 0.03]
             material: 1 + length(needles) + (lights ? length(bulbs) : 0) + k % length(fibers)
           }

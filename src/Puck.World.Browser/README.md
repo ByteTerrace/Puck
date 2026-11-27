@@ -378,7 +378,7 @@ own fixed-baseline reason, unrelated to this boundary.
 `PublishTrimmed=true`/`TrimMode=partial`, with `TrimmerRootAssembly` keeping
 `Puck.Assets`, `Puck.World.Authoring`, and `Puck.World.Schema` whole (their
 own `IsAotCompatible=false` reflection surface—schema/name-registry
-reflection, the `puck.creation.v1` embedded-document converter, `WorldDocumentBasis`'s
+reflection, the `puck.creation.v2` embedded-document converter, `WorldDocumentBasis`'s
 `JsonNode` diff/merge logic—stays real and reachable rather than being
 guessed at member-by-member). ILLink's trim ANALYSIS still runs over that IL
 regardless of the root/copy action (rooting only stops removal, not

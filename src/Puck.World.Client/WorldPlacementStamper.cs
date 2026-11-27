@@ -339,7 +339,7 @@ public static partial class WorldPlacementStamper {
     /// <returns>The shared mesh.</returns>
     internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
         derive: static authored => {
-            var positions = authored.EngineVertices.ToArray();
+            var positions = authored.Vertices.ToArray();
 
             return ((ClosedOutward(indices: authored.Indices, positions: positions) is { } outward)
                 ? new SdfMesh(indices: outward, positions: positions)

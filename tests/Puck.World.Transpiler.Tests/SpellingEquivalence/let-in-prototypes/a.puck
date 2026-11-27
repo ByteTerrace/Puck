@@ -7,7 +7,7 @@ template blockProto(id, h) {
 
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: id
       palette [{ color: "#888888", roughness: 0.5 }]
       shape Box "body" {

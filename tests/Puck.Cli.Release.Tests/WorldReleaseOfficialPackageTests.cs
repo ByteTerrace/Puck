@@ -15,7 +15,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             {"schema":"puck.world.definition.v1","host":{"width":320,"height":200},
              "state":{"world":[{"name":"cadence","kind":"Fixed","cells":[],
                 "draw":{"generator":{"source":"UniformRange","rangeMin":65536,"rangeMax":131072},"timing":"Boot"}}]},
-             "prototypes":[{"id":"actor","document":{"schema":"puck.creation.v1","name":"actor","shapes":[],
+             "prototypes":[{"id":"actor","document":{"schema":"puck.creation.v2","name":"actor","shapes":[],
                 "drivers":[{"name":"stride","signal":"planarTravel","cadence":"state.cadence"}]}}]}
             """;
         var tree = JsonNode.Parse(Json)!;

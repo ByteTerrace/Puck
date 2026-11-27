@@ -15,7 +15,7 @@ public sealed class ModuleNamespaceLawTests {
             prototype "post" {
               document {
                 name: "post"
-                schema: "puck.creation.v1"
+                schema: "puck.creation.v2"
               }
             }
           }
@@ -176,7 +176,7 @@ public sealed class ModuleNamespaceLawTests {
                 prototype "post" {
                   document {
                     name: "post"
-                    schema: "puck.creation.v1"
+                    schema: "puck.creation.v2"
                   }
                 }
               }
@@ -210,7 +210,7 @@ public sealed class ModuleNamespaceLawTests {
                 prototype "fin" {
                   document {
                     name: "fin"
-                    schema: "puck.creation.v1"
+                    schema: "puck.creation.v2"
                   }
                 }
               }

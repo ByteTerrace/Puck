@@ -58,7 +58,7 @@ Use total standing height `H` as the design reference, measured from the sole to
 | Each boot | About `0.15H` wide and `0.23H` long | Weight, direction, and a stable planted stance |
 | Forearm armor | Visibly thicker than the upper arm | Readable powered-armor silhouette |
 
-Fit the authored character to the existing body's scale and foot origin. Document the actual author-frame axes, dimensions, and pivot convention before placing shapes. Read the geometry unit contract: a primitive's scale can encode dimensions differently from another primitive's scale. Do not assume every scale is a radius or a generic multiplier.
+Fit the authored character to the existing body's scale and foot origin. Document the actual creation-frame axes, dimensions, and pivot convention before placing shapes. Read the geometry unit contract: a primitive's scale can encode dimensions differently from another primitive's scale. Do not assume every scale is a radius or a generic multiplier.
 
 ### Shape language
 
@@ -106,7 +106,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Subsystem or concept | Canonical source |
 |---|---|
 | Author a body-worn creation instead of expanding the procedural catalog | [WorldLook](../../../src/Puck.World.Schema/WorldLook.cs) |
-| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs), [CreationFrame](../../../src/Puck.World.Authoring/Authoring/CreationFrame.cs) |
+| Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs) |
 | Motion signals, gated drivers, swings and slides | [CreationAnimation](../../../src/Puck.World.Authoring/Authoring/CreationAnimation.cs) |
 | Foot and hand constraints | [CreationEffector](../../../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
 | Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldCreationInstances](../../../src/Puck.World.Client/WorldCreationInstances.cs) |

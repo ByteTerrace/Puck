@@ -144,7 +144,7 @@ public sealed partial class PuckLanguageServer {
         )
         : null
     ) ?? (word switch {
-        "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.definition.v1`, `puck.creation.v1`). Enables semantic validation and schema conformance checks.",
+        "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.definition.v1`, `puck.creation.v2`). Enables semantic validation and schema conformance checks.",
         "basis" => "**`basis` Directive**\n\nSpecifies the base world document path inherited by this world definition. Properties in this document override or compose over the basis.",
         "documentId" => "**`documentId` Directive**\n\nUnique string identifier for this world definition document.",
         "let" => "**`let` Declaration**\n\nDeclares a compile-time evaluated constant or alias (e.g. `let tickRate = 0.25s`, `let tableColor = #1b4d3e`).",

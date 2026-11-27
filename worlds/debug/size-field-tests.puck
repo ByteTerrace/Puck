@@ -96,7 +96,7 @@ prototypes {
     document {
       name: "floor"
       palette [{ color: "#C9BFAE" }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       boundsBox(label: "ground", x0: -10, x1: 30, y0: -1, y1: 0, z0: -20, z1: 10, slot: 0)
       boundsBox(label: "canopy", x0: 17, x1: 23, y0: 1, y1: 1.25, z0: -1, z1: 2, slot: 0)
     }

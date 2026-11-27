@@ -146,7 +146,7 @@ public sealed class WorldShapeLawCommandModuleLawTests {
             Profile = new SdfPrismProfile(SdfPrismProfileKind.Ellipse, CornerRadius: 0f),
         };
         var canonical = CreationCanonicalizer.Canonicalize(document: new CreationDocument(Schema: CreationDocument.CurrentSchema, Name: "rev", Palette: null, Shapes: [shape], Frames: null), source: "rev");
-        var law = CreationShapeLaws.Of(document: CreationFrame.ToEngine(document: canonical.Document), index: 0);
+        var law = CreationShapeLaws.Of(document: canonical.Document, index: 0);
 
         Assert.Null(law.Failure);
         Assert.EndsWith(expectedEndString: "lowered=Ellipse distance=exact cpu=interprets contact=refused (lifts by revolve)", actualString: law.Describe(), comparisonType: StringComparison.Ordinal);

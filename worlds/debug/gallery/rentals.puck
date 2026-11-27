@@ -78,8 +78,8 @@ let rentalReachDepth = 1.2
 function rentalAlong(n) = (rentalFirst + (rentalPitch * n))
 // A device's place on its arm, in the stall's frame, and the yaw it faces the customer at.
 function rentalSpot(arm, n) = ((arm == 0) ? [(0 - rentalFront), (0 - rentalAlong(n))] : [rentalAlong(n), rentalFront])
-// A device's front is its creation's author -Z, which the author frame turns to the engine's +Z, so a placement faces
-// it toward its customer at 270 on arm 0 (customers at -x) and 0 on arm 1 (customers at +z).
+// A device's screen faces its creation's +Z, so a placement faces it toward its customer at 270 on arm 0 (customers at
+// -x) and 0 on arm 1 (customers at +z).
 function rentalArmYaw(arm) = ((arm == 0) ? 270 : 0)
 
 // The models: a brick on arm 0, an advanced brick on arm 1.
@@ -373,37 +373,37 @@ template rentalBrick(c) {
   }
   shape Box "bezel" {
     material: 1
-    position [0, 0.095, -0.0135]
+    position [0, 0.095, 0.0135]
     scale [0.031, 0.026, 0.0015]
     rounding: 0.0012
   }
   shape Box "screen-hgb" {
     material: 2
-    position [0, 0.096, -0.0146]
+    position [0, 0.096, 0.0146]
     scale [0.022, 0.0198, 0.0008]
   }
   shape Box "pad-x" {
     material: 3
-    position [0.019, 0.042, -0.0142]
+    position [-0.019, 0.042, 0.0142]
     scale [0.0095, 0.003, 0.0015]
     rounding: 0.001
   }
   shape Box "pad-y" {
     material: 3
-    position [0.019, 0.042, -0.0142]
+    position [-0.019, 0.042, 0.0142]
     scale [0.003, 0.0095, 0.0015]
     rounding: 0.001
   }
   shape Cylinder "a" {
     material: 3
-    position [-0.024, 0.046, -0.0142]
-    rotation [0.7071, 0, 0, 0.7071]
+    position [0.024, 0.046, 0.0142]
+    rotation [-0.7071, 0, 0, 0.7071]
     scale [0.0045, 0.0015, 0.0045]
   }
   shape Cylinder "b" {
     material: 3
-    position [-0.012, 0.04, -0.0142]
-    rotation [0.7071, 0, 0, 0.7071]
+    position [0.012, 0.04, 0.0142]
+    rotation [-0.7071, 0, 0, 0.7071]
     scale [0.0045, 0.0015, 0.0045]
   }
 }
@@ -416,37 +416,37 @@ template rentalAdvanced(c) {
   }
   shape Box "bezel" {
     material: 1
-    position [0, 0.043, -0.0122]
+    position [0, 0.043, 0.0122]
     scale [0.038, 0.027, 0.0015]
     rounding: 0.0012
   }
   shape Box "screen-agb" {
     material: 2
-    position [0, 0.043, -0.0133]
+    position [0, 0.043, 0.0133]
     scale [0.0306, 0.0204, 0.0008]
   }
   shape Box "pad-x" {
     material: 3
-    position [0.054, 0.045, -0.0128]
+    position [-0.054, 0.045, 0.0128]
     scale [0.009, 0.003, 0.0015]
     rounding: 0.001
   }
   shape Box "pad-y" {
     material: 3
-    position [0.054, 0.045, -0.0128]
+    position [-0.054, 0.045, 0.0128]
     scale [0.003, 0.009, 0.0015]
     rounding: 0.001
   }
   shape Cylinder "a" {
     material: 3
-    position [-0.058, 0.049, -0.0128]
-    rotation [0.7071, 0, 0, 0.7071]
+    position [0.058, 0.049, 0.0128]
+    rotation [-0.7071, 0, 0, 0.7071]
     scale [0.0045, 0.0015, 0.0045]
   }
   shape Cylinder "b" {
     material: 3
-    position [-0.048, 0.042, -0.0128]
-    rotation [0.7071, 0, 0, 0.7071]
+    position [0.048, 0.042, 0.0128]
+    rotation [-0.7071, 0, 0, 0.7071]
     scale [0.0045, 0.0015, 0.0045]
   }
 }
@@ -466,20 +466,20 @@ template rentalKey() {
   }
   shape Box "bit" {
     material: 0
-    position [-0.012, 0.022, 0]
+    position [0.012, 0.022, 0]
     scale [0.01, 0.012, 0.003]
     rounding: 0.002
   }
   shape Torus "bow" {
     material: 0
     position [0, 0.14, 0]
-    rotation [0.7071068, 0, 0, 0.7071068]
+    rotation [-0.7071068, 0, 0, 0.7071068]
     scale [0.028, 0.028, 0.028]
   }
   shape Cylinder "gem" {
     material: 1
     position [0, 0.14, 0]
-    rotation [0.7071068, 0, 0, 0.7071068]
+    rotation [-0.7071068, 0, 0, 0.7071068]
     scale [0.019, 0.004, 0.019]
   }
 }
@@ -492,11 +492,11 @@ let rentalCounterPalette = [
   { color: lookLevelToybox.grout, roughness: 0.4, specular: 0.04 }
 ]
 
-// The kiosk: a stall's counter, a creation whose shapes are in the author frame, turned a half turn from the plan, so a
-// point of the stall's frame (`rentalPlan`'s lx, lz) is the author point (-lx, -lz) in both stalls. Each arm is
-// built once in its own terms, `u` along the arm from the corner and `v` out toward its customers (arm 0 customers at
-// the stall's -x, arm 1's at its +z), and `rentalArmAuthor` puts a point there in the author frame (arm 0: x = v, z = u;
-// arm 1: x = -u, z = -v). The arms are mirror images across the L's diagonal, so one template builds both.
+// The kiosk: a stall's counter, a creation in the stall's own frame (`rentalPlan`'s lx, lz). Each arm is built once in
+// its own terms, `u` along the arm from the corner and `v` out toward its customers (arm 0 runs down the stall's -z with
+// its customers at -x, arm 1 along +x with its customers at +z), and `rentalArmPoint` puts a point there in the stall's
+// frame (arm 0: x = -v, z = -u; arm 1: x = u, z = v). The arms are mirror images across the L's diagonal, so one
+// template builds both.
 // The slots of the palette below, by role.
 let rentalKiosk = { body: 0, trim: 1, bezel: 2, plate: 3, canopy: 4, neon: 5, back: 7, sign: 9, ink: 10 }
 let rentalKioskPalette = [
@@ -512,14 +512,14 @@ let rentalKioskPalette = [
   { color: lookRentalKiosk.sign, roughness: 0.4, emissive: lookCabinetGlow }
   { color: lookCabinetInk, roughness: 0.5, specular: 0.04 }
 ]
-function rentalArmAuthor(arm, u, y, v) = ((arm == 0) ? [v, y, u] : [(0 - u), y, (0 - v)])
+function rentalArmPoint(arm, u, y, v) = ((arm == 0) ? [(0 - v), y, (0 - u)] : [u, y, v])
 function rentalArmScale(arm, hu, hy, hv) = ((arm == 0) ? [hv, hy, hu] : [hu, hy, hv])
-// The turn about author +Y that carries a text run's front (author +Z) onto the arm's customers.
-function rentalArmTurn(arm) = ((arm == 0) ? 90 : 180)
+// The turn about +Y that carries a text run's face (its local +Z) onto the arm's customers.
+function rentalArmTurn(arm) = ((arm == 0) ? 270 : 0)
 // A line of lettering on an arm's customer side, centred on (u, y) at depth v.
 function rentalArmLetters(arm, u, y, v, text, em, width) = {
   text: text
-  position: rentalArmAuthor(arm, u, (y - ((textCapHeight * em) / 2)), v)
+  position: rentalArmPoint(arm, u, (y - ((textCapHeight * em) / 2)), v)
   rotation: rotate([0, 1, 0], rentalArmTurn(arm))
   emHeight: em
   depth: 0.004
@@ -528,11 +528,11 @@ function rentalArmLetters(arm, u, y, v, text, em, width) = {
   align: "center"
   maxWidth: width
 }
-// The corner's blade sign, turned to the diagonal the corner's customers come from (the stall's -x, +z, which is the
-// author's +x, -z), and a point `d` out of its face.
-let rentalBladeAt = [0.1, 2.95, -0.1]
-let rentalBladeTurn = 135
-function rentalBladePoint(d, y) = [(rentalBladeAt[0] + (0.70711 * d)), y, (rentalBladeAt[2] - (0.70711 * d))]
+// The corner's blade sign, its face (local +Z) turned to the diagonal the corner's customers come from (the stall's -x,
+// +z), and a point `d` out of its face.
+let rentalBladeAt = [-0.1, 2.95, 0.1]
+let rentalBladeTurn = 315
+function rentalBladePoint(d, y) = [(rentalBladeAt[0] - (0.70711 * d)), y, (rentalBladeAt[2] + (0.70711 * d))]
 // The cubbies' clear height over the counter: a brick is 0.133 m tall and an advanced brick 0.082 m.
 function rentalCubbyHeight(arm) = ((arm == 0) ? 0.22 : 0.15)
 
@@ -541,7 +541,7 @@ function rentalCubbyHeight(arm) = ((arm == 0) ? 0.22 : 0.15)
 template rentalKioskBox(label, arm, material, u, y, v, hu, hy, hv, rounding = 0, detail = true) {
   shape Box $"{label}" {
     material: material
-    position: rentalArmAuthor(arm, u, y, v)
+    position: rentalArmPoint(arm, u, y, v)
     scale: rentalArmScale(arm, hu, hy, hv)
     rounding: rounding
     detail: detail
@@ -718,7 +718,8 @@ template rentalKioskArm(arm) {
   )
   shape Box $"header-sign-{arm}" {
     material: rentalKiosk.sign
-    position: rentalArmAuthor(arm, 1.45, 2.12, 0.104)
+    position: rentalArmPoint(arm, 1.45, 2.12, 0.104)
+    rotation: rotate([0, 1, 0], 180)
     scale: rentalArmScale(arm, 1.08, 0.15, 0.012)
     lightsAs: Face
     detail: true
@@ -764,7 +765,7 @@ prototypes {
   prototype "rental-counter" {
     document {
       name: "rental-counter"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: rentalKioskPalette
       for arm in [0, 1] {
         rentalKioskArm(arm)
@@ -849,11 +850,11 @@ prototypes {
     }
   }
   // The key stand: a pedestal in the stalls' colours, its top at rentalKeyTop, the returns tray inset at its east end
-  // (authored at -x, which the author frame turns east).
+  // (+x).
   prototype "rental-key-stand" {
     document {
       name: "rental-key-stand"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: rentalCounterPalette
       shape Box "body" {
         material: 0
@@ -869,7 +870,7 @@ prototypes {
       }
       shape Box "tray" {
         material: 3
-        position [(0.1 - rentalKeyHalfWidth), (rentalKeyTop + 0.01), 0]
+        position [(rentalKeyHalfWidth - 0.1), (rentalKeyTop + 0.01), 0]
         scale [0.08, 0.012, 0.12]
         rounding: 0.01
       }
@@ -880,18 +881,18 @@ prototypes {
     prototype $"{kind.id}" {
       document {
         name: kind.name
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette [rentalKeyBrass, kind.gem]
         rentalKey()
       }
     }
   }
   // The cartridge rack: a counter in the stalls' colours, its top at rentalRackTop, the returns tray inset at its east
-  // end (authored at -x, which the author frame turns east). Its front faces +Z.
+  // end (+x). Its front faces -Z, the creation's front.
   prototype "rental-cartridge-rack" {
     document {
       name: "rental-cartridge-rack"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: rentalCounterPalette
       shape Box "body" {
         material: 0
@@ -907,7 +908,7 @@ prototypes {
       }
       shape Box "tray" {
         material: 3
-        position [(0.1 - rentalRackHalfWidth), (rentalRackTop + 0.01), 0.02]
+        position [(rentalRackHalfWidth - 0.1), (rentalRackTop + 0.01), -0.02]
         scale [0.08, 0.012, 0.12]
         rounding: 0.01
       }
@@ -919,7 +920,7 @@ prototypes {
     prototype $"rental-cartridge-{s}" {
       document {
         name: slot.label
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette [
           { color: "#2E2E33", roughness: 0.45, specular: 0.04 }
           { color: "#EDE6D3", roughness: 0.6, specular: 0.03 }
@@ -933,14 +934,14 @@ prototypes {
         }
         shape Box "label" {
           material: 1
-          position [0, 0.08, 0.0098]
+          position [0, 0.08, -0.0098]
           scale [0.048, 0.04, 0.0006]
         }
         textRuns [
           {
             text: slot.label
-            position [0, 0.08, 0.0106]
-            rotation [0, 0, 0, 1]
+            position [0, 0.08, -0.0106]
+            rotation [0, 1, 0, 0]
             emHeight: 0.011
             depth: 0.0006
             mode: "emboss"
@@ -954,7 +955,7 @@ prototypes {
   prototype "rental-device-empty" {
     document {
       name: "rental-device-empty"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [rentalBezel]
     }
   }
@@ -963,7 +964,7 @@ prototypes {
       prototype $"rental-{model.id}-{c.name}" {
         document {
           name: $"{model.title} ({c.name})"
-          schema: "puck.creation.v1"
+          schema: "puck.creation.v2"
           palette: rentalPalette(c)
           for k in filter([0], k => (m == 0)) {
             rentalBrick(c)

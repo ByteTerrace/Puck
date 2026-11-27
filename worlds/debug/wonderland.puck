@@ -59,7 +59,7 @@ template wonderPainting(label, size) {
     faces [{ name: "glass", shapeId: 0 }]
   }
   name: label
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette: wonderPaintPalette
   shape Box "rim" {
     material: wonderPaintBlack
@@ -153,12 +153,12 @@ prototypes {
   prototype "wonderland-door" {
     document {
       wonderPainting(label: "wonderland-door", size: 1)
-      localBox(label: "plaque", x0: 1.55, x1: 2.55, y0: 1, y1: 1.4, z0: 0, z1: 0.025, slot: wonderPaintBoard)
+      boundsBox(label: "plaque", x0: -2.55, x1: -1.55, y0: 1, y1: 1.4, z0: -0.025, z1: 0, slot: wonderPaintBoard)
       textRuns [
         {
           text: "WONDERLAND"
-          position [2.05, 1.31, 0.025]
-          rotation [0, 0, 0, 1]
+          position [-2.05, 1.31, -0.025]
+          rotation [0, 1, 0, 0]
           emHeight: 0.06
           depth: 0.004
           mode: "emboss"
@@ -168,8 +168,8 @@ prototypes {
         }
         {
           text: "Step in and you step out of the mouse hole next door, a quarter your size. Back through it, you are big again."
-          position [2.05, 1.22, 0.025]
-          rotation [0, 0, 0, 1]
+          position [-2.05, 1.22, -0.025]
+          rotation [0, 1, 0, 0]
           emHeight: 0.028
           depth: 0.003
           mode: "emboss"
@@ -202,7 +202,7 @@ prototypes {
         { color: wonderSkirting, roughness: 0.6, specular: 0.15 }
         { color: "#FFF1DF", roughness: 0.5, emissive: 2000nit }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       boundsBox(label: "floor", x0: 0.7, x1: 9.7, y0: -0.2, y1: wonderFloorTop, z0: 23.7, z1: 34.3, slot: 1)
       boundsBox(label: "east", x0: 9.4, x1: 9.7, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 34.3, slot: 0)
       boundsBox(label: "west", x0: 0.7, x1: 1, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 34.3, slot: 0)
@@ -271,7 +271,7 @@ prototypes {
         { color: "#F2E23A", roughness: 0.45, specular: 0.2 }
         { color: "#2FA84A", roughness: 0.45, specular: 0.2 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       for i in range(1, 11) {
         boundsBox(
           label: $"cases-{i}",
@@ -294,10 +294,11 @@ prototypes {
     document {
       name: "wonderland-cable"
       palette [{ color: "#141517", roughness: 0.3, specular: 0.05 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Sweep "drop" {
         material: 0
-        position [-1.7, 0.69, -31]
+        position [1.7, 0.69, 31]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [0, 0, 0]
           b [-0.2, -0.09, -0.05]
@@ -308,7 +309,8 @@ prototypes {
       }
       shape Sweep "loop" {
         material: 0
-        position [-1.88, 0.061, -31.1]
+        position [1.88, 0.061, 31.1]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [0, 0, 0]
           b [-0.52, 0, -0.9]
@@ -319,7 +321,8 @@ prototypes {
       }
       shape Sweep "tail" {
         material: 0
-        position [-3.4, 0.061, -31.2]
+        position [3.4, 0.061, 31.2]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [0, 0, 0]
           b [-0.9, 0, 0.9]

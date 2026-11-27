@@ -88,7 +88,7 @@ public sealed class InPlacePortalCrossingLawTests {
             )
         );
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: CreationFrame.ToAuthor(document: document),
+            document: document,
             source: id
         );
 

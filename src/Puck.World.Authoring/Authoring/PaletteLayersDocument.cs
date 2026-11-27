@@ -93,7 +93,7 @@ public sealed record PaletteFlowRegionDocument(DocumentVector3 Center, float Rad
 /// stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows,
 /// tilting the shading normal by <paramref name="Tilt"/> times its slope and revealing <paramref name="Surface"/> over
 /// <paramref name="Coverage"/> of the slot (streaks, foam). The velocity is authored in the shader's frame, as the other
-/// palette layers are: for a creation, its engine frame (the author frame's x and z negated), turned with each placement;
+/// palette layers are: for a creation, its own frame, turned with each placement;
 /// for a field row, world space; <paramref name="Frame"/> <c>World</c> keeps it and the pattern in world space on any surface.</summary>
 /// <param name="Velocity">The flow, in units per second.</param>
 /// <param name="Scale">The pattern's frequency, in cells per unit; positive (null = 1).</param>

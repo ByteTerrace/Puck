@@ -91,7 +91,6 @@ public sealed class BodyUpRelativeVelocityLawTests {
 
         body.ApplyContinuumTrajectory(
             destinationCompletedEngineTick: 0UL,
-            entityIndex: 0,
             trajectory: new WorldContinuumTrajectory(
                 BoundaryEvents: 1,
                 ConsumedThroughEngineTick: step,

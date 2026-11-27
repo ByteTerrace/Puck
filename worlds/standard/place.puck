@@ -11,7 +11,7 @@ prototypes {
   prototype "place" {
     document {
       name: "place"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#000000" }]
     }
   }

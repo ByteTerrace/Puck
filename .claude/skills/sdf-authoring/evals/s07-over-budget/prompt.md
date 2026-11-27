@@ -14,7 +14,7 @@ placements {}
 prototypes {
   prototype "subject" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "subject"
       palette [
         { color: "#9AA0A6", specular: 0.2, roughness: 0.55 }

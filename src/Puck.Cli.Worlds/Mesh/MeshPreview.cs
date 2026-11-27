@@ -7,13 +7,13 @@ using Puck.SdfVm;
 
 namespace Puck.Cli.Mesh;
 
-/// <summary>One view of a creation in its author frame: the camera stands along an azimuth and elevation from the
+/// <summary>One view of a creation in its frame: the camera stands along an azimuth and elevation from the
 /// creation's front, optionally on a close window about a point.</summary>
 /// <param name="Name">The name the view's file and label carry.</param>
-/// <param name="Azimuth">The camera's turn about up from the front (+Z), in degrees: +90 stands on the subject's own left
-/// (+X), 180 behind.</param>
+/// <param name="Azimuth">The camera's turn about up from the front (−Z), in degrees: +90 stands on the subject's own left
+/// (−X), 180 behind.</param>
 /// <param name="Elevation">The camera's height above the horizon, in degrees: 90 looks straight down.</param>
-/// <param name="Focus">The author-frame point a close window centres on, or <see langword="null"/> to frame the whole
+/// <param name="Focus">The point, in the creation's frame, a close window centres on, or <see langword="null"/> to frame the whole
 /// creation.</param>
 /// <param name="HalfWidth">Half the close window's width, in metres; read only with <paramref name="Focus"/>.</param>
 internal sealed record MeshPreviewView(string Name, float Azimuth, float Elevation, Vector3? Focus = null, float HalfWidth = 0f) {
@@ -31,12 +31,12 @@ internal sealed record MeshPreviewView(string Name, float Azimuth, float Elevati
             var azimuth = float.DegreesToRadians(degrees: Azimuth);
             var elevation = float.DegreesToRadians(degrees: Elevation);
 
-            return new Vector3(x: (MathF.Sin(x: azimuth) * MathF.Cos(x: elevation)), y: MathF.Sin(x: elevation), z: (MathF.Cos(x: azimuth) * MathF.Cos(x: elevation)));
+            return new Vector3(x: (-MathF.Sin(x: azimuth) * MathF.Cos(x: elevation)), y: MathF.Sin(x: elevation), z: (-MathF.Cos(x: azimuth) * MathF.Cos(x: elevation)));
         }
     }
-    /// <summary>Gets the direction that reads as up in the image: +Y, or the creation's front (+Z) from straight above or
+    /// <summary>Gets the direction that reads as up in the image: +Y, or the creation's front (−Z) from straight above or
     /// below, so the front is at the top of the image.</summary>
-    public Vector3 Up => ((MathF.Abs(x: Elevation) >= 89f) ? Vector3.UnitZ : Vector3.UnitY);
+    public Vector3 Up => ((MathF.Abs(x: Elevation) >= 89f) ? -Vector3.UnitZ : Vector3.UnitY);
 
     /// <summary>Reads the views a request names: the standard names, <c>all</c> for the standard set, or
     /// <c>name=azimuth,elevation</c> optionally followed by <c>,x,y,z,halfWidth</c> for a close window.</summary>
@@ -92,7 +92,7 @@ internal sealed record MeshPreviewView(string Name, float Azimuth, float Elevati
         return true;
     }
 }
-/// <summary>A creation's rest mesh in its author frame, ready to draw: one mesh, each triangle's colour and whether it holds
+/// <summary>A creation's rest mesh in its frame, ready to draw: one mesh, each triangle's colour and whether it holds
 /// an open edge.</summary>
 /// <param name="Mesh">The joined mesh of every group of the creation.</param>
 /// <param name="Albedo">One display colour, each channel 0 to 1, per triangle.</param>
@@ -119,7 +119,7 @@ internal static class MeshPreviewImage {
     private static readonly (int X, int Y)[] Neighbours = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
     /// <summary>Frames a view: the whole mesh centred with a margin, or the close window the view names.</summary>
-    /// <param name="mesh">The mesh, in the author frame.</param>
+    /// <param name="mesh">The mesh, in the creation's frame.</param>
     /// <param name="view">The view.</param>
     /// <param name="aspect">The image's width over its height.</param>
     /// <returns>The orthographic window.</returns>

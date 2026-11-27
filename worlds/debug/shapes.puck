@@ -344,7 +344,7 @@ let accent = { color: "#D9822B", roughness: 0.5, specular: 0.04 }
 // from 3 on, and `runs` the exhibit's own lettering.
 template exhibit(label, extra = [], runs = [], subject = galleryPalette[0]) {
   name: label
-  schema: "puck.creation.v1"
+  schema: "puck.creation.v2"
   palette: concat([subject], map(range(1, length(galleryPalette)), i => galleryPalette[i]), extra)
   textRuns: runs
 }
@@ -701,12 +701,12 @@ template consoleScreen(name, paints) {
   prototype name {
     document {
       name: name
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [consoleGlass with { paints: paints }]
       shape Box "glass" {
         material: 0
-        position: plinthOnFace(0, 0, displayGlassOut)
-        rotation: plinthFace
+        position: (plinthOnFace(0, 0, displayGlassOut) * [-1, 1, -1])
+        rotation: compose(rotate([0, 1, 0], 180), plinthFace)
         scale [plinthGlassHalf[0], plinthGlassHalf[1], plinthGlassDepth]
         rounding: 0.01
         // The interface the glass shows lights the plinth's pad and the exhibit before it, in its own colours.
@@ -1219,22 +1219,22 @@ template stretchPrototype(id, label, blend, smooth) {
       shape Capsule "capsule" {
         blend: blend
         material: accentMaterial
-        position [-0.37, 1.16, 0.12]
+        position [0.37, 1.16, -0.12]
         scale [0.12, 0.16, 0.05]
         smooth: smooth
       }
       shape Cone "cone" {
         blend: blend
         material: accentMaterial
-        position [0, 1.2, 0.12]
+        position [0, 1.2, -0.12]
         scale [0.13, 0.2, 0.05]
         smooth: smooth
       }
       shape Torus "torus" {
         blend: blend
         material: accentMaterial
-        position [0.37, 1.2, 0.12]
-        rotation [0.7071068, 0, 0, 0.7071068]
+        position [-0.37, 1.2, -0.12]
+        rotation [-0.7071068, 0, 0, 0.7071068]
         scale [0.08, 0.1, 0.17]
         smooth: smooth
       }
@@ -1255,7 +1255,7 @@ template blendPrototypes() {
         shape Sphere "tool" {
           blend: entry.blend
           material: accentMaterial
-          position: entry.tool
+          position: (entry.tool * [-1, 1, -1])
           scale: entry.radius
           smooth: entry.smooth
         }
@@ -1282,11 +1282,11 @@ template foldPrototypes() {
     document {
       shape Capsule "subject" {
         domain [
-          symmetry(normal: [1, 0, 0])
+          symmetry(normal: [-1, 0, 0])
         ]
         material: exhibitMaterial
-        position [0.25, 1.2, 0]
-        rotation [0, 0, 0.258819, 0.965926]
+        position [-0.25, 1.2, 0]
+        rotation [0.258819, 0.965926, 0, 0]
         scale [0.08, 0.25, 0.08]
       }
       exhibit(label: "SYMMETRY")
@@ -1300,6 +1300,7 @@ template foldPrototypes() {
         ]
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.1, 0.1, 0.1]
       }
       exhibit(
@@ -1315,6 +1316,7 @@ template foldPrototypes() {
         ]
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.07, 0.07, 0.07]
       }
       exhibit(label: "REPEAT 3X3")
@@ -1326,11 +1328,12 @@ template foldPrototypes() {
     document {
       shape Sphere "subject" {
         domain [
-          symmetry(normal: [1, 0, 0])
+          symmetry(normal: [-1, 0, 0])
           repeat(spacing: [0.25, 1, 1], limit: [1, 0, 0], origin: [-0.125, 0, 0])
         ]
         material: exhibitMaterial
-        position [0.125, 1.2, 0]
+        position [-0.125, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.09, 0.09, 0.09]
       }
       exhibit(
@@ -1349,6 +1352,7 @@ template foldPrototypes() {
         ]
         material: exhibitMaterial
         position [0, 0, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.06, 0.06, 0.06]
       }
       shape Box "clip" {
@@ -1369,8 +1373,8 @@ template foldPrototypes() {
           polar(count: 5, axis: Y, mirror: true)
         ]
         material: exhibitMaterial
-        position [0, 1.2, 0.3]
-        rotation [0, 0, 0.258819, 0.965926]
+        position [0, 1.2, -0.3]
+        rotation [0.258819, 0.965926, 0, 0]
         scale [0.05, 0.25, 0.1]
       }
       exhibit(
@@ -1386,6 +1390,7 @@ template foldPrototypes() {
         ]
         material: exhibitMaterial
         position [0, 1.5, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.04, 0.12, 0.04]
       }
       exhibit(label: "POLAR Z")
@@ -1398,7 +1403,8 @@ template foldPrototypes() {
           polar(count: 6, axis: Y, materialStride: 1)
         ]
         material: accentMaterial
-        position [0, 1.2, 0.32]
+        position [0, 1.2, -0.32]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.12, 0.12, 0.12]
       }
       exhibit(
@@ -1424,8 +1430,8 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: Pmm, limit: [1, 1])
         ]
         material: exhibitMaterial
-        position [-0.07, 1.2, -0.06]
-        rotation [0, 0.258819, 0, 0.965926]
+        position [0.07, 1.2, 0.06]
+        rotation [0, 0.965926, 0, -0.258819]
         scale [0.07, 0.03, 0.02]
       }
       exhibit(
@@ -1440,8 +1446,8 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P4M, limit: [1, 1])
         ]
         material: exhibitMaterial
-        position [-0.08, 1.2, -0.025]
-        rotation [0, 0.258819, 0, 0.965926]
+        position [0.08, 1.2, 0.025]
+        rotation [0, 0.965926, 0, -0.258819]
         scale [0.07, 0.03, 0.02]
       }
       exhibit(
@@ -1459,15 +1465,15 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P3M1)
         ]
         material: exhibitMaterial
-        position [-0.03, 1.2, -0.08]
-        rotation [0, 0.258819, 0, 0.965926]
+        position [0.03, 1.2, 0.08]
+        rotation [0, 0.965926, 0, -0.258819]
         scale [0.06, 0.03, 0.02]
       }
       shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.707107, 0, 0, 0.707107]
+        rotation [0, 0.707107, -0.707107, 0]
         profile {
           kind: "Convex"
           vertices: galleryHexClip
@@ -1486,15 +1492,15 @@ template foldPrototypes() {
           wallpaper(cell: [0.3, 0.3], group: P6M)
         ]
         material: exhibitMaterial
-        position [-0.06, 1.2, -0.06]
-        rotation [0, 0.258819, 0, 0.965926]
+        position [0.06, 1.2, 0.06]
+        rotation [0, 0.965926, 0, -0.258819]
         scale [0.06, 0.03, 0.02]
       }
       shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.707107, 0, 0, 0.707107]
+        rotation [0, 0.707107, -0.707107, 0]
         profile {
           kind: "Convex"
           vertices: galleryHexClip
@@ -1514,6 +1520,7 @@ template foldPrototypes() {
         ]
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.13, 0.04, 0.13]
       }
       exhibit(
@@ -1534,6 +1541,7 @@ template foldPrototypes() {
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.45]
       }
       exhibit(label: "ERODE")
@@ -1647,6 +1655,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 3
@@ -1661,6 +1670,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 6
@@ -1702,6 +1712,7 @@ template formPrototypes() {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.4, 0.4, 0]
         taper: 0.3
       }
@@ -1714,6 +1725,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -1765,6 +1777,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -1806,6 +1819,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -1846,6 +1860,7 @@ template formPrototypes() {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -1885,6 +1900,7 @@ template formPrototypes() {
       shape Sweep "subject" {
         material: exhibitMaterial
         position [0, 0.7, 0]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [0, 0, 0]
           b [0.2, 0.5, 0]
@@ -1961,6 +1977,7 @@ template surfacePrototypes(displays = galleryDisplays) {
         }
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.5, 0.5, 0.5]
       }
       exhibit(label: "WRAP SOFTEN", extra: [{ color: "#C9A27E", roughness: 0.6, wrap: 0.6, soften: 1 }])
@@ -1971,6 +1988,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Sphere "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.45]
       }
       exhibit(
@@ -1986,12 +2004,13 @@ template surfacePrototypes(displays = galleryDisplays) {
     document {
       shape Sphere "subject" {
         material: accentMaterial
-        position [-0.3, 1.2, 0]
+        position [0.3, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.25, 0.25, 0.25]
       }
       shape Sphere "continuous" {
         material: 4
-        position [0.3, 1.2, 0]
+        position [-0.3, 1.2, 0]
         scale [0.25, 0.25, 0.25]
       }
       exhibit(
@@ -2007,12 +2026,13 @@ template surfacePrototypes(displays = galleryDisplays) {
     document {
       shape Sphere "subject" {
         material: accentMaterial
-        position [-0.3, 1.2, 0]
+        position [0.3, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.25, 0.25, 0.25]
       }
       shape Sphere "continuous" {
         material: 4
-        position [0.3, 1.2, 0]
+        position [-0.3, 1.2, 0]
         scale [0.25, 0.25, 0.25]
       }
       exhibit(
@@ -2038,47 +2058,47 @@ template surfacePrototypes(displays = galleryDisplays) {
       }
       shape Box "grey-03" {
         material: 4
-        position [-0.375, 1.32, 0.015]
+        position [0.375, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-09" {
         material: 5
-        position [-0.225, 1.32, 0.015]
+        position [0.225, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-18" {
         material: 6
-        position [-0.075, 1.32, 0.015]
+        position [0.075, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-36" {
         material: 7
-        position [0.075, 1.32, 0.015]
+        position [-0.075, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-59" {
         material: 8
-        position [0.225, 1.32, 0.015]
+        position [-0.225, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "grey-90" {
         material: 9
-        position [0.375, 1.32, 0.015]
+        position [-0.375, 1.32, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "red" {
         material: 10
-        position [-0.15, 1.08, 0.015]
+        position [0.15, 1.08, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "green" {
         material: 11
-        position [0, 1.08, 0.015]
+        position [0, 1.08, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       shape Box "blue" {
         material: 12
-        position [0.15, 1.08, 0.015]
+        position [-0.15, 1.08, -0.015]
         scale [0.065, 0.065, 0.01]
       }
       exhibit(
@@ -2105,6 +2125,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Box "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.04]
       }
       exhibit(
@@ -2135,6 +2156,7 @@ template surfacePrototypes(displays = galleryDisplays) {
         rounding: 0.1
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.38, 0.38, 0.38]
       }
       exhibit(
@@ -2163,6 +2185,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Sphere "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.45]
       }
       exhibit(
@@ -2188,6 +2211,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Torus "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.45]
       }
       exhibit(
@@ -2212,6 +2236,7 @@ template surfacePrototypes(displays = galleryDisplays) {
           material: accentMaterial
         }
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.4, 0.35, 0.12]
       }
       exhibit(label: "PANEL RECESS", extra: [accent])
@@ -2227,6 +2252,7 @@ template surfacePrototypes(displays = galleryDisplays) {
           material: accentMaterial
         }
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.4, 0.35, 0.12]
       }
       exhibit(label: "PANEL RAISE", extra: [accent])
@@ -2243,6 +2269,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Box "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.35, 0.35, 0.35]
         trims [
           {
@@ -2260,6 +2287,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Sphere "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.45, 0.45, 0.45]
       }
       exhibit(
@@ -2297,8 +2325,8 @@ template surfacePrototypes(displays = galleryDisplays) {
         runs: [
           {
             text: "ENGRAVED"
-            position [0, 1.2, 0.08]
-            rotation [0, 0, 0, 1]
+            position [0, 1.2, -0.08]
+            rotation [0, 1, 0, 0]
             emHeight: 0.13
             depth: 0.012
             mode: "engrave"
@@ -2314,7 +2342,7 @@ template surfacePrototypes(displays = galleryDisplays) {
       shape Box "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0, 0, 0.173648, 0.984808]
+        rotation [0.173648, 0.984808, 0, 0]
         scale [0.45, 0.3, 0.05]
       }
       exhibit(
@@ -2350,7 +2378,7 @@ template surfacePrototypes(displays = galleryDisplays) {
         {
           kind: "flow"
           position [0, 1.35, 0]
-          rotation [1, 0, 0, 0]
+          rotation [0, 0, -1, 0]
           halfExtent [0.2, 0.4, 0.2]
           axis: 0.8
           width: 0.06
@@ -2389,7 +2417,7 @@ template surfacePrototypes(displays = galleryDisplays) {
         {
           kind: "cloud"
           position [0, 1.25, 0]
-          rotation [0, 0, 0, 1]
+          rotation [0, 1, 0, 0]
           halfExtent [0.45, 0.3, 0.45]
           width: 0.2
           extinction: 4
@@ -2428,37 +2456,37 @@ template surfacePrototypes(displays = galleryDisplays) {
     document {
       shape Sphere "core" {
         material: accentMaterial
-        position [-0.38, 1.2, 0]
+        position [0.38, 1.2, 0]
         scale [0.1, 0.1, 0.1]
       }
       shape Cylinder "rod" {
         material: accentMaterial
-        position [0.2, 1.2, 0.14]
+        position [-0.2, 1.2, -0.14]
         scale [0.015, 0.3, 0.015]
       }
       shape Cylinder "frost-rod" {
         material: accentMaterial
-        position [0.46, 1.2, 0.1]
+        position [-0.46, 1.2, -0.1]
         scale [0.015, 0.3, 0.015]
       }
       shape Box "shell" {
         material: 4
-        position [-0.38, 1.2, 0]
+        position [0.38, 1.2, 0]
         scale [0.18, 0.18, 0.18]
       }
       shape Box "thin" {
         material: 5
-        position [-0.05, 1.2, 0]
+        position [0.05, 1.2, 0]
         scale [0.1, 0.22, 0.004]
       }
       shape Box "thick" {
         material: 5
-        position [0.2, 1.2, 0]
+        position [-0.2, 1.2, 0]
         scale [0.08, 0.22, 0.03]
       }
       shape Box "frost" {
         material: 6
-        position [0.46, 1.2, 0]
+        position [-0.46, 1.2, 0]
         scale [0.1, 0.22, 0.004]
       }
       exhibit(
@@ -2484,6 +2512,7 @@ template motionPrototypes() {
       shape Box "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.4, 0.15, 0.25]
         swings [
           swing("clock", [0, 1, 0], 1, [0, 1.2, 0]) with { wave: "linear" }
@@ -2542,7 +2571,7 @@ template motionPrototypes() {
         slides [
           {
             driver: "clock"
-            axis [1, 0, 0]
+            axis [-1, 0, 0]
             amplitude: 0.35
           }
         ]
@@ -2595,13 +2624,13 @@ template motionPrototypes() {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [0.35, 1.2, 0]
+        position [-0.35, 1.2, 0]
         scale [0.18, 0.18, 0.18]
         smooth: 0.15
         slides [
           {
             driver: "clock"
-            axis [1, 0, 0]
+            axis [-1, 0, 0]
             amplitude: 0.06
           }
         ]
@@ -2646,13 +2675,13 @@ template motionPrototypes() {
         blend: SmoothSubtraction
         group: 1
         material: accentMaterial
-        position [0, 1.25, 0.3]
+        position [0, 1.25, -0.3]
         scale [0.2, 0.2, 0.2]
         smooth: 0.1
         slides [
           {
             driver: "clock"
-            axis [1, 0, 0]
+            axis [-1, 0, 0]
             amplitude: 0.045
           }
         ]
@@ -2678,7 +2707,7 @@ template motionPrototypes() {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [0, 1.42, 0.02]
+        position [0, 1.42, -0.02]
         scale [0.13, 0.13, 0.13]
         smooth: 0.08
         swings [
@@ -2706,7 +2735,7 @@ template motionPrototypes() {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [-0.1, 1.36, 0]
+        position [0.1, 1.36, 0]
         scale [0.09, 0.09, 0.09]
         smooth: 0.1
         swings [
@@ -2717,7 +2746,7 @@ template motionPrototypes() {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [0.1, 1.36, 0]
+        position [-0.1, 1.36, 0]
         scale [0.09, 0.09, 0.09]
         smooth: 0.1
         swings [
@@ -2744,12 +2773,12 @@ template motionPrototypes() {
       }
       shape Capsule "wing" {
         domain [
-          symmetry(normal: [1, 0, 0])
+          symmetry(normal: [-1, 0, 0])
         ]
         material: accentMaterial
         parent: "hinge"
-        position [0.28, 1.25, 0]
-        rotation [0, 0, 0.5, 0.866025]
+        position [-0.28, 1.25, 0]
+        rotation [0.5, 0.866025, 0, 0]
         scale [0.06, 0.16, 0.06]
       }
       exhibit(label: "MOVING MIRROR", extra: [accent])
@@ -2762,7 +2791,7 @@ template motionPrototypes() {
       shape Cylinder "hub" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.707107, 0, 0, 0.707107]
+        rotation [-0.707107, 0, 0, 0.707107]
         scale [0.08, 0.05, 0.08]
         swings [
           swing("clock", [0, 0, 1], 1, [0, 1.2, 0]) with { wave: "linear" }
@@ -2775,6 +2804,7 @@ template motionPrototypes() {
         material: accentMaterial
         parent: "hub"
         position [0, 1.45, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.035, 0.14, 0.02]
       }
       exhibit(label: "MOVING POLAR", extra: [accent])
@@ -2791,6 +2821,7 @@ template motionPrototypesB() {
       shape Box "panel" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.35, 0.3, 0.1]
         swings [
           swing("clock", [0, 1, 0], 0.6, [0, 1.2, 0])
@@ -2849,13 +2880,15 @@ template motionPrototypesB() {
         group: 1
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.25, 0.25, 0.25]
       }
       shape Sphere "visitor" {
         blend: SmoothUnion
         group: 1
         material: accentMaterial
-        position [0.35, 1.2, 0]
+        position [-0.35, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.18, 0.18, 0.18]
         smooth: 0.15
         slides [
@@ -2889,6 +2922,7 @@ template motionPrototypesB() {
       shape Sphere "eye" {
         material: accentMaterial
         position [0, 1.25, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.25, 0.25, 0.25]
         swings [
           swing("clock", [0, 1, 0], 0.5, [0, 1.25, 0])
@@ -2968,6 +3002,7 @@ template motionPrototypesB() {
         bend: 1.2
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.08, 0.4, 0.08]
         swings [
           swing("clock", [0, 1, 0], 0.5, [0, 1.2, 0])
@@ -2992,12 +3027,12 @@ template motionPrototypesB() {
         shape Sphere $"{petal.name}" {
           group: 2 + index
           material: accentMaterial
-          position: petal.at
+          position: (petal.at * [-1, 1, -1])
           scale [0.09, 0.09, 0.09]
           slides [
             {
               driver: "clock"
-              axis: petal.out
+              axis: (petal.out * [-1, 1, -1])
               amplitude: 0.1
             }
           ]
@@ -3019,6 +3054,7 @@ template motionPrototypesB() {
         }
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.35, 0.35, 0.35]
         swings [
           swing("clock", [1, 0, 0], 0.5, [0, 1.2, 0])
@@ -3034,6 +3070,7 @@ template motionPrototypesB() {
       shape Cylinder "nozzle" {
         material: exhibitMaterial
         position [0, 0.8, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.07, 0.15, 0.07]
         swings [
           swing("clock", [0, 0, 1], 0.4, [0, 0.65, 0])
@@ -3087,6 +3124,7 @@ template motionPrototypesB() {
         joint [0, 1.0, 0]
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.035, 0.2, 0.035]
       }
       shape Cylinder "lower" {
@@ -3094,12 +3132,14 @@ template motionPrototypesB() {
         material: exhibitMaterial
         parent: "upper"
         position [0, 1.58, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.03, 0.18, 0.03]
       }
       shape Sphere "hand" {
         material: accentMaterial
         parent: "lower"
         position [0, 1.76, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.06, 0.06, 0.06]
       }
       effectors [
@@ -3130,6 +3170,7 @@ template motionPrototypesB() {
       shape Box "subject" {
         material: accentMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.15, 0.15, 0.15]
       }
       frames [
@@ -3138,8 +3179,8 @@ template motionPrototypesB() {
           transforms [
             {
               id: 0
-              position [-0.25, 1.2, 0]
-              rotation [0, 0, 0, 1]
+              position [0.25, 1.2, 0]
+              rotation [0, 1, 0, 0]
             }
           ]
         }
@@ -3149,7 +3190,7 @@ template motionPrototypesB() {
             {
               id: 0
               position [0, 1.45, 0]
-              rotation [0, 0, 0.382683, 0.92388]
+              rotation [0.382683, 0.92388, 0, 0]
             }
           ]
         }
@@ -3158,8 +3199,8 @@ template motionPrototypesB() {
           transforms [
             {
               id: 0
-              position [0.25, 1.2, 0]
-              rotation [0, 0, 0, 1]
+              position [-0.25, 1.2, 0]
+              rotation [0, 1, 0, 0]
             }
           ]
         }
@@ -3169,7 +3210,7 @@ template motionPrototypesB() {
             {
               id: 0
               position [0, 0.95, 0]
-              rotation [0, 0.382683, 0, 0.92388]
+              rotation [0, 0.92388, 0, -0.382683]
             }
           ]
         }
@@ -3186,7 +3227,7 @@ template galleryPrototypes(displays = galleryDisplays) {
   prototype "gallery-display" {
     document {
       name: "gallery-display"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: plinthPalette
       displayPlinth(base: 0)
     }
@@ -3220,7 +3261,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Torus "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.5, 0, 0, 0.866025]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.6, 0.6, 0.6]
       }
       exhibit(label: "TORUS", subject: exhibitSubjects.torus)
@@ -3298,7 +3339,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.258819, 0, 0, 0.965926]
+        rotation [-0.258819, 0, 0, 0.965926]
       }
       exhibit(label: "PLANE CUT")
     }
@@ -3330,7 +3371,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Torus "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.5, 0, 0, 0.866025]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.7, 0.5, 0.4]
       }
       exhibit(label: "TORUS XZ")
@@ -3341,7 +3382,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Torus "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        rotation [0.5, 0, 0, 0.866025]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.5, 0.9, 0.5]
       }
       exhibit(label: "TORUS Y")
@@ -3454,6 +3495,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 6
@@ -3468,6 +3510,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 12
@@ -3482,6 +3525,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 12
@@ -3523,6 +3567,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Convex"
           vertices: galleryPentagon
@@ -3538,6 +3583,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -3576,6 +3622,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -3612,6 +3659,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Prism "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Path"
           cornerRadius: 0
@@ -3650,6 +3698,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.2, 0.3, 0.3]
         taper: 0.5
       }
@@ -3662,6 +3711,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 0.5
@@ -3677,6 +3727,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Polygon"
           sides: 6
@@ -3692,6 +3743,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Ellipse"
         }
@@ -3706,6 +3758,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "ChamferedRectangle"
           cornerRadius: 0.3
@@ -3721,6 +3774,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         lift: "Revolve"
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         profile {
           kind: "Convex"
           vertices: galleryPentagon
@@ -3738,6 +3792,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Sweep "subject" {
         material: exhibitMaterial
         position [0, 0.8, 0]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [-0.4, 0, 0]
           b [0, 1.0, 0.2]
@@ -3756,6 +3811,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Sweep "subject" {
         material: exhibitMaterial
         position [0, 0.8, 0]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [-0.4, 0, 0]
           b [0, 1.0, 0.2]
@@ -3775,6 +3831,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Sweep "subject" {
         material: exhibitMaterial
         position [0, 0.7, 0]
+        rotation: rotate([0, 1, 0], 180)
         curve {
           a [0, 0, 0]
           b [0, 0.5, 0]
@@ -3828,7 +3885,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Box "window" {
         blend: Subtraction
         material: exhibitMaterial
-        position [0, 1.45, 0.35]
+        position [0, 1.45, -0.35]
         scale [0.35, 0.3, 0.35]
       }
       exhibit(
@@ -3860,6 +3917,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.25, 0.5, 0.25]
       }
       exhibit(
@@ -3872,6 +3930,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       shape Box "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.2, 0.5, 0.2]
         shear {
           linear: 0.3
@@ -3902,6 +3961,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         ]
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.5, 0.5, 0.5]
       }
       exhibit(
@@ -3921,6 +3981,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.5, 0.5, 0.5]
       }
       exhibit(label: "CELLS F1")
@@ -3938,6 +3999,7 @@ template galleryPrototypes(displays = galleryDisplays) {
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.5, 0.5, 0.5]
       }
       exhibit(label: "CELLS F2 F1")
@@ -3950,7 +4012,8 @@ template galleryPrototypes(displays = galleryDisplays) {
           polar(count: 6, axis: Y)
         ]
         material: exhibitMaterial
-        position [0, 1.2, 0.35]
+        position [0, 1.2, -0.35]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.1, 0.3, 0.06]
       }
       exhibit(
@@ -3979,6 +4042,7 @@ template warpPrototypes() {
       shape Sphere "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.42, 0.42, 0.42]
         warp {
           frequency [9, 7, 11]
@@ -4002,6 +4066,7 @@ template warpPrototypes() {
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         rounding: 0.06
         scale [reliefHalf, reliefHalf, reliefHalf]
       }
@@ -4033,6 +4098,7 @@ template warpPrototypes() {
         ]
         material: accentMaterial
         position [0, 0, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.045, 0.045, 0.045]
       }
       shape Box "clip" {
@@ -4055,6 +4121,7 @@ template warpPrototypes() {
         ]
         material: accentMaterial
         position [0, 0, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.035, 0.035, 0.035]
       }
       shape Box "clip" {
@@ -4078,7 +4145,8 @@ template warpPrototypes() {
           logSphere(shellRatio: 2, twist: 0.6, origin: [0, 1.2, 0])
         ]
         material: accentMaterial
-        position [0.9, 1.2, 0]
+        position [-0.9, 1.2, 0]
+        rotation: rotate([0, 1, 0], 180)
         scale [0.07, 0.07, 0.07]
       }
       shape Sphere "clip" {
@@ -4103,7 +4171,7 @@ template warpPrototypes() {
       shape Sphere "tool" {
         blend: StairsUnion
         material: accentMaterial
-        position [0.22, 1.42, 0.16]
+        position [-0.22, 1.42, -0.16]
         scale [0.28, 0.28, 0.28]
         smooth: 0.2
         steps: 4
@@ -4124,7 +4192,7 @@ template warpPrototypes() {
       shape Sphere "tool" {
         blend: StairsSubtraction
         material: accentMaterial
-        position [0.22, 1.42, 0.16]
+        position [-0.22, 1.42, -0.16]
         scale [0.28, 0.28, 0.28]
         smooth: 0.15
         steps: 3

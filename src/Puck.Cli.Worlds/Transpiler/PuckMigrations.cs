@@ -8,7 +8,7 @@ namespace Puck.Cli.Transpiler;
 /// any name then lists nothing and exits non-zero.</remarks>
 internal static class PuckMigrations {
     /// <summary>Gets the registered migrations, ordered by name.</summary>
-    public static IReadOnlyList<PuckMigration> Registered { get; } = [];
+    public static IReadOnlyList<PuckMigration> Registered { get; } = [new CreationFrameMigration()];
 
     /// <summary>Returns the registered migration named <paramref name="name"/>.</summary>
     /// <param name="name">The name to resolve.</param>
