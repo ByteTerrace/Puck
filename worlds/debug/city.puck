@@ -608,7 +608,7 @@ prototypes {
     document {
       name: "floor"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       boundsBox(label: "north-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -205, z1: 40, slot: paving)
       boundsBox(label: "river", x0: -150, x1: 150, y0: -2, y1: -0.8, z0: -245, z1: -205, slot: river)
       boundsBox(label: "south-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -280, z1: -245, slot: stone)
@@ -626,7 +626,7 @@ prototypes {
     document {
       name: "roads"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       for strip in roadStrips {
         boundsBox(label: $"road-{strip.id}", x0: strip.x0, x1: strip.x1, y0: 0, y1: 0.02, z0: strip.z0, z1: strip.z1, slot: road)
       }
@@ -641,7 +641,7 @@ prototypes {
         document {
           name: $"house-{height}-{tone.name}"
           palette: cityPalette
-          schema: "puck.creation.v2"
+          schema: "puck.creation.v1"
           shape Box "walls" {
             material: tone.slot
             position [0, (height / 2), 0]
@@ -650,19 +650,19 @@ prototypes {
           shape Box "roof" {
             material: teal
             position [0, height, 0]
-            rotation: (gableTurn * [-1, 1, -1, 1])
+            rotation: gableTurn
             scale [3.6, 3.6, 4.3]
           }
           shape Box "door" {
             material: timber
-            position [0, 1.1, -4]
+            position [0, 1.1, 4]
             scale [0.6, 1.1, 0.06]
           }
           for storey in range(1, floor(height / 3.3) + 1) {
             for side in [-1, 1] {
               shape Box $"window-{storey}-{side}" {
                 material: windowGlow
-                position [(-2.5 * side), (3.3 * storey), -4]
+                position [(2.5 * side), (3.3 * storey), 4]
                 scale [0.5, 0.65, 0.05]
               }
             }
@@ -677,7 +677,7 @@ prototypes {
     document {
       name: "shed"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "walls" {
         material: ochre
         position [0, 4, 0]
@@ -690,7 +690,7 @@ prototypes {
       }
       shape Box "door" {
         material: timber
-        position [0, 2, -8]
+        position [0, 2, 8]
         scale [2.5, 2, 0.06]
       }
     }
@@ -701,7 +701,7 @@ prototypes {
     document {
       name: "warehouse"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "walls" {
         material: stone
         position [0, 5, 0]
@@ -714,7 +714,7 @@ prototypes {
       }
       shape Box "door" {
         material: timber
-        position [0, 2, -6]
+        position [0, 2, 6]
         scale [2, 2, 0.06]
       }
     }
@@ -726,7 +726,7 @@ prototypes {
     document {
       name: "civic-hall"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "walls" {
         material: cream
         position [0, 6, 0]
@@ -735,17 +735,17 @@ prototypes {
       shape Box "roof" {
         material: teal
         position [0, 12, 0]
-        rotation: (gableTurn * [-1, 1, -1, 1])
+        rotation: gableTurn
         scale [8.55, 8.55, 10.4]
       }
       shape Box "tower" {
         material: cream
-        position [0, 11, -7]
+        position [0, 11, 7]
         scale [3, 11, 3]
       }
       shape Box "tower-cap" {
         material: teal
-        position [0, 22.4, -7]
+        position [0, 22.4, 7]
         scale [3.4, 0.4, 3.4]
       }
     }
@@ -756,7 +756,7 @@ prototypes {
     document {
       name: "fountain"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Cylinder "basin" {
         material: stone
         position [0, 0.35, 0]
@@ -788,30 +788,30 @@ prototypes {
       document {
         name: $"stall-{awning.name}"
         palette: cityPalette
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Box "counter" {
           material: timber
-          position [0, 0.5, -0.6]
+          position [0, 0.5, 0.6]
           scale [1.5, 0.5, 0.4]
         }
         shape Box "post-nw" {
           material: timber
-          position [1.4, 1.2, 0.9]
+          position [-1.4, 1.2, -0.9]
           scale [0.06, 1.2, 0.06]
         }
         shape Box "post-ne" {
           material: timber
-          position [-1.4, 1.2, 0.9]
+          position [1.4, 1.2, -0.9]
           scale [0.06, 1.2, 0.06]
         }
         shape Box "post-sw" {
           material: timber
-          position [1.4, 1.2, -0.9]
+          position [-1.4, 1.2, 0.9]
           scale [0.06, 1.2, 0.06]
         }
         shape Box "post-se" {
           material: timber
-          position [-1.4, 1.2, -0.9]
+          position [1.4, 1.2, 0.9]
           scale [0.06, 1.2, 0.06]
         }
         shape Box "awning" {
@@ -829,7 +829,7 @@ prototypes {
     document {
       name: "street-lamp"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Cylinder "post" {
         material: timber
         position [0, 2, 0]
@@ -853,7 +853,7 @@ prototypes {
     document {
       name: "bridge"
       palette: cityPalette
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "deck" {
         material: stone
         position [0, -0.3, 0]
@@ -861,12 +861,12 @@ prototypes {
       }
       shape Box "parapet-west" {
         material: stone
-        position [5.8, 0.5, 0]
+        position [-5.8, 0.5, 0]
         scale [0.2, 0.5, 20]
       }
       shape Box "parapet-east" {
         material: stone
-        position [-5.8, 0.5, 0]
+        position [5.8, 0.5, 0]
         scale [0.2, 0.5, 20]
       }
     }

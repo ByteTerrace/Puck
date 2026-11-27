@@ -67,7 +67,7 @@ let placardCentre = [0, (plinthTop - 0.17), 0.235]
 let placardFront = [0, (plinthTop - 0.17 + 0.0274), 0.2304]
 template plinth(label, model) {
   name: label
-  schema: "puck.creation.v2"
+  schema: "puck.creation.v1"
   palette [devicePlinth, deviceLabel, devicePlinthKick]
   shape Box "plinth" {
     material: 0
@@ -81,15 +81,15 @@ template plinth(label, model) {
   }
   shape Box "placard" {
     material: 2
-    position: (placardCentre * [-1, 1, -1])
-    rotation: (placardTilt * [-1, 1, -1, 1])
+    position: placardCentre
+    rotation: placardTilt
     scale [0.19, 0.1, 0.012]
   }
   textRuns [
     {
       text: $"{model}\nGAMING BRICK"
-      position: (placardFront * [-1, 1, -1])
-      rotation: compose(rotate([0, 1, 0], 180), placardTilt)
+      position: placardFront
+      rotation: placardTilt
       emHeight: labelEm
       depth: labelDepth
       mode: "emboss"
@@ -230,12 +230,12 @@ prototypes {
   prototype "device-humble-gaming-brick" {
     document {
       name: "HUMBLE GAMING BRICK"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: brickPalette
       shape Prism "shell" {
         material: brickShell
-        position [0, 0.071422, 0.015938]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.071422, -0.015938]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0375, 0.0665, 0.0115]
         profile {
           kind: "RoundedRectangle"
@@ -245,8 +245,8 @@ prototypes {
       }
       shape Prism "battery-bay" {
         material: brickShell
-        position [0, 0.038017, 0.017082]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.038017, -0.017082]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.029, 0.021, 0.0035]
         profile {
           kind: "RoundedRectangle"
@@ -256,91 +256,91 @@ prototypes {
       }
       shape Box "board" {
         material: brickBoard
-        position [0, 0.064931, 0.010383]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.064931, -0.010383]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.034, 0.054, 0.0006]
         chamfer: 0.0004
       }
       shape Box "lcd-module" {
         material: brickChip
-        position [0, 0.102222, 0.01757]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.102222, -0.01757]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.026, 0.022, 0.0025]
         chamfer: 0.0006
       }
       shape Box "processor" {
         material: brickChip
-        position [0.002, 0.060609, 0.007639]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.002, 0.060609, -0.007639]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0075, 0.0075, 0.0006]
         chamfer: 0.0004
       }
       shape Box "memory" {
         material: brickChip
-        position [-0.015, 0.068058, 0.010563]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0.015, 0.068058, -0.010563]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.005, 0.003, 0.0004]
         chamfer: 0.0003
       }
       shape Box "regulator" {
         material: brickChip
-        position [0.017, 0.069937, 0.011247]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.017, 0.069937, -0.011247]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.004, 0.004, 0.0004]
         chamfer: 0.0003
       }
       shape Box "parts-row" {
         material: brickPart
-        position [0, 0.074115, 0.012927]
-        rotation [0, 0.984808, 0.173648, 0]
+        position [0, 0.074115, -0.012927]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0008, 0.0005, 0.00025]
         domain [repeat(spacing: [0.004, 1, 1], limit: [6, 0, 0], origin: [0, 0.074115, 0.012927])]
       }
       shape Box "parts-low" {
         material: brickPart
-        position [0.02, 0.033238, -0.001951]
-        rotation [0, 0.984808, 0.173648, 0]
+        position [-0.02, 0.033238, 0.001951]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0008, 0.0005, 0.00025]
         domain [repeat(spacing: [0.003, 1, 1], limit: [3, 0, 0], origin: [0.02, 0.033238, -0.001951])]
       }
       shape Cylinder "speaker-can" {
         material: brickChip
-        position [-0.0225, 0.02602, -0.006972]
-        rotation [-0.573576, 0, 0, 0.819152]
+        position [0.0225, 0.02602, 0.006972]
+        rotation [0.573576, 0, 0, 0.819152]
         scale [0.01, 0.0025, 0.01]
       }
       shape Box "cartridge-connector" {
         material: brickChip
-        position [0, 0.094443, 0.03017]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.094443, -0.03017]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.03, 0.003, 0.0045]
         chamfer: 0.0005
       }
       shape Cylinder "cell-upper" {
         material: brickCell
-        position [0, 0.047244, 0.015119]
-        rotation [0.122788, 0.122788, -0.696364, 0.696364]
+        position [0, 0.047244, -0.015119]
+        rotation [-0.122788, 0.122788, 0.696364, 0.696364]
         scale [0.00725, 0.02525, 0.00725]
         rounding: 0.001
       }
       shape Cylinder "cell-lower" {
         material: brickCell
-        position [0, 0.032209, 0.009647]
-        rotation [0.122788, 0.122788, -0.696364, 0.696364]
+        position [0, 0.032209, -0.009647]
+        rotation [-0.122788, 0.122788, 0.696364, 0.696364]
         scale [0.00725, 0.02525, 0.00725]
         rounding: 0.001
       }
       shape Box "cartridge" {
         material: brickCartridge
-        position [0, 0.118405, 0.038891]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.118405, -0.038891]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0285, 0.023, 0.0038]
         chamfer: 0.001
       }
       shape Prism "lens" {
         material: brickLens
-        position [0, 0.103145, 0.015033]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0, 0.103145, -0.015033]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0285, 0.0245, 0.0006]
         profile {
           kind: "RoundedRectangle"
@@ -349,14 +349,14 @@ prototypes {
       }
       shape Sphere "power-led" {
         material: brickLed
-        position [0.0254, 0.113618, 0.01842]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.0254, 0.113618, -0.01842]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0011, 0.0011, 0.0011]
       }
       shape Prism "dpad-well" {
         material: brickKeys
-        position [0.0215, 0.051428, -0.003684]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.0215, 0.051428, 0.003684]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0128, 0.0128, 0.0004]
         profile {
           kind: "RoundedRectangle"
@@ -365,22 +365,22 @@ prototypes {
       }
       shape Box "dpad-across" {
         material: brickKeys
-        position [0.0215, 0.051701, -0.004436]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.0215, 0.051701, 0.004436]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0105, 0.0036, 0.0016]
         chamfer: 0.0007
       }
       shape Box "dpad-down" {
         material: brickKeys
-        position [0.0215, 0.051701, -0.004436]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.0215, 0.051701, 0.004436]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0036, 0.0105, 0.0016]
         chamfer: 0.0007
       }
       shape Prism "button-a" {
         material: brickButtons
-        position [-0.0262, 0.056331, -0.002538]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0.0262, 0.056331, 0.002538]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0048, 0.0048, 0.0014]
         profile {
           kind: "RoundedRectangle"
@@ -390,8 +390,8 @@ prototypes {
       }
       shape Prism "button-b" {
         material: brickButtons
-        position [-0.0132, 0.049002, -0.005205]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0.0132, 0.049002, 0.005205]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0048, 0.0048, 0.0014]
         profile {
           kind: "RoundedRectangle"
@@ -401,8 +401,8 @@ prototypes {
       }
       shape Prism "select" {
         material: brickRubber
-        position [0.0085, 0.031763, -0.011054]
-        rotation [0.169532, 0.037584, -0.213151, 0.961464]
+        position [-0.0085, 0.031763, 0.011054]
+        rotation [-0.169532, 0.037584, 0.213151, 0.961464]
         scale [0.0052, 0.0017, 0.0009]
         profile {
           kind: "RoundedRectangle"
@@ -412,8 +412,8 @@ prototypes {
       }
       shape Prism "start" {
         material: brickRubber
-        position [-0.0085, 0.031763, -0.011054]
-        rotation [0.169532, 0.037584, -0.213151, 0.961464]
+        position [0.0085, 0.031763, 0.011054]
+        rotation [-0.169532, 0.037584, 0.213151, 0.961464]
         scale [0.0052, 0.0017, 0.0009]
         profile {
           kind: "RoundedRectangle"
@@ -423,8 +423,8 @@ prototypes {
       }
       shape Prism "speaker" {
         material: brickKeys
-        position [-0.0225, 0.027935, -0.012234]
-        rotation [0.492404, 0.852869, 0.150384, -0.086824]
+        position [0.0225, 0.027935, 0.012234]
+        rotation [-0.150384, 0.086824, 0.492404, 0.852869]
         scale [0.0045, 0.0007, 0.0004]
         profile {
           kind: "RoundedRectangle"
@@ -434,14 +434,14 @@ prototypes {
       }
       shape Box "power-switch" {
         material: brickKeys
-        position [0.022, 0.134878, 0.036906]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [-0.022, 0.134878, -0.036906]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.0045, 0.0016, 0.003]
       }
       shape Box "ir-window" {
         material: brickLens
-        position [-0.014, 0.134656, 0.035761]
-        rotation [0.173648, 0, 0, 0.984808]
+        position [0.014, 0.134656, -0.035761]
+        rotation [-0.173648, 0, 0, 0.984808]
         scale [0.007, 0.0012, 0.0032]
       }
     }
@@ -451,7 +451,7 @@ prototypes {
   prototype "device-humble-gaming-brick-held" {
     document {
       name: "HUMBLE GAMING BRICK"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: brickPalette
     }
   }
@@ -460,24 +460,24 @@ prototypes {
   prototype "device-humble-gaming-brick-stand" {
     document {
       name: "HUMBLE GAMING BRICK STAND"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: brickPalette
       shape Box "stand-base" {
         material: brickStand
-        position [0, 0.0025, 0.009051]
+        position [0, 0.0025, -0.009051]
         scale [0.032, 0.0035, 0.032664]
         chamfer: 0.0012
       }
       shape Box "stand-lip" {
         material: brickStand
-        position [0, 0.009, -0.020413]
+        position [0, 0.009, 0.020413]
         scale [0.032, 0.0045, 0.0022]
         chamfer: 0.0008
       }
       shape Prism "stand-rest" {
         material: brickStand
-        position [0, 0.028983, 0.023986]
-        rotation [0, 0.707107, 0, -0.707107]
+        position [0, 0.028983, -0.023986]
+        rotation [0, 0.707107, 0, 0.707107]
         scale [0.015729, 0.023983, 0.024]
         profile {
           kind: "Convex"
@@ -506,12 +506,12 @@ prototypes {
   prototype "device-advanced-gaming-brick" {
     document {
       name: "ADVANCED GAMING BRICK"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: advancedPalette
       shape Prism "lower-shell" {
         material: agbShell
-        position [0, 0.039259, -0.015818]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0, 0.039259, 0.015818]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0423, 0.041, 0.00665]
         profile {
           kind: "RoundedRectangle"
@@ -521,8 +521,8 @@ prototypes {
       }
       shape Prism "upper-shell" {
         material: agbShell
-        position [0, 0.097559, 0.040867]
-        rotation [0.258819, 0, 0, 0.965926]
+        position [0, 0.097559, -0.040867]
+        rotation [-0.258819, 0, 0, 0.965926]
         scale [0.0423, 0.04, 0.0052]
         profile {
           kind: "RoundedRectangle"
@@ -532,8 +532,8 @@ prototypes {
       }
       shape Prism "glass" {
         material: agbGlass
-        position [0, 0.100825, 0.03721]
-        rotation [0.258819, 0, 0, 0.965926]
+        position [0, 0.100825, -0.03721]
+        rotation [-0.258819, 0, 0, 0.965926]
         scale [0.0402, 0.0372, 0.0006]
         profile {
           kind: "RoundedRectangle"
@@ -542,29 +542,29 @@ prototypes {
       }
       shape Cylinder "hinge" {
         material: agbPolished
-        position [0, 0.061134, 0.020748]
-        rotation [0, 0, -0.707107, 0.707107]
+        position [0, 0.061134, -0.020748]
+        rotation [0, 0, 0.707107, 0.707107]
         scale [0.0062, 0.03, 0.0062]
         rounding: 0.0015
       }
       shape Box "shoulder-left" {
         material: agbKeys
-        position [0.034, 0.060229, 0.020803]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.034, 0.060229, -0.020803]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0075, 0.0025, 0.0045]
         chamfer: 0.001
       }
       shape Box "shoulder-right" {
         material: agbKeys
-        position [-0.034, 0.060229, 0.020803]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0.034, 0.060229, -0.020803]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0075, 0.0025, 0.0045]
         chamfer: 0.001
       }
       shape Prism "dpad-ring" {
         material: agbPolished
-        position [0.0265, 0.045605, -0.018327]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.0265, 0.045605, 0.018327]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0118, 0.0118, 0.0003]
         profile {
           kind: "RoundedRectangle"
@@ -573,22 +573,22 @@ prototypes {
       }
       shape Box "dpad-across" {
         material: agbKeys
-        position [0.0265, 0.046298, -0.018727]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.0265, 0.046298, 0.018727]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0095, 0.0032, 0.0014]
         chamfer: 0.0006
       }
       shape Box "dpad-down" {
         material: agbKeys
-        position [0.0265, 0.046298, -0.018727]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.0265, 0.046298, 0.018727]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0032, 0.0095, 0.0014]
         chamfer: 0.0006
       }
       shape Prism "button-a" {
         material: agbKeys
-        position [-0.03, 0.048461, -0.01478]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0.03, 0.048461, 0.01478]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0045, 0.0045, 0.0013]
         profile {
           kind: "RoundedRectangle"
@@ -598,8 +598,8 @@ prototypes {
       }
       shape Prism "button-b" {
         material: agbKeys
-        position [-0.0185, 0.044461, -0.021708]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0.0185, 0.044461, 0.021708]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0045, 0.0045, 0.0013]
         profile {
           kind: "RoundedRectangle"
@@ -609,8 +609,8 @@ prototypes {
       }
       shape Prism "select" {
         material: agbKeys
-        position [0.0335, 0.033038, -0.041094]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.0335, 0.033038, 0.041094]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0024, 0.0024, 0.0009]
         profile {
           kind: "RoundedRectangle"
@@ -620,8 +620,8 @@ prototypes {
       }
       shape Prism "start" {
         material: agbKeys
-        position [0.0215, 0.033038, -0.041094]
-        rotation [0.5, 0, 0, 0.866025]
+        position [-0.0215, 0.033038, 0.041094]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0024, 0.0024, 0.0009]
         profile {
           kind: "RoundedRectangle"
@@ -631,8 +631,8 @@ prototypes {
       }
       shape Prism "speaker" {
         material: agbGlass
-        position [-0.026, 0.031605, -0.042576]
-        rotation [0, 0.866025, 0.5, 0]
+        position [0.026, 0.031605, 0.042576]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0006, 0.0045, 0.0003]
         profile {
           kind: "RoundedRectangle"
@@ -642,21 +642,21 @@ prototypes {
       }
       shape Sphere "power-led" {
         material: agbLed
-        position [-0.036, 0.059691, 0.005872]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0.036, 0.059691, -0.005872]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0009, 0.0009, 0.0009]
       }
       shape Box "cartridge" {
         material: agbCartridge
-        position [0, 0.017399, -0.054581]
-        rotation [0.5, 0, 0, 0.866025]
+        position [0, 0.017399, 0.054581]
+        rotation [-0.5, 0, 0, 0.866025]
         scale [0.0285, 0.0045, 0.0034]
         chamfer: 0.0008
       }
       shape Prism "stand" {
         material: agbStand
-        position [0, 0.023717, -0.014908]
-        rotation [0, 0.707107, 0, -0.707107]
+        position [0, 0.023717, 0.014908]
+        rotation [0, 0.707107, 0, 0.707107]
         scale [0.02728, 0.024717, 0.032]
         profile {
           kind: "Convex"
@@ -678,7 +678,7 @@ prototypes {
   prototype "device-humble-gaming-deck-stand" {
     document {
       name: "HUMBLE GAMING DECK"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#5A3E2B", roughness: 0.55, specular: 0.04 }
         deviceLabel
@@ -693,22 +693,22 @@ prototypes {
       }
       shape Box "side-left" {
         material: standWood
-        position [0.585, 0.335, 0]
+        position [-0.585, 0.335, 0]
         scale [0.015, 0.29, 0.285]
       }
       shape Box "side-right" {
         material: standWood
-        position [-0.585, 0.335, 0]
+        position [0.585, 0.335, 0]
         scale [0.015, 0.29, 0.285]
       }
       shape Box "divider" {
         material: standWood
-        position [-0.15, 0.335, 0]
+        position [0.15, 0.335, 0]
         scale [0.012, 0.29, 0.28]
       }
       shape Box "shelf" {
         material: standWood
-        position [0.215, 0.34, 0]
+        position [-0.215, 0.34, 0]
         scale [0.36, 0.012, 0.275]
       }
       shape Box "bottom" {
@@ -718,23 +718,23 @@ prototypes {
       }
       shape Box "back" {
         material: standWood
-        position [0, 0.335, 0.279]
+        position [0, 0.335, -0.279]
         scale [0.575, 0.29, 0.006]
       }
       shape Box "kick" {
         material: standKick
-        position [0, 0.024, 0.01]
+        position [0, 0.024, -0.01]
         scale [0.57, 0.024, 0.26]
       }
       shape Box "spare-cartridge" {
         material: standCartridge
-        position [-0.33, 0.0835, -0.02]
+        position [0.33, 0.0835, 0.02]
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
       }
       shape Box "spare-cartridge-top" {
         material: standCartridge
-        position [-0.335, 0.102, -0.03]
+        position [0.335, 0.102, 0.03]
         rotation [0, 0.069756, 0, 0.997564]
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
@@ -742,8 +742,8 @@ prototypes {
       textRuns [
         {
           text: "HUMBLE GAMING DECK"
-          position [0, (deckTop - 0.04), -0.29]
-          rotation [0, 1, 0, 0]
+          position [0, (deckTop - 0.04), 0.29]
+          rotation [0, 0, 0, 1]
           emHeight: labelEm
           depth: labelDepth
           mode: "emboss"
@@ -763,7 +763,7 @@ prototypes {
   prototype "device-humble-gaming-deck-television" {
     document {
       name: "HUMBLE GAMING DECK TELEVISION"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#1B1C1F", roughness: 0.4, specular: 0.05 }
         { color: "#8E9198", metal: 0.6, roughness: 0.35, specular: 0.4 }
@@ -775,20 +775,20 @@ prototypes {
       ]
       shape Box "bezel" {
         material: tvTrim
-        position [-tvX, (((deckTop - 0.001) + (tubeTop + 0.03)) / 2), (0.06 - tvFront)]
+        position [tvX, (((deckTop - 0.001) + (tubeTop + 0.03)) / 2), (tvFront - 0.06)]
         scale [0.37, (((tubeTop + 0.03) - (deckTop - 0.001)) / 2), 0.06]
         chamfer: 0.004
       }
       shape Box "opening" {
         material: tvTrim
-        position [-tvX, pictureY, (0.06 - tvFront)]
+        position [tvX, pictureY, (tvFront - 0.06)]
         scale [tubeHalfWidth, tubeHalfHeight, 0.07]
         blend: ChamferSubtraction
         smooth: 0.006
       }
       shape Prism "tube" {
         material: tvTube
-        position [-tvX, pictureY, (0.008 - tubeFront)]
+        position [tvX, pictureY, (tubeFront - 0.008)]
         scale [(tubeHalfWidth + 0.012), (tubeHalfHeight + 0.012), 0.008]
         profile {
           kind: "RoundedRectangle"
@@ -797,54 +797,53 @@ prototypes {
       }
       shape Box "body" {
         material: tvCabinet
-        position [-tvX, (deckTop + 0.311), 0]
+        position [tvX, (deckTop + 0.311), 0]
         scale [0.36, 0.3, 0.09]
         chamfer: 0.02
       }
       shape Box "tube-housing" {
         material: tvCabinet
-        position [-tvX, (deckTop + 0.33), 0.17]
+        position [tvX, (deckTop + 0.33), -0.17]
         scale [0.3, 0.25, 0.09]
         chamfer: 0.06
       }
       shape Box "neck" {
         material: tvCabinet
-        position [-tvX, (deckTop + 0.35), 0.27]
+        position [tvX, (deckTop + 0.35), -0.27]
         scale [0.17, 0.15, 0.03]
         chamfer: 0.02
       }
       shape Box "vents" {
         material: tvGrille
-        position [-tvX, (deckTop + 0.5795), 0.17]
-        rotation: rotate([0, 1, 0], 180)
+        position [tvX, (deckTop + 0.5795), -0.17]
         scale [0.005, 0.0012, 0.025]
         domain [repeat(spacing: [0.025, 1, 1], limit: [6, 0, 0], origin: [(0 - tvX), (deckTop + 0.5795), 0.17])]
       }
       shape Box "base" {
         material: tvKnobs
-        position [-tvX, (deckTop + 0.007), 0.03]
+        position [tvX, (deckTop + 0.007), -0.03]
         scale [0.33, 0.008, 0.2]
       }
       shape Box "grille" {
         material: tvGrille
-        position [-tvX, (deckTop + 0.062), (0.0005 - tvFront)]
+        position [tvX, (deckTop + 0.062), (tvFront - 0.0005)]
         scale [0.3, 0.032, 0.0025]
       }
       shape Box "badge" {
         material: tvChrome
-        position [-tvX, (deckTop + 0.109), (0 - (tvFront + 0.0005))]
+        position [tvX, (deckTop + 0.109), (tvFront + 0.0005)]
         scale [0.03, 0.004, 0.0015]
         chamfer: 0.0008
       }
       shape Box "power" {
         material: tvKnobs
-        position [(0 - (tvX + 0.335)), (deckTop + 0.04), (0 - (tvFront + 0.0005))]
+        position [(tvX + 0.335), (deckTop + 0.04), (tvFront + 0.0005)]
         scale [0.012, 0.006, 0.0025]
         chamfer: 0.001
       }
       shape Sphere "standby-led" {
         material: tvLed
-        position [(0 - (tvX + 0.335)), (deckTop + 0.062), (0 - (tvFront + 0.0005))]
+        position [(tvX + 0.335), (deckTop + 0.062), (tvFront + 0.0005)]
         scale [0.0022, 0.0022, 0.0022]
       }
     }
@@ -858,7 +857,7 @@ prototypes {
   prototype "device-humble-gaming-deck" {
     document {
       name: "HUMBLE GAMING DECK"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#3A3C41", metal: 0.85, roughness: 0.35, specular: 0.4 }
         { color: "#C7C9CE", metal: 0.9, roughness: 0.3, specular: 0.5 }
@@ -877,28 +876,28 @@ prototypes {
       ]
       shape Cylinder "foot-left-back" {
         material: deckInlay
-        position [-0.24, 0.6515, 0.1]
+        position [0.24, 0.6515, -0.1]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-left-front" {
         material: deckInlay
-        position [-0.24, 0.6515, -0.02]
+        position [0.24, 0.6515, 0.02]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-right-back" {
         material: deckInlay
-        position [-0.36, 0.6515, 0.1]
+        position [0.36, 0.6515, -0.1]
         scale [0.006, 0.0025, 0.006]
       }
       shape Cylinder "foot-right-front" {
         material: deckInlay
-        position [-0.36, 0.6515, -0.02]
+        position [0.36, 0.6515, 0.02]
         scale [0.006, 0.0025, 0.006]
       }
       shape Prism "base" {
         material: deckGraphite
-        position [-0.3, 0.67, 0.04]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.3, 0.67, -0.04]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.08, 0.084, 0.016]
         profile {
           kind: "RoundedRectangle"
@@ -908,8 +907,8 @@ prototypes {
       }
       shape Prism "deck" {
         material: deckAluminium
-        position [-0.3, 0.6925, 0.044]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.3, 0.6925, -0.044]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.0755, 0.078, 0.008]
         profile {
           kind: "RoundedRectangle"
@@ -919,8 +918,8 @@ prototypes {
       }
       shape Prism "slot-housing" {
         material: deckGraphite
-        position [-0.3, 0.7065, 0.075]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.3, 0.7065, -0.075]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.069, 0.032, 0.0075]
         profile {
           kind: "RoundedRectangle"
@@ -930,75 +929,75 @@ prototypes {
       }
       shape Box "slot" {
         material: deckInlay
-        position [-0.3, 0.7142, 0.075]
+        position [0.3, 0.7142, -0.075]
         scale [0.0625, 0.0006, 0.0115]
       }
       shape Box "cartridge" {
         material: deckCartridge
-        position [-0.3, 0.75, 0.075]
+        position [0.3, 0.75, -0.075]
         scale [0.06, 0.04, 0.0095]
         chamfer: 0.002
       }
       shape Box "label-0" {
         material: deckBarWhite
-        position [-0.26325, 0.765, 0.0653]
+        position [0.26325, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-1" {
         material: deckBarYellow
-        position [-0.27375, 0.765, 0.0653]
+        position [0.27375, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-2" {
         material: deckBarCyan
-        position [-0.28425, 0.765, 0.0653]
+        position [0.28425, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-3" {
         material: deckBarGreen
-        position [-0.29475, 0.765, 0.0653]
+        position [0.29475, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-4" {
         material: deckBarMagenta
-        position [-0.30525, 0.765, 0.0653]
+        position [0.30525, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-5" {
         material: deckBarRed
-        position [-0.31575, 0.765, 0.0653]
+        position [0.31575, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-6" {
         material: deckBarBlue
-        position [-0.32625, 0.765, 0.0653]
+        position [0.32625, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "label-7" {
         material: deckBarBlack
-        position [-0.33675, 0.765, 0.0653]
+        position [0.33675, 0.765, -0.0653]
         scale [0.00525, 0.017, 0.0004]
       }
       shape Box "power" {
         material: deckInlay
-        position [-0.255, 0.702, 0.005]
+        position [0.255, 0.702, -0.005]
         scale [0.013, 0.0035, 0.009]
         chamfer: 0.0015
       }
       shape Box "reset" {
         material: deckInlay
-        position [-0.345, 0.702, 0.005]
+        position [0.345, 0.702, -0.005]
         scale [0.013, 0.0035, 0.009]
         chamfer: 0.0015
       }
       shape Box "power-led" {
         material: deckLed
-        position [-0.35, 0.676, -0.044]
+        position [0.35, 0.676, 0.044]
         scale [0.006, 0.0008, 0.0008]
       }
       shape Prism "port-1" {
         material: deckInlay
-        position [-0.272, 0.669, -0.0444]
+        position [0.272, 0.669, 0.0444]
         scale [0.0055, 0.0085, 0.0008]
         profile {
           kind: "RoundedRectangle"
@@ -1007,7 +1006,7 @@ prototypes {
       }
       shape Prism "port-2" {
         material: deckInlay
-        position [-0.328, 0.669, -0.0444]
+        position [0.328, 0.669, 0.0444]
         scale [0.0055, 0.0085, 0.0008]
         profile {
           kind: "RoundedRectangle"
@@ -1016,26 +1015,26 @@ prototypes {
       }
       shape Box "plug" {
         material: deckInlay
-        position [-0.272, 0.669, -0.052]
+        position [0.272, 0.669, 0.052]
         scale [0.007, 0.0095, 0.008]
         chamfer: 0.0015
       }
       shape Cylinder "pad-left" {
         material: deckAluminium
-        position [-0.206, 0.659, -0.164]
+        position [0.206, 0.659, 0.164]
         scale [0.026, 0.0095, 0.026]
         rounding: 0.004
       }
       shape Cylinder "pad-right" {
         material: deckAluminium
-        position [-0.274, 0.659, -0.164]
+        position [0.274, 0.659, 0.164]
         scale [0.026, 0.0095, 0.026]
         rounding: 0.004
       }
       shape Prism "pad-bridge" {
         material: deckAluminium
-        position [-0.24, 0.659, -0.164]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.24, 0.659, 0.164]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.034, 0.02, 0.0085]
         profile {
           kind: "RoundedRectangle"
@@ -1045,20 +1044,20 @@ prototypes {
       }
       shape Box "pad-dpad-across" {
         material: deckInlay
-        position [-0.206, 0.6697, -0.164]
+        position [0.206, 0.6697, 0.164]
         scale [0.0105, 0.0016, 0.0034]
         chamfer: 0.0006
       }
       shape Box "pad-dpad-down" {
         material: deckInlay
-        position [-0.206, 0.6697, -0.164]
+        position [0.206, 0.6697, 0.164]
         scale [0.0034, 0.0016, 0.0105]
         chamfer: 0.0006
       }
       shape Prism "pad-b" {
         material: deckButtons
-        position [-0.2655, 0.6695, -0.169]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.2655, 0.6695, 0.169]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.0048, 0.0048, 0.0016]
         profile {
           kind: "RoundedRectangle"
@@ -1068,8 +1067,8 @@ prototypes {
       }
       shape Prism "pad-a" {
         material: deckButtons
-        position [-0.283, 0.6695, -0.161]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.283, 0.6695, 0.161]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.0048, 0.0048, 0.0016]
         profile {
           kind: "RoundedRectangle"
@@ -1079,8 +1078,8 @@ prototypes {
       }
       shape Prism "pad-select" {
         material: deckInlay
-        position [-0.232, 0.6678, -0.167]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.232, 0.6678, 0.167]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.0055, 0.002, 0.0012]
         profile {
           kind: "RoundedRectangle"
@@ -1089,8 +1088,8 @@ prototypes {
       }
       shape Prism "pad-start" {
         material: deckInlay
-        position [-0.248, 0.6678, -0.167]
-        rotation [-0.707107, 0, 0, 0.707107]
+        position [0.248, 0.6678, 0.167]
+        rotation [0.707107, 0, 0, 0.707107]
         scale [0.0055, 0.002, 0.0012]
         profile {
           kind: "RoundedRectangle"
@@ -1099,8 +1098,7 @@ prototypes {
       }
       shape Sweep "cable" {
         material: deckInlay
-        position [-0.24, 0.656, -0.143]
-        rotation: rotate([0, 1, 0], 180)
+        position [0.24, 0.656, 0.143]
         curve {
           a [0, 0, 0]
           b [0.05, -0.012019, -0.042]

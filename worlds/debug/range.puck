@@ -191,11 +191,11 @@ prototypes {
   prototype "range-lane" {
     document {
       name: "range-lane"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: rangePalette
       shape Box "stripe" {
         material: rangeLine
-        position [0, 0.005, 85]
+        position [0, 0.005, -85]
         scale [0.06, 0.005, 85]
       }
     }
@@ -206,11 +206,11 @@ prototypes {
     prototype $"range-sign-{sign.d}" {
       document {
         name: $"range-sign-{sign.d}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: rangePalette
         shape Box "post" {
           material: rangePost
-          position [0, (0.6 * sign.k), 0.06]
+          position [0, (0.6 * sign.k), -0.06]
           scale [0.05, (0.6 * sign.k), 0.05]
         }
         shape Box "board" {
@@ -221,8 +221,8 @@ prototypes {
         textRuns [
           {
             text: $"{sign.d} m"
-            position [0, (2.0 * sign.k), -0.02]
-            rotation [0, 1, 0, 0]
+            position [0, (2.0 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
             emHeight: (0.38 * sign.k)
             depth: 0.01
             mode: "emboss"
@@ -231,8 +231,8 @@ prototypes {
           }
           {
             text: $"1280x900 {sign.low}"
-            position [0, (1.7 * sign.k), -0.02]
-            rotation [0, 1, 0, 0]
+            position [0, (1.7 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
             emHeight: (0.16 * sign.k)
             depth: 0.006
             mode: "emboss"
@@ -241,8 +241,8 @@ prototypes {
           }
           {
             text: $"3840x2160 {sign.high}"
-            position [0, (1.45 * sign.k), -0.02]
-            rotation [0, 1, 0, 0]
+            position [0, (1.45 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
             emHeight: (0.16 * sign.k)
             depth: 0.006
             mode: "emboss"
@@ -258,16 +258,16 @@ prototypes {
   prototype "range-television" {
     document {
       name: "range-television"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: rangePalette
       shape Box "case" {
         material: rangeInk
-        position [0, tvCentre, 0.06]
+        position [0, tvCentre, -0.06]
         scale [(tvHalfWidth + 0.08), (tvHalfHeight + 0.08), 0.05]
       }
       shape Box "post" {
         material: rangePost
-        position [0, ((tvCentre - tvHalfHeight) / 2), 0.06]
+        position [0, ((tvCentre - tvHalfHeight) / 2), -0.06]
         scale [0.08, ((tvCentre - tvHalfHeight) / 2), 0.08]
       }
     }
@@ -281,7 +281,7 @@ prototypes {
         faces [{ name: "glass", shapeId: 0 }]
       }
       name: "range-window"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: rangePalette
       shape Box "rim" {
         material: rangeInk
@@ -296,7 +296,7 @@ prototypes {
       }
       shape Box "frame" {
         material: rangePost
-        position [0, windowCentre, 0.1]
+        position [0, windowCentre, -0.1]
         scale [(windowHalfWidth + 0.1), (windowHalfHeight + 0.1), 0.04]
       }
     }

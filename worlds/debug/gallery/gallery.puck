@@ -82,14 +82,14 @@ let liftFaces = [
 template liftButtonFace() {
   shape Cylinder "bezel" {
     material: liftChrome
-    position [0, 0, -0.012]
-    rotation [-0.707107, 0, 0, 0.707107]
+    position [0, 0, 0.012]
+    rotation [0.707107, 0, 0, 0.707107]
     scale [0.12, 0.012, 0.12]
   }
   shape Cylinder "face" {
     material: liftFace
-    position [0, 0, -0.02]
-    rotation [-0.707107, 0, 0, 0.707107]
+    position [0, 0, 0.02]
+    rotation [0.707107, 0, 0, 0.707107]
     scale [0.095, 0.012, 0.095]
   }
 }
@@ -227,20 +227,20 @@ prototypes {
     prototype $"hall-switch-{state.name}" {
       document {
         name: $"hall-switch-{state.name}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette [
           { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
           { color: state.indicator, roughness: 0.4, emissive: state.glow }
         ]
-        localBox(label: "plate", x0: -0.13, x1: 0.13, y0: 1.1, y1: 1.46, z0: 0, z1: 0.04, slot: 0)
-        localBox(label: "rocker", x0: -0.035, x1: 0.035, y0: 1.24, y1: 1.32, z0: 0.04, z1: 0.09, slot: 1)
-        localBox(label: "indicator", x0: -0.02, x1: 0.02, y0: 1.39, y1: 1.42, z0: 0.04, z1: 0.055, slot: 2)
+        boundsBox(label: "plate", x0: -0.13, x1: 0.13, y0: 1.1, y1: 1.46, z0: -0.04, z1: 0, slot: 0)
+        boundsBox(label: "rocker", x0: -0.035, x1: 0.035, y0: 1.24, y1: 1.32, z0: -0.09, z1: -0.04, slot: 1)
+        boundsBox(label: "indicator", x0: -0.02, x1: 0.02, y0: 1.39, y1: 1.42, z0: -0.055, z1: -0.04, slot: 2)
         textRuns [
           {
             text: "LIGHTS"
-            position [0, 1.53, -0.002]
-            rotation [0, 1, 0, 0]
+            position [0, 1.53, 0.002]
+            rotation [0, 0, 0, 1]
             emHeight: 0.06
             depth: 0.004
             mode: "emboss"
@@ -256,7 +256,7 @@ prototypes {
     prototype $"stair-pendant-{state.name}" {
       document {
         name: $"stair-pendant-{state.name}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette [
           { color: lookStairPendant.drum, roughness: 0.45, specular: 0.05 }
           { color: lookStairPendant.cord, roughness: 0.6, specular: 0.04 }
@@ -271,12 +271,11 @@ prototypes {
   prototype "lift-platform" {
     document {
       name: "lift-platform"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: shellPlain
       shape Box "floor" {
         material: shellTrim
         position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
         scale [1.4, 0.05, 1.55]
       }
     }
@@ -285,7 +284,7 @@ prototypes {
   prototype "lift-hidden" {
     document {
       name: "lift-hidden"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: shellPlain
       shapes []
     }
@@ -297,29 +296,28 @@ prototypes {
   prototype "lift-car" {
     document {
       name: "lift-car"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: shellPlain
       shape Box "back" {
         material: shellGlass
-        position [0, 1.3, 1.5]
+        position [0, 1.3, -1.5]
         scale [1.3, 1.25, 0.05]
       }
       for side in [-1, 1] {
         shape Box $"side-{side}" {
           material: shellGlass
-          position [(side * -1.34), 1.3, 0]
+          position [(side * 1.34), 1.3, 0]
           scale [0.05, 1.25, 1.44]
         }
         shape Box $"rail-{side}" {
           material: shellBrass
-          position [(side * -1.24), 1, 0]
+          position [(side * 1.24), 1, 0]
           scale [0.03, 0.03, 1.3]
         }
         for end in [-1, 1] {
           shape Box $"post-{side}-{end}" {
             material: shellTrim
-            position [(side * -1.33), 1.3, (end * -1.49)]
-            rotation: rotate([0, 1, 0], 180)
+            position [(side * 1.33), 1.3, (end * 1.49)]
             scale [0.07, 1.3, 0.07]
           }
         }
@@ -327,7 +325,6 @@ prototypes {
       shape Box "ceiling" {
         material: shellTrim
         position [0, 2.61, 0]
-        rotation: rotate([0, 1, 0], 180)
         scale [1.4, 0.06, 1.55]
       }
       shape Box "lamp" {
@@ -337,8 +334,7 @@ prototypes {
       }
       shape Box "panel" {
         material: shellTrim
-        position [0, carPanelY, (carPanelZ + 0.025)]
-        rotation: rotate([0, 1, 0], 180)
+        position [0, carPanelY, (0 - (carPanelZ + 0.025))]
         scale [1.05, 0.2, 0.025]
       }
     }
@@ -349,13 +345,12 @@ prototypes {
     prototype $"lift-door-{open}" {
       document {
         name: $"lift-door-{open}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: shellPlain
         for side in [-1, 1] {
           shape Box $"leaf-{side}" {
             material: shellFloor
-            position [(0 - (side * ((open == 1) ? 1.16 : 0.45))), 1.33, 0]
-            rotation: rotate([0, 1, 0], 180)
+            position [(side * ((open == 1) ? 1.16 : 0.45)), 1.33, 0]
             scale [((open == 1) ? 0.24 : 0.44), 1.28, 0.06]
           }
         }
@@ -371,24 +366,24 @@ prototypes {
     prototype $"lift-display-{lit}" {
       document {
         name: $"lift-display-{lit}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: concat(liftBase, map(range(0, 4), d => liftLamps[(d == lit) ? 1 : 0]))
         shape Box "bezel" {
           material: liftChrome
-          position [0, 0, -0.015]
+          position [0, 0, 0.015]
           scale [0.32, 0.13, 0.015]
         }
         shape Box "glass" {
           material: liftGlass
-          position [0, 0, -0.03]
+          position [0, 0, 0.03]
           scale [0.295, 0.105, 0.01]
         }
         textRuns: map(
           range(0, 4),
           d => {
             text: $"{d}"
-            position [(0 - (-0.09 + (0.1 * d))), -0.045, -0.04]
-            rotation [0, 1, 0, 0]
+            position [(-0.09 + (0.1 * d)), -0.045, 0.04]
+            rotation [0, 0, 0, 1]
             emHeight: 0.13
             depth: 0.004
             mode: "emboss"
@@ -403,19 +398,19 @@ prototypes {
     prototype $"lift-arrows-{arrow}" {
       document {
         name: $"lift-arrows-{arrow}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: concat(liftBase, [liftLamps[(arrow == 1) ? 1 : 0], liftLamps[(arrow == 2) ? 1 : 0]])
         shape Prism "up" {
           material: 4
           taper: 0
-          position [0.22, 0.05, -0.04]
+          position [-0.22, 0.05, 0.04]
           scale [0.035, 0.03, 0.005]
         }
         shape Prism "down" {
           material: 5
           taper: 0
-          position [0.22, -0.05, -0.04]
-          rotation [0, 0, -1, 0]
+          position [-0.22, -0.05, 0.04]
+          rotation [0, 0, 1, 0]
           scale [0.035, 0.03, 0.005]
         }
       }
@@ -429,14 +424,14 @@ prototypes {
       prototype $"lift-btn-{j}-{lit}" {
         document {
           name: $"lift-btn-{j}-{lit}"
-          schema: "puck.creation.v2"
+          schema: "puck.creation.v1"
           palette: concat(liftBase, [liftFaces[lit]])
           liftButtonFace()
           textRuns [
             {
               text: $"{j}"
-              position [0, -0.045, -0.033]
-              rotation [0, 1, 0, 0]
+              position [0, -0.045, 0.033]
+              rotation [0, 0, 0, 1]
               emHeight: 0.13
               depth: 0.004
               mode: "emboss"
@@ -451,20 +446,20 @@ prototypes {
       prototype $"lift-btn-{glyph.key}-{lit}" {
         document {
           name: $"lift-btn-{glyph.key}-{lit}"
-          schema: "puck.creation.v2"
+          schema: "puck.creation.v1"
           palette: concat(liftBase, [liftFaces[lit]])
           liftButtonFace()
           shape Box "bar" {
             material: liftInk
-            position [0, 0, -0.034]
+            position [0, 0, 0.034]
             scale [0.007, 0.05, 0.004]
           }
           for side in [-1, 1] {
             shape Prism $"arrow-{side}" {
               material: liftInk
               taper: 0
-              position [(side * -0.047), 0, -0.034]
-              rotation: (((side * glyph.dir) == 1) ? [0, 0, 0.707107, 0.707107] : [0, 0, -0.707107, 0.707107])
+              position [(side * 0.047), 0, 0.034]
+              rotation: (((side * glyph.dir) == 1) ? [0, 0, -0.707107, 0.707107] : [0, 0, 0.707107, 0.707107])
               scale [0.032, 0.036, 0.004]
             }
           }
@@ -474,19 +469,19 @@ prototypes {
     prototype $"lift-call-{lit}" {
       document {
         name: $"lift-call-{lit}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: concat(liftBase, [liftFaces[lit]])
         shape Box "plate" {
           material: liftSteel
-          position [0, 0, 0.02]
+          position [0, 0, -0.02]
           scale [0.14, 0.22, 0.02]
         }
         liftButtonFace()
         textRuns [
           {
             text: "CALL"
-            position [0, -0.17, -0.003]
-            rotation [0, 1, 0, 0]
+            position [0, -0.17, 0.003]
+            rotation [0, 0, 0, 1]
             emHeight: 0.055
             depth: 0.003
             mode: "emboss"
@@ -503,18 +498,18 @@ prototypes {
     prototype $"lift-landing-{level.level}" {
       document {
         name: $"lift-landing-{level.level}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: shellPlain
         shape Box "board" {
           material: shellBoard
-          position [0, 3.25, 0.43]
+          position [0, 3.25, -0.43]
           scale [1.1, 0.3, 0.02]
         }
         textRuns [
           {
             text: level.title
-            position [0, 3.33, 0.405]
-            rotation [0, 1, 0, 0]
+            position [0, 3.33, -0.405]
+            rotation [0, 0, 0, 1]
             emHeight: 0.11
             depth: 0.004
             mode: "emboss"
@@ -524,8 +519,8 @@ prototypes {
           }
           {
             text: level.what
-            position [0, 3.13, 0.405]
-            rotation [0, 1, 0, 0]
+            position [0, 3.13, -0.405]
+            rotation [0, 0, 0, 1]
             emHeight: 0.06
             depth: 0.004
             mode: "emboss"

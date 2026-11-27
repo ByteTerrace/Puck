@@ -80,7 +80,7 @@ prototypes {
     document {
       name: "probeCard"
       palette [{ color: "#E8E2D0", roughness: 0.8 }]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "card" {
         material: 0
         position [0, 0, 0]

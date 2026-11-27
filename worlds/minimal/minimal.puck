@@ -67,7 +67,7 @@ prototypes {
   prototype "floor" {
     document {
       name: "floor"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#ADA69F", emissive: 0, specular: 0.02, roughness: 0.85 }
       ]

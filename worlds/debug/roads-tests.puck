@@ -138,7 +138,7 @@ prototypes {
   prototype "walker" {
     document {
       name: "walker"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [{ color: "#5B7DB1", roughness: 0.6 }]
       shape Capsule "body" {
         material: 0
@@ -150,7 +150,7 @@ prototypes {
   prototype "floor" {
     document {
       name: "floor"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [{ color: "#ADA69F", roughness: 0.85 }]
       shape Box {
         material: 0

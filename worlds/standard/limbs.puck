@@ -44,8 +44,8 @@ template limb(label, a, b, c, width, thickness, material, segments = 7, exponent
     let turn = turnAlong((p1 - p0))
     shape Superellipsoid $"{label}-{i}" {
       exponent: exponent
-      position: ((((p0 + p1) / 2) - rotatePoint(turn, [0, (th / 2), 0])) * [-1, 1, -1])
-      rotation: (turn * [-1, 1, -1, 1])
+      position: (((p0 + p1) / 2) - rotatePoint(turn, [0, (th / 2), 0]))
+      rotation: turn
       scale [((overlap * vectorLength((p1 - p0))) / 2), (th / 2), (w / 2)]
       material: material
       blend: SmoothUnion
@@ -68,7 +68,6 @@ template limbFork(label, a, b, c, at, side, reach, rise, radius, material, drop 
   let tip = limbForkTip(a, b, c, at, side, reach, rise, drop)
   let left = (limbLeft(a, b, c, at) * side)
   shape Sweep $"{label}" {
-    rotation: rotate([0, 1, 0], 180)
     material: material
     blend: SmoothUnion
     smooth: smooth
@@ -89,7 +88,7 @@ template limbKnot(label, a, b, c, at, side, width, size, material, depth = 0.35)
   shape Superellipsoid $"{label}" {
     detail: true
     exponent: 2.2
-    position: (((quadraticPoint(a, b, c, at) - [0, depth, 0]) + (limbLeft(a, b, c, at) * (side * ((width / 2) - (0.25 * size))))) * [-1, 1, -1])
+    position: ((quadraticPoint(a, b, c, at) - [0, depth, 0]) + (limbLeft(a, b, c, at) * (side * ((width / 2) - (0.25 * size)))))
     scale [(0.5 * size), (0.42 * size), (0.5 * size)]
     material: material
     blend: SmoothUnion
@@ -130,7 +129,7 @@ template spiralTreads(label, count, start, step, rise, base, apex, material, dep
     let wide = (across * (1 + (wander * (weylShare(k, 0.7548776662) - 0.5))))
     shape Superellipsoid $"{label}-{k}" {
       exponent: exponent
-      position: (polarPoint((r + ((reach - inset) / 2)), angle, (top - (thickness / 2))) * [-1, 1, -1])
+      position: polarPoint((r + ((reach - inset) / 2)), angle, (top - (thickness / 2)))
       rotation: rotate([0, 1, 0], (0 - angle))
       scale [((reach + inset) / 2), (thickness / 2), (wide / 2)]
       material: (((accentEvery > 0) and ((k % accentEvery) == (accentEvery - 1))) ? accent : material)
@@ -169,7 +168,6 @@ template braidedTrunk(label, count, foot, top, out, radius, material, turn = 150
       let t1 = ((s + 1) / segments)
       let mid = braidPoint(k, count, ((t0 + t1) / 2), foot, top, out, turn)
       shape Sweep $"{label}-{k}-{s}" {
-        rotation: rotate([0, 1, 0], 180)
         detail: true
         material: material
         blend: SmoothUnion

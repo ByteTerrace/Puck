@@ -235,7 +235,7 @@ prototypes {
           specular: 0.02
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "ground" {
         material: 0
         position [0, -0.2, 0]
@@ -264,7 +264,7 @@ prototypes {
           specular: 0.3
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "shaft" {
         material: 0
         position [0, 3, 0]

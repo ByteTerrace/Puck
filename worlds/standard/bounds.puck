@@ -20,12 +20,12 @@ function boundsCut(box, hole) = (
 )
 function boundsCutAll(boxes, holes) = reduce(holes, boxes, (kept, hole) => flatMap(kept, box => boundsCut(box, hole)))
 
-// One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
-// degrees about up from the world's, so the row negates x and z. `bevel` chamfers it (0 leaves the box's own fillet).
+// One box given its bounds in the creation's frame, which are world bounds for a creation standing at the origin with
+// no yaw. `bevel` chamfers it (0 leaves the box's own fillet).
 template boundsBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
   shape Box $"{label}" {
     material: slot
-    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
     scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
     chamfer: bevel
   }
@@ -35,7 +35,7 @@ template boundsBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
 template boundsRound(label, x0, x1, y0, y1, z0, z1, slot, rounding) {
   shape Box $"{label}" {
     material: slot
-    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
     scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
     rounding: rounding
   }
@@ -80,37 +80,20 @@ template wallAlongZ(label, x0, x1, y0, y1, z0, z1, openings, slot) {
   }
 }
 
-// One box given its bounds in the creation's own frame, with no conversion: a painting's, whose x runs across the canvas,
-// y up and z out of the wall.
-template localBox(label, x0, x1, y0, y1, z0, z1, slot) {
-  shape Box $"{label}" {
-    material: slot
-    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
-    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
-  }
-}
-
-// Three bars (left, right and top) round a canvas of half-width `ix` in the creation's own frame, from `y0` up to `y1`
-// and out by `w`, standing `depth` proud of the wall; the floor closes the fourth side.
+// Three bars (left, right and top, as a viewer facing the canvas sees them) round a canvas of half-width `ix` facing its
+// creation's front (-Z), from `y0` up to `y1` and out by `w`, standing `depth` proud of the wall; the floor closes the
+// fourth side.
 template barRing(label, ix, y0, y1, w, depth, slot) {
-  localBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
-  localBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
-  localBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  boundsBox(label: $"{label}-left", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: (0 - depth), z1: 0, slot: slot)
+  boundsBox(label: $"{label}-right", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: (0 - depth), z1: 0, slot: slot)
+  boundsBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: (0 - depth), z1: 0, slot: slot)
 }
 
-// Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`.
+// Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`: north at -z, south
+// at +z, east at -x and west at +x.
 template flatRing(label, ix, w, y0, y1, slot) {
-  localBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
-  localBox(
-    label: $"{label}-south",
-    x0: (0 - (ix + w)),
-    x1: (ix + w),
-    y0: y0,
-    y1: y1,
-    z0: (0 - (ix + w)),
-    z1: (0 - ix),
-    slot: slot
-  )
-  localBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
-  localBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+  boundsBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: (0 - (ix + w)), z1: (0 - ix), slot: slot)
+  boundsBox(label: $"{label}-south", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
+  boundsBox(label: $"{label}-east", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+  boundsBox(label: $"{label}-west", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
 }

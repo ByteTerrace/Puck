@@ -331,7 +331,7 @@ template shipLook(name = "ship", hull = "#E8DCC4", trim = "#C5533A", metal = "#4
     prototype $"{name}" {
       document {
         name: name
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette [
           { color: hull, roughness: 0.55, specular: 0.2 }
           { color: trim, roughness: 0.6, specular: 0.15 }
@@ -342,64 +342,64 @@ template shipLook(name = "ship", hull = "#E8DCC4", trim = "#C5533A", metal = "#4
         shape Superellipsoid "hull" {
           exponent: 2.6
           material: 0
-          position [0, 1.45, -0.2]
+          position [0, 1.45, 0.2]
           scale [1.35, 1.0, 2.6]
         }
         shape Superellipsoid "belly" {
           exponent: 2.2
           material: 1
-          position [0, 0.95, -0.3]
+          position [0, 0.95, 0.3]
           scale [1.2, 0.6, 2.3]
         }
         shape Sphere "canopy" {
           material: 3
-          position [0, 2.0, 0.9]
+          position [0, 2.0, -0.9]
           scale [0.85, 0.75, 1.15]
         }
         shape Box "wing-left" {
           material: 1
-          position [1.9, 1.2, -0.9]
+          position [-1.9, 1.2, 0.9]
           scale [0.9, 0.08, 0.7]
           rounding: 0.06
         }
         shape Box "wing-right" {
           material: 1
-          position [-1.9, 1.2, -0.9]
+          position [1.9, 1.2, 0.9]
           scale [0.9, 0.08, 0.7]
           rounding: 0.06
         }
         shape Box "fin" {
           material: 1
-          position [0, 2.5, -2.1]
+          position [0, 2.5, 2.1]
           scale [0.07, 0.7, 0.6]
           rounding: 0.05
         }
         shape Cylinder "bell" {
           material: 2
-          position [0, 1.4, -2.85]
-          rotation [-0.707107, 0, 0, 0.707107]
+          position [0, 1.4, 2.85]
+          rotation [0.707107, 0, 0, 0.707107]
           scale [0.6, 0.25, 0.6]
         }
         shape Sphere "flame" {
           material: 4
-          position [0, 1.4, -3.0]
+          position [0, 1.4, 3.0]
           scale [0.42, 0.42, 0.25]
         }
         for side in [-1, 1] {
           shape Box $"skid-{side}" {
             material: 2
-            position [(side * -0.85), 0.08, -0.2]
+            position [(side * 0.85), 0.08, 0.2]
             scale [0.1, 0.08, 1.8]
             rounding: 0.05
           }
           shape Box $"strut-fore-{side}" {
             material: 2
-            position [(side * -0.85), 0.35, 0.8]
+            position [(side * 0.85), 0.35, -0.8]
             scale [0.06, 0.3, 0.06]
           }
           shape Box $"strut-aft-{side}" {
             material: 2
-            position [(side * -0.85), 0.35, -1.2]
+            position [(side * 0.85), 0.35, 1.2]
             scale [0.06, 0.3, 0.06]
           }
         }

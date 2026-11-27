@@ -331,7 +331,7 @@ prototypes {
           roughness: 0.7
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "cube" {
         material: 0
         position [0, 0, 0]
@@ -349,7 +349,7 @@ prototypes {
           roughness: 0.7
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "cube" {
         material: 0
         position [0, 0, 0]
@@ -382,7 +382,7 @@ prototypes {
           specular: 0.02
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "floor" {
         material: roomWhite
         position [0, 0.05, 0]
@@ -390,17 +390,17 @@ prototypes {
       }
       shape Box "red-wall" {
         material: roomRed
-        position [2.05, 1.6, 0]
+        position [-2.05, 1.6, 0]
         scale [0.05, 1.5, 2.1]
       }
       shape Box "green-wall" {
         material: roomGreen
-        position [-2.05, 1.6, 0]
+        position [2.05, 1.6, 0]
         scale [0.05, 1.5, 2.1]
       }
       shape Box "back-wall" {
         material: roomWhite
-        position [0, 1.6, 2.05]
+        position [0, 1.6, -2.05]
         scale [2, 1.5, 0.05]
       }
       shape Box "ceiling" {
@@ -410,12 +410,12 @@ prototypes {
       }
       shape Box "low-block" {
         material: roomWhite
-        position [-0.8, 0.6, -0.4]
+        position [0.8, 0.6, 0.4]
         scale [0.5, 0.5, 0.5]
       }
       shape Box "tall-block" {
         material: roomWhite
-        position [0.7, 1.1, 0.7]
+        position [-0.7, 1.1, -0.7]
         scale [0.5, 1, 0.5]
       }
     }
@@ -430,7 +430,7 @@ prototypes {
           roughness: 0.7
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "cube" {
         material: 0
         position [0, 0, 0]

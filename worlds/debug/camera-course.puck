@@ -112,7 +112,7 @@ prototypes {
   prototype "beacon-screen" {
     document {
       name: "beacon-screen"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       behavior {
         faces [
           {
@@ -140,7 +140,7 @@ prototypes {
   prototype "camera-course" {
     document {
       name: "camera-course"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#D8D4CC", roughness: 0.9, specular: 0.02 }
         { color: "#8E949C", roughness: 0.85, specular: 0.03 }

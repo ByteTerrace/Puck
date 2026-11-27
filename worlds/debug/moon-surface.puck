@@ -127,7 +127,7 @@ let moonPalette = [
 // the bake draws each sector to the plane it shares with its neighbour and no further.
 template moonSector(sector) {
   name: $"moon-{sector.name}"
-  schema: "puck.creation.v2"
+  schema: "puck.creation.v1"
   palette: moonPalette
   noise {
     frequency: 0.018
@@ -159,16 +159,16 @@ template moonSector(sector) {
     shape Superellipsoid $"{crater.name}-rim" {
       exponent: 2
       material: moonRegolith
-      position: (map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius) * [-1, 1, -1])
-      rotation: (moonTilt(moonDirection(crater.latitude, crater.longitude)) * [-1, 1, -1, 1])
+      position: map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius)
+      rotation: moonTilt(moonDirection(crater.latitude, crater.longitude))
       scale [(crater.radius * moonRimReach), (crater.radius * crater.rim), (crater.radius * moonRimReach)]
     }
     shape Superellipsoid $"{crater.name}-bowl" {
       blend: Subtraction
       exponent: 2
       material: moonRegolith
-      position: (map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius) * [-1, 1, -1])
-      rotation: (moonTilt(moonDirection(crater.latitude, crater.longitude)) * [-1, 1, -1, 1])
+      position: map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius)
+      rotation: moonTilt(moonDirection(crater.latitude, crater.longitude))
       scale [crater.radius, (crater.radius * crater.depth), crater.radius]
     }
   }
@@ -181,16 +181,18 @@ template moonSector(sector) {
   shape Box "lapped" {
     blend: Intersection
     material: moonRegolith
-    position [(0 - (sector.sign[0] * (moonOctant - (moonLap / 2)))),
-  (sector.sign[1] * (moonOctant - (moonLap / 2))), (0 - (sector.sign[2] * (moonOctant - (moonLap / 2))))
-]
+    position [
+      (sector.sign[0] * (moonOctant - (moonLap / 2)))
+      (sector.sign[1] * (moonOctant - (moonLap / 2)))
+      (sector.sign[2] * (moonOctant - (moonLap / 2)))
+    ]
     scale [(moonOctant + (moonLap / 2)), (moonOctant + (moonLap / 2)), (moonOctant + (moonLap / 2))]
   }
   shape Box "octant" {
     blend: Intersection
     detail: true
     material: moonRegolith
-    position [(0 - (sector.sign[0] * moonOctant)), (sector.sign[1] * moonOctant), (0 - (sector.sign[2] * moonOctant))]
+    position [(sector.sign[0] * moonOctant), (sector.sign[1] * moonOctant), (sector.sign[2] * moonOctant)]
     scale [moonOctant, moonOctant, moonOctant]
   }
 }
@@ -198,7 +200,7 @@ template moonSector(sector) {
 // The pad: a low stone drum on the pole.
 template moonPad() {
   name: "moon-pad"
-  schema: "puck.creation.v2"
+  schema: "puck.creation.v1"
   palette: moonPalette
   shape Cylinder "drum" {
     material: moonStone

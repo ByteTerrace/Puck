@@ -21,12 +21,12 @@ template twoPedestalTable(material, top = [1.75, 0.05, 0.85]) {
   for x in [-1.1, 1.1] {
     shape Cylinder $"leg-{x}" {
       material: material
-      position [-x, 0.855, 0]
+      position [x, 0.855, 0]
       scale [0.08, 0.355, 0.08]
     }
     shape Cylinder $"foot-{x}" {
       material: material
-      position [-x, 0.52, 0]
+      position [x, 0.52, 0]
       scale [0.35, 0.02, 0.35]
     }
   }
@@ -42,7 +42,7 @@ template gameTablePrototype(id, cloth, top = [0.6, 0.04, 0.6], feltAt = [0, 1.29
         { color: "#6B4A2E", roughness: 0.6, specular: 0.15 }
         { color: cloth, roughness: 0.9, specular: 0.03 }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "top" {
         material: 0
         position [0, gameTableTop, 0]
@@ -60,7 +60,7 @@ template gameTablePrototype(id, cloth, top = [0.6, 0.04, 0.6], feltAt = [0, 1.29
       }
       shape Box "felt" {
         material: 1
-        position: (feltAt * [-1, 1, -1])
+        position: feltAt
         scale: felt
       }
     }

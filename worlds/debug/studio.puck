@@ -176,7 +176,7 @@ template studioPlacements() {
 template studioAidPrototypes() {
   prototype "studio-grid" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "studio-grid"
       palette [
         { color: "#2E3236", specular: 0.02, roughness: 0.9 }
@@ -188,64 +188,56 @@ template studioAidPrototypes() {
       ]
       shape Box "minor-z" {
         id: 0
-        position [-16, 0.016, 9]
-        rotation: rotate([0, 1, 0], 180)
+        position [16, 0.016, -9]
         scale [2.5, 0.006, 0.008]
         material: 1
         domain [repeat(spacing: [1, 1, 0.25], limit: [0, 0, 48], origin: [-16, 0.016, 9])]
       }
       shape Box "minor-x" {
         id: 1
-        position [-16, 0.016, 9]
-        rotation: rotate([0, 1, 0], 180)
+        position [16, 0.016, -9]
         scale [0.008, 0.006, 12]
         material: 1
         domain [repeat(spacing: [0.25, 1, 1], limit: [10, 0, 0], origin: [-16, 0.016, 9])]
       }
       shape Box "major-z" {
         id: 2
-        position [-16, 0.02, 9]
-        rotation: rotate([0, 1, 0], 180)
+        position [16, 0.02, -9]
         scale [2.5, 0.01, 0.02]
         material: 0
         domain [repeat(spacing: [1, 1, 1], limit: [0, 0, 12], origin: [-16, 0.02, 9])]
       }
       shape Box "major-x" {
         id: 3
-        position [-16, 0.02, 9]
-        rotation: rotate([0, 1, 0], 180)
+        position [16, 0.02, -9]
         scale [0.02, 0.01, 12]
         material: 0
         domain [repeat(spacing: [1, 1, 1], limit: [2, 0, 0], origin: [-16, 0.02, 9])]
       }
       shape Box "five-metres" {
         id: 4
-        position [-16, 0.022, 10]
-        rotation: rotate([0, 1, 0], 180)
+        position [16, 0.022, -10]
         scale [2.7, 0.012, 0.06]
         material: 2
         domain [repeat(spacing: [1, 1, 5], limit: [0, 0, 2], origin: [-16, 0.022, 10])]
       }
       shape Box "pole" {
         id: 5
-        position [-13, 1.5, 10]
-        rotation: rotate([0, 1, 0], 180)
+        position [13, 1.5, -10]
         scale [0.06, 1.5, 0.06]
         material: 3
         domain [repeat(spacing: [1, 1, 5], limit: [0, 0, 2], origin: [-13, 1.5, 10])]
       }
       shape Box "tick-half-metre" {
         id: 6
-        position [-13, 1.5, 10]
-        rotation: rotate([0, 1, 0], 180)
+        position [13, 1.5, -10]
         scale [0.09, 0.02, 0.3]
         material: 4
         domain [repeat(spacing: [1, 0.5, 5], limit: [0, 3, 2], origin: [-13, 1.5, 10])]
       }
       shape Box "tick-metre" {
         id: 7
-        position [-13, 2, 10]
-        rotation: rotate([0, 1, 0], 180)
+        position [13, 2, -10]
         scale [0.1, 0.03, 0.5]
         material: 5
         domain [repeat(spacing: [1, 1, 5], limit: [0, 1, 2], origin: [-13, 2, 10])]
@@ -254,7 +246,7 @@ template studioAidPrototypes() {
   }
   prototype "studio-course" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "studio-course"
       palette [
         { color: "#7C8FA3", specular: 0.03, roughness: 0.85 }
@@ -264,41 +256,41 @@ template studioAidPrototypes() {
       ]
       shape Box "step-015" {
         id: 0
-        position [12, 0.085, 13.5]
+        position [-12, 0.085, -13.5]
         scale [1.5, 0.075, 1.5]
         material: 0
       }
       shape Box "step-030" {
         id: 1
-        position [12, 0.16, 6.5]
+        position [-12, 0.16, -6.5]
         scale [1.5, 0.15, 1.5]
         material: 0
       }
       shape Box "ramp-015-up" {
         id: 2
-        position [12, 0.3876, -0.9888]
-        rotation [0.130526, 0, 0, 0.991445]
+        position [-12, 0.3876, 0.9888]
+        rotation [-0.130526, 0, 0, 0.991445]
         scale [1.5, 0.15, 2.0189]
         material: 1
       }
       shape Box "ramp-015-down" {
         id: 3
-        position [12, 0.3876, -4.8112]
-        rotation [-0.130526, 0, 0, 0.991445]
+        position [-12, 0.3876, 4.8112]
+        rotation [0.130526, 0, 0, 0.991445]
         scale [1.5, 0.15, 2.0189]
         material: 1
       }
       shape Box "ramp-030-up" {
         id: 4
-        position [12, 0.6306, -10.375]
-        rotation [0.258819, 0, 0, 0.965926]
+        position [-12, 0.6306, 10.375]
+        rotation [-0.258819, 0, 0, 0.965926]
         scale [1.5, 0.15, 1.5011]
         material: 2
       }
       shape Box "ramp-030-down" {
         id: 5
-        position [12, 0.6306, -12.825]
-        rotation [-0.258819, 0, 0, 0.965926]
+        position [-12, 0.6306, 12.825]
+        rotation [0.258819, 0, 0, 0.965926]
         scale [1.5, 0.15, 1.5011]
         material: 2
       }
@@ -306,21 +298,21 @@ template studioAidPrototypes() {
       for k in range(1, 8) {
         shape Box $"stair-up-{k}" {
           id: (9 + k)
-          position [12, ((0.01 + (0.17 * k)) / 2), (0 - (16.65 + (0.3 * (k - 1))))]
+          position [-12, ((0.01 + (0.17 * k)) / 2), (16.65 + (0.3 * (k - 1)))]
           scale [1.5, ((0.01 + (0.17 * k)) / 2), 0.15]
           material: 3
         }
       }
       shape Box "landing" {
         id: 20
-        position [12, 0.515, -18.9]
+        position [-12, 0.515, 18.9]
         scale [1.5, 0.515, 0.6]
         material: 3
       }
       for j in range(1, 7) {
         shape Box $"stair-down-{j}" {
           id: (20 + j)
-          position [12, ((0.01 + (0.17 * (6 - j))) / 2), (0 - (19.65 + (0.3 * (j - 1))))]
+          position [-12, ((0.01 + (0.17 * (6 - j))) / 2), (19.65 + (0.3 * (j - 1)))]
           scale [1.5, ((0.01 + (0.17 * (6 - j))) / 2), 0.15]
           material: 3
         }
@@ -336,7 +328,7 @@ template studioAidPrototypes() {
           roughness: 0.6
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "line" {
         material: 0
         position [0, 0, 0]
@@ -354,7 +346,7 @@ template studioAidPrototypes() {
           roughness: 0.6
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "line" {
         material: 0
         position [0, 0, 0]
@@ -372,7 +364,7 @@ template studioAidPrototypes() {
           roughness: 0.6
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "pole" {
         material: 0
         position [0, 0, 0]
@@ -386,7 +378,7 @@ template studioPrototypes() {
   studioAidPrototypes()
   prototype "avatar-studio" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "avatar-studio"
       palette [
         { color: "#85898C", specular: 0.02, roughness: 0.95 }
@@ -395,31 +387,31 @@ template studioPrototypes() {
       // The floor sits above the debug ground; the platform's top is at 0.3 m.
       shape Box "floor" {
         id: 0
-        position [0, -0.09, -4]
+        position [0, -0.09, 4]
         scale [24, 0.1, 28]
         material: 0
       }
       shape Box "back" {
         id: 1
-        position [0, 6, -32]
+        position [0, 6, 32]
         scale [24.2, 6, 0.2]
         material: 0
       }
       shape Box "front" {
         id: 2
-        position [0, 6, 24]
+        position [0, 6, -24]
         scale [24.2, 6, 0.2]
         material: 0
       }
       shape Box "left" {
         id: 3
-        position [-24, 6, -4]
+        position [24, 6, 4]
         scale [0.2, 6, 28]
         material: 0
       }
       shape Box "right" {
         id: 4
-        position [24, 6, -4]
+        position [-24, 6, 4]
         scale [0.2, 6, 28]
         material: 0
       }

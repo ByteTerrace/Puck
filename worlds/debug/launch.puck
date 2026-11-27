@@ -67,7 +67,7 @@ prototypes {
   prototype "launch-pad" {
     document {
       name: "launch-pad"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         celMaterial({ color: "#B9AE9C", roughness: 0.85, specular: 0.04 }, celStyle)
         celMaterial({ color: "#C5533A", roughness: 0.7, specular: 0.06 }, celStyle)

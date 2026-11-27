@@ -146,7 +146,7 @@ prototypes {
     prototype $"valley-{sector.name}" {
       document {
         name: $"valley-{sector.name}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: concat(
           [celRock(terrainMaterial(valleyRockBase, valleyRockBands, valleyRockBreakup))],
           sector.name == "north-west" ? wallPalette : []
@@ -206,9 +206,9 @@ prototypes {
           shape Superellipsoid $"{mound.label}" {
             exponent: mound.exponent
             material: mound.material
-            position: (mound.position * [-1, 1, -1])
+            position: mound.position
             scale: mound.radii
-            rotation: (mound.rotation * [-1, 1, -1, 1])
+            rotation: mound.rotation
           }
         }
         terrainFloorCut(top: (maximum(sector.peak, sector.name == "north-west" ? glacierRidge.peak : 0) + 30))
@@ -221,29 +221,29 @@ prototypes {
   prototype "valley-overlook" {
     document {
       name: "valley-overlook"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         celRock({ color: "#7D7366", roughness: 0.95, specular: 0.02 })
         celRock({ color: "#9A958B", roughness: 0.85, specular: 0.03 })
       ]
       shape Box "deck" {
         material: valleyDeck
-        position [0, (deckHeight - 1), (0 - ((overlookFace - deckReach) + deckDepth))]
+        position [0, (deckHeight - 1), ((overlookFace - deckReach) + deckDepth)]
         scale [deckWidth, 1, deckDepth]
       }
       shape Box "parapet-front" {
         material: valleyDeck
-        position [0, (deckHeight + 0.55), (0 - ((overlookFace - deckReach) + parapetHalf))]
+        position [0, (deckHeight + 0.55), ((overlookFace - deckReach) + parapetHalf)]
         scale [deckWidth, 0.55, parapetHalf]
       }
       shape Box "parapet-left" {
         material: valleyDeck
-        position [(parapetHalf - deckWidth), (deckHeight + 0.55), (0 - ((overlookFace - deckReach) + deckDepth))]
+        position [(deckWidth - parapetHalf), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
         scale [parapetHalf, 0.55, deckDepth]
       }
       shape Box "parapet-right" {
         material: valleyDeck
-        position [(deckWidth - parapetHalf), (deckHeight + 0.55), (0 - ((overlookFace - deckReach) + deckDepth))]
+        position [(parapetHalf - deckWidth), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
         scale [parapetHalf, 0.55, deckDepth]
       }
     }

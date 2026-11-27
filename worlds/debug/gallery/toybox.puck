@@ -33,7 +33,7 @@ prototypes {
     prototype $"toybox-cabinet-{i}" {
       document {
         name: $"toybox-cabinet-{i}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: lookCabinetPalette(c)
         arcadeCabinet(base: 0, title: deckDeviceName, players: 2, stools: true)
       }
@@ -43,7 +43,7 @@ prototypes {
     prototype $"toybox-television-{i}" {
       document {
         name: $"toybox-television-{i}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette: lookTelevisionPalette(t)
         televisionSet(base: 0)
         lounge(base: (setLamp + 1))

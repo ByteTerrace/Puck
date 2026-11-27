@@ -88,8 +88,8 @@ template spiderLeg(side, sign, shift, i, leg) {
     group: 0
     material: 1
     parent: "thorax"
-    position [(0 - (sign * leg.root[0])), 0.34, (0 - leg.root[1])]
-    rotation: compose(rotate([0, 1, 0], 180), [leg.turn[0], 0, sign * leg.turn[1], 0.4927])
+    position [sign * leg.root[0], 0.34, leg.root[1]]
+    rotation [leg.turn[0], 0, sign * leg.turn[1], 0.4927]
     scale [0.02, 0.4665, 0.02]
     swings [
       swing("stride", [0, 1, 0], sign * 0.35, [sign * 0.1, 0.22, leg.pivotZ]) with {
@@ -106,8 +106,8 @@ template spiderLeg(side, sign, shift, i, leg) {
     group: 0
     material: 1
     parent: $"coxa{side}{i + 1}"
-    position [(0 - (sign * leg.tip[0])), 0, (0 - leg.tip[1])]
-    rotation: compose(rotate([0, 1, 0], 180), [leg.tipTurn[0], 0, sign * leg.tipTurn[1], 0.9759])
+    position [sign * leg.tip[0], 0, leg.tip[1]]
+    rotation [leg.tipTurn[0], 0, sign * leg.tipTurn[1], 0.9759]
     scale [0.016, 0.7515, 0.016]
     swings [
       swing("stride", [leg.axis[0], 0, sign * leg.axis[1]], -0.6, [sign * leg.root[0], 0.34, leg.root[1]]) with {
@@ -131,7 +131,7 @@ template dragonflyWing(side, sign, n, wing) {
     group: 0
     material: 1
     parent: "thorax"
-    position [(0 - (sign * wing.x)), 0.94, -wing.z]
+    position [sign * wing.x, 0.94, wing.z]
     scale [wing.length, 0.005, 0.05]
     swings [
       swing("wingbeat", [0, 0, 1], sign * -0.6, [sign * 0.05, 0.94, wing.z]) with { wave: "sine", phase: wing.phase }
@@ -152,8 +152,8 @@ template houndLeg(side, sign, shift, e, end) {
     group: 0
     material: 0
     parent: "chest"
-    position [sign * -0.12, 0.26, -end.upperZ]
-    rotation: compose(rotate([0, 1, 0], 180), [0.0453, 0, sign * 0.0226, 0.9987])
+    position [sign * 0.12, 0.26, end.upperZ]
+    rotation [0.0453, 0, sign * 0.0226, 0.9987]
     scale [0.045, 0.4423, 0.045]
     swings [
       swing("stride", [1, 0, 0], -0.55, [sign * 0.11, 0.48, end.pivotZ]) with {
@@ -166,8 +166,8 @@ template houndLeg(side, sign, shift, e, end) {
     group: 0
     material: 0
     parent: $"upper{end.name}{side}"
-    position [sign * -0.12, 0.05, -end.lowerZ]
-    rotation [0, 0.9956, 0.094, 0]
+    position [sign * 0.12, 0.05, end.lowerZ]
+    rotation [-0.094, 0, 0, 0.9956]
     scale [0.035, 0.4276, 0.035]
     swings [
       swing("stride", [1, 0, 0], 0.8, [sign * 0.12, 0.26, end.upperZ]) with {
@@ -180,8 +180,7 @@ template houndLeg(side, sign, shift, e, end) {
     group: 0
     material: 1
     parent: $"lower{end.name}{side}"
-    position [sign * -0.12, 0.04, -end.pawZ]
-    rotation: rotate([0, 1, 0], 180)
+    position [sign * 0.12, 0.04, end.pawZ]
     scale [0.045, 0.035, 0.05]
   }
 }
@@ -862,12 +861,12 @@ template pond() {
             color: "#C8F03C"
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Sphere "abdomen" {
           blend: "SmoothUnion"
           group: 0
           material: 0
-          position [0, 0.22, 0.16]
+          position [0, 0.22, -0.16]
           scale [0.16, 0.135, 0.18]
           slides [
             {
@@ -886,7 +885,7 @@ template pond() {
           group: 0
           material: 0
           parent: "abdomen"
-          position [0, 0.21, -0.08]
+          position [0, 0.21, 0.08]
           scale [0.12, 0.1, 0.12]
           smooth: 0.04
         }
@@ -895,7 +894,7 @@ template pond() {
           group: 0
           material: 2
           parent: "abdomen"
-          position [-0.05, 0.25, -0.19]
+          position [0.05, 0.25, 0.19]
           scale [0.025, 0.025, 0.02]
         }
 
@@ -903,7 +902,7 @@ template pond() {
           group: 0
           material: 2
           parent: "abdomen"
-          position [0.05, 0.25, -0.19]
+          position [-0.05, 0.25, 0.19]
           scale [0.025, 0.025, 0.02]
         }
 
@@ -947,7 +946,7 @@ template pond() {
             color: "#1B3A44"
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Sphere "thorax" {
           blend: "SmoothUnion"
           group: 0
@@ -970,8 +969,8 @@ template pond() {
           group: 0
           material: 0
           parent: "thorax"
-          position [0, 0.9, 0.4]
-          rotation [-0.7071, 0, 0, 0.7071]
+          position [0, 0.9, -0.4]
+          rotation [0.7071, 0, 0, 0.7071]
           scale [0.025, 0.68, 0.025]
         }
 
@@ -979,7 +978,7 @@ template pond() {
           group: 0
           material: 0
           parent: "thorax"
-          position [0, 0.91, -0.11]
+          position [0, 0.91, 0.11]
           scale [0.045, 0.045, 0.045]
         }
 
@@ -987,7 +986,7 @@ template pond() {
           group: 0
           material: 2
           parent: "thorax"
-          position [-0.03, 0.93, -0.13]
+          position [0.03, 0.93, 0.13]
           scale [0.025, 0.028, 0.025]
         }
 
@@ -995,7 +994,7 @@ template pond() {
           group: 0
           material: 2
           parent: "thorax"
-          position [0.03, 0.93, -0.13]
+          position [-0.03, 0.93, 0.13]
           scale [0.025, 0.028, 0.025]
         }
 
@@ -1068,12 +1067,12 @@ template pond() {
             color: "#1E1410"
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Sphere "chest" {
           blend: "SmoothUnion"
           group: 0
           material: 0
-          position [0, 0.52, -0.22]
+          position [0, 0.52, 0.22]
           scale [0.15, 0.15, 0.2]
           slides [
             {
@@ -1092,7 +1091,7 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [0, 0.5, 0.22]
+          position [0, 0.5, -0.22]
           scale [0.14, 0.14, 0.18]
           smooth: 0.05
         }
@@ -1102,8 +1101,8 @@ template pond() {
           group: 0
           material: 1
           parent: "chest"
-          position [0, 0.46, 0.12]
-          rotation [-0.7071, 0, 0, 0.7071]
+          position [0, 0.46, -0.12]
+          rotation [0.7071, 0, 0, 0.7071]
           scale [0.12, 0.48, 0.12]
           smooth: 0.05
         }
@@ -1112,8 +1111,8 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [0, 0.62, -0.4]
-          rotation [0.8944, 0, 0, 0.4472]
+          position [0, 0.62, 0.4]
+          rotation [-0.8944, 0, 0, 0.4472]
           scale [0.06, 0.2, 0.06]
         }
 
@@ -1122,7 +1121,7 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [0, 0.68, -0.5]
+          position [0, 0.68, 0.5]
           scale [0.09, 0.08, 0.11]
           smooth: 0.03
         }
@@ -1131,7 +1130,7 @@ template pond() {
           group: 0
           material: 1
           parent: "chest"
-          position [0, 0.64, -0.61]
+          position [0, 0.64, 0.61]
           scale [0.05, 0.045, 0.065]
         }
 
@@ -1139,7 +1138,7 @@ template pond() {
           group: 0
           material: 2
           parent: "chest"
-          position [-0.05, 0.71, -0.58]
+          position [0.05, 0.71, 0.58]
           scale [0.02, 0.022, 0.015]
         }
 
@@ -1147,8 +1146,8 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [-0.07, 0.72, -0.46]
-          rotation [0, 0, 0.1736, 0.9848]
+          position [0.07, 0.72, 0.46]
+          rotation [0, 0, -0.1736, 0.9848]
           scale [0.025, 0.07, 0.025]
         }
 
@@ -1156,7 +1155,7 @@ template pond() {
           group: 0
           material: 2
           parent: "chest"
-          position [0.05, 0.71, -0.58]
+          position [-0.05, 0.71, 0.58]
           scale [0.02, 0.022, 0.015]
         }
 
@@ -1164,8 +1163,8 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [0.07, 0.72, -0.46]
-          rotation [0, 0, -0.1736, 0.9848]
+          position [-0.07, 0.72, 0.46]
+          rotation [0, 0, 0.1736, 0.9848]
           scale [0.025, 0.07, 0.025]
         }
 
@@ -1173,8 +1172,8 @@ template pond() {
           group: 0
           material: 0
           parent: "chest"
-          position [0, 0.62, 0.62]
-          rotation [-0.7882, 0, 0, 0.6154]
+          position [0, 0.62, -0.62]
+          rotation [0.7882, 0, 0, 0.6154]
           scale [0.03, 0.4948, 0.03]
           swings [
             swing("wag", [0, 1, 0], 0.45, [0, 0.56, -0.38]) with { wave: "sine", phase: 0 }
@@ -1204,19 +1203,19 @@ template pond() {
             specular: 0.3
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Capsule "body" {
           material: 0
           position [0, 0, 0]
-          rotation [-0.7071, 0, 0, 0.7071]
+          rotation [0.7071, 0, 0, 0.7071]
           scale [0.09, 0.16, 0.09]
         }
 
         shape Cone "tail" {
           blend: "SmoothUnion"
           material: 1
-          position [0, 0, 0.22]
-          rotation [-0.7071, 0, 0, 0.7071]
+          position [0, 0, -0.22]
+          rotation [0.7071, 0, 0, 0.7071]
           scale [0.1, 0.08, 0.1]
           smooth: 0.04
         }
@@ -1231,23 +1230,23 @@ template pond() {
             color: "#EDE6D6"
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Capsule "shaft" {
           material: 0
           position [0, 0.12, 0]
-          rotation [0, 0, -0.7071, 0.7071]
+          rotation [0, 0, 0.7071, 0.7071]
           scale [0.07, 0.35, 0.07]
         }
 
         shape Sphere "knobA" {
           material: 0
-          position [-0.35, 0.12, 0]
+          position [0.35, 0.12, 0]
           scale [0.12, 0.12, 0.12]
         }
 
         shape Sphere "knobB" {
           material: 0
-          position [0.35, 0.12, 0]
+          position [-0.35, 0.12, 0]
           scale [0.12, 0.12, 0.12]
         }
       }
@@ -1261,28 +1260,28 @@ template pond() {
             color: "#6E6A63"
           }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Box "wallWest" {
-          material: 0
-          position [4.25, 0.4, 0]
-          scale [0.25, 0.9, 4.5]
-        }
-
-        shape Box "wallEast" {
           material: 0
           position [-4.25, 0.4, 0]
           scale [0.25, 0.9, 4.5]
         }
 
+        shape Box "wallEast" {
+          material: 0
+          position [4.25, 0.4, 0]
+          scale [0.25, 0.9, 4.5]
+        }
+
         shape Box "wallNorth" {
           material: 0
-          position [0, 0.4, 4.25]
+          position [0, 0.4, -4.25]
           scale [4.5, 0.9, 0.25]
         }
 
         shape Box "wallSouth" {
           material: 0
-          position [0, 0.4, -4.25]
+          position [0, 0.4, 4.25]
           scale [4.5, 0.9, 0.25]
         }
       }
@@ -1294,7 +1293,7 @@ template pond() {
         palette [
           { color: "#2F6B3A", roughness: 0.95, specular: 0.03 }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Box "hedge" {
           material: 0
           position [0, 0.8, 0]
@@ -1310,15 +1309,15 @@ template pond() {
           { color: "#6E6A63", roughness: 0.9, specular: 0.04 }
           { color: "#4A3B2E", roughness: 0.85, specular: 0.04 }
         ]
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         shape Box "back" {
           material: 0
-          position [0, 1.3, 1.5]
+          position [0, 1.3, -1.5]
           scale [2, 1.3, 0.15]
         }
         shape Box "side" {
           material: 0
-          position [1.85, 1.3, 0]
+          position [-1.85, 1.3, 0]
           scale [0.15, 1.3, 1.5]
         }
         shape Box "roof" {

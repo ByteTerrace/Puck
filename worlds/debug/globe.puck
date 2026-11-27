@@ -249,7 +249,7 @@ prototypes {
     document {
       name: "floor"
       palette [{ color: "#6E7B8C", roughness: 0.85, specular: 0.04 }]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "floor" {
         material: 0
         position [0, (0 - (wall / 2)), 0]
@@ -266,7 +266,7 @@ prototypes {
         { color: "#B8926A", roughness: 0.8, specular: 0.05 }
         { color: "#7FA08A", roughness: 0.8, specular: 0.05 }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "ceiling" {
         material: 0
         position [0, ((2 * roomHalf) + (wall / 2)), 0]
@@ -274,22 +274,22 @@ prototypes {
       }
       shape Box "wall-east" {
         material: 1
-        position [(0 - (roomHalf + (wall / 2))), roomHalf, 0]
+        position [(roomHalf + (wall / 2)), roomHalf, 0]
         scale [(wall / 2), roomHalf, (roomHalf + wall)]
       }
       shape Box "wall-west" {
         material: 1
-        position [(roomHalf + (wall / 2)), roomHalf, 0]
+        position [(0 - (roomHalf + (wall / 2))), roomHalf, 0]
         scale [(wall / 2), roomHalf, (roomHalf + wall)]
       }
       shape Box "wall-north" {
         material: 2
-        position [0, roomHalf, (0 - (roomHalf + (wall / 2)))]
+        position [0, roomHalf, (roomHalf + (wall / 2))]
         scale [roomHalf, roomHalf, (wall / 2)]
       }
       shape Box "wall-south" {
         material: 2
-        position [0, roomHalf, (roomHalf + (wall / 2))]
+        position [0, roomHalf, (0 - (roomHalf + (wall / 2)))]
         scale [roomHalf, roomHalf, (wall / 2)]
       }
     }
@@ -305,7 +305,7 @@ prototypes {
     document {
       name: "marble"
       palette [{ color: "#E9E2D0", roughness: 0.25, specular: 0.5 }]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Sphere "ball" {
         material: 0
         position [0, 0, 0]

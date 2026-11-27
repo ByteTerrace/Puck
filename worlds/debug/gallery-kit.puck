@@ -22,7 +22,7 @@ prototypes {
   prototype "kit-pier" {
     document {
       name: "kit-pier"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: structurePalette
       branchedPier(base: 0, height: 4.2, span: 2.0)
     }
@@ -30,7 +30,7 @@ prototypes {
   prototype "kit-plinth" {
     document {
       name: "kit-plinth"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: plinthPalette
       displayPlinth(base: 0)
       shape Sphere "subject" {
@@ -43,7 +43,7 @@ prototypes {
   prototype "kit-bay" {
     document {
       name: "kit-bay"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       windowBay(base: 0)
     }
@@ -51,7 +51,7 @@ prototypes {
   prototype "kit-fan" {
     document {
       name: "kit-fan"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       fanShade(base: 0, signal: "state.kitShade", dynamics: "kit-shade")
     }
@@ -59,7 +59,7 @@ prototypes {
   prototype "kit-rail" {
     document {
       name: "kit-rail"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       balustrade(base: 0)
     }
@@ -67,7 +67,7 @@ prototypes {
   prototype "kit-lattice" {
     document {
       name: "kit-lattice"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: latticePalette("#9FE3C6", "#FFE98F", "#F2B52C")
       lattice(base: 0, cells: 64, pitch: 0.078125, height: 3.9)
     }
@@ -75,7 +75,7 @@ prototypes {
   prototype "kit-planter" {
     document {
       name: "kit-planter"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       planter(base: 0)
     }
@@ -83,7 +83,7 @@ prototypes {
   prototype "kit-bench" {
     document {
       name: "kit-bench"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       bench(base: 0)
     }
@@ -91,7 +91,7 @@ prototypes {
   prototype "kit-banner" {
     document {
       name: "kit-banner"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette: kitPalette
       banner(base: 0)
     }

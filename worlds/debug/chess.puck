@@ -91,7 +91,7 @@ template pieceProto(color, name, sx, sy, sz) {
           specular: 0.25
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Capsule "body" {
         material: 0
         position [0, 0, 0]
@@ -112,7 +112,7 @@ template crownedPieceProto(color, name, sx, sy, sz, csx, csy, csz, crownY) {
           specular: 0.25
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Capsule "body" {
         material: 0
         position [0, 0, 0]
@@ -140,7 +140,7 @@ template squareProto(name, colorKey) {
           specular: 0.05
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "square" {
         material: 0
         position [0, 0, 0]
@@ -246,7 +246,7 @@ prototypes {
           color: "#8A6A45"
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "top" {
         material: 0
         position [0, 1.25, 0]
@@ -291,25 +291,25 @@ prototypes {
           specular: 0.3
         }
       ]
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       shape Box "near" {
-        material: 0
-        position [0, 0, 0.088]
-        scale [0.1, 0.004, 0.012]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0, -0.088]
         scale [0.1, 0.004, 0.012]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0, 0.088]
+        scale [0.1, 0.004, 0.012]
+      }
       shape Box "left" {
         material: 0
-        position [0.088, 0, 0]
+        position [-0.088, 0, 0]
         scale [0.012, 0.004, 0.1]
       }
       shape Box "right" {
         material: 0
-        position [-0.088, 0, 0]
+        position [0.088, 0, 0]
         scale [0.012, 0.004, 0.1]
       }
     }

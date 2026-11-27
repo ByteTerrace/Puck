@@ -31,7 +31,7 @@ template terrainMass(label, foot, peak, radial, across, offset = 0, sink = 0.3, 
   shape Superellipsoid $"{label}" {
     exponent: exponent
     material: material
-    position [-offset, (0 - ((peak / (1 - sink)) * sink)), (0 - (foot + (radial * squareRoot((1 - (sink * sink))))))]
+    position [offset, (0 - ((peak / (1 - sink)) * sink)), (foot + (radial * squareRoot((1 - (sink * sink)))))]
     scale [across, (peak / (1 - sink)), radial]
   }
 }
@@ -44,7 +44,7 @@ template terrainBasin(label, lateral, radial, y, radii) {
     blend: Subtraction
     exponent: 2
     material: 0
-    position [-lateral, y, -radial]
+    position [lateral, y, radial]
     scale: radii
   }
 }
@@ -57,9 +57,9 @@ template terrainCut(cut) {
     blend: Subtraction
     material: cut.material
     rounding: cut.rounding
-    position: (cut.position * [-1, 1, -1])
+    position: cut.position
     scale: cut.half
-    rotation: (cut.rotation * [-1, 1, -1, 1])
+    rotation: cut.rotation
   }
 }
 

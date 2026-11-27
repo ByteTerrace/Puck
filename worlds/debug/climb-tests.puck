@@ -16,7 +16,7 @@ import "set-controls"
 prototypes {
   prototype "climb-face" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-face"
       palette [{ color: "#8A7F72" }]
       shape Box {
@@ -28,7 +28,7 @@ prototypes {
   }
   prototype "climb-block" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-block"
       palette [{ color: "#B9B2A6" }]
       shape Box {
@@ -40,7 +40,7 @@ prototypes {
   }
   prototype "climb-tower" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-tower"
       palette [{ color: "#8A7F72" }]
       shape Box {
@@ -52,7 +52,7 @@ prototypes {
   }
   prototype "climb-pillar" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-pillar"
       palette [{ color: "#8A7F72" }]
       shape Box {
@@ -64,7 +64,7 @@ prototypes {
   }
   prototype "climb-fin" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-fin"
       palette [{ color: "#8A7F72" }]
       shape Box {
@@ -76,7 +76,7 @@ prototypes {
   }
   prototype "climb-ledge" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: "climb-ledge"
       palette [{ color: "#8A7F72" }]
       shape Box {

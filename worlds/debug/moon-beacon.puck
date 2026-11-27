@@ -55,7 +55,7 @@ prototypes {
     prototype $"moon-beacon-switch-{state.name}" {
       document {
         name: $"moon-beacon-switch-{state.name}"
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         palette [
           { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }

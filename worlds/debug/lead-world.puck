@@ -103,7 +103,7 @@ template leadWorld(led) {
   prototypes {
     prototype "leadBody" {
       document {
-        schema: "puck.creation.v2"
+        schema: "puck.creation.v1"
         name: "leadBody"
         palette [{ color: "#B8B0A8", emissive: 0, specular: 0.02, roughness: 0.85 }]
         drivers [led ? (pressDriver with { lead: "press" }) : pressDriver]

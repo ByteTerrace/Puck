@@ -276,12 +276,12 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
 
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: concat([ground], palette)
       shape Box "ground" {
         material: 0
-        position [(region[0] + region[2]) / 2, top - depth, (region[1] + region[3]) / 2]
+        position [0 - (region[0] + region[2]) / 2, top - depth, 0 - (region[1] + region[3]) / 2]
         scale [(region[2] - region[0]) / 2, depth, (region[3] - region[1]) / 2]
       }
       for i in range(0, length(points) - 1) {
@@ -292,18 +292,20 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
         shape Prism $"cut-{i}" {
           blend: Subtraction
           material: 2
-          position [(a[0] + b[0]) / 2,
-  (bed + top + reach) / 2, (a[1] + b[1]) / 2
-]
+          position [
+            0 - (a[0] + b[0]) / 2,
+            (bed + top + reach) / 2,
+            0 - (a[1] + b[1]) / 2
+          ]
           scale [topHalf, (top + reach - bed) / 2, legLength / 2 + join]
           taper: bedHalf / topHalf
-          rotation [-halfTurnSine(legCosine), 0, -halfTurnCosine(legCosine), 0]
+          rotation [halfTurnSine(legCosine), 0, halfTurnCosine(legCosine), 0]
         }
       }
       for (stone, i) in stones {
         shape Ellipsoid $"stone-{i}" {
           material: 1
-          position [stone.position[0], stone.position[1], stone.position[2]]
+          position [0 - stone.position[0], stone.position[1], 0 - stone.position[2]]
           scale: stone.radii
           rotation [0, sine(stone.yaw * 0.008726646259971648), 0, cosine(stone.yaw * 0.008726646259971648)]
         }
@@ -321,7 +323,7 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
 template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "fallsFlow", visible = "fallsVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass, coverageLane = -1) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette [flowed(palette[0] with { glass: glass }, flow, coverageLane: coverageLane, glass: 1)]
       sizeBy: $"state.{visible}"
@@ -331,13 +333,13 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
       for j in range(0, length(profile) - 1) {
         shape Box $"sheet-{j}" {
           material: 0
-          position [0, (profile[j][1] + profile[j + 1][1]) / 2, standoff - (profile[j][0] + profile[j + 1][0]) / 2]
+          position [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
           scale [width / 2, thickness / 2, squareRoot(
               (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
                 (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])
             ) / 2
           ]
-          rotation: compose(rotate([0, 1, 0], 180), [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))])
+          rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
           swings [
             swing(
               "fold",
@@ -365,14 +367,13 @@ function onSlope(c, yaw) = turnAfter(turnByCosine([1, 0, 0], c, -1), turnAbout([
 template glacierMass(id, shapes, gauge = "glacierLength", origin = [0, 0, 0], palette = glacierPalette, relief = null) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: palette
       sizeBy: $"state.{gauge}"
       noise: relief
       shapes: map(shapes, shape => shape with {
-        position [origin[0] - shape.position[0], shape.position[1] - origin[1], origin[2] - shape.position[2]]
-        rotation: compose(rotate([0, 1, 0], 180), ({ rotation [0, 0, 0, 1] } with shape).rotation)
+        position [shape.position[0] - origin[0], shape.position[1] - origin[1], shape.position[2] - origin[2]]
       })
     }
   }
@@ -394,7 +395,7 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = {
 }) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: palette
       noise {
@@ -430,12 +431,14 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = {
         shape Superellipsoid $"stone-{i}" {
           material: stone.material
           exponent: exponent
-          position: (stone.position * [-1, 1, -1])
+          position: stone.position
           scale: stone.radii
-          rotation [(0 - (sine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)))
-  cosine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648), sine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648)
-  cosine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)
-]
+          rotation [
+            sine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            0 - sine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)
+          ]
         }
       }
     }
@@ -459,7 +462,7 @@ template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel",
 }) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette [lakeMaterial(palette[0] with { glass: glass }, flow, outlet)]
       drivers [
@@ -469,7 +472,6 @@ template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel",
         material: 0
         group: 1
         position [0, 0 - depth / 2, 0]
-        rotation: rotate([0, 1, 0], 180)
         scale [radius, depth / 2, radius]
         slides [
           { driver: "level", axis [0, 1, 0], amplitude: rise, phase: 0 - rest, wave: "linear" }
@@ -482,7 +484,6 @@ template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel",
         group: 1
         parent: "water"
         position [0, bowl.y, 0]
-        rotation: rotate([0, 1, 0], 180)
         scale [bowl.radii[0] + reach, bowl.radii[1] + reach, bowl.radii[2] + reach]
       }
     }
@@ -495,7 +496,7 @@ template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel",
 template floatGauge(id, height = 3, tick = 0.5, gauge = "aquiferFill", palette = gaugePalette) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: palette
       drivers [
@@ -509,13 +510,13 @@ template floatGauge(id, height = 3, tick = 0.5, gauge = "aquiferFill", palette =
       for k in range(0, floor(height / tick) + 1) {
         shape Box $"tick-{k}" {
           material: 1
-          position [0, k * tick + 0.04, 0.1]
+          position [0, k * tick + 0.04, -0.1]
           scale [0.2, 0.04, 0.015]
         }
       }
       shape Box "float" {
         material: 2
-        position [0, 0.12, 0.16]
+        position [0, 0.12, -0.16]
         scale [0.2, 0.12, 0.07]
         slides [
           { driver: "fill", axis [0, 1, 0], amplitude: height, phase: 0, wave: "linear" }
@@ -535,14 +536,14 @@ let gaugePalette = [
 template impactSpray(id, gauge = "fallsFlow", extent = [7, 4, 5]) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       sizeBy: $"state.{gauge}"
       volumes [
         {
           kind: "cloud"
           position [0, 0, 0]
-          rotation [0, 1, 0, 0]
+          rotation [0, 0, 0, 1]
           halfExtent: extent
           width: 1.2
           speed: 0.8
@@ -566,7 +567,7 @@ template impactSpray(id, gauge = "fallsFlow", extent = [7, 4, 5]) {
 template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: concat(palette, [{ color: "#E9F5F4", roughness: 0.04, specular: 0.5, glass { depth: 8, ior: 1.5 } }])
       shape Box "observation-window" {
@@ -577,31 +578,31 @@ template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
       for side in [-1, 1] {
         shape Box $"chamber-roof-side-{side}" {
           material: 1
-          position [(0 - (side * (half[0] - 0.5))), -0.15, 0]
+          position [side * (half[0] - 0.5), -0.15, 0]
           scale [0.5, 0.15, half[1]]
         }
         shape Box $"chamber-roof-end-{side}" {
           material: 1
-          position [0, -0.15, (0 - (side * (half[1] - 0.5)))]
+          position [0, -0.15, side * (half[1] - 0.5)]
           scale [half[0], 0.15, 0.5]
         }
       }
       for side in [-1, 1] {
         shape Box $"terrace-{side}" {
           material: 1
-          position [(0 - (side * (half[0] + 1))), 0.1, 0]
+          position [side * (half[0] + 1), 0.1, 0]
           scale [1, 0.3, half[1] + 2]
         }
         for end in [-1, 1] {
           shape Box $"column-{side}-{end}" {
             material: 0
-            position [(0 - (side * (half[0] + 1))), 2.2, (0 - (end * (half[1] + 0.8)))]
+            position [side * (half[0] + 1), 2.2, end * (half[1] + 0.8)]
             scale [0.22, 2.2, 0.22]
           }
         }
         shape Box $"rail-{side}" {
           material: 0
-          position [(0 - (side * (half[0] + 1.8))), 1.1, 0]
+          position [side * (half[0] + 1.8), 1.1, 0]
           scale [0.12, 0.12, half[1]]
         }
       }
@@ -613,13 +614,13 @@ template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
       }
       shape Box "orange-awning" {
         material: 2
-        position [0, 4.1, (0 - (half[1] + 2))]
+        position [0, 4.1, half[1] + 2]
         scale [half[0] + 1.5, 0.25, 0.7]
       }
       for i in range(0, 3) {
         shape Box $"entry-step-{i}" {
           material: 1
-          position [(0 - (half[0] + 1)), 0.05 * i, i * 0.5 - (half[1] + 2.5)]
+          position [half[0] + 1, 0.05 * i, half[1] + 2.5 - i * 0.5]
           scale [1, 0.05 * (i + 1), 0.6]
         }
       }
@@ -633,7 +634,7 @@ template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
 template stoneBridge(id, length = 9, width = 3, rise = 1.1, ramp = 3, palette = stonePalette) {
   prototype $"{id}" {
     document {
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       name: id
       palette: palette
       shape Box "deck" {
@@ -644,23 +645,25 @@ template stoneBridge(id, length = 9, width = 3, rise = 1.1, ramp = 3, palette = 
       for end in [-1, 1] {
         shape Box $"pier-{end}" {
           material: 1
-          position [0, rise / 2 - 0.2, (0 - (end * (length / 2 - 0.6)))]
+          position [0, rise / 2 - 0.2, end * (length / 2 - 0.6)]
           scale [width / 2 - 0.2, rise / 2, 0.6]
         }
         shape Box $"ramp-{end}" {
           material: 0
-          position [0, rise / 2 - 0.1, (0 - (end * (length / 2 + ramp / 2 - 0.05)))]
+          position [0, rise / 2 - 0.1, end * (length / 2 + ramp / 2 - 0.05)]
           scale [width / 2, 0.15, squareRoot(ramp * ramp + rise * rise) / 2]
-          rotation [(0 - (end * halfTurnSine(ramp / squareRoot(ramp * ramp + rise * rise))))
-  0, 0
-  halfTurnCosine(ramp / squareRoot(ramp * ramp + rise * rise))
-]
+          rotation [
+            end * halfTurnSine(ramp / squareRoot(ramp * ramp + rise * rise)),
+            0,
+            0,
+            halfTurnCosine(ramp / squareRoot(ramp * ramp + rise * rise))
+          ]
         }
       }
       for side in [-1, 1] {
         shape Box $"parapet-{side}" {
           material: 1
-          position [(0 - (side * (width / 2 - 0.15))), rise + 0.25, 0]
+          position [side * (width / 2 - 0.15), rise + 0.25, 0]
           scale [0.15, 0.25, length / 2]
         }
       }
@@ -671,7 +674,7 @@ template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9
   prototype $"{id}" {
     document {
       name: id
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [
         { color: "#B9A78A", roughness: 0.92, specular: 0.02 }
         { color: "#A39075", roughness: 0.92, specular: 0.02 }
@@ -683,39 +686,40 @@ template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9
       }
       shape Box "wall-east" {
         material: 1
-        position [(half[0] + 0.15), ((floorY - 0.3 + rimY) / 2), 0]
+        position [0 - (half[0] + 0.15), ((floorY - 0.3 + rimY) / 2), 0]
         scale [0.15, ((rimY - floorY + 0.3) / 2), half[1] + 0.15 * 2]
       }
       shape Box "wall-west" {
         material: 1
-        position [(0 - (half[0] + 0.15)), ((floorY - 0.3 + rimY) / 2), 0]
+        position [half[0] + 0.15, ((floorY - 0.3 + rimY) / 2), 0]
         scale [0.15, ((rimY - floorY + 0.3) / 2), half[1] + 0.15 * 2]
       }
       shape Box "wall-south" {
         material: 1
-        position [0, ((floorY - 0.3 + rimY) / 2), (0 - (half[1] + 0.15))]
+        position [0, ((floorY - 0.3 + rimY) / 2), half[1] + 0.15]
         scale [half[0] + 0.15 * 2, ((rimY - floorY + 0.3) / 2), 0.15]
       }
       shape Box "wall-north" {
         material: 1
-        position [0, ((floorY - 0.3 + rimY) / 2), (half[1] + 0.15)]
+        position [0, ((floorY - 0.3 + rimY) / 2), 0 - (half[1] + 0.15)]
         scale [half[0] + 0.15 * 2, ((rimY - floorY + 0.3) / 2), 0.15]
       }
       for (opening, i) in openings {
         shape Box $"passage-{i}" {
           material: 1
           blend: "Subtraction"
-          position: (opening.position * [-1, 1, -1])
+          position: opening.position
           scale: opening.half
         }
       }
       for (top, i) in stepTops {
         shape Box $"step-{i}" {
           material: 0
-          position [(half[0] - (0.8 * (length(stepTops) - i)) / 2),
-  (top + floorY) / 2,
-  0
-]
+          position [
+            0 - (half[0] - (0.8 * (length(stepTops) - i)) / 2),
+            (top + floorY) / 2,
+            0
+          ]
           scale [(0.8 * (length(stepTops) - i)) / 2, (top - floorY) / 2, 2]
         }
       }

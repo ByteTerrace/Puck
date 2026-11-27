@@ -5,9 +5,9 @@
 // absent one keeps the model's default. Written in a shape's `swings` list.
 function swing(driver, axis, amplitude, pivot) = {
   driver: driver
-  axis: (axis * [-1, 1, -1])
+  axis: axis
   amplitude: amplitude
-  pivot: (pivot * [-1, 1, -1])
+  pivot: pivot
 }
 
 // Turns as unit quaternions [x, y, z, w], the spelling of every `rotation` a shape row carries, right-handed about their

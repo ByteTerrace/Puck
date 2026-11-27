@@ -115,7 +115,7 @@ prototypes {
   prototype "guide-region" {
     document {
       name: "guide-region"
-      schema: "puck.creation.v2"
+      schema: "puck.creation.v1"
       palette [{ color: "#000000" }]
     }
   }

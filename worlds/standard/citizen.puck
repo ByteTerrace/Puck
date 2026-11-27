@@ -83,7 +83,7 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
         prototype $"citizen-{c}-{h}" {
           document {
             name: $"citizen-{c}-{h}"
-            schema: "puck.creation.v2"
+            schema: "puck.creation.v1"
             palette [
               { color: trousers, roughness: 0.85 }
               { color: coat, roughness: 0.8 }
