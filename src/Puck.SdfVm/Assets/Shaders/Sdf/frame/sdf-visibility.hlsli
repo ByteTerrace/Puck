@@ -19,6 +19,11 @@
 //    pixel; views filters it like the occlusion and lights by it only while shadows are on.
 // The identity and the material are exact; the packed fields round only presentation values.
 //
+// Past every record lies the tint plane, one word a pixel in the records' order (sdfVisibilityTintWord): the key light's
+// transmitted colour beside K's primary visibility (sdfPackShadowTint), white where no coloured glass stands between the
+// pixel and the light. A plane keeps each record on its own 32-byte sector; the storage is SDF_VISIBILITY_PIXEL_WORDS a
+// pixel (SdfWorldPackage.VisibilityPixelByteLength).
+//
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
 // source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
 // is identity 0, and a mesh hit's source is its draw.
@@ -39,7 +44,7 @@
 #define sdfVisibilityRecordBuffer sdfVisibilityRecords
 #endif
 
-static const uint SdfVisibilityWords = 8u;
+static const uint SdfVisibilityWords = SDF_VISIBILITY_RECORD_WORDS;
 static const uint SdfVisibilityTWord = 0u;
 static const uint SdfVisibilityIdentityWord = 1u;
 static const uint SdfVisibilityMaterialWord = 2u;
@@ -132,6 +137,28 @@ SdfVisibility sdfLoadVisibility(uint record) {
 float4 sdfLoadVisibilityShadows(uint record) {
     return sdfUnpackShadowVisibility(sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord]);
 }
+// The tint plane's word of the pixel whose record starts at `record`: the plane starts past as many records as the bound
+// storage holds whole pixels, so a writer and a reader of one buffer agree on it, and in storage sized at
+// SDF_VISIBILITY_PIXEL_WORDS a pixel (the graph's, SdfWorldPackage.VisibilityPixelByteLength) it overlaps no record a
+// pixel addresses.
+uint sdfVisibilityTintPlane() {
+    uint words;
+    uint stride;
+
+    sdfVisibilityRecordBuffer.GetDimensions(words, stride);
+
+    return (SdfVisibilityWords * (words / SDF_VISIBILITY_PIXEL_WORDS));
+}
+uint sdfVisibilityTintWord(uint plane, uint record) {
+    return (plane + (record / SdfVisibilityWords));
+}
+uint sdfVisibilityTintWord(uint record) {
+    return sdfVisibilityTintWord(sdfVisibilityTintPlane(), record);
+}
+// The key light's transmitted colour the surface pass measured at a pixel, unfiltered.
+float3 sdfLoadVisibilityTint(uint record) {
+    return sdfUnpackShadowTint(sdfVisibilityRecordBuffer[sdfVisibilityTintWord(record)]);
+}
 
 // The surface sample the shading stages read: a pixel's whole record, decoded.
 struct SdfSurfaceSample {
@@ -145,6 +172,9 @@ struct SdfSurfaceSample {
     float curvature;
     float ambient;
     float4 shadows;
+    // The key light's transmitted colour beside shadows.x: white as loaded; views takes the filtered colour, or the
+    // record's own where it filters no shadow (sdfLoadVisibilityTint).
+    float3 shadowTint;
 };
 SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     SdfVisibility visibility = sdfLoadVisibility(record);
@@ -160,6 +190,7 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     sample.curvature = f16tof32(shading & 0xFFFFu);
     sample.ambient = f16tof32(shading >> 16u);
     sample.shadows = sdfLoadVisibilityShadows(record);
+    sample.shadowTint = float3(1.0, 1.0, 1.0);
     return sample;
 }
 
@@ -177,6 +208,8 @@ struct SdfVisibilityRecordValue {
     float curvature;
     float ambient;
     float4 shadows;
+    // The key light's transmitted colour, the tint plane's word.
+    float3 shadowTint;
 };
 void sdfStoreVisibilityRecord(uint record, SdfVisibilityRecordValue value) {
     sdfVisibilityRecordBuffer[record + SdfVisibilityTWord] = asuint(value.visibility.t);
@@ -189,6 +222,7 @@ void sdfStoreVisibilityRecord(uint record, SdfVisibilityRecordValue value) {
     sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] =
         ((f32tof16(clamp(value.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) & 0xFFFFu) | ((f32tof16(value.ambient) & 0xFFFFu) << 16u));
     sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord] = sdfPackShadowVisibility(value.shadows);
+    sdfVisibilityRecordBuffer[sdfVisibilityTintWord(record)] = sdfPackShadowTint(value.shadowTint);
     sdfWorkTexels = 1u;
 }
 #endif

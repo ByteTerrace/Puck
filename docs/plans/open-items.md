@@ -2622,25 +2622,23 @@ The air's in-scatter:
 
 Light through coloured glass:
 
-- [high] Light through coloured glass is not coloured. Stained glass (the
-  gallery's east window, `architecture.puck`'s `stainedGlass`) tints what is seen
-  through it, but the light it passes reaches the floor and walls only as the
-  cascades carry it, and a cascade's glass extinction is one density
-  (`glass.shadowDensity`, `sdf-mesh-shadow-glass.frag.hlsl` accumulating one
-  64-bit optical depth a texel), so a pane casts at most a grey shadow and its
-  came the dark grid; the irradiance volume traces no glass at all. The plan:
-  (1) let a cascade's optical buffer carry RGB optical depth, three 64-bit sums a
-  texel from the material's absorption scaled by a transmitted-light opt-in on
-  the glass (an authored `glass.castsColor`, zero by default, so water and
-  windows keep their grey or no shadow), through the same
-  `sdfOpticalDepthAccumulate`; (2) have the surface pass resolve the key light's
-  transmitted colour beside its scalar visibility (`sdfMeshShadowGap` already
-  reads the optical term per tap) and write it as a chroma word of the
-  visibility record, so views multiplies the directional's colour by it with no
-  new tap; (3) carry the same RGB through the probe trace's visibility bits
-  later, so the irradiance volume bounces the coloured patch. Step 1 and 2
-  decide the record's layout; the forcing case is the east window's patch on the
-  nave floor on a morning sun.
+- [high] The irradiance volume does not bounce light that coloured glass
+  coloured. The key light's cascades carry it: a glass that opts in with
+  `glass.castsColor` adds that share of its absorption to each channel of the
+  cascade's optical buffer (`SdfGlass.ShadowColorExtinction`, the buffer's
+  colour plane in `frame/sdf-shadow-optical.hlsli`), the surface pass resolves
+  the transmitted colour beside the primary role's visibility into the
+  visibility record's tint plane (`sdfMeshShadow`, `sdfVisibilityTintWord`), and
+  the light phase's door multiplies the directional's colour by it
+  (`sdfLightTransmission`), so the stained glass (`stainedGlassPalette`) casts
+  its colours on the nave floor. The probe trace still traces no glass, so the
+  coloured patch bounces as white light and the volume lights the room as
+  though the window were clear. The remaining step carries the same RGB through
+  the probe trace's visibility bits (`SdfMeshIrradiance`'s capture,
+  `shade/sdf-probe-trace.hlsli`), so the volume's indirect light takes the
+  patch's colour. A narrower gap sits beside it: only the primary role keeps a
+  colour, and the second role's visibility through coloured glass is its
+  brightest channel.
 
 The volume's cost and convergence:
 

@@ -48,6 +48,9 @@ public sealed record PaletteRadialPaintDocument(
 /// <param name="Contact">Foam or a wet margin where an opaque surface behind the glass comes within reach of its
 /// surface, revealed through the slot's flow coverage (null = none).</param>
 /// <param name="ShadowDensity">Shadow extinction per creation unit, finite and non-negative (null = zero).</param>
+/// <param name="CastsColor">How much of the glass's colour the light it passes carries onto what it lights, finite and
+/// non-negative: at 1 a pane colours the sunlit patch it casts as it colours what is seen through it (null = 0, no
+/// colour).</param>
 public sealed record PaletteGlassDocument(
     float Depth,
     float? Ior = null,
@@ -55,7 +58,8 @@ public sealed record PaletteGlassDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scatter = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Scattering = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassContactDocument? Contact = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ShadowDensity = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ShadowDensity = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? CastsColor = null
 ) {
     /// <summary>The index of refraction an entry that names none takes: window glass.</summary>
     public const float DefaultIor = 1.5f;
@@ -72,7 +76,8 @@ public sealed record PaletteGlassDocument(
         Scattering: ((Scattering ?? 0f) / scale),
         ContactReach: ((Contact?.Reach ?? 0f) * scale),
         ContactCoverage: (Contact?.Coverage ?? 0f),
-        ShadowDensity: ((ShadowDensity ?? 0f) / scale)
+        ShadowDensity: ((ShadowDensity ?? 0f) / scale),
+        CastsColor: (CastsColor ?? 0f)
     );
 }
 /// <summary>A glass slot's contact: the slot's flow coverage rises toward <paramref name="Coverage"/> where the opaque

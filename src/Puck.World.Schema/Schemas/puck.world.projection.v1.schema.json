@@ -5776,6 +5776,15 @@
                           ],
                           "default": null,
                           "minimum": 0
+                        },
+                        "castsColor": {
+                          "description": "How much of the glass's colour the light it passes carries onto what it lights, finite and non-negative: at 1 a pane colours the sunlit patch it casts as it colours what is seen through it (null = 0, no colour).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null,
+                          "minimum": 0
                         }
                       },
                       "required": [

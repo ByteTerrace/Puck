@@ -1,5 +1,5 @@
 // The views filter pass of a binned view (SdfWorldPackage.Parts.ViewsFilter): each 8x8 group gathers the views filter's
-// tile, writes every hit's filtered occlusion and shadows and its edges into the filter record, as its view's mode
+// tile, writes every hit's filtered occlusion, shadows and key light colour and its edges into the filter record, as its view's mode
 // filters and searches, and writes the
 // tile's bin and light masks into the shade bins and counts the bin there (sdf-views-filter.hlsli, sdf-views-lights.hlsli).
 // A tile no pixel of which has a program is the plain kernel's; every other tile is the shading selection's. It
@@ -47,13 +47,17 @@ void sdfViewsFilterStage(SdfPixel p) {
             if (ambientFilter || shadowFilter) {
                 float ambient;
                 float4 shadows;
+                float3 tint;
 
-                sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows);
+                sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows, tint);
                 uint2 words = sdfViewsFilterPack(ambient, shadows);
                 uint record = sdfViewsFilterRecord(p.pixel, p.viewIndex);
 
                 sdfViewsFilterRecordsRW[record] = words.x;
                 sdfViewsFilterRecordsRW[record + 1u] = words.y;
+                if (shadowFilter) {
+                    sdfViewsFilterRecordsRW[record + 3u] = sdfPackShadowTint(tint);
+                }
                 sdfWorkTexels = 1u;
             }
             if (edgeSearch) {

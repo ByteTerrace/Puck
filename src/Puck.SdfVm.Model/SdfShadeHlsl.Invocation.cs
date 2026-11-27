@@ -134,6 +134,8 @@ SdfShadeCarry sdfShadeLightPrologue(SdfShadeBinding binding, SdfShadeStamp stamp
 SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp, SdfShadeCarry carry, SdfLightSource light, SdfShadeSurface surface) {
     bool authored = sdfShadeHas(binding, 1u);
     SdfLightInputs inputs = sdfLightInputs(light, surface, authored, authored && (sdfShadeReadsOf(binding) & SDF_SHADE_READ_PROBE_SHARE) != 0u);
+    // The light arrives in the colour coloured glass left it, for the default response and a program alike.
+    light.color *= inputs.transmitted;
     SdfLightResponse response = sdfLightResponse(light, surface, inputs, authored ? sdfShadeAssigned(binding, 1u) : 0u);
     // A light that reaches nothing here, and a traced light no probe about the surface sees, adds nothing, whatever the
     // program (SdfLightInputs.none): the default response is already none there, and a views tile leaves such a light

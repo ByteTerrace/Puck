@@ -231,7 +231,7 @@ public sealed class WorldValueDomainLawTests {
     public static TheoryData<string> Bindable => [.. Cases.Where(predicate: static pair => (pair.Value.Present is not null)).Select(selector: static pair => Key(field: pair.Key))];
 
     // Rows for plain numbers a creation authors, judged where the creation is canonicalized, not in a world section.
-    private static readonly IReadOnlySet<WorldValueField> LiteralOnly = new HashSet<WorldValueField> { WorldValueFields.VolumeSoftness, WorldValueFields.GlassShadowDensity };
+    private static readonly IReadOnlySet<WorldValueField> LiteralOnly = new HashSet<WorldValueField> { WorldValueFields.VolumeSoftness, WorldValueFields.GlassShadowDensity, WorldValueFields.GlassCastsColor };
 
     private const float HighFov = 1.5f;
     private const float LowFov = 0.5f;

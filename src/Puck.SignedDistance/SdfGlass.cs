@@ -32,9 +32,14 @@ namespace Puck.SignedDistance;
 /// <param name="ContactCoverage">The coverage the contact adds to the flow's where the opaque surface touches the glass
 /// surface, in [0, 1]. A contact needs the material's flow to name the surface its coverage reveals
 /// (<see cref="SdfMaterial.IsGlassValid"/>).</param>
-/// <param name="ShadowDensity">The shadow extinction per world unit, finite and non-negative. Zero casts no shadow;
-/// a light path of length d transmits exp(-ShadowDensity * d).</param>
-public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter = default, float Scattering = 0f, float ContactReach = 0f, float ContactCoverage = 0f, float ShadowDensity = 0f) {
+/// <param name="ShadowDensity">The shadow extinction per world unit, finite and non-negative, the same in every channel.
+/// Zero casts no grey shadow; a light path of length d transmits exp(-ShadowDensity * d).</param>
+/// <param name="CastsColor">How much of the glass's own colour the light it passes carries onto what it lights, finite
+/// and non-negative: the shadow cascades take <c>CastsColor</c> times the absorption the tint gives
+/// (<see cref="Absorption"/>) as extinction in each channel beyond the density (<see cref="ShadowColorExtinction"/>),
+/// so at one a pane colours the sunlit patch it casts as it colours what is seen through it. Zero, the default, casts
+/// no colour: water and plain windows keep their grey shadow or none.</param>
+public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter = default, float Scattering = 0f, float ContactReach = 0f, float ContactCoverage = 0f, float ShadowDensity = 0f, float CastsColor = 0f) {
     /// <summary>The least index of refraction: air, which bends and reflects nothing.</summary>
     public const float MinIor = 1f;
     /// <summary>The greatest index of refraction a material may declare; diamond is 2.42.</summary>
@@ -47,14 +52,14 @@ public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter =
 
     /// <summary>Gets whether the glass is admissible: a finite, positive depth, an index of refraction in
     /// [<see cref="MinIor"/>, <see cref="MaxIor"/>], a scatter colour in [0, 1], a finite, non-negative scattering, a
-    /// contact reach in [0, <see cref="MaxContactReach"/>], a contact coverage in [0, 1] and finite, non-negative shadow
-    /// density.</summary>
+    /// contact reach in [0, <see cref="MaxContactReach"/>], a contact coverage in [0, 1], and a finite, non-negative shadow
+    /// density and colour share.</summary>
     public bool IsValid =>
         float.IsFinite(f: Depth) && (Depth > 0f) && float.IsFinite(f: Ior) && (Ior >= MinIor) && (Ior <= MaxIor) &&
         IsTint(tint: Scatter) && float.IsFinite(f: Scattering) && (Scattering >= 0f) &&
         float.IsFinite(f: ContactReach) && (ContactReach >= 0f) && (ContactReach <= MaxContactReach) &&
         float.IsFinite(f: ContactCoverage) && (ContactCoverage >= 0f) && (ContactCoverage <= 1f) &&
-        float.IsFinite(f: ShadowDensity) && (ShadowDensity >= 0f);
+        float.IsFinite(f: ShadowDensity) && (ShadowDensity >= 0f) && float.IsFinite(f: CastsColor) && (CastsColor >= 0f);
     /// <summary>Gets whether the glass has a contact: a positive reach and coverage.</summary>
     public bool HasContact => ((ContactReach > 0f) && (ContactCoverage > 0f));
 
@@ -68,6 +73,26 @@ public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter =
         var clamped = Vector3.Clamp(value1: tint, min: new Vector3(value: MinTransmittance), max: Vector3.One);
 
         return (new Vector3(x: -MathF.Log(x: clamped.X), y: -MathF.Log(x: clamped.Y), z: -MathF.Log(x: clamped.Z)) / Depth);
+    }
+    /// <summary>Returns the extinction per world unit of each channel the glass adds to the shadow cascades beyond
+    /// <see cref="ShadowDensity"/>: <see cref="CastsColor"/> times the absorption the tint gives, zero where it casts no
+    /// colour. The shadow raster reads it packed beside the density in the material table (row 25).</summary>
+    /// <param name="tint">The transmitted colour at <see cref="Depth"/>, each channel in [0, 1].</param>
+    /// <returns>The colour extinction per world unit.</returns>
+    public Vector3 ShadowColorExtinction(Vector3 tint) => ((CastsColor > 0f) ? (CastsColor * Absorption(tint: tint)) : Vector3.Zero);
+    /// <summary>Returns whether the glass dims the light it passes on its way to a receiver: a positive density, or a
+    /// colour extinction in some channel.</summary>
+    /// <param name="tint">The transmitted colour at <see cref="Depth"/>, each channel in [0, 1].</param>
+    /// <returns><see langword="true"/> where the glass casts a shadow.</returns>
+    public bool CastsShadow(Vector3 tint) => ((ShadowDensity > 0f) || CastsColorShadow(tint: tint));
+    /// <summary>Returns whether the light the glass passes takes on its colour: a positive extinction in some channel
+    /// beyond the density (<see cref="ShadowColorExtinction"/>).</summary>
+    /// <param name="tint">The transmitted colour at <see cref="Depth"/>, each channel in [0, 1].</param>
+    /// <returns><see langword="true"/> where the glass casts colour.</returns>
+    public bool CastsColorShadow(Vector3 tint) {
+        var extinction = ShadowColorExtinction(tint: tint);
+
+        return ((extinction.X > 0f) || (extinction.Y > 0f) || (extinction.Z > 0f));
     }
     /// <summary>Returns the dielectric reflectance at normal incidence the index gives, <c>((ior - 1) / (ior + 1))²</c>:
     /// 0.04 for window glass.</summary>

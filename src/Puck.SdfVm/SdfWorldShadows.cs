@@ -502,16 +502,16 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
     }
     // The bytes one anchor's layers take at a view's texels: three pairs, with glass extinction where the program has
-    // glass that shadows.
+    // glass that shadows, and its colour plane where that glass casts colour.
     private static long AnchorBytes(SdfFrame frame, int view) {
         var texels = SdfMeshShadowCascades.TexelsFor(frame: frame, view: view).Texels;
 
-        return (3L * (PairBytes(texels: texels) + (frame.Program.HasGlassShadows ? OpticalBytes(texels: texels) : 0L)));
+        return (3L * (PairBytes(texels: texels) + (frame.Program.HasGlassShadows ? OpticalBytes(texels: texels, color: frame.Program.HasColoredGlassShadows) : 0L)));
     }
     // A pair's two layers and its block bounds.
     private static long PairBytes(int texels) => ((2L * texels * texels * GpuPixelFormats.TexelBytes(format: SdfWorldPackage.MeshShadowDepthAttachment.Format)) +
         (long)SdfWorldPackage.ShadowBlockBytes(side: (uint)texels));
-    private static long OpticalBytes(int texels) => checked((long)((((ulong)texels * (ulong)texels * SdfWorldPackage.ShadowOpticalTexelWords) + SdfWorldPackage.ShadowOpticalBitmapWords(side: (uint)texels)) * sizeof(uint)));
+    private static long OpticalBytes(int texels, bool color) => checked((long)SdfWorldPackage.ShadowOpticalBytes(side: (uint)texels, color: color));
     // Holds more bytes beside what the layers hold, refused where the pool has no room for them.
     private bool TryHold(long extra) => m_reservation.TryReserve(floor: m_bytes, peak: (m_bytes + extra));
     // Moves the bytes the layers hold, and the reservation with them: what is already allocated is never refused.
@@ -1051,6 +1051,8 @@ internal sealed class SdfWorldShadows : IDisposable {
         private bool m_opticalInitialized;
         // The side the glass extinction buffer was sized for; zero while none is held.
         private int m_opticalTexels;
+        // Whether the glass extinction buffer holds the colour plane.
+        private bool m_opticalColor;
         private int m_texels;
         // The pair readers bound after the last decision, whose replacement moves the views' binding revision.
         private Pair? m_bound;
@@ -1489,6 +1491,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         // standing layer survives.
         private bool Allocate(SdfFrame frame, int texels) {
             var optical = (FollowsMotion && frame.Program.HasGlassShadows);
+            var color = (optical && frame.Program.HasColoredGlassShadows);
             var changed = ((m_texels != texels) || (m_front is null));
 
             if (changed) {
@@ -1498,14 +1501,16 @@ internal sealed class SdfWorldShadows : IDisposable {
                 m_opticalInitialized = false;
             }
             // The glass stages index the buffer by the entry's side (SdfWorldPackage.ShadowOpticalTexelWords), so it is
-            // replaced whenever the texels change.
-            if ((optical != (Optical is not null)) || (optical && (m_opticalTexels != texels))) {
+            // replaced whenever the texels change, and they find the colour plane by its length
+            // (SdfWorldPackage.ShadowOpticalBytes), so it is replaced whenever a drawn glass starts or stops casting colour.
+            if ((optical != (Optical is not null)) || (optical && ((m_opticalTexels != texels) || (m_opticalColor != color)))) {
                 ReleaseOptical();
                 m_opticalTexels = (optical ? texels : 0);
+                m_opticalColor = color;
                 Optical = (optical
                     ? m_owner.m_gpu.BufferFactory.CreateDeviceLocal(
                         name: m_owner.Name(part: Part, detail: "optical"),
-                        sizeBytes: (ulong)OpticalBytes(texels: texels),
+                        sizeBytes: (ulong)OpticalBytes(texels: texels, color: color),
                         usage: GpuBufferUsage.Storage)
                     : null);
                 if (Optical is { } created) { m_owner.Hold(bytes: (long)created.SizeBytes); }
@@ -1524,6 +1529,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_owner.Retire(replaced: held);
             Optical = null;
             m_opticalTexels = 0;
+            m_opticalColor = false;
         }
         public void ReleaseLayers() {
             EndRedraw();
@@ -1936,7 +1942,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_rectDrawings++;
         }
         public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}-moved{m_endedByMotion}/blocks{m_blocksReduced}in{m_blockReductions}{((Optical is not null) ? "/optical" : string.Empty)}");
+            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}-moved{m_endedByMotion}/blocks{m_blocksReduced}in{m_blockReductions}{((Optical is not null) ? (m_opticalColor ? "/optical-color" : "/optical") : string.Empty)}");
 
         public void Dispose() {
             ReleaseLayers();
