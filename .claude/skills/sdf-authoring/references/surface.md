@@ -285,7 +285,7 @@ joint smaller than its cell over the slot's joint colour:
   repeat { cell [1.2, 0, 1.2], tone: "#C86E48", seed: 7 } }] }   // 1.2 m tiles, 1 cm joints
 ```
 
-A text paint cannot repeat. `shape-paint-tiles` on the gallery's STYLES row is
+A text paint cannot repeat. `shape-paint-tiles` on the gallery's shading styles display is
 the exhibit.
 
 **Frames.** A paint with a `parent` is authored in that shape's local frame, the

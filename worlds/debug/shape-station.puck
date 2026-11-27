@@ -38,25 +38,25 @@ let galleryConsoleActions = { show: 1, turn: 2, pace: 3 }
 let galleryConsoleSpeeds = filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0))
 // The terminals' console: its commands name the catalog's groups and exhibits, whichever displays stand.
 let galleryConsole = {
-  greeting ["type help for the commands this display answers"]
-  unknown ["not a command this display answers; type help"]
+  greeting ["Type help to see what you can do here."]
+  unknown ["That command isn't known here. Type help for the list."]
   commands: concat(
     [
       {
         line: "help"
         reply [
-          "show <exhibit>     show an exhibit on this turntable"
-          "                   (shape <exhibit> too; list names them)"
-          "list               name the groups"
-          "list <group>       name a group's exhibits"
-          "turntable on|off   set the turntable turning, or stop it"
-          $"speed <-{turntableSpeeds}..{turntableSpeeds}>      its pace and way round; 0 stops it"
+          "show <exhibit>     put an exhibit on the turntable"
+          "                   (shape <exhibit> works too)"
+          "list               see the groups"
+          "list <group>       see the exhibits in a group"
+          "turntable on|off   start or stop the turntable"
+          $"speed <-{turntableSpeeds}..{turntableSpeeds}>      set speed and direction; 0 stops it"
         ]
       }
       {
         line: "list"
         reply: concat(
-          ["groups (list <group> names its exhibits):"],
+          ["Groups (type list <group> to see its exhibits):"],
           terminalWrap(map(galleryDisplayRows, group => group.id))
         )
       }
@@ -66,18 +66,18 @@ let galleryConsole = {
       line: $"{verb} {entry.name}"
       action: galleryConsoleActions.show
       value: entry.index
-      reply [$"showing {galleryCopy[entry.name].title}"]
+      reply [$"Showing {galleryCopy[entry.name].title}."]
     })),
     [
-      { line: "turntable on", action: galleryConsoleActions.turn, value: 1, reply ["the turntable turns"] }
-      { line: "turntable off", action: galleryConsoleActions.turn, value: 0, reply ["the turntable stops"] }
-      { line: "speed 0", action: galleryConsoleActions.pace, value: 0, reply ["the turntable stops"] }
+      { line: "turntable on", action: galleryConsoleActions.turn, value: 1, reply ["The turntable is turning."] }
+      { line: "turntable off", action: galleryConsoleActions.turn, value: 0, reply ["The turntable has stopped."] }
+      { line: "speed 0", action: galleryConsoleActions.pace, value: 0, reply ["The turntable has stopped."] }
     ],
     map(galleryConsoleSpeeds, speed => {
       line: $"speed {speed}"
       action: galleryConsoleActions.pace
       value: speed
-      reply [$"pace {turntablePace(speed)}"]
+      reply [$"Turntable speed: {turntablePace(speed)}."]
     })
   )
 }
@@ -142,7 +142,7 @@ template shapeStation(displays = galleryDisplays) {
   // seat looks in first person. Mouse and touch take this one door, so a click and a tap answer alike and neither is read
   // twice. A touch on the list records the row it landed on; while it stays down, each row it passes scrolls the list a
   // row the other way, as a finger drags a page; and a lift that never left its row is a tap, which shows that row's
-  // exhibit on the turntable. A lift on PREV or NEXT turns the list a page, and one on the turntable's buttons posts to
+  // exhibit on the turntable. A lift on Previous or Next turns the list a page, and one on the turntable's buttons posts to
   // its mailbox. A display's selection holds a catalog index, any of the catalog's. One sweep a console reads every
   // contact on its glass once, so a tick of many contacts costs one walk of them, not one a gesture. While the display's
   // terminal console is open the glass shows it instead of the interface, so a tap on it does nothing.
@@ -183,7 +183,7 @@ template shapeStation(displays = galleryDisplays) {
         }
         galleryPress[key] = 0
       }
-      // A lift on a button: PREV and NEXT turn the list a page, the turntable's buttons post to its mailbox
+      // A lift on a button: Previous and Next turn the list a page, the turntable's buttons post to its mailbox
       // (galleryTurnCodes: slower, hold or release, faster).
       if contact(each, phase) == 3 and (
           contact(each, region, prev) +

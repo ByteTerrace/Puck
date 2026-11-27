@@ -2929,7 +2929,7 @@ Artefacts still to isolate:
   (re-read them after the finest probes' blocker-evidence rule, which closed the
   teal room's wall foot and vertical corner); bright bands in the painting wing and
   camera-bay roof; curved bands on the level-3 stairwell wall; the garden
-  portal's dark horizontal strip; the REVOLVED floor's diagonal patches and
+  portal's dark horizontal strip; the spun outlines floor's diagonal patches and
   black rectangle; the wing's north-east corner remnants.
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the
   level 3 ceiling and wall junction shows in beauty but not in `indirect`,

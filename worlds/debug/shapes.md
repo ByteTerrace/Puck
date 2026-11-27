@@ -125,7 +125,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | Switch a level's lights | Stand before the level's wall switch (`body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while a body stands in the reach box before the plate; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her before its display's console, turned past it (`gallerySpawnTurn`) so the chase camera frames the display beside her, and shows the exhibit on its turntable; `gallery.go` alone returns to the entrance |
 | Show an exhibit without walking | `gallery.show <exhibit>`: its display's turntable shows it and its screen names it |
-| Choose a display's exhibit | Point at its console's list and tap a row (the left mouse button): any exhibit in the catalog shows on its turntable. Drag the list to scroll it a row at a time, or tap PREV and NEXT to turn it a page. Or `gallery.step <display>`, or write the display's cell: `world.state.cell.set gallerySelect <display> <catalog index>` |
+| Choose a display's exhibit | Point at its console's list and tap a row (the left mouse button): any exhibit in the catalog shows on its turntable. Drag the list to scroll it a row at a time, or tap Previous and Next to turn it a page. Or `gallery.step <display>`, or write the display's cell: `world.state.cell.set gallerySelect <display> <catalog index>` |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; each stands body 0 before the exhibit's display and shows it there; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
 | Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the display at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body, which names the display (`display-<id>`); the capture shows the exhibit on its turntable |
@@ -223,15 +223,15 @@ back:
 | Step a display through the catalog | `gallery.step <display>` (`gallery.step <display> -1` steps back) |
 | Read a display's screen | `world.state galleryScreenTitle`, `galleryScreenGroup`, `galleryScreenNote`, `galleryPlace` (the place in the catalog, from 1) |
 | Read a console's list | `world.state galleryScroll <display>` (the top row's catalog index) and `world.state galleryRowName` (the rows, keyed `<display>-<row>`) |
-| Tap a console headless | `source.contact 1 down <ox> <oy> <oz> <dx> <dy> <dz>`, then the same with `up`: a contact whose world ray lands on the glass, as a finger's does (add `mouse` for a click). A lift on a list row selects it, on PREV, NEXT, `<`, pause or `>` presses that button |
-| Hold or release a turntable | `gallery.turn.hold <display>`, as the console's pause and play button does; `world.state galleryTurnHold <display>` reads the button's label (`PAUSE` while it turns) |
+| Tap a console headless | `source.contact 1 down <ox> <oy> <oz> <dx> <dy> <dz>`, then the same with `up`: a contact whose world ray lands on the glass, as a finger's does (add `mouse` for a click). A lift on a list row selects it, on Previous, Next, `<`, pause or `>` presses that button |
+| Hold or release a turntable | `gallery.turn.hold <display>`, as the console's pause and play button does; `world.state galleryTurnHold <display>` reads the button's label (`Pause` while it turns) |
 | Change a turntable's pace | `gallery.turn.slower <display>` and `gallery.turn.faster <display>`, as `<` and `>` do: the signed speed (`world.state galleryTurnSpeed <display>`, 1 at boot, up to 3 either way) and its label (`galleryTurnPace`) |
 | Read a turntable's angle | `world.turns`: each turning placement's turn and whole yaw at the latest tick. Its turn is `galleryTurnPhase + galleryTurnRate × galleryClock` turns |
 
 `galleryCopy` in `shapes.puck` holds each exhibit's title and note, which
 `galleryTitles` and `galleryNotes` carry by catalog index, and `galleryGroups`
 each exhibit's display title, for the console rules to copy. The note wraps in
-its box and shrinks to fit, so a note of up to about 180 characters reads at its
+its box and shrinks to fit, so a note of up to about 170 characters reads at its
 full size.
 
 ## A station on its own

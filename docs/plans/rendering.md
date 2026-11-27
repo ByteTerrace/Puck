@@ -1026,7 +1026,7 @@ shading ([decision](../decisions/rendering.md#scene-light-is-converted-to-displa
 The tone curve is authored (`render.tone`, `worlds/standard/tones.puck`),
 displays decode their pictures in the screen shading and the glow reduction, and
 the light range threshold stays a share of linear exposed light, so lamp ranges
-are unchanged. The gallery's STYLES row holds the grey card (`shape-grey-card`),
+are unchanged. The gallery's shading styles display holds the grey card (`shape-grey-card`),
 and a presented capture reports each frame's mean display level over its region
 (`PresentedFrameLevel`). The debug world keys its picture by day with
 `render.exposure.compensation` (the Moth basis and the hall), a look value: the

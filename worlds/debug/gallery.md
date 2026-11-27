@@ -384,13 +384,13 @@ plinth's front under the cap, with a brass lip where a hand rests
 ([architecture.puck](../standard/architecture.puck)'s plinth). Its interface
 glows on the glass in an LCARS-like layout in the kit's own palette
 (`consoleLook`): an ochre elbow frames the top left and turns into the top bar,
-whose cap names the catalog; PREV and NEXT buttons stack down the left column
+whose cap counts the catalog; Previous and Next buttons stack down the left column
 beside a list of every exhibit, the chosen one lit amber with its group beside
 it; and the right of the screen gives the chosen exhibit's title, its group and
 its place in the catalog, and its note, over the turntable's row: `<`, a pause
 and play button, `>` and the pace the turntable keeps. A tap on a row shows that
 exhibit; a drag scrolls the list a row for each row the pointer travels and taps
-nothing; PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists
+nothing; Previous and Next turn it a page. [shapes.md](shapes.md#the-displays) lists
 the displays and the console lines.
 
 Every exhibit turns on its turntable by default, once every 24 gallery seconds

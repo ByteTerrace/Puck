@@ -913,7 +913,7 @@ Each row gives `body.pose` arguments, then `view.override camera look` arguments
 For exposure, turn `gallery.lights.all on` and inspect the lift after
 `gallery.lift 0` and `body.pose 16 0.1 38 0 0 0`. A fixed interior eye clear of
 the avatar is `view.override camera pose 16 2.3 37 180 10`; the hanging
-PRIMITIVES sign is visible from `view.override camera pose 18 2.8 16 270 0`.
+basic shapes sign is visible from `view.override camera pose 18 2.8 16 270 0`.
 Read the primary view's meter after the scene and lighting settle, and during
 changes: an initial `meter=none` alone cannot establish that a settled room has
 no visible probe. Keep the authored exposure bounds and world headroom intact.
@@ -978,7 +978,7 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 | Exhibit | Body pose | Camera look |
 |---|---|---|
 | SPHERE, level 0 | `18 0.07 15 0 0 0` | `23 2.4 14 23 1.1 16` |
-| REVOLVED, level 0 | `18 0.07 31 0 0 0` | `30.8 2.4 30 30.8 1.1 34` |
+| Spun outlines, level 0 | `18 0.07 31 0 0 0` | `30.8 2.4 30 30.8 1.1 34` |
 | SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
 | COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
 
