@@ -186,6 +186,11 @@ public sealed partial class RuleEvaluator {
         m_host.BoundEachKey = key;
         m_host.BoundMemberKey = MemberKey(member: member);
 
+        // The binding's own deadline, apart from the visit's earliest, so a deadline coming due wakes this binding.
+        var visitWake = m_minWake;
+
+        m_minWake = ulong.MaxValue;
+
         var outcome = EvaluateOnce(
             applied: out var moved,
             binding: bound,
@@ -194,6 +199,9 @@ public sealed partial class RuleEvaluator {
             state: state,
             stepTicks: stepTicks
         );
+
+        list.RecordBindingWake(binding: binding, index: index, wake: m_minWake);
+        m_minWake = Math.Min(val1: visitWake, val2: m_minWake);
 
         if (m_rerun) {
             list.MarkBindingNext(binding: binding, index: index);
