@@ -98,6 +98,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private int m_holds = 1;
 
     private int m_debugMode;
+    private DebugViewOptions m_debugOptions = DebugViewOptions.Default;
     private bool m_disposed;
     private bool m_glyphAtlasInitialized;
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
@@ -402,6 +403,24 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
             if (m_tables is not null) {
                 m_tables.DebugMode = value;
+            }
+        }
+    }
+    // The overlap pipeline (SdfMeshRasterPass.OverlapKey) for the overlap pass of a view showing the overlap debug view, its
+    // one holder, which releases it through ReleaseOverlapRaster: no other view builds it.
+    internal GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireOverlapRaster(IGpuDeviceContext device) =>
+        m_pipelines.Catalog.MeshRaster.AcquireOverlaps(device: device);
+    internal void ReleaseOverlapRaster(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) =>
+        lease.Release(retired: m_pipelines.Catalog.RetiredBuilds);
+    /// <summary>Gets or sets what the debug view reads beside its mode (<see cref="DebugMode"/>), which every view's pass
+    /// block carries from the next frame.</summary>
+    public DebugViewOptions DebugOptions {
+        get => m_debugOptions;
+        set {
+            m_debugOptions = value;
+
+            if (m_tables is not null) {
+                m_tables.DebugOptions = value;
             }
         }
     }
@@ -794,6 +813,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ApplyPendingShaderReload();
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
+        tables.DebugOptions = m_debugOptions;
         tables.DebugLabel = Name;
         tables.MeshDemand = MeshDemand;
         BindScreens(

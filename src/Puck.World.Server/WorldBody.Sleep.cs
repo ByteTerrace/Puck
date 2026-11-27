@@ -113,7 +113,7 @@ public sealed partial class WorldBody {
         get {
             var reach = FixedQ4816.Max(x: m_tuning.GroundSnap, y: m_tuning.StepHeight);
 
-            foreach (var hold in m_holds) { reach = FixedQ4816.Max(x: reach, y: hold.Reach); }
+            foreach (ref readonly var hold in m_holds.Rows) { reach = FixedQ4816.Max(x: reach, y: hold.Reach); }
             return FixedQ4816.Max(x: reach, y: (reach * m_scale));
         }
     }

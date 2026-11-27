@@ -428,6 +428,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_LEVEL_TABLE_WORD", value: SdfMeshRecord.LevelTableWord);
         declarations.Count(name: "SDF_MESH_SELECTION_WORD", value: SdfMeshRecord.SelectionWord);
+        declarations.Count(name: "SDF_MESH_ENCLOSED_FLAG", value: SdfMeshRecord.EnclosedFlag);
         declarations.Count(name: "SDF_MESH_ABSENT_FLAG", value: SdfMeshRecord.AbsentFlag);
         declarations.Count(name: "SDF_MESH_DYNAMIC_FLAG", value: SdfMeshRecord.DynamicFlag);
         declarations.Count(name: "SDF_MESH_SLOT_BOX_FLAG", value: SdfMeshRecord.SlotBoxFlag);
@@ -442,6 +443,7 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
         declarations.Bits(name: "SDF_MESH_CLIP_FLAG", value: SdfMeshRecord.ClipFlag);
         declarations.Count(name: "SDF_MESH_OBJECT_KEY_SHIFT", value: SdfMeshRecord.ObjectKeyShift);
+        declarations.Count(name: "SDF_MESH_GROUP_OBJECT_KEY_BIT", value: SdfMeshRecord.GroupObjectKeyBit);
         declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
         declarations.Count(name: "SDF_MESH_CLUSTER_HEADER_WORDS", value: SdfMeshRecord.ClusterHeaderWords);
         declarations.Count(name: "SDF_MESH_CLUSTER_BOX_WORDS", value: SdfMeshRecord.ClusterBoxWords);
@@ -515,6 +517,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfWorldPackage.TemporalPeriod);
         declarations.Tuning(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfWorldPackage.TemporalPeriod);
         declarations.Tuning(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfWorldPackage.TemporalPeriod * SdfTemporalSamples.FeaturePeriods));
+        declarations.Section(title: "The overlap spans the overlap raster pass accumulates and the overlap view reads.");
+        declarations.Count(name: "SDF_OVERLAP_SPAN_WORDS", value: SdfWorldPackage.OverlapSpanWords);
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
         // Raster encodes these integers and compute decodes them. Raster pipelines are composition-owned and do not

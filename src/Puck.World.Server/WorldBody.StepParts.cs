@@ -337,7 +337,7 @@ public sealed partial class WorldBody {
             var local = ((m_rigid is null) && (m_carry is null) && (m_tetherFacet is null));
 
             foreach (var binding in m_laneBindings) { local &= (binding is null); }
-            foreach (var hold in m_holds) { local &= ((hold.SpendState is null) && (hold.RestoreState is null) && (hold.Mantle.State is null)); }
+            foreach (ref readonly var names in m_holds.AllNames) { local &= !names.WritesState; }
             foreach (var definition in m_actionStateDefinitions) { local &= !((definition.Kind == ActionStateKind.Timer) && (definition.ResetFact is not null)); }
             m_kitLocal = local;
             m_kitLocalStale = false;

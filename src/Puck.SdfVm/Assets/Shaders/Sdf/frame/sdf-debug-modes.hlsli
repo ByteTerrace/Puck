@@ -10,13 +10,15 @@
 // Mode 8 shows the ambient occlusion views shades with, after its window filter, in gray; a miss is black.
 // Mode 9 shows the key light's shadow visibility views shades with, after its window filter, in gray; a miss is black.
 // Modes rates and rate-flash are the final image with each rated item tinted by its update tier (SdfUpdateRateCode).
+// Mode overlaps is the final image dimmed, with each surface another object's solid passes into glowing by the overlap's
+// depth (frame/sdf-overlaps.hlsli).
 
-// Whether a mode composes the final image: the final image itself and the tier views, which tint it.
+// Whether a mode composes the final image: the final image itself, and the tier and overlap views, which tint it.
 bool sdfDebugPreservesScene(uint mode) {
     return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_COLLIDERS) || (mode == SDF_DEBUG_VIEW_CONTACTS) || (mode == SDF_DEBUG_VIEW_BLOOM));
 }
 bool sdfDebugComposesFinal(uint mode) {
-    return (sdfDebugPreservesScene(mode) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));
+    return (sdfDebugPreservesScene(mode) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH) || (mode == SDF_DEBUG_VIEW_OVERLAPS));
 }
 // The scale the views, glass and resolve passes store scene light at, in a mode whose composite composes it (lightScale,
 // SdfPhotometry.StoredLightScale): a writer multiplies its nits by it and the glass and the composite divide it out as
