@@ -297,54 +297,11 @@ public sealed class SdfFieldBoundsLawTests {
         }
     }
     /// <summary>The affine reading keeps its symbols through instructions whose floats lie off the raw grid, and stays
-    /// sound there. Every float of this program misses the grid (a turned, rounded box smoothly unioned with a row of
-    /// spheres a non-dyadic spacing apart, so the repeat's reciprocal misses it too), so every step reads its formula's
-    /// enclosed overload. Over a lattice of blocks both readings hold the floats' field at each block's corners and
-    /// interior points, and the affine reading proves the field's sign over blocks the interval reading cannot.</summary>
-    [Fact]
-    public void ScratchDebug() {
-        var lines = new System.Text.StringBuilder();
-
-        var tilt = Quaternion.Normalize(value: new Quaternion(w: 0.9f, x: 0.2f, y: -0.35f, z: 0.1f));
-        var programs = new (string, Action<SdfProgramBuilder, int>)[] {
-            ("box z-turn", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: 0.4f)).Box(halfExtents: new Vector3(x: 0.9f, y: 0.35f, z: 0.15f), material: m, round: 0.05f)),
-            ("box tilt", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.9f, y: 0.35f, z: 0.15f), material: m, round: 0.05f)),
-            ("box tilt exact", (b, m) => b.Translate(offset: new Vector3(x: 0.25f, y: -0.25f, z: 0.5f)).Rotate(rotation: new Quaternion(x: 0.5f, y: 0.5f, z: 0.5f, w: 0.5f)).Box(halfExtents: new Vector3(x: 0.875f, y: 0.375f, z: 0.125f), material: m, round: 0.0625f)),
-            ("spheres smooth", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Sphere(material: m, radius: 0.5f).ResetPoint().Translate(offset: new Vector3(x: -0.45f, y: 0.1f, z: 0.3f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: m, radius: 0.4f, smooth: 0.3f)),
-            ("spheres smooth exact", (b, m) => b.Translate(offset: new Vector3(x: 0.25f, y: -0.25f, z: 0.5f)).Sphere(material: m, radius: 0.5f).ResetPoint().Translate(offset: new Vector3(x: -0.5f, y: 0.125f, z: 0.25f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: m, radius: 0.375f, smooth: 0.25f)),
-            ("tilted capsule", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt).Capsule(endpoint: new Vector3(x: 1.3f, y: 0.2f, z: 0.1f), material: m, radius: 0.2f)),
-        };
-
-        foreach (var (name, emit) in programs) {
-            var builder = new SdfProgramBuilder();
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-            emit(arg1: builder, arg2: material);
-            var evaluator = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Render);
-
-            foreach (var s in (ReadOnlySpan<float>)[0.05f, 0.1f, 0.2f, 0.4f]) {
-                var (narrower, settles, gain, total) = (0, 0, 0.0, 0);
-                var best = "";
-
-                for (var cell = 0; (cell < (30 * 20 * 16)); cell++) {
-                    var c = new Vector3(x: (-2.4f + (0.15f * (cell % 30))), y: (-1.5f + (0.15f * ((cell / 30) % 20))), z: (-1.0f + (0.15f * (cell / 600))));
-                    var (lower, upper) = (FixedPosition.FromLocal(local: Fixed(value: (c - new Vector3(value: s)))), FixedPosition.FromLocal(local: Fixed(value: (c + new Vector3(value: s)))));
-
-                    _ = evaluator.TryDistanceBounds(distance: out var interval, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Interval, upper: upper);
-                    _ = evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Affine, upper: upper);
-                    total++;
-                    narrower += ((affine != interval) ? 1 : 0);
-                    var g = (((double)affine.Lower) - ((double)interval.Lower)) + (((double)interval.Upper) - ((double)affine.Upper));
-                    if (g > gain) { gain = g; best = $"c={c} interval={interval} affine={affine}"; }
-                    settles += ((((affine.Lower > FixedQ4816.Zero) && (interval.Lower <= FixedQ4816.Zero)) || ((affine.Upper < FixedQ4816.Zero) && (interval.Upper >= FixedQ4816.Zero))) ? 1 : 0);
-                }
-
-                lines.AppendLine(handler: $"{name} s={s}: narrower {narrower}/{total}, sign-settles {settles}, best gain {gain:F4} at {best}");
-            }
-        }
-
-        Assert.Fail(message: lines.ToString());
-    }
+    /// sound there. Every float of these programs misses the grid (a tilted, rounded box smoothly unioned with a row of
+    /// spheres a non-dyadic spacing apart, so the repeat's reciprocal misses it too, and a tilted capsule), so every step
+    /// reads its formula's enclosed overload. Over a lattice of blocks both readings hold the floats' field at each block's
+    /// corners and interior points, and the affine reading proves the field's sign over blocks the interval reading
+    /// cannot.</summary>
     [Fact]
     public void TheAffineReadingSettlesBlocksOverOffGridParameters() {
         var tilt = Quaternion.Normalize(value: new Quaternion(w: 0.9f, x: 0.2f, y: -0.35f, z: 0.1f));
@@ -389,10 +346,43 @@ public sealed class SdfFieldBoundsLawTests {
             }
         }
 
-        Assert.True(condition: (settledByAffine < 0), userMessage: $"the affine reading settles {settledByAffine} blocks the interval reading leaves open, beside {settledByInterval} both settle, of {2 * Blocks}, {narrower} narrower");
+        Assert.True(condition: (settledByAffine > 0), userMessage: $"the affine reading settles {settledByAffine} blocks the interval reading leaves open, beside {settledByInterval} both settle, of {2 * Blocks}, {narrower} narrower");
 
         // A reading settles a block when it proves the field's sign over it, so no surface crosses it.
         static bool Settles(FixedInterval bounds) => ((bounds.Lower > FixedQ4816.Zero) || (bounds.Upper < FixedQ4816.Zero));
+    }
+    /// <summary>A LaneErode's skip is a branch on a rounded fraction: from −4 to 2⁻¹⁶, both on the grid, the fraction
+    /// 4 / (4 + 2⁻¹⁶) rounds to one raw-wise, so the point walk skips the sphere, while the kernels' float fraction stays
+    /// below one and erode it by nearly its reach. Over a block about that sphere both readings hold both fields.</summary>
+    [Fact]
+    public void ALaneErodeWithinARawOfItsSkipBoundsBothOutcomes() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        const float Reach = 0.25f;
+
+        _ = builder.Sphere(material: material, radius: 1f).ResetPoint().Translate(offset: new Vector3(x: 2.5f, y: 0f, z: 0f))
+            .LaneErode(from: -4f, lane: 0, noiseScale: 3f, reach: Reach, to: (1f / 65536f)).Sphere(material: material, radius: 0.5f);
+
+        var program = builder.Build();
+        var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+        var (low, high) = (Fixed(value: new Vector3(x: 2.4f, y: -0.1f, z: -0.1f)), Fixed(value: new Vector3(x: 2.6f, y: 0.1f, z: 0.1f)));
+        var fraction = (4.0 / (4.0 + (1.0 / 65536.0)));
+        // The erosion's chain reads its candidate through the shape's step scale, as the kernels do.
+        var stepScale = ((double)program.ShapeStepScaleAt(instructionIndex: (program.Instructions.Count - 1)));
+
+        foreach (var reading in (ReadOnlySpan<SdfBoundsReading>)[SdfBoundsReading.Interval, SdfBoundsReading.Affine]) {
+            Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, instructionsWalked: out _, lower: FixedPosition.FromLocal(local: low), reading: reading, upper: FixedPosition.FromLocal(local: high)));
+
+            foreach (var point in PointsInside(interior: 6, lower: low, random: new Random(Seed: 3), upper: high)) {
+                var (x, y, z) = (((double)point.X), ((double)point.Y), ((double)point.Z));
+                var skipped = (Math.Sqrt(d: (((x * x) + (y * y)) + (z * z))) - 1.0);
+                var eroded = Math.Min(val1: skipped, val2: (((Math.Sqrt(d: ((((x - 2.5) * (x - 2.5)) + (y * y)) + (z * z))) - 0.5) + (fraction * Reach)) * stepScale));
+
+                foreach (var value in (ReadOnlySpan<double>)[skipped, eroded]) {
+                    Assert.True(condition: ((((double)bounds.Lower) <= value) && (value <= ((double)bounds.Upper))), userMessage: $"the {reading} bounds {bounds} miss {value} at {point}, skipped {skipped}, eroded {eroded}");
+                }
+            }
+        }
     }
     // The field the kernels evaluate for resets, translations, turns, scales, repeats and unioned or smoothly unioned
     // spheres and boxes, in double over the packed floats: a turn takes the point back through its quaternion's
