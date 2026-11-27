@@ -27,11 +27,11 @@ import "../standard/cards"
 import "../standard/kits"
 
 // A card is the deck's 1.76 by 2.48 creation at `patienceCardScale`, and lies a layer above the one under it.
-let patienceCardScale = 0.068
+let patienceCardScale = 0.072
 let patienceCardHalfWide = (0.88 * patienceCardScale)
 let patienceCardHalfTall = (1.24 * patienceCardScale)
-let patienceCardLayer = 0.0036
-let patienceFan = 0.045
+let patienceCardLayer = 0.0038
+let patienceFan = 0.055
 let patiencePitch = 0.14
 // The layout in the station's frame: the board area's centre across, the top row's centre line and the first tableau
 // card's centre.

@@ -8,7 +8,7 @@
 //
 // expands `piece-white-pawn` to `piece-black-king`. A side's `body` and `trim` are palette entries: the turned body, and
 // the foot's rim, the collars and the finials, which pick each piece out against a square of either colour. A piece
-// stands on its origin; the knight looks toward +X.
+// stands on its origin; the knight's muzzle points toward +X, so a player at the -Z side sees it in profile.
 
 // The kinds in the order of the chess vocabulary's piece codes (PieceKind 1 to 6, ../games/chess.puck): a piece of kind
 // k is code k + 1 for the side that plays up the board and -(k + 1) for the other.
@@ -100,36 +100,51 @@ template chessPieceShapes(kind) {
       scale [0.0045, 0.0045, 0.0045]
     }
   } else if kind == "knight" {
+    // The horse's head is carved from a slab, as a Staunton knight is: its neck and its head as two convex outlines in
+    // the XY plane, extruded 2.2 cm along Z, so a player across the board sees its profile, the muzzle toward +X.
     shape Cylinder "body" {
       material: 0
       position [0, 0.03, 0]
       scale [0.018, 0.013, 0.018]
     }
-    shape Superellipsoid "chest" {
+    shape Prism "neck" {
       material: 0
-      position [-0.002, 0.051, 0]
-      rotation: rotate([0, 0, 1], -12)
-      scale [0.015, 0.021, 0.012]
-      exponent: 3
+      position [-0.002, 0.0475, 0]
+      scale [0.016, 0.0305, 0.011]
+      profile {
+        kind: "Convex"
+        vertices [[-1, 0.082], [-0.625, 1], [0.375, 0.803], [0.875, 0.082], [1, -1], [-0.875, -1]]
+      }
+      rounding: 0.002
     }
-    shape Superellipsoid "head" {
+    shape Prism "head" {
       material: 0
-      position [0.008, 0.07, 0]
-      rotation: rotate([0, 0, 1], -28)
-      scale [0.021, 0.0105, 0.0105]
-      exponent: 3
+      position [0.0065, 0.072, 0]
+      scale [0.0185, 0.016, 0.0095]
+      profile {
+        kind: "Convex"
+        vertices [[-1, 1], [-0.027, 0.75], [1, -0.375], [1, -0.875], [0.081, -1], [-0.892, -0.5]]
+      }
+      rounding: 0.002
     }
     shape Box "mane" {
       material: 1
-      position [-0.011, 0.062, 0]
-      rotation: rotate([0, 0, 1], -16)
-      scale [0.0035, 0.017, 0.006]
-      rounding: 0.002
+      position [-0.0165, 0.063, 0]
+      rotation: rotate([0, 0, 1], -12)
+      scale [0.003, 0.016, 0.0115]
+      rounding: 0.0015
     }
     shape Cone "ear" {
       material: 1
-      position [-0.002, 0.083, 0]
-      scale [0.0045, 0.006, 0.0045]
+      position [-0.008, 0.091, 0]
+      scale [0.004, 0.005, 0.004]
+    }
+    for z in [-0.0098, 0.0098] {
+      shape Sphere $"eye-{z}" {
+        material: 1
+        position [0.007, 0.077, z]
+        scale [0.0022, 0.0022, 0.0022]
+      }
     }
   } else if kind == "queen" {
     shape Cone "body" {
