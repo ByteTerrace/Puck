@@ -23,6 +23,11 @@ public static class WorldIdentityRows {
     /// <summary>The number of award ids <see cref="Awards"/> keeps before it evicts the oldest.</summary>
     public const int AwardCapacity = 512;
 
+    /// <summary>Returns the key an award is recorded under in <see cref="Awards"/>, <c>award-&lt;digest&gt;</c>.</summary>
+    /// <param name="digest">The digest of what the award credits, a function of the run that earned it.</param>
+    /// <returns>The award id.</returns>
+    public static CellName Award(ulong digest) => CellName.Parse(candidate: string.Create(provider: CultureInfo.InvariantCulture, handler: $"award-{digest:x16}"));
+
     /// <summary>Returns the row remembering which machine a controller last drove, <c>controller$&lt;key&gt;$machine</c>.</summary>
     /// <param name="device">The controller's persisted device identity.</param>
     /// <returns>The row name.</returns>

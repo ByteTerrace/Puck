@@ -595,7 +595,7 @@ public sealed class WorldOwnedWorlds {
         hash.Add(value: ((byte)submission.Kind));
         hash.Add(value: submission.Value);
         hash.Add(value: submission.Text);
-        return CellName.Parse(candidate: $"award-{hash.Value:x16}");
+        return WorldIdentityRows.Award(digest: hash.Value);
     }
     // A submission already credited is answered from the owner's award ledger without applying again.
     private bool AlreadyCredited(WorldIdentity owner, WorldDocumentSubmission submission, out WorldDocumentSubmissionReceipt receipt) {

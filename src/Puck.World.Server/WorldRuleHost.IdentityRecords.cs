@@ -136,7 +136,7 @@ public sealed partial class WorldRuleHost {
         hash.Add(value: identity.Id);
         hash.Add(value: tick);
         hash.Add(value: ((uint)ordinal));
-        return CellName.Parse(candidate: $"award-{hash.Value:x16}");
+        return WorldIdentityRows.Award(digest: hash.Value);
     }
 
     // Drops the stages a rewound firing opened. A stage generation the journal recorded that is no longer current
