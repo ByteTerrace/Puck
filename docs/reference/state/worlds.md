@@ -436,8 +436,10 @@ Here's how the opponent plays:
    game has started, the physics is quiescent, the board has settled with no
    collisions, the last move was judged legal (or nothing moved), and the game
    hasn't reached the move-count or repetition draw limit.
-2. `chess-ai-revision` bumps `aiRevision` whenever the settled position
-   changes.
+2. `chess-ai-revision` bumps `aiRevision` whenever a piece's square or code
+   changes, waking only for the pieces that moved, and
+   `chess-ai-revision-metadata` whenever the turn, castling rights, en passant
+   square or draw counters do; the search runs only on a settled board.
 3. The `chessAI` job searches one ply. Its one shape is a `relocate` with
    `moves` (`chessMoves`): each piece kind's steps, jumps and slides for the
    side to move, so the job judges only the squares a piece could reach, a few

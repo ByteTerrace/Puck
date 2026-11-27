@@ -495,12 +495,13 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     }
 
     // Search relocates the primary token; these hypothetical-only rules complete
-    // the compound move before the same validator used for physical play judges it.
+    // the compound move before the same validator used for physical play judges it. Each names one piece.
     rule "tabletop-search-en-passant" {
       when search(ply) > 0 and move.kind == MoveKind.EnPassant and move.to == enPassantTarget and pieceCell[$each] == (
           move.to - 8 * (1 - 2 * turn)
         )
       forEach: pieceCode
+      maxFirings: 1
       pieceCell[$each] = -1
     }
 
@@ -509,6 +510,7 @@ template chessJudge(settleTicks, scope = "", digital = false) {
           (move.from & 56) + (move.to > move.from ? 7 : 0)
         ) and pieceCode[$each] == (4 * (1 - 2 * turn))
       forEach: pieceCode
+      maxFirings: 1
       pieceCell[$each] = move.from + move.to >> 1
     }
 
@@ -518,6 +520,7 @@ template chessJudge(settleTicks, scope = "", digital = false) {
         pieceCell[$each] == move.to and
         (move.to / 8) == (turn == TurnColor.White ? 7 : 0))
       forEach: pieceCode
+      maxFirings: 1
       pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
     }
 
@@ -1060,10 +1063,19 @@ template chessComputer(settleTicks) {
   // A completed answer belongs to exactly one settled physical position. Search
   // never moves bodies; the live apply path acts once, then lets physics settle
   // and the ordinary validator accept the resulting board.
+  // Keep identity as well as geometry: exchanging two same-kind pieces still invalidates a token-indexed answer. A saved
+  // piece packs square + 1 in seven bits and code + 6 above it; metadata also fits in one exact Int. Each piece's rule
+  // reads only its own cells, so a move wakes the pieces it moved; the revision moves whenever either changes, and the
+  // search runs only once the board has rested (`chess-ai-enable`).
   rule "chess-ai-revision" {
-    // Keep identity as well as geometry: exchanging two same-kind pieces still
-    // invalidates a token-indexed answer. A saved piece packs square + 1 in
-    // seven bits and code + 6 above it; metadata also fits in one exact Int.
+    local pieceState = pieceCell[$each] + 1 | pieceCode[$each] + 6 << 7
+    when pieceState != aiBefore[$each]
+    mode: Level
+    forEach: pieceCode
+    aiBefore[$each] = pieceState
+    aiRevision += 1
+  }
+  rule "chess-ai-revision-metadata" {
     local metadata = (
       turn |
       castleRights << 1 |
@@ -1073,11 +1085,8 @@ template chessComputer(settleTicks) {
       previousInCheck[0] << 27 |
       previousInCheck[1] << 28
     )
-    local pieceState = pieceCell[$each] + 1 | pieceCode[$each] + 6 << 7
-    when settleHold == settleTicks and chessRested == 1 and (pieceState != aiBefore[$each] or metadata != ai.metadata)
+    when metadata != ai.metadata
     mode: Level
-    forEach: pieceCode
-    aiBefore[$each] = pieceState
     ai.metadata = metadata
     aiRevision += 1
   }
@@ -1121,7 +1130,7 @@ template chessMoveDoor(settleTicks) {
   }
 
   // A numeric move mailbox is the console's and replay's real move door. It joins the seated player's apply path:
-  // captures, castling and promotion are placed by chess-ai-relocate, then the ordinary settled-board judge decides.
+  // captures, castling and promotion are placed by the chess-ai-relocate rules, then the ordinary settled-board judge decides.
   // Its physical resting read also keeps live mailbox inputs out of hypothetical search candidates.
   rule "chess-input-move" {
     when (chessInput.request == 1 and
@@ -1142,27 +1151,46 @@ template chessMoveDoor(settleTicks) {
     chessInput.accepted += 1
   }
 
-  rule "chess-ai-relocate" {
-    when ai.pending == 1
+  // A relocation moves at most one piece each way: the piece taken on the target square (or en passant behind it), the
+  // mover, and a castling rook. Each is one rule that fires for the one piece it names, in that order, so the capture
+  // reads the target square before the mover lands on it.
+  rule "chess-ai-relocate-capture" {
+    when ai.pending == 1 and pieceCell[$each] == ai.to
     mode: Level
     forEach: pieceCode
-    if pieceCell[$each] == ai.to {
-      pieceCell[$each] = -1
-    } else if pieceCell[$each] == ai.from {
-      pieceCell[$each] = ai.to
-      if absolute(ai.mover) == PieceKind.Pawn and (ai.to / 8) == (turn == TurnColor.White ? 7 : 0) {
-        pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
-      }
-    } else if (absolute(ai.mover) == PieceKind.Pawn and
+    maxFirings: 1
+    pieceCell[$each] = -1
+  }
+  rule "chess-ai-relocate-move" {
+    when ai.pending == 1 and pieceCell[$each] == ai.from
+    mode: Level
+    forEach: pieceCode
+    maxFirings: 1
+    pieceCell[$each] = ai.to
+    if absolute(ai.mover) == PieceKind.Pawn and (ai.to / 8) == (turn == TurnColor.White ? 7 : 0) {
+      pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
+    }
+  }
+  rule "chess-ai-relocate-en-passant" {
+    when (ai.pending == 1 and
+      absolute(ai.mover) == PieceKind.Pawn and
       ai.to == enPassantTarget and
       (ai.from & 7) != (ai.to & 7) and
-      pieceCell[$each] == (ai.to - 8 * (1 - 2 * turn))) {
-      pieceCell[$each] = -1
-    } else if absolute(ai.mover) == PieceKind.King and absolute(ai.to - ai.from) == 2 and pieceCell[$each] == (
-        (ai.from & 56) + (ai.to > ai.from ? 7 : 0)
-      ) {
-      pieceCell[$each] = ai.from + ai.to >> 1
-    }
+      pieceCell[$each] == (ai.to - 8 * (1 - 2 * turn)))
+    mode: Level
+    forEach: pieceCode
+    maxFirings: 1
+    pieceCell[$each] = -1
+  }
+  rule "chess-ai-relocate-castle" {
+    when (ai.pending == 1 and
+      absolute(ai.mover) == PieceKind.King and
+      absolute(ai.to - ai.from) == 2 and
+      pieceCell[$each] == (ai.from & 56) + (ai.to > ai.from ? 7 : 0))
+    mode: Level
+    forEach: pieceCode
+    maxFirings: 1
+    pieceCell[$each] = ai.from + ai.to >> 1
   }
 }
 

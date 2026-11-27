@@ -1799,7 +1799,7 @@ public static partial class ExpressionSpelling {
             var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
 
             // A reduction of a family member selected live (`count(pile[$each])`).
-            if (IsReduceSugar(name: name) && !m_quoted && (m_position < text.Length) && (text[m_position] == '[')) {
+            if (IsReduceSugar(name: name) && (m_position < text.Length) && (text[m_position] == '[')) {
                 return ParseReduce(name: name);
             }
 
@@ -1888,7 +1888,7 @@ public static partial class ExpressionSpelling {
 
             // A family member a reduction selects live (`count(pile[$each])`) keeps its bracketed index in the row
             // spelling, as a live zone does; the rule compiler resolves it against the declared family.
-            if ((m_kind == Lexeme.Name) && !m_quoted && !negative && (m_position < text.Length) && (text[m_position] == '[')) {
+            if ((m_kind == Lexeme.Name) && !negative && (m_position < text.Length) && (text[m_position] == '[')) {
                 var close = BracketEnd(open: m_position);
 
                 if (close < 0) {

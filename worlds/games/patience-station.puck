@@ -65,12 +65,12 @@ let kSlotX = map(range(0, 14), z => patienceCentreX + (3 - kColumn[z]) * patienc
 // The piles the glass reads, a pile a tick (klondike.puck's families): the waste, each column's face-down part and then
 // its face-up part fanned after it, and the foundations.
 let kReadTurns = concat(
-  [{ zone: 1, pile: "klondikeWasteOf", under: "", down: 0 }],
+  [{ zone: 1, pile: "klondikeWasteOf", under: "" }],
   flatMap(range(2, 9), z => [
-    { zone: z, pile: $"klondikeDown{z}Of", under: "", down: 1 },
-    { zone: z, pile: $"klondikePile{z}Of", under: $"klondikeDown{z}Of", down: 0 }
+    { zone: z, pile: $"klondikeDown{z}Of", under: "" },
+    { zone: z, pile: $"klondikePile{z}Of", under: $"klondikeDown{z}Of" }
   ]),
-  map(range(10, 14), z => { zone: z, pile: $"klondikePile{z}Of", under: "", down: 0 })
+  map(range(10, 14), z => { zone: z, pile: $"klondikePile{z}Of", under: "" })
 )
 let kReadCount = length(kReadTurns)
 
@@ -337,16 +337,6 @@ template patienceStationState(station) {
     max: fSlotCount
     cells: map(range(0, 52), k => { key: $"{k}", value: patienceAwaySlot })
   }
-  // Whether each card lay face down when the glass last read its pile.
-  row {
-    name: "patienceDownOf"
-    kind: "Int"
-    capacity: 52
-    min: 0
-    max: 1
-    cells: map(range(0, 52), k => { key: $"{k}", value: 1 })
-  }
-
   // The glass follows the piles for `left` more ticks after the last change, or after the game shown changed (`game`
   // is the one it last followed); `status` is the status line's last code.
   table patienceSync capacity(auto) {
@@ -380,16 +370,14 @@ template patienceStationState(station) {
 
 // Each pile's cards read their depth: how many cards of the pile stand before them, and of the pile `under` it in the
 // same column (a Klondike column's face-down part, "" for none). The length pattern matched from a card to the pile's
-// end counts the cards from it on, so a card's depth is the pile's count less that. `down` is whether the pile holds
-// its cards face down.
-template patienceRead(t, game, turn, base, pile, under, down) {
+// end counts the cards from it on, so a card's depth is the pile's count less that.
+template patienceRead(t, game, turn, base, pile, under) {
   if under == "" {
     rule $"patience-read-{game}-{turn}" {
       when solitaireTable[t] == game and patienceSync.left > 0 and patienceSync.scan == turn
       mode: Level
       forEach: pile
       patienceSlotOf[$each] = base + count(pile) - match(solitaireLength, pile, prefix)[$each]
-      patienceDownOf[$each] = down
     }
   } else {
     rule $"patience-read-{game}-{turn}" {
@@ -397,7 +385,6 @@ template patienceRead(t, game, turn, base, pile, under, down) {
       mode: Level
       forEach: pile
       patienceSlotOf[$each] = base + count(under) + count(pile) - match(solitaireLength, pile, prefix)[$each]
-      patienceDownOf[$each] = down
     }
   }
 }
@@ -408,6 +395,13 @@ template patienceStationRules(station, index, klondike, freecell) {
   let t = $"{index}"
   let freecellDeck = $"freecellDeckOf{index}"
   let stock = $"klondikeStockOf{index}"
+  let down2 = $"klondikeDown2Of{index}"
+  let down3 = $"klondikeDown3Of{index}"
+  let down4 = $"klondikeDown4Of{index}"
+  let down5 = $"klondikeDown5Of{index}"
+  let down6 = $"klondikeDown6Of{index}"
+  let down7 = $"klondikeDown7Of{index}"
+  let down8 = $"klondikeDown8Of{index}"
   let pick = gameStationBits.pick
 
   // The patience collection plays the game the station shows, and none while it shows another.
@@ -475,23 +469,25 @@ template patienceStationRules(station, index, klondike, freecell) {
       turn: turn,
       base: kBase[read.zone],
       pile: $"{read.pile}{index}",
-      under: (read.under == "") ? "" : $"{read.under}{index}",
-      down: read.down
+      under: (read.under == "") ? "" : $"{read.under}{index}"
     )
   }
   for z in range(0, 16) {
-    patienceRead(t: t, game: 2, turn: z, base: fBase[z], pile: $"freecellPile{z}Of{index}", under: "", down: 0)
+    patienceRead(t: t, game: 2, turn: z, base: fBase[z], pile: $"freecellPile{z}Of{index}", under: "")
   }
 
   // Then each card lies at its slot, face up or face down, or inside the cap while no patience game is shown.
   rule "patience-pose-up" {
     local card = patienceCardNo[$each]
     local klondikeSlot = (stock[card] == 1) ? (card % 24) : patienceSlotOf[card]
+    // A Klondike card lies face down in the stock and in a column's face-down part.
+    local klondikeDown = ((stock[card] ?? 0) + (down2[card] ?? 0) + (down3[card] ?? 0) + (down4[card] ?? 0) + (down5[card] ?? 0) +
+      (down6[card] ?? 0) + (down7[card] ?? 0) + (down8[card] ?? 0)) > 0
     local slot = (
       (solitaireTable[t] == 1) ? klondikeSlot : ((solitaireTable[t] == 2) ? patienceSlotOf[card] : patienceAwaySlot)
     )
     local down = (
-      (solitaireTable[t] == 1) ? ((stock[card] == 1) or patienceDownOf[card]) :
+      (solitaireTable[t] == 1) ? klondikeDown :
       ((solitaireTable[t] == 2) ? freecellDeck[card] : 0)
     )
     when patienceSync.left > 0 and down == 0
@@ -508,9 +504,12 @@ template patienceStationRules(station, index, klondike, freecell) {
   rule "patience-pose-down" {
     local card = patienceCardNo[$each]
     local klondikeSlot = (stock[card] == 1) ? (card % 24) : patienceSlotOf[card]
+    // A Klondike card lies face down in the stock and in a column's face-down part.
+    local klondikeDown = ((stock[card] ?? 0) + (down2[card] ?? 0) + (down3[card] ?? 0) + (down4[card] ?? 0) + (down5[card] ?? 0) +
+      (down6[card] ?? 0) + (down7[card] ?? 0) + (down8[card] ?? 0)) > 0
     local slot = (solitaireTable[t] == 1) ? klondikeSlot : (fDeckBase + card % 24)
     local down = (
-      (solitaireTable[t] == 1) ? ((stock[card] == 1) or patienceDownOf[card]) :
+      (solitaireTable[t] == 1) ? klondikeDown :
       ((solitaireTable[t] == 2) ? freecellDeck[card] : 0)
     )
     when patienceSync.left > 0 and down
@@ -664,10 +663,13 @@ template patienceStationRules(station, index, klondike, freecell) {
       freecellStage[t] == 0 and
       freecellBusy[t] == 0
     )
+    local card = patienceSeat.card
+    local klondikeDown = ((stock[card] ?? 0) + (down2[card] ?? 0) + (down3[card] ?? 0) + (down4[card] ?? 0) + (down5[card] ?? 0) +
+      (down6[card] ?? 0) + (down7[card] ?? 0) + (down8[card] ?? 0)) > 0
     local lifts = (
       patienceSeat.card >= 0 and
       (
-        solitaireTable[t] == 1 ? (patienceSeat.zone > 0 and patienceDownOf[patienceSeat.card] == 0) :
+        solitaireTable[t] == 1 ? (patienceSeat.zone > 0 and klondikeDown == 0) :
           (patienceSeat.zone < 4 or patienceSeat.zone >= 8)
       )
     )
