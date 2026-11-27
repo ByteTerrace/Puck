@@ -35,11 +35,18 @@ public sealed partial class WorldPopulation {
         if (m_entries[bodyIndex].Body is not { } body) { return; }
         body.RestoreInputMapping(owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Epoch);
     }
-    /// <summary>Installs an owner's admitted mapping on the body's consumers using precompiled kit bindings.</summary>
+    /// <summary>Installs an owner's admitted mapping on the body's consumers using precompiled kit bindings. The
+    /// steering image kept for the body between producer runs crosses the barrier with the body's own images
+    /// (<see cref="WorldBody.InstallInputMapping"/>).</summary>
     public void InstallInputMapping(int bodyIndex, WorldInputMapping previous, WorldInputOwner owner, bool reset, bool recompiled = false) {
-        if (m_entries[bodyIndex] is not { Active: true, Body: { } body }) { return; }
-        body.InstallInputMapping(InputCatalog, previous, owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Image, owner.Epoch, reset, owner.LastSwitch.Decisions.Span, recompiled);
+        if (m_entries[bodyIndex] is not { Active: true, Body: { } body } entry) { return; }
+        body.InstallInputMapping(InputCatalog, previous, owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Image, owner.Epoch, reset, owner.LastSwitch.Decisions.Span, ref entry.AutonomyState.SteeringIntent, recompiled);
     }
+    // The steering image kept for a body between producer runs, addressed under the body's installed mapping: what a
+    // kit step saves before it can install another mapping, and puts back beside the mapping when its sweep is refused
+    // (WorldInputRuntime.CompleteKitStep).
+    internal Protocol.PlayerIntent SteeringImage(int bodyIndex) => m_entries[bodyIndex].AutonomyState.SteeringIntent;
+    internal void RestoreSteeringImage(int bodyIndex, in Protocol.PlayerIntent image) => m_entries[bodyIndex].AutonomyState.SteeringIntent = image;
 
     // Whether the last selection pass had a selector to resolve, so the pass after a document drops both selectors
     // still clears what they selected, and a document without one costs nothing per tick.

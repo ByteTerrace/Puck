@@ -716,7 +716,6 @@ public sealed partial class WorldBody {
         }
 
         var resolution = SweepContact(
-            entityIndex: m_entityIndex,
             field: field,
             orientation: in m_orientation,
             position: ref resolved,
@@ -804,7 +803,6 @@ public sealed partial class WorldBody {
 
             var start = m_position;
             var resolution = SweepContact(
-                entityIndex: m_entityIndex,
                 field: field,
                 orientation: in orientation,
                 position: ref root,
