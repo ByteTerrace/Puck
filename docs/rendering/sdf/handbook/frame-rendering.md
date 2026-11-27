@@ -830,8 +830,8 @@ place:
 | Pass | Does |
 |---|---|
 | `glass-clear` | Zeroes the glass sums, whose stride is `SdfWorldPackage.GlassSumWords`. |
-| `glass` | Rasterizes the glass draws. Its reversed-Z target retains the nearest front face before the opaque hit. Integer sums hold the clipped path length, RGB optical depth, winding, and material key. The second record holds up to three front faces and the nearest back face. |
-| `glass-shade` | Writes the lit image again, shading up to two entrances, the target's nearest front face and the second-nearest the record names, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the far interface composes over that light and the near one over the far one's result; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
+| `glass` | Rasterizes the glass draws. Its reversed-Z target retains the nearest front face before the opaque hit. Integer sums hold the clipped path length, RGB optical depth, winding, and material key. The layer list holds the nearest `SdfWorldPackage.GlassLayers` front faces in distance order, and a word holds the nearest back face. |
+| `glass-shade` | Writes the lit image again, shading the target's nearest front face and the layer list's faces after it, nearest first, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the interfaces compose front to back, each showing its own light under what the nearer ones pass; an emissive glass adds its emission (the material's `emissive`, scaled by its emissive lane) to what it shows; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
 
 For a closed solid each back face adds and each front face subtracts the
 distance from the near plane to that crossing, clipped at the opaque hit.
@@ -851,12 +851,15 @@ adds scattered light sampled halfway along that segment. Overlapping starting
 media contribute absorption. The starting segment composes in front of the
 surface layers and marks its pixels reactive.
 
-With two interfaces the
+With several interfaces the
 distance splits at the nearest back face: the near interface's share runs from
-it to that back face (never past the far interface) and absorbs by its own
-material, and the far interface takes the rest of the distance and of the
-optical depth, so a pane over a pool keeps the pane's tint thin and the pool's
-deep. The glass pixel's coverage is the light behind's, darkened by
+it to that back face (never past the next interface) and absorbs by its own
+material; each later interface but the last takes an even part of the glass
+left, never past the next interface, absorbing by its own material; and the
+last takes the rest of the distance and of the optical depth (`sdfGlassShare`),
+so a pane over a pool keeps the pane's tint thin and the pool's deep, and the
+interfaces together absorb exactly what the sums hold. The even part assumes
+the later panes alike, since the sums keep only the nearest exit. The glass pixel's coverage is the light behind's, darkened by
 each interface's luminous transmittance, so the sky the composite puts behind a
 clear pane shows through at the pixel's own direction. The reflection and the
 highlights pass through the atmosphere over the glass's own distance; the light
@@ -877,22 +880,38 @@ gathers at a step, a pier or a bank in the flow's own pattern; the flow's
 revealed coverage covers the glass with its surface, lit by the same light. The
 glass reads the lit image once (or the frost's disc): the medium, the contact
 and the revealed surface are functions of the thickness, the distance to the
-opaque hit and the arriving light alone. Each of the two interfaces scatters,
-touches and flows by its own material over its own share, so the reservoir seen
+opaque hit and the arriving light alone. Each interface scatters, touches,
+emits and flows by its own material over its own share, so the reservoir seen
 through the pavilion's pane shows its surface, waterline, medium and flow under
-the pane's tint; the far interface's light, transmission included, is what the
-near one transmits. A slot with neither is the clear absorbing glass above.
+the pane's tint; the light of the interfaces behind one, transmission included,
+is what it transmits. A slot with neither is the clear absorbing glass above.
 
-**The second interface.** The glass target holds one record, the nearest front
-face its depth test keeps; a depth test keeps one extremum, so the second is the
-sums' second record. Every front face before the opaque hit counts itself and
-claims the next of three entries while one is free; the shading pass takes the
-held face nearest along the pixel's ray other than the target's
-(`sdfGlassSecondInterface`, its distance from the triangle's plane, ties to the
-lower draw and triangle). With three front faces or fewer every one is held, so
-the answer never depends on the order the faces claimed their entries, and the
-order-independence law checks the entries as a set. With more, the record names
-no second interface and the nearest alone is shaded.
+**The layer list.** The glass target holds one record, the nearest front face
+its depth test keeps; a depth test keeps one extremum, so the faces behind it
+come from the sums' layer list (`frame/sdf-glass.hlsli`). Every visible front
+face enters it as one 64-bit key, its distance's code above its draw and
+triangle, stored inverted so the cleared zero is empty: at each of the list's
+`SdfWorldPackage.GlassLayers` entries a 64-bit atomic maximum keeps the nearer
+key and hands the one it displaced on to the next entry. Whatever order the
+faces rasterize in, the list ends holding the nearest that many in distance
+order, ties going to the lower draw and triangle, so a pixel's words are
+identical for every raster order (`SdfGlassSumsDeviceLawTests`). The shading
+pass walks it after the target's face (`sdfGlassNextLayer`), placing each face
+at its triangle's plane. A face past the list's length absorbs through the sums
+but is not shaded, and a face whose draw or triangle passes its field of the key
+takes no entry. The key's atomics need 64-bit buffer atomics, which every device
+Puck creates has: Vulkan's `shaderInt64` and `shaderBufferInt64Atomics`, and
+Direct3D 12's shader model 6.6.
+
+**The cost of a layer.** Nothing runs for glass while no glass draw's box meets
+a view's frustum (`SdfWorldPasses.GlassSeen` skips the three passes). Each
+glass fragment pays its sums' atomics as before and, if it is a visible front
+face, at most `GlassLayers` 64-bit atomic maximums, fewer once the list is
+full of nearer faces. Each interface the shading pass shades pays one surface
+resolve, one probe gather (the nearest reuses the glass probe history), one
+light walk and its program's phases, so a pixel costs about one glass interface
+a layer it actually shows; a pane alone costs what it did. The list adds
+`GlassLayers × 8` bytes a render pixel to the sums.
 
 In a temporal view the glass pass raises a pixel's reactivity to one where its
 refracted read comes from a pixel away or more
@@ -906,10 +925,12 @@ and its taint rules see glass as any surface: the glass passes read nothing
 external. A debug view's image passes through the glass pass unshaded, and the
 pick reads the visibility record, the opaque hit behind the glass.
 
-The limits: two interfaces at most reflect, refract and scatter. A third front
-face's glass absorbs within the far interface's share, and what lies beyond the
-second interface is the opaque image, never shaded as glass; past three front
-faces before the opaque hit the nearest alone is shaded; the sky seen through glass is not refracted and is darkened rather than
+The limits: the nearest `SdfWorldPackage.GlassLayers` interfaces at most
+reflect, refract, emit and scatter. A farther front face's glass absorbs within
+the last interface's share, and what lies beyond the last shaded interface is
+the opaque image, never shaded as glass; the later interfaces' shares assume
+panes alike; light through coloured glass casts a grey shadow, not a coloured
+one (`glass.shadowDensity` is one density); the sky seen through glass is not refracted and is darkened rather than
 tinted; refraction reads a screen-space neighbour, so what lies off screen or
 behind a nearer surface reads the pixel's own sample; exit refraction and reflection for a submerged camera are open; the glass
 surface reads no screen-space occlusion and no cascade, its shadowing coming

@@ -19,6 +19,13 @@ public static class VulkanShaderCapabilities {
     /// glass passes name the triangle a fragment of an indexed draw covers by it. Requires the device's
     /// <c>geometryShader</c> feature.</summary>
     public const uint Geometry = 2u;
+    /// <summary>The SPIR-V <c>Int64</c> capability, which a 64-bit integer type declares: the glass raster's layer list
+    /// keys its faces in 64-bit words. Requires the device's <c>shaderInt64</c> feature.</summary>
+    public const uint Int64 = 11u;
+    /// <summary>The SPIR-V <c>Int64Atomics</c> capability, for a 64-bit atomic on a storage buffer: the glass raster's
+    /// layer list keeps the nearest faces by 64-bit atomic maximum. Requires the device's
+    /// <c>shaderBufferInt64Atomics</c> feature.</summary>
+    public const uint Int64Atomics = 12u;
     /// <summary>The SPIR-V <c>ClipDistance</c> capability, with which the mesh and shadow passes clip a body at a portal's
     /// glass. Requires the device's <c>shaderClipDistance</c> feature.</summary>
     public const uint ClipDistance = 32u;
@@ -66,6 +73,8 @@ public static class VulkanShaderCapabilities {
     public static IReadOnlyList<(uint Capability, string Name, string EnabledBy)> Enabled { get; } = [
         (Shader, "Shader", "Vulkan core"),
         (Geometry, "Geometry", "the geometryShader feature every device is created with"),
+        (Int64, "Int64", "the shaderInt64 feature every device is created with"),
+        (Int64Atomics, "Int64Atomics", "the shaderBufferInt64Atomics feature every device is created with"),
         (ClipDistance, "ClipDistance", "the shaderClipDistance feature every device is created with"),
         (StorageImageExtendedFormats, "StorageImageExtendedFormats", "the shaderStorageImageExtendedFormats feature every device is created with"),
         (StorageBufferArrayDynamicIndexing, "StorageBufferArrayDynamicIndexing", "the shaderStorageBufferArrayDynamicIndexing feature every device is created with"),

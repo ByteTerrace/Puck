@@ -99,7 +99,7 @@ public sealed class SdfShadeDispatch {
     /// <param name="screens">The bound screen count.</param>
     /// <param name="lightMask">The view's light mask (<c>SdfWorldTables.LightMaskOf</c>), which bounds every walk the
     /// pass's pixels take through the lights table.</param>
-    /// <param name="glass">Whether the pass shades glass, pricing both interfaces.</param>
+    /// <param name="glass">Whether the pass shades glass, pricing every interface a pixel shades (<see cref="SdfShadeProgram.GlassInterfaces"/>).</param>
     /// <param name="tier">The kernel tier the residency records the frame with.</param>
     /// <param name="binned">Whether to produce a binned plan when the tier runs programs.</param>
     /// <returns>The standing or newly built plan.</returns>
@@ -166,14 +166,14 @@ public sealed class SdfShadeDispatch {
     }
 
     /// <summary>Plans an unsplit extent, conservatively pricing every padded pixel at its largest admitted program.
-    /// Glass prices both interfaces. Splitting within a group is unrepresentable. An extent with no program runs only the
+    /// Glass prices every interface a pixel shades. Splitting within a group is unrepresentable. An extent with no program runs only the
     /// engine's fixed stage, which <see cref="SdfShadeProgram.MaxWork"/> does not bound (it bounds what an authored program
     /// adds), so it is one dispatch within the backend's group-count limit, as every engine pass is.</summary>
     /// <param name="width">The extent's width, in pixels.</param>
     /// <param name="height">The extent's height, in pixels.</param>
     /// <param name="programs">The admitted programs the frame runs.</param>
     /// <param name="lights">The lights each pixel's walk may visit, at most <see cref="SdfShadeProgram.MaxLights"/>.</param>
-    /// <param name="glass">Whether the pass shades glass, pricing both interfaces.</param>
+    /// <param name="glass">Whether the pass shades glass, pricing every interface a pixel shades (<see cref="SdfShadeProgram.GlassInterfaces"/>).</param>
     /// <param name="straight">Whether a specialized selection records the plan, pricing its straight-line arms.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="programs"/> is <see langword="null"/>.</exception>
@@ -208,7 +208,7 @@ public sealed class SdfShadeDispatch {
         return BuildBins(height: height, identities: identities, lights: lights, shadedWork: shadedWork, straight: straight, width: width);
     }
     private static SdfShadeDispatch BuildUnsplit(uint width, uint height, ulong pixelWork, string[] identities, bool glass, bool straight) {
-        var groupWork = checked(pixelWork * TilePixels * (glass ? 2UL : 1UL));
+        var groupWork = checked(pixelWork * TilePixels * (glass ? SdfShadeProgram.GlassInterfaces : 1UL));
         if (groupWork > SdfShadeProgram.MaxWork) { throw new InvalidOperationException("An admitted shade group exceeds MaxWork."); }
         var total = Tiles(width: width, height: height);
         var capacity = (uint)Math.Min(MaxGroups, ((identities.Length == 0) ? MaxGroups : (SdfShadeProgram.MaxWork / groupWork)));

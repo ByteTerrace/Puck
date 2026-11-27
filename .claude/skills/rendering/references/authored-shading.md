@@ -183,7 +183,7 @@ the ellipse and sweep loop bounds are generated from the evaluator constants.
 `PixelWork` includes the bounded light walk, default phases and fixed stage work.
 `MaxOps` bounds allocated instructions separately from weighted work. Admission
 checks the allocated phases' `PixelWork` at `MaxLights` for a complete 8x8 group,
-including both glass interfaces, against `MaxWork`. This admission bound is provisional;
+including every glass interface a pixel shades (`SdfShadeProgram.GlassInterfaces`), against `MaxWork`. This admission bound is provisional;
 it is not a measured timeout margin. `SdfShadeDispatch.Plan` partitions the full
 padded extent into whole groups under that bound and the backend group-count
 limit; `SdfShadeDispatch.For` prices a pixel's walk at the view's light-walk

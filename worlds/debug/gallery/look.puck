@@ -158,9 +158,6 @@ function lookTelevisionPalette(t) = [
 // clump's alone). `relief` is the bark's lumpy relief in metres and `grain` its features a metre. `streak` is the bark
 // grain's frequency along and across it (fine across, long along), and `twist` how many radians a metre the trunk's
 // grain turns as it climbs.
-// The level-1 branches' magic barrier (architecture.puck's rainbowArch): its neon arches' colours, outermost first, and
-// how bright they glow (nits).
-let lookBarrier = { colors ["#FF5A7A", "#FF9F43", "#FFE066", "#5EE07A", "#4CC9F0", "#7B6CFF", "#E36CFF"], glow: 300 }
 let lookTree = {
   bark: "#8A6B4F"
   barkUnder: "#3F2F24"
@@ -193,6 +190,56 @@ let lookTree = {
   grain: 1.6
   streak [0.22, 7, 7]
   twist: 0.09
+}
+// The level-1 branches' magic barrier (architecture.puck's filmArch): `colors`, its rainbow, outermost first (the
+// rentals' key takes its violet); `tints`, the nested sheets' glass, outermost first, each a pale hue so the sheets'
+// overlap deepens toward the middle; `pane`, the pane's; `glow`, the film's brightness in nits; `step`, how far each
+// sheet's hue runs on from the one outside it, a share of a cycle; and `film`, the magic film all of them show
+// (shading.puck's magicFilm): the full hue circle turning once every 15 seconds and rippling outward in rings about 1.4 m
+// apart, twinkling softly, brightest at the edges.
+let lookBarrier = {
+  colors ["#FF5A7A", "#FF9F43", "#FFE066", "#5EE07A", "#4CC9F0", "#7B6CFF", "#E36CFF"]
+  tints ["#FFC2D2", "#FFF0B8", "#BFF2D0"]
+  pane: "#F4F8FF"
+  glow: 60
+  step: 0.17
+  film {
+    low [0.55, 0.55, 0.55]
+    swing [0.45, 0.45, 0.45]
+    rate [1, 1, 1]
+    offset [0, 0.33, 0.67]
+    cycle: 15
+    twinkle: 2.5
+    rings: 0.7
+    swirl: 0.3
+    scale: 1.2
+    rim: 2.5
+    power: 3
+    shimmer: 0.3
+    seed: 6427
+  }
+}
+// The stained glass window in the nave's east end wall (architecture.puck's stainedGlassBay, the middle of its three tall
+// bays): `colors`, the panes' glass, and `cells`, its leaded light's pattern top row first, each cell an index into
+// `colors`. A rising sun over hills: a sky of blues paling to the horizon, a gold sun with rays, green hills, and a ruby
+// border, read whole from the nave and in its light on the floor.
+let lookStained = {
+  colors ["#1E4FA8", "#3F86D6", "#9FD0F0", "#F2B722", "#E8661C", "#2E8C46", "#7BC05A", "#B01E3A", "#F4EBD0"]
+  cells [
+    [7, 7, 7, 7, 7, 7, 7, 7, 7]
+    [7, 0, 0, 0, 0, 0, 0, 0, 7]
+    [7, 0, 1, 0, 1, 0, 1, 0, 7]
+    [7, 1, 1, 1, 1, 1, 1, 1, 7]
+    [7, 1, 3, 1, 3, 1, 3, 1, 7]
+    [7, 2, 1, 3, 3, 3, 1, 2, 7]
+    [7, 3, 3, 3, 8, 3, 3, 3, 7]
+    [7, 2, 4, 3, 3, 3, 4, 2, 7]
+    [7, 2, 2, 4, 4, 4, 2, 2, 7]
+    [7, 6, 2, 2, 2, 2, 2, 6, 7]
+    [7, 6, 6, 5, 2, 5, 6, 6, 7]
+    [7, 5, 6, 5, 5, 5, 6, 5, 7]
+    [7, 7, 7, 7, 7, 7, 7, 7, 7]
+  ]
 }
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.

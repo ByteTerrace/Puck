@@ -521,6 +521,13 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_OVERLAP_SPAN_WORDS", value: SdfWorldPackage.OverlapSpanWords);
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        // The layer list's length bounds the interfaces a glass pixel shades, which shade admission and the dispatch planner
+        // price (SdfShadeProgram.GlassInterfaces, in an assembly the package cannot reference): the two stay one number
+        // here, where both are visible, or no kernel is generated.
+        if (SdfWorldPackage.GlassLayers != SdfShadeProgram.GlassInterfaces) {
+            throw new InvalidOperationException(message: $"SdfWorldPackage.GlassLayers ({SdfWorldPackage.GlassLayers}) must equal SdfShadeProgram.GlassInterfaces ({SdfShadeProgram.GlassInterfaces}).");
+        }
+        declarations.Count(name: "SDF_GLASS_LAYERS", value: SdfWorldPackage.GlassLayers);
         // Raster encodes these integers and compute decodes them. Raster pipelines are composition-owned and do not
         // hot reload with the compute kernels, so their shared encoding scale must remain in the interface stamp.
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);

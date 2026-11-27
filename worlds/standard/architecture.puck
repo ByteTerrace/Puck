@@ -3,6 +3,7 @@
 // it hands its importers palettes and templates and emits no document. Each template takes `base`, the palette slot of
 // its palette's first entry, so a creation appends the palette after its own slots and passes where it starts.
 import "rig"
+import "shading"
 
 // The display plinth's materials, in slot order from `base`: cream shell, ochre body, teal recess, dark screen glass,
 // brass, and the warm light of the turntable ring.
@@ -259,14 +260,10 @@ let kitPalette = [
 // A quarter turn that lays a shape's +Y along +X, for a bar or a rail that runs across a piece.
 let kitAlong = [0, 0, -0.7071, 0.7071]
 
-// A window bay that faces +Z, the outside (docs/game/art/gallery-kit-pack/window-bay.png): a thick cream head and sill
-// with rounded edges and ochre jambs between them, standing proud of a wall `wall` thick whose centre plane is z 0; a
-// teal frame set in the opening with a centre mullion, two transoms and two short lower mullions; one pane of glass;
-// and the short bracket a fan shade's hub stands on, at the low transom's crossing. The opening is `width` by `height`
-// and starts `sill` above the bay's origin on the floor. Every shape is a box joined by union, so the bay collides as
-// drawn and glass holds a body in.
-function windowHubHeight(height, sill) = (sill + (height * 0.36))
-template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
+// A window bay's surround, facing +Z: a thick cream head and sill with rounded edges and ochre jambs between them,
+// standing proud of a wall `wall` thick whose centre plane is z 0, about an opening `width` by `height` that starts
+// `sill` above the bay's origin on the floor. Its palette is the kit's from `base`.
+template windowSurround(base, width, height, sill, wall) {
   shape Box "bay-head" {
     material: (base + kitCream)
     position [0, ((sill + height) + 0.3), 0.03]
@@ -286,6 +283,16 @@ template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
       scale [0.22, (height / 2), ((wall / 2) + 0.06)]
       chamfer: 0.03
     }
+  }
+}
+// A window bay that faces +Z, the outside (docs/game/art/gallery-kit-pack/window-bay.png): the surround
+// (windowSurround); a teal frame set in the opening with a centre mullion, two transoms and two short lower mullions;
+// one pane of glass; and the short bracket a fan shade's hub stands on, at the low transom's crossing. Every shape is a
+// box joined by union, so the bay collides as drawn and glass holds a body in.
+function windowHubHeight(height, sill) = (sill + (height * 0.36))
+template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
+  windowSurround(base: base, width: width, height: height, sill: sill, wall: wall)
+  for side in [-1, 1] {
     shape Box $"bay-frame-{side}" {
       material: (base + kitTeal)
       position [(side * ((width / 2) - 0.05)), (sill + (height / 2)), 0]
@@ -319,6 +326,54 @@ template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
     position [0, windowHubHeight(height, sill), 0.14]
     scale [0.06, 0.06, 0.1]
   }
+}
+
+// Stained glass: a leaded light `width` by `height`, facing ±Z in the plane z 0 with its foot at y `foot`, of coloured
+// panes in a grid held by lead came. `cells` lists the grid's rows top first, each a list of palette offsets, one a
+// pane: a pane takes the palette row `glass + offset`, so an author draws the pattern as data and colours it in the
+// palette (stainedGlassPalette). Each pane is glass `pane` thick, its tint the colour light passing it takes on; the
+// came, `came` wide and `cameDepth` deep, standing proud of the glass on both faces, runs along every line of the grid
+// and round its edge in the palette row `lead`. Every shape is a box joined by union, so the light collides as drawn.
+template stainedGlass(lead, glass, cells, width, height, foot = 0, pane = 0.008, came = 0.024, cameDepth = 0.022) {
+  let rows = length(cells)
+  let columns = length(cells[0])
+  let across = (width / columns)
+  let up = (height / rows)
+  for i in range(0, rows) {
+    for j in range(0, columns) {
+      shape Box $"stained-pane-{i}-{j}" {
+        material: (glass + cells[i][j])
+        position [((0 - (width / 2)) + ((j + 0.5) * across)), ((foot + height) - ((i + 0.5) * up)), 0]
+        scale [((across / 2) - (came / 4)), ((up / 2) - (came / 4)), (pane / 2)]
+      }
+    }
+  }
+  for k in range(0, (columns + 1)) {
+    shape Box $"stained-came-v-{k}" {
+      material: lead
+      position [((0 - (width / 2)) + (k * across)), (foot + (height / 2)), 0]
+      scale [(came / 2), ((height / 2) + (came / 2)), (cameDepth / 2)]
+    }
+  }
+  for k in range(0, (rows + 1)) {
+    shape Box $"stained-came-h-{k}" {
+      material: lead
+      position [0, (foot + (k * up)), 0]
+      scale [(width / 2), (came / 2), (cameDepth / 2)]
+    }
+  }
+}
+// A stained glass light's palette: the lead came, then a pane a colour of `colors`, each glass `depth` deep for its
+// tint (a pane as thick as its depth passes its colour) and frosted by `frost`.
+function stainedGlassPalette(colors, lead = "#2B2C30", depth = 0.008, frost = 0.06) = concat(
+  [{ color: lead, roughness: 0.45, metal: 0.7 }],
+  map(colors, c => { color: c, roughness: frost, glass { depth: depth, ior: 1.52 } })
+)
+// A window bay glazed with stained glass instead of the kit's frame and pane: the surround (windowSurround, whose kit
+// palette starts at `base`) about a leaded light filling the opening (stainedGlass, whose palette starts at `stained`).
+template stainedGlassBay(base, stained, cells, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
+  windowSurround(base: base, width: width, height: height, sill: sill, wall: wall)
+  stainedGlass(lead: stained, glass: (stained + 1), cells: cells, width: width, height: height, foot: sill)
 }
 
 // A fan shade (the sheet's orange leaves on a dark hub), facing +Z with its hub at the origin: `leaves` thin tapered
@@ -1624,54 +1679,57 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
-// A magic barrier filling an arch: a clear pane in the arch's shape (a half disc `radius` across over a rectangle down to
-// the floor from the spring line `spring` metres up), the part that collides, and nested inside its edge `hues` neon
-// arches, a rainbow, each a half circle on two legs, the outermost a hair inside the opening and each next `band` metres
-// inside it, drawn only. It stands on y 0, centred on x 0, facing ±Z. Its palette from `base`: the pane, then a neon a
-// hue, outermost first (rainbowArchPalette).
-function rainbowArchPalette(colors, glow = 300, pane = "#F4F8FF") = concat(
-  [{ color: pane, roughness: 0.02, glass { depth: 0.02, ior: 1.2 } }],
-  map(colors, c => { color: c, roughness: 0.3, emissive: glow })
+// The outline of an arch, as a Convex prism profile's vertices: a half circle `radius` either side of its axis springing
+// from `spring` metres up (positive), over straight sides down to y 0, clockwise from the foot of its left side with the
+// half circle in `segments` steps (at most 29), for a prism scaled [radius, (spring + radius) / 2, depth] whose centre
+// stands at y (spring + radius) / 2.
+function archOutline(radius, spring, segments = 24) = concat(
+  [[-1, -1]],
+  map(range(0, (segments + 1)), n => [
+    cosine((180 - ((180 * n) / segments)) * 1deg),
+    (((2 * (spring + (radius * sine((180 - ((180 * n) / segments)) * 1deg)))) / (spring + radius)) - 1)
+  ]),
+  [[1, -1]]
 )
-// The point on a half circle `radius` about the spring line's middle at `degrees` from +X toward +Y.
-function rainbowArchPoint(radius, spring, degrees) = [(radius * cosine(degrees * 1deg)), (spring + (radius * sine(degrees * 1deg))), 0]
-template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segments = 6) {
-  shape Cylinder "rainbow-pane-disc" {
+// A magic barrier filling an arch: a pane in the arch's shape (archOutline: a half circle `radius` across springing from
+// `spring` metres up, over straight sides down to the floor), the part that collides, and `films` sheets nested in it,
+// drawn only, each an arch `inset` metres inside the last and standing off the pane by `gap` metres more than the sheet
+// two before it, alternately before and behind it. Every one is glass `thickness` thick, so a ray through the middle
+// crosses the pane and every sheet, each tinting and glowing over those behind it. It stands on y 0, centred on x 0,
+// facing ±Z. Its palette from `base`: the pane, then a sheet a row, outermost first (filmArchPalette).
+template filmArch(base, radius, spring, films, inset = 0.24, gap = 0.035, thickness = 0.006) {
+  shape Prism "film-arch-pane" {
     material: base
-    position [0, spring, 0]
-    rotation [0.7071068, 0, 0, 0.7071068]
-    scale [radius, 0.005, radius]
-  }
-  shape Box "rainbow-pane-legs" {
-    material: base
-    position [0, (spring / 2), 0]
-    scale [radius, (spring / 2), 0.005]
-  }
-  for k in range(0, hues) {
-    let r = ((radius - 0.06) - (k * band))
-    for n in range(0, segments) {
-      shape Sweep $"rainbow-arc-{k}-{n}" {
-        detail: true
-        material: ((base + 1) + k)
-        curve {
-          a: rainbowArchPoint(r, spring, ((180 * n) / segments))
-          b: rainbowArchPoint((r / cosine((90 / segments) * 1deg)), spring, ((180 * (n + 0.5)) / segments))
-          c: rainbowArchPoint(r, spring, ((180 * (n + 1)) / segments))
-          radiusStart: tube
-          radiusEnd: tube
-        }
-      }
+    position [0, ((spring + radius) / 2), 0]
+    scale [radius, ((spring + radius) / 2), (thickness / 2)]
+    profile {
+      kind: "Convex"
+      vertices: archOutline(radius, spring)
     }
-    for side in [-1, 1] {
-      shape Cylinder $"rainbow-leg-{k}-{side}" {
-        detail: true
-        material: ((base + 1) + k)
-        position [(side * r), (spring / 2), 0]
-        scale [tube, (spring / 2), tube]
+  }
+  for k in range(1, (films + 1)) {
+    let r = (radius - (k * inset))
+    shape Prism $"film-arch-sheet-{k}" {
+      detail: true
+      material: (base + k)
+      position [0, ((spring + r) / 2), ((((k % 2) == 1) ? 1 : -1) * gap * floor(((k + 1) / 2)))]
+      scale [r, ((spring + r) / 2), (thickness / 2)]
+      profile {
+        kind: "Convex"
+        vertices: archOutline(r, spring)
       }
     }
   }
 }
+// A film arch's palette: the pane, tinted `pane`, then a sheet a colour of `tints`, outermost first. Every row is glass
+// that glows `glow` nits under the magic film `film` (shading.puck's magicFilmed) about the arch's centre `centre`, each
+// sheet's hue `step` of a cycle on from the one outside it, so the nested sheets show the palette's run of colours.
+function filmArchPalette(film, centre, tints, pane = "#F4F8FF", glow = 60, step = 0.17) = concat(
+  [magicFilmed({ color: pane, roughness: 0.02, emissive: glow, glass { depth: 0.04, ior: 1.2 } }, film, centre)],
+  map(range(0, length(tints)), k => magicFilmed(
+    { color: tints[k], roughness: 0.03, emissive: glow, glass { depth: 0.012, ior: 1.05 } }, film, centre, phase: ((k + 1) * step)
+  ))
+)
 
 // A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
 // drum shade `shade` in radius and `pendantShadeHeight` tall whose foot is `drop` metres under the ceiling, and across

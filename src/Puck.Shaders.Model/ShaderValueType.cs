@@ -5,8 +5,8 @@ namespace Puck.Shaders;
 
 /// <summary>The type of one manifest-declared value — a push-constant field or a config field — in HLSL's own
 /// spelling (<c>float</c>, <c>float2</c>, <c>uint</c>, <c>int4</c>, …), which is each member's JSON string. Every type
-/// is one to four 32-bit components; the component kind (<see cref="ShaderScalarKind"/>) and count derive from the
-/// value.</summary>
+/// but <see cref="Uint64"/> is one to four 32-bit components; the component kind (<see cref="ShaderScalarKind"/>) and
+/// count derive from the value.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderValueType>))]
 public enum ShaderValueType {
     /// <summary>One 32-bit float.</summary>
@@ -45,6 +45,11 @@ public enum ShaderValueType {
     /// <summary>Four signed 32-bit integers.</summary>
     [JsonStringEnumMemberName(name: "int4")]
     Int4 = 0x34,
+    /// <summary>One unsigned 64-bit integer, only as a buffer's element: the type a kernel's 64-bit atomics act on
+    /// (<c>RWStructuredBuffer&lt;uint64_t&gt;</c>), which every device Puck creates supports (Vulkan's required
+    /// <c>shaderInt64</c> and <c>shaderBufferInt64Atomics</c>, Direct3D 12's required shader model 6.6).</summary>
+    [JsonStringEnumMemberName(name: "uint64")]
+    Uint64 = 0x41,
 }
 /// <summary>The component kind of a <see cref="ShaderValueType"/>.</summary>
 public enum ShaderScalarKind {
@@ -54,6 +59,8 @@ public enum ShaderScalarKind {
     Uint = 2,
     /// <summary>A signed 32-bit integer component.</summary>
     Int = 3,
+    /// <summary>An unsigned 64-bit integer component (<see cref="ShaderValueType.Uint64"/>).</summary>
+    Uint64 = 4,
 }
 /// <summary>Derived facts about a <see cref="ShaderValueType"/>.</summary>
 public static class ShaderValueTypes {
@@ -91,10 +98,12 @@ public static class ShaderValueTypes {
     /// <param name="type">The value type.</param>
     /// <returns>The scalar kind.</returns>
     public static ShaderScalarKind ScalarKind(this ShaderValueType type) => ((ShaderScalarKind)(((uint)type) >> 4));
-    /// <summary>Gets the byte size of a whole value (<see cref="ComponentCount"/> × <see cref="ComponentBytes"/>).</summary>
+    /// <summary>Gets the byte size of a whole value: <see cref="ComponentCount"/> × <see cref="ComponentBytes"/>, and
+    /// eight for <see cref="ShaderValueType.Uint64"/>.</summary>
     /// <param name="type">The value type.</param>
     /// <returns>The byte size.</returns>
-    public static uint SizeBytes(this ShaderValueType type) => (type.ComponentCount() * ComponentBytes);
+    public static uint SizeBytes(this ShaderValueType type) =>
+        (type.ComponentCount() * ((type.ScalarKind() == ShaderScalarKind.Uint64) ? (2 * ComponentBytes) : ComponentBytes));
     /// <summary>Gets the HLSL spelling (<c>float</c>, <c>uint2</c>, …), which is also the manifest's JSON string.</summary>
     /// <param name="type">The value type.</param>
     /// <returns>The spelling.</returns>
@@ -103,6 +112,7 @@ public static class ShaderValueTypes {
             ShaderScalarKind.Float => "float",
             ShaderScalarKind.Uint => "uint",
             ShaderScalarKind.Int => "int",
+            ShaderScalarKind.Uint64 => "uint64_t",
             _ => throw new ArgumentOutOfRangeException(
             nameof(type),
             type,

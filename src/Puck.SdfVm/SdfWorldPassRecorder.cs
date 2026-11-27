@@ -1057,10 +1057,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             member: SdfWorldPackage.VisibilityRecords,
             set: set
         );
-        tables.WriteMeshBuffer(
+        tables.WriteMeshAccumulation(
             bound: ref m_meshSetBuffers[meshSet][MeshSetGlassSums],
             buffer: (Accumulates ? recording.Outputs[2].Buffer! : tables.DummyBuffer),
-            member: SdfWorldPackage.GlassSumsWritten,
             set: set
         );
 
@@ -1086,7 +1085,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+            tables.WriteMeshAccumulation(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, set: occlusionSet);
             occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
                 target: ((twoPhase && (phase != 0)) ? target.ImageViewHandle : tables.SampledFiller.ImageViewHandle));
         }
