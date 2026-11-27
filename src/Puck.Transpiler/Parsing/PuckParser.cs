@@ -305,7 +305,7 @@ public static partial class PuckParser {
             if (diagnostics is null) {
                 throw;
             }
-            var internalMessage = InternalFault(fault: internalError);
+            var internalMessage = UnreadableStatementReason(fault: internalError);
 
             diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: internalMessage, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
             SynchronizeToStatementBoundary(context: context);
@@ -369,7 +369,7 @@ public static partial class PuckParser {
         } catch (Exception ex) when ((diagnostics is not null)) {
             var (code, offset, faultLine, faultCol, message) = (((ex as PuckParseException) is { } pex)
                 ? (pex.Code, pex.Offset, pex.Line, pex.Column, ReasonOf(buffer: context.Scanner.Buffer, fault: pex))
-                : (PuckDiagnosticCodes.Syntax, startOffset, line, col, InternalFault(fault: ex))
+                : (PuckDiagnosticCodes.Syntax, startOffset, line, col, UnreadableStatementReason(fault: ex))
             );
 
             diagnostics.ReportError(code: code, message: message, span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
@@ -2065,7 +2065,7 @@ public static partial class PuckParser {
                 if (!string.Equals(a: respelled, b: text, comparisonType: StringComparison.Ordinal)) {
                     owned.Bag?.ReportError(
                         code: PuckDiagnosticCodes.OperandColonChannel,
-                        message: DiagnosticText.Compose(fix: $"Write it with dots: '{respelled}'", problem: $"'{text}' spells a reserved channel with colons"),
+                        message: DiagnosticText.Compose(fix: $"Write it as '{respelled}'", problem: $"'{text}' spells a reserved channel with colons"),
                         span: span
                     );
                 }
@@ -2260,7 +2260,7 @@ public static partial class PuckParser {
     }
     // The text for a statement the parser stopped on without a syntax fault of its own: the exception says what it
     // hit, since the author can only act on the statement by simplifying it and reporting the defect.
-    private static string InternalFault(Exception fault) => DiagnosticText.Compose(
+    private static string UnreadableStatementReason(Exception fault) => DiagnosticText.Compose(
         fix: "This is a defect in the compiler. Simplify the statement to read the rest of the document, and report it with the statement that triggers it",
         problem: $"The parser stopped on an internal error ({fault.GetType().Name}: {fault.Message}) while reading this statement"
     );

@@ -1,5 +1,10 @@
 # Diagnostics an author hits most
 
+[docs/reference/diagnostics.md](../../../../docs/reference/diagnostics.md) explains every code with its cause, an
+example and the fix; each message prints its anchor. A message is built through `DiagnosticText`
+(`src/Puck.Assets/Documents/DiagnosticText.cs`): what is wrong and the name involved, then how to fix it, then the
+corrected form where one exists. A new code gets an entry on that page in the same change (a law fails without one).
+
 The full catalog is declared once, in
 [`PuckDiagnosticCodes.cs`](../../../../src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs),
 and narrated with examples in

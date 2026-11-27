@@ -45,14 +45,6 @@ public static class DiagnosticText {
             problem: $"'{what}' holds at most {capacity.ToString(provider: CultureInfo.InvariantCulture)} {noun}, and {used.Count.ToString(provider: CultureInfo.InvariantCulture)} are written: {List(items: used)}"
         );
     }
-    /// <summary>Writes the message for a value of the wrong type.</summary>
-    /// <param name="subject">What was written, such as <c>The field 'visible'</c>.</param>
-    /// <param name="expected">The type the field takes.</param>
-    /// <param name="actual">The type the written value has.</param>
-    /// <param name="fix">How to fix it, or <see langword="null"/>.</param>
-    /// <returns>For example: <c>The field 'visible' takes a bool, and the value written is a number.</c></returns>
-    public static string Expected(string subject, string expected, string actual, string? fix = null) =>
-        Compose(fix: fix, problem: $"{subject} takes {Article(noun: expected)}, and the value written is {Article(noun: actual)}");
     /// <summary>Spells a short list of names for a message: all of them when few, then a count of the rest.</summary>
     /// <param name="items">The names, in the order they were written.</param>
     /// <returns>For example <c>'a', 'b' and 'c'</c>, or <c>'a', 'b', 'c', 'd', 'e' and 3 more</c>.</returns>

@@ -74,7 +74,7 @@ public class ClockSpellingLawTests {
 
         // The section's clock, the block's, and the two object literals'.
         Assert.Equal(expected: 4, actual: refusals.Length);
-        Assert.All(collection: refusals, action: static refusal => Assert.Contains(expectedSubstring: "write 'clock: day'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal));
+        Assert.All(collection: refusals, action: static refusal => Assert.Contains(expectedSubstring: "Write it bare: 'clock: day'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void AQuotedEaseIsRefusedNamingTheBareWord() {
@@ -83,6 +83,6 @@ public class ClockSpellingLawTests {
             predicate: static diagnostic => string.Equals(a: diagnostic.Code, b: PuckDiagnosticCodes.ArgumentWrittenBare, comparisonType: StringComparison.Ordinal)
         );
 
-        Assert.Contains(expectedSubstring: "write 'ease: Smooth'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "Write it bare: 'ease: Smooth'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
     }
 }

@@ -242,12 +242,15 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             if (Composition.WorldSourceIndex.Declaration(path: sourcePath) is not { } declaration) {
                 var faults = Composition.WorldSourceIndex.ParseFaults(path: sourcePath);
 
-                reason = DiagnosticText.Compose(
-                    fix: ((faults.Count == 0)
-                        ? $"Compile '{sourcePath}' alone to read its faults"
-                        : $"Fix the {((faults.Count == 1) ? "error" : "errors")} in '{sourcePath}' and compile again"
-                    ),
-                    problem: $"The imported source '{name}' does not parse, so the importer cannot tell whether it is a library or a document{((faults.Count == 0) ? string.Empty : $". It reports:\n{Diagnostic.Summarize(diagnostics: faults, filePath: sourcePath)}")}"
+                var intro = DiagnosticText.Compose(problem: $"The imported source '{name}' does not parse, so the importer cannot tell whether it is a library or a document");
+                var fix = ((faults.Count == 0)
+                    ? DiagnosticText.Compose(problem: $"Compile '{sourcePath}' alone to read its faults")
+                    : DiagnosticText.Compose(problem: $"Fix {((faults.Count == 1) ? "that error" : "those errors")} in '{sourcePath}' and compile again")
+                );
+
+                reason = ((faults.Count == 0)
+                    ? $"{intro} {fix}"
+                    : $"{intro} The source reports:\n{Diagnostic.Summarize(diagnostics: faults, filePath: sourcePath)}\n{fix}"
                 );
 
                 return false;

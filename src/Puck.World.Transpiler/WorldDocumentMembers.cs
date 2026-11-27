@@ -280,13 +280,21 @@ internal static class WorldDocumentMembers {
             .Select(selector: static member => member.Name)
             .ToArray();
 
+        var suggestion = DocumentNearestNames.Suggestion(candidates: known, name: key);
+
+        // With no name near the written one, the members the type does take are the nearest help there is.
+        if ((suggestion.Length == 0) && (known.Length > 0)) {
+            suggestion = $" It takes {string.Join(separator: ", ", values: known.Take(count: MaxListedMembers).Select(selector: static name => $"'{name}'"))}{((known.Length > MaxListedMembers) ? $" and {known.Length - MaxListedMembers} more" : string.Empty)}.";
+        }
+
         return string.Concat(
-            DiagnosticText.Compose(problem: $"'{key}' is not a member of {type.Name} in this build's schema, at {location}"),
-            DocumentNearestNames.Suggestion(candidates: known, name: key),
+            DiagnosticText.Compose(problem: $"'{key}' is not a member of {location} ({type.Name}) in this build's schema"),
+            suggestion,
             " ",
             DiagnosticText.Compose(problem: "If the member is new, this build of the compiler or the engine may be older than the document: rebuild the CLI and the engine from the same source and compile again")
         );
     }
+    private const int MaxListedMembers = 12;
     private static void OrderMembers(JsonObject obj, IReadOnlyList<WorldModelMember> members) {
         if (obj.Count < 2) { return; }
         var rank = Ranks.GetValue(key: members, derive: static list => {

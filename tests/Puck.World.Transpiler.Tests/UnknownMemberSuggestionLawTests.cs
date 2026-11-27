@@ -24,6 +24,8 @@ public sealed class UnknownMemberSuggestionLawTests {
         var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
         Assert.Contains(expectedSubstring: "'secondz' is not a member of", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'seconds'?", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "may be older than the document", actualString: finding.Message);
     }
     [Fact]
     public void AnUnknownMemberFarFromEveryDeclaredMemberSuggestsNothing() {
@@ -31,5 +33,7 @@ public sealed class UnknownMemberSuggestionLawTests {
         var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
         Assert.Contains(expectedSubstring: "'bogusMember' is not a member of", actualString: finding.Message);
+        Assert.DoesNotContain(expectedSubstring: "Did you mean", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "It takes 'seconds'", actualString: finding.Message);
     }
 }

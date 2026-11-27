@@ -407,7 +407,7 @@ outside any rule body.
 An enum member is spelled like a `let` or a module parameter in the same scope, or two enums in scope declare the same
 member and it is read bare.
 
-Fix: rename one, or read the member qualified: `Element.Air`.
+Fix: rename one, or read the member qualified with its enum, written enum name, a dot, then the member name.
 
 ### PUCK116
 
@@ -646,7 +646,7 @@ Fix: use one of the family's indexes, which the message lists.
 
 An enum, or an enum member, is not declared.
 
-Example: `Element.Smoke` where `Element` has no `Smoke`.
+Example: a read of the member `Smoke` of an enum `Element` that declares no such member.
 
 Fix: declare it with `enum Element { Air, Smoke }`. The message lists the members and suggests the nearest.
 
@@ -801,6 +801,15 @@ A state row or a record field names an enum the composed world does not declare.
 
 Fix: declare it with `enum Name { ... }` here or in the basis. A cell kind (`: Int`) is never written; see
 [PUCK107](#puck107).
+
+### PUCK106
+
+An operand spells a reserved channel with colons.
+
+Example: `$reduce:count:zone`.
+
+Fix: write the channel as a call, `count(zone)`, and a rule local by its bare name. The message shows the spelling to
+use.
 
 ### PUCK107
 

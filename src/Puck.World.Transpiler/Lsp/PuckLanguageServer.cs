@@ -1505,7 +1505,7 @@ public sealed partial class PuckLanguageServer {
         }
     }
     private static string? ExtractWrittenName(string code, string message) {
-        // For PUCK135 ("Template 'foo' has no parameter 'bar'; nearest: ..."), the written name is after "no parameter '".
+        // For PUCK135 ("Template 'foo' has no parameter 'bar'. Did you mean ..."), the written name is after "no parameter '".
         if (code == PuckDiagnosticCodes.TemplateArgument) {
             const string ParamMarker = "no parameter '";
             var idx = message.IndexOf(comparisonType: StringComparison.Ordinal, value: ParamMarker);
@@ -1536,10 +1536,6 @@ public sealed partial class PuckLanguageServer {
             var open = text.IndexOf(startIndex: index, value: '\'');
 
             if (open < 0) {
-                break;
-            }
-            // Stop once past the nearest list (e.g. before "(parameters: ...)").
-            if ((names.Count > 0) && text[index..open].Contains(value: '(')) {
                 break;
             }
             var close = text.IndexOf(startIndex: (open + 1), value: '\'');

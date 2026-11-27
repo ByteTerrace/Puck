@@ -1057,13 +1057,13 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!value.IsAuthorable(definition: definition)) {
-            errors.Add(item: DiagnosticText.Compose(fix: $"A value here {BindableScalar.Grammar}", problem: $"'{path}' holds {value}, which is not a value this field accepts"));
+            errors.Add(item: $"{path} {value} {BindableScalar.Grammar}.");
 
             return;
         }
 
         if ((value.Literal is { } literal) && !field.Domain.Contains(value: literal)) {
-            errors.Add(item: DiagnosticText.Compose(fix: $"Write a finite number within {field.Domain}", problem: $"'{path}' is {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, which is outside {field.Domain}{Because(field: field)}"));
+            errors.Add(item: DiagnosticText.Compose(fix: "Change it to a value inside that range", problem: $"{path} {literal} must be finite and within {field.Domain}{Because(field: field)}"));
         }
 
         if (value.Keys is { } keys) {
@@ -1079,7 +1079,7 @@ public static partial class WorldDefinitionValidator {
             if (keys.Keys[index].Value.Keys is { } nested) {
                 JudgeKeys(errors: errors, field: field, keys: nested, path: keyPath);
             } else if (keys.Keys[index].Value.Literal is { } literal && !field.Domain.Contains(value: literal)) {
-                errors.Add(item: DiagnosticText.Compose(fix: $"Write a finite number within {field.Domain}", problem: $"'{keyPath}' is {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, which is outside {field.Domain}{Because(field: field)}"));
+                errors.Add(item: DiagnosticText.Compose(fix: "Change it to a value inside that range", problem: $"{keyPath} {literal} must be finite and within {field.Domain}{Because(field: field)}"));
             }
         }
     }

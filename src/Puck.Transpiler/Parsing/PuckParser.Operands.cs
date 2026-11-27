@@ -132,7 +132,7 @@ public static partial class PuckParser {
 
         if (!string.Equals(a: respelled, b: operand.Text, comparisonType: StringComparison.Ordinal)) {
             diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandColonChannel,
-                message: DiagnosticText.Compose(fix: $"Write it with dots: '{respelled}'", problem: $"'{operand.Text}' spells a reserved channel with colons"), span: operand.Span);
+                message: DiagnosticText.Compose(fix: $"Write it as '{respelled}'", problem: $"'{operand.Text}' spells a reserved channel with colons"), span: operand.Span);
         } else if ((operand.Syntax is null) && (diagnostics is not null)) {
             diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
                 message: $"'{operand.Text}' {operand.SyntaxError}", span: operand.Span);

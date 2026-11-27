@@ -48,7 +48,7 @@ public sealed class DiagnosticMessageLawTests {
 
         _ = PuckParser.ParseDocumentWithDiagnostics(diagnostics: diagnostics, source: "x: $\"{unclosed\"\n}\n");
 
-        var error = Assert.Single(collection: diagnostics.Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)));
+        var error = Assert.Single(collection: diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
         Assert.Contains(expectedSubstring: "no '}' closes", actualString: error.Message);
     }
@@ -58,7 +58,7 @@ public sealed class DiagnosticMessageLawTests {
 
         _ = PuckParser.ParseDocumentWithDiagnostics(diagnostics: diagnostics, source: "let a = 1\n}\n");
 
-        var error = Assert.Single(collection: diagnostics.Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)));
+        var error = Assert.Single(collection: diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
         Assert.Contains(expectedSubstring: "where no block is open", actualString: error.Message);
         Assert.Contains(expectedSubstring: "Remove it", actualString: error.Message);
