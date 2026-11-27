@@ -39,6 +39,56 @@ public sealed class CartridgePanelTextTests {
         });
     }
 
+    // The Deck has no panel, so it is held to the long array alone: a far element read and written through a wide index.
+    [Fact]
+    public void TheDeckReadsAndWritesAFarElementThroughAWideIndex() {
+        var initial = new int[(FarElement + 1)];
+
+        initial[FarElement] = FarValue;
+        initial[NearElement] = NearValue;
+
+        var document = (CartridgeDocuments.Create(target: "hgd", title: "LONGARRAY") with {
+            Variables = [
+                new CartridgeVariable(Name: "cursor", Initial: FarElement, Max: 1000),
+                new CartridgeVariable(Name: "far", Initial: 0),
+                new CartridgeVariable(Name: "near", Initial: 0),
+                new CartridgeVariable(Name: "written", Initial: 0),
+            ],
+            Arrays = [new CartridgeArray(Name: "text", Initial: initial)],
+            Rules = [new CartridgeRule(Name: "read", Body: [
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "far"), Value: CartridgeExpressions.Of(state: "text", key: "cursor")),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "near"), Value: CartridgeExpressions.Of(state: "text", key: $"{NearElement}")),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "text", Key: "cursor"), Operation: Puck.State.ExpressionOp.Add, Value: CartridgeExpressions.Of(constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(State: "written"), Value: CartridgeExpressions.Of(state: "text", key: "cursor")),
+            ])],
+        });
+
+        Assert.Empty(collection: CartridgeDocuments.Validate(document: document));
+
+        var compiled = new Puck.HumbleGamingDeck.Forge.DeckCartridgeCompiler().Compile(document: document);
+
+        using var instance = Puck.HumbleGamingDeck.HgdMachineFactory.Create(configuration: new Puck.HumbleGamingDeck.HgdMachineConfiguration(cartridge: Puck.HumbleGamingDeck.HgdCartridge.Load(image: compiled.Rom)));
+        var machine = instance.Machine;
+
+        while (machine.FrameIndex < 1) {
+            machine.RunCycles(masterTicks: 4096UL);
+        }
+
+        var frame = machine.FrameIndex;
+
+        // The rule adds one to the far element every frame, and reads it back after the add.
+        while (machine.FrameIndex < (frame + 4)) {
+            machine.RunCycles(masterTicks: 4096UL);
+        }
+
+        var far = machine.Bus.Peek(address: ((ushort)compiled.Variables["far"]));
+        var written = machine.Bus.Peek(address: ((ushort)compiled.Variables["written"]));
+
+        Assert.Equal(expected: NearValue, actual: machine.Bus.Peek(address: ((ushort)compiled.Variables["near"])));
+        Assert.True(condition: (far > FarValue), userMessage: $"far {far}");
+        Assert.Equal(expected: (far + 1), actual: written);
+    }
+
     [InlineData("cgb")]
     [InlineData("agb")]
     [Theory]

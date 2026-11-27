@@ -435,15 +435,20 @@ public static class CartridgeCost {
 
         // A layer costs its visibility test and, when drawn, two scroll writes — the shape of an ordinary step. A
         // raster row costs far more, because the advanced machine republishes a whole scanline table for each band.
-        var total = CostBound.Known(cycles:
-            (((((document.Sprites?.Length ?? 0) * profile.Sprite)
-            + (((document.Layers?.Length ?? 0) * profile.StepSet) * 3))
-            + (((document.Raster?.Length ?? 0) == 0)
-            ? 0L
-            : (profile.RasterSetup + ((document.Raster?.Length ?? 0) * profile.RasterRow))))
-            + (((document.Sounds?.Length ?? 0) == 0)
-            ? 0L
-            : profile.Sound)));
+        var rows = (document.Raster?.Length ?? 0);
+        var total = CostBound.Add(
+            left: CostBound.Known(cycles:
+                ((((document.Sprites?.Length ?? 0) * profile.Sprite)
+                + (((document.Layers?.Length ?? 0) * profile.StepSet) * 3))
+                + (((document.Sounds?.Length ?? 0) == 0)
+                ? 0L
+                : profile.Sound))),
+            right: ((rows == 0)
+                ? CostBound.Zero
+                : (((profile.RasterSetup is { } setup) && (profile.RasterRow is { } row))
+                    ? CostBound.Known(cycles: (setup + (rows * row)))
+                    : CostBound.Unmodeled(reason: $"Profile '{profile.Name}' prices a machine that compiles no mid-picture scroll changes.")))
+        );
         // A guard is tested whether or not it holds, so every rule's conditions are charged.
         var rules = (document.Rules ?? []);
 

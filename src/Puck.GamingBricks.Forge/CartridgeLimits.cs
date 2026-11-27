@@ -19,7 +19,7 @@ public static class CartridgeLimits {
     /// <summary>The maximum number of named arrays.</summary>
     public const int ArrayCount = 32;
     /// <summary>The elements a byte index reaches. An array may be longer, up to <see cref="ArrayByteCount"/>; its
-    /// elements past this are reached only through a sixteen-bit index (<see cref="CartridgeExpressions.WideIndex"/>).</summary>
+    /// elements past this are reached only through a sixteen-bit index (<see cref="CartridgeExpressions.ReadsWide"/>).</summary>
     public const int ArrayLength = 256;
     /// <summary>The blend weight that leaves the translucent surface fully opaque.</summary>
     public const int BlendWeights = 16;
@@ -30,6 +30,10 @@ public static class CartridgeLimits {
     /// entirely near 168 cells.
     /// </summary>
     public const int BlitCellCount = 120;
+    /// <summary>The number of colours in the Deck's fixed master palette, which an hgd palette entry indexes.</summary>
+    public const int DeckColourCount = 64;
+    /// <summary>The maximum number of background or object palettes on the Deck.</summary>
+    public const int DeckPaletteCount = 4;
     /// <summary>The maximum number of conditions in one rule.</summary>
     public const int ConditionCount = 8;
     /// <summary>The fade amount that reaches the target colour completely.</summary>

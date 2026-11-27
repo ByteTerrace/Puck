@@ -18,51 +18,62 @@ public static class ApuNotePeriod {
     private static readonly int[] LetterSemitones = [9, 11, 0, 2, 4, 5, 7];
 
     /// <summary>Resolves a note name in scientific pitch notation (a letter A through G, an optional <c>#</c>, and an
-    /// octave, such as <c>"C5"</c> or <c>"G#2"</c>) to its equal-tempered frequency in millihertz.</summary>
-    /// <param name="noteName">The note name. Its octave is any whose period fits the 11-bit register
-    /// (<see cref="Period"/>): C2 through B8.</param>
-    /// <returns>The frequency in millihertz, rounded to the nearest.</returns>
-    /// <exception cref="ArgumentException"><paramref name="noteName"/> is empty, is not a note name, or names a note
-    /// too low for the period register.</exception>
-    public static int MillihertzFor(string noteName) {
+    /// octave, such as <c>"C5"</c> or <c>"G#2"</c>) to its place in semitones: twelve times its octave plus its semitone
+    /// above C, so C4 is 48 and every note a semitone higher counts one more.</summary>
+    /// <param name="noteName">The note name, octave 2 through 8; B#8 is refused, being C9.</param>
+    /// <returns>The note's semitone number, 24 (C2) through 107 (B8).</returns>
+    /// <exception cref="ArgumentException"><paramref name="noteName"/> is empty, is not a note name, or lies outside
+    /// octaves 2 through 8.</exception>
+    public static int Semitone(string noteName) {
         ArgumentException.ThrowIfNullOrEmpty(noteName);
 
         var letter = (noteName[0] - 'A');
         var sharp = ((noteName.Length > 1) && (noteName[1] == '#'));
-        var octaveText = noteName[(sharp ? 2 : 1)..];
+        // B# is the next octave's C, so the semitone count simply carries.
+        var semitone = ((letter is >= 0 and <= 6)
+            && int.TryParse(s: noteName[(sharp ? 2 : 1)..], style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var octave)
+            ? (((octave * 12) + LetterSemitones[letter]) + (sharp ? 1 : 0))
+            : -1);
 
-        if (
-            (letter is < 0 or > 6) ||
-            !int.TryParse(s: octaveText, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var octave) ||
-            (octave is < 2 or > 8)
-        ) {
+        if (semitone is < (2 * 12) or >= (9 * 12)) {
             throw new ArgumentException(
                 message: $"'{noteName}' is not a recognized note name (expected a letter A-G, an optional '#', and an octave 2..8, such as \"C5\" or \"G#2\").",
                 paramName: nameof(noteName)
             );
         }
 
-        var semitone = (LetterSemitones[letter] + (sharp ? 1 : 0));
-
-        // B# is the next octave's C.
-        if (semitone == 12) {
-            semitone = 0;
-            ++octave;
-        }
-
+        return semitone;
+    }
+    /// <summary>Resolves a note name (<see cref="Semitone"/>) to its equal-tempered frequency in millihertz. Octaves 2
+    /// through 8 all fit the 11-bit period register (<see cref="Period"/>).</summary>
+    /// <param name="noteName">The note name, octave 2 through 8.</param>
+    /// <returns>The frequency in millihertz, rounded to the nearest.</returns>
+    /// <exception cref="ArgumentException"><paramref name="noteName"/> is not a note name in that range.</exception>
+    public static int MillihertzFor(string noteName) {
+        var semitone = Semitone(noteName: noteName);
+        var octave = (semitone / 12);
         var microhertz = ((octave >= 4)
-            ? (OctaveFourMicrohertz[semitone] << (octave - 4))
-            : (OctaveFourMicrohertz[semitone] >> (4 - octave)));
-        var millihertz = ((int)((microhertz + 500) / 1000));
+            ? (OctaveFourMicrohertz[(semitone % 12)] << (octave - 4))
+            : (OctaveFourMicrohertz[(semitone % 12)] >> (4 - octave)));
 
-        if ((131_072_000L / millihertz) > 2048) {
-            throw new ArgumentException(
-                message: $"'{noteName}' is below the lowest note the period register reaches (C2).",
-                paramName: nameof(noteName)
-            );
-        }
+        return ((int)((microhertz + 500) / 1000));
+    }
+    /// <summary>Resolves the period of a divided timer, the form the Deck's tone channels take: a counter reloaded from
+    /// the period that steps a waveform of <paramref name="steps"/> slots, so <c>f = clock / (steps * (period + 1))</c>
+    /// and <c>period = round(clock / (steps * f)) - 1</c>, in integers over millihertz.</summary>
+    /// <param name="millihertz">The note frequency, in millihertz (&gt; 0).</param>
+    /// <param name="clockHertz">The timer's input clock, in hertz (&gt; 0).</param>
+    /// <param name="steps">The timer periods one waveform cycle spans (&gt; 0): 16 for a pulse, 32 for a triangle.</param>
+    /// <returns>The period register value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">An argument is not positive.</exception>
+    public static int DividedPeriod(int millihertz, long clockHertz, int steps) {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: millihertz, other: 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: clockHertz, other: 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: steps, other: 0);
 
-        return millihertz;
+        var divisor = (((long)steps) * millihertz);
+
+        return ((int)((((clockHertz * 1000L) + (divisor / 2)) / divisor) - 1));
     }
     /// <summary>Resolves the 11-bit period register value for a frequency: <c>period = 2048 - round(131072 Hz / f)</c>
     /// — pure integer math over millihertz so every build emits identical bytes.</summary>

@@ -122,10 +122,11 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | Field | Meaning and limits |
 |---|---|
 | `schema` | Exactly `puck.cartridge.v1`. |
-| `target` | `cgb`, `dmg` or `agb`. `cgb` uses the Color hardware at double speed and its image refuses to run on a DMG; `dmg` builds for the monochrome machine at single speed, which a Color machine also runs in its compatibility mode. |
+| `target` | `cgb`, `dmg`, `agb` or `hgd`. `cgb` uses the Color hardware at double speed and its image refuses to run on a DMG; `dmg` builds for the monochrome machine at single speed, which a Color machine also runs in its compatibility mode; `hgd` builds a 6502 image for the [Humble Gaming Deck](../hgd/README.md#compiled-cartridges). |
+| `board` | Optional, `hgd` only: `nrom`, `mmc1` or `mmc3`. Absent lets the compiler pick the smallest board the image fits. A battery `save` needs `mmc1` or `mmc3`. |
 | `title` | 1–12 printable ASCII characters, canonicalized to uppercase. |
 | `gameCode` | Four ASCII characters; used by the AGB header. |
-| `palettes` | `{background,object}`, each 1–8 palettes on CGB and DMG or 1–16 on AGB. A palette is 4 RGB555 integers on CGB and DMG, 16 on AGB. DMG shades each colour by its luma into one of four greys, the background from the first palette and sprites from the first two. Object color zero is transparent. |
+| `palettes` | `{background,object}`, each 1–8 palettes on CGB and DMG, 1–16 on AGB or 1–4 on HGD. A palette is 4 RGB555 integers on CGB and DMG, 16 on AGB, and 4 master-palette indices (0–63) on HGD, where colour zero of every palette is the first background palette's first colour. DMG shades each colour by its luma into one of four greys, the background from the first palette and sprites from the first two. Object color zero is transparent. |
 | `tiles` | 1–256 named 8×8 tiles. Each `pixels` array has eight strings of eight hexadecimal palette indices. Sprite color zero is transparent. |
 | `map` | Exactly 1024 tile indices, row-major over a 32×32 background. |
 | `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. DMG accepts every per-cell selection (here, a map step's `palette`, a screen's `palettes`) and shades every cell from palette zero. |
@@ -374,7 +375,8 @@ memory addresses for debugging and memory watches.
 
 This version supports background maps written at run time, byte and wide state,
 addressable byte arrays, sprites, cartridge audio and battery-backed state on every
-target. ROM banking and visual editing are not yet part of this document schema. A blit compiles and runs on every target;
+target. The hgd target's `board` selects banked ROM, and its compiler places data in
+the banks; visual editing is not yet part of this document schema. A blit compiles and runs on every target;
 its display-off interval is not priced as ordinary frame work. Existing Tune audio
 documents retain their separate compiler. These boundaries are explicit so
 an editor cannot silently discard unsupported authored data.

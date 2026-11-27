@@ -17,12 +17,16 @@ this file is corrected in the same change.
 | The cartridge `.puck` vocabulary | `src/Puck.GamingBricks.Transpiler` |
 | Native SM83 compiler for the cgb and dmg targets (code, 2bpp tiles, maps, palettes or shade registers) | `HgbCartridgeCompiler` in `src/Puck.HumbleGamingBrick.Forge` |
 | Native AGB compiler (Thumb code, mode-0 4bpp graphics) | `AgbCartridgeCompiler` in `src/Puck.AdvancedGamingBrick.Forge` |
+| Native Deck compiler for the hgd target (6502 code, NROM/MMC1/MMC3 banking, its own sound streams) | `DeckCartridgeCompiler`, `DeckCartridgeEmitter`, `DeckSoundCompiler` in `src/Puck.HumbleGamingDeck.Forge`; assembled by `DeckProgram` |
+| Target-independent lowering every compiler shares: gate composition, if/repeat/break, state, array and save layout | `CartridgeRuleLowering`, `CartridgeStateLayout` in the shared forge package |
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
 | Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
-| Shipped sources | `worlds/debug/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world lists in a machine's `contentFolders`), authored source only; `shared/` holds the modules several targets import, each declaring `schema: "puck.cartridge.v1"` so a world-source walk of the package never takes it for a world module |
+| Shipped sources | `worlds/debug/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, and `deck/` for `*.hgd.puck` beside the `.deck` selections, which a world lists in a machine's `contentFolders`), authored source only; `shared/` holds the modules several targets import, each declaring `schema: "puck.cartridge.v1"` so a world-source walk of the package never takes it for a world module |
 
-Both compilers consume the same rules, variables, sprites and input conditions.
+Every compiler consumes the same rules, variables, sprites and input conditions, through
+`CartridgeRuleLowering`: a compiler supplies labels, jumps, one comparison, a counted loop's
+three moves and its hardware steps, never a second copy of the control flow.
 Source data determines behavior: never add a game-name switch or copy gameplay
 into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets and
 `Puck.State`, never on World.
@@ -83,8 +87,9 @@ export and play always validate.
   `play`/`stop`/`save`/`load`). An operand is a `Puck.State.ExpressionProgram`;
   `CartridgeExpressions.Reads` is the admitted operation subset and anything
   outside it is refused at its own spelling.
-- **Targets differ; validation says how.** cgb, dmg and agb; byte and two-byte
-  state; no ROM banking. Consult the validator before calling a feature
+- **Targets differ; validation says how.** cgb, dmg, agb and hgd; byte and two-byte
+  state; ROM banking only on hgd, whose `board` (nrom, mmc1, mmc3, or absent for the
+  smallest that fits) the compiler places data across. Consult the validator before calling a feature
   portable. The light sensor `$light` exists only on `cgb`.
 - **Colour is per-palette:** up to 8 palettes on cgb and 16 on agb,
   `mapPalettes` per background cell, a sprite picks an object palette. The dmg
@@ -108,7 +113,7 @@ export and play always validate.
   `surface: "panel"` writes the declared window's map, not the background's;
   long text lives in an array past 256 elements, read through a wide slot
   (`text[cursor]`, `cursor += 1`), since a byte index reaches only the first
-  256 (`CartridgeExpressions.WideIndex`). Shared content such as the learning
+  256 (`CartridgeExpressions.ReadsWide`). Shared content such as the learning
   games' questions and glyphs is a `worlds/standard/learning/` library a
   cartridge imports by relative path; value functions and compile-time record
   members read in operands (`CartridgeOperand.FromOperand`), but an operand
@@ -130,6 +135,14 @@ export and play always validate.
 - **Saves.** `AgbSaveModule` needs its identifier text in the image or nothing
   persists; saves persist every byte.
 
+- **The Deck (hgd) is its own picture.** Palette entries are master-palette
+  indices 0-63, four palettes a bank, colour zero shared. The map wraps at 256 by
+  240 (rows 30-31 never show) and a cell's palette colours its 2x2 quadrant, so
+  align coloured regions to even rows and columns. No panel or raster rows: draw a
+  box into the map (the Moth Valley cartridge paints its question over the sky).
+  The wave voice is the triangle and carries no waveform. A save needs mmc1 or mmc3.
+  `DeckCartridgeEmitter`'s remarks hold the memory map and the frame.
+
 ## Cost is measured, never estimated
 
 `CartridgeCost` prices a document in abstract work units against
@@ -138,7 +151,7 @@ reports the frame bound and nothing refuses on it. Cost is advice, never a gate:
 do not add a cost refusal, because the one hard refusal is capacity
 (`CartridgeCapacityException`, an image that outgrew its machine). Weights come from
 `puck cartridge-cost`, which boots `CartridgeCostMeasurement`'s probe documents
-on both machines. Never hand-count an emitter's instructions into a weight or
+on each target's machine. Never hand-count an emitter's instructions into a weight or
 adjust a weight to make a document fit; a new primitive is measured by adding
 its shape to `CartridgeCostMeasurement.Shapes`. An unmeasured primitive prices
 as `CostBound.Unmodeled`, which poisons the whole estimate. Never compare unit

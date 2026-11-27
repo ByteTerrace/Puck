@@ -523,9 +523,12 @@ read again is refilled and republished whole.
   about their hits. The rows carry the patches after the lights
   (`SdfMeshProbeRelight.EmitterRows`, their count in the epoch row's fourth
   lane), and `RelightRays` prices one ray a patch in range. A group whose
-  shapes emit (`SdfMeshBakeGroup.Emits`) traces what it draws, never its floor
-  (`SdfMeshPathBake`'s `Group.Trace`), so its patches are its drawn surface.
-  Editing `Emits` or the bake group moves the bake identity. What the volume
+  shapes emit traces what it draws, never its floor, so its patches are its
+  drawn surface: the residency hands its bake the volume's test
+  (`SdfMeshPathBake.Emitting`), which the bake asks against the held program
+  each time it chooses a group's trace, so an emissive edit that keeps the
+  group reaches it. The bake only calls the test, so editing `Emits` or the
+  appearance moves no bake identity (`SdfMeshBakeClosureLawTests`). What the volume
   still leaves dark is in
   [open items](../../../../docs/plans/open-items.md#debug-tools) under
   "Emitters at night".
@@ -820,17 +823,33 @@ read again is refilled and republished whole.
   machinery, every held retired value's blocks, and object/array headers. A
   replaced table belongs only to readers already using it and stays valid
   until those readers finish; it is outside the current cache-owned reading.
-  The published table (`SdfWorldTables.PublishMeshIrradiance`) is copied on the
-  device from the feedback table; no frame uploads it from the host. It fits
-  the published volume exactly, is cleared before its first copies, retires
-  through the frame ring and increments the binding revision when replaced;
-  until the volume first publishes into a residency's tables the World set
-  binds the dummy buffer and the parameters are disabled. A moved window publishes each completed slot. A device reattach brings
-  new tables with no table: nothing publishes until a completed relight carries
-  the volume's full snapshot into the new feedback, then every slot republishes
-  at once (`RepublishAll`).
-  The GPU feedback table and the published table are distinct: a relight reads
-  completed prior batches, while views read the slots published for their current window.
+  The views read the probe service's feedback table itself, the one device copy
+  of the volume: a publication (`SdfWorldTables.PublishMeshIrradiance`) binds
+  it in the World set and moves the irradiance revision, and copies nothing.
+  Every write the service records into it (the snapshot and updates through
+  its region, a batch's commit) hands it to the views' stages
+  (`SdfWorldTables.TableReaders`), on the one queue the views use, so a view
+  may read records committed a few frames before their publication; each slot
+  carries its cell and the views reject another cell's, and a still view
+  stands until a publication moves the revision its signature folds. Until the
+  volume first publishes into a residency's tables, and while a relayout
+  replaces the feedback, the World set binds the dummy buffer and the
+  parameters are disabled (`SdfMeshIrradiance.Stage`). A retired feedback the
+  World sets bind is unbound at the next preparation
+  (`SdfWorldTables.SettleMeshIrradiance`) and disposed only after the upload
+  carrying the unbinding (`RetireBackgroundResource`). A moved window
+  publishes each completed slot. A device reattach brings new tables with no
+  table: nothing publishes until a completed relight carries the volume's full
+  snapshot into the new feedback, then every slot republishes at once
+  (`RepublishAll`).
+  The lighting reserves its device storage before it allocates it
+  (`SdfLightingHold`, under `SdfResidencySelector.LightingOwner`): the table,
+  the hit, camera-sample and batch caches of the layout the frame asks for,
+  and the trace words of the meshes the static draws name
+  (`SdfMeshIrradianceScene.EstimateGpuWords`), sized at every staging, so the
+  selector's elastic budget does not fall when the lighting first lights.
+  `world.residency`'s `lighting reserved=` line and `host.memory families`'
+  `reservation` rows read it.
   Feedback has a CPU shadow for reset snapshots; hierarchy staging streams
   from the scene arrays with only a root-word shadow. Upload buffers shrink
   after small flushes. `world.residency` reports scene, hit-cache and feedback

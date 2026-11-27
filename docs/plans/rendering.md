@@ -992,10 +992,9 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
     (their display share and the world's extent), share the spare pairs and
     the rectangle selections across the device's residencies, and allocate an
     entry when a view first reads it.
-  - **The irradiance volume** (the hit cache, the published and feedback
-    tables, the trace scene and its acceleration structures). Size the
-    tables by the probes a tier's windows hold, and keep one of the published
-    and feedback tables where the trace can write in place.
+  - **The irradiance volume** (the hit cache, the feedback table the views
+    bind, the trace scene and its acceleration structures). Size the table by
+    the probes a tier's windows hold.
   - **Per-pixel scratch sized for the worst case**: the glass sums
     (`SdfWorldPackage.GlassSumWords` a pixel for views that mostly show no
     glass) and the probe records. Allocate the glass sums by the tiles glass

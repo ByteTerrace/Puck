@@ -83,39 +83,23 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             widths[name] = slot.Width;
         }
 
-        var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
-        var lengths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var next = ((uint)ArrayBaseAddress);
+        var arrays = layout.ArrayOffsets.ToDictionary(
+            keySelector: static pair => pair.Key,
+            elementSelector: static pair => (ArrayBaseAddress + ((uint)pair.Value)),
+            comparer: StringComparer.Ordinal
+        );
+        var lengths = layout.ArrayLengths;
 
-        foreach (var array in document.Arrays) {
-            arrays[key: array.Name] = next;
-            lengths[key: array.Name] = array.Initial.Length;
-            next += ((uint)array.Initial.Length);
-        }
-        if (next > ArrayLimitAddress) {
+        if ((ArrayBaseAddress + layout.ArrayInitial.Length) > ArrayLimitAddress) {
             throw new ArgumentException(
-                message: $"Arrays need {(next - ArrayBaseAddress)} bytes; work RAM holds {(ArrayLimitAddress - ArrayBaseAddress)}.",
+                message: $"Arrays need {layout.ArrayInitial.Length} bytes; work RAM holds {(ArrayLimitAddress - ArrayBaseAddress)}.",
                 paramName: nameof(document)
             );
         }
 
         // The payload is the declared variables then the declared arrays, each mapped to its run of mirror bytes.
-        var persisted = new List<(uint Address, int Length)>();
-        var defaults = new List<byte>();
-
-        if (document.Save is { } declared) {
-            foreach (var name in declared.Variables) {
-                persisted.Add(item: (variables[name], layout.Slots[name].Width));
-                defaults.AddRange(collection: layout.InitialBytes(name: name));
-            }
-
-            foreach (var name in declared.Arrays) {
-                var array = document.Arrays.First(predicate: candidate => (candidate.Name == name));
-
-                persisted.Add(item: (arrays[name], array.Initial.Length));
-                defaults.AddRange(collection: array.Initial.Select(selector: static value => ((byte)value)));
-            }
-        }
+        var persisted = layout.SavePayload.Select(selector: run => ((run.IsArray ? arrays[run.Name] : variables[run.Name]), run.Length)).ToList();
+        var defaults = layout.SaveDefaults;
 
         var emitter = new Sm83Emitter();
         var arithmetic = new Sm83CartridgeArithmetic(emitter: emitter);
@@ -280,7 +264,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
         // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them. It is read once, at
         // boot, so it is placed after everything the running game reads from the fixed window and rides a switchable
         // bank when that window is full.
-        var arrayInitial = document.Arrays.SelectMany(selector: static array => array.Initial.Select(selector: static value => ((byte)value))).ToArray();
+        var arrayInitial = layout.ArrayInitial;
         var arrayData = Place(
             name: "arrays",
             bytes: ((arrayInitial.Length == 0)
@@ -348,6 +332,38 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter: emitter,
             spec: spec
         );
+        var lowering = new CartridgeRuleLowering(
+            newLabel: emitter.NewLabel,
+            mark: label => emitter.MarkLabel(label: label),
+            jump: label => emitter.JumpAbsolute(label: label),
+            compare: Compare,
+            assign: Act,
+            step: Step,
+            repeatEnter: index => {
+                emitter.XorA();
+                emitter.StoreAToAddress(address: ((ushort)variables[index]));
+            },
+            repeatTest: (index, count, exit) => {
+                emitter.LoadAFromAddress(address: ((ushort)variables[index]));
+                emitter.ArithmeticImmediate(
+                    op: AluOp.Compare,
+                    value: ((byte)count)
+                );
+                emitter.JumpAbsolute(
+                    condition: Condition.NoCarry,
+                    label: exit
+                );
+            },
+            repeatAdvance: index => {
+                emitter.LoadAFromAddress(address: ((ushort)variables[index]));
+                emitter.ArithmeticImmediate(
+                    op: AluOp.Add,
+                    value: 1
+                );
+                emitter.StoreAToAddress(address: ((ushort)variables[index]));
+            }
+        );
+
         emitter.MarkLabel(label: loop);
         FrameworkKernel.EmitHaltWait(emitter: emitter);
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.InputHeld);
@@ -498,19 +514,7 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 emitter.StoreAToAddress(address: SceneAddress);
             }
 
-            foreach (var rule in document.Rules) {
-                var end = emitter.NewLabel();
-
-                Gate(
-                    predicate: rule.When,
-                    fail: end
-                );
-                Statements(
-                    statements: rule.Body,
-                    breakLabel: -1
-                );
-                emitter.MarkLabel(label: end);
-            }
+            lowering.Rules(rules: document.Rules);
             Load(expression: document.ScrollX); emitter.StoreAToAddress(address: 0xFF43);
             Load(expression: document.ScrollY); emitter.StoreAToAddress(address: 0xFF42);
             EmitRasterUpdate();
@@ -595,62 +599,6 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 emitter.JumpAbsolute(label: done);
                 emitter.MarkLabel(label: hide); emitter.XorA(); emitter.StoreAToAddress(address: ((ushort)(0xC100 + (i * 4))));
                 emitter.MarkLabel(label: done);
-            }
-        }
-
-        // Jumps to fail when the gate misses; falls through when it holds. An absent gate always holds.
-        void Gate(ActionPredicate? predicate, int fail) {
-            switch (predicate) {
-                case null:
-                    return;
-                case ActionPredicate.All all:
-                    foreach (var inner in all.Predicates) {
-                        Gate(
-                        fail: fail,
-                        predicate: inner
-                    );
-                    }
-
-                    return;
-                case ActionPredicate.Any any: {
-                        var holds = emitter.NewLabel();
-
-                        foreach (var inner in any.Predicates) {
-                            var next = emitter.NewLabel();
-
-                            Gate(
-                                fail: next,
-                                predicate: inner
-                            );
-                            emitter.JumpAbsolute(label: holds);
-                            emitter.MarkLabel(label: next);
-                        }
-
-                        emitter.JumpAbsolute(label: fail);
-                        emitter.MarkLabel(label: holds);
-
-                        return;
-                    }
-                case ActionPredicate.Not not: {
-                        // The inner gate jumps away when it MISSES, which is exactly when this one holds.
-                        var holds = emitter.NewLabel();
-
-                        Gate(
-                            predicate: not.Predicate,
-                            fail: holds
-                        );
-                        emitter.JumpAbsolute(label: fail);
-                        emitter.MarkLabel(label: holds);
-
-                        return;
-                    }
-                default:
-                    Compare(
-                        compare: ((ActionPredicate.CompareValue)predicate),
-                        fail: fail
-                    );
-
-                    return;
             }
         }
 
@@ -787,427 +735,360 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             );
         }
 
-        // breakLabel is the enclosing loop's exit, or -1 outside any loop; validation has already refused a stray break.
-        void Statements(CartridgeStatement[] statements, int breakLabel) {
-            foreach (var statement in statements) {
-                switch (statement.Kind) {
-                    case "set":
-                        Act(action: statement);
-                        break;
-                    case "if": {
-                            var otherwise = emitter.NewLabel();
+        // Every step but set, if, repeat and break: the ones that touch this machine's own hardware.
+        void Step(CartridgeStatement statement) {
+            switch (statement.Kind) {
+                case "play": {
+                        var sound = sounds[statement.Sound!];
 
-                            Gate(
-                                predicate: statement.When!,
-                                fail: otherwise
-                            );
-                            Statements(
-                                statements: statement.Then!,
-                                breakLabel: breakLabel
-                            );
-                            if (statement.Else is { } alternative) {
-                                var joined = emitter.NewLabel();
-
-                                emitter.JumpAbsolute(label: joined);
-                                emitter.MarkLabel(label: otherwise);
-                                Statements(
-                                    breakLabel: breakLabel,
-                                    statements: alternative
+                        foreach (var part in sound.Parts) {
+                            // The wave voice plays through a pattern, which must be in place before the voice starts.
+                            if (part.Pattern is { } pattern) {
+                                ApuSoundDriver.EmitWavePatternLoad(
+                                    emitter: emitter,
+                                    pattern: pattern
                                 );
-                                emitter.MarkLabel(label: joined);
+                            }
+
+                            if (sound.IsMusic) {
+                                ApuSoundDriver.EmitMusicStart(
+                                    emitter: emitter,
+                                    stream: part.Table,
+                                    voice: part.Voice
+                                );
                             } else {
-                                emitter.MarkLabel(label: otherwise);
+                                ApuSoundDriver.EmitEffectStart(
+                                    emitter: emitter,
+                                    stream: part.Table,
+                                    voice: part.Voice
+                                );
                             }
-
-                            break;
-                        }
-                    case "repeat": {
-                            // A break leaves the index at the iteration that broke; normal completion leaves it at count.
-                            var address = ((ushort)variables[statement.Index!]);
-                            var top = emitter.NewLabel();
-                            var exit = emitter.NewLabel();
-
-                            emitter.XorA();
-                            emitter.StoreAToAddress(address: address);
-                            emitter.MarkLabel(label: top);
-                            emitter.LoadAFromAddress(address: address);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.Compare,
-                                value: ((byte)statement.Count!.Value)
-                            );
-                            emitter.JumpAbsolute(
-                                condition: Condition.NoCarry,
-                                label: exit
-                            );
-                            Statements(
-                                statements: statement.Body!,
-                                breakLabel: exit
-                            );
-                            emitter.LoadAFromAddress(address: address);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.Add,
-                                value: 1
-                            );
-                            emitter.StoreAToAddress(address: address);
-                            emitter.JumpAbsolute(label: top);
-                            emitter.MarkLabel(label: exit);
-                            break;
-                        }
-                    case "play": {
-                            var sound = sounds[statement.Sound!];
-
-                            foreach (var part in sound.Parts) {
-                                // The wave voice plays through a pattern, which must be in place before the voice starts.
-                                if (part.Pattern is { } pattern) {
-                                    ApuSoundDriver.EmitWavePatternLoad(
-                                        emitter: emitter,
-                                        pattern: pattern
-                                    );
-                                }
-
-                                if (sound.IsMusic) {
-                                    ApuSoundDriver.EmitMusicStart(
-                                        emitter: emitter,
-                                        stream: part.Table,
-                                        voice: part.Voice
-                                    );
-                                } else {
-                                    ApuSoundDriver.EmitEffectStart(
-                                        emitter: emitter,
-                                        stream: part.Table,
-                                        voice: part.Voice
-                                    );
-                                }
-                            }
-
-                            break;
-                        }
-                    case "stop":
-                        foreach (var voice in musicVoices) {
-                            ApuSoundDriver.EmitVoiceStop(
-                                emitter: emitter,
-                                voice: voice
-                            );
                         }
 
                         break;
-                    case "fade": {
-                            // Pick the baked bank for this step, then republish both palette banks from it.
-                            var backgroundBytes = (document.Palettes.Background.Sum(selector: static palette => palette.Length) * 2);
-                            var objectBytes = (document.Palettes.Object.Sum(selector: static palette => palette.Length) * 2);
-                            var table = ((statement.Toward == "white")
-                                ? fadesToWhite
-                                : fadesToBlack
-                            );
-                            var clamped = emitter.NewLabel();
-                            var placed = emitter.NewLabel();
-                            var stride = emitter.NewLabel();
+                    }
+                case "stop":
+                    foreach (var voice in musicVoices) {
+                        ApuSoundDriver.EmitVoiceStop(
+                            emitter: emitter,
+                            voice: voice
+                        );
+                    }
 
-                            Load(expression: statement.Amount!);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.Compare,
-                                value: (CartridgeLimits.FadeSteps + 1)
-                            );
-                            emitter.JumpRelative(
-                                condition: Condition.Carry,
-                                label: clamped
-                            );
-                            emitter.LoadAImmediate(value: CartridgeLimits.FadeSteps);
-                            emitter.MarkLabel(label: clamped);
-                            emitter.Load(
-                                destination: Reg8.B,
-                                source: Reg8.A
-                            );
-                            emitter.LoadImmediate(
-                                pair: Reg16.Hl,
-                                value: table.Address
-                            );
-                            // A monochrome step is its three shade registers.
-                            emitter.LoadImmediate(
-                                pair: Reg16.De,
-                                value: ((ushort)(monochrome
-                                    ? 3
-                                    : backgroundBytes))
-                            );
-                            emitter.MarkLabel(label: stride);
-                            emitter.Load(
-                                destination: Reg8.A,
-                                source: Reg8.B
-                            );
-                            emitter.Arithmetic(
-                                op: AluOp.Or,
-                                source: Reg8.A
-                            );
-                            emitter.JumpRelative(
-                                condition: Condition.Zero,
-                                label: placed
-                            );
-                            emitter.AddToHl(pair: Reg16.De);
-                            emitter.Decrement(register: Reg8.B);
-                            emitter.JumpRelative(label: stride);
-                            emitter.MarkLabel(label: placed);
-                            if (monochrome) {
-                                FrameworkKernel.EmitShadesFromHl(emitter: emitter);
+                    break;
+                case "fade": {
+                        // Pick the baked bank for this step, then republish both palette banks from it.
+                        var backgroundBytes = (document.Palettes.Background.Sum(selector: static palette => palette.Length) * 2);
+                        var objectBytes = (document.Palettes.Object.Sum(selector: static palette => palette.Length) * 2);
+                        var table = ((statement.Toward == "white")
+                            ? fadesToWhite
+                            : fadesToBlack
+                        );
+                        var clamped = emitter.NewLabel();
+                        var placed = emitter.NewLabel();
+                        var stride = emitter.NewLabel();
 
-                                break;
-                            }
+                        Load(expression: statement.Amount!);
+                        emitter.ArithmeticImmediate(
+                            op: AluOp.Compare,
+                            value: (CartridgeLimits.FadeSteps + 1)
+                        );
+                        emitter.JumpRelative(
+                            condition: Condition.Carry,
+                            label: clamped
+                        );
+                        emitter.LoadAImmediate(value: CartridgeLimits.FadeSteps);
+                        emitter.MarkLabel(label: clamped);
+                        emitter.Load(
+                            destination: Reg8.B,
+                            source: Reg8.A
+                        );
+                        emitter.LoadImmediate(
+                            pair: Reg16.Hl,
+                            value: table.Address
+                        );
+                        // A monochrome step is its three shade registers.
+                        emitter.LoadImmediate(
+                            pair: Reg16.De,
+                            value: ((ushort)(monochrome
+                                ? 3
+                                : backgroundBytes))
+                        );
+                        emitter.MarkLabel(label: stride);
+                        emitter.Load(
+                            destination: Reg8.A,
+                            source: Reg8.B
+                        );
+                        emitter.Arithmetic(
+                            op: AluOp.Or,
+                            source: Reg8.A
+                        );
+                        emitter.JumpRelative(
+                            condition: Condition.Zero,
+                            label: placed
+                        );
+                        emitter.AddToHl(pair: Reg16.De);
+                        emitter.Decrement(register: Reg8.B);
+                        emitter.JumpRelative(label: stride);
+                        emitter.MarkLabel(label: placed);
+                        if (monochrome) {
+                            FrameworkKernel.EmitShadesFromHl(emitter: emitter);
 
-                            FrameworkKernel.EmitPaletteRepublish(
-                                byteCount: backgroundBytes,
-                                dataPort: Hw.PortBgPaletteData,
-                                emitter: emitter,
-                                indexPort: Hw.PortBgPaletteIndex
-                            );
-                            // The object table follows the background one, stepped by its own stride.
-                            emitter.LoadImmediate(
-                                pair: Reg16.Hl,
-                                value: ((ushort)(table.Address + ((CartridgeLimits.FadeSteps + 1) * backgroundBytes)))
-                            );
-                            emitter.LoadImmediate(
-                                pair: Reg16.De,
-                                value: ((ushort)objectBytes)
-                            );
-                            Load(expression: statement.Amount!);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.Compare,
-                                value: (CartridgeLimits.FadeSteps + 1)
-                            );
-                            var clampedObject = emitter.NewLabel();
-                            var placedObject = emitter.NewLabel();
-                            var strideObject = emitter.NewLabel();
-
-                            emitter.JumpRelative(
-                                condition: Condition.Carry,
-                                label: clampedObject
-                            );
-                            emitter.LoadAImmediate(value: CartridgeLimits.FadeSteps);
-                            emitter.MarkLabel(label: clampedObject);
-                            emitter.Load(
-                                destination: Reg8.B,
-                                source: Reg8.A
-                            );
-                            emitter.MarkLabel(label: strideObject);
-                            emitter.Load(
-                                destination: Reg8.A,
-                                source: Reg8.B
-                            );
-                            emitter.Arithmetic(
-                                op: AluOp.Or,
-                                source: Reg8.A
-                            );
-                            emitter.JumpRelative(
-                                condition: Condition.Zero,
-                                label: placedObject
-                            );
-                            emitter.AddToHl(pair: Reg16.De);
-                            emitter.Decrement(register: Reg8.B);
-                            emitter.JumpRelative(label: strideObject);
-                            emitter.MarkLabel(label: placedObject);
-                            FrameworkKernel.EmitPaletteRepublish(
-                                byteCount: objectBytes,
-                                dataPort: Hw.PortObjPaletteData,
-                                emitter: emitter,
-                                indexPort: Hw.PortObjPaletteIndex
-                            );
                             break;
                         }
-                    case "clock": {
-                            // Latching copies the running clock into the readable registers; without it a read can
-                            // catch the counter mid-carry and report a moment that never happened.
-                            emitter.LoadAImmediate(value: 0x00);
-                            emitter.StoreAToAddress(address: 0x6000);
+
+                        FrameworkKernel.EmitPaletteRepublish(
+                            byteCount: backgroundBytes,
+                            dataPort: Hw.PortBgPaletteData,
+                            emitter: emitter,
+                            indexPort: Hw.PortBgPaletteIndex
+                        );
+                        // The object table follows the background one, stepped by its own stride.
+                        emitter.LoadImmediate(
+                            pair: Reg16.Hl,
+                            value: ((ushort)(table.Address + ((CartridgeLimits.FadeSteps + 1) * backgroundBytes)))
+                        );
+                        emitter.LoadImmediate(
+                            pair: Reg16.De,
+                            value: ((ushort)objectBytes)
+                        );
+                        Load(expression: statement.Amount!);
+                        emitter.ArithmeticImmediate(
+                            op: AluOp.Compare,
+                            value: (CartridgeLimits.FadeSteps + 1)
+                        );
+                        var clampedObject = emitter.NewLabel();
+                        var placedObject = emitter.NewLabel();
+                        var strideObject = emitter.NewLabel();
+
+                        emitter.JumpRelative(
+                            condition: Condition.Carry,
+                            label: clampedObject
+                        );
+                        emitter.LoadAImmediate(value: CartridgeLimits.FadeSteps);
+                        emitter.MarkLabel(label: clampedObject);
+                        emitter.Load(
+                            destination: Reg8.B,
+                            source: Reg8.A
+                        );
+                        emitter.MarkLabel(label: strideObject);
+                        emitter.Load(
+                            destination: Reg8.A,
+                            source: Reg8.B
+                        );
+                        emitter.Arithmetic(
+                            op: AluOp.Or,
+                            source: Reg8.A
+                        );
+                        emitter.JumpRelative(
+                            condition: Condition.Zero,
+                            label: placedObject
+                        );
+                        emitter.AddToHl(pair: Reg16.De);
+                        emitter.Decrement(register: Reg8.B);
+                        emitter.JumpRelative(label: strideObject);
+                        emitter.MarkLabel(label: placedObject);
+                        FrameworkKernel.EmitPaletteRepublish(
+                            byteCount: objectBytes,
+                            dataPort: Hw.PortObjPaletteData,
+                            emitter: emitter,
+                            indexPort: Hw.PortObjPaletteIndex
+                        );
+                        break;
+                    }
+                case "clock": {
+                        // Latching copies the running clock into the readable registers; without it a read can
+                        // catch the counter mid-carry and report a moment that never happened.
+                        emitter.LoadAImmediate(value: 0x00);
+                        emitter.StoreAToAddress(address: 0x6000);
+                        emitter.LoadAImmediate(value: 0x01);
+                        emitter.StoreAToAddress(address: 0x6000);
+                        emitter.LoadAImmediate(value: 0x0A);
+                        emitter.StoreAToAddress(address: 0x0000);
+                        foreach (var (name, register) in new[] {
+                        (document.Clock!.Seconds, 0x08), (document.Clock.Minutes, 0x09),
+                        (document.Clock.Hours, 0x0A), (document.Clock.Days, 0x0B),
+                    }) {
+                            if (name is null) {
+                                continue;
+                            }
+
+                            emitter.LoadAImmediate(value: ((byte)register));
+                            emitter.StoreAToAddress(address: 0x4000);
+                            emitter.LoadAFromAddress(address: 0xA000);
+                            emitter.StoreAToAddress(address: ((ushort)variables[name]));
+                        }
+
+                        emitter.XorA();
+                        emitter.StoreAToAddress(address: 0x0000);
+                        break;
+                    }
+                case "save": {
+                        // Gather the live state into the mirror, then let the module write it through with a checksum.
+                        var offset = 0;
+
+                        foreach (var (address, length) in persisted) {
+                            CopyRun(
+                                destination: ((ushort)(FrameworkMemoryMap.SaveMirror + offset)),
+                                length: length,
+                                source: ((ushort)address)
+                            );
+                            offset += length;
+                        }
+
+                        save!.EmitStore();
+                        break;
+                    }
+                case "load": {
+                        // The module fills the mirror from a valid block, or from the authored defaults when it is not.
+                        save!.EmitLoad();
+                        var offset = 0;
+
+                        foreach (var (address, length) in persisted) {
+                            CopyRun(
+                                destination: ((ushort)address),
+                                length: length,
+                                source: ((ushort)(FrameworkMemoryMap.SaveMirror + offset))
+                            );
+                            offset += length;
+                        }
+
+                        break;
+                    }
+                case "map": {
+                        // The queue push takes DE = cell address, A = tile. Row and column are runtime values, so the
+                        // address is built as the surface's map base + row * 32 + column with the row's low three bits
+                        // carried into H; the panel's map is the window map, the background's the background map.
+                        Load(expression: statement.Row!);
+                        emitter.ArithmeticImmediate(
+                            op: AluOp.And,
+                            value: 31
+                        );
+                        emitter.Load(
+                            destination: Reg8.L,
+                            source: Reg8.A
+                        );
+                        emitter.LoadImmediate(
+                            destination: Reg8.H,
+                            value: 0
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.ShiftLeftArithmetic,
+                            register: Reg8.L
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.RotateLeft,
+                            register: Reg8.H
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.ShiftLeftArithmetic,
+                            register: Reg8.L
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.RotateLeft,
+                            register: Reg8.H
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.ShiftLeftArithmetic,
+                            register: Reg8.L
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.RotateLeft,
+                            register: Reg8.H
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.ShiftLeftArithmetic,
+                            register: Reg8.L
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.RotateLeft,
+                            register: Reg8.H
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.ShiftLeftArithmetic,
+                            register: Reg8.L
+                        );
+                        emitter.Shift(
+                            op: ShiftOp.RotateLeft,
+                            register: Reg8.H
+                        );
+                        Load(expression: statement.Column!);
+                        emitter.ArithmeticImmediate(
+                            op: AluOp.And,
+                            value: 31
+                        );
+                        emitter.Arithmetic(
+                            op: AluOp.Add,
+                            source: Reg8.L
+                        );
+                        emitter.Load(
+                            destination: Reg8.E,
+                            source: Reg8.A
+                        );
+                        emitter.Load(
+                            destination: Reg8.A,
+                            source: Reg8.H
+                        );
+                        emitter.ArithmeticImmediate(
+                            op: AluOp.Add,
+                            value: ((byte)(((statement.Surface == "panel")
+                                ? Hw.VramWindowMap
+                                : Hw.VramBackgroundMap) >> 8))
+                        );
+                        emitter.Load(
+                            destination: Reg8.D,
+                            source: Reg8.A
+                        );
+                        emitter.Push(pair: StackPair.De);
+                        if (statement.Palette is { } shade) {
+                            Load(expression: shade);
+                            emitter.ArithmeticImmediate(
+                                op: AluOp.And,
+                                value: 0x07
+                            );
+                        } else {
+                            emitter.XorA();
+                        }
+
+                        emitter.Load(
+                            destination: Reg8.C,
+                            source: Reg8.A
+                        );
+                        Load(expression: statement.Tile!);
+                        emitter.Pop(pair: StackPair.De);
+                        background.EmitQueuePush();
+                        break;
+                    }
+                case "blit": {
+                        var screen = screens[statement.Screen!];
+
+                        background.EmitLcdOff();
+                        background.EmitQueueClear();
+                        background.EmitPaintRect(
+                            sourceAddress: screen.Table.Address,
+                            row: CartridgeExpressions.Whole(expression: statement.Row)!.Value,
+                            column: CartridgeExpressions.Whole(expression: statement.Column)!.Value,
+                            width: screen.Width,
+                            height: screen.Height
+                        );
+                        if (screen.Shades is { } shades) {
+                            // The colour of a cell lives at the same address in the other video-memory bank.
                             emitter.LoadAImmediate(value: 0x01);
-                            emitter.StoreAToAddress(address: 0x6000);
-                            emitter.LoadAImmediate(value: 0x0A);
-                            emitter.StoreAToAddress(address: 0x0000);
-                            foreach (var (name, register) in new[] {
-                            (document.Clock!.Seconds, 0x08), (document.Clock.Minutes, 0x09),
-                            (document.Clock.Hours, 0x0A), (document.Clock.Days, 0x0B),
-                        }) {
-                                if (name is null) {
-                                    continue;
-                                }
-
-                                emitter.LoadAImmediate(value: ((byte)register));
-                                emitter.StoreAToAddress(address: 0x4000);
-                                emitter.LoadAFromAddress(address: 0xA000);
-                                emitter.StoreAToAddress(address: ((ushort)variables[name]));
-                            }
-
-                            emitter.XorA();
-                            emitter.StoreAToAddress(address: 0x0000);
-                            break;
-                        }
-                    case "save": {
-                            // Gather the live state into the mirror, then let the module write it through with a checksum.
-                            var offset = 0;
-
-                            foreach (var (address, length) in persisted) {
-                                CopyRun(
-                                    destination: ((ushort)(FrameworkMemoryMap.SaveMirror + offset)),
-                                    length: length,
-                                    source: ((ushort)address)
-                                );
-                                offset += length;
-                            }
-
-                            save!.EmitStore();
-                            break;
-                        }
-                    case "load": {
-                            // The module fills the mirror from a valid block, or from the authored defaults when it is not.
-                            save!.EmitLoad();
-                            var offset = 0;
-
-                            foreach (var (address, length) in persisted) {
-                                CopyRun(
-                                    destination: ((ushort)address),
-                                    length: length,
-                                    source: ((ushort)(FrameworkMemoryMap.SaveMirror + offset))
-                                );
-                                offset += length;
-                            }
-
-                            break;
-                        }
-                    case "map": {
-                            // The queue push takes DE = cell address, A = tile. Row and column are runtime values, so the
-                            // address is built as the surface's map base + row * 32 + column with the row's low three bits
-                            // carried into H; the panel's map is the window map, the background's the background map.
-                            Load(expression: statement.Row!);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.And,
-                                value: 31
-                            );
-                            emitter.Load(
-                                destination: Reg8.L,
-                                source: Reg8.A
-                            );
-                            emitter.LoadImmediate(
-                                destination: Reg8.H,
-                                value: 0
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.ShiftLeftArithmetic,
-                                register: Reg8.L
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.RotateLeft,
-                                register: Reg8.H
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.ShiftLeftArithmetic,
-                                register: Reg8.L
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.RotateLeft,
-                                register: Reg8.H
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.ShiftLeftArithmetic,
-                                register: Reg8.L
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.RotateLeft,
-                                register: Reg8.H
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.ShiftLeftArithmetic,
-                                register: Reg8.L
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.RotateLeft,
-                                register: Reg8.H
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.ShiftLeftArithmetic,
-                                register: Reg8.L
-                            );
-                            emitter.Shift(
-                                op: ShiftOp.RotateLeft,
-                                register: Reg8.H
-                            );
-                            Load(expression: statement.Column!);
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.And,
-                                value: 31
-                            );
-                            emitter.Arithmetic(
-                                op: AluOp.Add,
-                                source: Reg8.L
-                            );
-                            emitter.Load(
-                                destination: Reg8.E,
-                                source: Reg8.A
-                            );
-                            emitter.Load(
-                                destination: Reg8.A,
-                                source: Reg8.H
-                            );
-                            emitter.ArithmeticImmediate(
-                                op: AluOp.Add,
-                                value: ((byte)(((statement.Surface == "panel")
-                                    ? Hw.VramWindowMap
-                                    : Hw.VramBackgroundMap) >> 8))
-                            );
-                            emitter.Load(
-                                destination: Reg8.D,
-                                source: Reg8.A
-                            );
-                            emitter.Push(pair: StackPair.De);
-                            if (statement.Palette is { } shade) {
-                                Load(expression: shade);
-                                emitter.ArithmeticImmediate(
-                                    op: AluOp.And,
-                                    value: 0x07
-                                );
-                            } else {
-                                emitter.XorA();
-                            }
-
-                            emitter.Load(
-                                destination: Reg8.C,
-                                source: Reg8.A
-                            );
-                            Load(expression: statement.Tile!);
-                            emitter.Pop(pair: StackPair.De);
-                            background.EmitQueuePush();
-                            break;
-                        }
-                    case "blit": {
-                            var screen = screens[statement.Screen!];
-
-                            background.EmitLcdOff();
-                            background.EmitQueueClear();
+                            emitter.StoreAToHighPage(port: Hw.PortVramBank);
                             background.EmitPaintRect(
-                                sourceAddress: screen.Table.Address,
+                                sourceAddress: shades.Address,
                                 row: CartridgeExpressions.Whole(expression: statement.Row)!.Value,
                                 column: CartridgeExpressions.Whole(expression: statement.Column)!.Value,
                                 width: screen.Width,
                                 height: screen.Height
                             );
-                            if (screen.Shades is { } shades) {
-                                // The colour of a cell lives at the same address in the other video-memory bank.
-                                emitter.LoadAImmediate(value: 0x01);
-                                emitter.StoreAToHighPage(port: Hw.PortVramBank);
-                                background.EmitPaintRect(
-                                    sourceAddress: shades.Address,
-                                    row: CartridgeExpressions.Whole(expression: statement.Row)!.Value,
-                                    column: CartridgeExpressions.Whole(expression: statement.Column)!.Value,
-                                    width: screen.Width,
-                                    height: screen.Height
-                                );
-                                emitter.XorA();
-                                emitter.StoreAToHighPage(port: Hw.PortVramBank);
-                            }
-
-                            background.EmitLcdOn(lcdc: BaseControl(document: document));
-                            break;
+                            emitter.XorA();
+                            emitter.StoreAToHighPage(port: Hw.PortVramBank);
                         }
-                    default:
-                        emitter.JumpAbsolute(label: breakLabel);
+
+                        background.EmitLcdOn(lcdc: BaseControl(document: document));
                         break;
-                }
+                    }
             }
         }
 
@@ -2014,9 +1895,9 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
 
-            if (CartridgeExpressions.WideIndex(
-                index: index,
-                widths: widths
+            if (CartridgeExpressions.ReadsWide(
+                expression: index,
+                layout: layout
             )) {
                 // A sixteen-bit index: HL - length borrows exactly when the index is inside the array.
                 LoadWide(

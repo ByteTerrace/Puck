@@ -43,7 +43,7 @@ per subject. Every device keeps it in its battery save. Two machines pass it as 
 | Machine | What the game stresses |
 |---|---|
 | Humble Gaming Brick | 256 tiles shared by font, scene and sprites; ten sprites a line (the Moth's four, three critters, the key, the answer pointer); the panel drawn over the scrolling valley as status line and text box, typed six cells a frame into the 24-entry map queue; a 32 by 32 scene scrolled with the camera; the text bank as long arrays read through a two-byte cursor; the boot-only payloads in switchable banks; the battery save; one source for the Color and monochrome machines. |
-| Humble Gaming Deck | The sibling lane's Deck target: eight sprites a line, nametable mirroring, attribute colour per 16 by 16 block, mapper banks for the gallery's larger rooms. |
+| Humble Gaming Deck | The `hgd` cartridge target: eight sprites a line, nametable mirroring, attribute colour per 16 by 16 block, mapper banks for the gallery's larger rooms. |
 | Advanced Gaming Brick | Mode-0 layers for depth in the great tree, the turning background for the moons' sky and the flight between them, blending for lantern light, recorded samples for critter calls, and the larger question bank its memory holds. |
 
 ## The learning content

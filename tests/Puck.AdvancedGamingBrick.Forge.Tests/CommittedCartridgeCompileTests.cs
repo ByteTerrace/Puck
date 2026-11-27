@@ -20,9 +20,11 @@ public sealed class CommittedCartridgeCompileTests {
     [Theory]
     public void EveryCommittedCartridgeCompilesForItsTarget(string sourcePath) {
         var document = Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: sourcePath);
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler());
+        ICartridgeCompiler compiler = (document.Target switch {
+            "agb" => new AgbCartridgeCompiler(),
+            Puck.HumbleGamingDeck.Forge.DeckCartridgeCompiler.TargetName => new Puck.HumbleGamingDeck.Forge.DeckCartridgeCompiler(),
+            _ => new HgbCartridgeCompiler(),
+        });
 
         Assert.NotEmpty(collection: compiler.Compile(document: document).Rom);
     }

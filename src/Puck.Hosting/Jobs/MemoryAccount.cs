@@ -690,6 +690,22 @@ public sealed class MemoryAccount {
         RefreshAvailable();
         lock (m_gate) { return AdmissionOf(pool: pool); }
     }
+    /// <summary>Reads every device owner that holds a reservation (<see cref="ReserveDevice"/>) under the account's lock:
+    /// its pool and class, the peak its reservations promise together, what its resources hold and the part of the peak
+    /// still promised, so a report names each reservation by its owner beside the families its resources make.</summary>
+    /// <returns>The reserved owners, most promised first, then by name.</returns>
+    public IReadOnlyList<MemoryReservationReading> ReadReservations() {
+        lock (m_gate) {
+            var readings = new List<MemoryReservationReading>();
+
+            foreach (var entry in m_families.Values) {
+                if (!entry.Classified || (entry.Peak == 0L)) { continue; }
+                readings.Add(item: new MemoryReservationReading(Class: entry.Class, Floor: entry.Floor, Held: entry.Held, Owner: entry.Family, Peak: entry.Peak, Pool: entry.Pool, Promised: entry.Promise));
+            }
+            readings.Sort(comparison: static (left, right) => ((right.Promised != left.Promised) ? right.Promised.CompareTo(value: left.Promised) : string.CompareOrdinal(strA: left.Owner, strB: right.Owner)));
+            return readings;
+        }
+    }
     /// <summary>Reads the pools, their admission figures, their physical rows with the parts their owners name, the
     /// recorded device reading and its segments' limits under the account's lock. A residual that sampling skew makes
     /// negative reads as nothing and is counted (<see cref="MemoryPoolsReading.NegativeResiduals"/>).</summary>

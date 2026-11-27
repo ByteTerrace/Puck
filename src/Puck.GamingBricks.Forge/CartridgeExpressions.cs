@@ -267,22 +267,23 @@ public static class CartridgeExpressions {
 
         return true;
     }
-    /// <summary>Returns whether an array index is read as sixteen bits: a bare read of a two-byte slot, or a lone literal
-    /// past a byte. Such an index reaches every element of an array longer than <see cref="CartridgeLimits.ArrayLength"/>;
-    /// any other index is a byte expression and reaches only the first <see cref="CartridgeLimits.ArrayLength"/>.</summary>
-    /// <param name="index">The index expression.</param>
-    /// <param name="widths">The declared slots' widths in bytes, by name.</param>
-    /// <returns><see langword="true"/> when the index is read as sixteen bits.</returns>
-    public static bool WideIndex(ExpressionProgram index, IReadOnlyDictionary<string, int> widths) {
-        ArgumentNullException.ThrowIfNull(argument: index);
-        ArgumentNullException.ThrowIfNull(argument: widths);
+    /// <summary>Returns whether an operand is read as sixteen bits: a bare read of a two-byte slot, or a lone literal past
+    /// a byte. Everywhere else a target evaluates a byte. As an array index such an operand reaches every element of an
+    /// array longer than <see cref="CartridgeLimits.ArrayLength"/>, where a byte index reaches only the first
+    /// <see cref="CartridgeLimits.ArrayLength"/>.</summary>
+    /// <param name="expression">The operand.</param>
+    /// <param name="layout">The document's state layout, which holds each slot's width.</param>
+    /// <returns><see langword="true"/> when the operand is read as sixteen bits.</returns>
+    public static bool ReadsWide(ExpressionProgram expression, CartridgeStateLayout layout) {
+        ArgumentNullException.ThrowIfNull(argument: expression);
+        ArgumentNullException.ThrowIfNull(argument: layout);
 
-        return (index.Instructions switch {
+        return (expression.Instructions switch {
             [{ Payload: InstructionPayload.Constant constant }] => (constant.Value > CartridgeLimits.NarrowMaximum),
-            [{ Payload: InstructionPayload.State { Key: null } state }] => (widths.TryGetValue(
+            [{ Payload: InstructionPayload.State { Key: null } state }] => (layout.Slots.TryGetValue(
                 key: state.Name.Spelling,
-                value: out var width
-            ) && (width == 2)),
+                value: out var slot
+            ) && (slot.Width == 2)),
             _ => false,
         });
     }
