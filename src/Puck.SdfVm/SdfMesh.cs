@@ -532,7 +532,8 @@ public readonly record struct SdfMeshDraw {
     /// independently of the root slot used by skinning and portal membership.</summary>
     public bool UsesRootMaterialFrame { get; init; } = true;
     /// <summary>Gets the key of the object the draw belongs to, at most <see cref="SdfMeshRecord.ObjectKeyMask"/>: every
-    /// draw of one object carries the same key (each chunk and tier of one bake group, every group of one placed copy),
+    /// draw of one object carries the same key (each chunk and tier of one bake group, every group of one placed copy, and
+    /// every group of one object its program declares, <see cref="SdfInstanceRange.JoinsPreviousObject"/>),
     /// and a view's edge search reads where two keys meet as the boundary between two objects. Zero, the default, is
     /// one object shared by every draw that names none. It is presentation only.</summary>
     public uint ObjectKey { get; init; }
@@ -1179,12 +1180,12 @@ public static class SdfMeshRegion {
         }
 
         var enclosed = ((!meshChanged && !basisChanged && Bitwise.Equal(left: in clip, right: in previousClip))
-            ? ((selection[3] & 4u) != 0u)
+            ? ((selection[3] & SdfMeshRecord.EnclosedFlag) != 0u)
             : draw.EnclosesSolid);
         // A skinned draw's box is a world bound its tables write (WriteSelectionBox), never one in the slot's frame.
         var slotBox = (rides && boxed && draw.Mesh.Members.IsEmpty);
 
-        writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
+        writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? SdfMeshRecord.EnclosedFlag : 0u) |
             (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u) | (draw.CastsNoShadow ? SdfMeshRecord.NoShadowFlag : 0u) |
             (((uint)draw.Audience) << SdfMeshRecord.AudienceShift);
 

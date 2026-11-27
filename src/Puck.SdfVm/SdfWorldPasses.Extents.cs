@@ -9,6 +9,8 @@ public sealed partial class SdfWorldPasses {
     private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
     // Each fragment with its views pass shading in bins (SdfWorldPackage.WithBins), made once for the same reason.
     private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
+    // Each fragment with the overlap pass (SdfWorldPackage.WithOverlaps), made once for the same reason.
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> OverlappedFragments = new();
     // Each temporal fragment with the reflection pass (SdfWorldPackage.WithReflections), one per cell edge in
     // SdfWorldPackage.ReflectionCells' order, made once for the same reason.
     private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> ReflectedFragments = new();
@@ -82,21 +84,24 @@ public sealed partial class SdfWorldPasses {
         // runs the binned views passes and allocates their storages (SdfWorldPackage.WithBins); a view of a frame with no
         // program pays nothing for them.
         private bool RequestsBins => (View?.Residency.ShadesInBins ?? false);
+        // Whether the view shows the overlap debug view, so it runs the overlap pass and allocates its storages
+        // (SdfWorldPackage.WithOverlaps); a view in any other mode pays nothing for them.
+        private bool RequestsOverlaps => (View?.Residency.DebugMode == DebugViewModes.Overlaps);
 
         private bool RequestsViewsRate => RequestsTemporal && View?.Residency.Frame?.Settings.ViewsRate is { MaxRate: > 1 };
         // The cell edge the view traces its reflections at, or zero for none: only a temporal view keeps the preceding
         // frame's picture the reflection pass reads.
         private uint ReflectionCell => ((RequestsTemporal && (View?.Residency.Frame?.Settings.Reflections is { } reflections)) ? (uint)reflections.Cell : 0u);
 
-        public RenderGraphPackageFragment Fragment => Glassed(fragment: Binned(fragment: (RequestsTemporal
+        public RenderGraphPackageFragment Fragment => Overlapped(fragment: Glassed(fragment: Binned(fragment: (RequestsTemporal
             ? Reflected(fragment: (RequestsViewsRate ? SdfWorldPackage.RateFragment : SdfWorldPackage.TemporalFragment))
-            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment))));
+            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)))));
 
-        // The low bits distinguish temporal reconstruction, the glass passes, the binned views passes, the views rate and
-        // the reflection cell. Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize):
+        // The low bits distinguish temporal reconstruction, the glass passes, the binned views passes, the views rate, the
+        // reflection cell and the overlap pass. Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize):
         // their binary exponents share the two high bits shifted out here, and their mantissas' low bits, which these bits
         // land in, are zero.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | ((long)ReflectionCell << 4) | (RequestsViewsRate ? 8L : 0L) | (RequestsBins ? 4L : 0L) |
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsOverlaps ? 64L : 0L) | ((long)ReflectionCell << 4) | (RequestsViewsRate ? 8L : 0L) | (RequestsBins ? 4L : 0L) |
             (RequestsGlass ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Reflected(RenderGraphPackageFragment fragment) {
@@ -120,6 +125,8 @@ public sealed partial class SdfWorldPasses {
             (RequestsBins ? BinnedFragments.GetValue(derive: SdfWorldPackage.WithBins, key: fragment) : fragment);
         private RenderGraphPackageFragment Glassed(RenderGraphPackageFragment fragment) =>
             (RequestsGlass ? GlassFragments.GetValue(derive: SdfWorldPackage.WithGlass, key: fragment) : fragment);
+        private RenderGraphPackageFragment Overlapped(RenderGraphPackageFragment fragment) =>
+            (RequestsOverlaps ? OverlappedFragments.GetValue(derive: SdfWorldPackage.WithOverlaps, key: fragment) : fragment);
 
         double IShaderPipelineRenderExtent.Grid => CurrentScale;
 

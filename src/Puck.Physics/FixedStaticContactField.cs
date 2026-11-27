@@ -180,6 +180,21 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
         m_solver.TrySupportDistance(colliders: Set, dynamicColliders: dynamicColliders, position: in position, orientation: in orientation,
             volumes: volumes, up: in up, reach: reach, descent: out descent,
             candidates: Candidates(orientation: in orientation, position: (position - (up * reach)), previousPosition: in position, scratch: Scratch(), volumes: volumes));
+    /// <summary>Casts a ray to the first surface of these colliders and per-tick ones it meets
+    /// (<see cref="FixedSurfaceQuery.TryCast"/>), tracing only the colliders the grid finds near the ray.</summary>
+    /// <param name="origin">The world-space ray origin, in open space.</param>
+    /// <param name="direction">The ray direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative length of the ray, in metres.</param>
+    /// <param name="dynamicColliders">The colliders the caller recomputes per tick, cast against beside these.</param>
+    /// <param name="candidate">The surface the ray meets, indexed into this field's colliders or
+    /// <paramref name="dynamicColliders"/>, or <see langword="default"/> when it meets none.</param>
+    /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.</returns>
+    public bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedStaticColliderSet dynamicColliders,
+        out FixedSurfaceAttachCandidate candidate) =>
+        FixedSurfaceQuery.TryCast(candidate: out candidate, colliders: Set, direction: in direction, dynamicColliders: dynamicColliders,
+            maxDistance: maxDistance, origin: in origin,
+            candidates: m_grid.Candidates(boxes: Set.Boxes, region: FixedSurfaceQuery.CastReach(direction: in direction, maxDistance: maxDistance, origin: in origin),
+                scratch: Scratch(), skin: FixedQ4816.Zero));
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         up = FixedVector3.UnitY;

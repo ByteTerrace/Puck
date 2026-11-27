@@ -47,7 +47,11 @@ let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA
 // The toybox's lattice (shell.puck), by the pastel `n` of the panel's place: its frame wears the pastel of the pier at
 // its west end, its uprights the pastel three steps on, and its crossbars the toybox's sunflower, so the panels step
 // along each edge with the piers. The members are glossy toy plastic, brushed as the structure is.
-function lookToyLattice(n) = { frame: lookToyPiers[(n % 6)], bar: lookToyPiers[((n + 3) % 6)], rail: lookLevelToybox.tileTone }
+function lookToyLattice(n) = {
+  frame: lookToyPiers[(n % 6)]
+  bar: lookToyPiers[((n + 3) % 6)]
+  rail: lookLevelToybox.tileTone
+}
 // The toybox's arcade cabinets (toybox.puck), by colourway (layout.puck's toyboxPlan `look`; a cabinet and its twin
 // across the nave wear one): glossy toy plastic, its body, its cheeks and marquee housing, its control panels and the
 // players' marks, the stick's ball and the first button, the second button, the marquee's glow, and the neon of its
@@ -93,6 +97,20 @@ function lookCabinetPalette(c) = [
   { color: c.neon, roughness: 0.4, emissive: lookCabinetNeonGlow }
   { color: lookCabinetMetal, roughness: 0.28, metal: 0.9 }
 ]
+// The toybox's handheld rental kiosks (rentals.puck's `rental-counter`): the cabinets' toy plastic in the level's cobalt
+// and sunflower under a candy-pink canopy, cream number plates, each arm lit in a neon of its own (the first two
+// cabinets' cyan and magenta) with a cubby back glowing pale cyan or pale pink, and the cabinets' marquee glow for the
+// signs. The cubbies' backlight is dimmer than a marquee's panel so the handhelds read against it, not as silhouettes.
+let lookRentalKiosk = {
+  body: lookLevelToybox.tile
+  trim: lookLevelToybox.tileTone
+  plate: lookLevelToybox.grout
+  canopy: lookLevelToybox.coffer
+  neon [lookCabinets[0].neon, lookCabinets[1].neon]
+  backlight ["#9EDCFF", "#FFC9E8"]
+  sign: lookCabinets[0].glow
+}
+let lookRentalKioskBackGlow = 1200nit
 // The toybox's television sets (toybox.puck), by colourway: a set and its twin across the nave wear one. Each names
 // the television's case and trim, the stand's painted boards, the console's shell, the pads' shells and buttons, and
 // the lounge before it: the rug's field and border and its two beanbags. Sunflower on a cobalt stand over a cherry rug,

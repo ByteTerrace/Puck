@@ -98,12 +98,10 @@ public readonly record struct FixedVerticalEnvelope(
 /// the face is felt and over which the body is raised; zero for a row with no mantle.</param>
 /// <param name="Depth">How far past the face the body steps in to stand, world units at unit scale.</param>
 /// <param name="DurationTicks">How long the mantle takes, in engine ticks.</param>
-/// <param name="State">The body-lane Timer slot started for the mantle's length, or <see langword="null"/>.</param>
 public readonly record struct FixedBodyMantle(
     FixedQ4816 Height,
     FixedQ4816 Depth,
-    ulong DurationTicks,
-    string? State
+    ulong DurationTicks
 ) {
     /// <summary>Gets whether the row authors a mantle at all.</summary>
     public bool Exists => (Height > FixedQ4816.Zero);
@@ -123,9 +121,10 @@ public readonly record struct FixedBodyCorner(
 /// <summary>
 /// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
-/// offers; <see cref="BodyMotionOp.ApplyHold"/> applies <see cref="Kind"/>.
+/// offers; <see cref="BodyMotionOp.ApplyHold"/> applies <see cref="Kind"/>. A row holds no reference: its authored names
+/// are its <see cref="FixedBodyHoldNames"/>, beside it in the same <see cref="FixedBodyHoldList"/>, so a row reads and
+/// copies as plain memory.
 /// </summary>
-/// <param name="Name">The hold's authored name — the read-back token, never read by the resolve.</param>
 /// <param name="Bond">Whether the hold needs a surface.</param>
 /// <param name="Kind">The vertical law while the hold is held.</param>
 /// <param name="ConeCosNear">The cosine of the cone's least angle — the upper bound on a candidate normal's
@@ -151,12 +150,8 @@ public readonly record struct FixedBodyCorner(
 /// <param name="ReleaseOrdinal">The channel ordinal whose held read drops the hold, or <c>-1</c> for a hold no
 /// channel can drop.</param>
 /// <param name="ReleaseThreshold">That channel's own binary crossing threshold.</param>
-/// <param name="SpendState">The body-lane state slot name the hold drains while held, or <see langword="null"/> for
-/// a hold that spends nothing.</param>
 /// <param name="SpendPerSecond">The rate that slot drains at, per second, while the body is commanded to move.</param>
 /// <param name="SpendRestingPerSecond">The rate that slot drains at, per second, while nothing is commanded.</param>
-/// <param name="RestoreState">The body-lane state slot name the hold refills while held, or <see langword="null"/>
-/// for a hold that restores nothing.</param>
 /// <param name="RestorePerSecond">The rate that slot refills at, per second.</param>
 /// <param name="Mantle">How a body climbing off the end of this row's face gets onto what lies past it. A row
 /// carrying one also keeps the body on its face where nothing lies past the edge.</param>
@@ -173,7 +168,6 @@ public readonly record struct FixedBodyCorner(
 /// <param name="Thrust">The fraction of the kit's resolved move speed the <c>MoveUp</c> role commands vertically
 /// while this row holds, in every bond; <c>0</c> is no thrust at all.</param>
 public readonly record struct FixedBodyHold(
-    string Name,
     BodyHoldBond Bond,
     BodyHoldKind Kind,
     FixedQ4816 ConeCosNear,
@@ -191,10 +185,8 @@ public readonly record struct FixedBodyHold(
     ulong DriveDwellTicks,
     int ReleaseOrdinal,
     FixedQ4816 ReleaseThreshold,
-    string? SpendState,
     FixedQ4816 SpendPerSecond,
     FixedQ4816 SpendRestingPerSecond,
-    string? RestoreState,
     FixedQ4816 RestorePerSecond,
     FixedBodyMantle Mantle,
     FixedBodyCorner Corner,
@@ -221,4 +213,61 @@ public readonly record struct FixedBodyHold(
             (cosine >= ConeCosFar)
         );
     }
+}
+/// <summary>The authored names of one compiled hold row, kept beside its <see cref="FixedBodyHold"/> rather than in it, so
+/// the row the resolve reads every tick holds no reference.</summary>
+/// <param name="Name">The hold's authored name: the read-back token and the reason its state writes carry, never read
+/// by the resolve.</param>
+/// <param name="SpendState">The body-lane state slot the hold drains while held, or <see langword="null"/> for a hold
+/// that spends nothing.</param>
+/// <param name="RestoreState">The body-lane state slot the hold refills while held, or <see langword="null"/> for a hold
+/// that restores nothing.</param>
+/// <param name="MantleState">The body-lane Timer slot a mantle starts for its length, or <see langword="null"/>.</param>
+public readonly record struct FixedBodyHoldNames(
+    string Name,
+    string? SpendState,
+    string? RestoreState,
+    string? MantleState
+) {
+    /// <summary>Gets whether the row names a state slot it writes while held: one it spends, restores or times a mantle
+    /// with.</summary>
+    public bool WritesState => ((SpendState is not null) || (RestoreState is not null) || (MantleState is not null));
+}
+/// <summary>A kit's compiled hold list in preference order: each row (<see cref="FixedBodyHold"/>, plain memory the
+/// resolve reads by reference) and its names (<see cref="FixedBodyHoldNames"/>) at the same index. The list never
+/// changes once built, so a body tells a retune from a rebind to the same kit by reference.</summary>
+public sealed class FixedBodyHoldList {
+    private readonly FixedBodyHold[] m_rows;
+    private readonly FixedBodyHoldNames[] m_names;
+
+    /// <summary>Initializes a new instance of the <see cref="FixedBodyHoldList"/> class over rows and their names, which
+    /// it keeps; the caller must not change either array afterwards.</summary>
+    /// <param name="rows">The compiled rows, in preference order.</param>
+    /// <param name="names">Each row's names, at the row's index.</param>
+    /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
+    public FixedBodyHoldList(FixedBodyHold[] rows, FixedBodyHoldNames[] names) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: names);
+        if (rows.Length != names.Length) { throw new ArgumentException(message: "Every hold row needs its names.", paramName: nameof(names)); }
+        m_rows = rows;
+        m_names = names;
+    }
+
+    /// <summary>Gets the list of no rows.</summary>
+    public static FixedBodyHoldList Empty { get; } = new(rows: [], names: []);
+
+    /// <summary>Gets the number of rows.</summary>
+    public int Length => m_rows.Length;
+    /// <summary>Gets the rows, in preference order.</summary>
+    public ReadOnlySpan<FixedBodyHold> Rows => m_rows;
+    /// <summary>Gets each row's names, at the row's index.</summary>
+    public ReadOnlySpan<FixedBodyHoldNames> AllNames => m_names;
+    /// <summary>Gets a row by reference.</summary>
+    /// <param name="index">The row's index.</param>
+    /// <returns>The row.</returns>
+    public ref readonly FixedBodyHold this[int index] => ref m_rows[index];
+    /// <summary>Gets a row's names by reference.</summary>
+    /// <param name="index">The row's index.</param>
+    /// <returns>The row's names.</returns>
+    public ref readonly FixedBodyHoldNames Names(int index) => ref m_names[index];
 }

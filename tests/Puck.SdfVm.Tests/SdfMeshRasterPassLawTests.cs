@@ -43,6 +43,10 @@ public sealed class SdfMeshRasterPassLawTests {
             actual: pass.GlassKey
         );
         Assert.Equal(
+            expected: SdfMeshRasterPass.OverlapKeyOf(fragment: Stage(stage: "frag", stem: SdfMeshRasterPass.OverlapShaderStem), vertex: vertex),
+            actual: pass.OverlapKey
+        );
+        Assert.Equal(
             expected: SdfMeshRasterPass.OcclusionKeyOf(occlusion: Stage(stage: "comp", stem: SdfMeshRasterPass.OcclusionShaderStem)),
             actual: pass.OcclusionKey
         );

@@ -157,9 +157,9 @@ public sealed partial class WorldBody {
     // never a hunt through Advance's op handlers, which stay generic over whatever the kit's body motion program
     // selects. WorldDefinitionValidator has already refused an incoherent pairing (a program whose operations need a
     // facet the declared row doesn't supply) before this ever runs.
-    private void SetTuning(FixedMotionTuning tuning, FixedBodyHold[]? holds = null) {
+    private void SetTuning(FixedMotionTuning tuning, FixedBodyHoldList? holds = null) {
         MarkKitLocalStale();
-        m_holds = (holds ?? []);
+        m_holds = (holds ?? FixedBodyHoldList.Empty);
 
         if (m_holdIndex >= m_holds.Length) {
             // A retune that shortened (or dropped) the list cannot leave the body holding a row that no longer
@@ -523,10 +523,10 @@ public sealed partial class WorldBody {
     /// <param name="channels">The compiled typed input table.</param>
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHoldList? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
         // An idle sleeper whose program, holds or feel change would answer differently than the one it fell asleep
         // under (a hold list that no longer supports it falls), so it wakes; a rebind to the same kit leaves it asleep.
-        if ((m_asleepSinceTick != 0UL) && ((m_tuning != tuning) || !ReferenceEquals(objA: m_holds, objB: (holds ?? [])) ||
+        if ((m_asleepSinceTick != 0UL) && ((m_tuning != tuning) || !ReferenceEquals(objA: m_holds, objB: (holds ?? FixedBodyHoldList.Empty)) ||
             !ReferenceEquals(objA: m_bodyMotionProgram, objB: program) || !SameVolumes(left: m_collider, right: collider) || (m_rigid != rigid))) {
             WakeUp();
         }

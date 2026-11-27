@@ -68,8 +68,9 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// the same order any number of times, in any order relative to each other — always resolve the same winner.</para>
 /// <para><b>Reach.</b> A candidate exactly at the caller's reach bound is included: <c>Distance &lt;= reach</c>, a
 /// closed interval, not <c>&lt;</c>.</para>
-/// <para>Zero allocation: every method is at most two <c>for</c> loops over the caller's own spans, updating one
-/// by-value running best; nothing here allocates, boxes, or retains a reference into either span.</para>
+/// <para>Zero allocation: every method walks the caller's own spans, updating one by-value running best, and retains
+/// no reference into them; a cast whose bounds cull keeps more colliders than fit on the stack rents its list from the
+/// shared array pool.</para>
 /// </remarks>
 public static class FixedSurfaceQuery {
     /// <summary>Casts to the first field surface and samples its outward normal in open space just before the hit.
@@ -377,31 +378,69 @@ public static class FixedSurfaceQuery {
     // and arrives well inside the count; a ray that only grazes a face runs out of steps and reports no hit.
     private static readonly FixedQ4816 CastTolerance = FixedQ4816.FromRawBits(value: (1L << 6));
     private const int CastSteps = 32;
+    // The most colliders a cast keeps on the stack; a cast whose bounds cull keeps more rents its list.
+    private const int CastStackColliders = 32;
 
-    /// <summary>Casts a ray to the first analytic surface it meets, by sphere tracing over <see cref="TryNearest"/>:
-    /// the nearest surface's distance from a point on the ray is how far the ray is free of every collider, so the
-    /// ray advances by it until it stands on a surface or leaves its reach. The directed probe a surface hold takes
-    /// and tracks a face with.</summary>
+    // One collider a cast's bounds cull kept, and the distance it measured at its latest evaluation.
+    private struct CastCollider {
+        public int Index;
+        public FixedSurfaceColliderSource Source;
+        // Whether the collider's nearest distance is the true Euclidean distance, which moves no faster than the probe:
+        // an analytic solid whose nearest point is exact. A field's projection and an iterative convex nearest are not.
+        public bool Lipschitz;
+        public bool Measured;
+        public FixedQ4816 Distance;
+        public FixedQ4816 MeasuredAt;
+    }
+
+    /// <summary>Returns the world box a cast's ray can meet a surface within: the segment from
+    /// <paramref name="origin"/> along the unit direction for <paramref name="maxDistance"/>, grown by the distance at
+    /// which the ray counts as standing on a surface. A collider whose bounds miss the box can neither stop the ray nor
+    /// be the surface it reports.</summary>
+    /// <param name="origin">The world-space ray origin.</param>
+    /// <param name="direction">The ray direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative length of the ray.</param>
+    /// <returns>The box.</returns>
+    public static FixedAabb CastReach(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance) =>
+        FixedAabb.Empty.Enclose(point: origin).Enclose(point: (origin + (direction.Normalize() * maxDistance))).Grow(margin: CastTolerance);
+
+    /// <summary>Casts a ray to the first analytic surface it meets, by sphere tracing: the nearest surface's distance
+    /// from a point on the ray is how far the ray is free of every collider, so the ray advances by it until it stands
+    /// on a surface or leaves its reach. The directed probe a surface hold takes and tracks a face with. Only the
+    /// colliders whose bounds meet <see cref="CastReach"/> are traced: the static ones <paramref name="candidates"/>
+    /// lists (every one whose bounds meet the box when it is inactive), then the dynamic ones. A collider whose nearest
+    /// distance is exact changes it no faster than the ray moves (a distance is 1-Lipschitz), so a step skips it while
+    /// its last distance less the ray's travel since stays further than the nearest found this step by more than the
+    /// hit tolerance, which a distance's rounding never reaches: each step finds the nearest surface the whole kept set
+    /// would.</summary>
     /// <param name="colliders">The colliders compiled once (<see cref="FixedSurfaceColliderSource.Static"/>).</param>
+    /// <param name="candidates">The static colliders the bounds cull keeps for <see cref="CastReach"/>: a grid's
+    /// candidates for that region (<see cref="FixedColliderGrid.Candidates"/>), or the default value, which tests every
+    /// static collider's bounds.</param>
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick
-    /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>), or empty.</param>
+    /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>).</param>
     /// <param name="origin">The world-space ray origin, in open space.</param>
     /// <param name="direction">The ray direction; need not be pre-normalized.</param>
     /// <param name="maxDistance">The non-negative length of the ray.</param>
     /// <param name="candidate">The surface point the ray meets, its outward normal and its distance along the ray, or
-    /// <see langword="default"/> when the ray meets none.</param>
+    /// <see langword="default"/> when the ray meets none. Its index is the collider's own in its span.</param>
     /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.
     /// A ray that grazes a face without closing on it, or that starts inside a collider and leaves through its
     /// surface, meets none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDistance"/> is negative.</exception>
     public static bool TryCast(
-        ReadOnlySpan<FixedStaticCollider> colliders,
-        ReadOnlySpan<FixedStaticCollider> dynamicColliders,
+        FixedStaticColliderSet colliders,
+        FixedColliderCandidates candidates,
+        FixedStaticColliderSet dynamicColliders,
         in FixedVector3 origin,
         in FixedVector3 direction,
         FixedQ4816 maxDistance,
         out FixedSurfaceAttachCandidate candidate
     ) {
+        ArgumentNullException.ThrowIfNull(argument: colliders);
+        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
         ArgumentOutOfRangeException.ThrowIfNegative(
             paramName: nameof(maxDistance),
             value: maxDistance.Value
@@ -415,46 +454,130 @@ public static class FixedSurfaceQuery {
             return false;
         }
 
-        var travelled = FixedQ4816.Zero;
+        var reach = (candidates.IsActive ? candidates.Region : CastReach(direction: in unitDirection, maxDistance: maxDistance, origin: in origin));
+        var capacity = ((candidates.IsActive ? candidates.Indices.Length : colliders.Count) + dynamicColliders.Count);
+        CastCollider[]? rented = null;
+        var kept = ((capacity <= CastStackColliders)
+            ? stackalloc CastCollider[CastStackColliders]
+            : (rented = System.Buffers.ArrayPool<CastCollider>.Shared.Rent(minimumLength: capacity)).AsSpan());
 
-        for (var step = 0; (step < CastSteps); step++) {
-            var point = (origin + (unitDirection * travelled));
+        try {
+            var count = 0;
 
-            if (!TryNearest(
-                candidate: out var nearest,
-                colliders: colliders,
-                dynamicColliders: dynamicColliders,
-                probe: in point,
-                reach: (maxDistance - travelled)
-            )) {
-                return false;
+            if (candidates.IsActive) {
+                foreach (var index in candidates.Indices) { Keep(kept: kept, count: ref count, collider: in colliders.Colliders[index], index: index, source: FixedSurfaceColliderSource.Static); }
+            } else {
+                KeepWithin(boxes: colliders.Boxes, colliders: colliders.Colliders, count: ref count, kept: kept, reach: in reach, source: FixedSurfaceColliderSource.Static);
             }
+            KeepWithin(boxes: dynamicColliders.Boxes, colliders: dynamicColliders.Colliders, count: ref count, kept: kept, reach: in reach, source: FixedSurfaceColliderSource.Dynamic);
 
-            // A collider whose nearest point is not its true distance (a field's projection through relief) can let
-            // a step carry the ray through its surface. The ray is then behind the surface it reports, which is the
-            // surface it met.
-            var crossed = ((step > 0) && (FixedVector3.Dot(
-                left: (point - nearest.Point),
-                right: nearest.Normal
-            ) < FixedQ4816.Zero));
+            return Trace(candidate: out candidate, colliders: colliders.Colliders, dynamicColliders: dynamicColliders.Colliders, kept: kept[..count],
+                maxDistance: maxDistance, origin: in origin, unitDirection: in unitDirection);
+        } finally {
+            if (rented is not null) { System.Buffers.ArrayPool<CastCollider>.Shared.Return(array: rented); }
+        }
 
-            if (crossed || (nearest.Distance <= CastTolerance)) {
-                if (FixedVector3.Dot(
-                    left: nearest.Normal,
-                    right: unitDirection
-                ) >= FixedQ4816.Zero) {
+        static void KeepWithin(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedAabb> boxes, in FixedAabb reach, FixedSurfaceColliderSource source, Span<CastCollider> kept, ref int count) {
+            for (var index = 0; (index < colliders.Length); index++) {
+                if (boxes[index].Intersects(other: in reach)) { Keep(kept: kept, count: ref count, collider: in colliders[index], index: index, source: source); }
+            }
+        }
+        static void Keep(Span<CastCollider> kept, ref int count, in FixedStaticCollider collider, int index, FixedSurfaceColliderSource source) =>
+            kept[count++] = new CastCollider {
+                Index = index,
+                Source = source,
+                Lipschitz = ((collider.Kind is FixedStaticColliderKind.Sphere or FixedStaticColliderKind.AxisAlignedBox or FixedStaticColliderKind.OrientedBox
+                    or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace) || collider.MeasuresDistance()),
+            };
+    }
+    // The sphere trace over the colliders the bounds cull kept. Each step measures the previous step's nearest first,
+    // so the distance bound has the nearest found so far to skip the rest against.
+    private static bool Trace(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedStaticCollider> dynamicColliders, Span<CastCollider> kept,
+        in FixedVector3 origin, in FixedVector3 unitDirection, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
+
+        var travelled = FixedQ4816.Zero;
+        var previous = -1;
+        var queries = 0;
+
+        try {
+            for (var step = 0; (step < CastSteps); step++) {
+                var point = (origin + (unitDirection * travelled));
+                var remaining = (maxDistance - travelled);
+                var found = false;
+                var nearest = default(FixedSurfaceAttachCandidate);
+                var nearestAt = -1;
+
+                for (var visit = -1; (visit < kept.Length); visit++) {
+                    var at = ((visit < 0) ? previous : visit);
+
+                    if ((at < 0) || ((visit >= 0) && (at == previous))) { continue; }
+
+                    ref var entry = ref kept[at];
+
+                    if (entry.Lipschitz && entry.Measured &&
+                        (((entry.Distance - (travelled - entry.MeasuredAt)) - CastTolerance) > (found ? nearest.Distance : remaining))) {
+                        continue;
+                    }
+
+                    ref readonly var collider = ref ((entry.Source == FixedSurfaceColliderSource.Static) ? ref colliders[entry.Index] : ref dynamicColliders[entry.Index]);
+
+                    queries++;
+                    if (!TryNearestOnCollider(collider: in collider, normal: out var normal, point: out var surface, probe: point)) {
+                        continue;
+                    }
+
+                    var distance = (point - surface).Length;
+
+                    entry.Measured = true;
+                    entry.Distance = distance;
+                    entry.MeasuredAt = travelled;
+                    if ((distance <= remaining) && (!found || IsCloser(best: in nearest, distance: distance, index: entry.Index, source: entry.Source))) {
+                        found = true;
+                        nearestAt = at;
+                        nearest = new FixedSurfaceAttachCandidate(
+                            ColliderIndex: entry.Index,
+                            Distance: distance,
+                            Normal: normal,
+                            Point: surface,
+                            Source: entry.Source
+                        );
+                    }
+                }
+
+                if (!found) {
                     return false;
                 }
 
-                candidate = (nearest with { Distance = (travelled + nearest.Distance) });
+                // A collider whose nearest point is not its true distance (a field's projection through relief) can let
+                // a step carry the ray through its surface. The ray is then behind the surface it reports, which is the
+                // surface it met.
+                var crossed = ((step > 0) && (FixedVector3.Dot(
+                    left: (point - nearest.Point),
+                    right: nearest.Normal
+                ) < FixedQ4816.Zero));
 
-                return true;
+                if (crossed || (nearest.Distance <= CastTolerance)) {
+                    if (FixedVector3.Dot(
+                        left: nearest.Normal,
+                        right: unitDirection
+                    ) >= FixedQ4816.Zero) {
+                        return false;
+                    }
+
+                    candidate = (nearest with { Distance = (travelled + nearest.Distance) });
+
+                    return true;
+                }
+
+                travelled += nearest.Distance;
+                previous = nearestAt;
             }
 
-            travelled += nearest.Distance;
+            return false;
+        } finally {
+            FixedStaticContactWork.Process.CountCast(queries: queries);
         }
-
-        return false;
     }
     /// <summary>Finds the best tether anchor candidate along an aim direction — a soft-lock cone rather than an
     /// exact ray cast: every collider's own <see cref="TryNearest"/> point to <paramref name="origin"/> is a
