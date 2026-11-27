@@ -282,6 +282,7 @@ template chessStationState(station) {
     turn = -1
     started = -1
     fresh = 0
+    stood = 0
   }
   table chessStationSelf capacity(auto) {
     opened = 0
@@ -512,11 +513,13 @@ template chessStationHolodeck(station, game) {
     }
   }
 
-  rule $"chess-station-{key}-tidy" {
-    when search(ply) == 0 and (putDown.revert == 1 or chessStationSaved.fresh == 1) and holodeckAt[$each] >= 0
-    forEach: pieceCode
+  // A put-back arrangement and a fresh game stand every body again in one write: the place rule poses a body
+  // whenever its last pose (`holodeckAt`, its square plus 64 for this parity) is not its square under the parity now.
+  rule $"chess-station-{key}-stand" {
+    when search(ply) == 0 and (putDown.revert == 1 or chessStationSaved.fresh == 1)
     mode: Level
-    holodeckTidy()
+    chessStationSaved.stood = 1 - chessStationSaved.stood
+    chessStationSaved.fresh = 0
   }
 
   for chair in chessStationChairs {
@@ -541,18 +544,13 @@ template chessStationHolodeck(station, game) {
 
   rule $"chess-station-{key}-place" {
     local square = pieceCell[$each]
+    local posed = square + 64 * chessStationSaved.stood
     local lifted = (square == chessStationPicked.near) or (square == chessStationPicked.far)
-    when search(ply) == 0 and square >= 0 and holodeckAt[$each] != square and lifted == 0 and holodeckStands()
+    when search(ply) == 0 and square >= 0 and holodeckAt[$each] != posed and lifted == 0 and holodeckStands()
     forEach: pieceCode
     mode: Level
     poseCell(key: `placement:$each`, topology: chessBoard, expression: square, offset: [0, chessStationDrop, 0])
-    holodeckAt[$each] = square
-  }
-
-  rule $"chess-station-{key}-fresh-stood" {
-    when search(ply) == 0 and chessStationSaved.fresh == 1
-    mode: Level
-    chessStationSaved.fresh = 0
+    holodeckAt[$each] = posed
   }
 }
 

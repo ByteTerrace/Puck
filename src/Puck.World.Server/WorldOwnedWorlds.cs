@@ -22,7 +22,7 @@ namespace Puck.World.Server;
 /// keeps the name it already carries: a save writes through the id's spelling, which the filesystem resolves onto
 /// the existing entry without renaming it. The same case-insensitive rule is held one door earlier over an authored
 /// seed list by <c>WorldDefinitionValidator.ValidateIdentitySeeds</c>.</remarks>
-public sealed class WorldOwnedWorlds {
+public sealed class WorldOwnedWorlds : IDisposable {
     /// <summary>The subdirectory an unadmittable document is moved into — a name outside this catalog's own
     /// <c>*.world.json</c> top-directory glob, exactly like the hand-placed <c>basis/</c> directory, so a disposed
     /// document is never enumerated again.</summary>
@@ -45,8 +45,10 @@ public sealed class WorldOwnedWorlds {
     private readonly string m_templateRefusal = string.Empty;
     // The hosting world's vector spaces, which an identity sharing a space name must agree with.
     private readonly IReadOnlyList<StateSpace>? m_hostSpaces;
-    // The OS lock that makes this the account's one writer across processes, or null for a catalog that took none.
-    private readonly FileStream? m_accountLock;
+    // The OS lock that makes this the account's one writer across processes, or null for a catalog that took none. It
+    // lives exactly as long as the catalog: whoever owns the catalog (a host's service container, which disposes it when
+    // the host ends) releases it, so an ended host leaves no handle open on its state root.
+    private FileStream? m_accountLock;
     private readonly bool m_persist = true;
     // The hosting world's document directory: the root a seeded owned document's assets resolve under.
     private readonly string? m_worldDirectory;
@@ -255,6 +257,11 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets a value indicating whether another process holds this account, so this catalog saves nothing.</summary>
     public bool ReadOnly { get; }
 
+    /// <summary>Releases the account's cross-process lock, when this catalog took one, so another catalog over the same
+    /// directory (the next host in this process, or another process) can become its writer. Every save this catalog
+    /// already made is on disk; a catalog used after disposal still saves, but no longer excludes another writer.</summary>
+    public void Dispose() => Interlocked.Exchange(location1: ref m_accountLock, value: null)?.Dispose();
+
     // The characters an empty account starts with: the world's authored seeds, or else the template's own identity
     // section, the release's default first character.
     private IReadOnlyList<WorldIdentitySeed> FirstCharacters() => ((Defaults.Identities.Count > 0)
@@ -308,8 +315,9 @@ public sealed class WorldOwnedWorlds {
         }
     }
     /// <summary>The file in the account directory whose exclusive hold makes a process the account's one writer — a name
-    /// outside the catalog's <c>*.world.json</c> glob.</summary>
-    public const string AccountLockName = "account.lock";
+    /// outside the catalog's <c>*.world.json</c> glob, and a runtime guard (<see cref="WorldStateRoot.GuardSuffix"/>)
+    /// that nothing archiving a state directory reads.</summary>
+    public const string AccountLockName = "account" + WorldStateRoot.GuardSuffix;
 
     private void Narrate(string text) {
         if (m_narrationHub is { HasNarrationSink: true } hub) {
