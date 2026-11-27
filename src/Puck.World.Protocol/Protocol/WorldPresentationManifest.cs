@@ -13,8 +13,7 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// The presentation manifest: every state read a document's presentation makes, compiled once from the document and
 /// deduplicated. <see cref="Bindings"/> are the reads that last as long as the document, which a
 /// <see cref="WorldStateMirror"/> registers when it installs the document: a HUD element's binding or template
-/// placeholder, an overlay <c>state</c> predicate (either keyed by the body is a seat's read, below), a binding bar's
-/// layout and model cells, every bindable scalar and
+/// placeholder, an overlay <c>state</c> predicate, a binding bar's layout and model cells, every bindable scalar and
 /// color (camera program operands, markers, render lighting, sky and environment colors, the theme), every state
 /// clock's row (read eased, as every keyed value on it reads it), every color a signed-distance program bakes (a creation palette's surface, fill, bleed,
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
@@ -258,8 +257,7 @@ public sealed class WorldPresentationManifest {
     /// wheel's label and icon cells keyed by each sector's id and the label row's
     /// <see cref="BindingWheelDefinition.HubLabelKey"/>, the bar's icon cell keyed by every page entry's
     /// <see cref="BindingPageEntryDefinition.KeyOf"/>, the bar's layout and model cells, and every binding and template
-    /// placeholder of the seat's own player-scope HUD panel, and every read a world HUD panel keys by the body
-    /// (<see cref="StateBinding.BodyKey"/>), resolved to the seat's body. A seat registers them on the mirror it reads through
+    /// placeholder of the seat's own player-scope HUD panel. A seat registers them on the mirror it reads through
     /// (<see cref="WorldStateMirror.Register"/>), so none is first read on a frame.</summary>
     /// <param name="definition">The world the seat presents from, whose rows say which context family is keyed.</param>
     /// <param name="bindings">The seat's composed binding document.</param>
@@ -275,7 +273,7 @@ public sealed class WorldPresentationManifest {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bar);
 
-        var builder = new Builder { SeatBody = bodyIndex };
+        var builder = new Builder();
 
         foreach (var context in (bindings.Contexts ?? [])) {
             if (
@@ -369,13 +367,6 @@ public sealed class WorldPresentationManifest {
             }
         }
 
-        // A world panel that reads the body key is drawn for each seat, reading that seat's body.
-        if (definition.Hud.Defaults.Enabled) {
-            foreach (var panel in definition.Hud.Panels) {
-                builder.AddSeatPanel(panel: panel);
-            }
-        }
-
         return [.. builder.Bindings];
     }
 
@@ -417,8 +408,6 @@ public sealed class WorldPresentationManifest {
 
         // The document the walk compiles, which says whether a keyless token names a keyed row; null for a seat's reads.
         public WorldDefinition? Definition { get; init; }
-        // The body a seat's reads resolve an overlay's body key to, or -1 for the document's compile, which reads none.
-        public int SeatBody { get; init; } = -1;
 
         public List<WorldPresentationBinding> BodyBindings { get; } = [];
 
@@ -473,7 +462,10 @@ public sealed class WorldPresentationManifest {
         }
         // A HUD element's binding and every placeholder of its template, each read as a number.
         public void AddHud(WorldHudElement element) {
-            AddOverlay(binding: StateBinding.Parse(token: element.Binding));
+            Add(
+                binding: StateBinding.Parse(token: element.Binding),
+                conversion: WorldStateConversion.Number
+            );
 
             if (
                 (element.Template is { Length: > 0 } template) &&
@@ -484,36 +476,12 @@ public sealed class WorldPresentationManifest {
             )
             ) {
                 foreach (var placeholder in placeholders) {
-                    AddOverlay(binding: StateBinding.Parse(token: placeholder));
+                    Add(
+                        binding: StateBinding.Parse(token: placeholder),
+                        conversion: WorldStateConversion.Number
+                    );
                 }
             }
-        }
-        // The body-keyed reads of a world panel, its elements' and its visibility's, resolved to the seat's body.
-        public void AddSeatPanel(WorldHudPanel panel) {
-            foreach (var token in panel.ReadTokens()) {
-                AddOverlay(
-                    binding: StateBinding.Parse(token: token),
-                    bodyOnly: true
-                );
-            }
-        }
-        // An overlay's state read, read as a number. One keyed by the body (StateBinding.BodyKey) reads the cell of the
-        // body of the seat the overlay is drawn for, so a seat's reads resolve it to SeatBody and the document's skip it.
-        public void AddOverlay(StateBinding? binding, bool bodyOnly = false) {
-            if (binding is { Key: StateBinding.BodyKey } seated) {
-                if (SeatBody < 0) {
-                    return;
-                }
-
-                binding = (seated with { Key = SeatBody.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) });
-            } else if (bodyOnly) {
-                return;
-            }
-
-            Add(
-                binding: binding,
-                conversion: WorldStateConversion.Number
-            );
         }
         // A color a signed-distance program bakes at build (a palette's, a field's, a text screen's ink), authored as a
         // #RRGGBB literal or a state binding naming a Text cell; a literal reads nothing.
@@ -750,7 +718,10 @@ public sealed class WorldPresentationManifest {
 
                     return false;
                 case OverlayPredicate.State state:
-                    AddOverlay(binding: StateBinding.Parse(token: state.Binding));
+                    Add(
+                        binding: StateBinding.Parse(token: state.Binding),
+                        conversion: WorldStateConversion.Number
+                    );
 
                     return false;
                 case WorldHudElement element:

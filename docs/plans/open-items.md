@@ -5949,8 +5949,8 @@ the model.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through `chat.whisper` and `chat.log` (`ChatCommandModule`). The
   standard's terminal console (`worlds/standard/contexts/terminal-console.puck`)
-  is the pattern: a `Text` channel a family offers while a body cell is open, a
-  line built in a `Text` cell, and a per-seat world HUD panel keyed `$body`.
+  is the input pattern: a `Text` channel a family offers while a cell is open,
+  and a line built in a `Text` cell.
 - [medium] A rule sweeps one owner's input events (`forEach: inputEvents(<seat>)`
   takes a compile-time seat), so the terminal console unrolls a rule per local
   seat and a visitor's body at a terminal cannot type into it. Let one rule

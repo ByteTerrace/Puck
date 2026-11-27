@@ -13,9 +13,7 @@ namespace Puck.World;
 /// <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
 /// sight. A state token on a world-scope panel reads the client's own <see cref="WorldStateMirror"/>; one on a seat's
 /// player-scope panel reads the mirror of the world that seat is routed to (<see cref="WorldSeatBindings.GetRoutedState"/>),
-/// where the seat registered its panel's reads, so a crossed seat's panel shows the world it is in; a world-scope panel
-/// drawn for one seat reads that way too. A token keyed by the body (<c>state.&lt;row&gt;.$body</c>) reads the cell of the
-/// body the panel's seat controls (<see cref="WorldSeatStateReads"/>), and reads nothing on a panel drawn for no seat. Either slot is found
+/// where the seat registered its panel's reads, so a crossed seat's panel shows the world it is in. Either slot is found
 /// afresh each frame, so it never reads a slot a document swap retired. Presentation-only:
 /// every normalization here is cosmetic (which fraction of a gauge fills), never simulation state, and is free to
 /// change without a determinism concern.
@@ -71,8 +69,6 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     private readonly WorldPresentationFeed m_feed = feed;
     private readonly WorldContinuum m_continuum = continuum;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
-    // A body-keyed state token reads the cell of the body the panel's seat controls.
-    private readonly WorldSeatStateReads m_seatReads = new(seatBindings: seatBindings);
     // Two UInt64 decimal values and their two-character separator, reused by the history bindings.
     private readonly char[] m_historyText = new char[42];
     // Every token seen so far, parsed once; an unknown token is remembered as unresolvable.
@@ -338,26 +334,16 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
 
                 return true;
             case HudBindingKind.StateNamed:
-                WorldStateMirror? mirror;
-                int slot;
-
-                if (!m_seatReads.TryFind(
-                    mirror: out mirror,
-                    seat: seat,
-                    slot: out slot,
-                    token: binding
-                )) {
-                    mirror = MirrorFor(seat: seat);
-                    slot = (mirror?.SlotOf(
-                        conversion: WorldStateConversion.Number,
-                        token: binding
-                    ) ?? -1);
+                if (MirrorFor(seat: seat) is not { } mirror) {
+                    return false;
                 }
 
-                if (
-                    (mirror is null) ||
-                    (slot < 0)
-                ) {
+                var slot = mirror.SlotOf(
+                    conversion: WorldStateConversion.Number,
+                    token: binding
+                );
+
+                if (slot < 0) {
                     return false;
                 }
 

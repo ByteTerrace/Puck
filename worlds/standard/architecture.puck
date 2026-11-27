@@ -42,7 +42,8 @@ let plinthGlassDepth = 0.012
 
 // The console screen's look: a near-black glass the interface glows on at a bright display's brightness, readable in a
 // daylit hall, and the interface's colours in the kit's own palette (ochre frame, cream, teal and terracotta controls),
-// the ink lettering takes on a lit control and the two inks of a list, its chosen row lit amber.
+// the ink lettering takes on a lit control and the two inks of a list, its chosen row lit amber. `scan` is the faint
+// teal of the scanlines a screen's terminal mode lays over its field.
 let consoleGlass = { color: "#081315", roughness: 0.12, specular: 0.45, emissive: 3000 }
 let consoleLook = {
   frame: "#E0A13A"
@@ -54,6 +55,7 @@ let consoleLook = {
   dim: "#C9B79A"
   quiet: "#7FB2B6"
   field: "#081315"
+  scan: "#11292D"
 }
 
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body

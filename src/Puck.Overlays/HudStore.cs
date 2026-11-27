@@ -123,16 +123,13 @@ public readonly record struct OverlayHudElement(
 /// <param name="Elements">The panel's child elements, in authored order.</param>
 /// <param name="Alpha">The panel's presence, 0..1 — its visibility predicate's eased value, multiplied into the
 /// chrome and every element's alpha so a fading predicate fades the panel rather than cutting it.</param>
-/// <param name="Seat">The 0-based local seat the panel is drawn for, whose body its body-keyed bindings read, or -1 for a
-/// panel drawn once for the whole frame.</param>
 public readonly record struct OverlayHudPanel(
     string Id,
     OverlayHudRect Rect,
     OverlayHudBand Band,
     OverlayPanelStyle Style,
     ReadOnlyMemory<OverlayHudElement> Elements,
-    float Alpha = 1f,
-    int Seat = -1
+    float Alpha = 1f
 );
 /// <summary>One player-scope HUD panel: a profile's private single panel plus the local seat viewport it is confined
 /// to (screen-normalized, the same convention <c>Puck.Abstractions.Presentation.NormalizedRect</c> uses for a seat's

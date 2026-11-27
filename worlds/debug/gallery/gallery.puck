@@ -1278,8 +1278,11 @@ cameras: concat(map(galleryDisplays, display => terminalCamera(
 // camera. The station view's eye stands behind her at the spawn point, so its near plane cuts her away: along the view,
 // her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
 //
-// Engaged, the backtick opens the display's console (../../standard/contexts/terminal-console.puck), a typed line that
-// works the display she stands at as its screen does: `show <exhibit>` (or `shape <exhibit>`, its prototype name) shows
+// Engaged, the backtick turns the display's own screen into its hidden console (../../standard/contexts/terminal-console.puck;
+// the screen's terminal mode is shapes.puck's terminalScreenPaints), a secret of the station rather than a menu: nothing
+// on screen hints at it, and everyone looking at that glass sees the line as it is typed and the replies it draws. The
+// backtick again returns the screen to its interface. The typed line works the display as its screen does: `show
+// <exhibit>` (or `shape <exhibit>`, its prototype name) shows
 // an exhibit on its turntable, `list` names the groups and `list <group>` a group's exhibits, `turntable on` and
 // `turntable off` set it turning or stop it, `speed <-3..3>` sets its pace and the way it turns (0 stops it), and `help`
 // says so. A command posts its action to the display's terminal mailbox, which the gallery-console-command rules below
@@ -1288,7 +1291,6 @@ cameras: concat(map(galleryDisplays, display => terminalCamera(
 let galleryConsoleActions = { show: 1, turn: 2, pace: 3 }
 let galleryConsoleSpeeds = filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0))
 let galleryConsole = {
-  title: "DISPLAY CONSOLE"
   greeting ["type help for the commands this display answers"]
   unknown ["not a command this display answers; type help"]
   commands: concat(
@@ -1487,13 +1489,15 @@ for entry in galleryCatalog {
 // row the other way, as a finger drags a page; and a lift that never left its row is a tap, which shows that row's
 // exhibit on the turntable. A lift on PREV or NEXT turns the list a page, and one on the turntable's buttons posts to
 // its mailbox. A display's selection holds a catalog index, any of the catalog's. One sweep a console reads every
-// contact on its glass once, so a tick of many contacts costs one walk of them, not one a gesture.
-for display in galleryDisplays {
+// contact on its glass once, so a tick of many contacts costs one walk of them, not one a gesture. While the display's
+// terminal console is open the glass shows it instead of the interface, so a tap on it does nothing.
+for (display, index) in galleryDisplays {
   let key = display.id
   let screen = $"display-{display.id}-screen"
+  let number = $"{index + 1}"
   rule $"gallery-console-{key}" {
     forEach: contacts(screen)
-    when contact(each, phase) > 0
+    when contact(each, phase) > 0 and terminalConsoleOpen[number] == 0
     mode: Level
     // A touch down on the list holds its row and the scroll it started from.
     if galleryPress[key] == 0 and contact(each, phase) == 1 and contact(each, region, list) == 1 {
