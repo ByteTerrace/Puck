@@ -8,7 +8,8 @@
 // screen, clipped to the screen and the near plane, and marched through the reflection pyramid
 // (frame/sdf-reflection-depth.hlsli): its inverse depth is linear along the projection, so a cell of any level the ray
 // crosses in front of the nearest surface it holds is skipped whole and the march climbs a level, and a cell it reaches
-// is entered a level finer, down to the mesh target's own pixels. What the ray reaches is read from the preceding frame's
+// is entered a level finer, down to the mesh target's own pixels. The hit is the ray's crossing of the reached pixel's
+// tangent plane (sdfReflectCrossing), below the pixel. What the ray reaches is read from the preceding frame's
 // history colour where the hit stood then (sdfPreviousPoint) and the history shows it (sdfReflectHistoryShows), read as
 // one filtered sample of the prefiltered level the specular lobe's footprint spans there (sdfReflectColorFootprint), so a
 // rough surface's blur is the same every frame and adds no noise for the resolve to reject in motion; with it, the air's
@@ -87,6 +88,28 @@ float3 sdfReflectInScatter(uint pixel, uint2 extent, float3 direction) {
     return (((sdfAirFogColor(ambient) * weights.x) + (sdfAirHazeColor(ambient, direction, airLight) * weights.y)) + (sdfSky[0].MediumColor * weights.z));
 }
 
+// Where a mirror ray from `origin` along `direction` (relative to the eye of the view `rows` holds) meets the surface of the
+// render pixel `hitPixel` its march reached, whose sample is `surface` (absolute) with geometric normal `normal`: the ray's
+// crossing of that sample's tangent plane, absolute, where the crossing projects inside the pixel, and otherwise the sample.
+// The march resolves which pixel the ray meets, at the pixel's edge or at its depth taken flat across it, so the sample
+// alone would move what a ray reads a whole render pixel at a time along a reflected silhouette; the crossing moves it
+// continuously, and lies on the surface wherever that surface is smooth across the pixel.
+float3 sdfReflectCrossing(float4 rows[6], float3 origin, float3 direction, float3 surface, float3 normal, uint2 hitPixel) {
+    float approach = dot(direction, normal);
+
+    if (approach >= -1.0e-4) {
+        return surface;
+    }
+
+    float travel = (dot(((surface - rows[0].xyz) - origin), normal) / approach);
+    float3 crossing = (origin + (direction * travel));
+    float2 projected;
+
+    // The render grid's samples lie where the jittered rays met the scene, the pixel's at its centre.
+    return (((travel > 0.0) && sdfProjectView(rows, crossing, projected) &&
+        all(abs((projected - passGroup.jitter) - (float2(hitPixel) + 0.5)) <= 0.5))
+        ? (crossing + rows[0].xyz) : surface);
+}
 // Marches a ray's projected segment, from `start` along `delta` in render pixels with inverse forward depth
 // `startInverse` there and `finishInverse` at its end, from where it leaves its own pixel, for at most `budget` reads of
 // the pyramid, and returns the share of the segment at which it meets a surface, or -1 for none. `open` says whether the
@@ -247,7 +270,8 @@ uint4 sdfReflectTrace(SdfPixel p) {
     uint hitRecord = worldVisibilityRecord(hitPixel, p.viewIndex);
     SdfVisibility hitVisibility = sdfLoadVisibility(hitRecord);
     float3 hitNormal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[hitRecord + SdfVisibilityNormalWord]);
-    float3 hitPoint = sdfPixelSurfacePoint(sdfPixelAt(p.view, hitPixel, p.viewIndex), hitVisibility.t);
+    float3 hitPoint = sdfReflectCrossing(rows, origin, direction, sdfPixelSurfacePoint(sdfPixelAt(p.view, hitPixel, p.viewIndex), hitVisibility.t),
+        hitNormal, hitPixel);
     float3 previousPoint;
     float2 previousPixel;
 

@@ -42,7 +42,7 @@ public sealed partial class SdfWorldPasses {
 
     /// <inheritdoc/>
     /// <remarks>Restarts the instance's temporal history (<see cref="SdfTemporalHistory.Reset"/>) when it read external
-    /// content, which then needs one <see cref="SdfWorldPackage.TemporalPeriod"/> of renders to converge again, and has a
+    /// content, which then needs <see cref="SdfWorldPackage.ConvergedRenders"/> renders to converge again, and has a
     /// tainted lighting source (the sky environment, the screen emission) derived again on its next recording
     /// (<see cref="SdfWorldTables.ProjectTaintedSourcesAgain"/>), from the capture gate's fills, before this instance's
     /// views read it in the same frame.</remarks>
@@ -60,7 +60,7 @@ public sealed partial class SdfWorldPasses {
         entry.TaintedNow = false;
         entry.TaintCause = null;
 
-        return ((int)SdfWorldPackage.TemporalPeriod);
+        return ((int)SdfWorldPackage.ConvergedRenders);
     }
 
     // Names a frame's tainted lighting source, a demanded sky environment or the screen emission it lights by, or null
