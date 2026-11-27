@@ -9,10 +9,11 @@ namespace Puck.World.Server;
 /// its origin passes the glass and the door fires (<see cref="WorldFaceRegion"/>).
 /// </summary>
 /// <remarks>
-/// <para>A body is in an opening when its foot point, before the solve, lies within the face's rectangle and within
-/// one crossing depth of its plane on either side, and its collider's volumes lie within the rectangle across the
-/// glass, so a body too big for a door meets the wall round it; of several openings, the one whose glass is nearest
-/// the foot point. The inner field resolves the step as it would with no door; then
+/// <para>A body is in an opening when its foot point, before the solve, lies within the face's rectangle and, on either
+/// side of the glass, within the body's own band: as far as its collider reaches along the face's normal, plus its travel
+/// along the normal this step and the contact skin, never thinner than the face's slab. Its collider's volumes must also
+/// lie within the rectangle across the glass, so a body too big for a door meets the wall round it; of several openings,
+/// the one whose glass is nearest the foot point. The inner field resolves the step as it would with no door; then
 /// every push it made out of the door along the face's outward normal is taken back — the position keeps the depth
 /// it was stepped to and the velocity keeps the speed it had into the door — and a ground contact facing out of the
 /// door no longer grounds the body. Pushes across the opening, from the door's own sides, stand.</para>
@@ -24,11 +25,14 @@ public sealed class WorldPortalHoleContactField : IContactField {
     private readonly IContactField m_inner;
     private readonly (string PlacementId, string Face, WorldFaceAperture.Box Box)[] m_openings;
     private readonly WorldPortalClosures? m_closures;
+    // The world's contact skin, which the solve keeps a pushed body's collider clear by.
+    private readonly FixedQ4816 m_skin;
 
-    private WorldPortalHoleContactField(IContactField inner, (string PlacementId, string Face, WorldFaceAperture.Box Box)[] openings, WorldPortalClosures? closures) {
+    private WorldPortalHoleContactField(IContactField inner, (string PlacementId, string Face, WorldFaceAperture.Box Box)[] openings, WorldPortalClosures? closures, FixedQ4816 skin) {
         m_inner = inner;
         m_openings = openings;
         m_closures = closures;
+        m_skin = skin;
     }
 
     /// <summary>Wraps <paramref name="inner"/> with the openings of every portal face <paramref name="definition"/>
@@ -52,21 +56,39 @@ public sealed class WorldPortalHoleContactField : IContactField {
             ? new WorldPortalHoleContactField(
                 closures: closures,
                 inner: inner,
-                openings: [.. openings]
+                openings: [.. openings],
+                skin: WorldFacePortalPolicy.SlabFloor(definition: definition)
             )
             : inner
         );
     }
 
+    // How far a volume reaches from its centre (and a capsule's from its endpoint) along any axis: its radius, or for a
+    // box or an ellipsoid the sum of its half-extents, which bounds it whatever its rotation.
+    private static FixedQ4816 Extent(in FixedBodyColliderVolume volume) => ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
+        ? FixedVector3.L1Norm(value: volume.HalfExtents)
+        : volume.Radius
+    );
+    // How far the body's collider reaches from its origin along a face's normal, either way, from each volume's support
+    // (FixedColliderBounds.MinimumProjection): how far from a door's glass its origin can stand while the collider meets
+    // the glass's plane.
+    private static FixedQ4816 ReachAlong(in FixedVector3 normal, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var reach = FixedQ4816.Zero;
+
+        foreach (var volume in volumes) {
+            reach = FixedQ4816.Max(x: reach, y: FixedQ4816.Max(
+                x: -FixedColliderBounds.MinimumProjection(normal: normal, orientation: in orientation, position: FixedVector3.Zero, volume: in volume),
+                y: -FixedColliderBounds.MinimumProjection(normal: -normal, orientation: in orientation, position: FixedVector3.Zero, volume: in volume)
+            ));
+        }
+
+        return reach;
+    }
     // Whether every volume of the body lies within the opening's rectangle across its glass: a body too big for a door,
-    // as a body at full size is for a door a quarter its size, meets the wall round it. A box volume is bounded by the sum
-    // of its half-extents along any axis, whatever its rotation.
+    // as a body at full size is for a door a quarter its size, meets the wall round it.
     private static bool Fits(in WorldFaceFrame frame, in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
         foreach (var volume in volumes) {
-            var reach = ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
-                ? ((FixedQ4816.Abs(value: volume.HalfExtents.X) + FixedQ4816.Abs(value: volume.HalfExtents.Y)) + FixedQ4816.Abs(value: volume.HalfExtents.Z))
-                : volume.Radius
-            );
+            var reach = Extent(volume: in volume);
 
             if (
                 !Within(frame: in frame, point: (position + orientation.Rotate(vector: volume.Center)), reach: reach) ||
@@ -88,10 +110,13 @@ public sealed class WorldPortalHoleContactField : IContactField {
         }
     }
     // The opening the body stands in, if any: its foot point within the opening's band and its volumes within the
-    // opening's rectangle (Fits). Of several, the one whose glass is nearest the foot point, the earlier in document
-    // order on a tie. A crossing band reaches a step of the world's fastest travel past its glass, so two doors back to
-    // back across a wall each hold a body standing at the other; the door it stands at is the nearer.
-    private bool TryOpening(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out WorldFaceAperture.Box opening) {
+    // opening's rectangle (Fits). The band is the body's own, on either side of the glass: as far as its collider reaches
+    // along the face's normal, plus its travel along the normal this step (from `previous`, the step's start) and the
+    // contact skin, and never thinner than the face's slab. So a body clear of a door is pushed as anywhere else, however
+    // fast another body can go. Of several, the one whose glass is nearest the foot point, the earlier in document order
+    // on a tie: two doors back to back across a wall each hold a body standing at the other, and the door it stands at is
+    // the nearer.
+    private bool TryOpening(in FixedVector3 position, in FixedVector3 previous, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out WorldFaceAperture.Box opening) {
         var found = false;
         var nearest = FixedQ4816.Zero;
 
@@ -102,16 +127,17 @@ public sealed class WorldPortalHoleContactField : IContactField {
 
             var frame = candidate.Frame;
             var offset = (position - frame.Origin);
-            var depth = FixedVector3.Dot(
+            var depth = FixedQ4816.Abs(value: FixedVector3.Dot(
                 left: offset,
                 right: frame.Normal
-            );
+            ));
 
             if (
-                (FixedQ4816.Abs(value: depth) <= candidate.Depth) &&
                 (FixedQ4816.Abs(value: FixedVector3.Dot(left: offset, right: frame.Right)) <= frame.HalfWidth) &&
                 (FixedQ4816.Abs(value: FixedVector3.Dot(left: offset, right: frame.Up)) <= frame.HalfHeight) &&
-                (!found || (FixedQ4816.Abs(value: depth) < nearest)) &&
+                (!found || (depth < nearest)) &&
+                ((depth <= candidate.Depth) || (depth <= ((ReachAlong(normal: frame.Normal, orientation: in orientation, volumes: volumes) +
+                    FixedQ4816.Abs(value: FixedVector3.Dot(left: (position - previous), right: frame.Normal))) + m_skin))) &&
                 Fits(
                     frame: in frame,
                     orientation: in orientation,
@@ -120,7 +146,7 @@ public sealed class WorldPortalHoleContactField : IContactField {
                 )
             ) {
                 found = true;
-                nearest = FixedQ4816.Abs(value: depth);
+                nearest = depth;
                 opening = candidate;
             }
         }
@@ -129,13 +155,14 @@ public sealed class WorldPortalHoleContactField : IContactField {
     }
     // Takes back what the solve pushed out of the opening's door: the position's outward displacement and the
     // velocity's outward change along the face normal, and a grounding on a surface that faces out of the door.
-    private ContactResolution Open(in FixedVector3 steppedPosition, in FixedVector3 steppedVelocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, ref FixedVector3 position, ref FixedVector3 velocity, ContactResolution resolution) {
+    private ContactResolution Open(in FixedVector3 previousPosition, in FixedVector3 steppedPosition, in FixedVector3 steppedVelocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, ref FixedVector3 position, ref FixedVector3 velocity, ContactResolution resolution) {
         if (
             (resolution.Refusal != ContactRefusal.None) ||
             !TryOpening(
             opening: out var opening,
             orientation: in orientation,
             position: in steppedPosition,
+            previous: in previousPosition,
             volumes: volumes
         )
         ) {
@@ -172,10 +199,12 @@ public sealed class WorldPortalHoleContactField : IContactField {
         var steppedPosition = position;
         var steppedVelocity = velocity;
 
+        // A resolve in place has no step behind it, so the body's band is its collider's reach alone.
         return Open(
             orientation: in orientation,
             volumes: volumes,
             position: ref position,
+            previousPosition: in steppedPosition,
             resolution: m_inner.Resolve(
                 orientation: in orientation,
                 position: ref position,
@@ -197,6 +226,7 @@ public sealed class WorldPortalHoleContactField : IContactField {
             orientation: in orientation,
             volumes: volumes,
             position: ref position,
+            previousPosition: in previousPosition,
             resolution: m_inner.ResolveSweep(
                 orientation: in orientation,
                 position: ref position,
@@ -215,7 +245,7 @@ public sealed class WorldPortalHoleContactField : IContactField {
     /// pushed; anywhere else the inner field answers.</remarks>
     public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
         Span<FixedSurfaceContact> destination) =>
-        (TryOpening(opening: out _, orientation: in orientation, position: in position, volumes: [volume])
+        (TryOpening(opening: out _, orientation: in orientation, position: in position, previous: in position, volumes: [volume])
             ? -1
             : m_inner.CollectContacts(destination: destination, margin: margin, orientation: in orientation, position: in position, volume: in volume));
     /// <inheritdoc/>

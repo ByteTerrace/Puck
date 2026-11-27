@@ -1535,8 +1535,8 @@ transfer for the same reason (see Carry below).
 `TryApplyRigidImpulse` refuses by name a second way beyond a raw fixed-point
 overflow: the resulting velocity's magnitude may not exceed
 `WorldPopulation.RigidVelocityCeiling`—the document's own declared speed
-ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the same fastest travel a
-crossing face already reads), so a degenerate `body.impulse` magnitude is
+ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the fastest travel the
+document declares), so a degenerate `body.impulse` magnitude is
 refused before it can reach the solver as an unrepresentable per-tick
 position delta rather than accepted and left to overflow deeper in the
 sweep. `world.budget`'s `rigid` segment echoes the compiled ceiling as

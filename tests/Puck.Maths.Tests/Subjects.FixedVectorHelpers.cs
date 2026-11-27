@@ -173,6 +173,19 @@ internal static partial class Subjects {
 
         if (FixedVector3.MaxComponent(value: a).Value != greatest) { return $"MaxComponent is not the greatest lane {greatest}"; }
 
+        // The L1 norm: the lanes' magnitudes summed exactly and clamped to the raw extremes; a MinValue lane has no
+        // magnitude and refuses.
+        if ((left[0] == long.MinValue) || (left[1] == long.MinValue) || (left[2] == long.MinValue)) {
+            if (RawsOrRefusal<OverflowException>(operation: () => new FixedVector3(X: FixedVector3.L1Norm(value: a), Y: default, Z: default)) is not null) {
+                return "L1Norm accepted a MinValue lane";
+            }
+        } else {
+            var magnitudes = ((BigInteger.Abs(value: left[0]) + BigInteger.Abs(value: left[1])) + BigInteger.Abs(value: left[2]));
+            var expectedNorm = ((magnitudes > long.MaxValue) ? long.MaxValue : (long)magnitudes);
+
+            if (FixedVector3.L1Norm(value: a).Value != expectedNorm) { return $"L1Norm is not the clamped magnitude sum {expectedNorm}"; }
+        }
+
         // Swapped bounds refuse whenever some lane's range is not a single point, and are the identity clamp to that
         // point otherwise.
         var degenerate = ((lower[0] == upper[0]) && (lower[1] == upper[1]) && (lower[2] == upper[2]));

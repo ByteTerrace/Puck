@@ -453,11 +453,7 @@ public sealed partial class WorldPopulation : IWorldInhabitants {
                 : PopulationKind.NetworkPeer),
                 CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index),
                 Designations = NewDesignations(),
-                ProducerState = new BodyProducerState {
-                    AcquiredTarget = -1,
-                    ActiveProducerCurveIndex = -1,
-                    ActiveProducerNavigationDomainIndex = -1,
-                },
+                ProducerState = BodyProducerState.Fresh,
             };
         }
 

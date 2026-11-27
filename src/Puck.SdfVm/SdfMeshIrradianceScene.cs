@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using Puck.Maths;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Hosting.Jobs;
@@ -319,7 +320,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         try {
             // The largest first, so one long build does not start last.
             pending.Sort(comparison: static (a, b) => b.Mesh.TriangleCount.CompareTo(value: a.Mesh.TriangleCount));
-            _ = Parallel.For(fromInclusive: 0, toExclusive: pending.Count, body: index => built[index] = Geometry.Build(key: pending[index].Key, mesh: pending[index].Mesh, workspace: workspace, allocator: allocator));
+            PoolFork.Run(partitions: pending.Count, body: index => built[index] = Geometry.Build(key: pending[index].Key, mesh: pending[index].Mesh, workspace: workspace, allocator: allocator));
 
             var trianglesBuilt = 0L;
 
@@ -1131,7 +1132,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 body(arg1: 0, arg2: count);
                 return;
             }
-            _ = Parallel.For(fromInclusive: 0, toExclusive: count.CeilingDivide(divisor: ParallelPrimitives), body: chunk => body(arg1: (chunk * ParallelPrimitives), arg2: Math.Min(val1: count, val2: ((chunk + 1) * ParallelPrimitives))));
+            PoolFork.Run(partitions: count.CeilingDivide(divisor: ParallelPrimitives), body: chunk => body(arg1: (chunk * ParallelPrimitives), arg2: Math.Min(val1: count, val2: ((chunk + 1) * ParallelPrimitives))));
         }
 
         // The boxes a run of triangles enters the hierarchy as, each with the triangle it bounds a piece of: a triangle

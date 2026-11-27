@@ -158,9 +158,8 @@ internal static class FixedRoundedBoxContact {
     // orientation: a component of a rotated vector is at most the vector's L1 norm, a capsule's segment ends at its centre
     // and endpoint, and a box's corners are its centre plus its half extents.
     private static FixedQ4816 Reach(in FixedBodyColliderVolume volume) => ((volume.Kind == FixedBodyColliderKind.Capsule)
-        ? (FixedQ4816.Max(x: L1(vector: volume.Center), y: L1(vector: volume.Endpoint)) + volume.Radius)
-        : (L1(vector: volume.Center) + L1(vector: volume.HalfExtents)));
-    private static FixedQ4816 L1(FixedVector3 vector) => ((FixedQ4816.Abs(value: vector.X) + FixedQ4816.Abs(value: vector.Y)) + FixedQ4816.Abs(value: vector.Z));
+        ? (FixedQ4816.Max(x: FixedVector3.L1Norm(value: volume.Center), y: FixedVector3.L1Norm(value: volume.Endpoint)) + volume.Radius)
+        : (FixedVector3.L1Norm(value: volume.Center) + FixedVector3.L1Norm(value: volume.HalfExtents)));
     // Far past the oriented test's rounding, a few units of the last place.
     private static readonly FixedQ4816 ReachMargin = FixedQ4816.FromDouble(value: (1.0 / 256.0));
 

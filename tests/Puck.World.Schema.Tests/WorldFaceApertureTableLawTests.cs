@@ -56,7 +56,7 @@ public sealed class WorldFaceApertureTableLawTests {
         Assert.NotNull(@object: WorldFaceApertures.For(primitive: SdfSolidPrimitive.Box));
     }
     [Fact]
-    public void TheBoxRecipeExtrudesTheFacesOwnFrame_NeverThinnerThanTheCrossingFloor() {
+    public void TheBoxRecipeExtrudesTheFacesOwnFrame_NeverThinnerThanTheSlabFloor() {
         var row = Row(primitive: SdfSolidPrimitive.Box);
         var recipe = Assert.IsType<WorldFaceApertureRecipe>(@object: row.Aperture);
 
@@ -70,12 +70,12 @@ public sealed class WorldFaceApertureTableLawTests {
 
         Assert.True(condition: WorldFacePortalPolicy.TryAperture(
             aperture: out var deep,
-            crossingFloor: thickFloor,
+            slabFloor: thickFloor,
             row: in row
         ));
         Assert.True(condition: WorldFacePortalPolicy.TryAperture(
             aperture: out var shallow,
-            crossingFloor: thinFloor,
+            slabFloor: thinFloor,
             row: in row
         ));
 
@@ -107,7 +107,7 @@ public sealed class WorldFaceApertureTableLawTests {
             Assert.Equal(
                 actual: WorldFacePortalPolicy.TryAperture(
                     aperture: out var aperture,
-                    crossingFloor: floor,
+                    slabFloor: floor,
                     row: in row
                 ),
                 expected: opens
@@ -124,7 +124,7 @@ public sealed class WorldFaceApertureTableLawTests {
         Assert.Null(@object: shapeless.Aperture);
         Assert.False(condition: WorldFacePortalPolicy.TryAperture(
             aperture: out _,
-            crossingFloor: floor,
+            slabFloor: floor,
             row: in shapeless
         ));
     }

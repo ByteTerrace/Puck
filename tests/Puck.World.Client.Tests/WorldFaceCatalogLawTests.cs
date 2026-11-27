@@ -511,16 +511,6 @@ public sealed class WorldFaceCatalogLawTests {
         );
     }
     [Fact]
-    public void ARestingWorldDerivesNoCrossingFloor() {
-        // Rate zero is a legal, distinct rate: nothing advances, so no step of travel exists to floor a band with.
-        var definition = (BuildDoorDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
-
-        Assert.Equal(
-            expected: FixedQ4816.Zero,
-            actual: WorldFacePortalPolicy.CrossingFloor(definition: definition)
-        );
-    }
-    [Fact]
     public void AnAttachedPlacementWithoutAPortal_IsStillAllowed() {
         // The refusal is about the DOOR, not about attaching: a face may still ride a body and show a feed.
         Assert.True(condition: Validates(definition: BuildDoorDocument(
@@ -570,31 +560,37 @@ public sealed class WorldFaceCatalogLawTests {
         );
     }
     [Fact]
-    public void TheBandIsNeverThinnerThanOneStepOfDeclaredTravel() {
+    public void TheSlabReachesPastTheFaceByTheSegmentsOwnTravel() {
         var definition = BuildDoorDocument();
         var row = DoorRow(definition: definition);
-        var floor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
+        var floor = WorldFacePortalPolicy.SlabFloor(definition: definition);
 
         Assert.True(condition: WorldFacePortalPolicy.TryAperture(
             aperture: out var aperture,
-            crossingFloor: floor,
+            slabFloor: floor,
             row: in row
         ));
 
-        var band = Assert.IsType<WorldFaceAperture.Box>(@object: aperture);
+        var slab = Assert.IsType<WorldFaceAperture.Box>(@object: aperture);
+        var frame = slab.Frame;
 
-        Assert.True(
-            condition: (band.Depth >= floor),
-            userMessage: "the band is thinner than the derived crossing floor"
+        Assert.True(condition: (slab.Depth >= floor), userMessage: "the slab is thinner than the contact skin");
+        Assert.True(condition: (slab.Depth >= frame.HalfDepth), userMessage: "the slab is thinner than the door itself");
+
+        // A fast step through the glass ends far past the face's own depth and is still found in the slab; a body at rest
+        // as far past it is not, so the slab is the moving body's, never the fastest travel the world declares.
+        var far = (slab.Depth * FixedQ4816.FromInteger(value: 40));
+        var front = (frame.Origin + (frame.Normal * far));
+        var behind = (frame.Origin - (frame.Normal * far));
+        var through = WorldFaceRegion.Sweep(aperture: slab, from: front, to: behind);
+
+        Assert.True(condition: through.Crossed);
+        Assert.True(condition: through.Inside, userMessage: "a step through the glass is not found in the slab");
+        Assert.False(
+            condition: WorldFaceRegion.Sweep(aperture: slab, from: behind, to: behind).Inside,
+            userMessage: "a body at rest far behind the glass reads inside the slab"
         );
-        Assert.True(
-            condition: (band.Depth >= row.Frame.HalfDepth),
-            userMessage: "the band is thinner than the door itself"
-        );
-        Assert.True(
-            condition: (floor > FixedQ4816.Zero),
-            userMessage: "a stepping world must derive a positive crossing floor"
-        );
+        Assert.True(condition: WorldFaceAperture.Box.Reaches(bounds: slab.Bounds, from: front, to: behind));
     }
     [Fact]
     public void TheDerivationIsReusedForOneDefinitionInstance() {
@@ -711,7 +707,6 @@ public sealed class WorldFaceCatalogLawTests {
         var faster = (definition with { MotionRaw = (definition.Motion with { MoveSpeed = (((float)((double)ceiling)) * 4f) }) });
 
         Assert.True(condition: (WorldFacePortalPolicy.SpeedCeiling(definition: faster) > ceiling));
-        Assert.True(condition: (WorldFacePortalPolicy.CrossingFloor(definition: faster) > WorldFacePortalPolicy.CrossingFloor(definition: definition)));
     }
     [Fact]
     public void TheTriadIsOrthonormal_SoTheWalkedSlabAndTheDrawnScreenAreOnePlane() {

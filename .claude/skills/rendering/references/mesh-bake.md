@@ -125,7 +125,8 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   A tighter later target resumes that search; only a completed search may raise
   the maximum. Shared edge midpoints precede the unshared centroid.
   Forward checks measure the removed vertex's samples first, then every other
-  tracked sample. An original vertex retained by its tracked triangle witnesses
+  tracked sample; `ListSources` lists the second phase only once a measure has
+  passed the first, since the removed vertex's own samples decide most refusals. An original vertex retained by its tracked triangle witnesses
   its own position, normal and material exactly; the other samples choose their
   nearest admissible witness. Ordering avoids later work when an early sample
   refuses the collapse. A nearest point already beyond the current distance
@@ -147,6 +148,15 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   neighbour list and geometry once for every neighbour tried; its tracked samples and
   lines are listed by the first neighbour that needs them. The link test runs after
   the turn and facing tests, which refuse most attempts and read only the place's fan.
+- **A pass leaves quiet places out and takes woken ones at their turn.** A pass
+  takes its candidates in one total order (cost, then place). A place whose last
+  turn kept only refusals standing on its own revision and the budget (no link,
+  unkept or touched-target skip) is quiet (`Collapser.TryPlace`); `Pass` leaves it
+  out while its revision and budget hold, and `Commit`, the one revision writer,
+  calls `Wake`, which queues a left-out place for the turn its key would have had
+  if that turn is still to come (`TakeWoken`). A new input a kept refusal reads
+  must wake or disqualify a quiet place, or it stays out on a stale refusal.
+  `sdf.collapse.quiet` counts the places left out beside `priced`.
 - **A large pass measures its candidates side by side, and takes exactly the serial
   pass's collapses.** `Collapser.Speculate` measures a block of a pass's candidates
   on workers (`Collapser(Collapser shared)`: the tables shared, read only; every

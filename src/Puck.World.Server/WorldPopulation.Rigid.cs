@@ -52,8 +52,8 @@ public sealed partial class WorldPopulation {
     /// motion their probe certified.</summary>
     public int RigidGuardSweepsThisTick { get; private set; }
     /// <summary>Gets the document-derived speed a <c>body.impulse</c> command's resulting velocity may not exceed —
-    /// <see cref="WorldFacePortalPolicy.SpeedCeiling"/>, the same fastest travel the document already declares for
-    /// crossing a face. <see cref="WorldBody.TryApplyRigidImpulse"/> refuses by name rather than applying a delta
+    /// <see cref="WorldFacePortalPolicy.SpeedCeiling"/>, the fastest travel the document declares.
+    /// <see cref="WorldBody.TryApplyRigidImpulse"/> refuses by name rather than applying a delta
     /// that would carry a rigid body past it, so a degenerate impulse magnitude never reaches the solver as an
     /// unrepresentable velocity.</summary>
     public FixedQ4816 RigidVelocityCeiling => m_rigidVelocityCeiling;

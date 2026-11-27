@@ -1441,13 +1441,13 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
-  A `Parallel.For` run from a bake worker waits for helper tasks the runtime's
-  pool has not started, so a pool saturated by other work holds the stage
-  behind it (the collapse's speculation did until it moved to `PoolFork`, whose
-  caller drains the partitions itself): `SdfSampledLattice.PrimeSigns`,
-  `SdfMeshChunks.Bake` and `SdfMeshIrradianceScene`'s builds still fork that way.
-  `PoolFork` lives in `Puck.Hosting`, which `Puck.SignedDistance` does not
-  reference, so `PrimeSigns` needs it (and `IJobPartitions`) a project lower.
+  A `Parallel.For` run from a background worker waits for helper tasks the
+  runtime's pool has not started, so a pool saturated by other work holds the
+  stage behind it; `PoolFork`, whose caller drains the partitions itself, is the
+  fork for that work. The irradiance volume's probe placement and relight batches
+  (`SdfMeshIrradiance.Placement`, `SdfMeshIrradiance.BatchTraced`) still fork
+  through `Parallel.For` with a degree they pass down as `ParallelOptions`; they
+  move once `PoolFork`'s helper count carries that degree through those methods.
 - [medium · unconfirmed] A tick-cadence screen source asked for at the tick's
   own rate (a 30 Hz floor under a 30 Hz tick) has a new image only on a
   step's frame, so its floor releases it there and no lead can move it

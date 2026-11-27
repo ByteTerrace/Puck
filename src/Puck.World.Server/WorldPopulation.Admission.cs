@@ -56,11 +56,7 @@ public sealed partial class WorldPopulation {
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         entry.TravelTurn = FixedQ4816.Zero;
-        entry.ProducerState.PreferredAltitude = altitude;
-        entry.ProducerState.AcquiredTarget = -1;
-        entry.ProducerState.CurveArcRaw = 0L;
-        entry.ProducerState.CurveArcRemainder = 0L;
-        entry.ProducerState.StandDown = BodyProducerStandDown.None;
+        SeedInhabitantProducer(altitude: altitude, entry: entry, index: index, kitIndex: kitIndex);
         entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
@@ -104,6 +100,7 @@ public sealed partial class WorldPopulation {
         m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         m_entries[index].TravelTurn = FixedQ4816.Zero;
         m_entries[index].IsRemoteHuman = remoteHuman;
+        m_entries[index].ProducerState = BodyProducerState.Fresh;
         SeedSimulated(index: index);
         if (remoteHuman) {
             SeedSeatSteeringProducer(slot: index);
