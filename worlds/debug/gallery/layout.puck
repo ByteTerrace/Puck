@@ -495,3 +495,49 @@ function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranch
   (p[1] + galleryFloor[0]),
   (treeZ - p[2])
 ])
+
+// The climbing wall (climbing-wall.puck): a face `climbWallWidth` across standing in front of the north balcony edge in
+// bay `climbWallBay`, from the nave's floor to level `climbWallLevel`, facing the nave. The bay is the nave's last even
+// bay clear of everything an edge already carries: the tree's branches land in bays 4, 6 (its trunk), 7 and 8, the
+// loose lattice panel is bay 8's, and bay 12 is the north-east stair's. The odd bays either side hold displays, whose
+// plinths stand 4.5 m in from the edge and leave the pad more than a metre of floor on each side.
+//
+// The wall stands `climbWallDepth` deep in front of the edge, its back on the edge's line, so its ledge (the frame's
+// coping, level with the floor it tops out at) is deep enough for a mantle to set a body down on it whole: the climb's
+// mantle carries a body 0.8 m in from where it hangs, one body radius off the face, so it lands 0.45 m past the face
+// with its capsule reaching 0.35 m either side, all of it on the ledge and clear of the balustrade. A doorway in that level's
+// balustrade opens behind the ledge (`galleryEdgeDoors`). Before the face a pad `climbWallPad.depth` deep catches a
+// fall, reaching past the frame on each side; the face stands on the pad, and the frame on the floor.
+let climbWallBay = 10
+let climbWallLevel = 3
+let climbWallX = bayX(climbWallBay)
+let climbWallWidth = 4
+let climbWallDepth = 1.1
+let climbWallThickness = 0.2
+let climbWallCoping = 0.3
+let climbWallPad = { width: 5, depth: 2.5, height: 0.25 }
+// The climbing plane's line in the plan (the face's front, where a climber's hands go), the pad's top, the ledge's top
+// and the face's height from the pad to the coping.
+let climbWallFace = (naveNorth - climbWallDepth)
+let climbWallFoot = (galleryFloor[0] + climbWallPad.height)
+let climbWallTop = galleryFloor[climbWallLevel]
+let climbWallFaceHeight = ((climbWallTop - climbWallFoot) - climbWallCoping)
+// A point on the face, `u` metres across from its middle (toward +x) and `v` up from its foot, in the plan, on the
+// climbing plane.
+function climbWallAt(u, v) = [(climbWallX + u), (climbWallFoot + v), climbWallFace]
+// Where a climb starts and ends: on the pad before the face's middle, a step out from it; on the ledge, a body's stance
+// in from the face where the climb's mantle sets it down; and on the floor of its level through the doorway behind.
+let climbWallStart = [climbWallX, climbWallFoot, (climbWallFace - 0.7)]
+let climbWallSummit = [climbWallX, climbWallTop, (climbWallFace + 0.5)]
+let climbWallLanding = [climbWallX, climbWallTop, (naveNorth + 1.5)]
+
+// The doorways in the balustrades of levels 2 and 3, each filling a bay's balcony edge where something meets the floor
+// from over the void: the tree's branches on those levels (`treeLimbs`) and the climbing wall's ledge. Each is
+// { level, side, x }, `x` the bay's centre; the balustrade leaves the bay to the doorway and a short length either side.
+let galleryEdgeDoors = concat(
+  map(filter(treeLimbs, b => (b.level >= 2)), b => { level: b.level, side: b.side, x: b.x }),
+  [{ level: climbWallLevel, side: "north", x: climbWallX }]
+)
+function galleryEdgeDoorsOn(level, side) = filter(galleryEdgeDoors, d => ((d.level == level) and (d.side == side)))
+// Whether the balcony edge at `x` on a level's side is a plain length of balustrade, with no doorway in its bay.
+function galleryEdgeRailed(level, side, x) = (count(galleryEdgeDoorsOn(level, side), d => (d.x == x)) == 0)

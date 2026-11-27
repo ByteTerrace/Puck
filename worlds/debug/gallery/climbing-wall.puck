@@ -1,0 +1,210 @@
+// The climbing wall: a sandstone face of softened canyon planes that rises from the nave's floor to level 3 in front of
+// the north balcony edge (layout.puck's climbWall* values), set with three coloured routes, so a player who walks into
+// it climbs the whole height of the hall past the toybox and the board game room's level and pulls up onto a ledge
+// with the nave, the tree and the far galleries below her, then steps through a doorway onto level 3. A fall lands on
+// the sage pad at its foot. The gallery module imports this, so the gallery booted alone (gallery-root.puck) and the
+// debug world both stand it.
+//
+// It is four kinds of piece, all the standard's (climbing.puck):
+//
+//   the face     the one surface a climber holds (its placement's `grip`), a flat backing under drawn plates, so the
+//                climb reads one plane; a body seated on it hangs a radius off the backing, clear of every hold
+//   the frame    cheeks either side of the face, its body back to the balcony edge and the coping whose top is the
+//                ledge, level with level 3's floor; solid and not holdable, so a climber stops at the face's edges
+//   the holds    one placement per hold, each a copy of its family's prototype, drawn only: a hold reads as where a
+//                hand goes and the rig's hands find it, while the climb itself holds the face
+//   the pad      foam blocks before the face, ground a body lands on
+//
+// The routes are lines of holds up the face (`climbRoutes`), each in one colour (look.puck's lookClimb): sunflower up
+// the middle, teal up the west side and berry up the east side. Every route ends under the ledge in front of the
+// doorway, so a player who follows any colour tops out where the ledge leads on. The pastel volumes stand on the face
+// between the routes' holds, and a hold that lands on one stands on its front.
+
+import "../../standard/climbing"
+import "../shapes"
+import "layout"
+import "look"
+import "shell"
+
+// The face's facet grid and the plates' relief and lean, gentler than the standard's so a hold seated 0.04 m out of
+// the face's plane stands proud of every plate it meets.
+let climbFacets = { columns: 3, rows: 10, relief [0.02, 0.04], tilt: 2.5, salt: 0.37 }
+let climbHoldSeat = 0.04
+
+// The volumes: each a face coordinate (metres across from the face's middle, up from its foot), its size and its tone
+// in lookClimb.volumes.
+let climbVolumes = [
+  { at [-0.85, 2.4], size: 1.2, tone: 0 }
+  { at [0.95, 5.1], size: 1.0, tone: 1 }
+  { at [-0.8, 8.6], size: 1.1, tone: 1 }
+  { at [0.75, 11.1], size: 0.9, tone: 0 }
+]
+// How far a hold at a face coordinate stands out on a volume beneath it: the volume's front, 0.09 m out at size 1,
+// wherever the hold lies inside the volume's triangle, and nothing elsewhere.
+function climbOnVolume(at, volume) = (let d = (at - volume.at) in
+(((d[1] >= (-0.38 * volume.size)) and
+  (d[1] <= (0.38 * volume.size)) and
+  (absolute(d[0]) <= ((0.45 * volume.size) * (((0.38 * volume.size) - d[1]) / (0.76 * volume.size))))) ? (0.09 *
+  volume.size) : 0))
+function climbStandOff(at) = maximum(map(climbVolumes, volume => climbOnVolume(at, volume)))
+
+// The routes, each a family's line of holds (the standard's climbRoute: a hold every `pitch` metres along its points,
+// stepping to either side of the line in turn). Sunflower is the gentle line, mostly jugs; teal climbs the west side
+// on crimps and pinches; berry the east side on slopers and pinches, wider apart. Each ends 0.4 m under the coping,
+// before the doorway.
+let climbRoutes = [
+  {
+    family: "sunflower"
+    color: lookClimb.routes.sunflower
+    holds: climbRoute(
+      [[0.1, 0.3], [-0.3, 3], [0.35, 6.2], [-0.25, 9.4], [0, 12.55]],
+      0.6,
+      0.28,
+      ["jug", "foot", "jug", "sloper", "jug", "foot"],
+      [1.1, 1, 1, 1, 1.15, 1]
+    )
+  }
+  {
+    family: "teal"
+    color: lookClimb.routes.teal
+    holds: climbRoute(
+      [[-1.5, 0.35], [-1.5, 4.5], [-1, 8], [-1.4, 10.8], [-0.95, 12.55]],
+      0.72,
+      0.24,
+      ["crimp", "pinch", "crimp", "foot"],
+      [1, 1.1, 1.2, 1]
+    )
+  }
+  {
+    family: "berry"
+    color: lookClimb.routes.berry
+    holds: climbRoute(
+      [[1.4, 0.35], [1.15, 3.5], [1.45, 6.8], [1.1, 10.2], [0.95, 12.55]],
+      0.8,
+      0.26,
+      ["sloper", "pinch", "crimp", "sloper", "foot"],
+      [1, 1, 1.1, 0.9, 1]
+    )
+  }
+]
+// Every hold of every route, with its family and colour; and each family and kind a route uses, which is one prototype.
+let climbHolds = flatMap(climbRoutes, r => map(r.holds, h => (h with { family: r.family, color: r.color })))
+let climbHoldPrototypes = distinct(map(climbHolds, h => { family: h.family, kind: h.kind, color: h.color }))
+
+// The face's and frame's palette: the standard's slots in the gallery's look, its panels and frame brushed as the
+// building's surfaces are.
+let climbPalette = map(
+  climbingPalette(lookClimb.panels, lookClimb.seam, lookClimb.frame, lookClimb.coping),
+  entry => shellBrushed(entry)
+)
+
+prototypes {
+  prototype "gallery-climb-face" {
+    document {
+      name: "gallery-climb-face"
+      schema: "puck.creation.v2"
+      palette: climbPalette
+      climbingFace(
+        base: 0,
+        width: climbWallWidth,
+        height: climbWallFaceHeight,
+        columns: climbFacets.columns,
+        rows: climbFacets.rows,
+        relief: climbFacets.relief,
+        tilt: climbFacets.tilt,
+        thickness: climbWallThickness,
+        salt: climbFacets.salt
+      )
+    }
+  }
+  prototype "gallery-climb-frame" {
+    document {
+      name: "gallery-climb-frame"
+      schema: "puck.creation.v2"
+      palette: climbPalette
+      climbingFrame(
+        base: 0,
+        width: climbWallWidth,
+        height: (climbWallTop - galleryFloor[0]),
+        depth: climbWallDepth,
+        coping: climbWallCoping,
+        thickness: climbWallThickness
+      )
+    }
+  }
+  prototype "gallery-climb-pad" {
+    document {
+      name: "gallery-climb-pad"
+      schema: "puck.creation.v2"
+      palette: map(climbingPadPalette(lookClimb.pad), entry => shellBrushed(entry))
+      climbingPad(
+        base: 0,
+        width: climbWallPad.width,
+        depth: (climbWallPad.depth + climbWallThickness),
+        height: climbWallPad.height
+      )
+    }
+  }
+  for p in climbHoldPrototypes {
+    prototype $"gallery-climb-{p.family}-{p.kind}" {
+      document {
+        name: $"gallery-climb-{p.family}-{p.kind}"
+        schema: "puck.creation.v2"
+        palette: climbingHoldPalette(p.color, lookClimb.bolt)
+        climbingHold(base: 0, kind: p.kind)
+      }
+    }
+  }
+  for (tone, n) in lookClimb.volumes {
+    prototype $"gallery-climb-volume-{n}" {
+      document {
+        name: $"gallery-climb-volume-{n}"
+        schema: "puck.creation.v2"
+        palette: climbingHoldPalette(tone, lookClimb.bolt)
+        climbingVolume(base: 0)
+      }
+    }
+  }
+}
+
+placements {
+  // The face holds a climber, and nothing else of the wall does.
+  placement "gallery-climb-face" {
+    prototype: "gallery-climb-face"
+    parent: "gallery"
+    position [climbWallX, climbWallFoot, climbWallFace]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "gallery-climb-frame" {
+    prototype: "gallery-climb-frame"
+    parent: "gallery"
+    position [climbWallX, galleryFloor[0], climbWallFace]
+    solid
+  }
+  // The pad reaches under the face's backing to the frame's body, so the face stands on it.
+  placement "gallery-climb-pad" {
+    prototype: "gallery-climb-pad"
+    parent: "gallery"
+    position [climbWallX, galleryFloor[0], (climbWallFace + climbWallThickness)]
+    solid
+  }
+  for (volume, n) in climbVolumes {
+    placement $"gallery-climb-volume-{n}" {
+      prototype: $"gallery-climb-volume-{volume.tone}"
+      parent: "gallery"
+      position: (climbWallAt(volume.at[0], volume.at[1]) - [0, 0, climbHoldSeat])
+      scale: volume.size
+    }
+  }
+  for (hold, n) in climbHolds {
+    placement $"gallery-climb-hold-{n}" {
+      prototype: $"gallery-climb-{hold.family}-{hold.kind}"
+      parent: "gallery"
+      position: (climbWallAt(hold.at[0], hold.at[1]) - [0, 0, (climbHoldSeat + climbStandOff(hold.at))])
+      scale: hold.size
+    }
+  }
+}

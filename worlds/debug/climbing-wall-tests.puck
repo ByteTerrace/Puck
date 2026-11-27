@@ -1,0 +1,163 @@
+// The gallery's climbing wall climbed as a player climbs it (gallery/climbing-wall.puck): seat 1 plays the
+// `climbing-wall` route (benchmark-route.puck) with the standard's `walker` program, onto the pad, up the face with
+// the stick held forward, over the ledge by the climb's mantle and through the doorway onto level 3. Rules in this test
+// world latch what the climb did as it went, from the body's own facts and kinematic witnesses (`kinematics(body, 0,
+// <witness>)`, what its contact phase decided each step):
+//
+//   held      the body held the face (the `HoldingUnwalkable` fact)
+//   passed    it was still holding the face above level 1's floor, and above level 2's
+//   topped    it stood on the ledge, grounded, level with level 3's floor, between the face and the balcony edge
+//   landed    it stood on level 3's floor beyond the doorway, grounded
+//   winded    its stamina never ran out on the way
+//   fell      no airborne run longer than `climbAirborne` once it held the face (a climb's hold is not airborne)
+//   deep      no step ended a contact solve still pushing as deep as the walker's contact skin
+//
+// and the least stamina it had, which a climb of the wall's height should leave well above empty. A second test
+// climbs part way by the keys, lets go with the run key, and lands on the pad. Play the route live with
+// `world.benchmark run climbing-wall`.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
+documentId: "debug"
+import "stopped-machines"
+import "gallery/layout"
+
+// The walker's contact skin, metres (avatars/moth.puck's collision.contactSkin), and the longest airborne run, seconds,
+// once the climb is under way: the mantle carries the body over the ledge in half a second.
+let climbSkin = 0.02
+let climbAirborne = 0.8
+// The heights in the world that the climb reads: level 1's and level 2's floors, the pad's top and the ledge's top; and
+// the band over a floor a standing body's foot stands in.
+let climbLevelFloors = map([1, 2], k => galleryWorld(0, galleryFloor[k], 0)[1])
+let climbPadTop = galleryWorld(0, climbWallFoot, 0)[1]
+let climbLedgeTop = galleryWorld(0, climbWallTop, 0)[1]
+let climbFloorBand = [-0.05, 0.3]
+// The ledge's span in the world: between the face and the balcony edge, across the face's width.
+let climbFaceZ = galleryWorld(0, 0, climbWallFace)[2]
+let climbEdgeZ = galleryWorld(0, 0, naveNorth)[2]
+let climbWallWorldX = galleryWorld(climbWallX, 0, 0)[0]
+let climbLanding = galleryWorld(climbWallLanding[0], climbWallLanding[1], climbWallLanding[2])
+let climbPadFrontZ = (climbFaceZ - climbWallPad.depth)
+// Whether body 0 stands grounded on a floor whose top is `top`, and whether it stands within `reach` of a point on the
+// plan (`px`, `pz`).
+function climbStands(top) = (fact(body, 0, Grounded) == 1 and
+  bodyPosition(body, 0, y) >= (top + climbFloorBand[0]) and
+  bodyPosition(body, 0, y) <= (top + climbFloorBand[1]))
+function climbNear(px, pz, reachX, reachZ) = (abs((bodyPosition(body, 0, x) - px)) < reachX and
+  abs((bodyPosition(body, 0, z) - pz)) < reachZ)
+
+// What the climb did, latched as it went; `climbLeast` is the least stamina seen since the face was held, starting
+// above any wheel's capacity.
+state {
+  world {
+    slot climbHeld = 0
+    slot climbTopped = 0
+    slot climbLanded = 0
+    slot climbWinded = 0
+    slot climbFell = 0
+    slot climbDeep = 0
+    slot climbLeast = 100.5
+    table climbPassed {
+      "1" = 0
+      "2" = 0
+    }
+  }
+}
+
+rule "climb-held" {
+  when climbHeld == 0 and fact(body, 0, HoldingUnwalkable) == 1
+  mode: Level
+  climbHeld = 1
+}
+for (floor, n) in climbLevelFloors {
+  rule $"climb-passed-{n + 1}" {
+    when climbPassed[$"{n + 1}"] == 0 and fact(body, 0, HoldingUnwalkable) == 1 and bodyPosition(body, 0, y) > floor
+    mode: Level
+    climbPassed[$"{n + 1}"] = 1
+  }
+}
+rule "climb-topped" {
+  when climbTopped == 0 and climbStands(climbLedgeTop) and climbNear(
+      climbWallWorldX,
+      ((climbFaceZ + climbEdgeZ) / 2),
+      (climbWallWidth / 2),
+      ((climbEdgeZ - climbFaceZ) / 2)
+    )
+  mode: Level
+  climbTopped = 1
+}
+rule "climb-landed" {
+  when climbTopped == 1 and climbLanded == 0 and climbStands(climbLanding[1]) and climbNear(
+      climbLanding[0],
+      climbLanding[2],
+      0.6,
+      0.6
+    )
+  mode: Level
+  climbLanded = 1
+}
+rule "climb-winded" {
+  when climbWinded == 0 and bodyState(body, 0, winded) == 1
+  mode: Level
+  climbWinded = 1
+}
+rule "climb-least" {
+  when climbHeld == 1 and bodyState(body, 0, stamina) < climbLeast
+  mode: Level
+  climbLeast = bodyState(body, 0, stamina)
+}
+rule "climb-fell" {
+  when climbHeld == 1 and climbFell == 0 and kinematics(body, 0, airborne) > climbAirborne
+  mode: Level
+  climbFell = 1
+}
+rule "climb-deep" {
+  when climbHeld == 1 and climbDeep == 0 and kinematics(body, 0, depth) >= climbSkin
+  mode: Level
+  climbDeep = 1
+}
+
+test "the climbing wall, pad to level 3" {
+  when {
+    seat1: route.play climbing-wall
+    ticks 900
+  }
+  expect {
+    climbHeld == 1
+    climbPassed["1"] == 1
+    climbPassed["2"] == 1
+    climbTopped == 1
+    climbLanded == 1
+    climbWinded == 0
+    climbFell == 0
+    climbDeep == 0
+    climbLeast > 2
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+// She walks from the place before the pad onto it and up the face for a few seconds, lets go of the stick, then lets go
+// of the face with the run key, and falls back onto the pad.
+test "a climber who lets go lands on the pad" {
+  when {
+    ticks 15
+    seat1: body.pose spawn:climbing-wall 0
+    ticks 5
+    seat1: player.signal keyboard.w press
+    ticks 150
+    seat1: player.signal keyboard.w release
+    seat1: player.signal keyboard.shiftLeft press
+    ticks 6
+    seat1: player.signal keyboard.shiftLeft release
+    ticks 120
+  }
+  expect {
+    climbHeld == 1
+    climbPassed["1"] == 1
+    fact(body, 0, HoldingUnwalkable) == 0
+    climbStands(climbPadTop)
+    bodyPosition(body, 0, z) > climbPadFrontZ
+    bodyPosition(body, 0, z) < climbFaceZ
+  }
+}
