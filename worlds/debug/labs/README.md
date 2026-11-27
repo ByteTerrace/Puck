@@ -169,16 +169,23 @@ running north (-Z, the way she faces) from its spawn point, and nothing here
 adds an ability: the walk, run, jump, dash, climb and jetpack are her basis's
 own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
 
-- `look-stage`: a grey room round the origin under the sun and a rim light,
-  where her basis's inspection cameras frame her. `moth.look front|three-quarter|side|back|close`
-  poses her there and picks one; `moth.turntable [turns a second]` turns the
-  disc she stands on (still until asked, 0 stops it);
+- `look-stage`: a closed grey room round the origin, lit only by its own lamps
+  (a key, a fill, a rim light behind her on each side and a wash on the walls,
+  so no sky tints the card), whose doorway a screen hides from every camera.
+  `moth.look front|three-quarter|side|back|close` poses her there and picks one
+  of the stage's own cameras, each 3.9 m out and framing her at about four
+  fifths of the frame's height (`close` is her basis's head camera);
+  `moth.turntable [turns a second]` turns the disc she stands on (still until
+  asked, 0 stops it);
 - `locomotion`: a 100 m lane with a mark every metre, longer at 5 and 10 m, for
   walk, run, turn on the spot, stop and start; `slalom`: posts 8 m apart, then
   4 m apart;
 - `terrain`: step-ups 0.1 to 0.5 m (her step height is 0.3 m), ramps at 10, 20,
   30, 40, 50, 58, 62 and 70 degrees (her limit is 60) and two stairs, one with
-  0.25 m risers and one with 0.35 m;
+  0.25 m risers and one with 0.35 m. Each item has a board on posts behind it
+  and each group a banner; `terrain-steps`, `terrain-ramps-low`,
+  `terrain-ramps-steep` and `terrain-stairs` stand her beside a group and
+  `moth.frame` shows it;
 - `jump`: a run-up and raised platforms with gaps of 1, 2, 3, 4, 6 and 8 m for
   the jump, air jump and dash, and ledges 0.6 to 2.6 m high to pull up onto;
 - `climb`: a holdable face 3.5 m tall over a block to stand on, small beside the
@@ -191,9 +198,10 @@ own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
 
 `moth.frame <station>` stands her at a station's spawn point and shows it from
 a fixed overview camera, the same every time; `debug.go` hands back the chase
-camera. The `arrival` frame stands outside the stage's doorway, and a sign by it
-says where each station lies. Settled when the bake is done; the look stage is
-judged in stills, everything else in motion.
+camera. The lab's air is clear (a fog density of 0.0002 a metre) so a mark reads
+at 40 m. The `arrival` frame stands outside the stage's doorway, and a sign by
+it says where each station lies. Settled when the bake is done; the look stage
+is judged in stills, everything else in motion.
 
 ### Shapes
 
