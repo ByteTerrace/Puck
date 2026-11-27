@@ -156,7 +156,8 @@ public sealed class SdfKernelSetLawTests {
     // include names nothing the renderer's declares, and the renderer's builds on it.
     [Fact]
     public void ARendererConstantMovesNoBakeStamp() {
-        var field = SdfIsaHlsl.GenerateLayout();
+        // The field's include layout and its generated dispatch and operand includes, which the field's fingerprint hashes.
+        var field = (SdfIsaHlsl.GenerateLayout() + SdfFieldHlsl.FingerprintText());
         var render = SdfRenderHlsl.GenerateLayout();
         var encoding = SdfEncodingProbe.Describe();
         var withRenderConstant = (render + "#define SDF_LIGHT_STAGE_PROBE 3u\n");

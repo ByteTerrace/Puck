@@ -211,7 +211,7 @@ repetition), one opponent move and a stale opponent answer. Run them with
 
 ## Twelve tables at once
 
-[`chess-stress.puck`](chess-stress.puck) stands twelve of these tables in a
+[`labs/board-games-stress.puck`](labs/board-games-stress.puck) (the board games lab's stress mode) stands twelve of these tables in a
 grid on a floor of their own, each `use physicalChessTable as t<n>(…)`, so every
 table's rows, rules, placements, board topology and search job are its own
 (`t3$turn`, `t3$piece4`) and a move at one table never restarts another's
@@ -226,5 +226,16 @@ measuring the board games under load, and its header names what to read
 (`world.budget.rules --spent`, `world.counters physics`, `world.search`,
 `host.frames`, `world.status`). `world.state t0$selfPlies` and `t0$selfGames`
 read a table's turns and fresh games, `stress.chess <table> <from> <to>` plays a
-move at one table, and `puck test worlds/debug/chess-stress.puck --reproduce`
+move at one table, and `puck test worlds/debug/labs/board-games-stress.puck --reproduce`
 plays every table's first turns twice and compares the runs.
+
+## The board games lab
+
+[`labs/board-games.puck`](labs/board-games.puck) stands one of these tables beside a game station, with
+its rows under their plain names, on a small floor, so a
+change to the table, its pieces or its seats bakes and settles without the
+gallery. It has no idle demonstration, and the station's chess is its own digital
+game, so the same moves can be played at both and the table is the reference the
+station's chess is compared against. Boot it with `--world
+worlds/debug/labs/board-games.puck`; the spawn point `chess` stands a seat at
+White's edge. The lab's header says what it leaves out (Go and Reversi) and why.

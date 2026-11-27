@@ -72,6 +72,11 @@ public sealed class SdfResidencySelector {
     /// samples, hits, readbacks): workspace, reserved before it is allocated and refused when its pool has no room,
     /// apart from the one job a service cannot progress without.</summary>
     public const string WorkOwner = "sdf.gpu-work";
+    /// <summary>The owner the lighting's device storage is created under: every residency's irradiance table (the probe
+    /// service's feedback table, which the views read), its hit, camera-sample and batch caches, and the probe scenes'
+    /// trace words, reserved as fixed storage before they are allocated (<see cref="ReserveLighting"/>), so the elastic
+    /// budget the mesh region is held to does not fall when the lighting first lights.</summary>
+    public const string LightingOwner = "sdf.lighting";
 
     [SideTable(reason: "one selector per device, holding that device's residency state")]
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
@@ -158,6 +163,14 @@ public sealed class SdfResidencySelector {
     public SdfGpuWorkHold ReserveWork() => new(
         device: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: Pool),
         host: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: PhysicalMemory.Host)
+    );
+    /// <summary>Returns a reservation for one residency's lighting: fixed storage under <see cref="LightingOwner"/>, in
+    /// the pool the mesh regions lie in, which the residency's irradiance volume sizes from its tier and the trace words
+    /// its standing static meshes need (<see cref="SdfLightingHold.Reserve"/>).</summary>
+    /// <returns>The reservation, holding nothing; disposing it releases it.</returns>
+    public SdfLightingHold ReserveLighting() => new(
+        account: m_account,
+        device: m_account.ReserveDevice(memoryClass: MemoryClass.Fixed, owner: LightingOwner, pool: Pool)
     );
     /// <summary>Registers a residency: its grant, which budgets its detail. The residency's meshes lie in the
     /// presentation's one region (<see cref="AttachStore"/>), which holds the reservation.</summary>

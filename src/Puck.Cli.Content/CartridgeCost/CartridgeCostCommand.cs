@@ -4,6 +4,8 @@ using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
+using Puck.HumbleGamingDeck;
+using Puck.HumbleGamingDeck.Forge;
 
 namespace Puck.Cli.CartridgeCost;
 
@@ -12,7 +14,7 @@ namespace Puck.Cli.CartridgeCost;
 /// largest per-frame iteration count each sustains, the evidence <c>CartridgeCost</c>'s weights are folded from.
 /// </summary>
 public static class CartridgeCostCommand {
-    private static readonly string[] Targets = ["cgb", "dmg", "agb"];
+    private static readonly string[] Targets = ["cgb", "dmg", "agb", "hgd"];
 
     // Every probe boots its own machine and shares nothing with another, so shapes are measured concurrently and
     // reported in sweep order; the counts do not depend on the schedule.
@@ -36,6 +38,10 @@ public static class CartridgeCostCommand {
         return 0;
     }
     private static int Ticks(CartridgeDocument document, int frames) {
+        if (document.Target == DeckCartridgeCompiler.TargetName) {
+            return DeckTicks(document: document, frames: frames);
+        }
+
         var compiled = ((document.Target == "agb")
             ? new AgbCartridgeCompiler().Compile(document: document)
             : new HgbCartridgeCompiler().Compile(document: document)
@@ -69,9 +75,23 @@ public static class CartridgeCostCommand {
         );
         return humble.Read(address: ((ushort)address));
     }
+    // The Deck counts frames by its PPU; the machine runs in small slices until the count has advanced.
+    private static int DeckTicks(CartridgeDocument document, int frames) {
+        var compiled = new DeckCartridgeCompiler().Compile(document: document);
+
+        using var instance = HgdMachineFactory.Create(configuration: new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: compiled.Rom)));
+        var machine = instance.Machine;
+        var end = (machine.FrameIndex + frames);
+
+        while (machine.FrameIndex < end) {
+            machine.RunCycles(masterTicks: 4096UL);
+        }
+
+        return machine.Bus.Peek(address: ((ushort)compiled.Variables[CartridgeCostMeasurement.Ticks]));
+    }
 
     public static Command Create() {
-        var target = new Option<string?>(name: "--target") { Description = "Measure one target only: cgb, dmg or agb. Every target is measured when omitted." };
+        var target = new Option<string?>(name: "--target") { Description = "Measure one target only: cgb, dmg, agb or hgd. Every target is measured when omitted." };
 
         target.AcceptOnlyFromAmong(values: Targets);
         var command = new Command(

@@ -175,7 +175,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_width = width;
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
-        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
+        // An emitting group traces what it draws (SdfMeshPathBake.Emitting), by the test the volume samples emitters with.
+        MeshPathBake = new SdfMeshPathBake {
+            Demand = MeshDemand,
+            Emitting = static (program, material) => SdfMeshIrradianceScene.Emits(appearance: program.Appearance, material: material),
+            Identity = SdfMeshStore.IdentityOf(kernels: kernels),
+            Library = (meshLibrary ?? m_ownedLibrary!),
+            Residency = name,
+        };
         m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
         MeshIrradiance = new SdfMeshIrradiance(allocator: MeshPathBake.Library.Allocator);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
@@ -213,7 +220,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="SdfWorldTables.DescribeRegionFlushes"/>), what the raster passes selected of it
     /// (<see cref="SdfWorldTables.DescribeSelection"/>), the motion scopes its passes sign with and why each last moved
     /// (<see cref="SdfWorldTables.DescribeMotion"/>), its presentation's selector
-    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
+    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the lighting's reservation (<see cref="SdfLightingHold.Describe"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
     /// volume's probe cache.</summary>
@@ -236,6 +243,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
+            (m_tables?.Lighting.Describe() ?? "lighting=none"),
             DescribeParking(),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),

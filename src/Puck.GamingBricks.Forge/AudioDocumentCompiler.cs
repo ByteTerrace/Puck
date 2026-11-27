@@ -26,11 +26,7 @@ public static class AudioDocumentCompiler {
     // same registers without the trigger, which restarts the envelope while intentionally not re-picking the pitch);
     // "OFF" zeroes the envelope (DAC off) with no trigger.
     private static void AppendMusicRow(byte frames, ref byte lastDuty, ref byte lastEnvelope, AudioRowDocument row, List<byte> stream) {
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsOff(row: row)) {
             stream.Add(item: frames);
             stream.Add(item: lastDuty);
             stream.Add(item: 0x00);
@@ -40,11 +36,7 @@ public static class AudioDocumentCompiler {
             return;
         }
 
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsHold(row: row)) {
             stream.Add(item: frames);
             stream.Add(item: lastDuty);
             stream.Add(item: lastEnvelope);
@@ -73,16 +65,8 @@ public static class AudioDocumentCompiler {
     }
     private static void AppendNoiseRow(byte frames, AudioRowDocument row, List<byte> stream) {
         if (
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ) ||
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
+            IsOff(row: row) ||
+            IsHold(row: row)
         ) {
             stream.Add(item: frames);
             stream.Add(item: 0x00);
@@ -106,21 +90,13 @@ public static class AudioDocumentCompiler {
     // One pulse-1 music row. The register run starts at the sweep, which stays flat because the schema carries no
     // sweep field, and a hold repeats the last step's voicing with no trigger so the note carries rather than cuts.
     private static void AppendPulseOneMusicRow(byte frames, ref byte lastDuty, ref byte lastEnvelope, AudioRowDocument row, List<byte> stream) {
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsOff(row: row)) {
             stream.AddRange(collection: [frames, ((byte)0x00), lastDuty, ((byte)0x00), ((byte)0x00), ((byte)0x00)]);
 
             return;
         }
 
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsHold(row: row)) {
             stream.AddRange(collection: [frames, ((byte)0x00), lastDuty, lastEnvelope, ((byte)0x00), ((byte)0x00)]);
 
             return;
@@ -143,16 +119,8 @@ public static class AudioDocumentCompiler {
     // always 0 — the document has no sweep field (a later schema bump can add one without breaking this compiler).
     private static void AppendPulseRow(byte frames, AudioRowDocument row, List<byte> stream) {
         if (
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ) ||
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
+            IsOff(row: row) ||
+            IsHold(row: row)
         ) {
             stream.Add(item: frames);
             stream.Add(item: 0x00);
@@ -188,21 +156,13 @@ public static class AudioDocumentCompiler {
     private static void AppendWaveMusicRow(byte frames, AudioRowDocument row, List<byte> stream) {
         var volume = ((byte)(((row.Envelope ?? 1) & 0x03) << 5));
 
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsOff(row: row)) {
             stream.AddRange(collection: [frames, ((byte)0x00), ((byte)0x00), ((byte)0x00), ((byte)0x00), ((byte)0x00)]);
 
             return;
         }
 
-        if (string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
+        if (IsHold(row: row)) {
             stream.AddRange(collection: [frames, ((byte)0x80), ((byte)0x00), volume, ((byte)0x00), ((byte)0x00)]);
 
             return;
@@ -218,16 +178,8 @@ public static class AudioDocumentCompiler {
     // One wave row: the five registers from the DAC switch through the control byte, which carries the trigger.
     private static void AppendWaveRow(byte frames, AudioRowDocument row, List<byte> stream) {
         if (
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Off,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ) ||
-            string.Equals(
-            a: row.Note,
-            b: AudioRowDocument.Hold,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
+            IsOff(row: row) ||
+            IsHold(row: row)
         ) {
             stream.Add(item: frames);
             stream.Add(item: 0x00);
@@ -250,6 +202,45 @@ public static class AudioDocumentCompiler {
         stream.Add(item: ((byte)(0x80 | (period >> 8))));
     }
 
+    /// <summary>Returns whether a row holds the previous step rather than sounding a note.</summary>
+    /// <param name="row">The row.</param>
+    /// <returns><see langword="true"/> for <see cref="AudioRowDocument.Hold"/>, in any case.</returns>
+    public static bool IsHold(AudioRowDocument row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+    /// <summary>Returns whether a row cuts the voice.</summary>
+    /// <param name="row">The row.</param>
+    /// <returns><see langword="true"/> for <see cref="AudioRowDocument.Off"/>, in any case.</returns>
+    public static bool IsOff(AudioRowDocument row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+    /// <summary>Returns a normalized part's rows in play order, each held for the part's tempo.</summary>
+    /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
+    /// <returns>The frames each row holds, 1 through 255, and the rows, pattern by pattern in the play order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The document has no patterns or no play order: it was not normalized.</exception>
+    public static (byte Frames, IEnumerable<AudioRowDocument> Rows) PlayOrder(AudioDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        var patterns = (document.Patterns ?? throw new ArgumentException(
+            message: "The document has no patterns (was it normalized by AudioCanonicalizer.Normalize?).",
+            paramName: nameof(document)
+        ));
+        var order = (document.Order ?? throw new ArgumentException(
+            message: "The document has no play order (was it normalized?).",
+            paramName: nameof(document)
+        ));
+
+        return (((byte)Math.Clamp(
+            value: (document.Tempo ?? AudioDocument.DefaultTempo),
+            max: 255,
+            min: 1
+        )), order.SelectMany(selector: index => patterns[index]));
+    }
     /// <summary>Compiles a named effect's rows into a pulse-1 or noise stream (its <see cref="AudioEffectDocument.Voice"/>
     /// selects the register layout), terminated with the effect terminator (mutes the channel).</summary>
     /// <param name="effect">The normalized effect (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
@@ -327,58 +318,44 @@ public static class AudioDocumentCompiler {
         ArgumentNullException.ThrowIfNull(document);
 
         var stream = new List<byte>();
-        var patterns = (document.Patterns ?? throw new ArgumentException(
-            message: "The document has no patterns (was it normalized by AudioCanonicalizer.Normalize?).",
-            paramName: nameof(document)
-        ));
-        var order = (document.Order ?? throw new ArgumentException(
-            message: "The document has no play order (was it normalized?).",
-            paramName: nameof(document)
-        ));
-        var frames = ((byte)Math.Clamp(
-            value: (document.Tempo ?? AudioDocument.DefaultTempo),
-            max: 255,
-            min: 1
-        ));
+        var (frames, rows) = PlayOrder(document: document);
         var lastDuty = DutyBits[2];
         var lastEnvelope = ((byte)DefaultPulseEnvelope);
 
-        foreach (var patternIndex in order) {
-            foreach (var row in patterns[patternIndex]) {
-                switch (voice) {
-                    case AudioEffectDocument.VoicePulse1:
-                        AppendPulseOneMusicRow(
-                            frames: frames,
-                            lastDuty: ref lastDuty,
-                            lastEnvelope: ref lastEnvelope,
-                            row: row,
-                            stream: stream
-                        );
-                        break;
-                    case AudioEffectDocument.VoiceWave:
-                        AppendWaveMusicRow(
-                            frames: frames,
-                            row: row,
-                            stream: stream
-                        );
-                        break;
-                    case AudioEffectDocument.VoiceNoise:
-                        AppendNoiseRow(
-                            frames: frames,
-                            row: row,
-                            stream: stream
-                        );
-                        break;
-                    default:
-                        AppendMusicRow(
-                            frames: frames,
-                            lastDuty: ref lastDuty,
-                            lastEnvelope: ref lastEnvelope,
-                            row: row,
-                            stream: stream
-                        );
-                        break;
-                }
+        foreach (var row in rows) {
+            switch (voice) {
+                case AudioEffectDocument.VoicePulse1:
+                    AppendPulseOneMusicRow(
+                        frames: frames,
+                        lastDuty: ref lastDuty,
+                        lastEnvelope: ref lastEnvelope,
+                        row: row,
+                        stream: stream
+                    );
+                    break;
+                case AudioEffectDocument.VoiceWave:
+                    AppendWaveMusicRow(
+                        frames: frames,
+                        row: row,
+                        stream: stream
+                    );
+                    break;
+                case AudioEffectDocument.VoiceNoise:
+                    AppendNoiseRow(
+                        frames: frames,
+                        row: row,
+                        stream: stream
+                    );
+                    break;
+                default:
+                    AppendMusicRow(
+                        frames: frames,
+                        lastDuty: ref lastDuty,
+                        lastEnvelope: ref lastEnvelope,
+                        row: row,
+                        stream: stream
+                    );
+                    break;
             }
         }
 

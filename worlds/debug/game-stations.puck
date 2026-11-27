@@ -143,10 +143,11 @@ template gameStationSetRules() {
 // A small room holding `stations` on their own: a floor, `seats` local seats and visitors with the stations' decks
 // above them, a spawn at the first station's near chair (`hero`) and at its far chair (`rival`), the glass's font, and
 // the world's part of every station. game-station-root.puck and the stations' test worlds stand on it; each still declares the
-// chess vocabularies and makes one instance a station itself (this file's header).
-template gameStationRoom(stations, seats = gameStationSeats) {
+// chess vocabularies and makes one instance a station itself (this file's header). A world standing more inhabitants
+// beside the stations (a lab's physical chess table: 33 bodies) names their count in `extraBodies`.
+template gameStationRoom(stations, seats = gameStationSeats, extraBodies = 0) {
   bodies {
-    capacity: (12 + (54 * length(stations)))
+    capacity: (12 + (54 * length(stations)) + extraBodies)
     localSeats: seats
     networkPlayers: 8
     seatSpawns [hero, rival]
