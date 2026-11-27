@@ -1,16 +1,16 @@
 // Patience on a game station's glass (../standard/game-station.puck): Klondike (klondike.puck) and FreeCell
 // (freecell.puck), the collection solitaire.puck switches between, laid out centred on the station's board area with the
 // standard deck's faces (../standard/cards.puck) and played from the station's near chair. A module library, in two
-// parts: what the world holds once or per station (the deck's faces, looks and kit; each station's 54 card bodies, which
-// are inhabitants and so stand where the world's body order wants them), and what each station's instance holds (its
-// games, its slots, its piles' outlines and its rules):
+// parts: what the world holds once or per station (the deck's faces, looks and kit; each station's card bodies and its
+// cursor and held outlines), and what each station's instance holds (its games, its slots, its piles' outlines and its
+// rules):
 //
 //   import "patience-station"
 //   patienceDeck()                                     // the deck's faces, looks and kit, once a world
 //   patienceStationCards(station: s)                   // one station's bodies, where the world's body order wants them
 //   prototypes { patienceStationPrototypes() }
-//   state { world { patienceDisplayState()  solitaireState(count: n) } }
-//   solitaireGame()                                    // one set of patience rules over every station's table
+//   state { world { patienceDisplayState(stations)  solitaireState(count: n) } }
+//   solitaireGame()  patienceSetRules()                // one set of patience rules over every station's table
 //   module games(station, index) {
 //     placements { patienceStationSpots(station: station, index: index) }
 //     state { patienceStationSlots(station: station)  world { patienceStationState(station: station) } }
@@ -23,9 +23,13 @@
 // otherwise, which pauses both and keeps their piles). The glass follows the piles: whenever they change
 // (`patienceSyncLeft`), every card is read for its pile and its depth in its column, and a card whose slot or face moved
 // is posed at that slot of the `patienceSlots` graph, read in the frame of the placement that put its body down, lying
-// flat on the glass, face up or face down; while another game is shown the cards lie inside the table's cap. A card is a
-// body of the `cardSlab` kit, posed exactly, so a move is judged by the door over the piles. Every station holds its own
-// deck, and each family of the layout (`patienceSlotOf`, `patienceCardNoOf`) holds one member a station.
+// flat on the glass, face up or face down. The cards are a holodeck's pool (../standard/holodeck.puck): a station's 52
+// card bodies stand while it shows a patience game and are released while it shows another, so a station showing chess
+// holds no card. A world whose body order cannot spare the deck's slots to a pool (the debug world, whose bodies below
+// the deck are numbered from it) passes `holodeck: false` to `patienceStationCards`, `patienceDisplayState` and
+// `patienceSetRules`, and its cards stand always, lying inside the table's cap while no patience game is shown. A card
+// is a body of the `cardSlab` kit, posed exactly, so a move is judged by the door over the piles. Every station holds its
+// own deck, and each family of the layout (`patienceSlotOf`, `patienceCardNoOf`) holds one member a station.
 //
 // Both games are laid out for the near chair: the top row runs along the far side from that player's left (Klondike's
 // stock, waste, a gap and four foundations; FreeCell's four cells and four foundations), and the columns fan toward the
@@ -35,6 +39,7 @@
 import "../standard/game-station"
 import "../standard/cards"
 import "../standard/kits"
+import "../standard/holodeck"
 import "klondike"
 
 // A card is the deck's 1.76 by 2.48 creation at `patienceCardScale`, and lies a layer above the one under it.
@@ -149,11 +154,28 @@ template patienceDeck() {
   ]
 }
 
-// One station's bodies, lying inside its table's cap until a patience game is shown there. They are inhabitants, so a
-// world expands this where its body order wants them.
-template patienceStationCards(station) {
+// One station's cards as a holodeck pool, each spawning inside its table's cap and posed onto the glass once it stands.
+function patienceStationPool(station) = map(range(0, 52), k => {
+  id: $"{station.id}-card{k}"
+  prototype: patienceFaces[k]
+  look: patienceFaces[k]
+  at [station.at[0], (station.at[1] + gameStationSurface - 0.03), station.at[2]]
+})
+
+// One station's bodies: its cursor and held outlines, which stand always and lie inside its table's cap while no patience
+// game is shown there, and its cards, a holodeck pool (or, with `holodeck: false`, standing always as the outlines do).
+// The outlines are inhabitants at a fixed count, so a world expands this where its body order wants them.
+template patienceStationCards(station, holodeck = true) {
+  if holodeck {
+    placements {
+      holodeckPool(bodies: patienceStationPool(station), kit: "cardSlab")
+    }
+  }
   placements {
-    for body in patienceBodies(station) {
+    for body in filter(
+      patienceBodies(station),
+      body => (holodeck == false) or (body.look == "patienceCursor") or (body.look == "patienceHeld")
+    ) {
       placement $"{body.id}" {
         prototype: body.look
         inhabit {
@@ -240,7 +262,10 @@ template patienceStationSpots(station, index) {
       prototype: "patienceSpotHidden"
       position: gameStationWorld(station, fSlotX[z], (z < 8 ? patienceTopRowZ : patienceTableauZ))
       respond [
-        { when: state(state: solitaireTable, key: $"{index}", comparison: Equal, value: 2), prototypeId: "patienceSpot" }
+        {
+          when: state(state: solitaireTable, key: $"{index}", comparison: Equal, value: 2)
+          prototypeId: "patienceSpot"
+        }
       ]
     }
   }
@@ -316,9 +341,9 @@ let patienceFields = [
 // first slot, Klondike's and FreeCell's; the deepest slot a Klondike pile's cursor reaches, its last or for the stock the
 // 24th layer the glass draws; the top row's piles by column; the status lines), each station's fields, and each
 // station's member of the families: its cards' numbers and its outlines' bodies keyed by placement (the poses sweep
-// them and name each body by its key), the slot each card lies in as the glass last read it, the card each slot holds,
-// and the slot and face each body was last posed at.
-template patienceDisplayState(stations) {
+// them and name each body by its key), the slot each card lies in as the glass last read it and the card each slot
+// holds; and the cards' holodeck pool, whose `holodeckAt` holds the slot and face each card was last posed at.
+template patienceDisplayState(stations, holodeck = true) {
   let count = length(stations)
 
   table patienceSlotBase capacity(14) = slice(kBase, 0, 14)
@@ -344,14 +369,9 @@ template patienceDisplayState(stations) {
   table patienceSlotOf[count] capacity(52) bounds(0..fSlotCount) = map(range(0, 52), k => patienceAwaySlot)
   table patienceCardAtOf[count] capacity(fSlotCount + 1) = map(range(0, fSlotCount + 1), slot => -1)
 
-  // Each card body's last pose, keyed by placement over every station: its slot twice over, plus one face down.
-  table patiencePosed capacity(52 * count) {
-    for station in stations {
-      for k in range(0, 52) {
-        $"{station.id}-card{k}" = -1
-      }
-    }
-  }
+  // The cards' holodeck pool, every station's: each standing from the start when the cards are no pool. A card's
+  // `holodeckAt` is its last pose: its slot twice over, plus one face down.
+  holodeckState(bodies: flatMap(stations, station => patienceStationPool(station)), live: (holodeck ? 0 : 1))
 }
 
 // Each pile's cards read their depth: how many cards of the pile stand before them, and of the pile `under` it in the
@@ -384,7 +404,7 @@ template patienceRead(game, turn, base, pile, under) {
 // rule about a station sweeps the stations' tables (`forEach: solitaireTable`, `$each` the station's place in the list)
 // and a rule about a station's cards sweeps a family (`$member` the station's place, `$each` the card), so a change at
 // one station wakes and costs that station's bindings alone.
-template patienceSetRules() {
+template patienceSetRules(holodeck = true) {
   // ---- The cards follow the piles ----------------------------------------------------------------------------------
   // Any change in the game (a deal in progress, a move, a draw, a reveal) keeps the glass reading for a pass over the
   // piles and three ticks more.
@@ -446,19 +466,36 @@ template patienceSetRules() {
     patienceRead(game: 2, turn: z, base: fBase[z], pile: $"freecellPile{z}Of", under: "")
   }
 
+  // A holodeck's cards stand while their station shows a patience game, and each is posed afresh once it stands again.
+  if holodeck {
+    rule "patience-holodeck" {
+      local want = solitaireTable[$member] != 0
+      when holodeckLive[$each] != want
+      mode: Level
+      forEach: patienceCardNoOf
+      holodeckSet()
+    }
+  }
+
   // Then each card lies at its slot, face up or face down, or inside the cap while no patience game is shown: posed
-  // whenever the slot or face it should show is not the one it was last posed at.
+  // whenever the slot or face it should show is not the one it was last posed at, and a holodeck's card only while it
+  // stands.
   rule "patience-pose" {
     local card = patienceCardNoOf[$member][$each]
     local klondikeSlot = (klondikeStockOf[$member][card] == 1) ? (card % 24) : patienceSlotOf[$member][card]
-    local down = ((solitaireTable[$member] == 1) ? klondikeFaceDownOf[$member][card] :
-      ((solitaireTable[$member] == 2) ? (freecellDeckOf[$member][card] ?? 0) : 0))
+    local down = (
+      (solitaireTable[$member] == 1) ? klondikeFaceDownOf[$member][card] :
+      ((solitaireTable[$member] == 2) ? (freecellDeckOf[$member][card] ?? 0) : 0)
+    )
     local slot = (
       (solitaireTable[$member] == 1) ? klondikeSlot :
-      ((solitaireTable[$member] == 2) ? (down ? (fDeckBase + card % 24) : patienceSlotOf[$member][card]) : patienceAwaySlot)
+      (
+        (solitaireTable[$member] == 2) ? (down ? (fDeckBase + card % 24) : patienceSlotOf[$member][card]) :
+        patienceAwaySlot
+      )
     )
     local posed = slot * 2 + down
-    when patiencePosed[$each] != posed
+    when holodeckAt[$each] != posed and holodeckStands()
     mode: Level
     forEach: patienceCardNoOf
     if down {
@@ -480,7 +517,7 @@ template patienceSetRules() {
         frame: `placement:$each`
       )
     }
-    patiencePosed[$each] = posed
+    holodeckAt[$each] = posed
   }
 
   // A game's first deal starts by itself, through the mailbox a player or the console uses.
@@ -529,7 +566,8 @@ template patienceSetRules() {
   }
   rule "patience-card" {
     local slot = (
-      (solitaireTable[$each] == 2) ? patienceFreeBase[patienceSeatZone[$each]] : patienceSlotBase[patienceSeatZone[$each]]
+      (solitaireTable[$each] == 2) ? patienceFreeBase[patienceSeatZone[$each]] :
+      patienceSlotBase[patienceSeatZone[$each]]
     ) + patienceSeatDepth[$each]
     local card = patienceCardAtOf[$each][slot]
     local here = (solitaireTable[$each] != 0) and (card >= 0) and (patienceSlotOf[$each][card] == slot)
@@ -544,24 +582,40 @@ template patienceSetRules() {
   // inside the cap otherwise. Each is posed only when the slot it marks changes.
   rule "patience-cursor" {
     local seated = solitaireTable[$member] != 0 and patienceSeatSeated[$member] != 0
-    local base = (solitaireTable[$member] == 2) ? patienceFreeBase[patienceSeatZone[$member]] : patienceSlotBase[patienceSeatZone[$member]]
+    local base = (
+      (solitaireTable[$member] == 2) ? patienceFreeBase[patienceSeatZone[$member]] :
+      patienceSlotBase[patienceSeatZone[$member]]
+    )
     local slot = seated ? (base + patienceSeatDepth[$member]) : patienceAwaySlot
     when patienceMarkerOf[$member][$each] == 0 and patienceSeatCursorAt[$member] != slot
     mode: Level
     forEach: patienceMarkerOf
-    poseCell(key: `placement:$each`, topology: patienceSlots, expression: slot, offset: [0, 0.004, 0], frame: `placement:$each`)
+    poseCell(
+      key: `placement:$each`,
+      topology: patienceSlots,
+      expression: slot,
+      offset: [0, 0.004, 0],
+      frame: `placement:$each`
+    )
     patienceSeatCursorAt[$member] = slot
   }
   rule "patience-held" {
     local held = solitaireTable[$member] != 0 and patienceSeatHeldZone[$member] >= 0
     local base = (
-      (solitaireTable[$member] == 2) ? patienceFreeBase[patienceSeatHeldZone[$member]] : patienceSlotBase[patienceSeatHeldZone[$member]]
+      (solitaireTable[$member] == 2) ? patienceFreeBase[patienceSeatHeldZone[$member]] :
+      patienceSlotBase[patienceSeatHeldZone[$member]]
     )
     local slot = held ? (base + patienceSeatHeldDepth[$member]) : patienceAwaySlot
     when patienceMarkerOf[$member][$each] == 1 and patienceSeatHeldAt[$member] != slot
     mode: Level
     forEach: patienceMarkerOf
-    poseCell(key: `placement:$each`, topology: patienceSlots, expression: slot, offset: [0, 0.008, 0], frame: `placement:$each`)
+    poseCell(
+      key: `placement:$each`,
+      topology: patienceSlots,
+      expression: slot,
+      offset: [0, 0.008, 0],
+      frame: `placement:$each`
+    )
     patienceSeatHeldAt[$member] = slot
   }
 
@@ -569,7 +623,9 @@ template patienceSetRules() {
   rule "patience-status-code" {
     local won = (solitaireTable[$each] == 1) ? klondikeStatus[$each] : freecellStatus[$each]
     local dealing = (solitaireTable[$each] == 1) ? klondikeStage[$each] : freecellStage[$each]
-    local code = (solitaireTable[$each] == 0) ? -1 : ((won == 2) ? 2 : ((dealing != 0) ? 3 : (solitaireTable[$each] - 1)))
+    local code = (
+      (solitaireTable[$each] == 0) ? -1 : ((won == 2) ? 2 : ((dealing != 0) ? 3 : (solitaireTable[$each] - 1)))
+    )
     when patienceSyncStatus[$each] != code
     mode: Level
     forEach: solitaireTable
@@ -651,27 +707,13 @@ template patienceStationRules(station, index, klondike, freecell) {
     local edges = gameStationEdges.near
     local picked = (edges & pick) != 0
     local fresh = (edges & gameStationBits.action) != 0
-    local klondikeIdle = (
-      klondikeRequest[t] == klondikeApplied[t] and
-      klondikeStage[t] == 0 and
-      klondikeBusy[t] == 0
-    )
-    local freecellIdle = (
-      freecellRequest[t] == freecellApplied[t] and
-      freecellStage[t] == 0 and
-      freecellBusy[t] == 0
-    )
+    local klondikeIdle = (klondikeRequest[t] == klondikeApplied[t] and klondikeStage[t] == 0 and klondikeBusy[t] == 0)
+    local freecellIdle = (freecellRequest[t] == freecellApplied[t] and freecellStage[t] == 0 and freecellBusy[t] == 0)
     local card = patienceSeatCard[t]
     local klondikeDown = klondikeFaceDownOf[index][card]
     local zone = patienceSeatZone[t]
     local heldZone = patienceSeatHeldZone[t]
-    local lifts = (
-      card >= 0 and
-      (
-        solitaireTable[t] == 1 ? (zone > 0 and klondikeDown == 0) :
-          (zone < 4 or zone >= 8)
-      )
-    )
+    local lifts = (card >= 0 and (solitaireTable[t] == 1 ? (zone > 0 and klondikeDown == 0) : (zone < 4 or zone >= 8)))
     when solitaireTable[t] and (picked or fresh)
     mode: Level
     patienceSeatHeldBefore[t] = heldZone
@@ -724,7 +766,12 @@ template patienceStationRules(station, index, klondike, freecell) {
     mode: Level
     patienceStatusShown = patienceSyncStatus[t]
     if patienceSyncStatus[t] >= 0 {
-      setState(state: gameStationStatus, key: $"{key}", fromState: patienceLines, fromKey: $"$cell:patienceSyncStatus:{t}")
+      setState(
+        state: gameStationStatus,
+        key: $"{key}",
+        fromState: patienceLines,
+        fromKey: $"$cell:patienceSyncStatus:{t}"
+      )
     }
   }
 }

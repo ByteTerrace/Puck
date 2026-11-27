@@ -72,7 +72,7 @@ The existing implementation and functions are mapped by
 [Debug world shape gallery](../../../../worlds/debug/shapes.md),
 [gallery.puck](../../../../worlds/debug/gallery/gallery.puck),
 [paintings.puck](../../../../worlds/debug/paintings.puck) and
-[chess.puck](../../../../worlds/debug/chess.puck) and
+[the game station](../../../../worlds/standard/game-station.puck) and
 [go.puck](../../../../worlds/debug/go.puck). The
 [SDF authoring skill](../../../../.claude/skills/sdf-authoring/SKILL.md)
 owns the primitive and surface vocabulary; the

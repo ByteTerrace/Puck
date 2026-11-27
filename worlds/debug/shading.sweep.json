@@ -2,7 +2,7 @@
   "note": "The authored-shading decision matrix (docs/plans/author-shaders.md#the-decision-matrix) at the gallery's level 1, the north valley slope and the hero spawn, for puck bench frames and puck measure. Each place reads five columns that differ only in the shading levers: the material layers alone (world.shade layers), the interpreter unsplit and in bins (world.shaders.tier interpreted, world.shaders.bins), and the published specialization unsplit and in bins (world.shaders.tier automatic). Read world/sdf.world$views, $views-filter, $views-bins and $glass-shade with --gpu-pass beside the frames; world.shaders.status in the prelude's rows names the specialized programs.",
   "tour": {
     "note": "The prelude waits long enough for the specialization to publish before the first specialized column; each stop sets every lever before its pose, and the settle produces the view's rebuilt graph before frames are read.",
-    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.shade programs", "world.wait 300", "world.shaders.status"],
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.shade programs", "world.wait 300", "world.shaders.status"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
     "frame": ["view.recenter 1", "view.reseed 0"],
     "settle": 45,

@@ -94,7 +94,7 @@ inside it, facing in. Its tables stand in two rows.
 
 | Table | Page |
 |---|---|
-| Chess, Go, Reversi, Alchemy and the granary board, along the projecting wing's windows | [`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md) |
+| Chess, Go, Reversi, Alchemy and the granary board, along the projecting wing's windows | [`game-station.md`](game-station.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md) |
 | The game station (its glass plays chess, Klondike or FreeCell), the auction, the shedding game, social deduction and the fog-of-war skirmish, toward the balustrade | [`game-station.md`](game-station.md), [`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck), [`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck) |
 
 Each table's document holds its position (`chessTable` and its fellows) and a

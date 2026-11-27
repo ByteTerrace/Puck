@@ -1,13 +1,13 @@
 // The watchdog: a development tool for agents, a WebAssembly addon (addons/watchdog.wat) that checks the debug world's
 // invariants every tick and records each violation, with the tick it happened on, in the `watchdog` and `watchdogLog`
-// state rows. A body more than 1 m under the floor, an orientation off unit length, two chess pieces overlapping and the
-// Moth overlapping the companion each count once as they start. `world.state` reads the rows, and a small HUD panel
+// state rows. A body more than 1 m under the floor, an orientation off unit length and the Moth overlapping the companion
+// each count once as they start. `world.state` reads the rows, and a small HUD panel
 // shows the count and the last violation while there is one. addons.md beside this file says how to find a transient
 // and replay to its tick.
 
 import "shapes"
 
-// Every population slot, including the seats, visitors, range walkers, chess pieces/cursor, lift, companion and the two
+// Every population slot, including the seats, visitors, range walkers, station chess pieces, lift, companion and the two
 // development stand-ins (debug.puck's `bodies`).
 let watchedBodies = range(0, (galleryPopulation + 2))
 

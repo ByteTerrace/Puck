@@ -375,7 +375,7 @@ opposite}]`, `edges: [{from, to, direction, oneWay?}]`; one neighbour per
 (cell, direction) slot, so k neighbours need k directions; `offset` refuses
 it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
-positions against (the debug world's chess table's `chessBoard`, `worlds/debug/chess-table.puck` — see
+positions against (a game station's holodeck chess's `chessBoard`, `worlds/games/chess-station.puck` — see
 `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section). The board facet's own `enforcement` (`record`, the default, or
 `return`) is the one engine-side reaction to its `verdict` row refusing a
 move — `return` poses the mover back onto `move`'s `from` cell on the
@@ -492,7 +492,7 @@ participant holds a control application onto a declared screen, captured or
 mirrored (`WorldEngagement.Applies`); the debug world's `brick-pick-up` rule
 (`worlds/debug/devices.puck`) sets the out-of-suit Moth's `pilotHold` cell from
 it.
-See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the debug world's chess table, `worlds/debug/chess-table.puck` (`chessBoard`), is the worked example.
+See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; a game station's holodeck chess, `worlds/games/chess-station.puck` (`chessBoard`, its piece bodies a holodeck pool, `worlds/standard/holodeck.puck`), is the worked example.
 A board facet's `engage` block makes the table something a seat sits down at
 with its context button (`placement:<id>` control application, board-view
 camera, `engagement` context `tabletop`), and its rules read the seated seat

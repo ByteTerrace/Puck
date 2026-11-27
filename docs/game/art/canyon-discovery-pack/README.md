@@ -179,7 +179,7 @@ loose pieces cluttering the public route.
 
 | Table | Visible identity |
 |---|---|
-| [Chess](../../../../worlds/debug/chess.md) | Square board, opposing seats, chunky pieces and capture trays. |
+| [Chess](../../../../worlds/debug/game-station.md) | Square board, opposing seats, chunky pieces and capture trays. |
 | [Go](../../../../worlds/debug/go.md) | Timber board, black/white stones and bowls. |
 | [Reversi](../../../../worlds/debug/reversi.md) | Distinct disc board and side trays. |
 | [Alchemy](../../../../worlds/debug/alchemy.md) | Discovery cauldron, two ingredient wells, element medallions and recipe-book readout. |

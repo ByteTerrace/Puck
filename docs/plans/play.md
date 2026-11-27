@@ -536,8 +536,8 @@ a live tenant today; the Azure suite runs against scripted services.
 
 ### Composed play
 
-**Owns:** the chess source's board `enforcement` and result verdicts
-(`worlds/debug/chess.puck`), the reusable chess rules library
+**Owns:** the chess board's `enforcement` and result verdicts (a game
+station's holodeck chess, `worlds/games/chess-station.puck`), the reusable chess rules library
 (`worlds/games/chess.puck`, whose fixed row names a second instance in one world
 still needs prefixed), and the composed-game acceptance check.
 

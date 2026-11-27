@@ -2,14 +2,16 @@ import "gallery/layout"
 import "../games/patience-station"
 // The gallery's game stations' decks: the faces, looks and kit every card wears, and each station's 54 bodies (its
 // cursor, 52 cards and held marker) that its patience games lay out (../games/patience-station.puck), apart from the
-// stations themselves (gallery/games.puck, which stands the plan's first station) because they are inhabitants. A root imports this where its body order wants
-// the decks: debug.puck ahead of every other population, so the cards take the population's top slots (shapes.puck's
-// cardBodies) and every body below keeps its index, and gallery-root.puck beside the gallery.
+// stations themselves (gallery/games.puck, which stands the plan's first station) because they are inhabitants. A root
+// imports this where its body order wants the decks: debug.puck ahead of every other population, so the cards take the
+// population's top slots (shapes.puck's cardBodies) and every body below keeps its index, and gallery-root.puck beside
+// the gallery. Its cards stand always, not as a holodeck pool, since a pool's bodies take free slots and the bodies below
+// would no longer be numbered from a fixed deck.
 
 // The deck's back and its ace to six of each suit, which the shedding table (shedding.puck) deals in the same debug world.
 export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s-5`, `card-s-6`, `card-h-a`, `card-h-2`, `card-h-3`, `card-h-4`, `card-h-5`, `card-h-6`, `card-c-a`, `card-c-2`, `card-c-3`, `card-c-4`, `card-c-5`, `card-c-6`, `card-d-a`, `card-d-2`, `card-d-3`, `card-d-4`, `card-d-5`, `card-d-6`
 
 patienceDeck()
 for station in [galleryGameStations[0]] {
-  patienceStationCards(station: station)
+  patienceStationCards(station: station, holodeck: false)
 }

@@ -133,7 +133,7 @@ template patienceState(stations) {
     $"{stations[s].id}-cursor" = 0
     $"{stations[s].id}-held" = 1
   }
-  table patiencePosed capacity(52 * count) {
+  table patienceDealt capacity(52 * count) {
     for station in stations {
       for k in range(0, 52) {
         $"{station.id}-card{k}" = -1
