@@ -96,8 +96,13 @@ public static class SdfMeshCollapse {
     /// <summary>Counts the speculated candidates an earlier commit of their block reached, which their turn measured
     /// again, a part of <see cref="Speculated"/>.</summary>
     public static readonly WorkKind Redone = new(name: "sdf.collapse.redone", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried listed from their source fans to measure.</summary>
+    public static readonly WorkKind Listed = new(name: "sdf.collapse.listed", unit: "samples", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried measured against their laid-out triangles, speculated
+    /// measures included.</summary>
+    public static readonly WorkKind Measured = new(name: "sdf.collapse.measured", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Gets the collapse's work, process-wide: what building every baked mesh's levels costs, counted, never timed.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Tried, Taken, Speculated, Redone]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Tried, Taken, Speculated, Redone, Listed, Measured]);
 
     /// <summary>Returns a mesh with its coarser levels of detail.</summary>
     /// <param name="mesh">The merged mesh.</param>
@@ -166,6 +171,7 @@ public static class SdfMeshCollapse {
             if ((clusterOf is not null) && (level < ClusteredRuns)) { collapser.CountClusters(into: runs); }
         }
 
+        collapser.CountSamples();
         if (levels.Count == 0) { return mesh; }
 
         var clusters = ((clusterOf is null) ? null : collapser.Clusters(clusters: clusterCount, runs: runs));
@@ -453,7 +459,10 @@ public static class SdfMeshCollapse {
         private readonly List<Source> m_sources = [];
 
         private int m_source;
-        private bool m_sourcesListed;
+        private int m_sourcesListed;
+        // The samples this collapser listed and measured, which Levels adds to the process's work (CountSamples).
+        private long m_listedSamples;
+        private long m_measuredSamples;
         private bool m_linesListed;
         private int m_laidCount;
 
@@ -984,6 +993,14 @@ public static class SdfMeshCollapse {
 
             return m_speculating.Count;
         }
+        // Adds the samples this collapser and its workers listed and measured to the process's work.
+        public void CountSamples() {
+            var (listed, measured) = (m_listedSamples, m_measuredSamples);
+
+            foreach (var worker in m_workers) { (listed, measured) = ((listed + worker.m_listedSamples), (measured + worker.m_measuredSamples)); }
+            ProcessWork.Add(amount: listed, kind: Listed);
+            ProcessWork.Add(amount: measured, kind: Measured);
+        }
         // The speculated candidates one partition of a block measures.
         private const int SpeculativeRun = 16;
         // The block Speculate is measuring: its first candidate and the level's bounds.
@@ -1394,7 +1411,8 @@ public static class SdfMeshCollapse {
             // The source fan's lines and tracked samples are the same for every neighbour tried, so the first that needs
             // them lists them.
             m_linesListed = false;
-            m_sourcesListed = false;
+            m_sourcesListed = 0;
+            m_sources.Clear();
             m_source = place;
 
             if (m_measured.Length < fan.Count) {
@@ -1427,35 +1445,35 @@ public static class SdfMeshCollapse {
                 Bounds(candidate: ref m_previous[index].Surface);
             }
         }
-        // Lists the samples tracked to the prepared fan's triangles, the removed vertex's first, for Measure.
+        // Lists the next phase of the samples tracked to the prepared fan's triangles for Measure: the removed vertex's,
+        // then every other. Most refusals are decided by the removed vertex's own samples, so the rest are listed only
+        // once a measure has passed all of those, in the order a whole listing gives.
         private void ListSources() {
             var fan = m_from;
             var place = m_source;
+            var phase = m_sourcesListed++;
 
-            m_sourcesListed = true;
-            m_sources.Clear();
-            for (var phase = 0; (phase < 2); phase++) {
-                for (var index = 0; (index < fan.Count); index++) {
-                    for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
-                        var vertex = m_sampleVertex[sample];
-                        var at = m_placeOf[vertex];
+            for (var index = 0; (index < fan.Count); index++) {
+                for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
+                    var vertex = m_sampleVertex[sample];
+                    var at = m_placeOf[vertex];
 
-                        if ((at == place) != (phase == 0)) { continue; }
-                        var own = m_normals[vertex];
+                    if ((at == place) != (phase == 0)) { continue; }
+                    var own = m_normals[vertex];
 
-                        m_sources.Add(item: new Source {
-                            Sample = sample,
-                            Index = index,
-                            Vertex = vertex,
-                            Px = m_point[at].X,
-                            Py = m_point[at].Y,
-                            Pz = m_point[at].Z,
-                            Own = own,
-                            OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
-                            Material = m_sampleMaterial[sample],
-                            Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
-                        });
-                    }
+                    m_listedSamples++;
+                    m_sources.Add(item: new Source {
+                        Sample = sample,
+                        Index = index,
+                        Vertex = vertex,
+                        Px = m_point[at].X,
+                        Py = m_point[at].Y,
+                        Pz = m_point[at].Z,
+                        Own = own,
+                        OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
+                        Material = m_sampleMaterial[sample],
+                        Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
+                    });
                 }
             }
         }
@@ -1727,11 +1745,16 @@ public static class SdfMeshCollapse {
             var candidates = Lay(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
             m_laidCount = candidates;
-            if (!m_sourcesListed) { ListSources(); }
-            // The removed vertex is often the first sample that refuses a target, so PrepareFrom lists its samples first,
-            // then all remaining samples; each still chooses its exact nearest admissible witness independently of the
-            // others.
-            foreach (ref readonly var source in CollectionsMarshal.AsSpan(list: m_sources)) {
+            // The removed vertex is often the first sample that refuses a target, so its samples are listed and measured
+            // first, then all remaining samples; each still chooses its exact nearest admissible witness independently of
+            // the others.
+            for (var next = 0; ; next++) {
+                while ((next == m_sources.Count) && (m_sourcesListed < 2)) { ListSources(); }
+                if (next >= m_sources.Count) { break; }
+
+                ref readonly var source = ref CollectionsMarshal.AsSpan(list: m_sources)[next];
+
+                m_measuredSamples++;
                 // A sample's own triangle, where it stays, is measured first: it is most often the nearest, and the
                 // others then fall to the bound on the nearest yet.
                 var laid = m_laid[source.Index];

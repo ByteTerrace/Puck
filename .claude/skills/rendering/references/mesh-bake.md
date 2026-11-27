@@ -125,7 +125,8 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   A tighter later target resumes that search; only a completed search may raise
   the maximum. Shared edge midpoints precede the unshared centroid.
   Forward checks measure the removed vertex's samples first, then every other
-  tracked sample. An original vertex retained by its tracked triangle witnesses
+  tracked sample; `ListSources` lists the second phase only once a measure has
+  passed the first, since the removed vertex's own samples decide most refusals. An original vertex retained by its tracked triangle witnesses
   its own position, normal and material exactly; the other samples choose their
   nearest admissible witness. Ordering avoids later work when an early sample
   refuses the collapse. A nearest point already beyond the current distance
