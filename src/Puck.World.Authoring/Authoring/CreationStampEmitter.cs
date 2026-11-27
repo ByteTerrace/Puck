@@ -320,7 +320,8 @@ public static partial class CreationStampEmitter {
             (run.MaxWidth is null) &&
             (run.Align is null) &&
             (run.Tracking is null) &&
-            (run.LineSpacing is null)
+            (run.LineSpacing is null) &&
+            (run.Anchor is null)
         ) {
             return null;
         }
@@ -329,7 +330,8 @@ public static partial class CreationStampEmitter {
             MaxLineWidth: (run.MaxWidth * scale),
             Alignment: TextRunDocument.AlignmentOf(align: run.Align),
             Tracking: (run.Tracking ?? 0f),
-            LineHeightScale: (run.LineSpacing ?? 1f)
+            LineHeightScale: (run.LineSpacing ?? 1f),
+            VerticalAnchor: (TextRunDocument.AnchorOf(anchor: run.Anchor) ?? TextVerticalAnchor.Baseline)
         );
     }
 

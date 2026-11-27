@@ -858,12 +858,9 @@ let cabinetDeckRot = rotate([1, 0, 0], 17.46)
 function cabinetDeckAt(x, u, h) = [x, (1.19 - (u * 0.3) + (h * 0.9539)), (0.2 + (u * 0.9539) + (h * 0.3))]
 // A cabinet's half-width: a one-player cabinet's, or the wider two-player one whose deck carries a control panel for
 // each player side by side.
-// The standard lettering's capital height in em (Inter: 0.727). A run's position is its baseline, so a capital line
-// centred on a point stands half this below it.
-let textCapHeight = 0.727
 // A control panel's centre down the deck and its half-extents [across, down the deck]; the players' marks sit in its outer
-// front corners, cabinetMarkMargin in from the side and from the front. A text run's position is its first baseline and,
-// aligned left or right, its outer edge, so those are what the margin measures to.
+// front corners, cabinetMarkMargin in from the side and from the front: each mark is anchored on its baseline, the foot of
+// its capitals, and aligned left or right on its outer edge, so those are what the margin measures to.
 let cabinetPanelMid = 0.265
 let cabinetPanelHalf = [0.54, 0.235]
 let cabinetMarkMargin = 0.04
@@ -1285,13 +1282,14 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   textRuns [
     {
       text: title
-      position [0, (2.7 - ((textCapHeight * em) / 2)), -0.552]
+      position [0, 2.7, -0.552]
       rotation [0, 1, 0, 0]
       emHeight: em
       depth: 0.008
       mode: "emboss"
       material: (base + cabinetInk)
       align: "center"
+      anchor: "capMiddle"
       maxWidth: (2 * (w - 0.37))
     }
     for (c, p) in ((players == 2) ? panels : []) {
@@ -1304,6 +1302,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
         mode: "emboss"
         material: (base + cabinetInk)
         align: ((p == 0) ? "left" : "right")
+        anchor: "baseline"
         maxWidth: 0.2
       }
     }

@@ -647,6 +647,33 @@ keeps its place in the composed order
 A render-lane member written with a quote offers the composed document's lane names in the language server
 (`WorldRenderLaneLanguageServices`), and hovering a name shows its lane and index.
 
+## Text runs: alignment and anchors
+
+A creation's text run (`textRuns`) is laid out on its own plane and placed by one point, its `position`. Two
+members say which point of the text block that is, as a layout tool's text box does.
+
+`align` places the block across: `left` (the default) puts the start of each line at the point, `right` puts the
+end of each line there, and `center` centres each line on it. It matches CSS `text-align` and the horizontal
+alignment buttons of Figma or Illustrator.
+
+`anchor` places the block up and down, by one of the lines type is designed on. Every height is the font's own,
+read from the font file, and scales with `emHeight`:
+
+| `anchor` | The point is |
+|---|---|
+| `baseline` (the default) | the first line's baseline, the line the letters stand on and descenders hang below |
+| `capTop` | the top of the first line's capitals (the font's cap height above its baseline) |
+| `capMiddle` | halfway between the top of the first line's capitals and the last line's baseline: where a label of capitals or figures reads as centred on the point |
+| `top` | the first line's ascent, the top of the text's box |
+| `middle` | halfway between the top and the bottom of the text's box |
+| `bottom` | the last line's descent, the bottom of the text's box, below every descender |
+
+`top`, `middle` and `bottom` are the box a layout tool draws round text, as Figma's vertical alignment and CSS
+`vertical-align: text-top` and `text-bottom` use it; their middle sits a little high on a line of capitals, because
+the box keeps room for descenders. `capTop` and `capMiddle` measure the capitals themselves, as a sign painter centres
+lettering, so a marquee's title written at the panel's centre with `anchor: "capMiddle"` sits optically centred on
+it. `baseline` lines text up with other text on one line.
+
 ## A section written twice composes
 
 A section or block written twice in one source (`render { }` and later `render { }`) composes
