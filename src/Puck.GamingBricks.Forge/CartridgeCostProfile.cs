@@ -38,8 +38,9 @@ namespace Puck.GamingBricks.Forge;
 /// <param name="OperandLight">Reading the light sensor, or <see langword="null"/> on a machine with no infrared receiver,
 /// where the read is refused and never priced.</param>
 /// <param name="OperandVariable">Reading a variable.</param>
-/// <param name="RasterRow">One mid-picture scroll change.</param>
-/// <param name="RasterSetup">Republishing the scroll rows at all.</param>
+/// <param name="RasterRow">One mid-picture scroll change, or <see langword="null"/> on a machine whose compiler refuses
+/// them, where they are never priced.</param>
+/// <param name="RasterSetup">Republishing the scroll rows at all, or <see langword="null"/> where they are refused.</param>
 /// <param name="SaveByte">One byte of a save payload.</param>
 /// <param name="SaveFixed">A save or load, before its payload.</param>
 /// <param name="Sound">Starting or stopping a sound.</param>
@@ -62,8 +63,8 @@ public sealed record CartridgeCostProfile(
     long OperandArray,
     long? OperandLight,
     long OperandVariable,
-    long RasterRow,
-    long RasterSetup,
+    long? RasterRow,
+    long? RasterSetup,
     long SaveByte,
     long SaveFixed,
     long Sound,
@@ -134,6 +135,35 @@ public sealed record CartridgeCostProfile(
         OperandLight = null,
     };
 
+    /// <summary>The Deck's reservation and weights. Its compiler refuses mid-picture scroll changes and its picture unit
+    /// has no light sensor, so neither is priced. A play and stop, and a save's fixed part, measured below the sweep's
+    /// resolution (one outer step of the step shape), so each is charged half that step per occurrence.</summary>
+    public static CartridgeCostProfile Deck { get; } = new(
+        Blit: 7315L,
+        ConditionCompare: 2L,
+        ConditionKey: 5L,
+        FrameUnits: 66000L,
+        LoopSetup: 31L,
+        LoopStep: 35L,
+        MapWrite: 479L,
+        Name: "puck.cartridge.hgd.v1",
+        OperandArray: 38L,
+        OperandLight: null,
+        OperandVariable: 14L,
+        RasterRow: null,
+        RasterSetup: null,
+        SaveByte: 65L,
+        SaveFixed: 131L,
+        Sound: 87L,
+        Sprite: 118L,
+        StepArithmetic: 11L,
+        StepDivide: 415L,
+        StepMultiply: 336L,
+        StepSet: 11L,
+        StepShift: 90L,
+        TargetArray: 47L
+    );
+
     /// <summary>Returns a value indicating whether a cost fits the reservation.</summary>
     /// <param name="bound">The cost to test.</param>
     /// <returns><see langword="true"/> when the cost is known and within the reservation.</returns>
@@ -147,6 +177,7 @@ public sealed record CartridgeCostProfile(
         "agb" => Advanced,
         "cgb" => Humble,
         "dmg" => Monochrome,
+        "hgd" => Deck,
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(target),
         actualValue: target,
