@@ -278,15 +278,14 @@ prototypes {
       textRuns: concat(
         flatMap(pressCaseLetters, (letters, row) => map(letters, (letter, column) => {
           text: letter
-          position [((pressCaseAt[0] + 0.375) - (0.15 * column)),
-  ((pressCaseAt[1] + 0.262) - (0.2 * row)), (pressCaseAt[2] - 0.02)
-]
+          position [((pressCaseAt[0] + 0.375) - (0.15 * column)), ((pressCaseAt[1] + 0.3) - (0.2 * row)), (pressCaseAt[2] - 0.02)]
           rotation [0, 1, 0, 0]
           emHeight: 0.105
           depth: 0.007
           mode: "emboss"
           material: pressType
           align: "center"
+          anchor: "capMiddle"
         })),
         [
           {

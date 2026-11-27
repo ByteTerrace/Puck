@@ -402,13 +402,14 @@ prototypes {
           range(0, 4),
           d => {
             text: $"{d}"
-            position [(0 - (-0.09 + (0.1 * d))), -0.045, -0.04]
+            position [(0.09 - (0.1 * d)), 0, -0.04]
             rotation [0, 1, 0, 0]
             emHeight: 0.13
             depth: 0.004
             mode: "emboss"
             material: (4 + d)
             align: "center"
+            anchor: "capMiddle"
           }
         )
       }
@@ -450,13 +451,14 @@ prototypes {
           textRuns [
             {
               text: $"{j}"
-              position [0, -0.045, -0.033]
+              position [0, 0, -0.033]
               rotation [0, 1, 0, 0]
               emHeight: 0.13
               depth: 0.004
               mode: "emboss"
               material: liftInk
               align: "center"
+              anchor: "capMiddle"
             }
           ]
         }
