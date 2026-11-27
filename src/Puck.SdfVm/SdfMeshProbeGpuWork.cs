@@ -441,6 +441,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     // that stand now, whatever its draws' key says, so the next head names a scene the region holds.
                     if (unplaced) { m_volume.NoteScenePlacement(scene: pending.Scene, placed: false); }
                     Cancel(job: pending);
+                    // Every query queued on the same scene would wait out its own AdmissionWait on what bound none of it,
+                    // a camera sample among them, so they are cancelled with the head and asked again of the rebuilt scene.
+                    if (unplaced) { CancelQueuedOn(scene: pending.Scene); }
                     if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 }
                 return Refused(reason: (unplaced ? "scene-placement" : "region-copies"));
@@ -509,6 +512,15 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             job = pending;
             estimatedSeconds = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
             return true;
+        }
+    }
+    // Cancels every queued query whose scene exports the words a scene the region could not bind exports, keeping the
+    // rest in their order. Under the gate.
+    private void CancelQueuedOn(SdfMeshIrradianceScene scene) {
+        for (var left = m_pending.Count; (left > 0); left--) {
+            var queued = m_pending.Dequeue();
+
+            if (SdfMeshIrradianceScene.SameGpuContent(first: queued.Scene, second: scene)) { Cancel(job: queued); } else { m_pending.Enqueue(item: queued); }
         }
     }
     // Why the latest take refused (TryTake), or "taken", and the takes asked of the client: what DescribeWait prints of a

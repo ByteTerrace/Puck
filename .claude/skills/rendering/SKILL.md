@@ -1519,7 +1519,8 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   is built (`SdfMeshIrradiance.TraceDraws`; a floor that does not stand gives way to the drawn mesh), and one that left
   a mesh out is built again once it stands (`scene-omitted=` on `world.probe`); a scene the region took a mesh of back
   since is refused as `scene-placement`, its head cancelled after `AdmissionWait`, and built again whatever the draws'
-  key says (`NoteScenePlacement`). `region-copies` is the region's copies in flight, and `scene-upload-stalled` the end
+  key says (`NoteScenePlacement`); every query queued on that scene is cancelled with the head, and until the rebuild
+  installs neither the worker nor a camera sample starts (`world.exposure` reads `wait=scene-rebuild`). `region-copies` is the region's copies in flight, and `scene-upload-stalled` the end
   stop of a scene upload the store moved nothing of for `AdmissionWait` (`UploadStalled`). The answers a probe call
   reads (`SdfMeshProbeGpuWork.Answers`) are the volume's, disposed only after its worker stops, and a fault of the
   worker or camera sample is contained (`SdfMeshIrradiance.ContainFault`: reported, counted in `sdf.mesh-gi.faults`,

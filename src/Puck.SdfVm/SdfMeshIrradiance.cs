@@ -1023,7 +1023,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             // background trace's work, and starts only from the windows it renders.
             if (!converging || (stage == SdfMeshConvergenceStage.None)) {
                 if (drain && !m_draining) { m_yield = true; }
-                if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain) && !RecoveringFromFault) {
+                if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain) && !RecoveringFromFault && !m_sceneUnplaced) {
                     m_yield = false;
                     m_draining = drain;
                     if (drain) { (m_drainPass, m_drainDone, m_drainTotal) = (0, 0, 0); }
