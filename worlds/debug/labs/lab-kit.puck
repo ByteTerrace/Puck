@@ -135,3 +135,19 @@ template labFloor(halfX, halfZ, color = "#A9A59D") {
     }
   }
 }
+
+// The font a lab's lettering embosses in, as the debug world declares it (../debug.puck): a lab with a plaque, a sign or
+// floor lettering expands it.
+template labText() {
+  text {
+    defaultFont: "inter"
+    fonts [
+      {
+        name: "inter"
+        source: "../fonts/inter-regular.ttf"
+        hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+        codePointRanges ["U+0020-U+007E"]
+      }
+    ]
+  }
+}

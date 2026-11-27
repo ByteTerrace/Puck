@@ -1,0 +1,917 @@
+// The Moth's lab (README.md): where her look, her motion and her camera are judged, on a plain floor under a held midday.
+// Seven stations stand apart on one floor, each course running north (-Z, the way she faces at yaw 0) from its spawn
+// point, which is also its place name:
+//
+//   look-stage   a grey room round the origin, a clear midday sun held and a rim light behind her: the basis's own
+//                inspection cameras (avatars/moth.puck) frame her there, `moth.look` poses her and picks one, and
+//                `moth.turntable` turns the disc she stands on
+//   locomotion   a 100 m lane with a mark every metre for walk, run, turn in place, stop and start, and a slalom of
+//                posts, wide then tight, for turning
+//   terrain      step-ups below, at and above her step height, slopes from 10 degrees to past her 60 degree limit, and
+//                stairs with risers she steps and risers she must jump
+//   jump         a run-up and gaps of 1 to 8 m between raised platforms for the jump, the air jump and the dash, and
+//                ledges 0.6 to 2.6 m high for the climb's mantle
+//   climb        a short holdable face over a block to stand on; the climbing lab owns the big wall
+//   flight       four tall pylons with decks at 10, 20 and 30 m for the jetpack: lift, hover, thrust and landing
+//   camera       a tight corridor, a low ceiling and pillars, for the chase camera's clearance, fade and cutaway
+//
+// Her abilities are her basis's own (avatars/moth.puck, moth-climb.puck, moth-dash.puck, moth-jetpack.puck): nothing
+// here adds one. `moth.frame <station>` poses her at a station and shows it from a fixed overview camera. Boot it with
+// `--world worlds/debug/labs/moth.puck`; the gallery's lab wing reaches it through its door `lab-moth`, and the `arrival`
+// frame outside the stage's doorway leads back there.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-moth"
+
+import "../still-noon"
+import "../set-controls"
+import "../noclip"
+import "../ship-rows"
+import "../../standard/camera"
+import "lab-kit"
+
+metadata {
+  title: "Moth lab"
+  description: "The Moth on a grey stage under a held sun, then a run, turns, steps, slopes, jumps, gaps, a climb, flight and a tight corridor for her camera."
+}
+
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// The lanes and the shaft reach past the basis's 80 m draw distance.
+render {
+  farDistance: 220
+}
+
+// Where each station starts: the point its course runs north from, and its spawn point.
+let mothStations = [
+  { id: "look-stage", at: [0, 0, 0] }
+  { id: "locomotion", at: [-30, 0, 48] }
+  { id: "slalom", at: [-44, 0, 30] }
+  { id: "terrain", at: [36, 0, -8] }
+  { id: "jump", at: [84, 0, -8] }
+  { id: "climb", at: [114, 0, -8] }
+  { id: "flight", at: [130, 0, -8] }
+  { id: "camera", at: [148, 0, -8] }
+  { id: "camera-pillar", at: [148, 0, -49] }
+]
+
+// The fixed overview camera of each station that has one: `eye` looking at `target`, `fov` radians wide.
+let mothFrames = [
+  { id: "locomotion", eye: [-26, 4, 56], target: [-30, 1.2, 30], fov: 0.9 }
+  { id: "slalom", eye: [-38, 5, 38], target: [-44, 1, 14], fov: 0.9 }
+  { id: "terrain", eye: [46, 14, 20], target: [46, 0, -20], fov: 1.25 }
+  { id: "jump", eye: [84, 10, 8], target: [86, 1, -30], fov: 1.1 }
+  { id: "climb", eye: [118, 3, 2], target: [114, 1.8, -14], fov: 0.9 }
+  { id: "flight", eye: [130, 16, 40], target: [130, 16, -14], fov: 0.9 }
+  { id: "camera", eye: [153, 4, 4], target: [148, 1.5, -20], fov: 1 }
+]
+
+spawnPoints: map(concat([{ id: "hero", at: [0, 0, 0] }], mothStations), s => { id: s.id, position: s.at, yawDegrees: 0 })
+
+// The look stage's added angles. `side` is her right (+X), looking at her from the front's height; `back` is the basis's
+// `rear` camera and `close` its `head` one, named for what `moth.look` asks of them.
+cameras: concat(
+  [lookCamera("side", [5.3, 1.45, 0], [0, 1.13, 0], 0.65)],
+  map(mothFrames, f => lookCamera($"frame-{f.id}", f.eye, f.target, f.fov))
+)
+
+views {
+  cameraLayout("side")
+  cameraLayout("back", "rear")
+  cameraLayout("close", "head")
+  for f in mothFrames {
+    cameraLayout($"frame-{f.id}")
+  }
+}
+
+commands [
+  goCommand(
+    help: "Poses a body at one of the Moth lab's stations (hero and look-stage, locomotion, slalom, terrain, jump, climb, flight, camera, camera-pillar, or any spawn point) and returns the view to the play layout's chase camera."
+  )
+  {
+    name: "moth.look"
+    help: "Stands the Moth on the look stage and frames her from a fixed camera, the same every time: front, three-quarter (her right), side (her right), back or close (her head)."
+    parameters [
+      { name: "view", kind: Choice, values ["front", "three-quarter", "side", "back", "close"], default: "front" }
+    ]
+    lines [
+      "body.pose spawn:look-stage 0"
+      "view.override layout {view}"
+    ]
+  }
+  {
+    name: "moth.turntable"
+    help: "Turns the look stage's disc, and the Moth standing on it, at this many turns a second; 0 stops it. The disc is still until asked."
+    parameters [
+      { name: "speed", kind: Number, default: "0.03" }
+    ]
+    lines [
+      "world.state.cell.set lookTurnWant $value {speed}"
+    ]
+  }
+  {
+    name: "moth.frame"
+    help: "Stands the Moth at a station's spawn point and shows the station from its fixed overview camera; debug.go returns the chase camera."
+    parameters [
+      { name: "station", kind: Choice, values: map(mothFrames, f => f.id), default: "locomotion" }
+    ]
+    lines [
+      "body.pose spawn:{station} 0"
+      "view.override layout frame-{station}"
+    ]
+  }
+]
+
+// The stage's disc turns by its rate a second from its phase, and the rule below keeps its angle continuous when the
+// rate the command asks for (`lookTurnWant`) differs from the one it keeps, as the gallery's turntables do.
+state {
+  world {
+    slot lookClock = 0.0 advance(perSecond: 1)
+    slot lookTurnRate = 0.0
+    slot lookTurnPhase = 0.0
+    slot lookTurnWant = 0.0
+  }
+}
+
+rule "look-turntable-rate" {
+  when lookTurnRate != lookTurnWant
+  mode: Level
+  lookTurnPhase = lookTurnPhase + ((lookTurnRate - lookTurnWant) * lookClock)
+  lookTurnRate = lookTurnWant
+}
+
+labText()
+labFloor(halfX: 158, halfZ: 85, color: "#777777")
+labWayBack(id: "moth", at: [-12, 0, -12], yaw: 225)
+
+// The basis's own floor is dropped for the grey card the stage stands on.
+placements {
+  placement "floor" {
+    $drop: true
+  }
+}
+
+// ---- Shared looks and marks ----
+
+function mothRadians(degrees) = (degrees * 0.017453292519943295)
+
+// The palette every course shares: stone for what she stands on and walks into, then two accents that tell a below-limit
+// piece from an at-or-past-limit one, the lane's dark track and the marking ivory.
+let mothPalette = [
+  { color: "#B3A593", roughness: 0.8, specular: 0.04 }
+  { color: "#2F8F8A", roughness: 0.7, specular: 0.04 }
+  { color: "#D9822B", roughness: 0.7, specular: 0.04 }
+  { color: "#3B4048", roughness: 0.6, specular: 0.04 }
+  { color: "#EFE9DC", roughness: 0.8, specular: 0.02 }
+]
+let mothStone = 0
+let mothTeal = 1
+let mothOrange = 2
+let mothDark = 3
+let mothIvory = 4
+
+// A run of lettering laid flat on a floor, reading from the south (the way she walks), at `at`.
+function floorText(text, at, em = 0.4, width = 3) = {
+  text: text
+  position: at
+  rotation: rotate([1, 0, 0], -90)
+  emHeight: em
+  depth: 0.01
+  mode: "emboss"
+  material: mothIvory
+  align: "center"
+  maxWidth: width
+}
+
+// A creation of floor lettering under a start line, a strip `half` wide across a course at `line`.
+template floorLabels(name, line, half, runs) {
+  name: name
+  schema: "puck.creation.v2"
+  palette: mothPalette
+  shape Box "start-line" {
+    material: mothIvory
+    position: line
+    scale [half, 0.0075, 0.06]
+  }
+  textRuns: runs
+}
+
+// A sign: a cream board on two posts, its face toward +Z, with a title and a plain line about the station.
+template mothSignBoard(title, note) {
+  palette [
+    { color: "#3B4048", roughness: 0.6, specular: 0.04 }
+    { color: "#E9DFC9", roughness: 0.8, specular: 0.02 }
+    { color: "#2B2A28", roughness: 0.7, specular: 0.02 }
+  ]
+  for side in [-0.6, 0.6] {
+    shape Box $"post-{side}" {
+      material: 0
+      position [side, 0.525, -0.03]
+      scale [0.04, 0.525, 0.03]
+    }
+  }
+  shape Box "board" {
+    material: 1
+    position [0, 1.5, 0]
+    scale [0.85, 0.45, 0.02]
+  }
+  textRuns [
+    {
+      text: title
+      position [0, 1.82, 0.02]
+      rotation [0, 0, 0, 1]
+      emHeight: 0.1
+      depth: 0.004
+      mode: "emboss"
+      material: 2
+      align: "center"
+      maxWidth: 1.6
+    }
+    {
+      text: note
+      position [0, 1.62, 0.02]
+      rotation [0, 0, 0, 1]
+      emHeight: 0.05
+      depth: 0.003
+      mode: "emboss"
+      material: 2
+      align: "center"
+      maxWidth: 1.6
+      lineSpacing: 1.15
+    }
+  ]
+}
+
+let mothSigns = [
+  {
+    id: "lab", at: [-9, 0, -13.5], yaw: 225, title: "MOTH LAB"
+    note: "West: the running lane and slalom. East: steps, slopes, gaps, ledges, a climb, flight and a tight corridor. The grey room is through the gap in its wall."
+  }
+  {
+    id: "look-stage", at: [-4.5, 0, -7.2], yaw: 225, title: "LOOK STAGE"
+    note: "One low sun and a back light on a grey room. Type moth.look front, side or back; moth.turntable 0.03 turns her slowly."
+  }
+  {
+    id: "locomotion", at: [-27.5, 0, 45.5], yaw: 0, title: "RUNNING LANE"
+    note: "A mark every metre, a long one every 5 and 10 m. Walk, run, turn on the spot, stop and start."
+  }
+  {
+    id: "slalom", at: [-41.5, 0, 27.5], yaw: 0, title: "SLALOM"
+    note: "Posts to weave between: wide at first, then tight."
+  }
+  {
+    id: "terrain", at: [38.5, 0, -10.5], yaw: 0, title: "STEPS AND SLOPES"
+    note: "Low steps, then ramps from gentle to too steep, then stairs. She steps up 0.3 m and walks to 60 degrees."
+  }
+  {
+    id: "jump", at: [86.5, 0, -10.5], yaw: 0, title: "GAPS AND LEDGES"
+    note: "Climb the stairs and run the platforms: jump, jump again, dash. The ledges beside them are for pulling up."
+  }
+  {
+    id: "climb", at: [116.5, 0, -10.5], yaw: 0, title: "CLIMB"
+    note: "A short face to scale and stand on. The big wall is in the climbing lab."
+  }
+  {
+    id: "flight", at: [132.5, 0, -10.5], yaw: 0, title: "FLIGHT"
+    note: "Press F to switch her jetpack on, then rise, hover and land on the decks at 10, 20 and 30 m."
+  }
+  {
+    id: "camera", at: [150.5, 0, -10.5], yaw: 0, title: "CAMERA"
+    note: "A narrow corridor, a low ceiling and pillars. Walk through and look at how the camera copes."
+  }
+]
+
+// ---- Look stage: a grey room, a turntable disc and a rim light ----
+
+// The room's wall stands 11 m out in 16 straight pieces, each 8 m tall. The piece at azimuth 225 degrees (toward -X and
+// -Z, which none of the basis's inspection cameras looks at) is left out as the doorway.
+let mothRoomRadius = 11
+let mothRoomDoor = 10
+
+prototypes {
+  prototype "moth-room" {
+    document {
+      name: "moth-room"
+      schema: "puck.creation.v2"
+      palette [{ color: "#777777", roughness: 0.92, specular: 0.02 }]
+      for i in filter(range(0, 16), k => (k != mothRoomDoor)) {
+        shape Box $"wall-{i}" {
+          material: 0
+          position: polarPoint((mothRoomRadius + 0.25), (i * 22.5), 4)
+          rotation: rotate([0, 1, 0], (90 - (i * 22.5)))
+          scale [2.3, 4, 0.25]
+        }
+      }
+    }
+  }
+  // The disc she stands on; the mark on its north edge shows which way it has turned.
+  prototype "moth-turntable" {
+    document {
+      name: "moth-turntable"
+      schema: "puck.creation.v2"
+      palette [
+        { color: "#6A6A6A", roughness: 0.8, specular: 0.04 }
+        { color: "#EFE9DC", roughness: 0.8, specular: 0.02 }
+      ]
+      shape Cylinder "disc" {
+        material: 0
+        position [0, 0.015, 0]
+        scale [1.5, 0.015, 1.5]
+      }
+      shape Box "north-mark" {
+        material: 1
+        position [0, 0.031, -1.25]
+        scale [0.03, 0.002, 0.2]
+      }
+    }
+  }
+  // The rim light's lamp: a small dark head high behind her, throwing a narrow cone down onto her back and shoulders
+  // from the +Z side, which the front, three-quarter and side cameras see as an edge of light round her.
+  prototype "moth-rim" {
+    document {
+      name: "moth-rim"
+      schema: "puck.creation.v2"
+      palette [{ color: "#2A2A2E", roughness: 0.5, specular: 0.1 }]
+      shape Box "head" {
+        material: 0
+        scale [0.2, 0.12, 0.2]
+      }
+    }
+    lights [
+      spot(
+        name: "rim",
+        position: [0, 0, 0],
+        direction: [0.321, -0.503, -0.802],
+        angle: 28deg,
+        innerAngle: 14deg,
+        temperature: 6500K,
+        power: 60000
+      )
+    ]
+  }
+}
+
+placements {
+  placement "moth-room" {
+    prototype: "moth-room"
+    position [0, 0, 0]
+    solid
+  }
+  placement "moth-turntable" {
+    prototype: "moth-turntable"
+    position [0, 0, 0]
+    solid
+    turn {
+      clock: "state.lookClock"
+      rate: "state.lookTurnRate"
+      phase: "state.lookTurnPhase"
+    }
+  }
+  placement "moth-rim" {
+    prototype: "moth-rim"
+    position [-3, 6, 7.5]
+  }
+}
+
+// ---- Signs ----
+
+prototypes {
+  for sign in mothSigns {
+    prototype $"moth-sign-{sign.id}" {
+      document {
+        name: $"moth-sign-{sign.id}"
+        schema: "puck.creation.v2"
+        mothSignBoard(title: sign.title, note: sign.note)
+      }
+    }
+  }
+}
+
+placements {
+  for sign in mothSigns {
+    placement $"moth-sign-{sign.id}" {
+      prototype: $"moth-sign-{sign.id}"
+      position: sign.at
+      yawDegrees: sign.yaw
+      solid
+    }
+  }
+}
+
+// ---- Locomotion: the lane and the slalom ----
+
+// The lane runs 100 m north from z 45 to z -55 at x -30, 6 m wide: a dark solid track under ivory marks every metre
+// (each 1.5 cm proud), longer every 5 m and every 10 m, with the distance in metres on the grass-grey floor beside it.
+let mothLaneHalf = 3
+let mothLaneFrom = 45
+let mothLaneLength = 100
+
+prototypes {
+  prototype "moth-lane" {
+    document {
+      name: "moth-lane"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      shape Box "track" {
+        material: mothDark
+        position [0, 0.01, (mothLaneFrom - (mothLaneLength / 2))]
+        scale [mothLaneHalf, 0.01, ((mothLaneLength / 2) + 0.5)]
+      }
+    }
+  }
+  prototype "moth-lane-marks" {
+    document {
+      name: "moth-lane-marks"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      shape Box "metre" {
+        material: mothIvory
+        position [0, 0.0275, (mothLaneFrom - (mothLaneLength / 2))]
+        scale [(mothLaneHalf * 0.5), 0.0075, 0.03]
+        domain [repeat(spacing: [1, 1, 1], limit: [0, 0, (mothLaneLength / 2)])]
+      }
+      shape Box "five-metres" {
+        material: mothIvory
+        position [0, 0.0275, (mothLaneFrom - (mothLaneLength / 2))]
+        scale [(mothLaneHalf * 0.8), 0.0075, 0.07]
+        domain [repeat(spacing: [1, 1, 5], limit: [0, 0, (mothLaneLength / 10)])]
+      }
+      shape Box "ten-metres" {
+        material: mothIvory
+        position [0, 0.0275, (mothLaneFrom - (mothLaneLength / 2))]
+        scale [mothLaneHalf, 0.0075, 0.12]
+        domain [repeat(spacing: [1, 1, 10], limit: [0, 0, (mothLaneLength / 20)])]
+      }
+    }
+  }
+  prototype "moth-lane-labels" {
+    document {
+      floorLabels(
+        name: "moth-lane-labels",
+        line: [0, 0.0075, mothLaneFrom],
+        half: mothLaneHalf,
+        runs: map(range(0, 11), k => floorText($"{(k * 10)} m", [(0 - (mothLaneHalf + 1.4)), 0.012, (mothLaneFrom - (k * 10))], 0.5, 2))
+      )
+    }
+  }
+}
+
+// The slalom's posts, 8 m apart at 2.5 m either side of its line, then 4 m apart at 1.5 m, each side's own colour.
+function slalomSide(k) = ((fraction((k / 2)) == 0) ? -1 : 1)
+let mothSlalomPosts = concat(
+  map(range(0, 6), k => [(slalomSide(k) * 2.5), (22 - (8 * k))]),
+  map(range(0, 8), k => [(slalomSide(k) * 1.5), (-28 - (4 * k))])
+)
+
+prototypes {
+  for post in [{ kind: "a", colour: mothTeal }, { kind: "b", colour: mothOrange }] {
+    prototype $"moth-post-{post.kind}" {
+      document {
+        name: $"moth-post-{post.kind}"
+        schema: "puck.creation.v2"
+        palette: mothPalette
+        shape Cylinder "post" {
+          material: post.colour
+          position [0, 0.8, 0]
+          scale [0.2, 0.8, 0.2]
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "moth-lane" {
+    prototype: "moth-lane"
+    position [-30, 0, 0]
+    solid
+  }
+  placement "moth-lane-marks" {
+    prototype: "moth-lane-marks"
+    position [-30, 0, 0]
+  }
+  placement "moth-lane-labels" {
+    prototype: "moth-lane-labels"
+    position [-30, 0, 0]
+  }
+  for (post, n) in mothSlalomPosts {
+    let kind = ((post[0] < 0) ? "a" : "b")
+
+    placement $"moth-post-{n}" {
+      prototype: $"moth-post-{kind}"
+      position [(-44 + post[0]), 0, post[1]]
+      solid
+    }
+  }
+}
+
+// ---- Terrain: steps, slopes and stairs ----
+
+// The station's origin is the foot of its courses, 6 m north of its spawn point; local x runs along the rows, local z
+// north. The step-ups stand 0.1 to 0.5 m high in a row (her step height is 0.3 m), the ramps beside them rise at their
+// angle over 3 m of slope (her limit is 60 degrees: the 62 and 70 degree ones, in orange, are past it), and two stairs
+// of eight treads 0.4 m deep, one with 0.25 m risers she steps up and one with 0.35 m risers she cannot.
+let mothTerrainAt = [36, 0, -14]
+let mothStepHeights = [0.1, 0.2, 0.3, 0.4, 0.5]
+let mothSlopeAngles = [10, 20, 30, 40, 50, 58, 62, 70]
+let mothSlopeLength = 3
+let mothSlopeThickness = 0.4
+let mothStairs = [{ x: 32, riser: 0.25 }, { x: 36, riser: 0.35 }]
+let mothTreadDepth = 0.4
+let mothTreads = 8
+
+prototypes {
+  prototype "moth-steps" {
+    document {
+      name: "moth-steps"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (h, k) in mothStepHeights {
+        shape Box $"step-{k}" {
+          material: mothStone
+          position [(-16 + (3 * k)), (h / 2), -1.5]
+          scale [1.2, (h / 2), 1.5]
+        }
+      }
+    }
+  }
+  prototype "moth-slopes" {
+    document {
+      name: "moth-slopes"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (a, k) in mothSlopeAngles {
+        let rise = sine(mothRadians(a))
+        let run = cosine(mothRadians(a))
+
+        // The slab's top face passes through the row's foot line and climbs north at `a` degrees; its low end sinks into the floor.
+        shape Box $"slope-{a}" {
+          material: ((a < 60) ? mothTeal : mothOrange)
+          position [(4 + (3 * k)), (((mothSlopeLength / 2) * rise) - ((mothSlopeThickness / 2) * run)), (0 - (((mothSlopeLength / 2) * run) + ((mothSlopeThickness / 2) * rise)))]
+          rotation: rotate([1, 0, 0], a)
+          scale [1.2, (mothSlopeThickness / 2), (mothSlopeLength / 2)]
+        }
+      }
+    }
+  }
+  prototype "moth-stairs" {
+    document {
+      name: "moth-stairs"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (flight, f) in mothStairs {
+        for n in range(1, (mothTreads + 1)) {
+          shape Box $"flight-{f}-tread-{n}" {
+            material: mothStone
+            position [flight.x, ((flight.riser * n) / 2), (0 - ((mothTreadDepth * (n - 1)) + (mothTreadDepth / 2)))]
+            scale [1.2, ((flight.riser * n) / 2), (mothTreadDepth / 2)]
+          }
+        }
+        shape Box $"flight-{f}-landing" {
+          material: mothOrange
+          position [flight.x, ((flight.riser * mothTreads) / 2), (0 - ((mothTreadDepth * mothTreads) + 1))]
+          scale [1.2, ((flight.riser * mothTreads) / 2), 1]
+        }
+      }
+    }
+  }
+  prototype "moth-terrain-labels" {
+    document {
+      floorLabels(
+        name: "moth-terrain-labels",
+        line: [10, 0.0075, 3],
+        half: 28,
+        runs: concat(
+          map(mothStepHeights, (h, k) => floorText($"{h} m", [(-16 + (3 * k)), 0.012, 1.6], 0.35, 2.4)),
+          map(mothSlopeAngles, (a, k) => floorText($"{a} deg", [(4 + (3 * k)), 0.012, 1.6], 0.35, 2.4)),
+          map(mothStairs, (flight, f) => floorText($"{flight.riser} m risers", [flight.x, 0.012, 1.6], 0.3, 2.4)),
+          [
+            floorText("STEP-UPS", [-10, 0.012, 4.6], 0.6, 8)
+            floorText("SLOPES: WALKABLE TO 60 DEG", [14.5, 0.012, 4.6], 0.6, 16)
+            floorText("STAIRS", [34, 0.012, 4.6], 0.6, 6)
+          ]
+        )
+      )
+    }
+  }
+}
+
+placements {
+  for name in ["steps", "slopes", "stairs"] {
+    placement $"moth-{name}" {
+      prototype: $"moth-{name}"
+      position: mothTerrainAt
+      solid
+    }
+  }
+  placement "moth-terrain-labels" {
+    prototype: "moth-terrain-labels"
+    position: mothTerrainAt
+  }
+}
+
+// ---- Jump, dash and gap ----
+
+// The station's origin is 6 m north of its spawn point. Gaps: eight treads of 0.25 m up to a run-up 6 m long and 2 m high,
+// then raised platforms 4 m long (the last 6) with gaps of 1, 2, 3, 4, 6 and 8 m between, 3 m wide; she falls back to the
+// floor 2 m below. Ledges: blocks 0.6 to 2.6 m high, 2.4 m wide and 3 m deep, holdable, 3.2 m apart beside the gaps.
+let mothJumpAt = [80, 0, -14]
+let mothGapWidths = [1, 2, 3, 4, 6, 8]
+let mothPlatformHeight = 2
+let mothPlatformLength = 4
+let mothRunUp = 6
+let mothLedgeHeights = [0.6, 1, 1.4, 1.8, 2.2, 2.6]
+// Where platform `i` (0 the run-up) begins, in metres north of the origin; the stairs take the first 3.2 m.
+function mothPlatformStart(i) = ((i == 0) ? (mothTreadDepth * mothTreads) : ((((mothTreadDepth * mothTreads) + mothRunUp) + scan(mothGapWidths)[i]) + (mothPlatformLength * (i - 1))))
+function mothPlatformSpan(i) = (((i == 0) or (i == length(mothGapWidths))) ? mothRunUp : mothPlatformLength)
+
+prototypes {
+  prototype "moth-gaps" {
+    document {
+      name: "moth-gaps"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for n in range(1, (mothTreads + 1)) {
+        shape Box $"tread-{n}" {
+          material: mothStone
+          position [0, ((0.25 * n) / 2), (0 - ((mothTreadDepth * (n - 1)) + (mothTreadDepth / 2)))]
+          scale [1.5, ((0.25 * n) / 2), (mothTreadDepth / 2)]
+        }
+      }
+      for i in range(0, (length(mothGapWidths) + 1)) {
+        shape Box $"platform-{i}" {
+          material: ((i == 0) ? mothStone : (((i - (2 * floor((i / 2)))) == 0) ? mothTeal : mothOrange))
+          position [0, (mothPlatformHeight / 2), (0 - (mothPlatformStart(i) + (mothPlatformSpan(i) / 2)))]
+          scale [1.5, (mothPlatformHeight / 2), (mothPlatformSpan(i) / 2)]
+        }
+      }
+    }
+  }
+  prototype "moth-ledges" {
+    document {
+      name: "moth-ledges"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (h, k) in mothLedgeHeights {
+        shape Box $"ledge-{k}" {
+          material: mothStone
+          position [(8 + (3.2 * k)), (h / 2), -1.5]
+          scale [1.2, (h / 2), 1.5]
+        }
+      }
+    }
+  }
+  prototype "moth-jump-labels" {
+    document {
+      floorLabels(
+        name: "moth-jump-labels",
+        line: [0, (mothPlatformHeight + 0.0075), (0 - 3.5)],
+        half: 1.5,
+        runs: concat(
+          map(range(1, (length(mothGapWidths) + 1)), i => floorText(
+            $"{mothGapWidths[(i - 1)]} m gap",
+            [0, (mothPlatformHeight + 0.012), (0 - (mothPlatformStart(i) - mothGapWidths[(i - 1)] - 1))],
+            0.4,
+            2.8
+          )),
+          [floorText("RUN-UP", [0, (mothPlatformHeight + 0.012), (0 - 7.5)], 0.45, 2.8)],
+          map(mothLedgeHeights, (h, k) => floorText($"{h} m", [(8 + (3.2 * k)), 0.012, 1.6], 0.4, 2.4))
+        )
+      )
+    }
+  }
+}
+
+placements {
+  placement "moth-gaps" {
+    prototype: "moth-gaps"
+    position: mothJumpAt
+    solid
+  }
+  placement "moth-ledges" {
+    prototype: "moth-ledges"
+    position: mothJumpAt
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "moth-jump-labels" {
+    prototype: "moth-jump-labels"
+    position: mothJumpAt
+  }
+}
+
+// ---- Climb: a short face ----
+
+// A holdable face 3.5 m tall, 4 m wide, over a block whose top is floor: the climb's mantle takes a top her hands can reach
+// (2.3 m above her feet), so she climbs this one before she tops out.
+let mothClimbAt = [114, 0, -14]
+let mothClimbHeight = 3.5
+
+prototypes {
+  prototype "moth-climb-face" {
+    document {
+      name: "moth-climb-face"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      shape Box "face" {
+        material: mothStone
+        position [0, (mothClimbHeight / 2), -0.1]
+        scale [2, (mothClimbHeight / 2), 0.1]
+      }
+    }
+  }
+  prototype "moth-climb-top" {
+    document {
+      name: "moth-climb-top"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      shape Box "block" {
+        material: mothTeal
+        position [0, (mothClimbHeight / 2), -1.7]
+        scale [2, (mothClimbHeight / 2), 1.5]
+      }
+    }
+  }
+}
+
+placements {
+  placement "moth-climb-face" {
+    prototype: "moth-climb-face"
+    position: mothClimbAt
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "moth-climb-top" {
+    prototype: "moth-climb-top"
+    position: mothClimbAt
+    solid
+  }
+}
+
+// ---- Flight: four pylons and three decks ----
+
+// The shaft's origin is its middle: pylons 6 m either way, 32 m tall, bands every 5 m, and decks across the north pair
+// at 10, 20 and 30 m. Her spawn point is inside it, 6 m south of the middle between the south pair.
+let mothShaftAt = [130, 0, -14]
+let mothPylonHalf = 6
+let mothPylonHeight = 32
+let mothDeckHeights = [10, 20, 30]
+
+prototypes {
+  prototype "moth-shaft" {
+    document {
+      name: "moth-shaft"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (sx, i) in [-1, 1] {
+        for (sz, j) in [-1, 1] {
+          shape Cylinder $"pylon-{i}-{j}" {
+            material: mothDark
+            position [(sx * mothPylonHalf), (mothPylonHeight / 2), (sz * mothPylonHalf)]
+            scale [0.5, (mothPylonHeight / 2), 0.5]
+          }
+        }
+      }
+      for (h, k) in mothDeckHeights {
+        shape Box $"deck-{k}" {
+          material: mothOrange
+          position [0, h, (0 - mothPylonHalf)]
+          scale [(mothPylonHalf - 0.5), 0.2, 1.5]
+        }
+      }
+    }
+  }
+  // Bands round the pylons every 5 m, a height scale she can read as she rises.
+  prototype "moth-shaft-bands" {
+    document {
+      name: "moth-shaft-bands"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (sx, i) in [-1, 1] {
+        for (sz, j) in [-1, 1] {
+          shape Box $"band-{i}-{j}" {
+            material: mothIvory
+            position [(sx * mothPylonHalf), 15, (sz * mothPylonHalf)]
+            scale [0.56, 0.05, 0.56]
+            domain [repeat(spacing: [1, 5, 1], limit: [0, 3, 0])]
+          }
+        }
+      }
+    }
+  }
+  prototype "moth-shaft-labels" {
+    document {
+      floorLabels(
+        name: "moth-shaft-labels",
+        line: [0, 0.0075, mothPylonHalf],
+        half: 3,
+        runs: concat(
+          map(mothDeckHeights, h => floorText($"{h} m", [0, (h + 0.212), (0 - (mothPylonHalf + 0.6))], 0.7, 4)),
+          [floorText("F: JETPACK ON AND OFF", [0, 0.012, (mothPylonHalf - 2.4)], 0.4, 5)]
+        )
+      )
+    }
+  }
+}
+
+placements {
+  placement "moth-shaft" {
+    prototype: "moth-shaft"
+    position: mothShaftAt
+    solid
+  }
+  placement "moth-shaft-bands" {
+    prototype: "moth-shaft-bands"
+    position: mothShaftAt
+  }
+  placement "moth-shaft-labels" {
+    prototype: "moth-shaft-labels"
+    position: mothShaftAt
+  }
+}
+
+// ---- Camera: a corridor, a low ceiling and pillars ----
+
+// The origin is the corridor's mouth, 6 m north of its spawn point. The tight corridor is 2 m wide between walls 5 m
+// tall and 14 m long; the low-ceiling one is 3 m wide under a ceiling 2.4 m up (she is 2.06 m tall) and 14 m long; then
+// open floor with a pillar 1.8 m across and 6 m tall, which the `camera-pillar` spawn point stands her in front of, and two
+// slimmer ones to walk round. Her chase camera sits 4.2 m behind her by default.
+let mothCorridorAt = [148, 0, -14]
+
+prototypes {
+  prototype "moth-corridor" {
+    document {
+      name: "moth-corridor"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (side, i) in [-1, 1] {
+        shape Box $"tight-wall-{i}" {
+          material: mothStone
+          position [(side * 1.3), 2.5, -7]
+          scale [0.3, 2.5, 7]
+        }
+        shape Box $"low-wall-{i}" {
+          material: mothStone
+          position [(side * 1.8), 1.4, -21]
+          scale [0.3, 1.4, 7]
+        }
+      }
+      shape Box "ceiling" {
+        material: mothDark
+        position [0, 2.6, -21]
+        scale [2.1, 0.2, 7]
+      }
+      shape Cylinder "pillar" {
+        material: mothTeal
+        position [0, 3, -33]
+        scale [0.9, 3, 0.9]
+      }
+      shape Cylinder "post-west" {
+        material: mothOrange
+        position [-4, 2, -30]
+        scale [0.45, 2, 0.45]
+      }
+      shape Cylinder "post-east" {
+        material: mothOrange
+        position [4, 2, -37]
+        scale [0.45, 2, 0.45]
+      }
+    }
+  }
+  prototype "moth-corridor-labels" {
+    document {
+      floorLabels(
+        name: "moth-corridor-labels",
+        line: [0, 0.0075, 2.6],
+        half: 1,
+        runs: [
+          floorText("TIGHT: 2 m", [0, 0.012, -2], 0.5, 1.8)
+          floorText("LOW CEILING: 2.4 m", [0, 0.012, -16], 0.4, 2.8)
+          floorText("PILLARS", [0, 0.012, -28], 0.5, 3)
+        ]
+      )
+    }
+  }
+}
+
+placements {
+  placement "moth-corridor" {
+    prototype: "moth-corridor"
+    position: mothCorridorAt
+    solid
+  }
+  placement "moth-corridor-labels" {
+    prototype: "moth-corridor-labels"
+    position: mothCorridorAt
+  }
+}
