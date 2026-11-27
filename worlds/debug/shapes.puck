@@ -33,7 +33,7 @@ let visitorPopulation = 8
 let galleryPopulation = (41 + seatPopulation + visitorPopulation)
 // The board game room's bodies: the granary board's cursor (granaries.puck), Alchemy's cursor and 31
 // element tokens (alchemy.puck), Go's cursor and 361 stones (go.puck), then Reversi's cursor and 64 discs
-// (reversi.puck), and above them the card table's cursor, 52 cards and held marker (cardtable.puck). debug.puck imports
+// (reversi.puck), and above them the game station's deck: its cursor, 52 cards and held marker (game-station-deck.puck). debug.puck imports
 // the card table first and the others after it, so the cards take the population's very top slots, the granary board
 // the highest below them, and every other body keeps the index it held before the cards came.
 let granaryBodies = 1

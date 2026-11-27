@@ -1,5 +1,5 @@
 // Klondike patience, as rules over piles of physical cards (solitaire.puck switches between the patience games and
-// cardtable.puck lays the cards out on a table). The console and the seated player play it through one mailbox: a
+// patience-station.puck lays the cards out on a game station's glass). The console and the seated player play it through one mailbox: a
 // request names an `action` (1 deal, 2 move a run from pile `from` to pile `to` led by card `card`, 3 draw from the stock
 // or turn the waste over) and bumps `request`; the door answers `applied`, `result` (1 played, -1 refused) and the rest
 // of the cells below, and the cards follow.
@@ -9,7 +9,7 @@
 // A deal gathers every card, shuffles the stock with the seeded stream and deals the tableau. `option` (1 or 3, the draw
 // count) takes effect at the next deal.
 
-// The surface the table (cardtable.puck) reads and the mailbox it writes.
+// The surface a station (patience-station.puck) reads and the mailbox it writes.
 export action solitaireKlondike
 export read solitaireKlondike, solitaireKlondikeCards, solitaireKlondikeFace, solitaireKlondikeRank, solitaireKlondikeSuit, solitaireKlondikeLength
 export read solitaireKlondikePile0, solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6

@@ -343,14 +343,15 @@ surrounding block's.
 An `Int` expression widens to `Fixed` wherever a destination expects it: a rule write, a record field,
 a function argument or an arm of a numeric expression. This includes body-state writes such as
 `setBodyState(...)` and copies from an `Int` cell into a `Fixed` cell. The shared rule compiler inserts
-`toFixed` at the typed boundary. Conversion shifts the integer left by 16 bits exactly, without floating point;
+`toFixed` on Int reads before the numeric operations that consume them. Conversion shifts the integer left by 16 bits exactly, without floating point;
 a value outside Q48.16's representable range faults instead of wrapping.
 
 `Fixed` never narrows to `Int` implicitly. Write `toInt(value)` explicitly to truncate toward zero; the
 compiler's kind error names this conversion. `toFixed(value)` is also available explicitly. Conversions
-preserve values already in the requested kind. Reads keep their declared kinds, so an integer quotient
-computed from `Int` cells still truncates before its result is promoted. Literals use their expression's
-numeric context, so `1 / 2` in a `Fixed` expression remains one half.
+preserve values already in the requested kind. A Fixed destination, comparison operand or arithmetic
+operand gives its numeric subexpressions Fixed context too. Thus `clock >= (h / 24)` keeps the fraction
+when `clock` is Fixed and `h` is Int: the compiler widens the division's operands before dividing.
+Division truncates only in Int context; an explicit `toInt(...)` keeps its truncation boundary.
 
 ## Indexing
 
@@ -557,7 +558,7 @@ propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
 kind; an unconstrained integer expression is Int, while an unconstrained decimal expression selects
-Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. There is no implicit conversion between Int and Fixed state reads. A gate needs no
+Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. Mixed numeric reads use Fixed context. A gate needs no
 `: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
 `compareState` or `compareValue` from the expression; source gates refuse these call spellings
 and name an ordinary comparison such as `left == right` as their replacement.

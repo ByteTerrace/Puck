@@ -1,5 +1,6 @@
-// The game table's Klondike scenarios (cardtable.puck, klondike.puck), each booted in the whole debug world with the
-// table showing Klondike: `puck test worlds/debug/cardtable-tests.puck --reproduce`. The table deals by itself at boot
+// The Klondike scenarios on the board game room's game station (../games/klondike.puck, ../games/patience-station.puck,
+// gallery/games.puck), each booted in the whole debug world with the station showing Klondike:
+// `puck test worlds/debug/klondike-tests.puck --reproduce`. The table deals by itself at boot
 // from the seeded stream, so every scenario sees the same deal: the tableau columns (piles 2 to 8) hold 1 to 7 cards and
 // the stock (pile 0) 24, and the cards on show are the jack of spades (card 10) on pile 2, the six of hearts (18) on 3,
 // the jack of hearts (23) on 4, the five of diamonds (43) on 5, the king of hearts (25) on 6, the nine of spades (9 of
@@ -13,8 +14,11 @@ import "stopped-machines"
 
 state {
   world {
-    table tableGame {
-      game = 1
+    row {
+      name: "gameStationGame"
+      kind: "Int"
+      capacity: 1
+      cells [{ key: "boardroom", value: 1 }]
     }
   }
 }
@@ -101,7 +105,7 @@ test "the stock draws a card to the waste" {
 test "a seated player lifts the ace and plays it on its foundation" {
   when {
     ticks 400
-    seat1: body.pose 60.8 9.25 34.4 180 0 0 0
+    seat1: body.pose 38 9.25 15.7 180 0 0 0
     ticks 60
     seat1: body.press interact
     ticks 10
@@ -125,10 +129,10 @@ test "a seated player lifts the ace and plays it on its foundation" {
     ticks 120
   }
   expect {
-    board(engaged, kBoard, 1) == 1
+    board(engaged, boardroomCells, 1) == 1
     solitaireKlondike.moves == 1
     count(solitaireKlondikePile13) == 1
     count(solitaireKlondikePile8) == 6
-    kSeat.heldZone == -1
+    patienceSeat.heldZone == -1
   }
 }

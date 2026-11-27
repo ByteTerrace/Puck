@@ -1,0 +1,75 @@
+import "chess"
+// Chess as a document for a world whose board is drawn rather than stood with pieces: a game station's glass
+// (../standard/game-station.puck). It composes the chess library (chess.puck) in its digital mode: the pieces are their
+// cells alone, start on their squares, and the board is always at rest, so a move is judged a couple of ticks after it is
+// applied and an illegal one is put back by writing its cells. A world that stands a physical table instead expands the
+// library itself (the debug world's chess.puck), and a world imports one or the other, never both: they declare the same
+// game.
+//
+// Moves come through the display door (`chessPut`: `from`, `to`, `request`) and the console's mailbox (`chessInput`);
+// the computer plays `aiSide` (Black by default).
+
+// What a game station's glass reads of the game to draw it, and the door it asks a move through.
+export read board, turn, verdict, move, inCheck, aiSide, halfmoveClock, repetitionCount, chessPut, chessSeated
+export action chessPut, chessSeated, chessInput, aiSide
+
+// The ticks a drawn board waits after a move before it is judged.
+let chessGameSettleTicks = 2
+
+state {
+  // The rules' vocabularies, declared here so the rules fold their members (chess.puck's header).
+  enum PieceKind {
+    None
+    Pawn
+    Knight
+    Bishop
+    Rook
+    Queen
+    King
+  }
+
+  enum MoveKind {
+    Illegal
+    Quiet
+    Capture
+    EnPassant
+    Castle
+  }
+
+  enum TurnColor {
+    White
+    Black
+  }
+
+  // The board's grid: no table carries it, so its frame only sizes its cells.
+  chessBoardGrid(cellSize: 0.1, origin: [-0.4, 0, -0.4], band: 0.1)
+
+  world {
+    chessGameState(settleTicks: chessGameSettleTicks, digital: true)
+  }
+}
+
+chessSearch()
+chessJudge(settleTicks: chessGameSettleTicks, digital: true)
+chessComputer(settleTicks: chessGameSettleTicks)
+chessMoveDoor(settleTicks: chessGameSettleTicks)
+chessMoveDone()
+chessPutDown(settleTicks: chessGameSettleTicks)
+chessPutJudged(settleTicks: chessGameSettleTicks, digital: true)
+chessPutSettled()
+
+commands [
+  {
+    name: "chess.move"
+    help: "Requests a move through the game's apply and judge. Cells count 8 * rank + 7 - file from a1."
+    parameters [
+      { name: "from", kind: Integer }
+      { name: "to", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set chessInput from {from}"
+      "world.state.cell.set chessInput to {to}"
+      "world.state.cell.set chessInput request 1"
+    ]
+  }
+]

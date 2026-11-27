@@ -3,6 +3,69 @@ using Xunit;
 namespace Puck.State.Rules.Tests;
 
 public sealed class NumericPromotionTests {
+    [Fact]
+    public void AKindFreeFoldKeepsAQuotientWhoseFixedReadingHasAFraction() {
+        Assert.Null(RuleCompiler.FoldKindFree(ExpressionProgram.Parse("6 / 24")));
+        Assert.Equal(30L, RuleCompiler.FoldKindFree(ExpressionProgram.Parse("6 + 24")));
+    }
+
+    [Fact]
+    public void FixedContextReachesACallBodyAndItsArgumentExpression() {
+        var expression = new ExpressionProgram([.. ExpressionProgram.Parse("score / 2").Instructions, Instruction.Call(0)]) {
+            Subprograms = [new Subprogram("half", 1, [Instruction.Argument(0), Instruction.Constant(2), Instruction.Of(ExpressionOp.Divide)])],
+        };
+        var context = RulesFixture.Context();
+        var host = new ArenaEffectHost(new StateArena(context.Catalog, RulesFixture.Section(), ArenaTime.Origin));
+        var compiled = RuleCompiler.CompileExpression(expression, CellKind.Fixed, "promotion", "write", context);
+        Assert.True(RuleExpressions.EvaluateDetached(host, compiled, CellKind.Fixed).TryFinite(out var raw));
+        Assert.Equal(81920L, raw);
+    }
+
+    [Theory]
+    [InlineData("score / 2", CellKind.Fixed, 163840L)]
+    [InlineData("score / 2", CellKind.Int, 2L)]
+    [InlineData("(score / 2) + ratio", CellKind.Fixed, 163840L)]
+    [InlineData("ratio + (score / 2)", CellKind.Fixed, 163840L)]
+    [InlineData("maximum(score / 2, ratio)", CellKind.Fixed, 163840L)]
+    [InlineData("score > 0 ? score / 2 : ratio", CellKind.Fixed, 163840L)]
+    [InlineData("(score / 2) ?? ratio", CellKind.Fixed, 163840L)]
+    [InlineData("toInt(score / 2)", CellKind.Fixed, 131072L)]
+    [InlineData("sum(tokens, x -> x / 2)", CellKind.Fixed, 32768L)]
+    [InlineData("sum(tokens, x -> x / 2)", CellKind.Int, 0L)]
+    public void FixedContextReachesIntOperationsBeforeTheyRun(string text, CellKind kind, long expected) {
+        var context = RulesFixture.Context();
+        var arena = new StateArena(context.Catalog, RulesFixture.Section(), ArenaTime.Origin);
+        var compiled = RuleCompiler.CompileExpression(ExpressionProgram.Parse(text), kind, "promotion", "write", context);
+        Assert.True(RuleExpressions.EvaluateDetached(new ArenaEffectHost(arena), compiled, kind).TryFinite(out var raw));
+        Assert.Equal(expected, raw);
+    }
+
+    [Theory]
+    [InlineData(13107L, false)]
+    [InlineData(16384L, true)]
+    [InlineData(19661L, true)]
+    public void AFixedClockComparesAgainstAnIntHourQuotient(long clock, bool expected) {
+        var section = new StateSection(Rows: [
+            new StateRow(Name: RulesFixture.Name("clock"), Kind: CellKind.Fixed,
+                Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Fixed(clock))]),
+            new StateRow(Name: RulesFixture.Name("h"), Kind: CellKind.Int,
+                Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(6))]),
+        ]);
+        var catalog = StateCatalog.Compile(section);
+        var context = new RuleCompileContext(section: section, catalog: catalog, tables: null, patterns: null,
+            generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
+        var host = new ArenaEffectHost(new StateArena(catalog, section, ArenaTime.Origin));
+        var compiled = RuleCompiler.CompileExpression(ExpressionProgram.Parse("clock >= (h / 24)"), CellKind.Int, "restock", "gate", context);
+        Assert.True(RuleExpressions.EvaluateDetached(host, compiled, CellKind.Int).TryFinite(out var result));
+        Assert.Equal(expected ? 1L : 0L, result);
+
+        var gate = RuleCompiler.CompileGate(new ActionPredicate.CompareValue(
+            Left: ExpressionProgram.Parse("clock"), Right: ExpressionProgram.Parse("h / 24"),
+            Comparison: ExpressionOp.GreaterOrEqual), "restock", context);
+        Assert.True(RuleExpressions.EvaluateDetached(host, gate[0].RightSource.Expression!, CellKind.Fixed).TryFinite(out var quotient));
+        Assert.Equal(16384L, quotient);
+    }
+
     [Theory]
     [InlineData("3", 196608L)]
     [InlineData("1 / 2", 32768L)]
@@ -41,7 +104,7 @@ public sealed class NumericPromotionTests {
             Subprograms = [new Subprogram("wave", 1, [Instruction.Argument(0), Instruction.Of(ExpressionOp.Sine)])],
         };
         var compiled = RuleCompiler.CompileExpression(expression, CellKind.Fixed, "promotion", "write", RulesFixture.Context());
-        Assert.Contains(compiled.Single(token => token.Operation == ExpressionOp.Call).Call!.Body, token => token.Operation == ExpressionOp.ToFixed);
+        Assert.Contains(compiled, token => token.Operation == ExpressionOp.ToFixed);
     }
 
     [Fact]

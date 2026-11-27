@@ -155,10 +155,12 @@ public static partial class RuleCompiler {
     private static (CellKind Result, CellKind LeftCarrier, CellKind RightCarrier) CompileComparisonCarrier(
         ActionPredicate.CompareValue expression, CellKind carrier, string ruleName, RuleCompileContext context,
         out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
+        var required = expression.Kind ?? (IsConstantExpression(expression.Left) && IsConstantExpression(expression.Right)
+            ? carrier : (CellKind?)null);
         left = CompileExpression(expression.Left, carrier, ruleName, "compareValue left", context,
-            resultKind: expression.Kind, result: out var leftKind);
+            resultKind: required, result: out var leftKind);
         right = CompileExpression(expression.Right, carrier, ruleName, "compareValue right", context,
-            resultKind: expression.Kind, result: out var rightKind);
+            resultKind: required, result: out var rightKind);
         var leftCarrier = carrier;
         var rightCarrier = carrier;
 
@@ -175,8 +177,9 @@ public static partial class RuleCompiler {
         }
         if (leftKind != rightKind) {
             var common = leftKind == CellKind.Fixed || rightKind == CellKind.Fixed ? CellKind.Fixed : leftKind;
-            left = ConvertExpression(left, leftKind, common, ruleName, "comparison left");
-            right = ConvertExpression(right, rightKind, common, ruleName, "comparison right");
+            left = CompileExpression(expression.Left, common, ruleName, "comparison left", context);
+            right = CompileExpression(expression.Right, common, ruleName, "comparison right", context);
+            leftCarrier = rightCarrier = common;
             leftKind = common;
         }
         return (leftKind, leftCarrier, rightCarrier);
