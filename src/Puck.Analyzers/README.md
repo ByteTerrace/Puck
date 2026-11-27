@@ -142,6 +142,14 @@ state was built from) carries `[SideTable(reason)]`, from
 rule reads declarations, so a weak table held in a local is outside what it
 sees, and a test assembly is not held to it.
 
+CACHE002 refuses, in the same declarations, a `CodeDerivedTable` or
+`ConditionalWeakTable` keyed by `Puck.World.WorldDefinition` outside
+`WorldDocumentDerivedTable`. A raw table keyed by a document hides the parts its
+derivation read from a product build that finds the value held, so the rebuilds
+an install plans depend on which caller derived first; the door notes those
+parts on every lookup. A table no product build reads, or whose values record
+their own reads, carries `[SideTable(reason)]` too.
+
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
 reads the compiled assembly's attributes, so it sees an
 `[assembly: InternalsVisibleTo(...)]` written in source and a csproj

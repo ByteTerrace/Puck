@@ -8,7 +8,9 @@ namespace Puck;
 /// leaves them standing. A side table holds an attachment a writer records (a source origin, a refusal noted while
 /// lowering), per-object state a code update must not drop (a pool, a guard's last valid values), or a value whose
 /// identity live state was built from. A product of code goes through <c>Puck.Abstractions.CodeDerivedTable</c>
-/// instead; <c>Puck.Analyzers</c> refuses a raw weak table field without this mark (CACHE001).
+/// instead; <c>Puck.Analyzers</c> refuses a raw weak table field without this mark (CACHE001). The mark also exempts a
+/// table keyed by <c>Puck.World.WorldDefinition</c> from CACHE002, which sends a value derived from a document to
+/// <c>WorldDocumentDerivedTable</c>: a table no product build reads, or whose values record their own document reads.
 /// <para>
 /// The type is <c>internal</c> and linked into every project as source (see <c>Directory.Build.props</c>): the analyzer
 /// matches it by name.

@@ -20,6 +20,7 @@ namespace Puck.World;
 public static class WorldShadeTable {
     private static readonly WorldDocumentWalker Walker = new(surfaces: [typeof(ShadeReference)]);
     // The table a definition writes, once per definition: a definition never changes once built.
+    [SideTable(reason: "reached through the document's Shades getter, which notes the shades part on every read")]
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Box> Tables = new();
 
     private sealed record Box(IReadOnlyDictionary<string, SdfShadeDefinition>? Table);

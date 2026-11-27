@@ -45,7 +45,7 @@ public sealed class WorldPresentationManifest {
         templates: []
     );
 
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldPresentationManifest> Compiled = new();
+    private static readonly WorldDocumentDerivedTable<WorldPresentationManifest> Compiled = new();
     private static readonly WorldDocumentWalker Walker = new(surfaces: [
         typeof(BindableAngle),
         typeof(BindableColor),
@@ -189,8 +189,8 @@ public sealed class WorldPresentationManifest {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return Compiled.GetValue(
-            derive: static document => Compile(definition: document),
-            key: definition
+            definition: definition,
+            derive: static document => Compile(definition: document)
         );
     }
     /// <summary>Compiles a document's manifest: the deduplicated union of the state bindings its presentation

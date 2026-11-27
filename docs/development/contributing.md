@@ -443,7 +443,11 @@ two things, and the watch output says which:
   `ConditionalWeakTable` field outside `CodeDerivedTable` (CACHE001) unless it
   carries `[SideTable(reason)]`, which names a table whose values no code
   derives: an attachment, per-object state, or a value whose identity live state
-  was built from, such as the state catalog an arena was created against. Every
+  was built from, such as the state catalog an arena was created against. A
+  table keyed by a `WorldDefinition` is a `WorldDocumentDerivedTable`, which
+  notes the document parts its derivation read on every lookup, and a raw
+  `CodeDerivedTable` keyed by one fails the build (CACHE002) unless it carries
+  `[SideTable(reason)]` for a table no product build reads. Every
   compiled camera rig (`WorldCameraRigCompiler.Cache`), everything the frame
   presenter derives from a delivered definition (cameras and faces, screens,
   speakers, text, decals, the static field), the composed scene program (the

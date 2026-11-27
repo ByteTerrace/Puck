@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// the reference's file name without extension is the document's <see cref="WorldDefinition.DocumentId"/>, and its
 /// counterpart names a face of this document.</remarks>
 public static class WorldPortalStraddle {
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Door[]> PerDefinition = new();
+    private static readonly WorldDocumentDerivedTable<Door[]> PerDefinition = new();
 
     /// <summary>One door of a same-world pair.</summary>
     /// <param name="Glass">The door's glass.</param>
@@ -42,8 +42,8 @@ public static class WorldPortalStraddle {
         }
 
         var doors = PerDefinition.GetValue(
-            derive: Derive,
-            key: definition
+            definition: definition,
+            derive: Derive
         );
         var slot = ((Interlocked.Increment(location: ref NextDerived) & int.MaxValue) % derived.Length);
 
