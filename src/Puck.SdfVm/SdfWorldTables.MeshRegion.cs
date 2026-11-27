@@ -63,6 +63,10 @@ public sealed partial class SdfWorldTables {
     /// the background GPU work, and its draws stay absent until it does. It turns false as the last such mesh lands,
     /// before a staging names its draws (<see cref="DrawsAwaitMeshes"/>). Safe to read from any thread.</summary>
     public bool MeshesLanding => (Volatile.Read(location: ref m_owedWords) != 0);
+    /// <summary>Gets whether the mesh region's next landing is being packed on a worker, which no frame's background work
+    /// takes until the packing ends: work in flight on the thread pool, which a frame-counted wait waits out in real
+    /// time.</summary>
+    public bool MeshesPacking => m_meshStore.LandingPacks;
     /// <summary>Gets whether a producer row is staged absent because its mesh is owed or refused. Read on the frame thread.</summary>
     public bool DrawsAwaitMeshes => (m_absentRows.Count > 0);
     /// <summary>Gets whether the staged draws' meshes all stand: the store owes none of their words, refuses none of

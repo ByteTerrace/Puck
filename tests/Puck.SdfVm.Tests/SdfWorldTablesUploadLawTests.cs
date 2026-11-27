@@ -1090,13 +1090,17 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         public void Land(float time, IReadOnlyList<SdfMeshDraw> meshDraws) {
             Render(meshDraws: meshDraws, time: time);
             // The upload budget is a rate of the device's clock (SdfGpuWork.UploadBytesPerSecond), which each frame steps, so
-            // the bound is in frames: ten seconds of them.
-            var frames = 0;
-
-            while (Engine.MeshesLanding || Engine.DrawsAwaitMeshes) {
-                Assert.True(condition: (frames++ < MostLandingFrames), userMessage: "The mesh region never landed its meshes.");
-                Render(meshDraws: meshDraws, time: time);
-            }
+            // the bound is in frames: ten seconds of them, each waiting out the landing words a worker packs.
+            TestLiveness.Within(
+                building: () => Engine.MeshesPacking,
+                frames: MostLandingFrames,
+                reason: () => $"The mesh region never landed its meshes: {Engine.MeshResidencyPending()}",
+                step: () => {
+                    if (!Engine.MeshesLanding && !Engine.DrawsAwaitMeshes) { return true; }
+                    Render(meshDraws: meshDraws, time: time);
+                    return false;
+                }
+            );
         }
         // Renders until every ring slot has taken its first frame and the world's shadows stand (their first redraws spread
         // over several uploads), so later frames read steady-state writes.
