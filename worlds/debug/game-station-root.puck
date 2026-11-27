@@ -13,6 +13,8 @@ import "../standard/skies"
 import "../standard/game-station"
 import "../games/chess-game"
 import "../games/chess-station"
+import "../games/solitaire"
+import "../games/patience-station"
 import "game-stations"
 
 metadata {
@@ -20,8 +22,9 @@ metadata {
   description: "One game station from the standard's module on a small floor, for iterating on the station."
 }
 
+// The seats and visitors, and above them the deck's 54 bodies (patienceStationCards).
 bodies {
-  capacity: 12
+  capacity: 66
   localSeats: 4
   networkPlayers: 8
   seatSpawns [hero]
@@ -55,7 +58,10 @@ placements {
   }
   gameStationPlacement(station: rootStation)
   chessStationTokens(station: rootStation, game: 0)
+  patienceStationSpots(station: rootStation)
 }
+
+patienceStationCards(station: rootStation)
 
 prototypes {
   prototype "floor" {
@@ -72,18 +78,22 @@ prototypes {
   }
   gameStationPrototype(station: rootStation, catalog: gameStationCatalog, boardPanels: chessStationPanels(rootStation))
   chessStationPrototypes()
+  patienceStationPrototypes()
 }
 
 state {
   gameStationGrid(station: rootStation)
+  patienceStationSlots(station: rootStation)
   world {
     gameStationState(stations: [rootStation], catalog: gameStationCatalog)
     chessStationState(stations: [rootStation])
+    patienceStationState()
   }
 }
 
 gameStationRules(station: rootStation, catalog: gameStationCatalog)
 chessStationRules(station: rootStation, game: 0, ordinal: 0)
+patienceStationRules(station: rootStation, klondike: 1, freecell: 2)
 
 render {
   farDistance: 200

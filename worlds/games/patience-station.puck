@@ -1,0 +1,624 @@
+// Patience on a game station's glass (../standard/game-station.puck): Klondike (klondike.puck) and FreeCell
+// (freecell.puck), the collection solitaire.puck switches between, laid out on the station's board area with the
+// standard deck's faces (../standard/cards.puck) and played through the station's pointer and buttons. A module library:
+// a world expands its templates beside the station's, with each game's place in the station's catalog.
+//
+//   import "patience-station"
+//   patienceStationCards(station: s)                   // the deck's bodies, where the world's body order wants them
+//   prototypes { patienceStationPrototypes() }
+//   placements { patienceStationSpots(station: s) }
+//   state { patienceStationSlots(station: s)  world { patienceStationState() } }
+//   patienceStationRules(station: s, klondike: 1, freecell: 2)
+//
+// The rules are the truth: the piles of `solitaireKlondike*` and `solitaireFreecell*` decide what a deal, a move and a
+// draw do, and `solitaire.table` follows the station (1 while it shows Klondike, 2 FreeCell, 0 otherwise, which pauses
+// both and keeps their piles). The glass follows the piles: whenever they change (`patienceSync`), every card is read for
+// its pile and its depth in it and posed at that slot of the `patienceSlots` graph, lying flat on the glass, face up or
+// face down; while another game is shown the cards lie inside the table's cap. A card is a body of the `cardSlab` kit,
+// posed exactly, so a move is judged by the door over the piles. A world holds one deck, so one station plays patience.
+//
+// Both games are laid out for the seat at the station's -Z edge: the top row runs along the far side from the seat's left
+// (Klondike's stock, waste, a gap and four foundations; FreeCell's four cells and four foundations), and the columns fan
+// toward the seat. The pointer puts the cursor on a card (inside a fan by where it points; the keys stand on a column's
+// last card), the pick lifts the run from there and plays it on another pile, and on Klondike's stock draws. The list's
+// NEW GAME deals the game shown again, as a pick on a won game does.
+import "../standard/game-station"
+import "../standard/cards"
+import "../standard/kits"
+
+// A card is the deck's 1.76 by 2.48 creation at `patienceCardScale`, and lies a layer above the one under it.
+let patienceCardScale = 0.068
+let patienceCardHalfWide = (0.88 * patienceCardScale)
+let patienceCardHalfTall = (1.24 * patienceCardScale)
+let patienceCardLayer = 0.0036
+let patienceFan = 0.045
+let patiencePitch = 0.14
+// The layout in the station's frame: the board area's centre across, the top row's centre line and the first tableau
+// card's centre.
+let patienceCentreX = ((gameStationBoard.x0 + gameStationBoard.x1) / 2)
+let patienceTopRowZ = ((gameStationBoard.z1 - patienceCardHalfTall) - 0.008)
+let patienceTableauZ = ((patienceTopRowZ - (2 * patienceCardHalfTall)) - 0.03)
+// A card lifted off the glass by this much lies on it.
+let patienceSurface = 0.002
+
+// Klondike's piles: zone 0 the stock (52 before a deal), 1 the waste, 2 to 8 the tableau, 10 to 13 the foundations (zone 9
+// unused); pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on. A pile's column, from the seat's left.
+let kCaps = [52, 24, 19, 19, 19, 19, 19, 19, 19, 0, 13, 13, 13, 13]
+let kBase = map(range(0, 14), z => reduce(range(0, z), 0, (sum, k) => sum + kCaps[k]))
+let kSlotCount = (kBase[13] + kCaps[13])
+let kColumn = [0, 1, 0, 1, 2, 3, 4, 5, 6, 0, 3, 4, 5, 6]
+let kTopRow = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]
+let kTopRowZones = [0, 1, -1, 10, 11, 12, 13]
+let kSlotX = map(range(0, 14), z => patienceCentreX + (3 - kColumn[z]) * patiencePitch)
+
+// FreeCell's slots follow Klondike's in the graph: zones 0 to 3 the free cells, 4 to 7 the foundations and 8 to 15 the
+// columns, then the deck's 24 layers over the first cell during a deal; the graph's last slot lies inside the cap, where
+// the cards wait while another game is shown.
+let fCaps = [1, 1, 1, 1, 13, 13, 13, 13, 19, 19, 19, 19, 19, 19, 19, 19]
+let fBase = map(range(0, 16), z => kSlotCount + reduce(range(0, z), 0, (sum, k) => sum + fCaps[k]))
+let fDeckBase = (fBase[15] + fCaps[15])
+let fSlotCount = (fDeckBase + 24)
+let fSlotX = map(range(0, 16), z => patienceCentreX + (3.5 - (z < 8 ? z : z - 8)) * patiencePitch)
+let patienceAwaySlot = fSlotCount
+
+// The deck's faces, in card order: key = suit * 13 + rank - 1, suits spades, hearts, clubs, diamonds.
+let patienceSuits = ["s", "h", "c", "d"]
+let patienceRanks = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
+let patienceFaces = map(range(0, 52), k => $"card-{patienceSuits[(k - k % 13) / 13]}-{patienceRanks[k % 13]}")
+let patienceFaceUp = -90
+let patienceFaceDown = 90
+
+let patienceLineTexts = ["KLONDIKE", "FREECELL", "SOLVED  -  TAP NEW GAME", "DEALING"]
+
+// The deck's bodies: the cursor outline, the 52 cards and the held-run outline, lying inside the station's cap until a
+// patience game is shown. They are inhabitants, so a world expands this where its body order wants them.
+template patienceStationCards(station) {
+  looks: concat(
+    map(patienceFaces, name => {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: name
+      scale: patienceCardScale
+      source: creation(prototypeId: name)
+    }),
+    map(["patienceCursor", "patienceHeld"], name => {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: name
+      scale: 1
+      source: creation(prototypeId: name)
+    })
+  )
+
+  // A card keeps the attitude it is posed at, pitch included: the drive frame carries the pose's pitch within the kit's
+  // `turn.maxPitch`, just short of a right angle.
+  bodyMotionPrograms [
+    {
+      kind: Motion
+      name: "cardSlab"
+      operations [
+        ResolveDriveFrame
+        CommitPose
+      ]
+      version: "puck.body.program.v1"
+    }
+  ]
+
+  kits [
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "cardSlab"
+      motion: stillMotion with { facingSnap: true, turn: stillTurn with { maxPitch: 1.5707 } }
+      name: "cardSlab"
+    }
+  ]
+
+  placements {
+    for body in concat([{ id: "patienceCursor", look: "patienceCursor" }], map(range(0, 52), k => { id: $"patienceCard{k}", look: patienceFaces[k] }), [{ id: "patienceHeld", look: "patienceHeld" }]) {
+      placement $"{body.id}" {
+        prototype: body.look
+        inhabit {
+          count: 1
+          distribution {
+            fill {
+              name: "additive"
+              offset: 0
+              step: 0.001
+            }
+            region: disc(radius: 0.01)
+          }
+          kit: "cardSlab"
+          look: body.look
+          source: "Idle"
+        }
+        position [station.at[0], (station.at[1] + gameStationSurface - 0.03), station.at[2]]
+      }
+    }
+  }
+}
+
+// A card's outline, four flat bars round a card.
+template patienceOutline(name, color) {
+  prototype name {
+    document {
+      name: name
+      palette [{ color: color, roughness: 0.4, specular: 0.3, emissive: 300 }]
+      schema: "puck.creation.v2"
+      for (bar, k) in [
+        { at [0, 0, (patienceCardHalfTall + 0.006)], half [(patienceCardHalfWide + 0.006), 0.002, 0.003] }
+        { at [0, 0, (0 - (patienceCardHalfTall + 0.006))], half [(patienceCardHalfWide + 0.006), 0.002, 0.003] }
+        { at [(patienceCardHalfWide + 0.006), 0, 0], half [0.003, 0.002, (patienceCardHalfTall + 0.009)] }
+        { at [(0 - (patienceCardHalfWide + 0.006)), 0, 0], half [0.003, 0.002, (patienceCardHalfTall + 0.009)] }
+      ] {
+        shape Box $"bar-{k}" {
+          material: 0
+          position: bar.at
+          scale: bar.half
+        }
+      }
+    }
+  }
+}
+
+// A pile's outline on the glass, glowing faintly: shown, or sunk under the glass while its game is not.
+template patienceSpot(name, depth) {
+  prototype name {
+    document {
+      name: name
+      palette [{ color: "#1F4A50", roughness: 0.3, specular: 0.2, emissive: 120 }]
+      schema: "puck.creation.v2"
+      shape Box "spot" {
+        material: 0
+        position [0, depth, 0]
+        scale [(patienceCardHalfWide + 0.003), 0.0004, (patienceCardHalfTall + 0.003)]
+      }
+    }
+  }
+}
+
+template patienceStationPrototypes() {
+  cardDeckPrototypes(variant: "light")
+  patienceOutline(name: "patienceCursor", color: "#9FE6F0")
+  patienceOutline(name: "patienceHeld", color: "#FFC46A")
+  patienceSpot(name: "patienceSpot", depth: 0)
+  patienceSpot(name: "patienceSpotHidden", depth: -0.01)
+}
+
+// Each pile's outline on the station's glass: Klondike's thirteen and FreeCell's sixteen, each shown while its game is.
+template patienceStationSpots(station) {
+  for z in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13] {
+    placement $"{station.id}-spot-k{z}" {
+      prototype: "patienceSpot"
+      position: gameStationWorld(station, kSlotX[z], (kTopRow[z] == 1 ? patienceTopRowZ : patienceTableauZ))
+      respond [{ when: state(state: solitaire, key: `table`, comparison: NotEqual, value: 1), prototypeId: "patienceSpotHidden" }]
+    }
+  }
+  for z in range(0, 16) {
+    placement $"{station.id}-spot-f{z}" {
+      prototype: "patienceSpotHidden"
+      position: gameStationWorld(station, fSlotX[z], (z < 8 ? patienceTopRowZ : patienceTableauZ))
+      respond [{ when: state(state: solitaire, key: `table`, comparison: Equal, value: 2), prototypeId: "patienceSpot" }]
+    }
+  }
+}
+
+// Every slot a card can lie in, by absolute position, inside the world's `state` block: the graph is only a table of
+// centres, with no adjacency.
+template patienceStationSlots(station) {
+  lattices [
+    graph(
+      name: "patienceSlots",
+      origin: [0, 0, 0],
+      cellSize: 0.05,
+      cells: concat(
+        flatMap(range(0, 14), z => map(range(0, kCaps[z]), j => {
+          id: $"z{z}-{j}",
+          centre: gameStationWorld(station, kSlotX[z], (kTopRow[z] == 1 ? patienceTopRowZ : patienceTableauZ - patienceFan * j)) + [0, patienceSurface + patienceCardLayer * j, 0]
+        })),
+        flatMap(range(0, 16), z => map(range(0, fCaps[z]), j => {
+          id: $"f{z}-{j}",
+          centre: gameStationWorld(station, fSlotX[z], (z < 8 ? patienceTopRowZ : patienceTableauZ - patienceFan * j)) + [0, patienceSurface + patienceCardLayer * j, 0]
+        })),
+        map(range(0, 24), j => {
+          id: $"fd-{j}",
+          centre: gameStationWorld(station, fSlotX[0], patienceTopRowZ) + [0, patienceSurface + patienceCardLayer * j, 0]
+        }),
+        [{ id: "away", centre: gameStationWorld(station, 0, 0) + [0, -0.03, 0] }]
+      ),
+      directions: [{ name: "none", opposite: "none" }],
+      edges: []
+    )
+  ]
+}
+
+// The deck's state, inside the world's `state.world` block.
+template patienceStationState() {
+  // Each card's number, keyed by its placement's name (the pose rules iterate it), and the slot it lies in as the glass
+  // last read it: its pile's first slot and its depth in the pile.
+  row {
+    name: "patienceCardNo"
+    kind: "Int"
+    capacity: 52
+    cells: map(range(0, 52), k => { key: $"patienceCard{k}", value: k })
+  }
+  row {
+    name: "patienceSlotOf"
+    kind: "Int"
+    capacity: 52
+    min: 0
+    max: fSlotCount
+    cells: map(range(0, 52), k => { key: $"{k}", value: patienceAwaySlot })
+  }
+  row {
+    name: "patienceSlotBase"
+    kind: "Int"
+    cells: map(range(0, 14), z => { key: $"{z}", value: kBase[z] })
+  }
+  row {
+    name: "patienceFreeBase"
+    kind: "Int"
+    cells: map(range(0, 16), z => { key: $"{z}", value: fBase[z] })
+  }
+  // The deepest slot a pile's cursor reaches: its last, or for the stock the 24th layer the glass draws.
+  row {
+    name: "patienceTopSlot"
+    kind: "Int"
+    cells: map(range(0, 14), z => { key: $"{z}", value: z == 0 ? 23 : kCaps[z] - 1 })
+  }
+  row {
+    name: "patienceTopZone"
+    kind: "Int"
+    cells: map(range(0, 7), c => { key: $"{c}", value: kTopRowZones[c] })
+  }
+  row {
+    name: "patienceLines"
+    kind: Text
+    capacity: length(patienceLineTexts)
+    cells: map(range(0, length(patienceLineTexts)), code => { key: $"{code}", value: patienceLineTexts[code] })
+  }
+
+  // The glass follows the piles for `left` more ticks after the last change, or after the game shown changed (`game`
+  // is the one it last followed); `status` is the status line's last code.
+  table patienceSync capacity(auto) {
+    left = 16
+    scan = 0
+    game = 0
+    seenKlondike = 0
+    seenFreecell = 0
+    status = -1
+  }
+
+  // The seat at the glass: the cursor's column, band (0 the top row, 1 the tableau), pile, depth and card, the pile and
+  // card lifted (-1 for none) and what was lifted before this tick's pick, the last pointed pick cell, and the slots the
+  // cursor and the held marker were last posed at.
+  table patienceSeat capacity(auto) {
+    col = 0
+    band = 1
+    zone = 2
+    depth = 0
+    want = 99
+    card = -1
+    heldZone = -1
+    heldBefore = -1
+    heldDepth = 0
+    heldCard = -1
+    pointer = -1
+    cursorAt = -1
+    heldAt = -1
+  }
+}
+
+// Each pile's cards read their depth: how many cards of the pile stand before them. The length pattern matched from a
+// card to the pile's end counts the cards from it on, so a card's depth is the pile's count less that.
+template patienceRead(game, turn, base, pile, length) {
+  rule $"patience-read-{game}-{turn}" {
+    when solitaire.table == game and patienceSync.left > 0 and patienceSync.scan == turn
+    mode: Level
+    forEach: pile
+    patienceSlotOf[$each] = base + count(pile) - match(length, pile, prefix)[$each]
+  }
+}
+
+template patienceStationRules(station, klondike, freecell) {
+  let key = station.id
+  let pick = gameStationBits.pick
+
+  // The patience collection plays the game the station shows, and none while it shows another.
+  rule "patience-follow" {
+    local table = (gameStationGame[key] == klondike) ? 1 : ((gameStationGame[key] == freecell) ? 2 : 0)
+    when solitaire.table != table
+    mode: Level
+    solitaire.table = table
+  }
+
+  // ---- The cards follow the piles ----------------------------------------------------------------------------------
+  // Any change in the game (a deal in progress, a move, a draw, a reveal) keeps the glass reading for a pass over the
+  // piles and three ticks more.
+  rule "patience-arm-klondike" {
+    when solitaire.table == 1 and (solitaireKlondike.busy == 1 or
+        solitaireKlondike.stage or
+        solitaireKlondike.applied != patienceSync.seenKlondike)
+    mode: Level
+    patienceSync.left = 15
+    patienceSync.seenKlondike = solitaireKlondike.applied
+  }
+  rule "patience-arm-freecell" {
+    when solitaire.table == 2 and (solitaireFreecell.busy == 1 or
+        solitaireFreecell.stage or
+        solitaireFreecell.applied != patienceSync.seenFreecell)
+    mode: Level
+    patienceSync.left = 19
+    patienceSync.seenFreecell = solitaireFreecell.applied
+  }
+  rule "patience-run" {
+    local busy = (solitaire.table == 1) ? (solitaireKlondike.busy + solitaireKlondike.stage) : ((solitaire.table == 2) ? (solitaireFreecell.busy + solitaireFreecell.stage) : 0)
+    when patienceSync.left > 0 and busy == 0
+    mode: Level
+    patienceSync.left -= 1
+  }
+
+  // A game switched to is read afresh, and the seat starts on the game's first column with nothing lifted.
+  rule "patience-switch" {
+    when patienceSync.game != solitaire.table
+    mode: Level
+    patienceSync.game = solitaire.table
+    patienceSync.left = 19
+    patienceSeat.col = 0
+    patienceSeat.band = 1
+    patienceSeat.zone = solitaire.table == 2 ? 8 : 2
+    patienceSeat.want = 99
+    patienceSeat.heldZone = -1
+  }
+
+  // The reading visits one pile a tick: its rules are alternatives on `patienceSync.scan`, so the work budget prices the
+  // twelve (Klondike's) or sixteen (FreeCell's) as the dearest one, not their sum.
+  rule "patience-scan" {
+    when patienceSync.left > 0 and solitaire.table != 0
+    mode: Level
+    patienceSync.scan = (patienceSync.scan + 1) % (solitaire.table == 2 ? 16 : 12)
+  }
+
+  for (z, turn) in [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13] {
+    patienceRead(game: 1, turn: turn, base: kBase[z], pile: $"solitaireKlondikePile{z}", length: solitaireKlondikeLength)
+  }
+  for z in range(0, 16) {
+    patienceRead(game: 2, turn: z, base: fBase[z], pile: $"solitaireFreecellPile{z}", length: solitaireFreecellLength)
+  }
+
+  // Then each card lies at its slot, face up or face down, or inside the cap while no patience game is shown.
+  rule "patience-pose-up" {
+    local card = patienceCardNo[$each]
+    local klondikeSlot = (solitaireKlondikePile0[card] == 1) ? (card % 24) : patienceSlotOf[card]
+    local slot = (solitaire.table == 1) ? klondikeSlot : ((solitaire.table == 2) ? patienceSlotOf[card] : patienceAwaySlot)
+    local down = (solitaire.table == 1) ? (solitaireKlondikeFace[card] == 0) : ((solitaire.table == 2) ? solitaireFreecellDeck[card] : 0)
+    when patienceSync.left > 0 and down == 0
+    mode: Level
+    forEach: patienceCardNo
+    poseCell(key: `placement:$each`, topology: patienceSlots, expression: slot, offset: [0, 0, 0], pitchDegrees: patienceFaceUp)
+  }
+  rule "patience-pose-down" {
+    local card = patienceCardNo[$each]
+    local klondikeSlot = (solitaireKlondikePile0[card] == 1) ? (card % 24) : patienceSlotOf[card]
+    local slot = (solitaire.table == 1) ? klondikeSlot : (fDeckBase + card % 24)
+    local down = (solitaire.table == 1) ? (solitaireKlondikeFace[card] == 0) : ((solitaire.table == 2) ? solitaireFreecellDeck[card] : 0)
+    when patienceSync.left > 0 and down != 0
+    mode: Level
+    forEach: patienceCardNo
+    poseCell(key: `placement:$each`, topology: patienceSlots, expression: slot, offset: [0, 0, 0], pitchDegrees: patienceFaceDown)
+  }
+
+  // A game's first deal starts by itself, through the mailbox a player or the console uses.
+  rule "patience-first-deal-klondike" {
+    when (solitaire.table == 1 and
+      solitaireKlondike.deals == 0 and
+      solitaireKlondike.request == solitaireKlondike.applied and
+      solitaireKlondike.stage == 0 and
+      solitaireKlondike.busy == 0)
+    mode: Level
+    solitaireKlondike.action = 1
+    solitaireKlondike.request += 1
+  }
+  rule "patience-first-deal-freecell" {
+    when (solitaire.table == 2 and
+      solitaireFreecell.deals == 0 and
+      solitaireFreecell.request == solitaireFreecell.applied and
+      solitaireFreecell.stage == 0 and
+      solitaireFreecell.busy == 0)
+    mode: Level
+    solitaireFreecell.action = 1
+    solitaireFreecell.request += 1
+  }
+
+  // ---- Playing at the glass ----------------------------------------------------------------------------------------
+  // The pointer puts the cursor on a pile whenever it moves onto another pick cell of the board area: the column under it
+  // across, the top row or the tableau by how far away it points, and a column's depth by how far down its fan.
+  rule "patience-point" {
+    local pointed = gameStationPointer[key]
+    local x = gameStationBoard.x0 + gameStationCell * (gameStationColumn(pointed) + 0.5)
+    local z = gameStationBoard.z0 + gameStationCell * (gameStationRow(pointed) + 0.5)
+    local wide = (solitaire.table == 2) ? 4 : 3.5
+    local col = toInt((patienceCentreX + wide * patiencePitch - x) / patiencePitch + 1) - 1
+    local top = z >= (patienceTopRowZ - patienceCardHalfTall - 0.01)
+    local fanned = toInt(maximum((patienceTableauZ + patienceCardHalfTall - z) / patienceFan, 0))
+    local columns = (solitaire.table == 2) ? 8 : 7
+    local zone = (solitaire.table == 2) ? (top ? col : 8 + col) : (top ? patienceTopZone[col] : 2 + col)
+    when solitaire.table != 0 and pointed != patienceSeat.pointer
+    mode: Level
+    if pointed >= 0 and gameStationColumn(pointed) < gameStationListColumn and col >= 0 and col < columns and zone >= 0 {
+      patienceSeat.zone = zone
+      patienceSeat.col = col
+      patienceSeat.band = top ? 0 : 1
+      patienceSeat.want = top ? 99 : fanned
+    }
+    patienceSeat.pointer = pointed
+  }
+
+  // A step moves the cursor one pile across, or between the top row and the tableau, onto a pile's last card. Ahead is
+  // toward the top row and right is the next pile to the seat's right; Klondike's top row skips its gap.
+  rule "patience-step" {
+    local edges = gameStationEdges[key]
+    local across = ((edges & gameStationBits.right) != 0) - ((edges & gameStationBits.left) != 0)
+    local away = ((edges & gameStationBits.ahead) != 0) - ((edges & gameStationBits.behind) != 0)
+    local columns = (solitaire.table == 2) ? 8 : 7
+    local moved = clamp(patienceSeat.col + across, 0, columns - 1)
+    local bandNow = (away > 0) ? 0 : ((away < 0) ? 1 : patienceSeat.band)
+    local colNow = (solitaire.table == 1 and bandNow == 0 and moved == 2) ? (across > 0 ? 3 : 1) : moved
+    when solitaire.table != 0 and (across or away)
+    mode: Level
+    patienceSeat.col = colNow
+    patienceSeat.band = bandNow
+    patienceSeat.zone = (solitaire.table == 2) ? (bandNow == 0 ? colNow : 8 + colNow) : (bandNow == 0 ? patienceTopZone[colNow] : 2 + colNow)
+    patienceSeat.want = 99
+  }
+
+  // The cursor's depth stays inside its pile, and the card under the cursor is the one whose slot is the cursor's.
+  rule "patience-depth-klondike" {
+    local top = maximum(0, minimum(count($zones[patienceSeat.zone]) - 1, patienceTopSlot[patienceSeat.zone]))
+    when solitaire.table == 1 and patienceSeat.depth != clamp(patienceSeat.want, 0, top)
+    zones [
+      solitaireKlondikePile0
+      solitaireKlondikePile1
+      solitaireKlondikePile2
+      solitaireKlondikePile3
+      solitaireKlondikePile4
+      solitaireKlondikePile5
+      solitaireKlondikePile6
+      solitaireKlondikePile7
+      solitaireKlondikePile8
+      ""
+      solitaireKlondikePile10
+      solitaireKlondikePile11
+      solitaireKlondikePile12
+      solitaireKlondikePile13
+    ]
+    mode: Level
+    patienceSeat.depth = clamp(patienceSeat.want, 0, top)
+  }
+  rule "patience-depth-freecell" {
+    local top = maximum(0, count($zones[patienceSeat.zone]) - 1)
+    when solitaire.table == 2 and patienceSeat.depth != clamp(patienceSeat.want, 0, top)
+    zones [
+      solitaireFreecellPile0
+      solitaireFreecellPile1
+      solitaireFreecellPile2
+      solitaireFreecellPile3
+      solitaireFreecellPile4
+      solitaireFreecellPile5
+      solitaireFreecellPile6
+      solitaireFreecellPile7
+      solitaireFreecellPile8
+      solitaireFreecellPile9
+      solitaireFreecellPile10
+      solitaireFreecellPile11
+      solitaireFreecellPile12
+      solitaireFreecellPile13
+      solitaireFreecellPile14
+      solitaireFreecellPile15
+    ]
+    mode: Level
+    patienceSeat.depth = clamp(patienceSeat.want, 0, top)
+  }
+  rule "patience-card-clear" {
+    local slot = ((solitaire.table == 2) ? patienceFreeBase[patienceSeat.zone] : patienceSlotBase[patienceSeat.zone]) + patienceSeat.depth
+    when patienceSeat.card >= 0 and (solitaire.table == 0 or patienceSlotOf[patienceSeat.card] != slot)
+    mode: Level
+    patienceSeat.card = -1
+  }
+  rule "patience-card" {
+    local slot = ((solitaire.table == 2) ? patienceFreeBase[patienceSeat.zone] : patienceSlotBase[patienceSeat.zone]) + patienceSeat.depth
+    local card = patienceCardNo[$each]
+    when solitaire.table != 0 and patienceSlotOf[card] == slot and patienceSeat.card != card
+    mode: Level
+    forEach: patienceCardNo
+    maxFirings: 1
+    patienceSeat.card = card
+  }
+
+  // A pick with the door idle: a won game deals again, Klondike's stock draws, a face-up card is lifted (never from a
+  // foundation in FreeCell), and a lifted run is played on another pile (the door refuses an illegal move and says so in
+  // `result`) or put back on its own. The list's NEW GAME deals the game shown again.
+  rule "patience-pick" {
+    local edges = gameStationEdges[key]
+    local picked = (edges & pick) != 0
+    local fresh = (edges & gameStationBits.action) != 0
+    local klondikeIdle = solitaireKlondike.request == solitaireKlondike.applied and solitaireKlondike.stage == 0 and solitaireKlondike.busy == 0
+    local freecellIdle = solitaireFreecell.request == solitaireFreecell.applied and solitaireFreecell.stage == 0 and solitaireFreecell.busy == 0
+    local lifts = patienceSeat.card >= 0 and (solitaire.table == 1 ? (patienceSeat.zone > 0 and solitaireKlondikeFace[patienceSeat.card] == 1) : (patienceSeat.zone < 4 or patienceSeat.zone >= 8))
+    when solitaire.table != 0 and (picked or fresh)
+    mode: Level
+    patienceSeat.heldBefore = patienceSeat.heldZone
+    if solitaire.table == 1 and klondikeIdle and (fresh or solitaireKlondike.status == 2) {
+      solitaireKlondike.action = 1
+      solitaireKlondike.request += 1
+      patienceSeat.heldZone = -1
+    } else if solitaire.table == 2 and freecellIdle and (fresh or solitaireFreecell.status == 2) {
+      solitaireFreecell.action = 1
+      solitaireFreecell.request += 1
+      patienceSeat.heldZone = -1
+    } else if solitaire.table == 1 and klondikeIdle and patienceSeat.heldZone < 0 and patienceSeat.zone == 0 {
+      solitaireKlondike.action = 3
+      solitaireKlondike.request += 1
+    } else if patienceSeat.heldZone < 0 and lifts {
+      patienceSeat.heldZone = patienceSeat.zone
+      patienceSeat.heldDepth = patienceSeat.depth
+      patienceSeat.heldCard = patienceSeat.card
+    } else if patienceSeat.heldZone >= 0 and patienceSeat.zone == patienceSeat.heldZone {
+      patienceSeat.heldZone = -1
+    } else if solitaire.table == 1 and klondikeIdle and patienceSeat.heldZone >= 0 {
+      solitaireKlondike.action = 2
+      solitaireKlondike.from = patienceSeat.heldZone
+      solitaireKlondike.to = patienceSeat.zone
+      solitaireKlondike.card = patienceSeat.heldCard
+      solitaireKlondike.request += 1
+      patienceSeat.heldZone = -1
+    } else if solitaire.table == 2 and freecellIdle and patienceSeat.heldZone >= 0 {
+      solitaireFreecell.action = 2
+      solitaireFreecell.from = patienceSeat.heldZone
+      solitaireFreecell.to = patienceSeat.zone
+      solitaireFreecell.card = patienceSeat.heldCard
+      solitaireFreecell.request += 1
+      patienceSeat.heldZone = -1
+    }
+  }
+
+  // Putting the run back: the cancel button, standing up, or another game taking the glass.
+  rule "patience-cancel" {
+    when patienceSeat.heldZone >= 0 and ((gameStationEdges[key] & gameStationBits.cancel) != 0 or
+        board(engaged, $"{key}Cells", 1) == 0 or
+        solitaire.table == 0)
+    mode: Level
+    patienceSeat.heldZone = -1
+  }
+
+  // The cursor outlines its card while the seat sits at the glass, and the held marker the lifted run; each rests inside
+  // the cap otherwise. Each is posed only when the slot it marks changes.
+  rule "patience-cursor" {
+    local seated = solitaire.table != 0 and board(engaged, $"{key}Cells", 1) == 1
+    local base = (solitaire.table == 2) ? patienceFreeBase[patienceSeat.zone] : patienceSlotBase[patienceSeat.zone]
+    local slot = seated ? (base + patienceSeat.depth) : patienceAwaySlot
+    when patienceSeat.cursorAt != slot
+    mode: Level
+    poseCell(key: `placement:patienceCursor`, topology: patienceSlots, expression: slot, offset: [0, 0.004, 0])
+    patienceSeat.cursorAt = slot
+  }
+  rule "patience-held" {
+    local held = solitaire.table != 0 and patienceSeat.heldZone >= 0
+    local base = (solitaire.table == 2) ? patienceFreeBase[patienceSeat.heldZone] : patienceSlotBase[patienceSeat.heldZone]
+    local slot = held ? (base + patienceSeat.heldDepth) : patienceAwaySlot
+    when patienceSeat.heldAt != slot
+    mode: Level
+    poseCell(key: `placement:patienceHeld`, topology: patienceSlots, expression: slot, offset: [0, 0.008, 0])
+    patienceSeat.heldAt = slot
+  }
+
+  // The status line while a patience game is shown: which game, a deal under way, or a won game.
+  rule "patience-status" {
+    local won = (solitaire.table == 1) ? solitaireKlondike.status : solitaireFreecell.status
+    local dealing = (solitaire.table == 1) ? solitaireKlondike.stage : solitaireFreecell.stage
+    local code = (solitaire.table == 0) ? -1 : ((won == 2) ? 2 : ((dealing != 0) ? 3 : (solitaire.table - 1)))
+    when patienceSync.status != code
+    mode: Level
+    patienceSync.status = code
+    if code >= 0 {
+      setState(state: gameStationStatus, key: $"{key}", fromState: patienceLines, fromKey: patienceSync.status)
+    }
+  }
+}

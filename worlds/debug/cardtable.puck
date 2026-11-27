@@ -1,7 +1,7 @@
 import "../standard/contexts/tabletop"
 import "../standard/inputs"
 import "shapes"
-import "solitaire"
+import "../games/solitaire"
 import "../standard/cards"
 import "../standard/kits"
 import "../standard/display-table"

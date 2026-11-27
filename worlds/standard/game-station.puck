@@ -66,9 +66,11 @@ function gameStationRow(cell) = ((cell - (cell % gameStationColumns)) / gameStat
 // The list's first pick column: the first whose cells lie wholly past gameStationList.x0.
 let gameStationListColumn = 43
 
-// The seated seat's buttons, one bit each, and the list's tap, which a pick on the list's column makes in place of the
-// board's pick.
-let gameStationBits = { pick: 1, cancel: 2, ahead: 4, behind: 8, right: 16, left: 32, list: 64 }
+// The seated seat's buttons, one bit each, and the list's two taps, which a pick on the list's column makes in place of
+// the board's pick: on a game's row (`list`), or on the list's last row, NEW GAME (`action`), which the game shown
+// answers by starting afresh.
+let gameStationBits = { pick: 1, cancel: 2, ahead: 4, behind: 8, right: 16, left: 32, list: 64, action: 128 }
+let gameStationActionRow = (gameStationListRows - 1)
 
 // The station's look, in the display stations' family (architecture.puck): the console's glass and its interface's
 // colours, the plinth's cream, ochre, teal, brass and glowing ring for the table. `light` and `dark` are a board's two
@@ -78,6 +80,7 @@ let gameStationLook = {
   table: plinthPalette
   rowLit: consoleLook.lit
   rowDim: consoleLook.teal
+  action: consoleLook.cream
   label: consoleLook.ink
   status: consoleLook.lit
   title: consoleLook.frame
@@ -130,7 +133,10 @@ function gameStationListPaints(station, catalog, look) = concat(
   [gameStationText(station, { x0: gameStationList.x0, x1: gameStationList.x1, z0: (gameStationList.z1 + 0.02), z1: (gameStationList.z1 + 0.08) }, "GAMES", look.title, 0.05)],
   map(catalog, (game, row) => gameStationFill(station, gameStationRowRect(row), $"state.gameStationRowInk.{station.id}-{row}", 0.01)),
   map(catalog, (game, row) => gameStationText(station, gameStationRowRect(row), game.title, look.label, gameStationListEm)),
-  []
+  [
+    gameStationFill(station, gameStationRowRect(gameStationActionRow), look.action, 0.01)
+    gameStationText(station, gameStationRowRect(gameStationActionRow), "NEW GAME", look.label, gameStationListEm)
+  ]
 )
 
 // The table: a thick cream cap bevelled at its rim with the glass set in it, a glowing line in the shadow under the
@@ -346,7 +352,9 @@ template gameStationRules(station, catalog) {
     )
     local rose = now & ~(gameStationDown[key])
     local onList = (pointed >= 0) and (gameStationColumn(pointed) >= gameStationListColumn)
-    local edges = onList ? ((rose & ~(gameStationBits.pick)) | ((rose & gameStationBits.pick) * gameStationBits.list)) : rose
+    local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(pointed) + 0.5))
+    local tap = (toInt(below / gameStationRowPitch) == gameStationActionRow) ? gameStationBits.action : gameStationBits.list
+    local edges = onList ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * tap)) : rose
     when gameStationDown[key] != now or gameStationEdges[key] != edges or gameStationPointer[key] != pointed
     mode: Level
     gameStationDown[key] = now
@@ -358,7 +366,7 @@ template gameStationRules(station, catalog) {
   rule $"game-station-{key}-list" {
     local below = gameStationList.z1 - (gameStationBoard.z0 + gameStationCell * (gameStationRow(gameStationPointer[key]) + 0.5))
     local chosen = toInt(below / gameStationRowPitch)
-    when (gameStationEdges[key] & gameStationBits.list) != 0 and below >= 0 and chosen < games
+    when (gameStationEdges[key] & gameStationBits.list) != 0 and below >= 0 and chosen >= 0 and chosen < games
     mode: Level
     gameStationGame[key] = chosen
   }
