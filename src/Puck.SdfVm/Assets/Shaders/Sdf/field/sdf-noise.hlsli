@@ -174,6 +174,13 @@ float3 sdfShadeCells(float3 q, uint seed) {
     first = sqrt(first); second = sqrt(second);
     return float3(first, second - first, float(firstHash >> 8u) * (1.0 / 16777216.0));
 }
+// A shade program's `cellsGradient`, which the gradient of a height reading `cells` writes: channel 0 is
+// [F1, its gradient], channel 1 [F2 - F1, its gradient], from the same search as `cells`.
+float4 sdfShadeCellsGradient(float3 q, uint seed, uint channel) {
+    float3 gradient;
+    float value = sdfCellDistanceGrad(q, seed, (channel == 0u) ? SDF_CELL_MODE_F1 : SDF_CELL_MODE_F2_MINUS_F1, 1.0, gradient);
+    return float4(value, gradient);
+}
 // The cellular field alone, for a reader that takes no gradient (the fixed-point reader's is SdfFieldEvaluator.SampleCells).
 precise float sdfCellDistance(float3 q, uint seed, uint mode, float randomness) {
     float3 gradient;

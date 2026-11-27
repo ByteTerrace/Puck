@@ -29,6 +29,11 @@ internal sealed class WorldShadeLowering {
         public override IReadOnlyList<SyntaxNode> Children() => [];
         public override SyntaxNode MapChildren(ISyntaxMap map) => this;
     }
+    // A gradient's height function's parameter: the point the compiler differentiates the height along.
+    private sealed record Variable : ExpressionNode {
+        public override IReadOnlyList<SyntaxNode> Children() => [];
+        public override SyntaxNode MapChildren(ISyntaxMap map) => this;
+    }
 
     private readonly List<SdfShadeParameter> m_parameters = [];
     private readonly Dictionary<string, JsonNode?> m_values = new(comparer: StringComparer.Ordinal);
@@ -132,6 +137,8 @@ internal sealed class WorldShadeLowering {
                     if (!compilation.Templates.TryGetValue(key: template, value: out var ordinal)) { compilation.Templates[template] = ordinal = compilation.Templates.Count; }
                     text.Append(value: 'T').Append(value: ordinal).Append(value: '(');
                     foreach (var argument in call.Arguments) {
+                        // A function argument (a relief's height) is code, not a value: such a call lowers on its own.
+                        if (Function(expression: argument.Value, scope: scope) is not null) { return false; }
                         text.Append(value: argument.Name).Append(value: '=')
                             .Append(value: (DocumentLowering.EvaluateValue(expr: argument.Value, scope: scope)?.ToJsonString() ?? "null")).Append(value: ';');
                     }
@@ -244,6 +251,8 @@ internal sealed class WorldShadeLowering {
         return ((member is not null) && prior.TryGetValue(key: member, value: out var written)) ? written : null;
     }
     private ExpressionNode BindParameter(TemplateParameterNode parameter, ExpressionNode value, DocumentScope caller) {
+        // A function passed to a template (the height a relief differentiates) is bound as written, in the caller's scope.
+        if (Function(expression: value, scope: caller) is not null) { return new Bound(value, caller); }
         value = RequireStructural(expression: value, scope: caller);
         if (parameter.IsStructural) {
             // A structural argument read out of a record or a list (`pen.uneven`, `rows[2]`) enters as its value: inside
@@ -377,6 +386,10 @@ internal sealed class WorldShadeLowering {
                 }
                 return DocumentLowering.ExpandFunction(call.Name, call.Span, scope,
                     () => Expression(function.Body, scope.WithConstants(bindings), expected), Literal(JsonValue.Create(0)));
+            case CallExpressionNode { Name: "gradient" } gradient when (gradient.Arguments.Count == 2):
+                return Gradient(point: gradient.Arguments[0].Value, height: gradient.Arguments[1].Value, scope: scope);
+            case Variable:
+                return new("variable");
             case CallExpressionNode { Name: "uint" } cast when (cast.Arguments.Count == 1):
                 return Literal(DocumentLowering.EvaluateValue(RequireStructural(expression: cast.Arguments[0].Value, scope: scope), scope), SdfShadeType.UInt);
             case CallExpressionNode { Name: "shape" } shape when (shape.Arguments.Count == 2):
@@ -391,6 +404,34 @@ internal sealed class WorldShadeLowering {
                     call.Name == "select" && i > 0 ? expected : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Rewrite it with the shade operations, names and numbers a shade program admits", problem: "This expression uses something a shade program has no word for"));
         }
+    }
+    // `gradient(point, q => height)`: the exact gradient of the height function at the point, which the shade compiler
+    // differentiates (SdfShadeProgram's Differentiation). The function's parameter reads as the point it is
+    // differentiated along; everything else it reads is held at its value there.
+    private SdfShadeExpression Gradient(ExpressionNode point, ExpressionNode height, DocumentScope scope) {
+        var (function, lexical) = (Function(expression: height, scope: scope)
+            ?? throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(example: "'gradient(surface.position, q => shadeFbm(q * 4, uint(7)))'", fix: "Pass the height as a function of one point", problem: "A gradient's height is not a function of the point")));
+
+        if (function.Parameters.Count != 1) {
+            throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(example: "'q => shadeFbm(q, seed)'", fix: "Write the height as a function of one point", problem: $"A gradient's height function takes {function.Parameters.Count} parameters"));
+        }
+        var constants = new Dictionary<string, ExpressionNode>(lexical.Constants, StringComparer.Ordinal) { [function.Parameters[0]] = new Variable() };
+
+        return new("gradient", [Expression(point, scope), Expression(function.Body, lexical.WithConstants(constants), SdfShadeType.Float)]);
+    }
+    // The function an expression names, with the scope it was written in: a lambda, or a binding or argument that holds
+    // one; null for anything else.
+    private static (LambdaExpressionNode Function, DocumentScope Scope)? Function(ExpressionNode expression, DocumentScope scope) {
+        for (var hops = 0; (hops < 64); hops++) {
+            switch (expression) {
+                case LambdaExpressionNode function: return (function, scope);
+                case Bound bound: (expression, scope) = (bound.Source, bound.Scope); break;
+                case IdentifierExpressionNode id when !scope.Locals.ContainsKey(key: id.Name) && scope.TryGetExpression(id.Name, out var declared, out var lexical) && (declared is not null):
+                    (expression, scope) = (declared, lexical); break;
+                default: return null;
+            }
+        }
+        return null;
     }
     // A compile-time reduce over a structural array unrolls into one expression: the running value is the shade
     // expression folded so far and each item enters as its value, so `reduce(range(0, octaves), ...)` lowers to the
@@ -469,6 +510,7 @@ internal sealed class WorldShadeLowering {
         public ExpressionNode Apply(ExpressionNode expression) => RewriteExpression(expression: expression);
 
         protected override ExpressionNode RewriteExpression(ExpressionNode expression) {
+            if (expression is Variable) { throw new SdfShadeException(code: "PUCK130", message: DiagnosticText.Compose(fix: "Use the height's point only in the height's arithmetic", problem: "A gradient's point is used where it would shape the program (a loop range, a shape descriptor or a lane selector)")); }
             if (expression is Runtime) { throw new SdfShadeException(code: "PUCK130", message: DiagnosticText.Compose(fix: "Mark the parameter 'structural' in the template's parameter list, so the compiler knows its value", problem: "A runtime parameter is used where it would shape the program (a loop range, a shape descriptor or a lane selector)")); }
             if (expression is Bound bound) { return new Structural(scope: bound.Scope, visiting: visiting).Apply(expression: bound.Source); }
             if (expression is IdentifierExpressionNode id) {

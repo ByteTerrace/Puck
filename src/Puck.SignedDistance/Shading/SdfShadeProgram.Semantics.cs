@@ -21,7 +21,7 @@ public sealed partial class SdfShadeProgram {
             case SdfShadeOp.Hash when (a == SdfShadeType.UInt3): return SdfShadeType.UInt3;
             case SdfShadeOp.Lattice when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float;
             case SdfShadeOp.Cells when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float3;
-            case SdfShadeOp.LatticeGradient when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float4;
+            case SdfShadeOp.LatticeGradient or SdfShadeOp.CellsGradient when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float4;
             case SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4 when args.All(predicate: t => (t == SdfShadeType.Float)):
                 return ((SdfShadeType)args.Length);
             case SdfShadeOp.Select when ((a == SdfShadeType.Float) && (b == c)): return b;
@@ -48,9 +48,12 @@ public sealed partial class SdfShadeProgram {
         throw new SdfShadeException(code: "PUCK127", message: $"'{SdfShadeOps.Get(op: op).Name}' does not accept ({string.Join(separator: ", ", values: args)}); integer conversion is explicit.");
     }
 
-    private static bool Fold(SdfShadeOp op, SdfShadeType type, Node[] args, out uint[] bits) {
+    private static bool Fold(SdfShadeOp op, SdfShadeType type, Node[] args, uint immediate, out uint[] bits) {
         bits = [];
-        if ((args.Length == 0) || args.Any(predicate: a => (a.Op != SdfShadeOp.Constant)) || SdfShadeOps.IsUInt(type: type)) { return false; }
+        if ((args.Length == 0) || args.Any(predicate: a => (a.Op != SdfShadeOp.Constant))) { return false; }
+        // Selecting a literal's component is exact for either kind.
+        if (op == SdfShadeOp.Component) { bits = [args[0].Bits[immediate]]; return true; }
+        if (SdfShadeOps.IsUInt(type: type)) { return false; }
         if (op == SdfShadeOp.Equal && args[0].Type == SdfShadeType.UInt) {
             bits = [BitConverter.SingleToUInt32Bits(args[0].Bits[0] == args[1].Bits[0] ? 1f : 0f)];
             return true;

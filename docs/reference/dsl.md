@@ -675,6 +675,34 @@ the box keeps room for descenders. `capTop` and `capMiddle` measure the capitals
 lettering, so a marquee's title written at the panel's centre with `anchor: "capMiddle"` sits optically centred on
 it. `baseline` lines text up with other text on one line.
 
+## Slopes of a height: `gradient` and `relief`
+
+Inside a shade program, `gradient(point, q => height)` is the exact gradient of a height function at a point: a
+vector of the point's width, the height's slope along each of the point's axes. The compiler differentiates the
+height's expression itself, forward mode with one derivative row a component (`SdfShadeProgram`'s differentiation in
+`Shading/SdfShadeProgram.Gradient.cs`), so no slope is written by hand and none is sampled by finite differences. The
+function's parameter reads as the point; everything else it reads (a `let`, a parameter, a stamp member) holds its
+value at the point, so a pattern's phase or weight can be fixed while its shape is differentiated.
+
+```text
+let slope = gradient(surface.position, q => 0.01 * shadeFbm(q * 4, uint(7)))
+normal: tilt(surface.normal, slope * -1, 1.2)
+```
+
+The standard package's `relief` template (`worlds/standard/shading.puck`) is that normal written once:
+`relief(q => height, amount)` lights a surface as if the height, in metres, raised it along its normal. Placed after a
+row's own program, `row with { shade [row.shade, relief(q => ..., 1)] }`, it tilts that program's normal. A height may
+use arithmetic, `min`, `max`, `select` and the conditional, `abs`, `saturate`, `smoothstep`, `mix`, `pow`, `exp2`,
+`log2`, `sqrt`, the trigonometric functions, `dot`, `cross`, `length`, `normalize`, `reflect`, components, vector
+literals, a fixed rotation and the frame conversions, `lattice` and `cells`; `cells` takes its slope from the same
+cellular search that gives its value. A height that reads `shape`, `lines`, `refract`, `tilt` or a gradient op of its
+point has no derivative and is refused (PUCK126).
+
+Only slope makes relief. `floor`, `step`, `quantize`, a comparison and a cell's id are flat on both sides of their
+jump, so a pattern built from hard steps gets no relief and reads as painted on. Carve an edge by ramping across it:
+the standard edge helpers (`shadeCellBorder`, `shadeBrick`) ramp over a `bevel` the author sets, never narrower than
+two display pixels' footprint, so the groove has a slope wider than a pixel and does not alias.
+
 ## A section written twice composes
 
 A section or block written twice in one source (`render { }` and later `render { }`) composes
