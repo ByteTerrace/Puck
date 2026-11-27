@@ -1,5 +1,224 @@
 # The Moth’s companion
 
+## Round five
+
+**Sparkbill** is a palm-sized flying flashlight and camera. It hangs beside
+the Moth's shoulder, looks first with its lens, then darts ahead to light or
+point out what it saw. The owner thought Spur might be the best attempt yet,
+but still far from the mark. They want the companion itself to be the floating
+device and asked for the quick, hovering presence of a fairy, with a techno
+moth or firefly as the animal direction. Sparkbill's shell, optics and lantern
+stay together throughout play. [Round four](#round-four)
+
+### Four flying devices
+
+![Four flying workshop insects and their unlit silhouettes. From left, Wick, Ruffle, Sparkbill and Pleat.](r5-01-exploration.png)
+
+| Variant | Shape and movement | What decided it |
+| --- | --- | --- |
+| Wick · firefly | Long oval lantern, casing over two narrow flight plates. The plates trail as it darts. | The clearest flying light. From the front, the narrow wings and simple oval give it little expression at a distance. |
+| Ruffle · moth | Short body under broad eyespot plates with two fine comb antennae. It flutters and rocks on its hinges. | The strongest family resemblance to the Moth. The wings dominate the short lantern and its combs disappear first as it recedes. |
+| **Sparkbill · firefly and moth** | A long firefly lantern beneath an ivory optical brow, forked antennae, and a pair of scalloped moth wings. It turns its eye, then banks around the heavy end. | The eye points, the tail signals, and the wings act. The forks, wing arc and tapered tail hold three distinct masses with the lamps off. |
+| Pleat · firefly and moth | A compact round lantern under two tall pleated paddles. It swivels under them. | Wide contrast between the wing tips and belly. Head-on, the bright round belly overwhelms the device silhouette. |
+
+### Anatomy and flight
+
+![Sparkbill in front, left profile, rear and front three-quarter views.](r5-02-turnaround.png)
+
+The ivory brow is shaped like a broad petal and holds a recessed camera
+glass in a brass rim. Two rear-swept forked antennae grow from socketed
+bases. A captive brass collar lets the head tilt before the body follows.
+The deep teal thorax carries one brass root pin per wing. Each ivory wing
+is a thin enamel plate with scallops on its trailing edge and one painted
+teal eyespot. An ochre spine frames one frosted lantern that wraps the
+abdomen across its underside and two flanks. It reads as a long drop even
+when dim. Wear the wing tips and the edges of the collar. Put a fleck of
+moss in the sheltered aft seam, clear of the optics and pivots.
+[Canyon workshop palette](../valley-and-gallery.md#selected-art-treatment)
+
+![Full-height scale and a detail of Sparkbill hovering outside the Moth's hood and over the shoulder line.](r5-03-scale.png)
+
+Start at **0.16 m** from fork tips to tail in a neutral hover and about
+**0.16 m** across the open wings. That's 8% of the suited Moth's **2.06 m**
+height. Set the follow point around eye height, about **0.45 m** to the
+side of the helmet centre and **0.15 m** ahead. Pick the side with room
+to fly and keep the working envelope outside the braid, hood, pauldron
+and chase sightline. A dart ends in a small counter-bank and a held hover.
+It can bob a few centimetres while it waits, or orbit a point while keeping
+its lens on it. The abdomen and wings stay in the air, including at rest.
+[The suited Moth](../moth-concept-pack/README.md#preserve-the-character)
+
+![Six airborne poses showing a dart, inward bank, curious pitch, recoil, proud lift and tired hover.](r5-04-flight.png)
+
+| Beat | Key pose and movement |
+| --- | --- |
+| Darting | The brow leads, the body pitches into the move and the wing plates sweep behind their brass pins. |
+| Orbiting | Bank inward and look along the arc. Keep the tail trailing the turn. |
+| Curious | Yaw the brow toward the point of interest, cant one wing, then creep in with two short bobs. |
+| Startled | Tip back before a short retreat. Spread both wings to check the motion. |
+| Proud | Rise once, lift the lens and show a high V at the top of the beat. |
+| Tired | Let the brow dip and the wings droop through shallow strokes. Shorten excursions and hover closer. |
+
+### Five uses for one body
+
+![The lens lights a stair tread, shows its recording view, and puts a flat ring on a stone plinth.](r5-06-modes.png)
+
+| Use | What the player sees and does |
+| --- | --- |
+| Flashlight | Toggle a warm-neutral cone around the recessed lens. Sparkbill flies forward of the shoulder and lights the next step. Aim by looking or by pointing at an admitted target. When it turns to speak, keep the lamp on the path or ease it off until it can aim there again. |
+| Camera | Open a view from the optical eye. The Moth holds position while the player guides Sparkbill through short, clear routes. Close the view to return to the Moth. Recall returns Sparkbill to the shoulder. |
+| Recorder | Start and stop a clip from the same view. A steady red dot belongs to the viewfinder, leaving the abdomen free for world cues. Close the clip on recall, loss of permission or departure and save what has already been captured. |
+| Marker | Confirm a visible surface or actor. Sparkbill darts to a reachable near-side offset and hovers. A brief lens-to-hit ray shows where it is pointing. A ring holds on the surface normal after the ray fades. On a moving lock Sparkbill stays off the visible flank. |
+| Speech | The abdomen swells on syllables, softens on releases and rests through punctuation. Idle can use the full lower band. Other states retain their masks while the open area changes brightness a little. Use the same timing for audio and light, including on mute or cancellation. |
+
+One local authority owns the whole body's movement and resolves mark targets.
+The camera, lamp and ray use the same eye transform. The displayed view has
+to belong to the admitted observer and the current body generation. Clear a
+mark on occlusion, target loss or departure. Release the old view and finish
+its clip when custody changes. The arriving companion reacquires targets and
+view permission in the destination. A portal view carries the portal's own
+visibility rules. Flight through the seam needs the destination's admission.
+Create the optical view on demand and share its rendered frames between the
+viewfinder and recorder. A crowd of idle companions needs only the bodies
+and their authored lights.
+The pack specifies this invariant. The build must enforce it at the view and
+target bindings. [Companion custody](../../../decisions/companions.md) ·
+[Worlds and authority](../../../architecture/worlds.md#the-idea-in-plain-terms)
+
+### The lantern's light language
+
+![Eight states as large colour and greyscale drawings and matched pairs at 5 m and 15 m.](r5-05-states.png)
+
+| State | Hue | Pattern | Motion | Pose |
+| --- | --- | --- | --- | --- |
+| Idle | Warm honey | Wide, low abdomen bar | Slow swell above a held floor | Upright, softly bobbing, wings relaxed |
+| Interest | Glacial cyan | One upper flank and the checking wing's edge | Two gentle swells, then hold | Head canted, near wing high, lean toward the sight |
+| Discovery | Mint green | Whole lantern with lit edges on both wings | One lift and broad swell, then hold | Upright body and high V |
+| Objective | Lavender | Long, solid stripe down the abdomen | One sweep toward the tip, then hold | Nose into the route, tail trailing diagonally, wings swept back |
+| Danger | Signal orange | Two full-height flanks framing a dark spine | Quick rise on braking, then steady | Face the Moth with the wings spread low and wide |
+| Combat | Raspberry red | Hot centre and two bright outer wing edges | One swell on the first evasive cut, then held floor | Hard bank and visible sidestep, clear of the player's aim |
+| Locked target | Ice white | Broad belt high under the thorax | Steady while the lens tracks | Upright, wings drawn down symmetrically |
+| Low energy | Dim ochre | Small tip ember, dark upper lantern | Slow fall to a dim steady light | Dipped head, drooped wing plates, small slow strokes |
+
+Danger preempts combat. Combat preempts a lock. An energy reserve that
+forces a return ends the excursion, with danger still free to show. After
+those, prefer lock, objective, discovery, ordinary low energy, interest,
+then idle. Resume a preempted guide only after checking its target again.
+Use a held phase with an emissive floor during the cue, including while
+speaking. Reduced motion holds the patterns and eases the banks and swells.
+
+Open the sheet at 100% for the actual distance samples. A 1080p view at
+60° vertical field of view puts a neutral 0.16 m Sparkbill at about **30 px
+at 5 m** and **10 px at 15 m**. The 2.06 m suited Moth would span about
+385 px and 128 px at those distances. The same state drawing is reduced
+for each sample without rescaling individual poses to fill their boxes.
+At 5 m the lantern masks and pose separate the cues. At 15 m the
+greyscale pair for danger and lock depends on the depth of the bright area
+and the wing angle. Interest and combat rely on one-sided versus paired
+wing accents and banks in opposite directions. The silhouette and cue
+samples are legible on the study's dark flat background. The 15 m
+differences are small enough that actual exposure, edge-on angles and
+motion can decide them. Near the limit, Sparkbill can turn broadside for
+an urgent cue and return toward the Moth. An objective's surface mark
+gives the player a second place to look.
+
+![At night in the Gallery, Sparkbill lights the next step as the Moth follows.](r5-07-gallery-night.png)
+
+![On the near side of a valley rockfall, Sparkbill brakes and shows its orange lantern to the Moth.](r5-08-valley-danger.png)
+
+### SDF build plan
+
+1. **Build the silhouette as one creation.** Use a low-exponent
+   `Superellipsoid` for the teal thorax and a flattened one for the ivory
+   brow. Recess the glass behind an annular cylinder cut and shallow
+   curved lens. Build the tail from a tapered `Sweep` with a broad
+   separate palette slot for the continuous ventral diffuser. Keep
+   a narrow ochre spine across the mask. Create one wing plate profile
+   from an elongated flattened ellipsoid with rounded subtractions
+   along the trailing edge. Mirror it to the opposite side. Blend its
+   root into the moving hinge sleeve and keep the sleeve concentric
+   with the thorax pin. Use paint for eyespots, veins, wear and moss.
+   Start the wing strokes at 30° below and 45° above neutral, with about
+   20° of play in the collar. Check the two wing extrema and both head
+   limits for clearance, seated pivots, and a visible lens and lantern.
+   Compile the prototype and read its creation stats before the first
+   lab pass. [SDF shapes](../../../../.claude/skills/sdf-authoring/SKILL.md#choosing-geometry) ·
+   [Shape rigs](../../../../.claude/skills/sdf-authoring/references/rig.md#attaching-a-shape)
+2. **Use the standard companion's flight and cue rules.** Replace the debug
+   companion's seed shell with this creation and reuse the driver for
+   follow, evasion, arrival and hover. Put head lead, bank, wingbeat and
+   bob in authored presentation poses. Leave collision and targeting
+   on the authoritative body. Key cue, held envelope and speech envelope
+   to the selected companion. Paint the abdomen masks in object space
+   through authored shading. Light only the wing edges that carry a
+   secondary cue. Bind discrete cue selection separately from eased
+   brightness. In the lab, seat two companions, change cues independently
+   and switch straight from discovery to danger during a spoken phrase.
+   Check there is no intervening mask, fresh bake or stray mouth light on
+   cancellation. Reuse the existing text speech schedule for the envelope.
+   [Debug companion](../../../../worlds/debug/companion.puck) ·
+   [Standard companion](../../../../worlds/standard/companion.puck) ·
+   [Driver](../../../../worlds/standard/addons/companion.wat) ·
+   [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Text speech](../../../reference/audio.md#text-speech)
+3. **Bind the eye once.** Mount the view ray and spotlight to the eye
+   pose. Use the standard guide and point designation for the mark and
+   its arrival offset. Use a short, eye-mounted volume for the pickup of
+   the beam in dust and a small ring on the resolved surface. Reuse the
+   engine's published view mapping for camera input and its capture graph
+   for recording. Prove the proposed connection from the companion view's
+   frames to the recorder. The current capture documentation describes
+   native capture in windowed presentation. Direct recording from a
+   secondary source still needs proof. If the connection is
+   missing, add source selection to the capture graph before offering
+   the mode. In the lab, record a clip, move the marked target behind
+   cover, release and reacquire the view, and cross the Gallery lab
+   portal mid-clip. Inspect the saved clip and confirm that old control
+   and mark references go stale. [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
+   [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes) ·
+   [View mapping](../../../reference/commands.md) ·
+   [Capture and recording](../../../reference/recording.md)
+4. **Prove it in the companion lab and on the route.** The lead should
+   link the focused lab from the Gallery wing, run its hazard and target
+   loop at 5 m and 15 m, and verify a local and federated crossing with an
+   active guide. Then take presented passes through the Gallery at night
+   and along the valley trail, after bake, residency and lighting settle.
+   Check the moving lamp's aim, and name each held cue in colour and
+   greyscale on both bright and dark backgrounds. Fail the distance pass
+   if a warning needs colour or if danger and lock cannot be told apart.
+
+### Panel audit
+
+The following is the artist's review. The checking partner's independent
+written audit is pending. [Review criteria](../README.md#concept-art-review) ·
+[Panel prompts and distance method](r5-prompts.md)
+
+| Panel | Artist's audit |
+| --- | --- |
+| [Exploration](r5-01-exploration.png) | Four closed silhouettes with readable negative space and consistent hover. The hinges and lanterns attach to each thorax. Each outline keeps its own eye and abdomen proportions. |
+| [Turnaround](r5-02-turnaround.png) | The brass collar, two wing pins, rear lantern and ivory cap repeat at one scale. The nearer wing goes edge-on in profile. The lens appears only where you can see its front rim. |
+| [Scale and placement](r5-03-scale.png) | The full figure pair reads near 8% and has air between its silhouettes. Her boots share a plane. The right-cheek braid, open ivory hood and dusty lavender plate stack carry into the detail. |
+| [Flight and personality](r5-04-flight.png) | The visible pins stay seated on the bank, sweep and flare. Tired retains air below the tail. The six poses keep one brow and two wings with the same eyespots and the same aft shell. |
+| [States](r5-05-states.png) | One rig schematic and the same wing root per side in every swatch. Every small pair comes from its own large pose with the same camera scale. Light stays within the lantern or on the wing edge. |
+| [Device modes](r5-06-modes.png) | The cone starts at the eye and hits the tread. The viewfinder looks at the same stair and door. The marked ring lies on the plinth and the shaft ends at its centre. |
+| [Gallery at night](r5-07-gallery-night.png) | The loaded boot and stepping boot share perspective with the stone course. The rim and braid carry through. The little guide has clear air around its hinge and tail and the cone lights the tread ahead. |
+| [Valley danger](r5-08-valley-danger.png) | The Moth braces on the trail with her braid through the front of the hood. The folded joints and boots support the stop. Sparkbill brakes near her, clear of the dust and rocks, with orange flanks divided by the ochre spine. |
+
+### Open questions
+
+- The checking partner owns the independent art verdict. Use the turnaround
+  and scale sheet for the proportions and the scenes for light and placement.
+- The lead owns the live cue verdict. Test danger against lock and interest
+  against combat at 15 m in greyscale while turning. If those pairs blur
+  together, widen their contrast on the lantern and wing surfaces and
+  repeat before adjusting the follow distance or body scale.
+- The camera builder needs to prove which published view the recorder can
+  consume in the lab, including when a portal is visible and when the source
+  world goes away. Record the one admitted optical view and retain only the
+  frames received while it was valid.
+- Start low energy as a short close hover. After the flight pass, they can
+  decide whether recharge should become an action for the player.
+
 ## Round four
 
 **Spur** is a knee-high workshop bird with an eye that flies away. It watches
