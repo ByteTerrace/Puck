@@ -678,14 +678,11 @@ public static partial class WorldDefinitionFileSource {
 
         if (!whole) {
             image = null;
-            _ = ComposedDocuments.TryRemove(
-                key: CacheKey(
-                    fingerprint: catalogFingerprint,
-                    path: resolvedPath,
-                    source: source
-                ),
-                value: out _
-            );
+            _ = ComposedDocuments.Remove(key: CacheKey(
+                fingerprint: catalogFingerprint,
+                path: resolvedPath,
+                source: source
+            ));
 
             return false;
         }
@@ -1614,30 +1611,16 @@ public static partial class WorldDefinitionFileSource {
     // reader's own depth plus the reach still fits inside WorldDocumentBasis.MaxChainDepth, exactly as a fresh walk
     // of the same subtree would have had to.
 
-    /// <summary>Gets the total bytes the held composed images occupy — each image's own composed tree as UTF-8
-    /// JSON, plus the bytes of every file its composition read. A file's bytes are shared with every image whose
-    /// chain also read it, so this counts the shared array once per image that names it, an upper bound on what
-    /// the store actually retains.</summary>
-    public static long ComposedDocumentBytes {
-        get {
-            var total = 0L;
-
-            foreach (var image in ComposedDocuments.Values) {
-                total += image.ComposedJson.LongLength;
-
-                for (var index = 0; (index < image.Chain.Count); index++) {
-                    total += (image.Chain[index].Bytes?.LongLength ?? 0L);
-                }
-            }
-
-            return total;
-        }
-    }
-    /// <summary>Gets how many distinct path/catalog identities this process currently holds a composed image of. The store
-    /// is not capped: it holds one image per distinct document path and catalog fingerprint a directory composition has completed in this
-    /// process, so it grows with the documents the process actually composes and never with how long it runs. What
-    /// that costs is <see cref="ComposedDocumentBytes"/>, which the boot narration and <c>world.status</c> both
-    /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
+    /// <summary>Gets the total bytes the held composed images retain (<see cref="WorldComposedDocument.RetainedBytes"/>
+    /// of each), the quantity the store is bounded by. A file's bytes are shared with every image whose chain also
+    /// read it, so this counts the shared array once per image that names it, an upper bound on what the store
+    /// actually retains.</summary>
+    public static long ComposedDocumentBytes => ComposedDocuments.Weight;
+    /// <summary>Gets how many distinct path/catalog identities this process currently holds a composed image of. The
+    /// store is bounded: past a count and a byte budget the least recently composed or reused image is dropped and its
+    /// document recomposes when next asked for, so the store grows with the documents a process composes in step and
+    /// never with how many it has composed in all. What it costs is <see cref="ComposedDocumentBytes"/>, which the boot
+    /// narration and <c>world.status</c> both read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
     public static int ComposedDocumentsHeld => ComposedDocuments.Count;
 
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
