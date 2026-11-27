@@ -32,8 +32,4 @@ public static partial class RuleCompiler {
         return CompiledValueSource.FromExpression(FoldConstants(tokens.ToArray(), required), required);
     }
 
-    private static CompiledExpressionToken[] ConvertExpression(CompiledExpressionToken[] tokens, CellKind actual, CellKind required, string ruleName, string verb) =>
-        ImplicitConversion(actual, required, ruleName, verb) is { } conversion
-            ? FoldConstants([.. tokens, new CompiledExpressionToken(conversion, CarrierKind: actual)], required)
-            : tokens;
 }

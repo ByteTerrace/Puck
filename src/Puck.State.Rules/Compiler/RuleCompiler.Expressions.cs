@@ -83,7 +83,7 @@ public static partial class RuleCompiler {
             try {
                 var context = new RuleCompileContext(catalog: KindFreeCatalog, generators: null, patterns: null, section: null, simulationRateHz: 1, tables: null, vocabulary: RuleVocabulary.Core);
 
-                return ((CompileExpression(context: context, expression: expression, kind: kind, result: out var result, resultKind: null, ruleName: "fold", verb: "fold") is [{ Operation: ExpressionOp.Constant } constant])
+                return ((CompileExpression(context: context, expression: expression, kind: kind, result: out var result, resultKind: kind, ruleName: "fold", verb: "fold") is [{ Operation: ExpressionOp.Constant } constant])
                     ? ((result != CellKind.Fixed) ? constant.Constant : (((constant.Constant & 0xFFFFL) == 0L) ? (constant.Constant >> 16) : null))
                     : null);
             } catch (RuleException) {
@@ -125,7 +125,7 @@ public static partial class RuleCompiler {
             result: out result,
             resultKind: resultKind,
             ruleName: ruleName,
-            shared: new Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result)>(comparer: StringComparer.Ordinal),
+            shared: new Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)>(comparer: StringComparer.Ordinal),
             verb: verb
         );
     }
@@ -201,7 +201,7 @@ public static partial class RuleCompiler {
     // member reads as inside a fold body; `argumentKinds` are the kinds a subprogram's own operands carry;
     // `calling` is the chain of subprograms already open, which is what makes the call graph a proven DAG; and
     // `shared` holds each subprogram body compiled once per signature.
-    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result)> shared, out CellKind result) {
+    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)> shared, out CellKind result, bool[]? contextualArguments = null) {
         if (
             (instructions is not { Count: > 0 } authored) ||
             (authored.Count > RuleCapacity.MaxExpressionTokens)
@@ -222,49 +222,67 @@ public static partial class RuleCompiler {
         var tokens = new CompiledExpressionToken[authored.Count];
         var producedAt = new int[authored.Count];
         var promotions = new bool[authored.Count];
+        var fixedAt = new bool[authored.Count];
+        var inputs = new int[authored.Count][];
+        var producers = new Stack<int>();
+        var changed = false;
+        var current = 0;
         var inferLiterals = resultKind is null || authored.Any(static instruction => instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not);
 
-        for (var index = 0; (index < authored.Count); index++) {
-            var instruction = (authored[index] ?? throw Malformed(detail: "contains a null instruction"));
+        // Context flows backwards through numeric operations before folding. Kinds only widen, so each
+        // instruction can request another pass at most once; discrete results remain conversion boundaries.
+        do {
+            changed = false;
+            depth = 0;
+            producers.Clear();
+            Array.Clear(promotions);
+            for (var index = 0; (index < authored.Count); index++) {
+                current = index;
+                var instruction = (authored[index] ?? throw Malformed(detail: "contains a null instruction"));
 
-            tokens[index] = (instruction switch {
-                { Payload: InstructionPayload.Constant constant } => PushConstant(
-                    constant: constant,
-                    index: index
-                ),
-                { Payload: InstructionPayload.State state } => ResolveState(state: state),
-                { Payload: InstructionPayload.Board board } => ResolveBoard(
-                    board: board,
-                    operation: instruction.Operation
-                ),
-                { Payload: InstructionPayload.Vector vector } => ResolveVectorCall(
-                    call: vector,
-                    operation: instruction.Operation
-                ),
-                { Payload: InstructionPayload.Fold fold } => ResolveFold(
-                    fold: fold,
-                    operation: instruction.Operation
-                ),
-                { Payload: InstructionPayload.Call call } => ResolveCall(call: call),
-                { Payload: InstructionPayload.Argument argument } => ResolveArgument(argument: argument),
-                { Operation: ExpressionOp.Member } => ResolveMember(),
-                _ => ResolveOperator(instruction: instruction),
-            });
-            producedAt[depth - 1] = index;
+                tokens[index] = (instruction switch {
+                    { Payload: InstructionPayload.Constant constant } => PushConstant(
+                        constant: constant,
+                        index: index
+                    ),
+                    { Payload: InstructionPayload.State state } => ResolveState(state: state),
+                    { Payload: InstructionPayload.Board board } => ResolveBoard(
+                        board: board,
+                        operation: instruction.Operation
+                    ),
+                    { Payload: InstructionPayload.Vector vector } => ResolveVectorCall(
+                        call: vector,
+                        operation: instruction.Operation
+                    ),
+                    { Payload: InstructionPayload.Fold fold } => ResolveFold(
+                        fold: fold,
+                        operation: instruction.Operation
+                    ),
+                    { Payload: InstructionPayload.Call call } => ResolveCall(call: call),
+                    { Payload: InstructionPayload.Argument argument } => ResolveArgument(argument: argument),
+                    { Operation: ExpressionOp.Member } => ResolveMember(),
+                    _ => ResolveOperator(instruction: instruction),
+                });
+                var arity = tokens[index].Call?.Arity ?? ExpressionOperators.Arity(tokens[index].Operation);
+                inputs[index] ??= new int[arity];
+                for (var argument = arity - 1; argument >= 0; argument--) { inputs[index][argument] = producers.Pop(); }
+                producers.Push(index);
+                producedAt[depth - 1] = index;
 
-            // Only a constant instruction leaves a literal on the stack; every other instruction's result slot is
-            // not one.
-            if (instruction.Payload is not InstructionPayload.Constant) {
-                literalAt[(depth - 1)] = -1;
+                // Only a constant instruction leaves a literal on the stack; every other instruction's result slot is
+                // not one.
+                if (instruction.Payload is not InstructionPayload.Constant) {
+                    literalAt[(depth - 1)] = -1;
+                }
             }
-        }
 
-        if (depth != 1) {
-            throw Malformed(detail: $"leaves {depth} values on the postfix stack instead of exactly one");
-        }
-        if (resultKind is { } required) {
-            RequireKind(ExpressionOp.ToFixed, 0, required);
-        }
+            if (depth != 1) {
+                throw Malformed(detail: $"leaves {depth} values on the postfix stack instead of exactly one");
+            }
+            if (resultKind is { } required) {
+                RequireKind(ExpressionOp.ToFixed, 0, required);
+            }
+        } while (changed);
 
         result = kinds[0];
 
@@ -297,7 +315,7 @@ public static partial class RuleCompiler {
                 arity: 2,
                 operation: ExpressionOp.Coalesce
             );
-            MatchKinds(ExpressionOp.Coalesce, 2);
+            MatchKinds(ExpressionOp.Coalesce, 2, fixedAt[current] ? CellKind.Fixed : null);
 
             depth--;
 
@@ -404,7 +422,7 @@ public static partial class RuleCompiler {
         CompiledExpressionToken PushConstant(InstructionPayload.Constant constant, int index) {
             literalAt[depth] = index;
             literals[depth] = constant.Value;
-            var literalKind = HasFixedSpelling(value: constant.Value) ? CellKind.Fixed : (inferLiterals ? CellKind.Int : kind);
+            var literalKind = fixedAt[index] || HasFixedSpelling(value: constant.Value) ? CellKind.Fixed : (inferLiterals ? CellKind.Int : kind);
 
             return Push(
                 new CompiledExpressionToken(
@@ -426,8 +444,24 @@ public static partial class RuleCompiler {
         }
         void RequireKind(ExpressionOp operation, int slot, CellKind required) {
             if (ImplicitConversion(kinds[slot], required, ruleName, $"{verb} instruction '{operation}'") is not null) {
+                RequireFixed(producedAt[slot]);
                 promotions[producedAt[slot]] = true;
                 kinds[slot] = required;
+            }
+        }
+        void RequireFixed(int producer) {
+            if (fixedAt[producer]) { return; }
+            fixedAt[producer] = true;
+            changed = true;
+            if (authored[producer].Payload is InstructionPayload.Argument parameter && contextualArguments is not null) {
+                contextualArguments[parameter.Index] = true;
+            }
+            var signature = ExpressionOperators.Find(tokens[producer].Operation)?.Signature;
+            if (signature is ExpressionSignature.Numeric or ExpressionSignature.Coalesce or ExpressionSignature.Select) {
+                var arguments = inputs[producer];
+                for (var argument = signature == ExpressionSignature.Select ? 1 : 0; argument < arguments.Length; argument++) {
+                    RequireFixed(arguments[argument]);
+                }
             }
         }
         CompiledExpressionToken ResolveArgument(InstructionPayload.Argument argument) {
@@ -505,13 +539,26 @@ public static partial class RuleCompiler {
                 arguments[slot] = kinds[((depth - declared.Arity) + slot)];
             }
 
-            var (body, returned) = SharedBody(
+            var (body, returned, requiredArguments) = SharedBody(
                 argumentKinds: arguments,
                 kind: kind,
                 memberKind: memberKind,
-                resultKind: null,
+                resultKind: fixedAt[current] ? CellKind.Fixed : null,
                 subprogram: call.Subprogram
             );
+            while (true) {
+                var widened = false;
+                for (var argument = 0; argument < arguments.Length; argument++) {
+                    if (requiredArguments[argument] && arguments[argument] == CellKind.Int) {
+                        RequireKind(ExpressionOp.Call, depth - arguments.Length + argument, CellKind.Fixed);
+                        arguments[argument] = CellKind.Fixed;
+                        widened = true;
+                    }
+                }
+                if (!widened) { break; }
+                (body, returned, requiredArguments) = SharedBody(call.Subprogram, kind,
+                    fixedAt[current] ? CellKind.Fixed : null, memberKind, arguments);
+            }
 
             depth -= declared.Arity;
 
@@ -545,17 +592,23 @@ public static partial class RuleCompiler {
                 throw Malformed(detail: $"folds '{fold.Family}', whose kind={StateSpelling.Kind(kind: member)} cells are not numeric");
             }
 
-            // The body computes in its member's kind; a predicate fold's body leaves the Int its comparison yields,
-            // and the fold pushes that Int whatever kind the enclosing program computes in.
-            var (body, _) = SharedBody(
+            // A sum passes its numeric context into the body. Predicate folds still leave Int, and their
+            // members keep their declared encoding until a numeric operation widens the read.
+            var foldedKind = operation == ExpressionOp.Sum && fixedAt[current] ? CellKind.Fixed : member;
+            var (body, _, requiredArguments) = SharedBody(
                 argumentKinds: argumentKinds,
                 kind: member,
                 memberKind: member,
                 resultKind: ((operation == ExpressionOp.Sum)
-                    ? member
+                    ? foldedKind
                     : CellKind.Int),
                 subprogram: fold.Subprogram
             );
+            if (contextualArguments is not null) {
+                for (var argument = 0; argument < requiredArguments.Length; argument++) {
+                    contextualArguments[argument] |= requiredArguments[argument];
+                }
+            }
 
             var folded = ResolveRowOrdinal(
                 context: context,
@@ -575,7 +628,7 @@ public static partial class RuleCompiler {
                     Operation: operation
                 ),
                 ((operation == ExpressionOp.Sum)
-                    ? member
+                    ? foldedKind
                     : CellKind.Int)
             );
         }
@@ -630,7 +683,7 @@ public static partial class RuleCompiler {
             var carrier = MatchKinds(operation, descriptor.Arity, descriptor.Signature switch {
                 ExpressionSignature.Fixed => CellKind.Fixed,
                 ExpressionSignature.Int => CellKind.Int,
-                _ => null,
+                _ => fixedAt[current] ? CellKind.Fixed : null,
             });
 
             if (!descriptor.Admits(kind: carrier)) {
@@ -732,7 +785,7 @@ public static partial class RuleCompiler {
                 required: CellKind.Int,
                 slot: (depth - 3)
             );
-            MatchKinds(ExpressionOp.Select, 2);
+            MatchKinds(ExpressionOp.Select, 2, fixedAt[current] ? CellKind.Fixed : null);
 
             var selected = kinds[(depth - 1)];
 
@@ -743,7 +796,7 @@ public static partial class RuleCompiler {
         }
         // A subprogram body depends only on the subprogram and the kinds it is entered with, so one compiled body
         // per signature serves every call site and every fold that names it.
-        (CompiledExpressionToken[] Body, CellKind Result) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
+        (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
             var signature = $"{subprogram}:{kind}:{resultKind}:{memberKind}:{string.Join(
                 separator: ',',
                 values: argumentKinds
@@ -753,8 +806,10 @@ public static partial class RuleCompiler {
                 key: signature,
                 value: out var body
             )) {
+                var requiredArguments = new bool[argumentKinds.Count];
                 var compiled = CompileInstructions(
                     argumentKinds: argumentKinds,
+                    contextualArguments: requiredArguments,
                     calling: Entering(subprogram: subprogram),
                     context: context,
                     expression: expression,
@@ -768,7 +823,7 @@ public static partial class RuleCompiler {
                     verb: verb
                 );
 
-                body = (compiled, left);
+                body = (compiled, left, requiredArguments);
                 shared[signature] = body;
             }
 

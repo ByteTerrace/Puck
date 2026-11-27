@@ -191,8 +191,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   form cannot carry (`` `seat-1` ``).
   Holes carry ordinary expressions, including nested interpolations and object braces; their quotes need no outer
   escaping. `SourceLexemes.HoleEnd` owns their boundaries for readers and editor services; the printer escapes only literal runs.
-- **Int widens to Fixed at typed boundaries.** `RuleCompiler.ImplicitConversion` checks expression slots, direct
-  row and field copies and host arguments. It lowers promotion to `ExpressionOp.ToFixed`, evaluated by
+- **Fixed context reaches numeric operands before evaluation.** `RuleCompiler.CompileInstructions` propagates
+  context through numeric subexpressions before folding; `CompileComparisonCarrier` recompiles comparison sides
+  in their common kind. `FoldKindFree` requires both numeric readings to agree before substituting a constant.
+  `RuleCompiler.ImplicitConversion` checks expression slots, direct row and field copies and host arguments.
+  It lowers promotion of Int reads to `ExpressionOp.ToFixed`, evaluated by
   `ExpressionArithmetic.TryUnary` with an exact checked shift. Fixed needs explicit `toInt(value)` to truncate
   toward zero; it never narrows implicitly.
 - **Hashes have one authored spelling.** Write `hash: auto` for automatic
