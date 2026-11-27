@@ -686,7 +686,26 @@ literal index is live in such a table (`$zones[2]` differs per binding), so a
 rule written once per column names its piles by number. In `.puck` a table
 may be any value known at compile time, such as a `let` or a function over the
 piles (`zones: kdZonesOf(kdColumns)`, worlds/games/klondike.puck), so a world
-writes its piles once and each rule names only the piles it can choose. A host fact read for the body bound to `$each` marks
+writes its piles once and each rule names only the piles it can choose.
+
+A rule may sweep a row family itself (`forEach: pile` over `pile pile[n]`):
+it binds every key of every member, members in family order and each member's
+keys in cell order, with the key bound to `$each` and the member's family index
+to `$member`, so a set of stations each holding a pile of cards is one rule over
+station and card (worlds/games/patience-station.puck). There the binding's own
+member is the one `$member` names: `pile[$member]` and `$zones[i]` select the
+binding's station, a read `pile[$member][$each]` is a cell of it, and a cell
+`table[$member]` of a row keyed by station is reached as `RowReach.MemberKey`.
+The due list keeps one snapshot of (member, key) positions per family
+(`RuleDueList.FamilySnapshot`): a move of member `m`'s row, or of the cell keyed
+`m` that a rule reads under `$member`, marks member `m`'s bindings; a move of a
+cell read under `$each` marks that key in every member; and a change to any
+member's structure runs the next visit in full. The sheet multiplies the rule by
+every member's capacity and prices one change at one member's bindings. Two such
+lines whose gates pin one row's cell under `$member` to disjoint ranges
+(`patienceSyncScan[$member] == turn`) share one allowance, as literal pins do,
+when neither fires at rest and every read at rest reaches its binding through
+the member (`RuleResponse.PinsByMember`). A host fact read for the body bound to `$each` marks
 that body's binding the same way, and in a sweep whose keys are bodies it marks
 nothing for a body outside the set the sweep last bound: that body has no
 binding until the set itself moves, which reaches the sweep through the set's

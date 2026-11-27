@@ -218,9 +218,7 @@ public sealed partial class RuleEvaluator {
     private bool SweepRow(int index, RuleDueList list, ulong stepTicks, out bool whole) {
         var rule = list.Rules[index];
         var state = list.States[index];
-        var latch = list.Latch;
         var snapshot = list.SnapshotOf(index: index);
-        var applied = false;
         var structure = m_host.Arena.RowStructureVersion(rowOrdinal: rule.ForEachOrdinal);
         var full = list.TakeFull(force: !list.SnapshotStands(index: index, structure: structure), index: index);
 
@@ -234,24 +232,32 @@ public sealed partial class RuleEvaluator {
             }
             list.NoteSwept(index: index, structure: structure);
         }
-        latch.BeginSweep();
 
-        // Whether every key from here on is judged: from the start of a full sweep, or once a firing made the rule
-        // due in full.
+        return SweepPositions(count: snapshot.Count, full: full, index: index, keys: snapshot.Keys, list: list, members: null, stepTicks: stepTicks);
+    }
+    // Judges a positional sweep's bindings in order over the snapshot its visit stands on: every one from the start of
+    // a full sweep, otherwise the due positions alone until a firing makes the rule due in full, from which every
+    // later position is judged.
+    private bool SweepPositions(int index, RuleDueList list, bool full, int count, CellKey[] keys, int[]? members, ulong stepTicks) {
+        var state = list.States[index];
+        var latch = list.Latch;
+        var applied = false;
         var every = full;
 
-        for (var position = 0; (position < snapshot.Count); position++) {
+        latch.BeginSweep();
+        for (var position = 0; (position < count); position++) {
             every |= list.IsFull(index: index);
             if (!every) {
                 position = list.NextBindingDue(from: position, index: index);
-                if ((position < 0) || (position >= snapshot.Count)) {
+                if ((position < 0) || (position >= count)) {
                     break;
                 }
             }
-            applied |= SweepBinding(binding: position, full: full, index: index, key: snapshot.Keys[position], list: list, stepTicks: stepTicks);
+            applied |= SweepBinding(binding: position, full: full, index: index, key: keys[position], list: list, member: ((members is null) ? -1 : members[position]), stepTicks: stepTicks);
         }
 
         m_host.BoundEachKey = default;
+        m_host.BoundMemberKey = default;
         if (full) {
             latch.EndSweep(journal: m_host.Arena.Journal, state: state);
         }
@@ -265,10 +271,8 @@ public sealed partial class RuleEvaluator {
     private bool SweepFamily(int index, RuleDueList list, ulong stepTicks, out bool whole) {
         var rule = list.Rules[index];
         var state = list.States[index];
-        var latch = list.Latch;
         var snapshot = list.FamilySnapshotOf(index: index);
         var family = rule.ForEachFamily!.Value;
-        var applied = false;
         var full = list.TakeFull(force: !list.FamilySnapshotStands(index: index), index: index);
 
         whole = full;
@@ -281,28 +285,8 @@ public sealed partial class RuleEvaluator {
             }
             list.NoteFamilySwept(index: index);
         }
-        latch.BeginSweep();
 
-        var every = full;
-
-        for (var position = 0; (position < snapshot.Count); position++) {
-            every |= list.IsFull(index: index);
-            if (!every) {
-                position = list.NextBindingDue(from: position, index: index);
-                if ((position < 0) || (position >= snapshot.Count)) {
-                    break;
-                }
-            }
-            applied |= SweepBinding(binding: position, full: full, index: index, key: snapshot.Keys[position], list: list, member: snapshot.Members[position], stepTicks: stepTicks);
-        }
-
-        m_host.BoundEachKey = default;
-        m_host.BoundMemberKey = default;
-        if (full) {
-            latch.EndSweep(journal: m_host.Arena.Journal, state: state);
-        }
-
-        return applied;
+        return SweepPositions(count: snapshot.Count, full: full, index: index, keys: snapshot.Keys, list: list, members: snapshot.Members, stepTicks: stepTicks);
     }
 
     internal bool Owns(CompiledRule rule) => ((m_owner is { } owner) && owner.Owns(rule: rule));

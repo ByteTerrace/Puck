@@ -8036,7 +8036,7 @@ export type WorldEffectPoseCell = {
    */
   pitchDegrees?: number;
   /**
-   * The placement whose composed frame the topology's cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame's yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root.
+   * The placement whose composed frame the topology's cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame's yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root. placement:$each names the placement whose id is the swept key, read when the effect fires, so one topology authored in a placement's own frame poses every swept body about the row that placed it (each station's cards about their own station).
    */
   frame?: string | null;
 };

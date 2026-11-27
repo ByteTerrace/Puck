@@ -201,7 +201,11 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   with the member's family index, which `RuleSchedule` keeps as
   `RowReach.Member` and the due list maps back to the one binding whose key
   spells that index; a selection by any other index stays every member, any
-  cell.
+  cell. A rule sweeping a row family (`forEach: pile`, `CompiledRule.ForEachFamily`)
+  binds `$each` to a member's key and `$member` to its family index; its own
+  member is `$member`'s (`LiveRow.SelectsOwnMember`, `RuleReads.BoundOwnIndex`),
+  a cell under `$member` is `RowReach.MemberKey`, and the due list's
+  `FamilySnapshot` maps a move to (member, key) positions.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content

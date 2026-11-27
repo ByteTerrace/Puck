@@ -20208,7 +20208,7 @@
           "default": 0
         },
         "frame": {
-          "description": "The placement whose composed frame the topology\u0027s cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame\u0027s yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root.",
+          "description": "The placement whose composed frame the topology\u0027s cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame\u0027s yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root. placement:$each names the placement whose id is the swept key, read when the effect fires, so one topology authored in a placement\u0027s own frame poses every swept body about the row that placed it (each station\u0027s cards about their own station).",
           "type": [
             "string",
             "null"
