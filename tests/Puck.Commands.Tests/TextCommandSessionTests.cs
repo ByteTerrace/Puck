@@ -110,7 +110,7 @@ public sealed class TextCommandSessionTests {
         );
     }
     [Fact]
-    public void ReleasedFocusDispatchesOnlyFocusExemptCommandsAndIgnoresKeyRepeat() {
+    public void APageBindingTakesThePlanesSourceUntilFocusIsReleased() {
         var dispatched = new List<string>();
         var registry = new CommandRegistry(modules: [new FocusModule(dispatched: dispatched)]);
         var router = Router(
@@ -165,9 +165,11 @@ public sealed class TextCommandSessionTests {
 
         registry.ApplySnapshot(snapshot: in closing);
 
+        // The page binds the backtick, so the focused press is the page's alone; once focus is released the page is
+        // never asked, and the plane answers the next press.
         Assert.Equal(
             actual: dispatched,
-            expected: ["gameplay.action", "terminal.console", "terminal.console"]
+            expected: ["gameplay.action", "terminal.console"]
         );
     }
     [Fact]

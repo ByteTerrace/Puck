@@ -5947,7 +5947,19 @@ the model.
   supplies no `SurfaceTexts`, as it emits no creation text run). The slots are
   a fixed band of the decal buffer (`SdfSurfaceTextLayout.MaxTexts`).
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
-  submits through `chat.whisper` and `chat.log` (`ChatCommandModule`).
+  submits through `chat.whisper` and `chat.log` (`ChatCommandModule`). The
+  standard's terminal console (`worlds/standard/contexts/terminal-console.puck`)
+  is the pattern: a `Text` channel a family offers while a body cell is open, a
+  line built in a `Text` cell, and a per-seat world HUD panel keyed `$body`.
+- [medium] A rule sweeps one owner's input events (`forEach: inputEvents(<seat>)`
+  takes a compile-time seat), so the terminal console unrolls a rule per local
+  seat and a visitor's body at a terminal cannot type into it. Let one rule
+  sweep every player's step events (each event bound with its owner), as
+  `$players` sweeps their bodies.
+- [low] The terminal console closes only on the backtick: Escape is the host's,
+  reserved for the pause menu ([play decisions](../decisions/play.md#the-game)).
+  When the pause menu lands (hub plan H4), decide whether opening it closes an
+  open terminal console, so Escape still leaves the console in one press.
 - Cross-check the Triton's reports against several independent sources (SDL
   is one second opinion, never the specification), then rewrite the input
   reference's Triton section to cite them:

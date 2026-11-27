@@ -51,6 +51,16 @@ public readonly record struct StateBinding(string Row, string? Key, bool Target)
 
         return true;
     }
+    /// <summary>Returns whether a token is a state binding keyed by <see cref="BodyKey"/>, which reads the cell of the
+    /// body reading it.</summary>
+    /// <param name="token">The candidate token.</param>
+    /// <returns><see langword="true"/> when <paramref name="token"/> is <c>state.&lt;row&gt;.$body</c>, with or without
+    /// <c>.$target</c>.</returns>
+    public static bool IsBodyKeyed(string? token) => (TryParse(binding: out var binding, token: token) && string.Equals(
+        a: binding.Key,
+        b: BodyKey,
+        comparisonType: StringComparison.Ordinal
+    ));
     /// <summary>Parses the state arm of the binding grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
     /// <c>state.&lt;row&gt;.&lt;key&gt;</c>, either with an optional trailing <c>.$target</c>. Any other token —
     /// including a literal — is not a state binding.</summary>

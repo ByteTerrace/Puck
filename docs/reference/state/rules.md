@@ -111,7 +111,7 @@ The effect arms, with their `.puck` spellings:
 | Arm | `.puck` spelling | What it does |
 |---|---|---|
 | `setState` | `row[key] = rhs` | Replaces a cell from a literal, a duration, another cell, an expression, text, or a vector. |
-| `addState` | `row[key] += rhs` | Adds to a numeric cell. |
+| `addState` | `row[key] += rhs` | Adds to a numeric cell, or edits the end of a `Text` cell (below). |
 | `pushState` | `push row = rhs` | Pushes one value onto a history ring. |
 | `transformState` | `transform name(…)`, `draw`, `deal`, `shuffle` | Runs a structured [state transform](transforms.md). |
 | `generate` | `generate(row: site)` | Redraws a [draw site](generators.md). |
@@ -683,6 +683,19 @@ and failure. The source still keeps the distinctions its author chose:
 A source that reads `forever` skips the effect without a refusal. A source that
 reads [absent](#absent-reads-and-empty-endpoints), or an expression that faults,
 refuses the effect and rewinds the firing.
+
+`addState` to a `Text` cell edits the text's end by a whole number
+(`TextEdit`): a positive value appends the Unicode scalar it names, so
+`line[k] += raw` appends a character a rule read from a typed `Text` input
+event; a negative one removes that many scalars from the end, so
+`line[k] -= 1` erases the last character (a subtraction lowers to the add of
+its negation); and zero leaves the text as it stands. The number is an `Int`
+`value`, `expression` or `fromState`. A positive value that names no scalar
+(past U+10FFFF, or a surrogate) refuses the effect. Unlike a numeric add, a
+text edit does not commute with another write to the cell, so the hazard
+analysis orders it as a set. A text cell has no length bound of its own: a rule
+that appends keeps its own count and gates on it, as the standard's terminal
+console does (`worlds/standard/contexts/terminal-console.puck`).
 
 `pushState` (`push coinLog = coins * 2`) appends its value to a history row, a
 row whose domain is a `ring(capacity:)`. Once the ring is full, the push
