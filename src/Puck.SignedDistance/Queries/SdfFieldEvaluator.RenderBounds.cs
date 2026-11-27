@@ -5,7 +5,8 @@ namespace Puck.SignedDistance.Queries;
 
 // THE INTERVAL INTERPRETER's rules for the render reading's ops (SdfFieldEvaluator.RenderOps.cs): each encloses its
 // point rule over a box rather than mirroring it step by step, since a hashed cell, a sector seam or a shell round can
-// fall anywhere inside the box. A rule reads the point rule's own bound on how far it moves the point or the field.
+// fall anywhere inside the box. A rule reads the point rule's own bound on how far it moves the point or the field, over
+// its parameters' enclosures (CompiledInstruction's THE PARAMETER ENCLOSURES).
 public sealed partial class SdfFieldEvaluator {
     // The raws a transcendental endpoint is widened by: the tables' half-ULP envelope plus the products about it.
     private static readonly FixedQ4816 RenderBoundSlack = FixedQ4816.FromRawBits(value: 8L);
@@ -18,17 +19,17 @@ public sealed partial class SdfFieldEvaluator {
                     // The target moves by the cubic of the driver, taken over the driver's interval.
                     var target = (int)instruction.Shape;
                     var t = local[((int)instruction.Blend)];
-                    var offset = ((((Point(value: instruction.Data0Z) * t) + Point(value: instruction.Data0Y)) * t) + Point(value: instruction.Data0X)) * t;
+                    var offset = ((((instruction.Bounds0Z * t) + instruction.Bounds0Y) * t) + instruction.Bounds0X) * t;
 
                     return local.With(axis: target, value: (local[target] + offset));
                 }
             case SdfRenderWarpBoundsAction.GaussianPush: {
                     // The weight lies in [0, 1], so each component moves by at most its push.
-                    return Widen(box: local, reach: new FixedVector3(X: FixedQ4816.Abs(value: instruction.Data0W), Y: FixedQ4816.Abs(value: instruction.Data1W), Z: FixedQ4816.Abs(value: instruction.Aux)));
+                    return Widen(box: local, reach: new FixedVector3(X: FixedInterval.Abs(value: instruction.Bounds0W).Upper, Y: FixedInterval.Abs(value: instruction.Bounds1W).Upper, Z: FixedInterval.Abs(value: instruction.BoundsAux).Upper));
                 }
             case SdfRenderWarpBoundsAction.DomainWarp: {
                     // Each sine lies in [-1, 1], so each component moves by at most the amplitude.
-                    var amplitude = FixedQ4816.Abs(value: instruction.Data0W);
+                    var amplitude = FixedInterval.Abs(value: instruction.Bounds0W).Upper;
 
                     return Widen(box: local, reach: new FixedVector3(X: amplitude, Y: amplitude, Z: amplitude));
                 }
@@ -49,16 +50,17 @@ public sealed partial class SdfFieldEvaluator {
             case SdfRenderWarpBoundsAction.Unbounded: {
                     // The Repeat fold, then a displacement of at most half the jitter per axis, then a rotation, which
                     // keeps the length: every folded coordinate lies within the largest length the jittered box reaches.
-                    var spacing = Vector(instruction: instruction);
-                    var inverseSpacing = Vector1(instruction: instruction);
-                    var jitter = (FixedQ4816.Abs(value: instruction.Data0W) * Half);
+                    var spacing = instruction.BoundsVector;
+                    var inverseSpacing = instruction.BoundsVector1;
+                    var jitter = (FixedInterval.Abs(value: instruction.Bounds0W).Upper * Half);
                     var folded = Widen(box: new IntervalVector3(
-                        X: (local.X - (Point(value: spacing.X) * FixedInterval.Round(value: (local.X * Point(value: inverseSpacing.X))))),
-                        Y: (local.Y - (Point(value: spacing.Y) * FixedInterval.Round(value: (local.Y * Point(value: inverseSpacing.Y))))),
-                        Z: (local.Z - (Point(value: spacing.Z) * FixedInterval.Round(value: (local.Z * Point(value: inverseSpacing.Z)))))
+                        X: (local.X - (spacing.X * FixedInterval.Round(value: (local.X * inverseSpacing.X)))),
+                        Y: (local.Y - (spacing.Y * FixedInterval.Round(value: (local.Y * inverseSpacing.Y)))),
+                        Z: (local.Z - (spacing.Z * FixedInterval.Round(value: (local.Z * inverseSpacing.Z))))
                     ), reach: new FixedVector3(X: jitter, Y: jitter, Z: jitter));
 
-                    if (instruction.Data1W <= FixedQ4816.Zero) {
+                    // The tumble's turn keeps the length, so its bound holds the untumbled point too.
+                    if (!instruction.Bounds1W.IsUnbounded && (instruction.Bounds1W.Upper <= FixedQ4816.Zero)) {
                         return folded;
                     }
 
@@ -83,15 +85,14 @@ public sealed partial class SdfFieldEvaluator {
 
         if (group >= SdfWallpaperGroup.P3) {
             // The nearest hex lattice point lies within a pitch of the point on each axis.
-            var pitch = FixedQ4816.Abs(value: instruction.Data0X);
+            var pitch = FixedInterval.Abs(value: instruction.Bounds0X).Upper;
 
             folded = Spread(magnitude: FixedInterval.Magnitude(x: new FixedInterval(lower: -pitch, upper: pitch), y: new FixedInterval(lower: -pitch, upper: pitch)));
         } else {
-            var cell = new FixedVector2(X: instruction.Data0X, Y: instruction.Data0Y);
-            var inverseCell = new FixedVector2(X: instruction.Data0Z, Y: instruction.Data0W);
-            var ra = (qa - (Point(value: cell.X) * FixedInterval.Clamp(maximum: instruction.Data1X, minimum: -instruction.Data1X, value: FixedInterval.Round(value: (qa * Point(value: inverseCell.X))))));
-            var rb = (qb - (Point(value: cell.Y) * FixedInterval.Clamp(maximum: instruction.Data1Y, minimum: -instruction.Data1Y, value: FixedInterval.Round(value: (qb * Point(value: inverseCell.Y))))));
-            var shift = ((group == SdfWallpaperGroup.P4G) ? FixedQ4816.Abs(value: cell.X) : FixedQ4816.Zero);
+            var (cellX, cellY) = (instruction.Bounds0X, instruction.Bounds0Y);
+            var ra = (qa - (cellX * FixedInterval.Clamp(maximum: instruction.Bounds1X, minimum: -instruction.Bounds1X, value: FixedInterval.Round(value: (qa * instruction.Bounds0Z)))));
+            var rb = (qb - (cellY * FixedInterval.Clamp(maximum: instruction.Bounds1Y, minimum: -instruction.Bounds1Y, value: FixedInterval.Round(value: (qb * instruction.Bounds0W)))));
+            var shift = ((group == SdfWallpaperGroup.P4G) ? FixedInterval.Abs(value: cellX).Upper : FixedQ4816.Zero);
 
             folded = (Spread(magnitude: FixedInterval.Magnitude(x: ra, y: rb)) + new FixedInterval(lower: -shift, upper: shift));
         }
@@ -100,24 +101,29 @@ public sealed partial class SdfFieldEvaluator {
     }
     // The radius folded to its shell: the shell index runs between the shells of the box's least and greatest radius,
     // the folded point lies within the prototype shell's outer radius, and the candidate scale runs over those shells.
+    // Each is monotone in the radius and in each parameter (the shell density Data0.z and the shell ratio's logarithm
+    // Data0.x), so over the parameters' enclosures it is taken at their corners.
     private static IntervalVector3 LogSphereBounds(in CompiledInstruction instruction, IntervalVector3 local, ref FixedInterval distanceScale) {
         var radius = local.Length;
+        var (ratio, density) = (instruction.Bounds0X, instruction.Bounds0Z);
 
-        if (radius.IsUnbounded) {
+        if (radius.IsUnbounded || ratio.IsUnbounded || density.IsUnbounded) {
             distanceScale = FixedInterval.Entire;
 
             return new IntervalVector3(X: FixedInterval.Entire, Y: FixedInterval.Entire, Z: FixedInterval.Entire);
         }
 
-        var w = instruction.Data0X;
-        var lowShell = FixedQ4816.Round(value: ((FixedQ4816.Log2(value: FixedQ4816.Max(x: radius.Lower, y: LogSphereMinRadius)) * Ln2) * instruction.Data0Z));
-        var highShell = FixedQ4816.Round(value: ((FixedQ4816.Log2(value: FixedQ4816.Max(x: radius.Upper, y: LogSphereMinRadius)) * Ln2) * instruction.Data0Z));
+        FixedQ4816 Shell(FixedQ4816 r, FixedQ4816 z) => FixedQ4816.Round(value: ((FixedQ4816.Log2(value: FixedQ4816.Max(x: r, y: LogSphereMinRadius)) * Ln2) * z));
+        var lowShell = FixedQ4816.Min(x: Shell(r: radius.Lower, z: density.Lower), y: Shell(r: radius.Lower, z: density.Upper));
+        var highShell = FixedQ4816.Max(x: Shell(r: radius.Upper, z: density.Lower), y: Shell(r: radius.Upper, z: density.Upper));
+        FixedQ4816 Least(FixedQ4816 shell) => FixedQ4816.Min(x: Exp(value: (shell * ratio.Lower)), y: Exp(value: (shell * ratio.Upper)));
+        FixedQ4816 Greatest(FixedQ4816 shell) => FixedQ4816.Max(x: Exp(value: (shell * ratio.Lower)), y: Exp(value: (shell * ratio.Upper)));
         // A shell either side, since the rounding of the folded logarithm can land a point on a neighbour.
         var scales = new FixedInterval(
-            lower: FixedQ4816.Max(x: FixedQ4816.Zero, y: (Exp(value: ((lowShell - FixedQ4816.One) * w)) - RenderBoundSlack)),
-            upper: (Exp(value: ((highShell + FixedQ4816.One) * w)) + RenderBoundSlack)
+            lower: FixedQ4816.Max(x: FixedQ4816.Zero, y: (Least(shell: (lowShell - FixedQ4816.One)) - RenderBoundSlack)),
+            upper: (Greatest(shell: (highShell + FixedQ4816.One)) + RenderBoundSlack)
         );
-        var outer = (Exp(value: (w * Half)) + RenderBoundSlack);
+        var outer = (Greatest(shell: Half) + RenderBoundSlack);
         var folded = new FixedInterval(lower: -outer, upper: outer);
 
         distanceScale *= scales;
@@ -126,7 +132,7 @@ public sealed partial class SdfFieldEvaluator {
     }
     // The render reading's sine displacement over a box: a relief of at most its amplitude either way.
     private static FixedInterval RenderEditFieldBounds(in CompiledInstruction instruction, FixedInterval result) {
-        var amplitude = (FixedQ4816.Abs(value: instruction.Data0W) + RenderBoundSlack);
+        var amplitude = (FixedInterval.Abs(value: instruction.Bounds0W).Upper + RenderBoundSlack);
 
         return (result + new FixedInterval(lower: -amplitude, upper: amplitude));
     }
@@ -140,10 +146,15 @@ public sealed partial class SdfFieldEvaluator {
             return result;
         }
 
-        var frequency = instruction.Data0X;
-        var relief = (Point(value: (instruction.Data0Y * instruction.Data1X)) * Pcg3dLatticeNoise.Fbm3Bounds(gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
-            x: FixedInterval.RoundedProduct(factor: frequency, value: local.X), y: FixedInterval.RoundedProduct(factor: frequency, value: local.Y),
-            z: FixedInterval.RoundedProduct(factor: frequency, value: local.Z)));
+        // On the grid, the point rule's own roundings (its rounded amplitude and lattice point); off it, the
+        // outward-rounded products over the enclosures, which hold those roundings and the floats' exact products.
+        var frequency = instruction.Bounds0X;
+        var exact = (instruction.ExactData0 && instruction.ExactData1X);
+        var amplitude = (exact ? Point(value: (instruction.Data0Y * instruction.Data1X)) : (instruction.Bounds0Y * instruction.Bounds1X));
+        var relief = (amplitude * Pcg3dLatticeNoise.Fbm3Bounds(gain: instruction.Bounds0Z, lacunarity: instruction.Bounds0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
+            x: (exact ? FixedInterval.RoundedProduct(factor: frequency.Lower, value: local.X) : (local.X * frequency)),
+            y: (exact ? FixedInterval.RoundedProduct(factor: frequency.Lower, value: local.Y) : (local.Y * frequency)),
+            z: (exact ? FixedInterval.RoundedProduct(factor: frequency.Lower, value: local.Z) : (local.Z * frequency))));
         var unweighted = ((weight is not { } held) || (held == FixedInterval.FromPoint(value: FixedQ4816.One)));
 
         return (result + (unweighted ? relief : (relief * weight!.Value)));
@@ -160,9 +171,9 @@ public sealed partial class SdfFieldEvaluator {
             FixedInterval? distance = null;
 
             foreach (var region in mask.Regions) {
-                var u = new IntervalVector3(X: (q.X - Point(value: region.Origin.X)), Y: (q.Y - Point(value: region.Origin.Y)), Z: (q.Z - Point(value: region.Origin.Z)));
+                var u = new IntervalVector3(X: (q.X - TableValue(inexact: region.Inexact, value: region.Origin.X)), Y: (q.Y - TableValue(inexact: region.Inexact, value: region.Origin.Y)), Z: (q.Z - TableValue(inexact: region.Inexact, value: region.Origin.Z)));
 
-                if (!region.Identity) {
+                if (!region.Identity || region.Inexact) {
                     u = RotateBoundsByInverseQuaternion(p: u, rotation: region.Bounds);
                 }
 
@@ -181,11 +192,18 @@ public sealed partial class SdfFieldEvaluator {
 
         return weight;
     }
-    // A LaneErode's effect on the next shape over a box: skipped outright, or eroded by any share of its reach.
-    private static FixedInterval? LaneErodeBounds(in CompiledInstruction instruction) {
+    // A LaneErode's effect on the next shape over a box: skipped outright, eroded by any share of its reach, or, where its
+    // threshold lanes lie off the grid and their enclosures straddle the skip, either.
+    private static (bool Skip, bool MaySkip, FixedInterval Amount) LaneErodeBounds(in CompiledInstruction instruction) {
         var t = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((FixedQ4816.Zero - instruction.Data0Y) / (instruction.Data0Z - instruction.Data0Y)));
+        var spread = (instruction.ExactData0
+            ? Point(value: t)
+            : FixedInterval.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((Point(value: FixedQ4816.Zero) - instruction.Bounds0Y) / (instruction.Bounds0Z - instruction.Bounds0Y))));
+        var amount = new FixedInterval(lower: FixedQ4816.Zero, upper: (FixedInterval.Abs(value: instruction.Bounds1X).Upper + RenderBoundSlack));
 
-        return ((t >= FixedQ4816.One) ? null : new FixedInterval(lower: FixedQ4816.Zero, upper: (FixedQ4816.Abs(value: instruction.Data1X) + RenderBoundSlack)));
+        return ((spread.IsUnbounded || ((t >= FixedQ4816.One) != (spread.Lower >= FixedQ4816.One)) || ((t >= FixedQ4816.One) != (spread.Upper >= FixedQ4816.One)))
+            ? (false, true, amount)
+            : ((t >= FixedQ4816.One) ? (true, false, amount) : (false, false, amount)));
     }
     // The interval a coordinate turned or reflected about the origin lies in: within the largest magnitude either way.
     private static FixedInterval Spread(FixedInterval magnitude) {
