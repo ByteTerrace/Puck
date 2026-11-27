@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingDeck.Forge;
 
 /// <summary>A small 6502 assembler for original Deck cartridges, the Post battery's fixtures, the shipped test
 /// cartridges and the cartridge compiler alike: it emits instructions from its origin onward, resolves labels for
-/// branches, jumps, absolute operands and address bytes, and packs the program with CHR data into an NROM-256 image, or
+/// branches, jumps and absolute operands, and packs the program with CHR data into an NROM-256 image, or
 /// into a larger MMC1 or MMC3 image whose last 16 KiB holds it. The reset vector is the origin; the NMI and IRQ vectors
 /// are the <c>nmi</c> and <c>irq</c> labels when they exist.</summary>
 /// <remarks>A far branch (<see cref="BranchFar"/>) packs as the two-byte relative branch while its target is in reach,
@@ -13,8 +13,6 @@ public sealed class DeckProgram {
     private enum Fixup {
         Relative,
         Absolute,
-        Low,
-        High,
     }
 
     private readonly ushort m_origin;
@@ -81,13 +79,8 @@ public sealed class DeckProgram {
     /// <param name="opcode">The branch opcode.</param>
     /// <param name="label">The target label.</param>
     /// <returns>This program.</returns>
-    public DeckProgram Branch(byte opcode, string label) {
-        m_code.Add(item: opcode);
-        m_fixups.Add(item: (m_code.Count, label, Fixup.Relative));
-        m_code.Add(item: 0);
-
-        return this;
-    }
+    public DeckProgram Branch(byte opcode, string label) =>
+        Reference(kind: Fixup.Relative, label: label, opcode: opcode);
     /// <summary>Emits a conditional branch to a label at any distance: the relative branch when the target is in reach,
     /// otherwise the opposite branch over an absolute jump.</summary>
     /// <param name="opcode">The branch opcode; its opposite differs in bit 5, as every 6502 branch pair does.</param>
@@ -105,36 +98,8 @@ public sealed class DeckProgram {
     /// <param name="opcode">The opcode.</param>
     /// <param name="label">The target label.</param>
     /// <returns>This program.</returns>
-    public DeckProgram Jump(byte opcode, string label) {
-        m_code.Add(item: opcode);
-        m_fixups.Add(item: (m_code.Count, label, Fixup.Absolute));
-        m_code.Add(item: 0);
-        m_code.Add(item: 0);
-
-        return this;
-    }
-    /// <summary>Emits an instruction whose one-byte operand is the low byte of a label's address.</summary>
-    /// <param name="opcode">The opcode, normally an immediate load.</param>
-    /// <param name="label">The label.</param>
-    /// <returns>This program.</returns>
-    public DeckProgram Low(byte opcode, string label) {
-        m_code.Add(item: opcode);
-        m_fixups.Add(item: (m_code.Count, label, Fixup.Low));
-        m_code.Add(item: 0);
-
-        return this;
-    }
-    /// <summary>Emits an instruction whose one-byte operand is the high byte of a label's address.</summary>
-    /// <param name="opcode">The opcode, normally an immediate load.</param>
-    /// <param name="label">The label.</param>
-    /// <returns>This program.</returns>
-    public DeckProgram High(byte opcode, string label) {
-        m_code.Add(item: opcode);
-        m_fixups.Add(item: (m_code.Count, label, Fixup.High));
-        m_code.Add(item: 0);
-
-        return this;
-    }
+    public DeckProgram Jump(byte opcode, string label) =>
+        Reference(kind: Fixup.Absolute, label: label, opcode: opcode);
     /// <summary>Returns the address a label marks.</summary>
     /// <param name="name">The label.</param>
     /// <returns>The CPU address, with every far branch before it at its settled form.</returns>
@@ -207,6 +172,17 @@ public sealed class DeckProgram {
         return image;
     }
 
+    // Emits an opcode and a zeroed operand that packing resolves to the label: one byte relative, two absolute.
+    private DeckProgram Reference(byte opcode, string label, Fixup kind) {
+        m_code.Add(item: opcode);
+        m_fixups.Add(item: (m_code.Count, label, kind));
+        m_code.Add(item: 0);
+        if (kind == Fixup.Absolute) {
+            m_code.Add(item: 0);
+        }
+
+        return this;
+    }
     // Settles every far branch's form, returning each branch's growth before it: entry i is the bytes the long forms
     // among the first i far branches add. Every branch starts short; a pass measures reach against the previous pass's
     // layout, and one whose target is out of reach grows. Growing only moves code apart, so a pass that grows nothing
@@ -297,17 +273,9 @@ public sealed class DeckProgram {
 
                         break;
                     }
-                case Fixup.Absolute:
+                default:
                     code[site] = ((byte)target);
                     code[(site + 1)] = ((byte)(target >> 8));
-
-                    break;
-                case Fixup.Low:
-                    code[site] = ((byte)target);
-
-                    break;
-                default:
-                    code[site] = ((byte)(target >> 8));
 
                     break;
             }

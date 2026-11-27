@@ -302,12 +302,8 @@ internal sealed class DeckCartridgeEmitter {
         LoadImmediate(value: (address >> 8));
         Op(opcode: StaZeroPage, operand: (zeroPage + 1));
     }
-    private void SetCount(int count) {
-        LoadImmediate(value: (count & 0xFF));
-        Op(opcode: StaZeroPage, operand: Count);
-        LoadImmediate(value: (count >> 8));
-        Op(opcode: StaZeroPage, operand: (Count + 1));
-    }
+    private void SetCount(int count) =>
+        Pointer(zeroPage: Count, address: count);
     // Maps a data page at $8000; nrom's one page never moves.
     private void SelectPage(int page) {
         if (!Banked) {

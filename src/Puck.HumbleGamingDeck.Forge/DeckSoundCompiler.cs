@@ -50,24 +50,20 @@ public static class DeckSoundCompiler {
     public static byte[] CompileMusicVoice(AudioDocument document, string voice) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var patterns = (document.Patterns ?? throw new ArgumentException(message: "The document has no patterns; normalize it first.", paramName: nameof(document)));
-        var order = (document.Order ?? throw new ArgumentException(message: "The document has no play order; normalize it first.", paramName: nameof(document)));
-        var frames = Math.Clamp(value: (document.Tempo ?? AudioDocument.DefaultTempo), min: 1, max: 255);
+        var (frames, rows) = AudioDocumentCompiler.PlayOrder(document: document);
         var stream = new List<byte>();
         var channel = Channel(voice: voice);
         AudioRowDocument? sounding = null;
 
-        foreach (var pattern in order) {
-            foreach (var row in patterns[pattern]) {
-                if (IsOff(row: row) || (IsHold(row: row) && (sounding is null))) {
-                    sounding = null;
-                    Rest(channel: channel, frames: frames, stream: stream);
-                } else if (IsHold(row: row)) {
-                    Note(channel: channel, frames: frames, row: sounding!, stream: stream, trigger: false);
-                } else {
-                    sounding = row;
-                    Note(channel: channel, frames: frames, row: row, stream: stream, trigger: true);
-                }
+        foreach (var row in rows) {
+            if (AudioDocumentCompiler.IsOff(row: row) || (AudioDocumentCompiler.IsHold(row: row) && (sounding is null))) {
+                sounding = null;
+                Rest(channel: channel, frames: frames, stream: stream);
+            } else if (AudioDocumentCompiler.IsHold(row: row)) {
+                Note(channel: channel, frames: frames, row: sounding!, stream: stream, trigger: false);
+            } else {
+                sounding = row;
+                Note(channel: channel, frames: frames, row: row, stream: stream, trigger: true);
             }
         }
         stream.Add(item: 0);
@@ -89,7 +85,7 @@ public static class DeckSoundCompiler {
         var channel = Channel(voice: effect.Voice);
 
         foreach (var row in effect.Rows) {
-            if (IsOff(row: row) || IsHold(row: row)) {
+            if (AudioDocumentCompiler.IsOff(row: row) || AudioDocumentCompiler.IsHold(row: row)) {
                 Rest(channel: channel, frames: step, stream: stream);
             } else {
                 Note(channel: channel, frames: step, row: row, stream: stream, trigger: true);
@@ -100,10 +96,6 @@ public static class DeckSoundCompiler {
         return [.. stream];
     }
 
-    private static bool IsHold(AudioRowDocument row) =>
-        string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase);
-    private static bool IsOff(AudioRowDocument row) =>
-        string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase);
     private static void Rest(int channel, int frames, List<byte> stream) =>
         stream.AddRange(collection: [((byte)frames), Silence(channel: channel), 0, 0, 0]);
     // One sounding row: its pitch on the first step, then a step each time the unrolled envelope changes the volume.
