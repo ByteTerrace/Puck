@@ -483,19 +483,52 @@ read again is refilled and republished whole.
   rented for one batch and returned when it ends (`BatchEnded`), so a volume
   whose lighting has settled holds none of them.
 - The cube is two parts. The local part (the traced point and spot lights'
-  bounce under their shadow rays, and emission) is kept per probe with the
-  lighting's local version, which advances only when those lights, the gains,
-  the sources or the materials change; a relight under a moving sun reuses it
+  bounce under their shadow rays, and the emitting patches' light at the
+  probe's centre) is kept per probe with the lighting's local version, which
+  advances only when those lights, the gains, the sources, the materials or the
+  scene's emitting patches change; a relight under a moving sun reuses it
   and traces no shadow ray toward a point light. The directional lights and the
   bounce are shaded every relight. A probe rebased across a scene change (its
   hits kept) keeps its local part too unless a change since its relight reaches
-  one of its point-light shadow segments (`ReusesLocal`, the one rule for the CPU
+  one of its point-light shadow segments or the segment from its centre to an
+  emitting patch in range (`ReusesLocal`, the one rule for the CPU
   and the GPU relight): every hit lies within the probe's recorded reach of its
   origin (`ProbeData.Reach`), so a light's segments lie in the box about that
   sphere's part inside the light's range, the light and the origin, which is
   tested against the changes (`MeetsChange`). `sdf.mesh-gi.local-kept` counts the
   relights that kept it across a change. `world.probe`'s volume line prints
-  `lighting-version` and `local-version`.
+  `lighting-version`, `local-version` and `emitters=` (the patches the lighting
+  holds over those the scene gathered).
+- Emission enters the volume sampled, never met. A probe's 144 rays each span
+  about 0.09 sr, and a holiday bulb a metre off spans a sixth of that, so a ray
+  meeting an emitter counts it at random, and a floor traced in a group's place
+  need not keep its surface or its material at all. So a hit adds no emission
+  (`Shade`, `sdfProbeShade`); instead the scene build gathers every traced
+  triangle of an emitting material (`SdfMeshIrradianceScene.Emits`: a positive
+  emissive no lane drives and no emitter face lights with, since a face's
+  material lights through the screen-light walk) into patches per draw, material and cell
+  (`SdfMeshIrradianceScene.Emitters`, `EmitterCell`, at most
+  `EmitterCellsPerAxis` cells along a draw's emissive span), each its
+  area-weighted centroid, its area and its area-weighted normal sum, and a
+  lighting capture prices them (`Lighting.Emitters`: the material's albedo ×
+  emissive × bleed × the emission gain, in nits, and a range sized as a point
+  light's at the world's brightest exposure). Every relight adds each patch in
+  range that its centre sees (`ReachesLight`/`probeClear` toward it, so the
+  solid holding it never hides it) to the local cube as a Lambertian face of the
+  area it shows toward the centre (`SdfMeshEmitter.ProjectedArea`: the flat part
+  projected plus a quarter of what its normals cancel, a bulb's quarter area),
+  `E = L·P·cos / (d² + P/π)` windowed at its range, as a screen's face lights
+  (`AddEmitters`, `sdfProbeEmitters`, shared by the relight and the camera
+  sample); the bounce of that light reaches other probes through the probes
+  about their hits. The rows carry the patches after the lights
+  (`SdfMeshProbeRelight.EmitterRows`, their count in the epoch row's fourth
+  lane), and `RelightRays` prices one ray a patch in range. A group whose
+  shapes emit (`SdfMeshBakeGroup.Emits`) traces what it draws, never its floor
+  (`SdfMeshPathBake`'s `Group.Trace`), so its patches are its drawn surface.
+  Editing `Emits` or the bake group moves the bake identity. What the volume
+  still leaves dark is in
+  [open items](../../../../docs/plans/open-items.md#debug-tools) under
+  "Emitters at night".
 - A scene build records a box hierarchy over the world boxes of the static
   draws it added or removed (`ChangedBoxes`, `ChangeTree`, built with the scene's
   own `SdfMeshIrradianceScene.Hierarchy` and laid out depth first with escape

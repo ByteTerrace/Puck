@@ -3769,9 +3769,12 @@ public sealed partial class SdfMeshPathBake {
         // the trace scene standing. A floor of the group's own shape kept beside a finer tier, unless the trace judge
         // declined it; at or past the floor tier the group's own floor product once it draws it, and until then what the
         // group it replaces traces, where that group is of the same shape. Nothing else: a group drawing its stand-in of
-        // another shape, or no floor of its own shape, traces what it draws.
+        // another shape, or no floor of its own shape, traces what it draws, and so does a group whose shapes emit
+        // (SdfMeshBakeGroup.Emits), since the volume samples emitters from the triangles it traces
+        // (SdfMeshIrradianceScene.Emitters) and a floor need not keep a small emitter's surface or material.
         public SdfMesh? Trace {
             get {
+                if (Emits) { return null; }
                 if (CurrentFloor is { } kept) { return ((FloorVerdict?.Declined ?? false) ? null : kept); }
                 if (!AtFloor) { return null; }
                 if (!Ahead && (OwnProduct is { } own)) { return own; }

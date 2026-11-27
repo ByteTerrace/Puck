@@ -174,15 +174,25 @@ public static class SdfPhotometry {
     /// <param name="range">The light's range, in world units.</param>
     /// <returns>The falloff, per square world unit.</returns>
     public static float Falloff(float distance, float range) {
+        var near = MathF.Max(x: distance, y: MinimumDistance);
+
+        return (Window(distance: distance, range: range) / (near * near));
+    }
+    /// <summary>Returns the window every ranged light's reach is eased to zero by at its range:
+    /// <c>saturate(1 − (d / r)^4)²</c>, one at the light and exactly zero at the range. KEEP IN SYNC with
+    /// <c>sdfLightWindow</c> in <c>frame/sdf-lights.hlsli</c>.</summary>
+    /// <param name="distance">The distance from the light, in world units.</param>
+    /// <param name="range">The light's range, in world units.</param>
+    /// <returns>The window, in [0, 1]; zero for a range that is not positive.</returns>
+    public static float Window(float distance, float range) {
         if (!(range > 0f)) {
             return 0f;
         }
 
         var ratio = (distance / range);
         var window = Math.Clamp(value: (1f - ((ratio * ratio) * (ratio * ratio))), min: 0f, max: 1f);
-        var near = MathF.Max(x: distance, y: MinimumDistance);
 
-        return ((window * window) / (near * near));
+        return (window * window);
     }
     /// <summary>Returns the linear Rec. 709 colour of a black body at a temperature, scaled to unit luminance: its
     /// chromaticity on the Planckian locus (Kim et al.'s cubic fit), converted from CIE XYZ, with any out-of-gamut channel

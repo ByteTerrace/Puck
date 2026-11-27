@@ -262,7 +262,7 @@ public sealed partial class SdfMeshIrradiance {
     // returned array owns it and passes it back.
     private static Vector4[] LightingRows(Lighting lighting, in Snapshot snapshot, bool feedback, Vector4[]? rows = null) {
         var length = SdfMeshProbeRelight.HeaderRows + (lighting.Materials.Length + 1) * SdfMeshProbeRelight.MaterialRows +
-            (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows;
+            (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows + lighting.Emitters.Length * SdfMeshProbeRelight.EmitterRows;
 
         if (rows is null || (rows.Length != length)) { rows = new Vector4[length]; }
         else { Array.Clear(rows); }
@@ -277,14 +277,13 @@ public sealed partial class SdfMeshIrradiance {
             rows[4 + 2 * level] = new(snapshot.Layout.Measures(level) ? snapshot.Layout.SpacingOf(level) : Vector3.Zero, 0);
         }
         rows[9] = new(AxisTotals[0], AxisTotals[1], AxisTotals[2], AxisTotals[3]);
-        rows[SdfMeshProbeRelight.EpochRow] = new(AxisTotals[4], AxisTotals[5], (uint)lighting.Epoch & SdfMeshIrradianceProbe.EpochMask, 0);
+        rows[SdfMeshProbeRelight.EpochRow] = new(AxisTotals[4], AxisTotals[5], (uint)lighting.Epoch & SdfMeshIrradianceProbe.EpochMask, lighting.Emitters.Length);
         for (var i = 0; i < lighting.SkyTexels.Length; i++) { rows[SdfMeshProbeRelight.SkyRow + i] = new(lighting.SkyTexels[i], 0); }
         var cursor = SdfMeshProbeRelight.HeaderRows;
         for (var i = 0; i <= lighting.Materials.Length; i++) {
             var material = lighting.MaterialAt(i);
             var bleed = material.Bleed ?? Vector3.One;
             rows[cursor++] = new(material.Albedo * (1 - material.Metal) * bleed, material.Wrap);
-            rows[cursor++] = new(material.EmissiveLane is null ? material.Albedo * material.Emissive * bleed : Vector3.Zero, 0);
         }
         for (var i = 0; i < lighting.Lights.Length; i++) {
             var light = lighting.Lights[i];
@@ -298,6 +297,11 @@ public sealed partial class SdfMeshIrradiance {
             rows[cursor++] = new(light.Color, light.Weight);
             rows[cursor++] = new(light.SpotAxis, light.SpotOffset);
             rows[cursor++] = new(light.Bounce, light.Index, 1, 1);
+        }
+        foreach (var emitter in lighting.Emitters) {
+            rows[cursor++] = new(emitter.Patch.Centroid, emitter.Range);
+            rows[cursor++] = new(emitter.Patch.Normal, emitter.Patch.Area);
+            rows[cursor++] = new(emitter.Radiance, 0);
         }
         return rows;
     }
@@ -444,7 +448,8 @@ public sealed partial class SdfMeshIrradiance {
     // The rays sdfProbeShade traces from one valid probe, for each of its hit texels at most, and the light loop after
     // them: one toward each shadowing directional light from each, and unless the probe reuses its local cube, one toward
     // each point light whose range reaches the probe's origin from each hit (a hit's own distance is not known before the
-    // trace answers) and one toward every point light from the centre, for its visibility bit.
+    // trace answers) and one toward every point light from the centre, for its visibility bit, and one toward each emitting
+    // patch in range of its centre (sdfProbeEmitters).
     private static long RelightRays(Lighting lighting, Vector3 origin, bool reuses) {
         var lights = 0L;
         foreach (var light in lighting.Lights) { if (light.CastsShadow) { lights++; } }
@@ -452,6 +457,9 @@ public sealed partial class SdfMeshIrradiance {
         if (!reuses) {
             foreach (var point in lighting.Points) {
                 rays += ((Vector3.DistanceSquared(point.Position, origin) < (point.Range * point.Range)) ? (SdfMeshProbeDepth.HitCount + 1) : 1);
+            }
+            foreach (var emitter in lighting.Emitters) {
+                if (Vector3.DistanceSquared(emitter.Patch.Centroid, origin) < (emitter.Range * emitter.Range)) { rays++; }
             }
         }
         return rays;

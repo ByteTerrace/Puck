@@ -205,10 +205,10 @@ public sealed partial class SdfMeshIrradiance {
     private readonly record struct SegmentRegion(Vector3 From, Vector3 Inverse, float Length, Vector3 Grow) : IChangeRegion {
         public bool Meets(Vector3 low, Vector3 high) => SdfMeshIrradianceScene.Slab(entry: out _, high: (high + Grow), inverse: Inverse, low: (low - Grow), maximum: Length, origin: From);
     }
-    // Whether a probe relit under an earlier geometry keeps the cube its point and spot lights and emission send, and
-    // the visibility of those lights from its centre: it traces no new hits, the local lighting it was relit under
+    // Whether a probe relit under an earlier geometry keeps the cube its point and spot lights and emitting patches send,
+    // and the visibility of those lights from its centre: it traces no new hits, the local lighting it was relit under
     // stands, and no change since it was relit reaches a segment from one of its hits toward a light whose range covers
-    // that hit, nor the segment from its centre toward any light, at any distance (its visibility bit is the geometry's,
+    // that hit, nor the segment from its centre toward an emitting patch in range or toward any light, at any distance (its visibility bit is the geometry's,
     // never the range's). Every hit lies within the probe's recorded reach of its origin (ProbeData.Reach), so a light's
     // hit segments lie in the box about that sphere's part inside the light's range, the light and the origin, which
     // holds the centre's segment too. The one rule for the CPU and the GPU relight.
@@ -232,6 +232,11 @@ public sealed partial class SdfMeshIrradiance {
                 // No hit lies within the light's range, so only the centre's visibility of it can change.
                 return false;
             }
+        }
+        // An emitting patch lights the centre alone (AddEmitters), along the segment toward it.
+        foreach (var emitter in lighting.Emitters) {
+            if ((Vector3.DistanceSquared(value1: emitter.Patch.Centroid, value2: origin) < (emitter.Range * emitter.Range)) &&
+                MeetsSegment(changes: changes, from: origin, margin: SdfMeshIrradianceProbe.BoxMargin, since: previous.Geometry, to: emitter.Patch.Centroid)) { return false; }
         }
         return true;
     }
