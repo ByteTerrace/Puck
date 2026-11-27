@@ -84,7 +84,11 @@ name stands: an operand, an assignment target, a module argument, a re-export (`
 endpoint (`west.left.floor.east`). A nested instance reads through each alias, so `box.child.score` is
 `box$child$score`. The alias resolves from the `use` lines of the scope and its modules' bodies, so a reference
 reads the same written before its `use` as after it. A JSON document and the console write the document spelling
-(`world.state left$score`). A document that imports another under an alias (`imports: [{"as": "dive", ...}]`)
+(`world.state left$score`). A cell key is local to its row and keeps its spelling, except a key that spells the id of
+an inhabited placement the instance declares: a placement roster's key names that placement (`placement:$each`,
+`physics(quiescent, <row>)`), so it is qualified with it (`left$piece0`) in the rows' declared cells and at every key
+read alike, and the instance's roster still names its own bodies (`WorldModuleNamespace`;
+`worlds/debug/labs/board-games-stress.puck` stands twelve chess tables this way). A document that imports another under an alias (`imports: [{"as": "dive", ...}]`)
 restates or reads that import's names in the same spelling (`dive$diveCourt`); the compiler admits a declaration
 headed by one of the document's own import aliases, and the decompiler prints those names as written.
 

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Physics;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -10,7 +11,8 @@ namespace Puck.World.Client;
 /// anchor (<see cref="WorldAnchor.Placement"/>, as a creation's lights do, <see cref="WorldCreationLights"/>), and one for
 /// each live body that renders as an occluding creation (<see cref="WorldBodyStampCensus.TryResolveCreation"/>),
 /// riding its drawn root (<see cref="WorldAnchorPoses.TryEntity"/>), so a body that moves moves its occluder through the
-/// pose its stamp draws. Each is the creation's own solid (<see cref="LocalOf"/>) at the row's or the body's scale. A
+/// pose its stamp draws. A placement's is the creation's own solid (<see cref="LocalOf"/>) at the row's scale, and a
+/// body's its kit's collider where one solid stands for it (<see cref="BodyLocalOf"/>) at the body's drawn scale. A
 /// body's occluder names its stamp's slots (<see cref="WorldCreationInstances.TryBodyTransformSlot(int, out int, out int)"/>),
 /// so the body's own surfaces take nothing from it.
 /// </summary>
@@ -24,11 +26,13 @@ public sealed class WorldCreationOccluders {
     // The definition the placements were gathered from, the placements carrying an occluding creation (each with the
     // anchor it rides and its solid at the row's scale), and whether any creation the definition holds occludes at all.
     private WorldDefinition? m_definition;
-    private readonly List<(WorldAnchor Anchor, SdfOccluder Occluder)> m_placed = [];
+    private readonly List<(WorldAnchor Anchor, SdfOccluder Occluder, string Source)> m_placed = [];
     private bool m_anyOccludes;
     private readonly List<int> m_bodies = [];
-    // The occluders gathered this frame before the table's capacity trims them.
-    private readonly List<SdfOccluder> m_candidates = [];
+    // Each body index's source name (SdfOccluders.SourceOf), made once an index.
+    private string?[] m_bodySources = [];
+    // The occluders gathered this frame, each with who cast it, before the table's capacity trims them.
+    private readonly List<(SdfOccluder Occluder, string? Source)> m_candidates = [];
 
     /// <summary>Gets how many occluders the latest <see cref="AppendTo"/> gathered before the table's capacity, the
     /// authored ones it was handed included.</summary>
@@ -77,6 +81,66 @@ public sealed class WorldCreationOccluders {
             ? prototype.Occlusion.Apply(fitted: fitted)
             : null);
     }
+    /// <summary>Returns the occluder a body wearing a creation casts, in the body's frame at unit scale: the solid of its
+    /// kit's collider where that is one sphere, capsule or box (<see cref="SolidOf"/>), which is the volume a body's kit
+    /// is authored to fill, else the creation's own (<see cref="LocalOf"/>); with the creation's occlusion's strengths,
+    /// reach and softness either way. The collider is preferred because the rest box a creation's shapes fill counts a
+    /// shape no box holds (a flared, twisted or swept one) by its cull sphere, which for a character can stand far wider
+    /// than the body and reach under the ground it stands on.</summary>
+    /// <param name="prototype">The creation the body wears.</param>
+    /// <param name="collider">The body's kit's compiled collider (<see cref="IWorldStampSource.Collider"/>), or
+    /// <see langword="null"/> for a kit that authors none.</param>
+    /// <returns>The occluder, or <see langword="null"/> for a creation that casts none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="prototype"/> is <see langword="null"/>.</exception>
+    public static SdfOccluder? BodyLocalOf(WorldPrototype prototype, FixedWorldCollider? collider) {
+        ArgumentNullException.ThrowIfNull(argument: prototype);
+
+        if (prototype.Occlusion is not { } occlusion) {
+            return null;
+        }
+
+        return (((collider is { } kit) && (SolidOf(collider: kit) is { } solid)) ? occlusion.Apply(fitted: solid) : LocalOf(prototype: prototype));
+    }
+    /// <summary>Returns the analytic solid of a collider that is one sphere, capsule or box volume, in the body's frame at
+    /// unit scale, its strengths, reach and softness zero.</summary>
+    /// <param name="collider">The compiled collider.</param>
+    /// <returns>The solid, or <see langword="null"/> for a collider of several volumes or of an ellipsoid, which no one
+    /// sphere, capsule or box stands for.</returns>
+    public static SdfOccluder? SolidOf(FixedWorldCollider collider) {
+        var volumes = collider.Volumes;
+
+        if (volumes.Length != 1) {
+            return null;
+        }
+
+        var volume = volumes[0];
+        var center = volume.Center.ToVector3();
+
+        switch (volume.Kind) {
+            case FixedBodyColliderKind.Sphere:
+                return new SdfOccluder { Center = center, Radius = (float)volume.Radius, Shape = SdfOccluderShape.Sphere };
+            case FixedBodyColliderKind.Capsule: {
+                    // The volume's Center is the core's lower end and its Endpoint the upper.
+                    var half = (0.5f * (volume.Endpoint.ToVector3() - center));
+
+                    return new SdfOccluder { AxisX = half, Center = (center + half), Radius = (float)volume.Radius, Shape = SdfOccluderShape.Capsule };
+                }
+            case FixedBodyColliderKind.Box: {
+                    var rotation = volume.Rotation.ToQuaternion();
+                    var half = volume.HalfExtents.ToVector3();
+
+                    return new SdfOccluder {
+                        AxisX = Vector3.Transform(value: new Vector3(x: half.X, y: 0f, z: 0f), rotation: rotation),
+                        AxisY = Vector3.Transform(value: new Vector3(x: 0f, y: half.Y, z: 0f), rotation: rotation),
+                        AxisZ = Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: half.Z), rotation: rotation),
+                        Center = center,
+                        Shape = SdfOccluderShape.Box,
+                    };
+                }
+            default:
+                return null;
+        }
+    }
 
     /// <summary>Appends this frame's creation occluders to a table that may already hold the authored ones, then keeps the
     /// nearest <see cref="SdfOccluders.MaxOccluders"/> of them all to <paramref name="eye"/>.</summary>
@@ -99,17 +163,21 @@ public sealed class WorldCreationOccluders {
         }
 
         m_candidates.Clear();
-        foreach (var authored in occluders.Records) { m_candidates.Add(item: authored); }
-        foreach (var (anchor, local) in m_placed) {
+        for (var index = 0; (index < occluders.Count); index++) {
+            m_candidates.Add(item: (occluders[index], occluders.SourceOf(index: index)));
+        }
+        foreach (var (anchor, local, source) in m_placed) {
             if (WorldAnchorPoses.TryResolve(anchor: anchor, pose: out var pose, scope: in scope)) {
-                m_candidates.Add(item: local.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f));
+                m_candidates.Add(item: (local.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f), source));
             }
         }
 
+        // CopyActiveBodies appends, so a body would cast once more every frame the list was not emptied first.
+        m_bodies.Clear();
         scope.Source.CopyActiveBodies(bodies: m_bodies);
         foreach (var body in m_bodies) {
             if (!WorldBodyStampCensus.TryResolveCreation(creation: out var creation, definition: definition, index: body, scale: out var scale, source: scope.Source)
-                || (LocalOf(prototype: creation) is not { } local)
+                || (BodyLocalOf(collider: scope.Source.Collider(index: body), prototype: creation) is not { } local)
                 || !WorldAnchorPoses.TryEntity(body: body, pose: out var pose, scope: in scope)) {
                 continue;
             }
@@ -120,23 +188,31 @@ public sealed class WorldCreationOccluders {
                 occluder = (occluder with { OwnSlot = slot, OwnSlots = (uint)Math.Max(val1: count, val2: 0) });
             }
 
-            m_candidates.Add(item: occluder);
+            m_candidates.Add(item: (occluder, BodySource(body: body)));
         }
 
         Gathered = m_candidates.Count;
         // Past the table's capacity, the occluders whose spheres of reach come nearest the eye.
         if (m_candidates.Count > SdfOccluders.MaxOccluders) {
-            m_candidates.Sort(comparison: (left, right) => (Vector3.Distance(value1: eye, value2: left.Center) - left.Reach).CompareTo(value: (Vector3.Distance(value1: eye, value2: right.Center) - right.Reach)));
+            m_candidates.Sort(comparison: (left, right) => (Vector3.Distance(value1: eye, value2: left.Occluder.Center) - left.Occluder.Reach).CompareTo(value: (Vector3.Distance(value1: eye, value2: right.Occluder.Center) - right.Occluder.Reach)));
         }
 
         occluders.Clear();
-        foreach (var occluder in m_candidates) {
+        foreach (var (occluder, source) in m_candidates) {
             if (occluders.Count >= SdfOccluders.MaxOccluders) {
                 break;
             }
 
-            _ = occluders.TryAdd(occluder: in occluder);
+            _ = occluders.TryAdd(occluder: in occluder, source: source);
         }
+    }
+    // A body's source name, "body <index>", made the first time the index casts.
+    private string BodySource(int body) {
+        if (body >= m_bodySources.Length) {
+            Array.Resize(array: ref m_bodySources, newSize: Math.Max(val1: (body + 1), val2: (2 * m_bodySources.Length)));
+        }
+
+        return (m_bodySources[body] ??= string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"body {body}"));
     }
     // The placements carrying an occluding creation: each one frame a creation's light could ride (WorldCreationLights.Carries)
     // that no body inhabits (an inhabitant's occluder is its body's), for each creation it can show.
@@ -165,7 +241,7 @@ public sealed class WorldCreationOccluders {
 
             foreach (var prototypeId in WorldPlacementResponse.Showable(placement: placement).Distinct(comparer: StringComparer.Ordinal)) {
                 if ((WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId) is { } creation) && (LocalOf(prototype: creation) is { } local)) {
-                    m_placed.Add(item: (new WorldAnchor.Placement(PlacementId: id, ShapeId: null, Showing: prototypeId), local.Placed(orientation: Quaternion.Identity, position: Vector3.Zero, scale: scale)));
+                    m_placed.Add(item: (new WorldAnchor.Placement(PlacementId: id, ShapeId: null, Showing: prototypeId), local.Placed(orientation: Quaternion.Identity, position: Vector3.Zero, scale: scale), $"placement {id} showing {prototypeId}"));
                 }
             }
         }

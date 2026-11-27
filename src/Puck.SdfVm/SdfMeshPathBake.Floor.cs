@@ -22,7 +22,7 @@ namespace Puck.SdfVm;
 // FrameAccess.TraceOf into SdfMeshDraw.Trace): the plan alone chooses it, so a view's retier or the budget's bias leaves
 // the trace scene standing. A kept floor is traced until the trace judge (SdfMeshTraceJudge, run by JudgeFloors on one
 // pool thread) holds it to the group's first finer product and declines it; a declined floor's group traces what it
-// draws, which moves with the view again, as an emitting group's always does (SdfMeshBakeGroup.Emits).
+// draws, which moves with the view again, as an emitting group's always does (SdfMeshPathBake.Emitting).
 public sealed partial class SdfMeshPathBake {
     // The groups ObserveResidency found drawing a refused finer tier over a standing kept floor, which the next prepared
     // frame evicts; the evictions made and the bytes of the finer tiers they let go; the groups in reach that drew no
@@ -173,8 +173,8 @@ public sealed partial class SdfMeshPathBake {
 
         while (m_judgeable.TryDequeue(result: out var group)) {
             group.ClearJudging();
-            // An emitting group traces what it draws whatever a verdict says (Group.Trace), so it owes none.
-            if (group.Retired || group.Glass || group.Dynamic || group.Emits || !group.OwesVerdict) { continue; }
+            // An emitting group traces what it draws whatever a verdict says (TraceOf), so it owes none.
+            if (group.Retired || group.Glass || group.Dynamic || Emits(group: group) || !group.OwesVerdict) { continue; }
             group.FloorVerdict!.State = TraceVerdict.Judging;
             // The pair's verdict is the library's to keep where both meshes are named by a geometry under one bake
             // identity: the floor's, which a floor carried across a replan no longer has, and the group's own.
@@ -287,7 +287,7 @@ public sealed partial class SdfMeshPathBake {
 
             foreach (var group in m_groups) {
                 if (group.Retired || group.Dynamic || group.Glass || (group.Shown is null)) { continue; }
-                if (group.Trace is null) { drawn++; } else { traced++; }
+                if (TraceOf(group: group) is null) { drawn++; } else { traced++; }
             }
             lock (m_judging) { judging = m_judging.Count; }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"floor-shown={shown} floor-pending={pending} floor-empty={empty} floor-failed={failed} floor-kept={kept} floorless={none} first-details-owed={m_firstDetailsOwed} floors-raised={m_floorsRaised} evicted={m_evicted} evicted-bytes={m_evictedBytes}B holes={m_holes} hole-frames={m_holeFrames}");

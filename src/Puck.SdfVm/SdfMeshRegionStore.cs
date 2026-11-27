@@ -395,13 +395,15 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private void Apply(SdfWorldTables? planner) {
         if (m_arena.Changed) { m_version++; }
         ForgetArenaMeshes(planner: planner);
+        // A fit waits for the copies of moved meshes, which read words past the arena's end until they run. An arena the
+        // plan emptied fits too, to the least region, so a region whose meshes all left gives its buffer back. A
+        // forgetting owes a fit wherever it ran (ForgetArenaMeshes).
+        m_fitOwed |= (m_arena.Moved.Count > 0);
+        if (m_fitOwed && !m_arena.HoldsMoveSources) {
+            m_fitOwed = false;
+            Fit(bytes: (((ulong)m_arena.Words) * sizeof(uint)));
+        }
         if (m_arena.Words > 0L) {
-            // A fit waits for the copies of moved meshes, which read words past the arena's end until they run.
-            m_fitOwed |= ((m_arena.Forgotten.Count > 0) || (m_arena.Moved.Count > 0));
-            if (m_fitOwed && !m_arena.HoldsMoveSources) {
-                m_fitOwed = false;
-                Fit(bytes: (((ulong)m_arena.Words) * sizeof(uint)));
-            }
             EnsureCapacity(bytes: (((ulong)m_arena.Words) * sizeof(uint)), planner: planner);
             Cover();
         } else {
@@ -474,7 +476,10 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private bool StandsOne(SdfMesh mesh) => (m_arena.Placements.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && m_pages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent);
     // The arena took these meshes' placements back: their words are free for the next mesh they hold, so they owe none,
     // their landing starts again should a plan place them later, and a residency whose rows read one stages them absent.
+    // Every forgetting (a plan's, a cap's, a trim's, a clip's) owes the region a fit at the next plan, since that plan
+    // starts the arena's lists afresh and would not see what left before it.
     private void ForgetArenaMeshes(SdfWorldTables? planner) {
+        m_fitOwed |= (m_arena.Forgotten.Count > 0);
         foreach (var mesh in m_arena.Forgotten) {
             if (m_arena.Placements.ContainsKey(key: mesh)) { continue; }
             if (!m_pages.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && !m_placements.ContainsKey(key: mesh)) { continue; }

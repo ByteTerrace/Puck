@@ -81,7 +81,8 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
             byteCount: first,
             copyPipeline: copyPipeline,
             memory: GpuResidency.RingMemory(profile: device.MemoryProfile),
-            name: new GpuObjectName(owner: SdfWorldTables.ObjectOwner, part: "probe-scene"),
+            // The lighting's storage, which each residency's lighting reservation counts its traced meshes' words in.
+            name: new GpuObjectName(owner: SdfResidencySelector.LightingOwner, part: "probe-scene"),
             policy: GpuResidencyPolicy.Staged,
             recorder: services.Recorder,
             slotCount: Slots,

@@ -44,8 +44,9 @@ namespace Puck.SdfVm;
 //                          composite read.
 //   - m_decalRevision    : the glyph-decal buffer (the screens' cells and the surface texts' glyphs), revision-tracked
 //                          rather than hashed each frame.
-//   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
-//                          behind the same binding; a lighting value too, so only the shading passes gather it again.
+//   - m_meshIrradianceRevision : each publication of the irradiance volume, whose slots the probe service wrote into
+//                          the table the World set binds; a lighting value too, so only the shading passes gather it
+//                          again. A write the device makes between publications moves nothing a still view stands on.
 // Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass
 // that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view
 // stands only while each image it samples stands with the publication its latest render sampled (SdfWorldPasses.ReadsStand).

@@ -197,7 +197,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             };
         });
     }
-    internal IGpuBuffer FeedbackBuffer => m_feedback!.Buffer(0);
+    // The feedback table the relights commit into and the views read, or null while a relayout replaces it.
+    internal IGpuBuffer? FeedbackBuffer => m_feedback?.Buffer(0);
 
     // A selection answers each probe from its own row alone (sdf-probe-select), so it is cut like a trace: jobs of at
     // most the probes whose tests (SelectTestsOf) fit the live frame allowance at the measured rate. A
@@ -540,9 +541,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (query.Batch is { } batch) { return ((m_feedbackWords != query.VolumeWords) || m_batchOutput.NeedsFit(BatchOutputBytes(batch.Probes))); }
         return false;
     }
-    private static ulong HitCacheBytes(uint capacity) => (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
-    private static ulong CameraSampleCacheBytes(Job query) => (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
-    private static ulong BatchOutputBytes(int probes) => (ulong)probes * SdfMeshProbeRelight.ResultWords * sizeof(uint);
+    // The bytes of the service's caches: the one statement of their sizes, which the residency's lighting reservation
+    // reads too (SdfMeshIrradiance.Reserve).
+    internal static ulong HitCacheBytes(uint capacity) => (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
+    internal static ulong CameraSampleCacheBytes(int origins) => (ulong)origins * (1 + SdfMeshProbeDepth.HitWords) * 4;
+    private static ulong CameraSampleCacheBytes(Job query) => CameraSampleCacheBytes(origins: query.Origins.Length);
+    internal static ulong BatchOutputBytes(int probes) => (ulong)probes * SdfMeshProbeRelight.ResultWords * sizeof(uint);
 
     public void Record(object job, in SdfGpuWorkRecording recording) {
         if (job is StructureJob structures) { RecordStructures(job: structures, recording: in recording); return; }
@@ -601,7 +605,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             for (var update = 0; update < updates.Count; update++) {
                 m_feedback.OweSourced(offset: updates.Words.Span[update] * 4L, length: updates.Length * 4L);
             }
-            recording.CopyRegion(m_feedback, recording.Slot, GpuStage.ComputeShader);
+            // The views read the feedback table too (SdfWorldTables.PublishMeshIrradiance), so the copy hands it to their stages.
+            recording.CopyRegion(m_feedback, recording.Slot, SdfWorldTables.TableReaders);
         }
         Bind(SdfKernelInterfaces.ProbeScene, m_sceneStore!.Buffer, 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
@@ -752,12 +757,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
     // Copies every probe's published record of the batch from the batch output into the feedback volume at its
     // destination slot: one copy a probe, after every relight of the batch, which wrote its rows in this or an earlier
-    // submission.
+    // submission. The views read the table as well as the relights (SdfWorldTables.PublishMeshIrradiance): one queue
+    // carries both, so the barriers order the copies after every earlier read in the views' stages and hand the table to
+    // those stages after them.
     private void RecordCommit(Job query, IGpuRecorder recorder, nint command) {
         var source = m_batchOutput.Buffer!;
-        var destination = FeedbackBuffer;
+        var destination = m_feedback!.Buffer(0);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, sourceStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: SdfWorldTables.TableReaders,
             destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
         var destinations = query.Destinations.Span;
         for (var i = 0; i < destinations.Length; i++) {
@@ -770,7 +777,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
             sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, destinationStageMask: GpuStage.ComputeShader | GpuStage.Transfer);
+            destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: SdfWorldTables.TableReaders);
     }
 
     public void Complete(object job, SdfGpuWorkReadback readback) {
@@ -920,8 +927,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         return FormattableString.Invariant($" rays={query.Rays} valid={valid} reused={reused} shadowing-points-in-range-max={most} mean={((valid > reused) ? (total / (double)(valid - reused)) : 0.0):0.0} max-slot={slots}");
     }
+    // The service's objects are the lighting's storage, which the residency reserves (SdfLightingHold); the ray-query
+    // structures, which no estimate sizes before the driver measures them, are the tables' (StructureName).
     private static GpuObjectName Name(string part, int index = GpuObjectName.NoIndex) =>
-        new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
+        new(index: index, owner: SdfResidencySelector.LightingOwner, part: $"probe-trace {part}");
+    private static GpuObjectName StructureName(string part) =>
+        new(owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
     public GpuMemoryBytes OwnedBytes {
         get {
             // The scene's words lie in the probe scenes every residency of the mesh region shares, which parking one

@@ -100,7 +100,6 @@ public sealed partial class SdfWorldTables {
             RegionAt(index: index)?.Dispose();
         }
 
-        m_meshIrradiance.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
         m_regionHostCopies.Dispose();
@@ -150,7 +149,6 @@ public sealed partial class SdfWorldTables {
             var bytes = (new GpuMemoryBytes(DeviceLocal: ((((m_previousDynamicTransforms.Buffer!.SizeBytes + m_previousMeshTransforms.Buffer!.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes) + (ulong)(m_shadows?.Bytes ?? 0L)), HostVisible: 0));
 
             bytes += m_meshHistoryCopies.OwnedBytes;
-            bytes += MeshIrradianceBufferBytes;
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {

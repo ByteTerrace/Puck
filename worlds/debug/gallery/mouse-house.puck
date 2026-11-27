@@ -1,0 +1,269 @@
+// The little house: a toy house on level 1's north gallery whose front door only a body the toybox has made small fits
+// through, so being small there is a way in rather than a trap (the owner's ruling, gallery.md "Ways back to normal
+// size"). Its door is the standard's sizedDoorway, sized for the visitor (layout.puck's `galleryVisitorRadius` and
+// `galleryVisitorHeight`) at `mouseHouse.admits` of its full size: a body at the toybox's size walks in, and a full-size
+// one meets the frame. Inside, one low room holds a table with a cake on it. Press the context button before the table
+// (E, the pad's RB) and the cake grants the full-size pass (wonder.puck's `wonderPass` register): level 1's size field
+// gives the holder its full size from then on, the barriers at the tree's branches let it through, and the toybox's
+// games are in its reach. Inside the room it grows only as far as the ceiling lets it (WorldBody.SetScaleWithinClearance),
+// which stands lower than the door, so it always fits back out, and it grows to its full size as it steps out under the
+// gallery's own ceiling.
+//
+// The house stands free in bay 10, its front toward the nave; its place and the points in it are layout.puck's
+// `mouseHouse` and `mouseHousePoint`. The gallery module imports this.
+import "../../standard/architecture"
+import "../../standard/occlusion"
+import "../../standard/reach"
+import "layout"
+import "look"
+
+// The house's walls, `mouseHouseWall` thick and `mouseHouseHeight` tall under a gabled roof, and the room's ceiling, whose
+// underside stands `mouseHouseRoom` over the floor: under the door's opening, so a body growing inside stays one the door
+// admits.
+let mouseHouseWall = 0.06
+let mouseHouseHeight = 1.3
+let mouseHouseRoom = 0.52
+let mouseHouseHalfX = (mouseHouse.width / 2)
+let mouseHouseHalfZ = (mouseHouse.depth / 2)
+let mouseHouseFront = (mouseHouseWall - mouseHouseHalfZ)
+// The doorway's opening and frame, as the standard's sizedDoorway draws it, and how far the frame reaches either side of
+// the door's middle and over the floor.
+let mouseDoorWidth = sizedDoorwayWidth(galleryVisitorRadius, mouseHouse.admits, mouseHouse.room)
+let mouseDoorHeight = sizedDoorwayHeight(galleryVisitorHeight, mouseHouse.admits, mouseHouse.room)
+let mouseDoorSide = ((mouseDoorWidth / 2) + sizedDoorwayPost(galleryVisitorHeight, mouseHouse.admits))
+let mouseDoorTop = (mouseDoorHeight + sizedDoorwayLintel(galleryVisitorHeight, mouseHouse.admits))
+// The cake's table, at the room's back.
+let mouseCakeAt = [0, 0, mouseHouseCake[2]]
+
+// The palette: the house's pastel walls, cream trim, its candy roof, dark window glass, the table's timber, the cake's
+// sponge, icing and cherry, the sign's ink, the room's lamp and its rug.
+let mouseHouseWalls = 0
+let mouseHouseTrim = 1
+let mouseHouseRoof = 2
+let mouseHouseGlass = 3
+let mouseHouseTimber = 4
+let mouseHouseSponge = 5
+let mouseHouseIcing = 6
+let mouseHouseCherry = 7
+let mouseHouseInk = 8
+let mouseHouseLamp = 9
+let mouseHouseRug = 10
+let mouseHousePalette = [
+  { color: lookToyPiers[2], roughness: 0.6, specular: 0.04 }
+  { color: "#F4ECDC", roughness: 0.6, specular: 0.04 }
+  { color: lookToyPiers[5], roughness: 0.55, specular: 0.04 }
+  { color: "#2B4A66", roughness: 0.15, specular: 0.3 }
+  { color: "#B8623A", roughness: 0.55, specular: 0.04 }
+  { color: "#F2D9A8", roughness: 0.8, specular: 0.03 }
+  { color: "#FFF4F0", roughness: 0.5, specular: 0.05 }
+  { color: "#D7263D", roughness: 0.3, specular: 0.1 }
+  { color: lookCabinetInk, roughness: 0.6, specular: 0.04 }
+  { color: "#FFE9B0", roughness: 0.5, emissive: 600nit }
+  { color: lookToyPiers[4], roughness: 0.9, specular: 0.02 }
+]
+
+prototypes {
+  // The house, facing -z: its walls round one room, the front wall built round the doorway's frame (a union of boxes, so
+  // the analytic provider collides it exactly), the room's ceiling, a gabled roof, two windows and a name board on the
+  // front, and the room's rug, lamp, table and cake.
+  prototype "gallery-mouse-house" {
+    occlusion: propOcclusion
+    document {
+      name: "gallery-mouse-house"
+      schema: "puck.creation.v2"
+      palette: mouseHousePalette
+      shape Box "wall-back" {
+        material: mouseHouseWalls
+        position [0, (mouseHouseHeight / 2), (mouseHouseHalfZ - (mouseHouseWall / 2))]
+        scale [mouseHouseHalfX, (mouseHouseHeight / 2), (mouseHouseWall / 2)]
+      }
+      for side in [-1, 1] {
+        shape Box $"wall-side-{side}" {
+          material: mouseHouseWalls
+          position [(side * (mouseHouseHalfX - (mouseHouseWall / 2))), (mouseHouseHeight / 2), 0]
+          scale [(mouseHouseWall / 2), (mouseHouseHeight / 2), mouseHouseHalfZ]
+        }
+        shape Box $"wall-front-{side}" {
+          material: mouseHouseWalls
+          position [
+            (side * ((mouseHouseHalfX + mouseDoorSide) / 2)),
+            (mouseHouseHeight / 2),
+            (mouseHouseFront - (mouseHouseWall / 2))
+          ]
+          scale [((mouseHouseHalfX - mouseDoorSide) / 2), (mouseHouseHeight / 2), (mouseHouseWall / 2)]
+        }
+        shape Box $"window-{side}" {
+          detail: true
+          material: mouseHouseTrim
+          position [(side * 0.5), 0.95, (0.004 - mouseHouseHalfZ)]
+          scale [0.16, 0.14, 0.008]
+          rounding: 0.006
+        }
+        shape Box $"window-glass-{side}" {
+          detail: true
+          material: mouseHouseGlass
+          position [(side * 0.5), 0.95, (0.0 - mouseHouseHalfZ)]
+          scale [0.12, 0.1, 0.006]
+        }
+      }
+      shape Box "wall-front-head" {
+        material: mouseHouseWalls
+        position [0, ((mouseDoorTop + mouseHouseHeight) / 2), (mouseHouseFront - (mouseHouseWall / 2))]
+        scale [mouseDoorSide, ((mouseHouseHeight - mouseDoorTop) / 2), (mouseHouseWall / 2)]
+      }
+      shape Box "ceiling" {
+        material: mouseHouseTrim
+        position [0, (mouseHouseRoom + 0.03), 0]
+        scale [(mouseHouseHalfX - mouseHouseWall), 0.03, (mouseHouseHalfZ - mouseHouseWall)]
+      }
+      // The roof: a square prism laid along x and turned a quarter about it, so its upper half is a gable whose eaves meet
+      // the walls' tops and its lower half stays above the room's ceiling.
+      shape Box "roof" {
+        material: mouseHouseRoof
+        position [0, mouseHouseHeight, 0]
+        rotation: rotate([1, 0, 0], 45)
+        scale [mouseHouseHalfX, ((mouseHouseHalfZ + 0.02) * 0.7071), ((mouseHouseHalfZ + 0.02) * 0.7071)]
+        rounding: 0.01
+      }
+      shape Box "chimney" {
+        material: mouseHouseTrim
+        position [0.45, (mouseHouseHeight + 0.5), 0.2]
+        scale [0.08, 0.22, 0.08]
+        rounding: 0.01
+      }
+      shape Box "board" {
+        detail: true
+        material: mouseHouseTrim
+        position [0, 0.78, (0.004 - mouseHouseHalfZ)]
+        scale [0.24, 0.055, 0.008]
+        rounding: 0.006
+      }
+      shape Box "rug" {
+        detail: true
+        material: mouseHouseRug
+        position [0, 0.003, 0.05]
+        scale [0.55, 0.003, 0.4]
+        rounding: 0.002
+      }
+      shape Sphere "lamp" {
+        detail: true
+        material: mouseHouseLamp
+        position [0, (mouseHouseRoom - 0.02), 0]
+        scale [0.035, 0.02, 0.035]
+      }
+      shape Box "table-top" {
+        material: mouseHouseTimber
+        position: (mouseCakeAt + [0, 0.085, 0])
+        scale [0.12, 0.008, 0.08]
+        rounding: 0.004
+      }
+      shape Cylinder "table-leg" {
+        material: mouseHouseTimber
+        position: (mouseCakeAt + [0, 0.04, 0])
+        scale [0.015, 0.04, 0.015]
+      }
+      shape Cylinder "cake" {
+        detail: true
+        material: mouseHouseSponge
+        position: (mouseCakeAt + [0, 0.12, 0])
+        scale [0.05, 0.027, 0.05]
+        rounding: 0.006
+      }
+      shape Cylinder "icing" {
+        detail: true
+        material: mouseHouseIcing
+        position: (mouseCakeAt + [0, 0.148, 0])
+        scale [0.052, 0.005, 0.052]
+        rounding: 0.004
+      }
+      shape Sphere "cherry" {
+        detail: true
+        material: mouseHouseCherry
+        position: (mouseCakeAt + [0, 0.162, 0])
+        scale [0.011, 0.011, 0.011]
+      }
+      shape Box "card" {
+        detail: true
+        material: mouseHouseTrim
+        position: (mouseCakeAt + [0, 0.112, -0.062])
+        scale [0.032, 0.014, 0.002]
+      }
+      textRuns [
+        {
+          text: "THE LITTLE HOUSE"
+          position [0, 0.78, (-0.005 - mouseHouseHalfZ)]
+          rotation [0, 1, 0, 0]
+          emHeight: 0.036
+          depth: 0.003
+          mode: "emboss"
+          material: mouseHouseInk
+          align: "center"
+          maxWidth: 0.44
+        }
+        {
+          text: "EAT ME"
+          position: (mouseCakeAt + [0, 0.108, -0.065])
+          rotation [0, 1, 0, 0]
+          emHeight: 0.011
+          depth: 0.001
+          mode: "emboss"
+          material: mouseHouseInk
+          align: "center"
+          maxWidth: 0.06
+        }
+      ]
+    }
+  }
+  // The doorway in the house's front wall.
+  prototype "gallery-mouse-door" {
+    occlusion: propOcclusion
+    document {
+      name: "gallery-mouse-door"
+      schema: "puck.creation.v2"
+      palette: kitPalette
+      sizedDoorway(
+        base: 0,
+        radius: galleryVisitorRadius,
+        tall: galleryVisitorHeight,
+        admits: mouseHouse.admits,
+        room: mouseHouse.room,
+        depth: (mouseHouseWall + 0.02)
+      )
+    }
+  }
+}
+
+placements {
+  placement "gallery-mouse-house" {
+    prototype: "gallery-mouse-house"
+    parent: "gallery"
+    position [mouseHouse.x, galleryFloor[toyboxLevel], mouseHouse.z]
+    solid
+  }
+  placement "gallery-mouse-door" {
+    prototype: "gallery-mouse-door"
+    parent: "gallery"
+    position [mouseHouse.x, galleryFloor[toyboxLevel], (mouseHouse.z + (mouseHouseFront - (mouseHouseWall / 2)))]
+    solid
+  }
+  // The floor before the cake's table, where the context button eats it.
+  reach(
+    id: "gallery-mouse-house-cake",
+    box: {
+      x0: mouseHousePoint([(0.3 - mouseHouseHalfX), 0, 0])[0]
+      x1: mouseHousePoint([(mouseHouseHalfX - 0.3), 0, 0])[0]
+      y0: (mouseHousePoint([0, 0, 0])[1] - 0.2)
+      y1: (mouseHousePoint([0, 0, 0])[1] + mouseHouseRoom)
+      z0: mouseHousePoint([0, 0, (mouseCakeAt[2] - 0.4)])[2]
+      z1: mouseHousePoint([0, 0, (mouseCakeAt[2] - 0.1)])[2]
+    }
+  )
+}
+
+// The cake grants the full-size pass to the body that eats it.
+rule "mouse-house-cake" {
+  when pressing()
+  mode: Edge
+  forEach: region("gallery-mouse-house-cake")
+  setBodyState(key: $each, state: "wonderPass", expression: 1.0)
+}

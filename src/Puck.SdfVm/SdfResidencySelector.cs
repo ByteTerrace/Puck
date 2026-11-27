@@ -17,7 +17,11 @@ namespace Puck.SdfVm;
 /// <param name="CanLower">Whether the residency would stay under its budget with every demand half a rung finer, with
 /// nothing owed, in flight or landing.</param>
 /// <param name="Elapsed">The frames since the residency's last decision.</param>
-public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool CanLower, int Elapsed);
+/// <param name="Floored">Whether another half rung of bias would move none of the residency's demanded tiers: every
+/// demand already stands at its floor or at what its pixel asks past it (<see cref="SdfMeshTier.Demanded"/>). The bias
+/// rises only while some fresh report is not floored, so a demand past the budget at every floor rests over it rather
+/// than raising a bias that coarsens nothing. <see langword="false"/> where the residency does not know.</param>
+public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool CanLower, int Elapsed, bool Floored = false);
 /// <summary>
 /// A presentation's selector: the one place the residencies of a device share its memory and its background GPU time,
 /// in place of a share each. It holds the one detail bias every residency's bake coarsens its demand by
@@ -68,6 +72,11 @@ public sealed class SdfResidencySelector {
     /// samples, hits, readbacks): workspace, reserved before it is allocated and refused when its pool has no room,
     /// apart from the one job a service cannot progress without.</summary>
     public const string WorkOwner = "sdf.gpu-work";
+    /// <summary>The owner the lighting's device storage is created under: every residency's irradiance table (the probe
+    /// service's feedback table, which the views read), its hit, camera-sample and batch caches, and the probe scenes'
+    /// trace words, reserved as fixed storage before they are allocated (<see cref="ReserveLighting"/>), so the elastic
+    /// budget the mesh region is held to does not fall when the lighting first lights.</summary>
+    public const string LightingOwner = "sdf.lighting";
 
     [SideTable(reason: "one selector per device, holding that device's residency state")]
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
@@ -154,6 +163,14 @@ public sealed class SdfResidencySelector {
     public SdfGpuWorkHold ReserveWork() => new(
         device: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: Pool),
         host: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: PhysicalMemory.Host)
+    );
+    /// <summary>Returns a reservation for one residency's lighting: fixed storage under <see cref="LightingOwner"/>, in
+    /// the pool the mesh regions lie in, which the residency's irradiance volume sizes from its tier and the trace words
+    /// its standing static meshes need (<see cref="SdfLightingHold.Reserve"/>).</summary>
+    /// <returns>The reservation, holding nothing; disposing it releases it.</returns>
+    public SdfLightingHold ReserveLighting() => new(
+        account: m_account,
+        device: m_account.ReserveDevice(memoryClass: MemoryClass.Fixed, owner: LightingOwner, pool: Pool)
     );
     /// <summary>Registers a residency: its grant, which budgets its detail. The residency's meshes lie in the
     /// presentation's one region (<see cref="AttachStore"/>), which holds the reservation.</summary>
@@ -396,7 +413,8 @@ public sealed class SdfResidencySelector {
     // Moves the one bias on the report of the residency that names the most among those reporting: it presses when the
     // residencies together name more than the budget holds or any fresh report presses (its draws past its own budget,
     // or a mesh its region refuses), rises half a rung once the budget has pressed for the hold with no residency holding
-    // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
+    // detail it can give up and some residency's demand still moving under another half rung (SdfDetailReport.Floored),
+    // and falls half a rung once every residency has fit a half rung finer for the quiet wait,
     // which doubles when a rise follows a fall closely and halves again, down to SdfMeshTier.BiasQuietFrames, at each
     // fall that follows a fall with no rise between.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
@@ -422,6 +440,7 @@ public sealed class SdfResidencySelector {
             var over = report.Over;
             var anySpare = false;
             var canLower = true;
+            var coarsens = false;
             var named = 0L;
 
             foreach (var other in m_grants) {
@@ -431,6 +450,7 @@ public sealed class SdfResidencySelector {
                 if ((other.ReportSerial > m_decidedSerial) && (other.ReportLimit >= limitNow)) { over |= other.Report.Over; }
                 anySpare |= other.Report.AnySpare;
                 canLower &= other.Report.CanLower;
+                coarsens |= !other.Report.Floored;
             }
             // The residencies name one region, where a mesh several of them name lies once.
             if (m_region is not null) { named = Math.Min(val1: named, val2: m_regionNamed); }
@@ -443,7 +463,9 @@ public sealed class SdfResidencySelector {
 
             if (over) {
                 m_biasQuiet = 0;
-                if (anySpare) {
+                // Spare detail is given back before the bias rises, and a rise that would move no residency's tier is
+                // not taken: the demand rests over the budget at its floors.
+                if (anySpare || !coarsens) {
                     m_biasPressed = 0;
                 } else if (((m_biasPressed += elapsed) >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
                     Volatile.Write(location: ref m_bias, value: (bias + 1));

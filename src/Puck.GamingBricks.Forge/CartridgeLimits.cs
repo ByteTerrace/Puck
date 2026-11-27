@@ -29,6 +29,10 @@ public static class CartridgeLimits {
     /// entirely near 168 cells.
     /// </summary>
     public const int BlitCellCount = 120;
+    /// <summary>The number of colours in the Deck's fixed master palette, which an hgd palette entry indexes.</summary>
+    public const int DeckColourCount = 64;
+    /// <summary>The maximum number of background or object palettes on the Deck.</summary>
+    public const int DeckPaletteCount = 4;
     /// <summary>The maximum number of conditions in one rule.</summary>
     public const int ConditionCount = 8;
     /// <summary>The fade amount that reaches the target colour completely.</summary>
