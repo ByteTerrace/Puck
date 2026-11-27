@@ -157,15 +157,20 @@ admits (`world.budget.rules` reads the same sheet live):
 
 | | Rows | Rules | Sheet (work units a tick, at rest plus one change) |
 |---|---|---|---|
-| One station with its own chess | 177 | 325 | 555,397 |
-| Two | 282 | 616 | 1,068,789 |
-| Twelve | 1,387 | 3,537 | 6,106,017 |
+| One station with its own chess | 193 | 187 | 344,330 |
+| Two | 303 | 309 | 618,594 |
+| Twelve | 1,403 | 1,529 | 3,181,114 |
+| The debug world with its one station | | | 3,592,041 |
+| The debug world with all twelve | | | 6,428,825 |
+| gallery-root with all twelve | | | 4,509,927 |
 
-FreeCell's rules are one set for every station and price about 80 thousand
-units whatever the count; chess, Klondike, the patience layout and the chairs
-are still copied into each station's instance and price about half a million a
-station. The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`),
-so twelve stations wait on moving those to the same shape. What an idle station spends is a
+Klondike's and FreeCell's rules are one set for every station and price about
+130 thousand units whatever the count. Chess (about 170 thousand a station),
+the patience layout (about 60 thousand) and the chairs (about 12 thousand) are
+still copied into each station's instance, so each station past the first adds
+about 260 thousand. The tick admits 4.2 million units
+(`RuleCapacity.MaxWorkUnitsPerTick`), so twelve stations in the debug world wait
+on moving chess and the layout to the same shape. What an idle station spends is a
 different number from what the sheet admits: a station's rules are judged by
 change, so at rest they do no work; `world.budget.rules --spent` reads what
 they spent. Bringing the sheet down to admit twelve is the open item

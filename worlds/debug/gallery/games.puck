@@ -4,8 +4,9 @@ import "../game-stations"
 // It stands the plan's first, south3, the debug world set's station (../game-stations.puck) in its shared-chess form:
 // its Klondike and FreeCell are its own, and its chess is the world's (the debug world's chess table, or
 // ../../games/chess-game.puck's drawn board in gallery-root), so a move at the glass moves the table's pieces too. The
-// rest of the plan waits on the rule work sheet: one station holding its own chess prices about 0.72 million work units a
-// tick (../game-station.md, "Cost"), so twelve exceed the tick's 4.2 million. The gallery imports this file, so the
+// rest of the plan waits on the rule work sheet: each station holding its own chess adds about 0.26 million work units a
+// tick, so twelve beside the rest of the debug world exceed the tick's 4.2 million (../game-station.md, "Cost"). The
+// gallery imports this file, so the
 // station stands in the debug world and gallery-root alike, and each root imports its card bodies from
 // ../game-station-deck.puck where its body order wants them. ../game-station.md says how to play and drive it.
 

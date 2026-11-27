@@ -370,8 +370,9 @@ being the seat slots a document chooses (`pond.puck` already writes
 
 **G8 — Naming a rule expression.** A `let` cannot name a state expression, so
 the idle-door guard is restated in nine Klondike rules and eight FreeCell rules
-(`worlds/games/klondike.puck:246` on), and Klondike adds a `moveReady` latch
-cell (`klondike.puck:472`) partly to keep the work budget's price low.
+(worlds/games/klondike.puck, now the function `klondikeIdle`), and Klondike adds
+a `moveReady` latch cell (`klondikeMoveReady`, written by the rule
+`solitaireKlondike-move-ready`) partly to keep the work budget's price low.
 
 - (a) G3's `function` over state reads: `function idle() = solitaire.table == 1
   and …`, inlined into each gate, so the rule program and its price are the
