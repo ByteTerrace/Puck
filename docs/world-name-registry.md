@@ -1513,6 +1513,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1565,6 +1566,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1600,6 +1602,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -2100,6 +2103,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2152,6 +2156,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2187,6 +2192,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -2687,6 +2693,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2739,6 +2746,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2774,6 +2782,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -3958,6 +3967,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4010,6 +4020,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4045,6 +4056,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -4563,6 +4575,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].decision.options[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4615,6 +4628,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].decision.options[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4650,6 +4664,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -5191,6 +5206,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5243,6 +5259,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5278,6 +5295,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -5761,6 +5779,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `interactions.interactions[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5813,6 +5832,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `interactions.interactions[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5848,6 +5868,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |

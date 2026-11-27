@@ -4475,6 +4475,7 @@ public static partial class WorldModelShape {
                 M("value", typeof(global::System.Nullable<global::System.Decimal>), typeof(global::Puck.World.WorldIdentityRecordValue), "Value", Read | Write, static value => ((global::Puck.World.WorldIdentityRecordValue)value).Value),
                 M("expression", typeof(global::Puck.State.ExpressionProgram), typeof(global::Puck.World.WorldIdentityRecordValue), "Expression", Read | Write, static value => ((global::Puck.World.WorldIdentityRecordValue)value).Expression, kind: WorldNameKind.State, role: WorldNameRole.Expression, facet: WorldExportFacet.Read),
                 M("text", typeof(global::System.String), typeof(global::Puck.World.WorldIdentityRecordValue), "Text", Read | Write, static value => ((global::Puck.World.WorldIdentityRecordValue)value).Text, text: "a text value"),
+                M("identityOf", typeof(global::Puck.State.StateChannelRef), typeof(global::Puck.World.WorldIdentityRecordValue), "IdentityOf", Read | Write, static value => ((global::Puck.World.WorldIdentityRecordValue)value).IdentityOf, kind: WorldNameKind.State, role: WorldNameRole.Key, facet: WorldExportFacet.Read),
             ],
             []),
         T(typeof(global::Puck.World.WorldIdentitySeed), true, JsonTypeInfoKind.Object, null,

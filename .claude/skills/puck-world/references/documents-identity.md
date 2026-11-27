@@ -238,7 +238,7 @@ document (I14 of [the hub plan](../../../../docs/plans/hub-and-saves.md#invarian
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-Controllers, Voice, Facts, Travel, HomeScoped)`; `Travel` gives each record pool that crosses an authority seam its class, every other pool the document declares stays home, and `HomeScoped` names the facts and pools no world's rule writes; the record store and its rule effects are [Owned identity records](../../../../docs/reference/state/worlds.md#owned-identity-records)): `MoveSpeed`/`TurnSpeed` read
+Controllers, Voice, Facts, Travel, HomeScoped)`; `Travel` gives each record pool that crosses an authority seam its class, every other pool the document declares stays home, and `HomeScoped` names the facts and pools no world's rule writes; the record store, its rule effects and its rule reads (`identityFind`, `identityCount`, `identityFree`, `identityRecord`), and the standard's quests written over them (`worlds/standard/quests.puck`), are [Owned identity records](../../../../docs/reference/state/worlds.md#owned-identity-records)): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see

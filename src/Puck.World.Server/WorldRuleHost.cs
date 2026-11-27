@@ -481,6 +481,31 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    /// <remarks>The store read is the identity's as it stands: a record a firing earlier in this pass committed is
+    /// already installed (<see cref="Committed"/>), as the version a schedule names for it says.</remarks>
+    public Fact Read(IdentityRecordOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return operand.Answer(identity: Host.Body(index: ResolveBodyRef(bodyRef: operand.Body))?.Profile);
+    }
+    /// <inheritdoc/>
+    /// <remarks>Membership is read from the live document's <c>groups</c> section, under the principal the body's
+    /// index stands for (<see cref="WorldPopulation.OccupantPrincipal"/>).</remarks>
+    public Fact Read(GroupMemberOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        var index = ResolveBodyRef(bodyRef: operand.Body);
+        var member = (
+            (index >= 0) &&
+            Host.Population.IsActive(index: index) &&
+            (Host.Document.Definition.Groups is { } section) &&
+            (WorldGroup.Find(groups: section.Groups, id: operand.Group) is { } group) &&
+            WorldGroup.HoldsLocal(members: group.Members, principal: Host.Population.OccupantPrincipal(index: index))
+        );
+
+        return Fact.Finite(kind: CellKind.Int, value: (member ? 1L : 0L));
+    }
+    /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
@@ -676,9 +701,9 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     // ordinal-addressed one (WorldBodyRef) carries the key its compile interned. Both resolve through ResolveBody.
     private int ResolveBodyRef(in CompiledBodyRef bodyRef) => ResolveBody(
         index: bodyRef.Index,
-        key: (((bodyRef.Kind == CompiledBodyRefKind.Cell) && Host.Arena.Keys.TryResolve(
+        key: (((bodyRef.Kind == CompiledBodyRefKind.Cell) && (bodyRef.Key is { } cellName) && Host.Arena.Keys.TryResolve(
             key: out var cellKey,
-            name: CellName.Parse(candidate: bodyRef.Key!)
+            name: CellName.Parse(candidate: cellName)
         ))
             ? cellKey
             : default),
@@ -698,8 +723,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     private int ResolveBody(CompiledBodyRefKind kind, int index, int rowOrdinal, CellKey key, IReadOnlyList<int>? placementOrdinals) => (kind switch {
         CompiledBodyRefKind.Literal => index,
         CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)index)),
-        CompiledBodyRefKind.Cell => ((key.IsValid && Host.ReadArenaCell(
-            key: key,
+        CompiledBodyRefKind.Cell => (((((key.IsValid ? key : CellKeyOf(binding: (BoundKey)index)) is { IsValid: true } cellKey)) && Host.ReadArenaCell(
+            key: cellKey,
             rowOrdinal: rowOrdinal
         ).TryFinite(raw: out var raw) && ((raw >> FixedQ4816.FractionBitCount) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
         ? ((int)cellIndex)
@@ -721,6 +746,16 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         : StateReduceOp.Min),
         rowOrdinal: rowOrdinal
     ),
+    });
+
+    // The key a binding names for the evaluation in flight, for a cell reference read under it (cell:<row>:$each); a
+    // reference that carries a literal key carries no binding (its index is -1) and names none.
+    private CellKey CellKeyOf(BoundKey binding) => (binding switch {
+        BoundKey.Each => BoundEachKey,
+        BoundKey.Member => BoundMemberKey,
+        BoundKey.Previous => BoundPreviousKey,
+        BoundKey.Token => BoundTokenKey,
+        _ => default,
     });
 
     /// <summary>Initializes the rule host over the server it evaluates against.</summary>

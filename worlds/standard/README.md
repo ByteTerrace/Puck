@@ -137,6 +137,14 @@ walks, runs, jumps and falls, framed by `chaseCamera`. It imports the standard a
 the standard's place; an author's own avatar refines its `walker` kit, look and prototype by id, or replaces it (the
 debug world's avatar is its own, [`../debug/avatars/moth.puck`](../debug/avatars/moth.puck)).
 
+`character.puck` names the identity template every character an account mints starts as, `identity.puck`, whose
+record pools hold what a character keeps: the journal's notes, tags and links, its marks, items and quests.
+`quests.puck` is a library a world imports to give quests: `questStart`, `questAdvance` and `questSetAsideNow` splice
+into a rule over the players, and `questChain` declares a chain of parts, each open to a character who finished the one
+before it, and the share that offers the chain to a group's members, each joining at the farthest part it qualifies
+for, with the sharer's journal recording who accepted, completed or did not qualify. The debug world's lantern trail is
+the worked chain ([`../debug/lantern-trail.puck`](../debug/lantern-trail.puck)).
+
 `motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a
 correction to it reaches them all. An avatar's speeds, holds, turn and actions stay in its own kit; a
 world refines the program itself by declaring a `bodyMotionPrograms` row named `walk` in its own body.

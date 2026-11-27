@@ -9733,7 +9733,7 @@ export type WorldIdentityPool = {
 };
 
 /**
- * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.
+ * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.
  */
 export type WorldIdentityRecordValue = {
   /**
@@ -9752,6 +9752,10 @@ export type WorldIdentityRecordValue = {
    * The text literal.
    */
   text?: string | null;
+  /**
+   * The body whose identity's id the field holds — an index, a $cell: indirection, or a bound key; a body driving under no identity refuses the firing.
+   */
+  identityOf?: StateChannelRefNonNullable;
 };
 
 export type WorldIdentitySeed = {

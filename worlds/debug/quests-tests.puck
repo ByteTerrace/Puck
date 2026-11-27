@@ -1,0 +1,241 @@
+// The standard quests (standard/quests.puck) on two characters, each scenario booted here: `puck test
+// worlds/debug/quests-tests.puck --reproduce`. Seat 1 plays Ada and seat 2 Bram, both members of the fellowship. A seat
+// asks for one quest action by writing its own body's `questAsk` cell (the codes below), which the rule for that code
+// answers through the standard's templates and clears; a seat shares the trail by writing its body index into
+// `trailShare.from`. Expectations read each character's record store: `identityFind(body, <n>, quests, quest, <id>,
+// <field>)` is a quest's field (0 while the character holds none), and a share's record sits in the sharer's
+// `questShares` pool keyed by the recipient's id.
+//
+// The trail is a chain of three parts behind one prerequisite: `primer` opens `trailA`, and each part opens the next.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "quests-tests"
+
+import "set-controls"
+import "../standard/quests"
+
+seatDefaults {
+  identities [
+    { id: "ada", name: "Ada", color: "#C9A46A" }
+    { id: "bram", name: "Bram", color: "#6A8FC9" }
+  ]
+}
+
+bodies {
+  localSeats: 3
+  seatActivation [Eager, Eager, Eager]
+}
+
+groups {
+  kinds [
+    {
+      name: "party"
+      roles [{ name: "member", capabilities [Observe] }]
+      lifetime: Persistent
+      evictionPolicy: Remove
+      capacity: 4
+    }
+  ]
+  groups [
+    {
+      id: "fellowship"
+      kindName: "party"
+      members [
+        { ref { kind: Local, principal: "seat1" }, role: "member", joinOrdinal: 0 }
+        { ref { kind: Local, principal: "seat2" }, role: "member", joinOrdinal: 1 }
+      ]
+      nextJoinOrdinal: 2
+    }
+  ]
+  ownership []
+}
+
+questChain(
+  id: "trail",
+  parts: [{ quest: "trailA", steps: 2 }, { quest: "trailB", steps: 1 }, { quest: "trailC", steps: 1 }],
+  group: "fellowship",
+  requires: ["primer"]
+)
+
+state {
+  world {
+    table questAsk bounds(0..16) {
+      "0" = 0
+      "1" = 0
+      "2" = 0
+    }
+  }
+}
+
+// Each code a seat may ask for, and the standard template that answers it.
+rule "ask-start-primer" {
+  forEach: $players
+  when questAsk[$each] == 1
+  mode: Level
+  questStart(questId: "primer", chain: "primer")
+  questAsk[$each] = 0
+}
+rule "ask-finish-primer" {
+  forEach: $players
+  when questAsk[$each] == 2
+  mode: Level
+  questAdvance(questId: "primer", fromStep: 0, steps: 1)
+  questAsk[$each] = 0
+}
+rule "ask-start-a" {
+  forEach: $players
+  when questAsk[$each] == 3
+  mode: Level
+  questStart(questId: "trailA", chain: "trail", part: 0)
+  questAsk[$each] = 0
+}
+rule "ask-advance-a0" {
+  forEach: $players
+  when questAsk[$each] == 4
+  mode: Level
+  questAdvance(questId: "trailA", fromStep: 0, steps: 2)
+  questAsk[$each] = 0
+}
+rule "ask-advance-a1" {
+  forEach: $players
+  when questAsk[$each] == 5
+  mode: Level
+  questAdvance(questId: "trailA", fromStep: 1, steps: 2)
+  questAsk[$each] = 0
+}
+rule "ask-start-b" {
+  forEach: $players
+  when questAsk[$each] == 6
+  mode: Level
+  questStart(questId: "trailB", chain: "trail", part: 1)
+  questAsk[$each] = 0
+}
+rule "ask-finish-b" {
+  forEach: $players
+  when questAsk[$each] == 7
+  mode: Level
+  questAdvance(questId: "trailB", fromStep: 0, steps: 1)
+  questAsk[$each] = 0
+}
+rule "ask-start-c" {
+  forEach: $players
+  when questAsk[$each] == 8
+  mode: Level
+  questStart(questId: "trailC", chain: "trail", part: 2)
+  questAsk[$each] = 0
+}
+
+test "a quest starts at its first step and advances one step at a time" {
+  when {
+    seat1: world.state.cell.set questAsk 0 3
+    ticks 2
+    seat1: world.state.cell.set questAsk 0 4
+    ticks 2
+  }
+  expect {
+    identityCount(body, 0, quests) == 1
+    identityFind(body, 0, quests, quest, trailA, step) == 1
+    identityFind(body, 0, quests, quest, trailA, status) == questActive
+    identityCount(body, 1, quests) == 0
+  }
+}
+
+test "a quest past its last step is done, and starting it again changes nothing" {
+  when {
+    seat1: world.state.cell.set questAsk 0 3
+    ticks 2
+    seat1: world.state.cell.set questAsk 0 4
+    ticks 2
+    seat1: world.state.cell.set questAsk 0 5
+    ticks 2
+    seat1: world.state.cell.set questAsk 0 3
+    ticks 2
+  }
+  expect {
+    identityCount(body, 0, quests) == 1
+    identityFind(body, 0, quests, quest, trailA, step) == 2
+    identityFind(body, 0, quests, quest, trailA, status) == questDone
+  }
+}
+
+// Ada has finished the primer, trailA and trailB and follows trailC; Bram has finished the primer and trailA. Shared,
+// the chain reaches Bram at trailB, the farthest part he qualifies for, not at Ada's trailC, and Ada's journal records
+// that he accepted it there.
+test "a recipient joins the chain at the farthest part it qualifies for" {
+  when {
+    for code in [1, 2, 3, 4, 5, 6, 7, 8] {
+      seat1: world.state.cell.set questAsk 0 {code}
+      ticks 2
+    }
+    for code in [1, 2, 3, 4, 5] {
+      seat2: world.state.cell.set questAsk 1 {code}
+      ticks 2
+    }
+    seat1: world.state.cell.set trailShare from 0
+    ticks 2
+  }
+  expect {
+    identityFind(body, 1, quests, quest, trailB, status) == questActive
+    identityFind(body, 1, quests, quest, trailB, part) == 1
+    identityFind(body, 1, quests, quest, trailC) == -1
+    identityCount(body, 0, questShares) == 1
+    identityFind(body, 0, questShares, recipient, bram, outcome) == shareAccepted
+    identityFind(body, 0, questShares, recipient, bram, part) == 1
+    trailShare.from == -1
+  }
+}
+
+// Bram has not finished the primer the trail requires, so he qualifies for no part: he gains no quest, and Ada's journal
+// records that he did not qualify.
+test "a recipient that lacks the chain's prerequisite does not qualify" {
+  when {
+    for code in [1, 2, 3] {
+      seat1: world.state.cell.set questAsk 0 {code}
+      ticks 2
+    }
+    seat1: world.state.cell.set trailShare from 0
+    ticks 2
+  }
+  expect {
+    identityCount(body, 1, quests) == 0
+    identityFind(body, 0, questShares, recipient, bram, outcome) == shareUnqualified
+  }
+}
+
+// Bram joins at trailB and finishes it while Ada stands in the same world: Ada's record of the share turns to completed.
+test "the sharer sees the recipient complete the part it joined" {
+  when {
+    for code in [1, 2, 3, 4, 5, 6, 7, 8] {
+      seat1: world.state.cell.set questAsk 0 {code}
+      ticks 2
+    }
+    for code in [1, 2, 3, 4, 5] {
+      seat2: world.state.cell.set questAsk 1 {code}
+      ticks 2
+    }
+    seat1: world.state.cell.set trailShare from 0
+    ticks 2
+    seat2: world.state.cell.set questAsk 1 7
+    ticks 2
+  }
+  expect {
+    identityFind(body, 1, quests, quest, trailB, status) == questDone
+    identityFind(body, 0, questShares, recipient, bram, outcome) == shareCompleted
+  }
+}
+
+// Seat 3 plays under no identity and belongs to no group: a share passes it by.
+test "a share reaches only the group's members" {
+  when {
+    for code in [1, 2, 3] {
+      seat1: world.state.cell.set questAsk 0 {code}
+      ticks 2
+    }
+    seat1: world.state.cell.set trailShare from 0
+    ticks 2
+  }
+  expect {
+    identityCount(body, 0, questShares) == 1
+  }
+}

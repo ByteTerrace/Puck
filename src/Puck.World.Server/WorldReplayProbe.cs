@@ -9,6 +9,9 @@ public sealed class WorldReplayProbe : IDisposable {
     private readonly WorldReplayTape m_tape;
     private readonly WorldServer m_server;
     private readonly WorldAuthorityCheckpoint m_start;
+    // The account as it stood when the probe started: an image never carries an owned identity, so the replay reads and
+    // writes this copy, which holds the records and facts the recording first read, and never the live account.
+    private readonly WorldOwnedWorlds m_startAccount;
 
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
@@ -39,6 +42,7 @@ public sealed class WorldReplayProbe : IDisposable {
             throw new InvalidOperationException(message: $"Replay probe cannot capture its start: {reason}");
         }
         m_start = checkpoint!;
+        m_startAccount = server.Account.CreateReplayCopy();
         m_startComponents = WorldStateHashComposition.AuthoritativeComponents(server: server, tick: (server.NextInputTick - 1));
     }
 
@@ -80,6 +84,7 @@ public sealed class WorldReplayProbe : IDisposable {
         // schedule answered for; the replay judges every binding of every rule in place, every tick, so the hashes
         // below compare what the schedules ran with the evaluation they stand for.
         m_server.RuleHost.JudgesEveryBinding = true;
+        var liveAccount = m_server.SwapAccount(account: m_startAccount);
         try {
             m_server.Persistence.RestoreReplayStart(checkpoint: m_start);
             var startDifference = WorldStateHashComposition.DifferingComponents(left: m_startComponents,
@@ -124,7 +129,27 @@ public sealed class WorldReplayProbe : IDisposable {
                 static rebuild => (null, rebuild.ContentHash));
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
                 m_finalMachines.SequenceEqual(second: WorldReplaySnapshot.MachineDigests(machines: m_server.Machines))) ? -1 : m_inputs.Count);
-        } finally { m_server.RuleHost.JudgesEveryBinding = false; m_server.DrawKeys.AdvanceGeneration(); m_tape.ResumeCapture(); }
+        } finally {
+            m_server.RuleHost.JudgesEveryBinding = false;
+            _ = m_server.SwapAccount(account: liveAccount);
+            RebindHomeSeats(live: liveAccount);
+            m_server.DrawKeys.AdvanceGeneration();
+            m_tape.ResumeCapture();
+        }
+    }
+    // Returns every local seat the replay left bound to an identity of the start copy to the live account's identity of
+    // the same id, so the authority goes on writing the account it owns.
+    private void RebindHomeSeats(WorldOwnedWorlds live) {
+        var population = m_server.Population;
+
+        for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
+            if (population.IsActive(index: slot) &&
+                (population.EntryBody(index: slot)?.Profile is { } replayed) &&
+                m_startAccount.Owns(identity: replayed) &&
+                (live.FindById(id: replayed.Id) is { } owned)) {
+                population.SetSeatProfile(profile: owned, slot: slot);
+            }
+        }
     }
     /// <summary>Detaches capture without changing the authority.</summary>
     public void Dispose() {

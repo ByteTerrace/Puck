@@ -3,6 +3,11 @@ namespace Puck.World;
 /// <summary>Selects and admits an identity's record pools: the ones a projection carries across an authority seam
 /// (<see cref="WorldIdentityTravel.Crossing"/>), and the whole store the identity's own document holds.</summary>
 public static class WorldIdentityRecords {
+    /// <summary>The work units a rule is charged for one walk of an identity pool (a claim's search for a free slot, a
+    /// release's dependent pairs, a read that matches a field across the live instances). The pool's capacity is the
+    /// identity's, which a world's compile cannot read, so the walk is priced at this fixed bound.</summary>
+    public const long StoreWalkWork = 512L;
+
     /// <summary>Copies the crossing pools of an identity's document, the pair pools joining two of them, and the record,
     /// enum and vector-space declarations they depend on. A home pool, and a pair pool reaching one, is never
     /// copied.</summary>

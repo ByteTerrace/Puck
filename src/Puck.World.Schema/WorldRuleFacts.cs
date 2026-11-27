@@ -96,6 +96,28 @@ public static class WorldRuleFacts {
     /// <summary>The reserved channel reading one fact on the identity a body drives under:
     /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
     public const string IdentityPrefix = "$identity:";
+    /// <summary>The reserved channel reading one field of a record on the identity a body drives under:
+    /// <c>$identityRecord:&lt;bodyRef&gt;:&lt;pool&gt;:&lt;slot&gt;:&lt;field&gt;</c>, a literal slot
+    /// (<see cref="IdentityRecordOperand"/>).</summary>
+    public const string IdentityRecordPrefix = "$identityRecord:";
+    /// <summary>The reserved channel finding a record on the identity a body drives under by a key field's literal:
+    /// <c>$identityFind:&lt;bodyRef&gt;:&lt;pool&gt;:&lt;keyField&gt;:&lt;value&gt;[:&lt;field&gt;]</c> reads the field of the
+    /// lowest matching instance, or its slot (<c>-1</c> for none) when no field is named.</summary>
+    public const string IdentityFindPrefix = "$identityFind:";
+    /// <summary>The reserved channel counting the records of a pool on the identity a body drives under:
+    /// <c>$identityCount:&lt;bodyRef&gt;:&lt;pool&gt;[:&lt;keyField&gt;:&lt;value&gt;]</c>, every live instance or those whose
+    /// key field holds the literal.</summary>
+    public const string IdentityCountPrefix = "$identityCount:";
+    /// <summary>The reserved channel naming the slot the next claim of a pool on the identity a body drives under takes:
+    /// <c>$identityFree:&lt;bodyRef&gt;:&lt;pool&gt;</c>, or <c>-1</c> when the pool is full.</summary>
+    public const string IdentityFreePrefix = "$identityFree:";
+    /// <summary>The reserved channel reading whether the principal holding a body is a member of a group the world's
+    /// <c>groups</c> section declares: <c>$inGroup:&lt;bodyRef&gt;:&lt;group&gt;</c> (<see cref="GroupMemberOperand"/>).</summary>
+    public const string InGroupPrefix = "$inGroup:";
+    /// <summary>The reserved channel reading the index of the body a reference names: <c>$bodyIndex:&lt;bodyRef&gt;</c>,
+    /// the index a cell holds or the one a sweep bound, so a rule compares two bodies by their indices
+    /// (<see cref="BodyIndexOperand"/>).</summary>
+    public const string BodyIndexPrefix = "$bodyIndex:";
     /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
     /// the target with the named influence. An optional read key addresses a dealt child of the named template.
     /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>

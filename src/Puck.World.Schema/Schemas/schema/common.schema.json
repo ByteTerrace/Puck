@@ -10301,7 +10301,7 @@
       "title": "WorldEffectSetIdentityFact"
     },
     "WorldIdentityRecordValue": {
-      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.",
+      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.",
       "type": [
         "object",
         "null"
@@ -10330,6 +10330,11 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "identityOf": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body whose identity\u0027s id the field holds \u2014 an index, a $cell: indirection, or a bound key; a body driving under no identity refuses the firing.",
           "default": null
         }
       },

@@ -584,6 +584,13 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+    /// <summary>Returns the principal a body index stands for: a local seat below the seat count, the slot's current
+    /// generation-bearing peer identity above it.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The principal.</returns>
+    public Principal OccupantPrincipal(int index) => ((index < LocalSeatCount)
+        ? Principal.Seat(slot: index)
+        : PeerPrincipal(index: index));
     /// <summary>Returns whether the body a peer principal names stands here as that peer's, live or parked.</summary>
     /// <param name="principal">The peer principal.</param>
     /// <returns><see langword="true"/> when the principal is a peer whose body index holds a remote human of the same

@@ -64,6 +64,14 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(BodyKinematicsOperand operand);
+    /// <summary>Returns one read of the record store on the identity a body drives under.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    Fact Read(IdentityRecordOperand operand);
+    /// <summary>Returns whether the principal holding a body is a member of a declared group.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    Fact Read(GroupMemberOperand operand);
     /// <summary>Returns whether a body's participant holds a control application onto a screen.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

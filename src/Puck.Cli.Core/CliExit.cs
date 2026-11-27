@@ -116,7 +116,7 @@ public static class CliExit {
         ));
         CliRevision.ExplainUnknownMember(reason: message);
         // Programming faults need their call site; a one-line refusal cannot tell an author which mechanism broke.
-        if (exception is NullReferenceException or IndexOutOfRangeException or InvalidCastException) {
+        if (exception is NullReferenceException or IndexOutOfRangeException or InvalidCastException or FormatException) {
             Console.Error.WriteLine(value: exception.StackTrace);
         }
 

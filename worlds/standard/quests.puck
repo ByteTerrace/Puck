@@ -1,0 +1,173 @@
+// Quests: records in the `quests` pool of the character a seat drives under (identity.puck), so a quest belongs to the
+// player and travels with them into every world they enter. A world's rules start a quest, advance its steps and finish
+// it; a chain of quests is shared with a group, and each member joins at the farthest part they qualify for.
+//
+// A quest is one record: its id, the chain it belongs to and its part there, the step it has reached, and its status.
+// The engine holds only the store and its reads (`identityFind`, `identityCount`, `identityFree`, `inGroup`); what a
+// quest is and how sharing works is written here.
+//
+// Rules over quests sweep the players (`forEach: $players`) and read the quest of the body bound to `$each`, so one rule
+// serves every seat and visitor.
+
+// A quest's status.
+let questActive = 1
+let questDone = 2
+let questSetAside = 3
+
+// What came of a share, as the sharer's journal records it.
+let shareAccepted = 1
+let shareCompleted = 2
+let shareUnqualified = 3
+
+// The status of a quest on the character bound to `$each`: 0 while it holds none of that id.
+function questStatus(questId) = identityFind(each, quests, quest, questId, status)
+// Whether the character bound to `$each` follows a quest and has reached a step of it.
+function questAt(questId, atStep) = (questStatus(questId) == questActive) and
+  (identityFind(each, quests, quest, questId, step) == atStep)
+
+// Starts a quest on the character bound to `$each`, at step 0, unless the character already holds it (active, done or
+// set aside). `chain` and `part` place it in a chain; a quest taken up alone is a chain of one.
+rule template questStart(questId, chain, part = 0) {
+  if identityFind(each, quests, quest, questId) < 0 {
+    claimIdentityRecord(key: $each, pool: "quests", fields: [
+      { field: "quest", text: questId }
+      { field: "chain", text: chain }
+      { field: "part", value: part }
+      { field: "step", value: 0 }
+      { field: "status", value: questActive }
+    ])
+  }
+}
+
+// Completes step `fromStep` of a quest on the character bound to `$each`: the quest moves to the next step, and is done
+// once it has passed its last (`steps`). A character not at that step is left as it is, so a world's rule may splice
+// this wherever the step's condition holds.
+rule template questAdvance(questId, fromStep, steps) {
+  if questAt(questId, fromStep) {
+    setIdentityRecord(key: $each, pool: "quests", slot: identityFind(each, quests, quest, questId), fields: [
+      { field: "step", value: fromStep + 1 }
+      { field: "status", value: ((fromStep + 1) >= steps) ? questDone : questActive }
+    ])
+  }
+}
+
+// Sets a quest the character bound to `$each` follows aside; `questStart` will not start it again.
+rule template questSetAsideNow(questId) {
+  if questStatus(questId) == questActive {
+    setIdentityRecord(key: $each, pool: "quests", slot: identityFind(each, quests, quest, questId), fields: [
+      { field: "status", value: questSetAside }
+    ])
+  }
+}
+
+// A chain: quests taken in order, each part open to a character who finished the part before it, and the first to one
+// who finished every quest `requires` names. `parts` lists each part's quest id and step count
+// (`[{ quest: "lanternLit", steps: 2 }, …]`).
+//
+// Sharing: a seat writes its own body index into `<id>Share.from` (the journal's share press does, and a console line
+// can), and the chain is offered to every other player in the world who is a member of `group`. Each recipient joins at
+// the farthest part, up to the one the sharer follows, that they qualify for: a part they already hold is kept as it
+// is, and a recipient who qualifies for none does not join. The sharer's journal gains one `questShares` record for each
+// recipient: who, the part, and accepted, completed or did not qualify. When a recipient later finishes the part they
+// joined at while the sharer is still a member present in the same world, the record turns to completed.
+template questChain(id, parts, group, requires = []) {
+  let count = length(parts)
+  let questIds = map(parts, p => p.quest)
+  let indexed = map(range(0, count), k => {
+    quest: parts[k].quest
+    steps: parts[k].steps
+    index: k
+    prev: parts[(k > 0) ? (k - 1) : 0].quest
+  })
+
+  state {
+    world {
+      // The body index of the seat sharing the chain this tick, or -1.
+      table $"{id}Share" {
+        from = -1
+      }
+      // Per recipient body: the body that shared the chain with it, the part it joined, and the slot of the sharer's
+      // record of the share, while completion feedback is owed.
+      table $"{id}SharedBy" bounds(-1..4095) capacity(64)
+      table $"{id}SharedPart" bounds(0..255) capacity(64)
+      table $"{id}ShareSlot" bounds(-1..65535) capacity(64)
+    }
+  }
+
+  rule $"{id}-share" {
+    forEach: $players
+    // The part the sharer follows, the farthest part this recipient qualifies for up to it, and what it already holds
+    // of that part.
+    local sharerPart = maximum(
+      indexed,
+      p => (identityFind(cell, $"{id}Share", from, quests, quest, p.quest, status) == questActive) ? p.index : -1
+    )
+    local entryOk = all(requires, q => identityFind(each, quests, quest, q, status) == questDone)
+    local joinPart = maximum(
+      indexed,
+      p => (
+        (p.index <= sharerPart) and
+        ((p.index == 0) ? entryOk : (identityFind(each, quests, quest, p.prev, status) == questDone))
+      ) ?
+          p.index :
+        -1
+    )
+    local held = maximum(indexed, p => (p.index == joinPart) ? identityFind(each, quests, quest, p.quest, status) : 0)
+    local shareSlot = identityFree(cell, $"{id}Share", from, questShares)
+    when ($"{id}Share".from >= 0 and
+      bodyIndex(each) != $"{id}Share".from and
+      sharerPart >= 0 and
+      inGroup(each, group) == 1)
+    mode: Level
+    for (partQuest, k) in questIds {
+      if joinPart == k and held == 0 {
+        claimIdentityRecord(key: $each, pool: "quests", fields: [
+          { field: "quest", text: partQuest }
+          { field: "chain", text: id }
+          { field: "part", value: k }
+          { field: "step", value: 0 }
+          { field: "status", value: questActive }
+          { field: "sharedBy", identityOf: $"{id}Share".from }
+        ])
+      }
+    }
+    claimIdentityRecord(key: $"{id}Share".from, pool: "questShares", fields: [
+      { field: "chain", text: id }
+      { field: "recipient", identityOf: $each }
+      { field: "part", expression: (joinPart >= 0) ? joinPart : 0 }
+      {
+        field: "outcome"
+        expression: (joinPart < 0) ? shareUnqualified : ((held == questDone) ? shareCompleted : shareAccepted)
+      }
+    ])
+    if joinPart >= 0 and held != questDone {
+      $"{id}SharedBy"[$each] = $"{id}Share".from
+      $"{id}SharedPart"[$each] = joinPart
+      $"{id}ShareSlot"[$each] = shareSlot
+    }
+  }
+
+  // The share is offered once: every recipient was judged in the sweep above.
+  rule $"{id}-share-done" {
+    when $"{id}Share".from >= 0
+    mode: Level
+    $"{id}Share".from = -1
+  }
+
+  // A recipient finished the part it joined at, with its sharer still a member here: the sharer's record of the share
+  // turns to completed.
+  rule $"{id}-share-completed" {
+    forEach: $players
+    local finished = any(
+      indexed,
+      p => ($"{id}SharedPart"[$each] == p.index) and (identityFind(each, quests, quest, p.quest, status) == questDone)
+    )
+    local shareSlot = $"{id}ShareSlot"[$each]
+    when $"{id}SharedBy"[$each] >= 0 and finished == 1 and inGroup(cell, $"{id}SharedBy", $each, group) == 1
+    mode: Level
+    setIdentityRecord(key: $"{id}SharedBy"[$each], pool: "questShares", slot: shareSlot + 0, fields: [
+      { field: "outcome", value: shareCompleted }
+    ])
+    $"{id}SharedBy"[$each] = -1
+  }
+}

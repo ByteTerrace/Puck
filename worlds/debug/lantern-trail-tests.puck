@@ -1,0 +1,47 @@
+// The lantern trail across worlds (lantern-trail.puck), booted in the whole debug world: `puck test
+// worlds/debug/lantern-trail-tests.puck --reproduce`. Body 0 takes up lanternLit before the garden painting, walks
+// through it into the garden, where the trail's first step is finished, and comes home through the arrival frame, where
+// the second is. The quest is a record on seat 1's character, which crosses with her: the garden reads and writes the
+// same record the debug world started. The crossing walk is suit-tests.puck's.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The garden's way back names the document `debug`, so the scenario world keeps the debug world's id.
+documentId: "debug"
+
+import "stopped-machines"
+import "../standard/quests"
+
+test "the lantern trail starts in the gallery, advances in the garden and finishes at home" {
+  when {
+    ticks 30
+    seat1: body.pose 57 0.05 36.3 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+  }
+  expect {
+    garden {
+      identityFind(body, 0, quests, quest, lanternLit, step) == 1
+    }
+    identityFind(body, 0, quests, quest, lanternLit, status) == questDone
+    identityFind(body, 0, quests, quest, lanternLit, step) == 2
+    bodyPosition(body, 0, z) > 38
+  }
+}
+
+// The second part opens only to a character who finished the first: standing before the painting without lanternLit
+// done takes up lanternLit, never lanternKept.
+test "the trail's second part is not taken up before the first is done" {
+  when {
+    ticks 30
+    seat1: body.pose 57 0.05 36.3 180 0 0
+    ticks 10
+  }
+  expect {
+    identityFind(body, 0, quests, quest, lanternLit, status) == questActive
+    identityFind(body, 0, quests, quest, lanternKept) == -1
+  }
+}

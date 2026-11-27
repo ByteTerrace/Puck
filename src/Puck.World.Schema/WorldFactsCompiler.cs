@@ -479,11 +479,20 @@ public static partial class WorldFactsCompiler {
             if ((field is null) || !CellName.TryParse(candidate: field.Field, name: out var fieldName, reason: out var fieldReason)) {
                 throw new RuleException(detail: $"'{verb}' field '{field?.Field}' is not a cell name", refusal: WorldRuleRefusal.IdentityRecordMalformed, ruleName: ruleName);
             }
-            if ((((field.Value is not null) ? 1 : 0) + ((field.Expression is not null) ? 1 : 0) + ((field.Text is not null) ? 1 : 0)) != 1) {
-                throw new RuleException(detail: $"'{verb}' field '{fieldName}' must author exactly one of 'value', 'expression' or 'text'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
+            if ((((field.Value is not null) ? 1 : 0) + ((field.Expression is not null) ? 1 : 0) + ((field.Text is not null) ? 1 : 0) + ((field.IdentityOf is not null) ? 1 : 0)) != 1) {
+                throw new RuleException(detail: $"'{verb}' field '{fieldName}' must author exactly one of 'value', 'expression', 'text' or 'identityOf'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
+            }
+
+            WorldIdentityRecordBody? identityOf = null;
+
+            if (field.IdentityOf is { } other) {
+                var otherAddress = context.ResolveBodyAddress(reference: other, ruleName: ruleName, verb: verb);
+
+                identityOf = new WorldIdentityRecordBody(Key: otherAddress.Key, KeyFrom: otherAddress.KeyFrom);
             }
             compiled.Add(item: new WorldIdentityRecordField(
                 Field: fieldName,
+                IdentityOf: identityOf,
                 Literal: field.Value,
                 Source: ((field.Expression is { } expression) ? Integer(context: context, expression: expression, ruleName: ruleName, verb: verb) : CompiledValueSource.Constant(rawValue: 0L)),
                 Text: field.Text

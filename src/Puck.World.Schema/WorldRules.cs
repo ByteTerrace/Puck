@@ -176,6 +176,12 @@ public enum WorldRuleRefusal : byte {
     SpawnPointUnknown,
     [Refusal(door: "world.rule.compile", condition: "a '$kinematics:' channel does not spell '$kinematics:<bodyRef>:<witness>' with a witness name WorldKinematicsVocabulary declares", kind: RefusalKind.Verdict)]
     KinematicsMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$identityRecord:', '$identityFind:', '$identityCount:' or '$identityFree:' channel does not spell its body reference, then a pool and the slot, key field, value and field its read names as cell names and literals", kind: RefusalKind.Verdict)]
+    IdentityRecordReadMalformed,
+    [Refusal(door: "world.rule.compile", condition: "an '$inGroup:' channel does not spell '$inGroup:<bodyRef>:<group>' with a group id", kind: RefusalKind.Verdict)]
+    InGroupMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$bodyIndex:' channel does not spell exactly one body reference", kind: RefusalKind.Verdict)]
+    BodyIndexMalformed,
 }
 /// <summary>The runtime refusals only a world-owned effect arm can draw; the state-neutral ones are
 /// <see cref="RuleEffectRefusal"/>'s, and both share the evaluator's ledger.</summary>
