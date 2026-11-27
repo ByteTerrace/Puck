@@ -1,5 +1,69 @@
 # The Moth’s companion
 
+## Round nine
+
+The owner narrowed round eight to Patchlace and Bellbuoy. They asked for four
+moderately different versions of each, keeping each character’s silhouette and
+giving every take a few differences that read together at a glance. [Round eight](#round-eight)
+
+Both are palm-sized flying guides who steer the Moth’s attention toward paths
+and points of interest. Each has one expressive eye. The wing seams or keel
+pulse with speech and carry the light states, with emission kept off the pupil.
+[The lantern’s light language](#the-lanterns-light-language)
+
+### Patchlace
+
+![Four Patchlace variants with matched three-quarter flight and face views.](r9-patchlace.png)
+
+| Variation | What changes | One-sentence difference |
+| --- | --- | --- |
+| A · Mossflower | Scalloped moss lobes, large ivory flower appliqués, and a deep olive lid over the jade eye. | Ivory flowers fill the scalloped moss wings, and a deep olive lid shades the jade eye. |
+| B · Clayquilt | Clay-red wool, broader lower wings, and cream diamond quilting. | Broad clay-red lower wings carry cream diamond quilting and glow along their roots. |
+| C · Mintstitch | Taller teal upper wings, curved oatmeal stitching, and longer mint-lit seams. | Tall teal wings carry curved cream stitching and longer mint-green seams. |
+| D · Goldpetal | Dusty lavender felt, ochre petal appliqués, and a violet eye above a thick oatmeal ruff. | Ochre petals fan across lavender wings around a wide violet eye and a thick cream ruff. |
+
+### Bellbuoy
+
+![Four Bellbuoy variants with matched three-quarter flight and face views.](r9-bellbuoy.png)
+
+| Variation | What changes | One-sentence difference |
+| --- | --- | --- |
+| A · Tangerine | Taller tangerine dome, wide riveted brass bezel, and long cream flippers angled down. | A tall orange dome carries a wide brass bezel and two cream flippers pitched down like spoons. |
+| B · Breakwater | Squat teal dome, smaller amber eye, and square-ended flippers. | A squat teal bell with square paddles peers through a small amber porthole. |
+| C · Watchcap | Worn ivory enamel with aged brass, overhanging dark lid, and three separate keel panes. | A dark lid shades the ivory bell’s eye above a row of three cyan keel lights. |
+| D · Wraplight | Ochre enamel, round stubby paddles, and a wide cyan strip that wraps around the skirt. | An ochre bell with stubby round paddles carries a cyan strip that wraps around its skirt. |
+
+### Palm-scale comparison
+
+![All eight three-quarter flight poses at palm scale beside the suited Moth’s head.](r9-overview.png)
+
+The overview reuses the eight flight drawings. Each pose spans 16 cm along
+its longest projected dimension, scaled against the 2.06 m suited Moth’s
+front view. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Building the shapes
+
+Build Patchlace’s four wing lobes as thick, rounded SDF solids joined behind
+the ruff. Put the quilting and plain stitches in paint and use shallow felt
+shapes for the large appliqués. The upper and lower wing roots can pivot
+separately through short strokes. Bellbuoy’s flippers pivot on short pins
+below a rounded dome. Use a rounded skirt with a recessed strip or panes.
+Emissive paint carries the speech and state cues on the seam or keel surfaces.
+[SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md)
+
+### Round-nine panel audit
+
+The artist checked the saved panels and compared the eight flight poses at
+thumbnail size. Each take reads through a combination of profile, palette,
+face framing, or light placement. The checking partner’s independent audit
+is pending. [Concept art review](../README.md#concept-art-review)
+
+| Panel | What the artist checked |
+| --- | --- |
+| [Patchlace](r9-patchlace.png) | Four thick lobes join behind the ruff in each view. The roots have room for short strokes, and the wing tips clear the body in hover. The far lobes shorten in the flight view. Wing patterns, antennae and seam lights agree across each pair. Each pupil stays clear of the glow. |
+| [Bellbuoy](r9-bellbuoy.png) | Both flippers join at low pivots and clear the skirt at the pictured angles. The keel stays seated under the dome in hover. The round bezel and hinge hardware foreshorten in flight. The face views retain each variant’s flipper shape and keel pattern. Opaque side fittings leave the porthole as the only eye. |
+| [Overview](r9-overview.png) | The flight drawings preserve their attachments and camera angles at palm scale. All eight eyes and lights remain legible. The head crop retains the Moth’s hood, face and braid root. The figures and the head share a scale, with clean edges and space between them. |
+
 ## Round eight
 
 The owner’s verdict on round seven was “I'm not sure the variants were different
