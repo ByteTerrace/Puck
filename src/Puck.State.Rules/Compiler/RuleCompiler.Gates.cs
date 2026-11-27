@@ -157,10 +157,25 @@ public static partial class RuleCompiler {
         out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
         var required = expression.Kind ?? (IsConstantExpression(expression.Left) && IsConstantExpression(expression.Right)
             ? carrier : (CellKind?)null);
-        left = CompileExpression(expression.Left, carrier, ruleName, "compareValue left", context,
-            resultKind: required, result: out var leftKind);
-        right = CompileExpression(expression.Right, carrier, ruleName, "compareValue right", context,
-            resultKind: required, result: out var rightKind);
+        // D6: a lone fractional literal facing any other side under an Int carrier is not a narrowing of the literal
+        // but the exact integer comparison the gate lowers it to (LowerConstantComparison), so a declared Int keeps its
+        // kind. The side stands as an Int placeholder that the gate's lowering replaces whenever the comparison stays
+        // Int, and that the constant branch below recompiles when the other side is Fixed.
+        var exactLeft = (carrier == CellKind.Int) && TryFractionalLiteral(program: expression.Left, literal: out _) &&
+            !TryFractionalLiteral(program: expression.Right, literal: out _);
+        var exactRight = (carrier == CellKind.Int) && TryFractionalLiteral(program: expression.Right, literal: out _) &&
+            !TryFractionalLiteral(program: expression.Left, literal: out _);
+        var leftKind = CellKind.Int;
+        var rightKind = CellKind.Int;
+
+        left = (exactLeft
+            ? [Literal(raw: 0L)]
+            : CompileExpression(expression.Left, carrier, ruleName, "compareValue left", context,
+                resultKind: required, result: out leftKind));
+        right = (exactRight
+            ? [Literal(raw: 0L)]
+            : CompileExpression(expression.Right, carrier, ruleName, "compareValue right", context,
+                resultKind: required, result: out rightKind));
         var leftCarrier = carrier;
         var rightCarrier = carrier;
 
@@ -941,6 +956,17 @@ public static partial class RuleCompiler {
                 Verb: "compareState"
             )
         );
+
+        // Int and Fixed compare in Fixed, the Int side widened exactly; every other pair of kinds compares only with
+        // its own kind.
+        if ((lhs.ValueKind != rhs.ValueKind) &&
+            ((lhs.ValueKind is not (CellKind.Int or CellKind.Fixed)) || (rhs.ValueKind is not (CellKind.Int or CellKind.Fixed)))) {
+            throw new RuleException(
+                detail: $"'{name}' is kind={StateSpelling.Kind(kind: lhs.ValueKind)} but comparand '{compare.ComparandState}' is kind={StateSpelling.Kind(kind: rhs.ValueKind)}; only Int and Fixed compare across kinds",
+                refusal: RuleRefusal.ComparandKindMismatch,
+                ruleName: ruleName
+            );
+        }
 
         var commonKind = lhs.ValueKind == CellKind.Fixed || rhs.ValueKind == CellKind.Fixed ? CellKind.Fixed : lhs.ValueKind;
         var leftSource = ConvertOperand(lhs.Operand, commonKind, ruleName, "comparison left");
