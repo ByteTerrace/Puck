@@ -127,7 +127,6 @@ public sealed partial class SdfWorldTables {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
         RecordRegionCopies();
-        RecordMeshIrradiance(command: commandBuffer);
         if (!keepsMotion) {
             CompletePreviousTables(commandBuffer: commandBuffer);
         }
@@ -194,15 +193,26 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
-    /// <summary>Retains a replaced background resource through pending copies and the device timeline.</summary>
-    /// <param name="replaced">The object to dispose after its last submitted use.</param>
+    /// <summary>Retains a replaced background resource through the device timeline: behind the background jobs submitted
+    /// before it, and, for the irradiance table the World sets bind (<see cref="PublishMeshIrradiance"/>), until the next
+    /// preparation stops binding it and the upload carrying that has reached the queue, so no view still reads it.</summary>
+    /// <param name="replaced">The object to dispose after its last submitted use. Its owner records no use of it
+    /// after this call.</param>
     /// <param name="released">The callback run once the object is disposed, or <see langword="null"/> for none.</param>
     public void RetireBackgroundResource(GpuRegion replaced, Action? released = null) {
-        var source = replaced.Buffer(slot: 0);
+        var item = ((released is null) ? (IDisposable)replaced : new ReleasedRegion(Region: replaced, Released: released));
+        var buffer = replaced.Buffer(slot: 0);
 
-        m_retired.Hold(item: ((released is null) ? replaced : new ReleasedRegion(Region: replaced, Released: released)),
-            pendingUse: () => (ReferenceEquals(objA: m_meshIrradianceSource, objB: source) && (m_meshIrradianceSlots.Count > 0)));
+        if (!ReferenceEquals(objA: m_meshIrradiance, objB: buffer)) {
+            m_retired.Hold(item: item);
+            return;
+        }
+        // The World sets name it until a preparation unbinds it (SettleMeshIrradiance); the upload that follows carries
+        // the unbinding, and the checkpoint Poll takes once it has reached the queue follows every view that bound it.
+        var unbinding = new UnboundTable(buffer: buffer);
+
+        m_meshIrradianceUnbinding = unbinding;
+        m_retired.Hold(item: item, pendingUse: () => (m_uploadedBindingRevision < unbinding.Revision));
     }
     // A retired region whose owner waits to hear it was disposed.
     private sealed record ReleasedRegion(GpuRegion Region, Action Released) : IDisposable {

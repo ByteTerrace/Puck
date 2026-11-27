@@ -67,6 +67,23 @@ public static class ApuNotePeriod {
             )
         );
     }
+    /// <summary>Resolves the period of a divided timer, the form the Deck's tone channels take: a counter reloaded from
+    /// the period that steps a waveform of <paramref name="steps"/> slots, so <c>f = clock / (steps * (period + 1))</c>
+    /// and <c>period = round(clock / (steps * f)) - 1</c>, in integers over millihertz.</summary>
+    /// <param name="millihertz">The note frequency, in millihertz (&gt; 0).</param>
+    /// <param name="clockHertz">The timer's input clock, in hertz (&gt; 0).</param>
+    /// <param name="steps">The timer periods one waveform cycle spans (&gt; 0): 16 for a pulse, 32 for a triangle.</param>
+    /// <returns>The period register value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">An argument is not positive.</exception>
+    public static int DividedPeriod(int millihertz, long clockHertz, int steps) {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: millihertz, other: 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: clockHertz, other: 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: steps, other: 0);
+
+        var divisor = (((long)steps) * millihertz);
+
+        return ((int)((((clockHertz * 1000L) + (divisor / 2)) / divisor) - 1));
+    }
     /// <summary>Resolves the 11-bit period register value for a frequency: <c>period = 2048 - round(131072 Hz / f)</c>
     /// — pure integer math over millihertz so every build emits identical bytes.</summary>
     /// <param name="millihertz">The note frequency, in millihertz (&gt; 0).</param>

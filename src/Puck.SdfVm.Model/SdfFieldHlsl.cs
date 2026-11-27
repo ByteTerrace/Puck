@@ -27,7 +27,10 @@ public static class SdfFieldHlsl {
         new ShaderDeclaration(Path: Directory + "sdf-field-operands.hlsli", Generate: EmitOperands),
     ];
 
-    internal static string FingerprintText() => string.Concat(Declarations.Select(static file => file.Generate()));
+    /// <summary>Returns the generated field dispatch and operand includes concatenated, the part of the field's
+    /// fingerprint (<see cref="SdfIsaHlsl.DescribeFieldFingerprint"/>) past the field include's layout.</summary>
+    /// <returns>The HLSL text.</returns>
+    public static string FingerprintText() => string.Concat(Declarations.Select(static file => file.Generate()));
 
     // A walk that carries the gradient reader's derivatives (map, parts) marks a sample uncovered in every arm that does
     // not keep them (SdfShaderAction.Dual), so the bake answers that sample's gradient by its stencil instead.

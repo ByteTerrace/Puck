@@ -28,8 +28,10 @@ public sealed class SdfMeshBakeClosureLawTests {
         Assert.Equal(expected: "root", actual: closure.Reasons[members.First(predicate: static member => member.Contains(value: "SdfMeshBakeClosureFixture.Run`0(", comparisonType: StringComparison.Ordinal))]);
         // The same build walks to the same closure.
         Assert.Equal(expected: closure.Hash, actual: SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: FixtureRoot).Hash);
-        _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.NoSuchType", null)]));
-        _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.SdfMeshBakeClosureFixture", "NoSuchMethod")]));
+        // Naming roots walks nothing (CodeIdentity is lazy), so a root that names nothing throws when the closure is first
+        // asked for.
+        _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.NoSuchType", null)]).Members);
+        _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.SdfMeshBakeClosureFixture", "NoSuchMethod")]).Members);
         _ = Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: null!));
     }
 
@@ -118,21 +120,26 @@ public sealed class SdfMeshBakeClosureLawTests {
         // SdfAppearanceOutline is the one appearance input of the field constructor, and its values reach neither the code
         // identity nor the kernels. Each member is safe for its own reason: the material count and declared screens only
         // validate material lanes (and fill a header lane no field kernel reads), the vectors only size the stream's tail,
-        // and glass enters every glass group's geometry (SdfMeshGeometryBuilder.AppendGlass). A member added here must be
-        // one of those kinds, or hashed into the geometry, before this list grows. Matches compares the same inputs for reuse.
+        // glass enters every glass group's geometry (SdfMeshGeometryBuilder.AppendGlass), and a shadowless material only
+        // partitions its shapes into groups of their own (SdfProgram.IsShadowlessRange, SdfMeshBakeGroup.CastsNoShadow),
+        // whose mesh is the one a casting group of the same instances bakes and whose flag reaches the draws through the
+        // group, never the stored mesh. Each material's glass and shadowless bits are one byte of classes. A member added
+        // here must be one of those kinds, or hashed into the geometry, before this list grows. Matches compares the same
+        // inputs for reuse.
         var outline = typeof(Puck.SignedDistance.SdfAppearanceOutline);
         const System.Reflection.BindingFlags Declared = (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly);
 
         Assert.Equal(
-            expected: ["DeclaresScreen", "IsGlass", "Matches", "Materials", "Screens", "Vectors"],
+            expected: ["DeclaresScreen", "IsGlass", "IsShadowless", "Matches", "Materials", "Screens", "Vectors"],
             actual: outline.GetMembers(bindingAttr: (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
                 .Where(predicate: static member => member.MemberType is (System.Reflection.MemberTypes.Property or System.Reflection.MemberTypes.Method))
                 .Where(predicate: static member => !member.Name.StartsWith(value: "get_", comparisonType: StringComparison.Ordinal))
                 .Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal).ToArray()
         );
         Assert.Equal(
-            expected: [typeof(bool[]), typeof(int), typeof(uint)],
-            actual: outline.GetFields(bindingAttr: Declared).Select(selector: static field => field.FieldType).OrderBy(keySelector: static type => type.Name, comparer: StringComparer.Ordinal).ToArray()
+            expected: [typeof(byte[]), typeof(int), typeof(int[])],
+            // A constant (the class bits) is no field a value carries.
+            actual: outline.GetFields(bindingAttr: Declared).Where(predicate: static field => !field.IsLiteral).Select(selector: static field => field.FieldType).OrderBy(keySelector: static type => type.Name, comparer: StringComparer.Ordinal).ToArray()
         );
     }
 }

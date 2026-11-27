@@ -244,6 +244,41 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Contains(expectedSubstring: "growth-refusals=0", actualString: selector.Describe());
     }
     [Fact]
+    public void TheLightingsReservationTakesItsRoomWhenMadeSoItsAllocationsMoveNoBudget() {
+        var (account, ledger, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var region = selector.RegisterRegion();
+        using var valley = selector.Register(name: "valley");
+
+        Budget(account: account, localBudget: (6L * Gibibyte), segments: segments, serial: 1UL);
+        region.Created(capacityBytes: (16L * Mebibyte));
+
+        var unreserved = valley.Budget(filled: Gibibyte, named: Gibibyte);
+        using var lighting = selector.ReserveLighting();
+
+        // Reserved as the volume first stages: the table, the caches and the trace words its standing meshes need.
+        lighting.Reserve(cacheBytes: (45L * Mebibyte), tableBytes: (230L * Mebibyte), traceBytes: (160L * Mebibyte));
+
+        var reserved = valley.Budget(filled: Gibibyte, named: Gibibyte);
+
+        Assert.True(condition: (reserved < unreserved), userMessage: "the reservation takes its room from the budget when it is made");
+        // The lighting's storage, allocated under its owner as it first lights, moves bytes from promised to held.
+        foreach (var (family, bytes, allocation) in new[] { ("sdf.lighting/probe-feedback", (230L * Mebibyte), 0x20), ("sdf.lighting/probe-trace hit-cache", (45L * Mebibyte), 0x21), ("sdf.lighting/probe-scene", (160L * Mebibyte), 0x22) }) {
+            Assert.True(condition: ledger.TryAdmit(bytes: bytes, device: Device, family: family, grant: out var grant, payer: family, payerBytes: bytes, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+            ledger.CountAllocated(allocation: allocation, grant: grant);
+            Assert.Equal(expected: reserved, actual: valley.Budget(filled: Gibibyte, named: Gibibyte));
+        }
+
+        var owner = Assert.Single(collection: account.ReadReservations(), predicate: static reading => (reading.Owner == SdfResidencySelector.LightingOwner));
+
+        Assert.Equal(expected: ((435L * Mebibyte), (435L * Mebibyte), 0L), actual: (owner.Peak, owner.Held, owner.Promised));
+        Assert.Contains(expectedSubstring: "lighting reserved=", actualString: lighting.Describe());
+        // A smaller table (another tier) lowers the reservation; what is held stays counted whatever the peak says.
+        lighting.Reserve(cacheBytes: (45L * Mebibyte), tableBytes: (115L * Mebibyte), traceBytes: (160L * Mebibyte));
+        owner = Assert.Single(collection: account.ReadReservations(), predicate: static reading => (reading.Owner == SdfResidencySelector.LightingOwner));
+        Assert.Equal(expected: ((320L * Mebibyte), (435L * Mebibyte), 0L), actual: (owner.Peak, owner.Held, owner.Promised));
+    }
+    [Fact]
     public void ABudgetNeverPassesTheShareOfWhatItsRegionMayPlace() {
         var (account, ledger, segments) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
