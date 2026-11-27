@@ -126,7 +126,7 @@ prototypes {
   prototype "gallery-tree" {
     document {
       name: "gallery-tree"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       contact: Shapes
       palette: concat(
         [
@@ -215,11 +215,11 @@ prototypes {
             detail: true
             material: treeFungus
             exponent: 2.4
-            position: polarPoint(
-              (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + 0.1),
-              ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6)),
-              (treeTreadTop(k) - (0.85 + (0.45 * j)))
-            )
+            position: (polarPoint(
+  (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + 0.1),
+  ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6)),
+  (treeTreadTop(k) - (0.85 + (0.45 * j)))
+) * [-1, 1, -1])
             rotation: rotate([0, 1, 0], (0 - ((treeTreadAngle(k) + treeAuthorTurn) + ((j == 0) ? -7 : 6))))
             scale [(0.42 - (0.1 * j)), 0.07, (0.5 - (0.12 * j))]
             blend: SmoothUnion
@@ -235,7 +235,7 @@ prototypes {
           detail: true
           material: treeBark
           exponent: 2.1
-          position: polarPoint(trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)), (treeTreadAngle(k) + treeAuthorTurn), (treeTreadTop(k) - 2))
+          position: (polarPoint(trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)), (treeTreadAngle(k) + treeAuthorTurn), (treeTreadTop(k) - 2)) * [-1, 1, -1])
           scale [(0.42 + (0.2 * weylShare(n, 0.7548776662))), (0.55 + (0.2 * weylShare(n))), (0.42 + (0.2 * weylShare(n, 0.7548776662)))]
           blend: SmoothUnion
           smooth: 0.35
@@ -285,7 +285,7 @@ prototypes {
   prototype "gallery-tree-canopy" {
     document {
       name: "gallery-tree-canopy"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         galleryCel(canopySurface(lookTree.foliage.crown.inner, 6115))
         treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
@@ -293,7 +293,7 @@ prototypes {
       shape Superellipsoid "crown-core" {
         material: treeLeaf
         exponent: landscapeExponent
-        position: treeCrownCore.at
+        position: (treeCrownCore.at * [-1, 1, -1])
         scale: treeCrownCore.r
       }
       // The limbs from the trunk's top out into the crown's clumps. Every bough bows: its control point drops below the
@@ -302,6 +302,7 @@ prototypes {
       for n in range(0, floor((treeCrown.count / treeCrownLimbEvery))) {
         let into = leafClusterAt(treeCrown.centre, treeCrown.radius, treeCrown.height, treeCrown.count, ((n * treeCrownLimbEvery) + 2), treeCrown.turn)
         shape Sweep $"crown-limb-{n}" {
+          rotation: rotate([0, 1, 0], 180)
           material: treeTwig
           blend: SmoothUnion
           smooth: 0.3
@@ -321,6 +322,7 @@ prototypes {
           let n = (m * treeTierLimbEvery)
           let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
           shape Sweep $"tier-limb-{k}-{n}" {
+            rotation: rotate([0, 1, 0], 180)
             material: treeTwig
             blend: SmoothUnion
             smooth: 0.2
@@ -340,6 +342,7 @@ prototypes {
           let n = (m * treeTierLimbEvery)
           let into = leafClusterAt((treeForkTip(b, i) + [0, 0.3, 0]), treeForkFoliage.radius, treeForkFoliage.height, treeForkFoliage.count, n, (31 * i))
           shape Sweep $"fork-twig-{i}-{n}" {
+            rotation: rotate([0, 1, 0], 180)
             material: treeTwig
             blend: SmoothUnion
             smooth: 0.1

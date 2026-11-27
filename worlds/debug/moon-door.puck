@@ -132,7 +132,7 @@ prototypes {
     prototype $"moon-door-curtain-{curtain.name}" {
       document {
         name: $"moon-door-curtain-{curtain.name}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette [
           { color: "#2E3A6B", roughness: 0.9, specular: 0.03 }
           { color: "#B58F4F", roughness: 0.35, specular: 0.5 }

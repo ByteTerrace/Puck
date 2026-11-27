@@ -405,10 +405,10 @@ prototypes {
         { color: "#6FAE5B", roughness: 0.9, specular: 0.03 }
         { color: "#C9BFA6", roughness: 0.7, specular: 0.05 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Sphere "ball" {
         material: 0
-        position: homeCentre
+        position: (homeCentre * [-1, 1, -1])
         scale [homeRadius, homeRadius, homeRadius]
       }
       shape Cylinder "pad" {
@@ -429,7 +429,7 @@ prototypes {
   prototype "hidden" {
     document {
       name: "hidden"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#000000" }]
       shapes []
     }
@@ -440,7 +440,7 @@ prototypes {
     document {
       name: "pad"
       palette [{ color: "#FFD35A", emissive: 9000, roughness: 0.4, specular: 0.2 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "disc" {
         material: 0
         position [0, -0.45, 0]
@@ -453,7 +453,7 @@ prototypes {
     document {
       name: "ring"
       palette [{ color: "#D98A4E", roughness: 0.6, specular: 0.1 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Torus "tube" {
         material: 0
         position [0, 0, 0]
@@ -466,7 +466,7 @@ prototypes {
     document {
       name: "cube"
       palette [{ color: "#6C8FD6", roughness: 0.55, specular: 0.15 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "block" {
         material: 0
         position [0, 0, 0]
@@ -480,7 +480,7 @@ prototypes {
     document {
       name: "coin"
       palette [{ color: "#D9C24E", roughness: 0.35, specular: 0.4 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "slab" {
         material: 0
         position [0, 0, 0]
@@ -498,7 +498,7 @@ prototypes {
         { color: "#8C93A6", roughness: 0.7, specular: 0.08 }
         { color: "#A6708C", roughness: 0.7, specular: 0.08 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "floor" {
         material: 0
         position [0, 0, 0]
@@ -517,18 +517,18 @@ prototypes {
     document {
       name: "pipe"
       palette [{ color: "#59B8A6", roughness: 0.6, specular: 0.1 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "wall" {
         material: 0
         position [0, 0, 0]
-        rotation [0, 0, 0.7071068, 0.7071068]
+        rotation [0, 0, -0.7071068, 0.7071068]
         scale [pipeOuter, pipeHalf, pipeOuter]
       }
       shape Cylinder "bore" {
         blend: Subtraction
         material: 0
         position [0, 0, 0]
-        rotation [0, 0, 0.7071068, 0.7071068]
+        rotation [0, 0, -0.7071068, 0.7071068]
         scale [pipeInner, (pipeHalf + 0.5), pipeInner]
       }
     }
@@ -538,7 +538,7 @@ prototypes {
     document {
       name: "pebble"
       palette [{ color: "#C8C4BC", roughness: 0.85, specular: 0.04 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Sphere "ball" {
         material: 0
         position [0, 0, 0]

@@ -99,7 +99,7 @@ prototypes {
   prototype "walker" {
     document {
       name: "walker"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         { color: "#9AA0A8", roughness: 0.6, specular: 0.04, emissive: 0 }
         { color: "#22262C", roughness: 0.3, specular: 0.04, emissive: 0 }
@@ -114,7 +114,7 @@ prototypes {
       // The visor across its face, on the +Z side it faces.
       shape Box "visor" {
         material: 1
-        position [0, 1.5, 0.27]
+        position [0, 1.5, -0.27]
         scale [0.2, 0.06, 0.05]
       }
     }

@@ -32,8 +32,8 @@ template swallowWing(side) {
     smooth: 0.004
     material: swallowTeal
     parent: "body"
-    position [side.sign * 0.016, 0.048, 0.02]
-    rotation: side.rotation
+    position [side.sign * -0.016, 0.048, -0.02]
+    rotation: compose(rotate([0, 1, 0], 180), side.rotation)
     scale [1, 1, 0.003]
     profile {
       kind: "Convex"
@@ -49,8 +49,8 @@ template swallowStreamer(side) {
     group: swallowGroup
     material: swallowTeal
     parent: "tailBase"
-    position [side.sign * 0.005, 0.014, -0.078]
-    rotation: side.tail
+    position [side.sign * -0.005, 0.014, 0.078]
+    rotation: (side.tail * [-1, 1, -1, 1])
     scale [0.0042, 0.05, 0.0042]
   }
 }
@@ -61,7 +61,7 @@ template swallowEyeShape(side) {
     group: swallowGroup
     material: swallowEye
     parent: "head"
-    position [side.sign * 0.014, 0.079, 0.047]
+    position [side.sign * -0.014, 0.079, -0.047]
     scale [0.0042, 0.0042, 0.0042]
   }
 }
@@ -70,7 +70,7 @@ prototypes {
   prototype "swallow" {
     document {
       name: "swallow"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       // A perched bird's idle: it glances side to side every few seconds and bobs its tail.
       drivers [
         { name: "glance", signal: "time", cadence: 0.3 }
@@ -87,7 +87,7 @@ prototypes {
         group: swallowGroup
         material: swallowTeal
         position [0, 0.034, 0]
-        rotation: swallowPitch
+        rotation: (swallowPitch * [-1, 1, -1, 1])
         scale [0.021, 0.023, 0.052]
       }
       shape Ellipsoid "belly" {
@@ -96,8 +96,8 @@ prototypes {
         group: swallowGroup
         material: swallowCream
         parent: "body"
-        position [0, 0.025, 0.008]
-        rotation: swallowPitch
+        position [0, 0.025, -0.008]
+        rotation: (swallowPitch * [-1, 1, -1, 1])
         scale [0.018, 0.017, 0.042]
       }
       shape Ellipsoid "tailBase" {
@@ -106,8 +106,8 @@ prototypes {
         group: swallowGroup
         material: swallowTeal
         parent: "body"
-        position [0, 0.022, -0.052]
-        rotation: swallowPitch
+        position [0, 0.022, 0.052]
+        rotation: (swallowPitch * [-1, 1, -1, 1])
         scale [0.013, 0.004, 0.028]
         swings [
           swing("bob", [1, 0, 0], 0.18, [0, 0.026, -0.03]) with { wave: "sine", phase: 0 }
@@ -119,7 +119,7 @@ prototypes {
         group: swallowGroup
         material: swallowTeal
         parent: "body"
-        position [0, 0.074, 0.035]
+        position [0, 0.074, -0.035]
         scale [0.0195, 0.0195, 0.0195]
         swings [
           swing("glance", [0, 1, 0], 0.55, [0, 0.06, 0.03]) with { wave: "sine", phase: 0 }
@@ -131,7 +131,7 @@ prototypes {
         group: swallowGroup
         material: swallowChestnut
         parent: "head"
-        position [0, 0.066, 0.049]
+        position [0, 0.066, -0.049]
         scale [0.012, 0.012, 0.0085]
       }
       shape Ellipsoid "forehead" {
@@ -140,15 +140,15 @@ prototypes {
         group: swallowGroup
         material: swallowChestnut
         parent: "head"
-        position [0, 0.08, 0.052]
+        position [0, 0.08, -0.052]
         scale [0.007, 0.005, 0.0045]
       }
       shape Cone "beak" {
         group: swallowGroup
         material: swallowCharcoal
         parent: "head"
-        position [0, 0.074, 0.057]
-        rotation [0.6756, 0, 0, 0.7373]
+        position [0, 0.074, -0.057]
+        rotation [-0.6756, 0, 0, 0.7373]
         scale [0.0055, 0.009, 0.0055]
       }
       for side in swallowSides {
@@ -159,7 +159,7 @@ prototypes {
           group: swallowGroup
           material: swallowCharcoal
           parent: "body"
-          position [side.sign * 0.007, 0.002, 0.012]
+          position [side.sign * -0.007, 0.002, -0.012]
           scale [0.0045, 0.018, 0.0045]
         }
       }
@@ -169,7 +169,7 @@ prototypes {
   prototype "birdPerch" {
     document {
       name: "birdPerch"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         { color: "#8A6A48", roughness: 0.9 }
         { color: "#6E5236", roughness: 0.9 }

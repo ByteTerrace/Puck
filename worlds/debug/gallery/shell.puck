@@ -658,7 +658,7 @@ template shellPrototypes() {
     prototype $"gallery-walls-{k}" {
       document {
         name: $"gallery-walls-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellPalette([], k, k)
         shellWalls(level: k)
       }
@@ -667,7 +667,7 @@ template shellPrototypes() {
   prototype "gallery-floor-0" {
     document {
       name: "gallery-floor-0"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPalette(shellPads(0))
       boundsBox(label: "ground", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: galleryWall, z1: naveMid, slot: shellFloor)
       boundsBox(label: "ground-north", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: naveMid, z1: galleryNorth, slot: shellFloorNorth)
@@ -680,7 +680,7 @@ template shellPrototypes() {
     prototype $"gallery-floor-{k}" {
       document {
         name: $"gallery-floor-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellPalette(shellPads(k), k, (k - 1))
         for piece in shellFloorPieces(k) {
           shellSlab(
@@ -713,7 +713,7 @@ template shellPrototypes() {
   prototype "gallery-roof" {
     document {
       name: "gallery-roof"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPalette([], 3, 3)
       for piece in shellRoofPieces {
         shellSlab(label: $"roof-{piece.id}", x0: piece.x0, x1: piece.x1, y0: galleryCeiling[3], y1: galleryRoof, z0: piece.z0, z1: piece.z1, top: shellCream)
@@ -725,7 +725,7 @@ template shellPrototypes() {
   prototype "gallery-skylight" {
     document {
       name: "gallery-skylight"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPlain
       boundsBox(label: "pane", x0: -5.1, x1: 5.1, y0: 0.04, y1: 0.16, z0: (0 - (skylightHalf + 0.1)), z1: (skylightHalf + 0.1), slot: shellGlass)
       boundsBox(label: "frame-south", x0: -5.2, x1: 5.2, y0: 0, y1: 0.3, z0: (0 - (skylightHalf + 0.2)), z1: (0 - skylightHalf), slot: shellTrim)
@@ -741,7 +741,7 @@ template shellPrototypes() {
     prototype $"gallery-switchback-{k}" {
       document {
         name: $"gallery-switchback-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellKit
         switchbackStair(
           base: 0,
@@ -759,7 +759,7 @@ template shellPrototypes() {
     prototype $"gallery-spiral-{k}" {
       document {
         name: $"gallery-spiral-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellKit
         spiralStair(
           base: 0,
@@ -776,7 +776,7 @@ template shellPrototypes() {
   prototype "gallery-tower" {
     document {
       name: "gallery-tower"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPlain
       shellTower()
     }
@@ -784,7 +784,7 @@ template shellPrototypes() {
   prototype "gallery-bands" {
     document {
       name: "gallery-bands"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPlain
       shellBands()
     }
@@ -792,7 +792,7 @@ template shellPrototypes() {
   prototype "gallery-forecourt" {
     document {
       name: "gallery-forecourt"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellPlain
       shellForecourt()
     }
@@ -804,7 +804,7 @@ template shellPrototypes() {
     prototype $"gallery-pier{end.suffix}" {
       document {
         name: $"gallery-pier{end.suffix}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellStructure
         branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf], reach: end.reach)
       }
@@ -813,7 +813,7 @@ template shellPrototypes() {
       prototype $"gallery-pier-toy-{n}{end.suffix}" {
         document {
           name: $"gallery-pier-toy-{n}{end.suffix}"
-          schema: "puck.creation.v1"
+          schema: "puck.creation.v2"
           palette [shellBrushed((structurePalette[0] with { color: tone }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
           branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf], reach: end.reach)
         }
@@ -824,7 +824,7 @@ template shellPrototypes() {
   prototype "gallery-nave-pier" {
     document {
       name: "gallery-nave-pier"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellStructure
       branchedPier(base: 0, height: (tallBayHeight + 1.1), span: naveEndSpan, depth: 0.26, shaft: 0.22, foot: [shellTileHalf, shellTileHalf])
     }
@@ -832,7 +832,7 @@ template shellPrototypes() {
   prototype "gallery-arch" {
     document {
       name: "gallery-arch"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellStructure
       branchedPier(base: 0, height: (galleryCeiling[1] - galleryFloor[0]), span: archSpan, depth: 0.55, shaft: 0.6)
     }
@@ -840,7 +840,7 @@ template shellPrototypes() {
   prototype "gallery-bay" {
     document {
       name: "gallery-bay"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       windowBay(base: 0, width: bayWidth, height: bayHeight, sill: baySill, wall: galleryWall)
     }
@@ -848,7 +848,7 @@ template shellPrototypes() {
   prototype "gallery-bay-tall" {
     document {
       name: "gallery-bay-tall"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       windowBay(base: 0, width: tallBayWidth, height: tallBayHeight, sill: baySill, wall: galleryWall)
     }
@@ -858,7 +858,7 @@ template shellPrototypes() {
     prototype $"gallery-fan-{k}" {
       document {
         name: $"gallery-fan-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellKit
         fanShade(base: 0, signal: $"state.hallBlinds.level{k}", dynamics: "gallery-shade", radius: lookFan.radius, leaves: lookFan.leaves, spread: lookFan.spread, leaf: lookFan.leaf)
       }
@@ -868,7 +868,7 @@ template shellPrototypes() {
     prototype $"gallery-fan-tall-{k}" {
       document {
         name: $"gallery-fan-tall-{k}"
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: shellKit
         fanShade(base: 0, signal: $"state.hallBlinds.level{k}", dynamics: "gallery-shade", radius: lookFanTall.radius, leaves: lookFanTall.leaves, spread: lookFanTall.spread, leaf: lookFanTall.leaf)
       }
@@ -877,7 +877,7 @@ template shellPrototypes() {
   prototype "gallery-rail" {
     document {
       name: "gallery-rail"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       balustrade(base: 0, length: 4, posts: 3)
     }
@@ -885,7 +885,7 @@ template shellPrototypes() {
   prototype "gallery-rail-tile" {
     document {
       name: "gallery-rail-tile"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       balustrade(base: 0, length: galleryTile, posts: 1)
     }
@@ -893,7 +893,7 @@ template shellPrototypes() {
   prototype "gallery-rail-door-side" {
     document {
       name: "gallery-rail-door-side"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       balustrade(base: 0, length: treeDoorSide, posts: 1)
     }
@@ -901,7 +901,7 @@ template shellPrototypes() {
   prototype "gallery-rail-short" {
     document {
       name: "gallery-rail-short"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       balustrade(base: 0, length: 2, posts: 2)
     }
@@ -924,7 +924,7 @@ template shellPrototypes() {
   prototype "gallery-barrier" {
     document {
       name: "gallery-barrier"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: rainbowArchPalette(lookBarrier.colors, glow: lookBarrier.glow)
       rainbowArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, hues: length(lookBarrier.colors))
     }
@@ -933,7 +933,7 @@ template shellPrototypes() {
     prototype $"{kind.id}" {
       document {
         name: kind.id
-        schema: "puck.creation.v1"
+        schema: "puck.creation.v2"
         palette: map(
           latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
           entry => ((entry.glass != null) ? entry : shellBrushed(entry, lookBrushStructure))
@@ -955,7 +955,7 @@ template shellPrototypes() {
   prototype "gallery-branch-door" {
     document {
       name: "gallery-branch-door"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       edgeDoorway(base: 0, width: treeDoorWidth, post: treeDoorPost)
     }
@@ -963,7 +963,7 @@ template shellPrototypes() {
   prototype "gallery-planter" {
     document {
       name: "gallery-planter"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       planter(base: 0, length: (2 * galleryTile))
     }
@@ -971,7 +971,7 @@ template shellPrototypes() {
   prototype "gallery-bench" {
     document {
       name: "gallery-bench"
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: shellKit
       bench(base: 0, length: (2 * galleryTile))
     }

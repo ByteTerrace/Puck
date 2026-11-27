@@ -11,8 +11,8 @@ prototypes {
     document {
       name: "floor"
       palette [{ color: "#C9BFAE" }]
-      schema: "puck.creation.v1"
-      shape Box "bank" { material: 0  position [0, -1, -82.5]  scale [150, 1, 122.5] }
+      schema: "puck.creation.v2"
+      shape Box "bank" { material: 0  position [0, -1, 82.5]  scale [150, 1, 122.5] }
     }
   }
 }

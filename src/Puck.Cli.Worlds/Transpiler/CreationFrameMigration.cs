@@ -1406,6 +1406,8 @@ internal sealed class CreationFrameMigration : PuckMigration {
                 return binary with { Left = Negate(value: binary.Left) };
             case BinaryExpressionNode { Operator: "*" } binary when Number(expression: binary.Right) is not null:
                 return binary with { Right = Negate(value: binary.Right) };
+            case BinaryExpressionNode { Operator: "/" } binary when (Number(expression: binary.Right) is not null) && (binary.Left is BinaryExpressionNode { Operator: "-" } or UnaryExpressionNode { Operator: "-" } or LiteralExpressionNode):
+                return binary with { Left = Negate(value: binary.Left) };
             case ConditionalExpressionNode conditional:
                 return conditional with { WhenTrue = Negate(value: conditional.WhenTrue), WhenFalse = Negate(value: conditional.WhenFalse) };
             case IdentifierExpressionNode or CallExpressionNode or MemberAccessExpressionNode:

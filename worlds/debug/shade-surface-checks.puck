@@ -44,17 +44,17 @@ render {
 prototypes {
   prototype "shade-sphere" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celStyle)]
       shape Sphere "sphere" {
-        position [0, 1, -3]
+        position [0, 1, 3]
         scale [1, 1, 1]
       }
     }
   }
   prototype "shade-panel" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#FFFFFF", roughness: 1, specular: 0, shade: shadowProbe() }]
       shape Box "panel" {
         scale [0.8, 0.8, 0.04]
@@ -63,7 +63,7 @@ prototypes {
   }
   prototype "shade-blocker" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [{ color: "#303030", roughness: 1, specular: 0 }]
       shape Box "blocker" {
         scale [2, 2, 0.2]
@@ -72,7 +72,7 @@ prototypes {
   }
   prototype "shade-water" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette [
         flowed(waterMaterial, stillFlowLayer with { frame: Object, coverage: 0.3, tilt: 0.1 }, world: 0, glass: 1)
       ]
