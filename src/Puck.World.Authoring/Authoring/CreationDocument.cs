@@ -747,6 +747,9 @@ public sealed record CreationBehaviorDocument(
 /// see <see cref="CreationClipDocument"/>. Presentation-only, like the drivers.</param>
 /// <param name="Contact">What a solid placement of this creation collides as (null = <see cref="CreationContact.Drawn"/>);
 /// see <see cref="CreationContact"/>.</param>
+/// <param name="SizeAbout">The point, in the creation's own units, <paramref name="SizeBy"/> scales about (null = the
+/// origin): a creation sized by state keeps this point where it stands, so an exhibit resting on a stand can grow and
+/// shrink about its own centre. A literal point; drawn and contact alike.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -770,8 +773,13 @@ public sealed record CreationDocument(
     IReadOnlyList<VolumeDocument>? Volumes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipDocument>? Clips = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationContact? Contact = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationContact? Contact = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? SizeAbout = null
 ) {
+    /// <summary>Returns the creation-space point <see cref="SizeBy"/> scales about: <see cref="SizeAbout"/>'s literal
+    /// point, or the origin when it names none.</summary>
+    /// <returns>The point, in the creation's own units.</returns>
+    public System.Numerics.Vector3 SizePivot() => ((SizeAbout is { Reference: null } about) ? about.Value : System.Numerics.Vector3.Zero);
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v2";
     /// <summary>The version tag of a creation written in the retired author frame, which <c>puck migrate frame</c>

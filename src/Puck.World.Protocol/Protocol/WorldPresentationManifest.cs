@@ -688,11 +688,13 @@ public sealed class WorldPresentationManifest {
                             continue;
                         }
                         AddText(paint: paint);
-                        foreach (var (_, placeholder) in WorldScreenText.Placeholders(line: paintText.Template)) {
-                            Add(
-                                binding: placeholder,
-                                conversion: WorldStateConversion.Number
-                            );
+                        foreach (var line in new[] { paintText.Template, paintText.Scroll }) {
+                            foreach (var (_, placeholder) in WorldScreenText.Placeholders(line: line)) {
+                                Add(
+                                    binding: placeholder,
+                                    conversion: WorldStateConversion.Number
+                                );
+                            }
                         }
                     }
 

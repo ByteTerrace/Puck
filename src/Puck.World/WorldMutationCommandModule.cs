@@ -40,6 +40,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms WorldSaveForms = CommandForms.Of(verb: "world.save", "[path]");
     private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
     private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
+    private static readonly CommandForms WorldFormulaForms = CommandForms.Of(verb: "world.formula", "[shape:<type>|blend:<blend>]");
 
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
@@ -413,6 +414,32 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)) {
                     return CommandResult.Error(output: $"[world.save: could not write {target} ({exception.Message})]");
                 }
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Unbindable,
+            name: "world.formula",
+            description: $"Reads the engine's own field formulas in their typeset form (SdfFormulaTypesetting), the math a text paint's @formula line shows: with no argument every reference (shape:<type>, blend:<blend>); with one, that formula's equation, its terms (name, symbol, kind) and its step by step, as math markup; {WorldFormulaForms.Spelling}.",
+            forms: WorldFormulaForms,
+            handler: (context, args) => {
+                if (args.Count > 1) {
+                    return WorldFormulaForms.Refuse();
+                }
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.formula: {string.Join(separator: " ", values: Puck.SignedDistance.SdfFormulaTypesetting.All.Select(selector: static formula => formula.Reference))}]");
+                }
+                if (!Puck.SignedDistance.SdfFormulaTypesetting.TryFind(formula: out var formula, reference: args[0].ToString())) {
+                    return CommandResult.Error(output: $"[world.formula: '{args[0]}' names no shape or blend formula; world.formula lists them]");
+                }
+
+                var lines = new List<string> { $"[world.formula: {formula.Reference} name={formula.Name}]" };
+
+                lines.AddRange(collection: formula.Equation.Select(selector: static line => $"  equation: {line}"));
+                lines.AddRange(collection: formula.Terms.Select(selector: static term => $"  term: {term.Name} symbol={term.Symbol} kind={term.Kind}"));
+                lines.AddRange(collection: formula.Steps.Select(selector: static step => $"  step{step.Depth}: {step.Markup}"));
+
+                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: lines));
             }
         );
         yield return CommandDefinition.WithWireArgs(
