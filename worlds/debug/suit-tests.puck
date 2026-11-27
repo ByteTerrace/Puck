@@ -20,13 +20,14 @@ basis: "debug"
 // would send her home to a second world rather than to this one.
 documentId: "debug"
 
-// The two-seat scenarios seat a second body, whose own press the suit toggle's one rule over every player answers.
+// The two-seat scenarios seat a second body, whose own press the suit toggle's one rule over every player answers. The
+// debug world's four local seats stay, since what it composes reads them (the game station's chairs read seats 1 to
+// 4); the last two wait for a claim.
 import "stopped-machines"
 
 bodies {
-  localSeats: 2
-  seatActivation [Eager, Eager]
-  seatSpawns [stage, stage]
+  seatActivation [Eager, Eager, OnDemand, OnDemand]
+  seatSpawns [stage, stage, stage, stage]
 }
 
 test "a press on the ground takes the suit off and refuses flight" {
