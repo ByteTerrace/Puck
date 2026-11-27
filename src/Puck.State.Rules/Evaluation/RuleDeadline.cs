@@ -89,42 +89,7 @@ public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long 
         return needs.Build().ReadsTick;
     }
     // Whether the comparison at `token` reading false makes the whole gate read false, whatever every other comparison
-    // answers: the postfix program folded over three values (false, true, unknown), skipping its short-circuit
-    // instructions, which only spare work and never change the answer.
-    private static bool Closes(GateToken[] gate, int token) {
-        const byte False = 0, True = 1, Unknown = 2;
-        var stack = new byte[gate.Length];
-        var top = 0;
-
-        for (var index = 0; (index < gate.Length); index++) {
-            var op = gate[index];
-
-            switch (op.Op) {
-                case GateOp.ShortCircuit:
-                    continue;
-                case GateOp.Not:
-                    stack[(top - 1)] = (stack[(top - 1)] switch { False => True, True => False, _ => Unknown });
-                    continue;
-                case GateOp.All:
-                case GateOp.Any: {
-                    var isAll = (op.Op == GateOp.All);
-                    var decided = false;
-                    var unknown = false;
-
-                    for (var operand = (top - op.Arity); (operand < top); operand++) {
-                        decided |= (stack[operand] == (isAll ? False : True));
-                        unknown |= (stack[operand] == Unknown);
-                    }
-                    top -= op.Arity;
-                    stack[top++] = (decided ? (isAll ? False : True) : (unknown ? Unknown : (isAll ? True : False)));
-                    continue;
-                }
-                default:
-                    stack[top++] = ((index == token) ? False : Unknown);
-                    continue;
-            }
-        }
-
-        return ((top == 1) && (stack[0] == False));
-    }
+    // answers.
+    private static bool Closes(GateToken[] gate, int token) =>
+        (GateTruth.Fold(gate: gate, leaf: index => ((index == token) ? GateTruth.False : GateTruth.Unknown)) == GateTruth.False);
 }
