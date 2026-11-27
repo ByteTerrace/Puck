@@ -1,0 +1,47 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+    table flag {
+      a = 0
+      b = 0
+    }
+    table mark {
+      a = 0
+      b = 0
+    }
+  }
+}
+
+rule "tick" {
+  local want = count > 1
+  when flag[$each] != want
+  forEach: flag
+  flag[$each] = want
+  mark[$each] = 0 - ($tick + (want + 1))
+  if want {
+    other = flag[want] + (want + 1)
+  }
+}
+
+rule "keyed" {
+  local shown = count > 3
+  when flag[$each] != shown
+  forEach: flag
+  flag[$each] = shown
+  mark[$each] = $tick + 2
+}
+
+rule "again" {
+  local wanted = count > 2
+  when mark[$each] != wanted
+  forEach: mark
+  flag[$each] = wanted
+  mark[$each] = 0 - ($tick + 2)
+  if wanted {
+    other = flag[wanted] + 2
+  }
+}

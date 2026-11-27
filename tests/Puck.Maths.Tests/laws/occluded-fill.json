@@ -1,0 +1,20 @@
+[
+  {
+    "Id": "occluded-fill.slide-vs-ray-walk",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.OccludedFill", "Name": "Slide" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Slide over 256 seeded slider and occupancy words (occupancy holding every slider) on an eight-by-eight grid in all eight directions, each with the landing cells whose predecessor lies on the grid, and on a 64-cell strip both ways; and the refusal of a zero step and of a step of 64.",
+        "Against": "A walk of each slider's ray one cell at a time by grid coordinates, marking every cell until and including the first occupied one, which calls no OccludedFill member.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

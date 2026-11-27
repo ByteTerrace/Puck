@@ -211,6 +211,11 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// it follows goes, under the role declaration of each world it enters. Absent: the body holds no role.</param>
 /// <param name="Follows">The 0-based local seat whose player the role's body follows. Required with
 /// <paramref name="Role"/> and refused without it.</param>
+/// <param name="Pool">A shared Int cell (<c>{"row": "&lt;row&gt;"[, "key": "&lt;key&gt;"]}</c>) that admits this facet's
+/// bodies: while it holds zero the facet stands no body whatever <paramref name="Count"/> says, and while it holds any
+/// other value <paramref name="Count"/> stands. Every placement naming one cell is a pool whose bodies stand and leave
+/// on one write of it (<c>WorldPopulation.ReconcileInhabitCounts</c>), however many there are. Absent: the count
+/// alone decides. Refused as a literal and beside <paramref name="Role"/>.</param>
 public sealed record WorldPlacementInhabit(
     [property: DocumentText("a kit in the composed world")] string? Kit,
     [property: DocumentText("a look in the composed world")] string? Look,
@@ -219,12 +224,19 @@ public sealed record WorldPlacementInhabit(
     WorldDistribution? Distribution = null,
     [property: DocumentText("a role name")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Role = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Follows = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Follows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabitCount? Pool = null
 ) {
     /// <summary>Gets <see cref="Count"/> as authored — an absent field reads as a literal 1, exactly as before this
     /// facet's count could name a cell.</summary>
     [JsonIgnore]
     public WorldPlacementInhabitCount ResolvedCount => (Count ?? new WorldPlacementInhabitCount(Literal: 1));
+
+    /// <summary>Gets whether a cell decides how many bodies the facet stands: a <see cref="Count"/> naming a cell, or a
+    /// <see cref="Pool"/>. Such a facet starts every install with no body and follows its cells
+    /// (<c>WorldPopulation.ReconcileInhabitCounts</c>); any other stands its literal count from the install on.</summary>
+    [JsonIgnore]
+    public bool FollowsCells => ((Count?.Row is not null) || (Pool is not null));
 
     /// <summary>Gets whether the facet stands at most one body, so <c>placement:&lt;id&gt;</c> names that body (or none):
     /// an authored literal of 1, or a cell reference whose <see cref="Distribution"/> disc declares one sample, which

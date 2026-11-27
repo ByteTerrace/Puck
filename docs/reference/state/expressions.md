@@ -508,7 +508,7 @@ are the exact spellings the parser accepts.
 | Absence | `isAbsent(operand)`, `operand ?? fallback` | See [Answer an absent read](#answer-an-absent-read) |
 | Bits | `&`, `\|`, `^`, `~`, `<<`, `>>`, `>>>` (logical), `setBitCount`, `leadingZeroCount`, `trailingZeroCount`, `lowestSetBit`, `clearLowestSetBit`, `byteSwap`, `reverseBits`, `rotateLeft(value, count)`, `rotateRight(value, count)`, `parallelBitExtract(value, mask)`, `parallelBitDeposit(value, mask)`, `bitField(value, offset, width)`, `bitInsert(value, field, offset, width)` | Int |
 | Periodic masks | `replicationMask(width)`, `repeatBits(pattern, width)` | Int |
-| Board masks | `boardShift(mask, topology, direction)`, `boardRay(mask, topology, direction)`, `boardImage(mask, topology, element)` | Int; topologies of at most 64 cells |
+| Board masks | `boardShift(mask, topology, direction)`, `boardRay(mask, topology, direction)`, `boardImage(mask, topology, element)`, `boardSlide(sliders, occupied, topology, direction)` | Int; topologies of at most 64 cells |
 | Pairing | `pair(x, y)`, `pairX`, `pairY`, `pairSwap`, `pairMaximum`, `pairMinimum`, `pairSum`, `pairDifference`, `pairTranslate(p, delta)`, `pairScale(p, factor)` | Int |
 | Morton order | `mortonIndex(x, y)`, `mortonX`, `mortonY` | Int |
 | Hilbert order | `hilbertIndex(order, x, y)`, `hilbertX(order, index)`, `hilbertY(order, index)` | Int |

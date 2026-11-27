@@ -484,6 +484,7 @@ public static partial class RuleCompiler {
                 ExpressionOp.BoardShift => ("shifts", "direction"),
                 ExpressionOp.BoardRay => ("extends", "direction"),
                 ExpressionOp.BoardImage => ("carries", "symmetry element"),
+                ExpressionOp.BoardSlide => ("slides", "direction"),
                 _ => throw Malformed(detail: $"instruction '{operation}' is not a board query"),
             });
 
@@ -503,11 +504,15 @@ public static partial class RuleCompiler {
                 throw Malformed(detail: $"instruction '{operation}' names no {indexKind} '{board.Index}' of '{board.Topology}'");
             }
 
+            var arity = ExpressionOperators.Arity(operation: operation);
+
             Require(
-                arity: 1,
+                arity: arity,
                 operation: operation
             );
-            MatchKinds(operation, 1, CellKind.Int);
+            MatchKinds(operation, arity, CellKind.Int);
+            depth -= (arity - 1);
+            kinds[(depth - 1)] = CellKind.Int;
 
             return new CompiledExpressionToken(
                 Board: new BoardNeighbourQuery(

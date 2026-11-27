@@ -19,6 +19,9 @@ public sealed partial class WorldRuleHost {
     private const int ValueSource = 8;
     private const int FieldRowSource = 9;
     private const int ProducerSource = 10;
+    // A body's facts read through a placement reference: a move names the placement's ordinal, which TryFactKey answers
+    // as the key a placement roster's sweep binds for it.
+    private const int PlacementFactsSource = 11;
 
     // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
     // and answers from host state alone, so its value moves only where the host's state does. Each is read again
@@ -137,6 +140,8 @@ public sealed partial class WorldRuleHost {
     // Which bodies inhabit a placement, as of the placement table version it was built for: a move of one of them
     // moves the placement source.
     private bool[] m_inhabitant = [];
+    // The placement ordinal each body inhabits, or -1, built with m_inhabitant.
+    private int[] m_inhabitedPlacement = [];
     private ulong m_inhabitantsFor = ulong.MaxValue;
     private bool m_watchPlacements;
 
@@ -332,6 +337,13 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: factScope, Source: BodyFactsSource));
 
                 return true;
+            // A fact of whichever body inhabits a placement: a literal placement's ordinal, or the placement $each names.
+            case BodyFactOperand { Body.Kind: CompiledBodyRefKind.Placement } placementFact:
+                WatchFacts();
+                WatchPlacements();
+                facts.Add(item: new FactRead(Body: ((placementFact.Body.PlacementOrdinals is not null) ? FactRead.EachBody : placementFact.Body.Index), Source: PlacementFactsSource));
+
+                return true;
             // Why a body's producer stands down: the reasons a hold effect and the engagement fold write.
             case ProducerOperand producer when TryBodyScope(body: producer.BodyA, scope: out var producerScope):
                 WatchProducers();
@@ -423,7 +435,7 @@ public sealed partial class WorldRuleHost {
 
             return false;
         }
-        if (source == PlacementPoseSource) {
+        if (source is PlacementPoseSource or PlacementFactsSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
             if (ordinal < 0) {
@@ -431,8 +443,9 @@ public sealed partial class WorldRuleHost {
             }
 
             var inhabitant = Host.Population.BodyForPlacementOrdinal(ordinal: ordinal);
+            var versions = ((source == PlacementPoseSource) ? m_poseVersions : m_factsVersions);
 
-            version = ((Host.Population.PlacementTableVersion << 32) + ((((uint)inhabitant) < ((uint)m_poseVersions.Length)) ? m_poseVersions[inhabitant] : 0UL));
+            version = ((Host.Population.PlacementTableVersion << 32) + ((((uint)inhabitant) < ((uint)versions.Length)) ? versions[inhabitant] : 0UL));
 
             return true;
         }
@@ -461,9 +474,27 @@ public sealed partial class WorldRuleHost {
         }
     }
     /// <inheritdoc/>
+    /// <remarks>A placement's facts move by its ordinal, and the binding they reach is the one keyed by the placement's
+    /// id, as <c>placement:$each</c> resolves a key to a placement (<see cref="EachPlacementOrdinal"/>).</remarks>
+    public bool TryFactKey(int source, int body, out CellKey key) {
+        key = default;
+        if (source != PlacementFactsSource) {
+            return false;
+        }
+
+        var placements = Host.Document.Definition.Placements;
+
+        if ((((uint)body) < ((uint)placements.Count)) && Host.Arena.Keys.TryResolve(key: out var found, name: placements[body].Id.AsSpan())) {
+            key = found;
+        }
+
+        return true;
+    }
+    /// <inheritdoc/>
     public string DescribeFactSource(int source) => (source switch {
         BodyPoseSource => "bodyPose",
         BodyFactsSource => "fact",
+        PlacementFactsSource => "placementFact",
         LiveBodiesSource => "bodies",
         PlacementPoseSource => "placementPose",
         InputSource => "input",
@@ -574,7 +605,8 @@ public sealed partial class WorldRuleHost {
             return;
         }
 
-        var placementMoved = (m_watchPlacements && SeeInhabitants());
+        var tableMoved = (m_watchPlacements && SeeInhabitants());
+        var placementMoved = tableMoved;
 
         population.CollectFactCandidateSlots(fullScan: out var fullScan, into: m_factSlotScratch);
         var slotCount = (fullScan ? capacity : m_factSlotScratch.Count);
@@ -606,12 +638,17 @@ public sealed partial class WorldRuleHost {
             if (m_watchPoses && See(move: new FactRead(Body: index, Source: BodyPoseSource), now: pose, seen: ref m_seenPose[index], version: ref m_poseVersions[index])) {
                 placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
             }
-            if (m_watchFacts) {
-                _ = See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]);
+            if (m_watchFacts && See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]) &&
+                m_watchPlacements && (index < m_inhabitedPlacement.Length) && (m_inhabitedPlacement[index] >= 0)) {
+                m_factMoves.Add(item: new FactRead(Body: m_inhabitedPlacement[index], Source: PlacementFactsSource));
             }
         }
         if (placementMoved) {
             m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementPoseSource));
+        }
+        // Another body inhabiting a placement answers its facts: a move of the table reaches every placement's readers.
+        if (tableMoved) {
+            m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementFactsSource));
         }
     }
 
@@ -758,14 +795,17 @@ public sealed partial class WorldRuleHost {
         m_inhabitantsFor = population.PlacementTableVersion;
         if (m_inhabitant.Length != population.Capacity) {
             m_inhabitant = new bool[population.Capacity];
+            m_inhabitedPlacement = new int[population.Capacity];
         } else {
             Array.Clear(array: m_inhabitant);
         }
+        Array.Fill(array: m_inhabitedPlacement, value: -1);
         for (var ordinal = 0; (ordinal < Host.Document.Definition.Placements.Count); ordinal++) {
             var body = population.BodyForPlacementOrdinal(ordinal: ordinal);
 
             if (((uint)body) < ((uint)m_inhabitant.Length)) {
                 m_inhabitant[body] = true;
+                m_inhabitedPlacement[body] = ordinal;
             }
         }
 

@@ -1489,6 +1489,16 @@ public static class ExpressionOperators {
             symbol: null
         ),
         Define(
+            arity: 2,
+            cost: 24L,
+            function: true,
+            name: "boardSlide",
+            operation: ExpressionOp.BoardSlide,
+            payload: PayloadShape.Board,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
             arity: 0,
             cost: 2L,
             function: true,
