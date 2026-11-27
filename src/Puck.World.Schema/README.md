@@ -445,7 +445,7 @@ bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell—see the
-debug world's [`chess.puck`](../../worlds/debug/chess.puck) tabletop rules for the worked pattern (retain the accepted
+chess library's [`chess.puck`](../../worlds/games/chess.puck) judge (`chessJudge`) for the worked pattern (retain the accepted
 board while clearing and deriving fresh occupancy, detect which single piece
 moved between two occupied board cells—a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
@@ -2469,6 +2469,12 @@ metres, fixed point, 0 for no live body; any other axis refuses as
 `BodyPositionMalformed`; the debug world's `fall-recovery` rule sweeps
 `forEach: $bodies` and gates a `pose` on it to stand any body that falls out of
 the world on the floor below the valley sector it fell in),
+`$kinematics:<bodyRef>:<witness>` (one witness of the body's own contact
+phase, `WorldKinematicsWitness`: step-ups taken and refused, the tallest
+rise, snaps, steps that left and met the ground, the current and longest
+airborne and stuck runs in seconds, slope refusals, and the latest and deepest
+push a solve still applied in metres; 0 for no live body; an unknown name
+refuses as `KinematicsMalformed`),
 `$engaged:<bodyRef>:<screen>` (1 while the body's participant holds a control
 application onto that declared screen, captured or mirrored,
 0 otherwise or for no live body; an undeclared screen refuses as

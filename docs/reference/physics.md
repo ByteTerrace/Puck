@@ -420,7 +420,11 @@ The raised across move must be free of obstruction and make more progress
 than the blocked step. The landing must ground on a walkable surface, no higher
 than the step height above the start and higher than the blocked step. A wall costs
 two sweeps; an accepted step costs four sweeps and one support-distance query. The World calls
-it from the kit's `motion.stepHeight`, zero by default.
+it from the kit's `motion.stepHeight`, zero by default. `FixedStepUp.Attempt` runs the same step and returns
+which check decided it (`FixedStepUpOutcome`): a riser the body cleared at the step height but could not land on
+walkable support beyond is a refused step (`FixedStepUpOutcomes.IsRefusal`), where a riser taller than the step
+height, a wall or a ceiling is not. Every solve also reports `ContactResolution.Residual`, the deepest displacing
+push its last relaxation pass still applied at the endpoint the body keeps, zero when that pass found the pose clear.
 
 `FixedStepUp.Stands` says whether a body resting on support stands there or rests on an edge it will roll off. A
 contact alone cannot tell them apart: a round body resting on an edge meets a normal that leans just as a slope's

@@ -16,6 +16,9 @@ namespace Puck.World;
 /// match: a bare name position, the name positions of a reserved <c>$</c> channel's colon segments (read by the
 /// channel's grammar, <see cref="DescribesChannel"/>), a cell key's <c>$cell:</c>/<c>cell:</c> spelling, an infix
 /// expression's state reads and topology arguments, a postfix token's row, and a <c>state.&lt;row&gt;</c> binding.
+/// A cell key is local to its row and stays, except one spelling the id of an inhabited placement the fragment
+/// declares: a placement roster's key names that placement (<c>placement:$each</c>, <c>physics(quiescent, row)</c>),
+/// so it is qualified with it, in the rows' declared cells and at every key read alike.
 /// A placement, a prototype, a clock, a screen material, a camera and a spawn point each live in their own namespace, apart from every
 /// state-side name. The engine's own words are never renamed: a function an expression calls, and a channel's
 /// operation, facet, or body-reference kind.
@@ -424,6 +427,8 @@ public static class WorldModuleNamespace {
             return true;
         }
 
+        DeclareRosterKeys(declared: declared, module: module);
+
         var rewriter = new Rewriter(names: declared);
 
         Visit(
@@ -440,10 +445,52 @@ public static class WorldModuleNamespace {
                 );
             }
         );
+        QualifyRosterCellKeys(declared: declared, module: module);
 
         reason = string.Empty;
 
         return true;
+    }
+    // Every placement the fragment declares that a body inhabits is one a roster row's key can name.
+    private static void DeclareRosterKeys(JsonObject module, DeclaredNames declared) {
+        if ((module["placements"] as JsonObject)?["rows"] is not JsonArray placements) {
+            return;
+        }
+
+        foreach (var node in placements) {
+            if (
+                (node is JsonObject placement) &&
+                (placement["inhabit"] is JsonObject) &&
+                (placement["id"] is JsonValue id) &&
+                id.TryGetValue<string>(value: out var placementId)
+            ) {
+                declared.DeclareRosterKey(placement: placementId);
+            }
+        }
+    }
+    // A row's declared cell keys are local text the registry does not visit (StateCell.Key), so a roster key among
+    // them is qualified here, to the spelling every key read of the fragment was rewritten to.
+    private static void QualifyRosterCellKeys(JsonObject module, DeclaredNames declared) {
+        if ((module["state"] is not JsonObject state) || (state["world"] is not JsonArray rows)) {
+            return;
+        }
+
+        foreach (var row in rows) {
+            if ((row is not JsonObject declaration) || (declaration["cells"] is not JsonArray cells)) {
+                continue;
+            }
+
+            foreach (var cell in cells) {
+                if (
+                    (cell is JsonObject entry) &&
+                    (entry["key"] is JsonValue key) &&
+                    key.TryGetValue<string>(value: out var text) &&
+                    declared.TryMapKey(key: text, mapped: out var qualified)
+                ) {
+                    entry["key"] = qualified;
+                }
+            }
+        }
     }
     /// <summary>Restores compiler-generated reference placeholders to the names captured from the module's caller.</summary>
     /// <param name="module">The lowered module fragment; mutated.</param>
@@ -852,6 +899,14 @@ public static class WorldModuleNamespace {
     // restoration reaches.
     private interface INameMap {
         bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped);
+
+        // A cell key is local to its row, so only a map that qualifies placements renames one: the key of a placement
+        // roster names an inhabited placement by its id (WorldFactsVocabulary.PlacementOrdinals, `placement:$each`).
+        bool TryMapKey(string key, [NotNullWhen(returnValue: true)] out string? mapped) {
+            mapped = null;
+
+            return false;
+        }
     }
     // A map that answers by spelling alone, whatever the position: a module argument's placeholders, and a caller's
     // own dictionary.
@@ -875,8 +930,21 @@ public static class WorldModuleNamespace {
     private sealed class DeclaredNames : INameMap {
         private readonly Dictionary<(WorldNameKind Kind, string Name), string> m_exact = [];
         private readonly Dictionary<(NameSpace Space, string Name), string> m_spaced = [];
+        private readonly Dictionary<string, string> m_rosterKeys = new(comparer: StringComparer.Ordinal);
 
         public int Count => m_spaced.Count;
+
+        // An inhabited placement the fragment declares: a cell key spelling its id is a roster key naming it, so the
+        // key is qualified with the placement and the roster still names the fragment's own bodies.
+        public void DeclareRosterKey(string placement) {
+            if (m_exact.TryGetValue(key: (WorldNameKind.Placement, placement), value: out var qualified)) {
+                m_rosterKeys[placement] = qualified;
+            }
+        }
+        public bool TryMapKey(string key, [NotNullWhen(returnValue: true)] out string? mapped) => m_rosterKeys.TryGetValue(
+            key: key,
+            value: out mapped
+        );
         public IReadOnlyCollection<string> Qualified => m_spaced.Values;
 
         public void Declare(WorldNameKind kind, string name, string qualified) {
@@ -1154,6 +1222,7 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.FactPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A position axis and a body-state slot are engine names, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.BodyPositionPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.KinematicsPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A screen index is the document's own, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.EngagedPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.BodyStatePrefix), static read => read.BodyReferenceThen(rows: null)),
@@ -1297,8 +1366,8 @@ public static class WorldModuleNamespace {
 
             return $"{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}{Map(kind: WorldNameKind.State, name: row)}{tail}";
         }
-        // The text between a name's brackets: a bare or backquoted name is a cell key and stays; a reserved token
-        // rewrites as a key; anything else is an expression.
+        // The text between a name's brackets: a bare or backquoted name is a cell key and stays unless it is a roster
+        // key; a reserved token rewrites as a key; anything else is an expression.
         private string RewriteBracket(string inner) {
             if (!ExpressionSpelling.TryParseKey(
                 error: out _,
@@ -1325,7 +1394,10 @@ public static class WorldModuleNamespace {
                 return RewriteReserved(name: inner.Trim());
             }
 
-            return inner;
+            return (names.TryMapKey(key: key, mapped: out var roster)
+                ? ExpressionSpelling.PrintName(name: roster, quoted: true)
+                : inner
+            );
         }
 
         // Rewrites one registered site in place: a list holding one value of the site's role per element (names,
@@ -1418,7 +1490,10 @@ public static class WorldModuleNamespace {
                 return RewriteReserved(name: key);
             }
 
-            return key;
+            return (names.TryMapKey(key: key, mapped: out var roster)
+                ? roster
+                : key
+            );
         }
 
         // A reserved spelling's colon segments, each read by the position it holds in its channel's grammar

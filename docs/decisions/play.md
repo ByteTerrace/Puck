@@ -222,6 +222,38 @@ The standard's terminal console (`worlds/standard/contexts/terminal-console.puck
 and the gallery displays' terminal mode (`worlds/debug/shapes.puck`'s
 `terminalScreenPaints`) are the worked example.
 
+**Most UI is diegetic (the owner's ruling).** Player-facing interfaces, such as
+a quest journal or an inventory, live on objects in the world that the player
+engages, as the game stations' screens do. They are not flat overlays in a
+seat's view. An overlay is the exception that a world chooses, never the
+engine's default.
+
+**Lock-on targeting is a must-have (the owner's ruling).** A player can focus a
+target, as Z-targeting does in Ocarina of Time and lock-on in Metroid Prime.
+The camera frames the locked target, movement strafes around it, the player can
+cycle targets, and the target's information is shown diegetically. The
+mechanism is the engine's: camera ops, input patterns and a target query. What
+can be targeted, how the camera frames it and what is shown are authored in
+the standard package.
+
+**The companion is a diegetic marker (the owner's ruling).** Among its other
+roles, the companion marks what matters, as Navi did. It flies to and
+highlights points of interest, quest objectives and the locked target, so
+guidance comes from a character in the world rather than from HUD arrows.
+
+**Players mark the world (the owner's ruling).** A player can mark targets
+and points of interest, temporarily (a ping, the current lock, a short-lived
+mark) and long term (marks that persist across sessions and show in the world,
+in the journal and in the companion's guidance).
+
+**The quest journal is central and belongs to the player (the owner's
+ruling).** It is an integral part of the experience, in the direction Majora's
+Mask's Bomber's Notebook points: a record of people, places and times and the
+threads between them, with hints that update as the player learns. The scope
+is much larger. The player has broad control over organizing it and over their
+own notes: free notes, tags, links between entries, people, places and marks,
+and their own arrangement.
+
 ## Creatures and scale
 
 **Creature collectives are authorable local laws**, not a prescribed group

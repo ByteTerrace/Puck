@@ -249,6 +249,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             var grounded = (accepted && neighbourResolution.Grounded);
             resolution = new ContactResolution(
                 RequiredStepHeight: FixedQ4816.Max(x: resolution.RequiredStepHeight, y: neighbourResolution.RequiredStepHeight),
+                Residual: FixedQ4816.Max(x: resolution.Residual, y: neighbourResolution.Residual),
                 // A neighbour's pairs index another authority's colliders, so its uncertainty stays unnamed here.
                 Uncertainty: (neighbourResolution.Unproved ? resolution.Uncertainty.Union(other: ContactUncertainty.Unknown) : resolution.Uncertainty),
                 Grounded: (resolution.Grounded || grounded),
