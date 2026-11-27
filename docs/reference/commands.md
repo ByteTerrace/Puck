@@ -206,10 +206,13 @@ tick's own due signals, so anything synthesized during a fold is visible only to
 the next call. A catch-up of N steps therefore cannot stretch the gap between an
 input's active and inactive edge.
 
-A device whose terminal focus is released captures through
+The host-owned always-active plane (`IAlwaysActiveInputBindings`) answers a
+source the seat's active page leaves unbound, so a page that binds one of its
+sources (an engaged terminal's console on the backtick) takes it while that
+page is active. A device whose terminal focus is released captures through
 `CaptureFocusExempt`. Only commands declaring `CommandInputScope.FocusExempt`
-may dispatch, and only the host-owned always-active plane answers, so a typed
-key cannot press a gameplay page's binding. A RELEASE is still forwarded through
+may dispatch, and only the plane answers, so a typed key cannot press a
+gameplay page's binding. A RELEASE is still forwarded through
 the page resolver, because that resolver holds the chord tracker, the press
 latches, and the armed command rows; a release those never observe would leave a
 page flipped and a row armed until the console closes.

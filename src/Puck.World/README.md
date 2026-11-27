@@ -989,7 +989,8 @@ verbs whose names start with the prefix (`help world.state`), and
 
 Each local seat has its own text session, editor, history, tape, and allowed
 command surface. Backtick is a terminal-owned, always-active binding rather
-than a world-page row. Seated `console [on|off]` invocations affect their own
+than a world-page row; it yields only to a page that binds it, as an engaged
+terminal's console does. Seated `console [on|off]` invocations affect their own
 seat; stdin uses `console [on|off] <player>` and must name the target. Until
 there is a separate operator panel, stdin exchanges and deferred edit echoes
 live on their own operator tape and are mirrored onto the displayed seat-one

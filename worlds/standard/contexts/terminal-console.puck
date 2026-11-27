@@ -1,0 +1,392 @@
+// A terminal's console: a line a player types at a desk-view terminal they are engaged with, which runs one of the
+// commands that terminal offers. A library: `terminalPlay(console: ...)` (terminal.puck) expands its template, and a
+// world lists `terminalConsoleFamily()` in its `inputModes`. It names no place, command or look: what each command does
+// is the importing world's rules, and which terminals offer it is the world's data.
+//
+// Engaged at a terminal, the console key (the backtick, `toggleSources`) opens the console; it closes it again (as do
+// any `closeSources`), and stepping back from the terminal closes it too. Escape is not among them: it is the host's,
+// reserved for the pause menu (docs/decisions/play.md), so no page may bind it. While the console is open the seat's
+// controls are the console's alone: every character the keyboard commits is typed into the line, Enter runs it,
+// Backspace erases its last character, and nothing the seat presses moves its body or its camera. The console key
+// itself is never typed. A letter is typed in lower case, so a line matches without case. The console key reaches the
+// console rather than the host's developer console because the host's always-active plane answers only a source the
+// seat's active page leaves unbound.
+//
+// A line runs only when it is one of the console's command lines, written in lower case, and the terminal the seat is
+// engaged with offers it. Running a command posts its `action` and `value` to that terminal's mailbox
+// (`terminalAction` and `terminalValue`, keyed by the terminal's number), and the world's own rules take it from there
+// as they take a press on the terminal's screen, through the same state; the console shows the command's `reply`. Any
+// other line shows the console's `unknown` reply and changes nothing.
+//
+// The console is a trust boundary its rules enforce, not its look: typed text reaches the simulation only as Text
+// events on `terminalText`, which the authority admits only while the seat's console is open (the `terminal-console`
+// input family), and the only thing that reads them is the key rule below. That rule looks the line up in the console's
+// command table and writes only the mailbox of the terminal the body is engaged with, read from the authority's own
+// `terminalAt` cell, never from the text. A line reaches no console verb, grant or other terminal.
+//
+// A command is { line, action, value, reply, terminals }: `line` the text that runs it, `action` a whole number the
+// world's rules read (0, the default, only replies), `value` the number posted beside it, `reply` up to
+// `terminalConsoleReplyLines` lines it shows, and `terminals` the numbers of the terminals that offer it (every one, when
+// absent). The console itself is { commands, title, greeting, unknown, hint }: `greeting` the reply shown as it opens and
+// `unknown` the reply to a line no offered command matches. `terminalWrap` breaks a list of words into reply lines.
+//
+// The state, keyed by body index unless it says otherwise:
+//
+//   terminalConsoleOpen  1 while the body's console is open, which the console's binding group and panel read
+//   terminalLine         the line being typed, its letters in lower case
+//   terminalLength       how many characters the line holds
+//   terminalLast         the last line run, and terminalRan the number of what it ran (0 the greeting, the command's
+//                        place in `commands` from 1, and one past the last for the unknown reply)
+//   terminalReply0..     the lines of the reply the console shows
+//   terminalAction       keyed by terminal number: the action of the last command run there, until the world's rules
+//                        take it and write 0; terminalValue its value
+//
+//   import "../standard/contexts/terminal"
+//   import "../standard/contexts/terminal-console"
+//   inputModes { families [terminalFamily(), terminalConsoleFamily(), ...] }
+//   terminalPlay(terminals: [...], console: { commands [{ line: "lamp on", action: 1, value: 1, reply ["the lamp is on"] }] })
+
+// The most characters a line holds, and the lines a reply shows.
+let terminalConsoleWidth = 56
+let terminalConsoleReplyLines = 10
+
+// The family that offers the console's channels: the console key always, and the typed text, Enter and Backspace while
+// the body's console is open.
+function terminalConsoleFamily(suspendedBy = []) = {
+  name: "terminal-console"
+  selector { kind: BodyState, name: "terminalConsole" }
+  default: "closed"
+  states [
+    { name: "closed", values ["0"], channels ["terminalConsole"] }
+    { name: "open", values ["1"], channels ["terminalConsole", "terminalText", "terminalEnter", "terminalErase"] }
+  ]
+  suspendedBy: suspendedBy
+  transitions []
+}
+
+// The words, joined by `gap` into lines no wider than `width` characters, for a command's reply.
+function terminalWrap(words, width = terminalConsoleWidth, gap = "  ") = reduce(
+  words,
+  [""],
+  (lines, word) => terminalWrapStep(lines, word, width, gap)
+)
+function terminalWrapStep(lines, word, width, gap) = ((terminalLastOf(lines) == "") ? concat(
+  terminalInitOf(lines),
+  [word]
+) : (((length(scalars(terminalLastOf(lines))) + length(scalars(gap)) + length(scalars(word))) <= width) ? concat(
+  terminalInitOf(lines),
+  [$"{terminalLastOf(lines)}{gap}{word}"]
+) : concat(lines, [word])))
+function terminalLastOf(lines) = lines[length(lines) - 1]
+function terminalInitOf(lines) = filter(lines, (line, i) => (i < (length(lines) - 1)))
+
+// The console's binding group, a binding overlay row listed ahead of the terminal's own so it wins while the console is
+// open: the console key closes it, Enter runs the line, Backspace erases, and nothing else is bound, so the
+// keys the seat types reach the line and nothing else.
+function terminalConsoleOverlay(toggleSources, closeSources, enterSources, eraseSources) = {
+  id: "terminal-console"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: "state:terminalConsoleOpen", state: "1", group: "terminal-console" }
+    ]
+    chords [
+      {
+        chord []
+        group: "terminal-console"
+        page {
+          id: "terminal-console"
+          label: "Console"
+          entries [
+            {
+              channel: "terminalConsole"
+              id: "terminalConsoleClose"
+              label: "Close"
+              scale: 1
+              sources: concat(toggleSources, closeSources)
+            }
+            { channel: "terminalEnter", id: "terminalEnter", label: "Run", scale: 1, sources: enterSources }
+            { channel: "terminalErase", id: "terminalErase", label: "Erase", scale: 1, sources: eraseSources }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// The console a terminalPlay world's terminals share: `count` terminals, bodies 0 to `seats` - 1 seeded and up to
+// `capacity` keyed, and the local seats 1 to `seats` typing (a step's input events are read for a literal seat).
+// `keysPerStep` bounds the characters a seat's line takes in one step; `rect` is the panel's place in the seat's view.
+template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep = 16, rect = {
+  x: 0.2
+  y: 0.5
+  width: 0.6
+  height: 0.46
+}) {
+  let shown = {
+    title: "CONSOLE"
+    greeting ["type help for the commands"]
+    unknown ["not a command here; type help"]
+    hint: "ENTER runs   BACKSPACE erases   ` closes"
+  } with console
+  let commands = map(shown.commands, command => ({ action: 0, value: 0, reply [], terminals: null } with command))
+  let unknownNumber = length(commands) + 1
+  let stride = length(commands) + 2
+  let restricted = flatMap(
+    range(0, length(commands)),
+    c => ((commands[c].terminals == null) ? [] : map(
+      commands[c].terminals,
+      t => { key: $"{t * stride + c + 1}", value: 1 }
+    ))
+  )
+  let replies = concat([shown.greeting], map(commands, command => command.reply), [shown.unknown])
+  let blank = map(range(0, terminalConsoleReplyLines), i => "")
+  let bodies = map(range(0, seats), body => $"{body}")
+  let consoleTitle = shown.title
+  let consoleHint = shown.hint
+
+  channels [
+    { name: "terminalConsole", shape: Binary, composition: true }
+    { name: "terminalText", shape: Text, composition: true }
+    { name: "terminalEnter", shape: Binary, composition: true }
+    { name: "terminalErase", shape: Binary, composition: true }
+  ]
+
+  state {
+    body [
+      {
+        name: "terminalConsole"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
+    ]
+    world {
+      for name in ["terminalConsoleOpen", "terminalConsolePosed", "terminalLength", "terminalEntered", "terminalRan"] {
+        row {
+          name: name
+          kind: Int
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: 0 })
+        }
+      }
+      for name in concat(
+        ["terminalLine", "terminalLast"],
+        map(range(0, terminalConsoleReplyLines), i => $"terminalReply{i}")
+      ) {
+        row {
+          name: name
+          kind: Text
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: "" })
+        }
+      }
+      for name in ["terminalAction", "terminalValue"] {
+        row {
+          name: name
+          kind: Int
+          capacity: count
+          cells: map(range(1, count + 1), number => { key: $"{number}", value: 0 })
+        }
+      }
+      // The command table: each line's number, and each number's action, value and whether every terminal offers it.
+      row {
+        name: "terminalCommandOf"
+        kind: Int
+        capacity: length(commands)
+        cells: map(range(0, length(commands)), c => { key: commands[c].line, value: c + 1 })
+      }
+      row {
+        name: "terminalCommandAction"
+        kind: Int
+        capacity: length(commands)
+        cells: map(range(0, length(commands)), c => { key: $"{c + 1}", value: commands[c].action })
+      }
+      row {
+        name: "terminalCommandValue"
+        kind: Int
+        capacity: length(commands)
+        cells: map(range(0, length(commands)), c => { key: $"{c + 1}", value: commands[c].value })
+      }
+      row {
+        name: "terminalCommandAll"
+        kind: Int
+        capacity: length(commands)
+        cells: map(
+          range(0, length(commands)),
+          c => { key: $"{c + 1}", value: ((commands[c].terminals == null) ? 1 : 0) }
+        )
+      }
+      // The terminals a restricted command is offered at, keyed `terminal * stride + command`.
+      row {
+        name: "terminalOffers"
+        kind: Int
+        capacity: maximum(1, length(restricted))
+        cells: restricted
+      }
+      // Each reply's lines, keyed by what ran (terminalRan).
+      for i in range(0, terminalConsoleReplyLines) {
+        row {
+          name: $"terminalReplies{i}"
+          kind: Text
+          capacity: length(replies)
+          cells: map(range(0, length(replies)), r => { key: $"{r}", value: concat(replies[r], blank)[i] })
+        }
+      }
+    }
+  }
+
+  // The console key opens the console of a body engaged at a terminal and closes an open one.
+  rule "terminal-console-toggle" {
+    forEach: $players
+    local open = terminalConsoleOpen[$each] ?? 0
+    local engaged = terminalAt[$each] ?? 0
+    local target = (open == 1) ? 0 : ((engaged != 0) ? 1 : 0)
+    when channel(each, terminalConsole) >= 1
+    mode: Edge
+    terminalConsoleOpen[$each] = target
+  }
+  // Stepping back from the terminal, however it happens, closes the console.
+  rule "terminal-console-drop" {
+    forEach: $players
+    when (terminalConsoleOpen[$each] ?? 0) == 1 and (terminalAt[$each] ?? 0) == 0
+    mode: Level
+    terminalConsoleOpen[$each] = 0
+  }
+  // Carries an opening or a closing to the body's `terminalConsole` register, which selects the console's input family,
+  // and starts the console afresh: an empty line and the greeting.
+  rule "terminal-console-pose" {
+    forEach: $players
+    local open = terminalConsoleOpen[$each] ?? 0
+    when (terminalConsolePosed[$each] ?? 0) != open
+    mode: Level
+    terminalConsolePosed[$each] = open
+    setBodyState(key: $each, state: "terminalConsole", expression: (open == 1) ? 1.0 : 0.0)
+    for name in ["terminalLine", "terminalLast"] {
+      setState(state: name, key: $each, text: "")
+    }
+    terminalLength[$each] = 0
+    terminalEntered[$each] = 0
+    terminalRan[$each] = 0
+    for i in range(0, terminalConsoleReplyLines) {
+      setState(state: $"terminalReply{i}", key: $each, fromState: $"terminalReplies{i}", fromKey: 0)
+    }
+  }
+
+  // Each event of a seat's step, oldest first, so characters and erases in one step land in the order typed: a character
+  // joins the line, Backspace erases its last character, and Enter marks the line entered (`terminalEntered`), after
+  // which the step's later events wait for the run below to take it.
+  for seat in range(1, seats + 1) {
+    let body = $"{seat - 1}"
+    rule $"terminal-console-key-{seat}" {
+      forEach: inputEvents(seat)
+      maxFirings: keysPerStep
+      local raw = inputValue(seat, terminalText, Text, each) ?? 0
+      local typed = inputEdge(seat, terminalText, Text, each) and (raw >= 32) and (raw != 96) and (raw != 127)
+      local erase = inputEdge(seat, terminalErase, Press, each)
+      local enter = inputEdge(seat, terminalEnter, Press, each)
+      local typedCount = terminalLength[body] ?? 0
+      when (terminalConsoleOpen[body] ?? 0) == 1 and (terminalEntered[body] ?? 0) == 0 and (typed or erase or enter)
+      mode: Level
+      if typed and typedCount < terminalConsoleWidth {
+        terminalLine[body] += ((raw >= 65) and (raw <= 90)) ? (raw + 32) : raw
+        terminalLength[body] = typedCount + 1
+      }
+      if erase and typedCount > 0 {
+        terminalLine[body] -= 1
+        terminalLength[body] = typedCount - 1
+      }
+      if enter and typedCount > 0 {
+        terminalEntered[body] = 1
+      }
+    }
+    // An entered line runs the command its lower-case text names when the terminal the body is engaged with offers it,
+    // posting its action to that terminal's mailbox; either way the console shows the reply of what ran (terminalRan)
+    // and starts a fresh line.
+    rule $"terminal-console-run-{seat}" {
+      local found = terminalCommandOf[terminalLine[body]] ?? 0
+      local at = terminalAt[body] ?? 0
+      local offered = (
+        (found > 0) and
+        (at > 0) and
+        (((terminalCommandAll[found] ?? 0) == 1) or ((terminalOffers[at * stride + found] ?? 0) == 1))
+      )
+      local action = offered ? (terminalCommandAction[found] ?? 0) : 0
+      when (terminalEntered[body] ?? 0) == 1
+      mode: Level
+      terminalEntered[body] = 0
+      terminalRan[body] = offered ? found : unknownNumber
+      if action {
+        terminalAction[at] = action
+        terminalValue[at] = terminalCommandValue[found] ?? 0
+      }
+      setState(state: terminalLast, key: body, fromState: terminalLine, fromKey: body)
+      for i in range(0, terminalConsoleReplyLines) {
+        setState(
+          state: $"terminalReply{i}",
+          key: body,
+          fromState: $"terminalReplies{i}",
+          fromKey: $"$cell:terminalRan:{body}"
+        )
+      }
+      setState(state: terminalLine, key: body, text: "")
+      terminalLength[body] = 0
+    }
+  }
+
+  // The console, drawn in the view of each seat whose console is open: its title, the last line run and its reply, the
+  // line being typed and the keys that work it.
+  hud {
+    panels [
+      {
+        id: "terminal-console"
+        rect: rect
+        layer: Over
+        style: Panel
+        visible { $type: "state", binding: "state.terminalConsoleOpen.$body", comparison: Equal, value: 1 }
+        elements: concat(
+          [
+            {
+              id: "title"
+              kind: Text
+              rect { x: 0.03, y: 0.02, width: 0.94, height: 0.06 }
+              style: Accent
+              text: consoleTitle
+            }
+            {
+              id: "last"
+              kind: Text
+              rect { x: 0.03, y: 0.085, width: 0.94, height: 0.06 }
+              style: Dim
+              template: "> {state.terminalLast.$body}"
+            }
+          ],
+          map(range(0, terminalConsoleReplyLines), i => {
+            id: $"reply{i}"
+            kind: Text
+            rect { x: 0.05, y: (0.15 + (i * (0.63 / terminalConsoleReplyLines))), width: 0.92, height: 0.06 }
+            style: Primary
+            template: $"{{state.terminalReply{i}.$body}}"
+          }),
+          [
+            {
+              id: "line"
+              kind: Text
+              rect { x: 0.03, y: 0.8, width: 0.94, height: 0.07 }
+              style: Accent
+              template: "> {state.terminalLine.$body}_"
+            }
+            {
+              id: "hint"
+              kind: Text
+              rect { x: 0.03, y: 0.89, width: 0.94, height: 0.06 }
+              style: Dim
+              text: consoleHint
+            }
+          ]
+        )
+      }
+    ]
+  }
+}

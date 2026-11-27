@@ -170,7 +170,7 @@ routes [
             goTo(wonderAt(8.7), "walk", 0.08)
             face(270, 0.5)
             { $type: "cross", headingDegrees: 270, until: "place-west-hall", pace: "walk", metres: 3 }
-            goTo(galleryWorld(6.2, floor0, 13.4), "walk")
+            goTo(galleryWorld(6.2, floor0, 10.4), "walk")
           ]
         }
       ],

@@ -723,11 +723,29 @@ public static partial class RuleCompiler {
         var hasText = (text is not null);
         var isTextRow = (row.Kind == CellKind.Text);
 
+        if (isTextRow && (write == StateWriteKind.Add)) {
+            return ResolveTextEdit(
+                context: context,
+                expression: expression,
+                fromKey: fromKey,
+                fromState: fromState,
+                key: key,
+                liveRow: liveRow,
+                row: row,
+                rowName: rowName,
+                ruleName: ruleName,
+                text: text,
+                value: value,
+                valueSeconds: valueSeconds,
+                vector: vector,
+                verb: verb
+            );
+        }
+
         if (
             (hasText && !isTextRow) ||
             (isTextRow && !hasText && (fromState is null)) ||
-            (isTextRow && (expression is not null)) ||
-            (isTextRow && (write == StateWriteKind.Add))
+            (isTextRow && (expression is not null))
         ) {
             throw new RuleException(
                 detail: (hasText
@@ -962,6 +980,97 @@ public static partial class RuleCompiler {
             source: CompiledValueSource.FromOperand(operand: source.Operand),
             text: null,
             write: write
+        );
+    }
+    // An add to a kind=Text cell edits its end by a whole number: a positive value appends the Unicode scalar it names,
+    // a negative one removes that many scalars (a subtraction lowers to the add of its negation), and zero leaves the
+    // text as it stands. The number is an ordinary Int source, so a typed character read from an input event appends
+    // as it was typed.
+    private static WriteEffect ResolveTextEdit(StateChannelRef rowName, StateRowDeclaration row, LiveRow? liveRow, StateChannelRef? key, decimal? value, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string? vector, string ruleName, RuleCompileContext context, string verb) {
+        var sources = (((value is not null) ? 1 : 0) + ((fromState is not null) ? 1 : 0) + ((expression is not null) ? 1 : 0));
+
+        if (
+            (sources != 1) ||
+            (text is not null) ||
+            (valueSeconds is not null) ||
+            (vector is not null) ||
+            ((fromKey is not null) && (fromState is null))
+        ) {
+            throw new RuleException(
+                detail: $"'{verb}' adds to text row '{rowName}' — a text edit names exactly one whole-number 'value', 'expression' or Int 'fromState': a scalar to append, or a negative count of scalars to remove",
+                refusal: RuleRefusal.EffectSourceAmbiguous,
+                ruleName: ruleName
+            );
+        }
+
+        var destination = ResolveDestination(
+            context: context,
+            key: key,
+            row: row,
+            ruleName: ruleName,
+            verb: verb
+        );
+        var rowOrdinal = ((liveRow is null)
+            ? ResolveRowOrdinal(
+                context: context,
+                name: rowName.Spelling
+            )
+            : -1);
+        CompiledValueSource source;
+
+        if (value is { } literal) {
+            source = CompiledValueSource.Constant(rawValue: LiteralToRaw(
+                kind: CellKind.Int,
+                literal: literal,
+                ruleName: ruleName,
+                verb: verb
+            ));
+        } else if (expression is not null) {
+            source = CompiledValueSource.FromExpression(
+                expression: CompileExpression(
+                    context: context,
+                    expression: expression,
+                    kind: CellKind.Int,
+                    ruleName: ruleName,
+                    verb: verb
+                ),
+                kind: CellKind.Int
+            );
+        } else {
+            var operand = ResolveOperand(
+                context: context,
+                cell: fromKey,
+                operand: fromState!,
+                site: new OperandSite(
+                    AllowText: false,
+                    FieldLabel: "fromState",
+                    KeyFieldLabel: "fromKey",
+                    RuleName: ruleName,
+                    Verb: verb
+                )
+            );
+
+            if (operand.ValueKind != CellKind.Int) {
+                throw new RuleException(
+                    detail: $"'{verb}' adds '{fromState}' (kind={StateSpelling.Kind(kind: operand.ValueKind)}) to text row '{rowName}' — a text edit's number is kind=Int",
+                    refusal: RuleRefusal.EffectSourceKindMismatch,
+                    ruleName: ruleName
+                );
+            }
+
+            source = CompiledValueSource.FromOperand(operand: operand.Operand);
+        }
+
+        return new WriteEffect(
+            describe: $"{verb} {rowName}.{destination.Spelling} edits text",
+            key: destination.Key,
+            keyFrom: destination.KeyFrom,
+            rowFrom: liveRow,
+            rowOrdinal: rowOrdinal,
+            source: source,
+            text: null,
+            textEdit: true,
+            write: StateWriteKind.Add
         );
     }
     private static IRuleEffect ResolveInstanceWrite(RuleInstanceBinding binding, StatePoolFieldDescriptor field, StateChannelRef? key, StateWriteKind write, decimal? value, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string? vector, string ruleName, RuleCompileContext context, string verb) {

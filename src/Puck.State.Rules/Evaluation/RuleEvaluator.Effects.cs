@@ -1353,7 +1353,31 @@ public sealed partial class RuleEvaluator {
         var write = ((WriteEffect)effect);
         var text = write.Text;
 
-        if ((text is null) && !TryReadText(effect: effect, firing: in firing, source: write.Source.Operand, step: out var textStep, text: out text)) {
+        if (write.IsTextEdit) {
+            if (!TryReadValue(effect: effect, firing: in firing, kind: CellKind.Int, raw: out var edit, source: write.Source, step: out var editStep)) {
+                return editStep;
+            }
+
+            var current = ((m_host.Arena.Read(key: key, rowOrdinal: rowOrdinal) is { Kind: CellKind.Text } cell)
+                ? (cell.AsText ?? string.Empty)
+                : string.Empty);
+
+            if (!TextEdit.TryApply(edit: edit, edited: out text, text: current)) {
+                ReportRefusal(
+                    detail: $"{edit} is no Unicode scalar to append",
+                    effect: effect.Describe,
+                    refusal: RuleEffectRefusal.Arithmetic,
+                    ruleName: firing.RuleName,
+                    tick: firing.Tick
+                );
+
+                return Step.Refused;
+            }
+
+            if (ReferenceEquals(objA: text, objB: current)) {
+                return Step.Done;
+            }
+        } else if ((text is null) && !TryReadText(effect: effect, firing: in firing, source: write.Source.Operand, step: out var textStep, text: out text)) {
             return textStep;
         }
 
