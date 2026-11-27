@@ -33,39 +33,49 @@
 // The state, keyed by panel:
 //
 //   learnSubject   the subject's index, which the world writes
-//   learnOpen      0 closed, 1 the sentence, 2 the maths
+//   learnOpen      0 closed, 1 the sentence, 2 the maths (a tap, a state write or a rule may set it)
 //   learnTerm      the selected term's row, -1 for none
 //   learnScroll    the steps' scroll, a share of their overflow (a math text paint's `scroll`)
 //   learnVelocity  the scroll's run on after a flick, a share a tick
 //   learnFormula   the subject's formula reference while the maths shows, else ""
 //   learnSentence  the subject's sentence
 //   learnScrubTerm the term the scrub sets, or "" for none; learnScrubOn is 1 when there is one
-//   learnValue     the scrub term's value as drawn; learnToggle the layer button's label
+//   learnValue     the scrub term's value, always its value at full size times the subject's `learnSize`, whoever wrote
+//                  the size; learnToggle the layer button's label
+//   learnBarInk    the scrub bar's ticks, a colour each (`learnBarText` draws them): lit up to the share the size stands at
 //
-// and learnPress, learnLastY, learnLastTick, learnScrubbing, learnSubjectAt and learnView are the gestures' and the
-// rules' own.
+// and learnPress, learnLastY, learnLastTick, learnScrubbing, learnBarAt and learnView are the gestures' and the rules'
+// own. Every cell above that comes from the subject or the layer follows `learnSubject` and `learnOpen` in the one
+// `learn-view` rule, so a tap, a state write and a subject change all reach the same copies.
 
-// What each of the engine's formula terms means, by its name in the formula (SdfFormulaTypesetting's terms; `world.formula
-// <reference>` lists a formula's). A term the glossary leaves out shows its name alone.
+// What each of the engine's formula terms is, in plain words, by its name in the formula (SdfFormulaTypesetting's terms;
+// `world.formula <reference>` lists a formula's). A term's row already shows its symbol, so a meaning never repeats it or
+// the code's name for the term; a term the glossary leaves out shows its name alone.
 let learnGlossary = [
   { name: "p", meaning: "the point being measured" }
-  { name: "radius", meaning: "centre to surface" }
-  { name: "halfExtents", meaning: "half the size on each axis" }
-  { name: "cornerRadius", meaning: "how round the corners are" }
-  { name: "major", meaning: "the ring, centre to tube" }
+  { name: "radius", meaning: "radius, from the centre to the surface" }
+  { name: "halfExtents", meaning: "half the size across, along each direction" }
+  { name: "cornerRadius", meaning: "how rounded the corners are" }
+  { name: "major", meaning: "the ring's radius, from the centre to the middle of the tube" }
   { name: "minor", meaning: "the tube's radius" }
   { name: "halfHeight", meaning: "half the height" }
-  { name: "rounding", meaning: "how round the edges are" }
-  { name: "endpoint", meaning: "where the segment ends" }
-  { name: "current", meaning: "distance to the shapes so far" }
-  { name: "candidate", meaning: "distance to this shape" }
-  { name: "smoothRadius", meaning: "softness, the fillet's width" }
-  { name: "normal", meaning: "the way the plane faces" }
-  { name: "offset", meaning: "the plane's offset" }
-  { name: "exponent", meaning: "how square the form is" }
+  { name: "rounding", meaning: "how much the edges are rounded off" }
+  { name: "endpoint", meaning: "where the line ends" }
+  { name: "current", meaning: "the distance to the shapes joined so far" }
+  { name: "candidate", meaning: "the distance to the shape being joined" }
+  { name: "smoothRadius", meaning: "how soft the join is, the width of the blend between the shapes" }
+  { name: "normal", meaning: "the direction the plane faces" }
+  { name: "offset", meaning: "how far the plane sits from the middle" }
+  { name: "exponent", meaning: "how square or round the shape is" }
+  { name: "steps", meaning: "how many steps there are" }
+  { name: "radii", meaning: "the radii the shape is rounded by" }
+  { name: "liftAmount", meaning: "how far the shape is lifted" }
+  { name: "lift", meaning: "the amount lifted" }
 ]
-// The highlighted term's, the live values' and the meanings' colours.
-let learnColors = { highlight: "#FFB347", live: "#7FE0D0", quiet: "#A9B4C2" }
+// The highlighted term's, the live values' and the meanings' colours, and the scrub bar's lit ticks and its track.
+let learnColors = { highlight: "#FFB347", live: "#7FE0D0", quiet: "#A9B4C2", fill: "#6FB0B4", track: "#143F46" }
+// How many ticks the scrub bar draws.
+let learnBarCells = 24
 // A wheel notch's scroll, a flick's slowing a tick, and the run on a flick comes to rest under.
 let learnWheelStep = 0.12
 let learnFriction = 0.9
@@ -98,6 +108,9 @@ function learnScrollText(key) = $"{{state.learnScroll.{key}}}"
 function learnSentenceText(key) = $"{{state.learnSentence.{key}}}"
 function learnToggleText(key) = $"{{state.learnToggle.{key}}}"
 function learnScrubText(key) = $"{{state.learnScrubTerm.{key}}}  {{state.learnValue.{key}}}"
+// The scrub bar's ticks, a text paint's template read with `markup: true`: `learnBarCells` vertical bars, each in its
+// `learnBarInk` colour.
+function learnBarText(key, cells = learnBarCells) = join(map(range(0, cells), i => $"[color={{state.learnBarInk.{key}-{i}}}]|[/color]"), "")
 
 // One subject of the table: no formula, no sentence and nothing to scrub unless it says so.
 function learnSubjectOf(subject) = ({ formula: "", sentence: "", scrub: null } with subject)
@@ -163,11 +176,9 @@ template learnPanelState(keys) {
       }
     }
   }
-  for name in ["learnTerm", "learnSubjectAt"] {
-    table $"{name}" capacity(length(keys)) {
-      for key in keys {
-        [key] = -1
-      }
+  table learnTerm capacity(length(keys)) {
+    for key in keys {
+      [key] = -1
     }
   }
   for name in ["learnScroll", "learnVelocity", "learnLastY", "learnValue"] {
@@ -177,6 +188,25 @@ template learnPanelState(keys) {
       capacity: length(keys)
       cells: map(keys, key => { key: key, value: 0 })
     }
+  }
+  // The share the scrub bar's ticks were last drawn at, which no share equals until the first draw.
+  row {
+    name: "learnBarAt"
+    kind: "Fixed"
+    capacity: length(keys)
+    cells: map(keys, key => { key: key, value: -1 })
+  }
+  row {
+    name: "learnBarInk"
+    kind: "Text"
+    capacity: (length(keys) * learnBarCells)
+    cells: reduce(map(keys, key => map(range(0, learnBarCells), i => { key: $"{key}-{i}", value: learnColors.track })), [], (all, next) => concat(all, next))
+  }
+  row {
+    name: "learnBarInks"
+    kind: "Text"
+    capacity: 2
+    cells: [{ key: "lit", value: learnColors.fill }, { key: "dim", value: learnColors.track }]
   }
   for name in ["learnFormula", "learnSentence", "learnScrubTerm"] {
     table $"{name}" capacity(length(keys)) {
@@ -200,33 +230,47 @@ template learnPanelState(keys) {
 template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
   let number = $"{terminal}"
 
-  // The subject: its cells copied from its table row whenever it changes, the panel's scroll and term reset.
-  rule $"learn-subject-{key}" {
-    when learnSubject[key] != learnSubjectAt[key]
+  // The subject and the layer: every cell they decide is copied from the subject's table row whenever either moves, by
+  // whatever moved it (a tap, a state write, the world's own rule). The panel's term, scroll and run reset with them. The
+  // layer and the subject pack into one view the gate and the write share, so a firing closes its own gate. The formula
+  // is copied whatever the layer and cleared unless the maths shows; the copy is not inside the `if`, as a text copy by
+  // a read key sits with the unconditional writes.
+  rule $"learn-view-{key}" {
+    local view = (learnOpen[key] * 65536) + learnSubject[key] + 1
+    when learnView[key] != view
     mode: Level
     setState(state: learnSentence, key: $"{key}", fromState: learnSubjectSentences, fromKey: $"$cell:learnSubject:{key}")
     setState(state: learnScrubTerm, key: $"{key}", fromState: learnSubjectTerms, fromKey: $"$cell:learnSubject:{key}")
     setState(state: learnScrubOn, key: $"{key}", fromState: learnSubjectScrubs, fromKey: $"$cell:learnSubject:{key}")
-    learnValue[key] = learnSize[learnSubject[key]] * learnSubjectValues[learnSubject[key]]
-    learnTerm[key] = -1
-    learnScroll[key] = 0
-    learnVelocity[key] = 0
-    learnSubjectAt[key] = learnSubject[key]
-  }
-  // The maths shows the subject's formula only while it is open, and the layer button names the other layer. The layer
-  // and the subject pack into one view the gate and the write share, so a firing closes its own gate.
-  rule $"learn-layer-{key}" {
-    local view = (learnOpen[key] * 65536) + learnSubjectAt[key] + 1
-    when learnView[key] != view
-    mode: Level
+    setState(state: learnFormula, key: $"{key}", fromState: learnSubjectFormulas, fromKey: $"$cell:learnSubject:{key}")
     if learnOpen[key] == 2 {
-      setState(state: learnFormula, key: $"{key}", fromState: learnSubjectFormulas, fromKey: $"$cell:learnSubjectAt:{key}")
       learnToggle[key] = learnToggleLabels[1]
     } else {
       learnFormula[key] = ""
       learnToggle[key] = learnToggleLabels[0]
     }
+    learnTerm[key] = -1
+    learnScroll[key] = 0
+    learnVelocity[key] = 0
     learnView[key] = view
+  }
+  // The value and the scrub bar follow the subject's size, whoever wrote it (a drag, a state write, a reset): the value is
+  // the term's value at full size times the size, and the bar lights its ticks up to the share the size stands at between
+  // the subject's least share and its whole size. The gate and the write share both numbers, so a firing closes its own.
+  rule $"learn-value-{key}" {
+    local value = learnSize[learnSubject[key]] * learnSubjectValues[learnSubject[key]]
+    local fill = (learnSize[learnSubject[key]] - learnSubjectLeast[learnSubject[key]]) / maximum(1 - learnSubjectLeast[learnSubject[key]], 0.01)
+    when learnValue[key] != value or learnBarAt[key] != fill
+    mode: Level
+    learnValue[key] = value
+    learnBarAt[key] = fill
+    for tick in range(0, learnBarCells) {
+      if (fill * learnBarCells) > tick {
+        setState(state: learnBarInk, key: $"{key}-{tick}", fromState: learnBarInks, fromKey: lit)
+      } else {
+        setState(state: learnBarInk, key: $"{key}-{tick}", fromState: learnBarInks, fromKey: dim)
+      }
+    }
   }
   // The screen's contacts: the buttons on a lift, a drag on the steps, a touch on the scrub bar.
   rule $"learn-{key}" {
@@ -236,9 +280,6 @@ template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
     if learnOpen[key] == 0 {
       if contact(each, phase) == 3 and contact(each, region, learn) == 1 {
         learnOpen[key] = 1
-        learnTerm[key] = -1
-        learnScroll[key] = 0
-        learnVelocity[key] = 0
       }
     } else {
       if contact(each, phase) == 3 and contact(each, region, back) == 1 {
@@ -248,8 +289,6 @@ template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
       }
       if contact(each, phase) == 3 and contact(each, region, layer) == 1 {
         learnOpen[key] = 3 - learnOpen[key]
-        learnScroll[key] = 0
-        learnVelocity[key] = 0
       }
       // A tap on a term's row selects it, and a tap on the selected one lets it go.
       if contact(each, phase) == 3 and learnOpen[key] == 2 and contact(each, row, terms) >= 0 {
@@ -284,11 +323,6 @@ template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
           0,
           1
         ))
-        learnValue[key] = (learnSubjectLeast[learnSubject[key]] + ((1 - learnSubjectLeast[learnSubject[key]]) * clamp(
-          (contact(each, x) - scrubFrom) / (scrubTo - scrubFrom),
-          0,
-          1
-        ))) * learnSubjectValues[learnSubject[key]]
       }
       if contact(each, phase) >= 3 {
         learnScrubbing[key] = 0

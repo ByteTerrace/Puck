@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// <list type="bullet">
 /// <item><c>@formula &lt;reference&gt; [equation|values|steps|terms|meaning]</c> writes a formula's equation (the
 /// default), its equation with every term a <c>@value</c> names written as that value, its step by step, its terms one a
-/// line (each with its <c>@meaning</c> and value), or the selected term's line alone. An empty reference writes
+/// line (its symbol, its <c>@meaning</c> or, with none, its name, and its value), or the selected term's line alone. An empty reference writes
 /// nothing.</item>
 /// <item><c>@value &lt;term&gt; &lt;number&gt; [unit]</c> gives a term its live value.</item>
 /// <item><c>@select &lt;index|term&gt;</c> highlights a term: by its place in the first formula's terms from zero, or by
@@ -140,15 +140,13 @@ public static class WorldMathText {
         );
     }
 
-    // A term's line: its symbol, its name, what it means and its live value.
+    // A term's line: its symbol, then what it means, written as the author wrote it (the symbol already stands in the
+    // first column, so the meaning never repeats it), or the term's own name where no meaning is given, then its live value.
     private static string TermLine(SdfTypesetTerm term, IReadOnlyDictionary<string, string> meanings, IReadOnlyDictionary<string, string> values, string live, string quiet) {
         var builder = new StringBuilder();
+        var said = (meanings.TryGetValue(key: term.Name, value: out var meaning) && (meaning.Length > 0)) ? meaning : term.Name;
 
-        builder.Append(value: $"\\term{{{term.Name}}}{{{term.Symbol}}}\\quad \\color{{{quiet}}}{{{MathMarkup.Escape(text: term.Name)}");
-        if (meanings.TryGetValue(key: term.Name, value: out var meaning) && (meaning.Length > 0)) {
-            builder.Append(value: $": {MathMarkup.Escape(text: meaning)}");
-        }
-        builder.Append(value: '}');
+        builder.Append(value: $"\\term{{{term.Name}}}{{{term.Symbol}}}\\quad \\color{{{quiet}}}{{{MathMarkup.Escape(text: said)}}}");
         if (values.TryGetValue(key: term.Name, value: out var value)) {
             builder.Append(value: $" = \\color{{{live}}}{{{MathMarkup.Escape(text: value)}}}");
         }

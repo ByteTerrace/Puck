@@ -929,6 +929,10 @@ let learnScrub = { x0: 0.33, x1: consoleDetail.x1, y0: consoleList.y0, y1: -0.11
 let learnScrubReading = { x0: 0.33, x1: consoleDetail.x1, y0: -0.112, y1: -0.08 }
 let learnTermEm = 0.0135
 let learnStepsEm = 0.0155
+// The scrub bar's track, and its ticks' em and tracking (in ems) which spread learnBarCells vertical bars across it.
+let learnScrubTrack = { x0: learnScrub.x0, x1: learnScrub.x1, y0: (learnScrub.y0 + 0.008), y1: (learnScrub.y1 - 0.008) }
+let learnTickEm = 0.0115
+let learnTickTracking = 1.1
 // How much past its box the step by step usually runs, in box heights: a drag's travel scrolls by this estimate, so the
 // steps follow the finger near enough while a scroll of 0..1 always reaches both ends.
 let learnStepsSpan = 2
@@ -943,6 +947,17 @@ function consoleMath(display, rect, template, ink, em, spacing = 1, scroll = nul
   "left"
 ) with {
   text: ({ template: template, emHeight: (displayScale * em), math: true, lineSpacing: spacing, pitch: pitch } with ((scroll == null) ? {} : { scroll: scroll }))
+}
+// A row of ticks on a display's glass, a markup text whose ticks' colours bind state, spread by `tracking` (in ems).
+function consoleTicks(display, rect, template, ink, em, tracking) = consoleText(
+  display,
+  rect,
+  "",
+  ink,
+  em,
+  "left"
+) with {
+  text: { template: template, emHeight: (displayScale * em), align: "left", fit: true, markup: true, tracking: tracking }
 }
 function learnPaints(display) = concat(consoleFrame(display), [
   consoleFill(display, { x0: 0.295, x1: 0.303, y0: consoleList.y0, y1: consoleList.y1 }, consoleLook.frame, 0.004)
@@ -967,8 +982,10 @@ function learnPaints(display) = concat(consoleFrame(display), [
     spacing: (((learnTerms.y1 - learnTerms.y0) / learnTermRows) / (learnTermEm * consoleFontLine)),
     pitch: true
   )
-  // The scrub bar: a track across its region, and its reading over it.
-  consoleFill(display, { x0: learnScrub.x0, x1: learnScrub.x1, y0: (learnScrub.y0 + 0.008), y1: (learnScrub.y1 - 0.008) }, consoleLook.teal, 0.005)
+  // The scrub bar: a track across its region, its ticks lit up to the size the subject stands at (learnBarText), and its
+  // reading over it.
+  consoleFill(display, learnScrubTrack, learnColors.track, 0.005)
+  consoleTicks(display, learnScrubTrack, learnBarText(display.id), consoleLook.teal, learnTickEm, learnTickTracking)
   consoleText(display, learnScrubReading, learnScrubText(display.id), consoleLook.lit, 0.015, "left")
 ])
 // The pointer surface a display's screen placement carries: the glass's front face, carried from the plinth's author

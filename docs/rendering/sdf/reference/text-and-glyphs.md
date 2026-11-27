@@ -169,7 +169,9 @@ engine's own field formulas, typeset from the formula tree every reader lowers
 (`SdfFormulaTypesetting`, [the decision](../../../decisions/rendering.md#the-maths-a-screen-shows-is-the-engines-own-formula-tree)),
 `@value <term> <number>` writes a term's live value into the `values` line,
 `@select <row|term>` highlights a term wherever it appears, `@meaning <term>
-<text>` says what it means in the `terms` lines, and `@color` sets their inks.
+<text>` says what it means in the `terms` lines (written after the term's symbol
+as given, so it never repeats the symbol; a term with no meaning shows its
+name), and `@color` sets their inks.
 A math text is set from its box's top-left corner, a line wider than the box
 set smaller to fit it; `pitch: true` stands its lines exactly one step apart so
 they fall on a pointer region's rows, and `scroll` (a template resolving to a
