@@ -1,15 +1,17 @@
 # Debug world chess table
 
-The debug world stands a chess table in the gallery hall's board game room, the
-east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)), beside the
-Go and Reversi tables ([`go.md`](go.md), [`reversi.md`](reversi.md)). The
-board's centre is at (56.5, 9.85, 22.6); the table is 2 m square, its top 0.8 m
-over the floor. White's back rank is on the table's -Z side, toward the south
-windows, and Black's on the +Z side, toward the room's doorway aisle.
-[`chess.puck`](chess.puck) holds it and `debug.puck` imports it whole
-(`import "chess"`); the rules it plays by are the shared
-[`../games/chess.puck`](../games/chess.puck) library, whose templates the table
-expands.
+The debug world stands a chess table in the gallery hall's board game room on
+level 2 ([`shapes.md`](shapes.md#the-board-game-room)), beside the Go and
+Reversi tables ([`go.md`](go.md), [`reversi.md`](reversi.md)). The board's
+centre is at (37, 9.85, 10.3), over the table's placement (`chessTable` in
+[`chess.puck`](chess.puck)); the table is 2 m square, its top 0.8 m over the
+floor. White's back rank is on the table's -Z side and Black's on the +Z side.
+`chess.puck` holds it and `debug.puck` imports it whole (`import "chess"`); the
+rules it plays by are the shared [`../games/chess.puck`](../games/chess.puck)
+library, whose templates the table expands. The room's game table
+([`cardtable.md`](cardtable.md)) draws this same game on its glass and plays it
+through the display door below, so a move made at either table moves the
+pieces here.
 
 The board reads as a real one from each side: from White's seat a1 is the dark
 corner at her left, h1 the light one at her right, and the queen stands on her
@@ -78,7 +80,7 @@ A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
 `49 - n`, so White's pieces are bodies 34 to 49 and Black's 18 to 33; piece `n`
 starts on file `n % 8` (piece 4 is the white king, piece 12 the e2 pawn).
 Square (file, rank), counting from a1 = (0, 0), is centred at
-x = 57.2 - 0.2 × file, z = 21.9 + 0.2 × rank: the files run toward -X, so a1
+x = 37.7 - 0.2 × file, z = 9.6 + 0.2 × rank: the files run toward -X, so a1
 lies on +X. Its cell in the board's rows (`pieceCell`, `board`, `move`) is
 8 × rank + 7 - file, so e2 is cell 11 and e4 cell 27: the grid counts its
 columns toward +X. Lift a piece onto a square by posing its body at y = 10.35,
@@ -86,9 +88,9 @@ columns toward +X. Lift a piece onto a square by posing its body at y = 10.35,
 
 | Move | Console line |
 |---|---|
-| e2-e4 (the e2 pawn, body 37) | `body.pose 56.4 10.35 22.5 0 0 0 37` |
-| Ng1-f3 (body 43) | `body.pose 56.2 10.35 22.3 0 0 0 43` |
-| Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 55.6 10.35 22.3 0 0 0 <body>` |
+| e2-e4 (the e2 pawn, body 37) | `body.pose 36.9 10.35 10.2 0 0 0 37` |
+| Ng1-f3 (body 43) | `body.pose 36.7 10.35 10 0 0 0 43` |
+| Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 36.1 10.35 10 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as
 the console.
@@ -104,8 +106,8 @@ the console.
 | Where each piece stands (`-1` off the board or fallen) | `world.state pieceCell` |
 | Check, castling rights, the move clock and repetitions | `world.state inCheck`, `world.state castleRights`, `world.state halfmoveClock`, `world.state repetitionCount` |
 | The opponent's search: running or done, and its answer | `world.search` |
-| Frame the table from White's side | `view.override camera look 56.5 11.05 20.8 56.5 9.85 22.6`, then `view.override camera auto` |
-| Frame the board game room from its doorway | `view.override camera look 52 11.6 26 60 9.6 26.5`, then `view.override camera auto` |
+| Frame the table from White's side | `view.override camera look 37 11.05 8.5 37 9.85 10.3`, then `view.override camera auto` |
+| Stand in the board game room, facing in | `debug.go boardroom` |
 
 ## The idle replay demonstration
 
@@ -154,6 +156,21 @@ The authored timing constants stand near the top of `chess.puck`.
 `world.state.cell.set chessDemo enabled 0` cancels and disables the loop.
 `chess.move 11 27` requests e2-e4 through the same apply and judging path;
 `chessInput` reads the mailbox and its accepted-request count.
+
+## The display door
+
+`chessPut` is the door a presentation of this game away from the table asks a
+move through: the game table's glass ([`cardtable.md`](cardtable.md)) writes
+the square a piece leaves (`from`) and the square it lands on (`to`) and sets
+`request`. The door takes the path a seated player's put-down takes: the apply
+relocates and poses the pieces, the board rests and is judged, and an
+arrangement judged illegal is put back as it stood. A request waits while the
+board settles, a piece is held or a move is being judged, and lapses once its
+square holds no piece of the side to move or that side is the computer's;
+either way `request` returns to 0. While `seated` is 1 (a seat playing the
+game at the glass) the idle demonstration waits, as for a seat at this table.
+The table exports what the glass reads (`board`, `turn`, `verdict`, `move`,
+`inCheck`, `aiSide`, `halfmoveClock`, `repetitionCount`) and the door.
 
 ## The opponent
 

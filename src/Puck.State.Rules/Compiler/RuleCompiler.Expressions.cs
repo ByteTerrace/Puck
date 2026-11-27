@@ -220,8 +220,9 @@ public static partial class RuleCompiler {
         var literalAt = new int[authored.Count];
         var literals = new decimal[authored.Count];
         var tokens = new CompiledExpressionToken[authored.Count];
-        var inferLiterals = ((resultKind is null) || authored.Any(predicate: static instruction =>
-            (instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not)));
+        var producedAt = new int[authored.Count];
+        var promotions = new bool[authored.Count];
+        var inferLiterals = resultKind is null || authored.Any(static instruction => instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not);
 
         for (var index = 0; (index < authored.Count); index++) {
             var instruction = (authored[index] ?? throw Malformed(detail: "contains a null instruction"));
@@ -249,6 +250,7 @@ public static partial class RuleCompiler {
                 { Operation: ExpressionOp.Member } => ResolveMember(),
                 _ => ResolveOperator(instruction: instruction),
             });
+            producedAt[depth - 1] = index;
 
             // Only a constant instruction leaves a literal on the stack; every other instruction's result slot is
             // not one.
@@ -260,16 +262,26 @@ public static partial class RuleCompiler {
         if (depth != 1) {
             throw Malformed(detail: $"leaves {depth} values on the postfix stack instead of exactly one");
         }
-        if ((resultKind is { } required) && (kinds[0] != required)) {
-            throw Malformed(detail: $"leaves a kind={StateSpelling.Kind(kind: kinds[0])} value where kind={StateSpelling.Kind(kind: (resultKind ?? kind))} is required");
+        if (resultKind is { } required) {
+            RequireKind(ExpressionOp.ToFixed, 0, required);
         }
 
         result = kinds[0];
 
         return FoldConstants(
             kind: kind,
-            tokens: ShortCircuit(tokens: tokens)
+            tokens: ShortCircuit(tokens: WithPromotions())
         );
+
+        CompiledExpressionToken[] WithPromotions() {
+            if (!promotions.Contains(true)) { return tokens; }
+            var lowered = new List<CompiledExpressionToken>(tokens.Length + promotions.Count(static promote => promote));
+            for (var index = 0; index < tokens.Length; index++) {
+                lowered.Add(tokens[index]);
+                if (promotions[index]) { lowered.Add(new CompiledExpressionToken(ExpressionOp.ToFixed, CarrierKind: CellKind.Int)); }
+            }
+            return lowered.ToArray();
+        }
 
         CompiledExpressionToken Absence() {
             Require(
@@ -285,10 +297,7 @@ public static partial class RuleCompiler {
                 arity: 2,
                 operation: ExpressionOp.Coalesce
             );
-            MatchLiterals(arity: 2);
-            if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
-                throw Malformed(detail: $"instruction 'Coalesce' arms disagree: kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
-            }
+            MatchKinds(ExpressionOp.Coalesce, 2);
 
             depth--;
 
@@ -299,10 +308,7 @@ public static partial class RuleCompiler {
                 arity: 2,
                 operation: operation
             );
-            MatchLiterals(arity: 2);
-            if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
-                throw Malformed(detail: $"instruction '{operation}' compares kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
-            }
+            MatchKinds(operation, 2);
 
             var compared = kinds[(depth - 1)];
 
@@ -372,28 +378,33 @@ public static partial class RuleCompiler {
 
             return token with { CarrierKind = pushed };
         }
-        CellKind MatchLiterals(int arity) {
-            var first = (depth - arity);
-            var carrier = kinds[first];
-
-            for (var slot = first; (slot < depth); slot++) {
-                if (literalAt[slot] < 0) { carrier = kinds[slot]; break; }
+        CellKind MatchKinds(ExpressionOp operation, int arity, CellKind? expected = null) {
+            var carrier = kinds[depth - arity];
+            if (expected is { } required) { carrier = required; }
+            else {
+                for (var slot = depth - arity; slot < depth; slot++) {
+                    if (literalAt[slot] < 0) { carrier = kinds[slot]; break; }
+                }
+                for (var slot = depth - arity; slot < depth; slot++) {
+                    if (kinds[slot] == CellKind.Fixed && (literalAt[slot] < 0 || decimal.Truncate(literals[slot]) != literals[slot])) { carrier = CellKind.Fixed; }
+                }
             }
-            for (var slot = first; (slot < depth); slot++) {
-                if ((literalAt[slot] >= 0) && (kinds[slot] != carrier)) {
+            for (var slot = depth - arity; slot < depth; slot++) {
+                // A whole literal has no committed encoding until its context chooses one.
+                if (literalAt[slot] >= 0 && decimal.Truncate(literals[slot]) == literals[slot] && kinds[slot] != carrier) {
                     tokens[literalAt[slot]] = tokens[literalAt[slot]] with {
-                        Constant = LiteralToRaw(kind: carrier, literal: literals[slot], ruleName: ruleName, verb: verb),
-                        CarrierKind = carrier,
+                        Constant = LiteralToRaw(carrier, literals[slot], ruleName, verb), CarrierKind = carrier,
                     };
                     kinds[slot] = carrier;
                 }
+                RequireKind(operation, slot, carrier);
             }
             return carrier;
         }
         CompiledExpressionToken PushConstant(InstructionPayload.Constant constant, int index) {
             literalAt[depth] = index;
             literals[depth] = constant.Value;
-            var literalKind = ((inferLiterals && HasFixedSpelling(value: constant.Value)) ? CellKind.Fixed : kind);
+            var literalKind = HasFixedSpelling(value: constant.Value) ? CellKind.Fixed : (inferLiterals ? CellKind.Int : kind);
 
             return Push(
                 new CompiledExpressionToken(
@@ -414,12 +425,9 @@ public static partial class RuleCompiler {
             }
         }
         void RequireKind(ExpressionOp operation, int slot, CellKind required) {
-            if (kinds[slot] != required) {
-                throw new RuleException(
-                    detail: $"'{verb}' instruction '{operation}' needs a kind={StateSpelling.Kind(kind: required)} operand but found kind={StateSpelling.Kind(kind: kinds[slot])}",
-                    refusal: RuleRefusal.EffectSourceKindMismatch,
-                    ruleName: ruleName
-                );
+            if (ImplicitConversion(kinds[slot], required, ruleName, $"{verb} instruction '{operation}'") is not null) {
+                promotions[producedAt[slot]] = true;
+                kinds[slot] = required;
             }
         }
         CompiledExpressionToken ResolveArgument(InstructionPayload.Argument argument) {
@@ -445,9 +453,6 @@ public static partial class RuleCompiler {
                 _ => throw Malformed(detail: $"instruction '{operation}' is not a board query"),
             });
 
-            if (kind != CellKind.Int) {
-                throw Malformed(detail: $"instruction '{operation}' is admitted in kind=Int expressions only");
-            }
             if (context.FindTopology(name: board.Topology) is not { } topology) {
                 throw Malformed(detail: $"instruction '{operation}' names no discrete topology '{board.Topology}'");
             }
@@ -468,11 +473,7 @@ public static partial class RuleCompiler {
                 arity: 1,
                 operation: operation
             );
-            RequireKind(
-                operation: operation,
-                required: CellKind.Int,
-                slot: (depth - 1)
-            );
+            MatchKinds(operation, 1, CellKind.Int);
 
             return new CompiledExpressionToken(
                 Board: new BoardNeighbourQuery(
@@ -543,12 +544,6 @@ public static partial class RuleCompiler {
             if (member is not (CellKind.Int or CellKind.Fixed)) {
                 throw Malformed(detail: $"folds '{fold.Family}', whose kind={StateSpelling.Kind(kind: member)} cells are not numeric");
             }
-            if (
-                (operation == ExpressionOp.Sum) &&
-                (member != kind)
-            ) {
-                throw Malformed(detail: $"sums kind={StateSpelling.Kind(kind: member)} '{fold.Family}' into a kind={StateSpelling.Kind(kind: kind)} destination");
-            }
 
             // The body computes in its member's kind; a predicate fold's body leaves the Int its comparison yields,
             // and the fold pushes that Int whatever kind the enclosing program computes in.
@@ -588,13 +583,10 @@ public static partial class RuleCompiler {
             if (memberKind is not { } bound) {
                 throw Malformed(detail: "reads a fold member outside a fold body");
             }
-            if (bound != kind) {
-                throw Malformed(detail: $"reads a kind={StateSpelling.Kind(kind: bound)} fold member into a kind={StateSpelling.Kind(kind: kind)} body");
-            }
 
             return Push(
                 new CompiledExpressionToken(Operation: ExpressionOp.Member),
-                kind
+                bound
             );
         }
         CompiledExpressionToken ResolveOperator(Instruction instruction) {
@@ -606,6 +598,12 @@ public static partial class RuleCompiler {
             }
             if (descriptor.Signature == ExpressionSignature.Sign) {
                 return SignOf();
+            }
+            if (descriptor.Signature == ExpressionSignature.Conversion) {
+                Require(operation, 1);
+                var input = kinds[depth - 1];
+                kinds[depth - 1] = operation == ExpressionOp.ToFixed ? CellKind.Fixed : CellKind.Int;
+                return new CompiledExpressionToken(operation, CarrierKind: input);
             }
             if (descriptor.Signature == ExpressionSignature.Truth) {
                 Require(arity: descriptor.Arity, operation: operation);
@@ -629,7 +627,11 @@ public static partial class RuleCompiler {
                 arity: descriptor.Arity,
                 operation: operation
             );
-            var carrier = MatchLiterals(arity: descriptor.Arity);
+            var carrier = MatchKinds(operation, descriptor.Arity, descriptor.Signature switch {
+                ExpressionSignature.Fixed => CellKind.Fixed,
+                ExpressionSignature.Int => CellKind.Int,
+                _ => null,
+            });
 
             if (!descriptor.Admits(kind: carrier)) {
                 throw Malformed(detail: $"instruction '{operation}' is admitted in kind={descriptor.Signature} expressions only");
@@ -718,22 +720,19 @@ public static partial class RuleCompiler {
             // whatever kind the arms compute in.
             var condition = (depth - 3);
 
-            if ((literalAt[condition] >= 0) && (kinds[condition] != CellKind.Int)) {
+            if (literalAt[condition] >= 0 && decimal.Truncate(literals[condition]) == literals[condition]) {
                 tokens[literalAt[condition]] = tokens[literalAt[condition]] with {
-                    Constant = LiteralToRaw(kind: CellKind.Int, literal: literals[condition], ruleName: ruleName, verb: verb),
-                    CarrierKind = CellKind.Int,
+                    Constant = LiteralToRaw(CellKind.Int, literals[condition], ruleName, verb), CarrierKind = CellKind.Int,
                 };
                 kinds[condition] = CellKind.Int;
             }
+
             RequireKind(
                 operation: ExpressionOp.Select,
                 required: CellKind.Int,
                 slot: (depth - 3)
             );
-            MatchLiterals(arity: 2);
-            if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
-                throw Malformed(detail: $"instruction 'Select' branches disagree: kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
-            }
+            MatchKinds(ExpressionOp.Select, 2);
 
             var selected = kinds[(depth - 1)];
 

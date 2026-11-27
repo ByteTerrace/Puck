@@ -1,5 +1,7 @@
-// The reflection pass (SdfWorldPackage.Parts.ViewsReflections): one invocation a cell of passGroup.screenReflections
-// render pixels a side, in 8x8 groups, run before views in a temporal view (SdfWorldPackage.WithReflections). Each cell
+// The reflection pass (SdfWorldPackage.Parts.ViewsReflections), two dispatches the pushed index chooses between, run
+// before views in a temporal view (SdfWorldPackage.WithReflections). Step zero prefilters the preceding frame's history
+// colour into every level of the reflection colour (frame/sdf-reflection-color.hlsli), a group a 32 by 32 block of it.
+// Step one runs one invocation a cell of passGroup.screenReflections render pixels a side, in 8x8 groups. Each cell
 // traces one mirror ray this frame, from its representative pixel (sdfViewsReflectionPhase), which turns through the
 // cell's pixels frame by frame; views blends each pixel's nearest cells whose representatives lie on its surface
 // (sdfViewsScreenReflection). A glossy representative's mirror ray, about its record's normal, is projected onto the
@@ -7,9 +9,12 @@
 // (frame/sdf-reflection-depth.hlsli): its inverse depth is linear along the projection, so a cell of any level the ray
 // crosses in front of the nearest surface it holds is skipped whole and the march climbs a level, and a cell it reaches
 // is entered a level finer, down to the mesh target's own pixels. What the ray reaches is read from the preceding frame's
-// history colour where the hit stood then (sdfPreviousPoint) and the history shows it (sdfReflectHistoryShows), widened by
-// the specular lobe's footprint there, with the air's in-scatter the composite added to that pixel and the history does
-// not hold; a ray that passes in front of everything it crosses and ends over a pixel no mesh covers answers the open sky.
+// history colour where the hit stood then (sdfPreviousPoint) and the history shows it (sdfReflectHistoryShows), read as
+// one filtered sample of the prefiltered level the specular lobe's footprint spans there (sdfReflectColorFootprint), so a
+// rough surface's blur is the same every frame and adds no noise for the resolve to reject in motion; with it, the air's
+// in-scatter the composite added to that pixel and the history does not hold. A ray that passes in front of everything it
+// crosses and ends over a pixel no mesh covers answers the open sky. A hit's share fades toward the screen's edge and over
+// the last steps of the budget, so where rays stop answering the volume takes over smoothly rather than at a line.
 // Views blends the records over the irradiance volume's reflection, which still answers whatever leaves the screen, hides
 // behind a nearer face, or belongs to a rough surface.
 #define SDF_VIEWS_REFLECTIONS_PASS
@@ -18,6 +23,7 @@
 #include "../frame/sdf-reprojection.hlsli"
 #include "../frame/sdf-history-surface.hlsli"
 #include "../frame/sdf-reflection-depth.hlsli"
+#include "../frame/sdf-reflection-color.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "Shared/luma.hlsli"
 
@@ -40,12 +46,12 @@ static const uint SdfReflectBehindPixels = 4u;
 static const float SdfReflectNudge = 0.005;
 // The share of the screen's shorter side over which a hit fades toward the screen's edge.
 static const float SdfReflectEdge = 0.08;
-// The history taps that spread a hit over the lobe's footprint, turned each jitter phase, and the widest footprint radius,
-// in history pixels.
-static const uint SdfReflectTaps = 4u;
-static const float SdfReflectRadius = 24.0;
-// The golden angle, which turns each tap of the footprint's spiral and the spiral itself from one jitter phase to the next.
-static const float SdfReflectGoldenAngle = 2.39996323;
+// The share of the step budget a hit may take at full confidence; past it a hit's share falls to none at the budget's end.
+static const float SdfReflectBudgetFade = 0.75;
+
+// Step zero's sums of the level-two texels the group's lanes hold and the history pixels each sum counts.
+groupshared float4 sdfReflectColorSums[64];
+groupshared float sdfReflectColorCounts[64];
 
 // Whether the preceding frame's history shows a hit's surface about a position in its pixels: any of the four history
 // pixels about it holds the hit's receiver at its previous distance (sdfHistoryReceiverMatches, the resolve's own test),
@@ -84,8 +90,8 @@ float3 sdfReflectInScatter(uint pixel, uint2 extent, float3 direction) {
 // Marches a ray's projected segment, from `start` along `delta` in render pixels with inverse forward depth
 // `startInverse` there and `finishInverse` at its end, from where it leaves its own pixel, for at most `budget` reads of
 // the pyramid, and returns the share of the segment at which it meets a surface, or -1 for none. `open` says whether the
-// march passed in front of everything to the segment's end.
-float sdfReflectMarch(float2 start, float2 delta, float startInverse, float finishInverse, uint budget, out bool open) {
+// march passed in front of everything to the segment's end, and `taken` how many reads it took.
+float sdfReflectMarch(float2 start, float2 delta, float startInverse, float finishInverse, uint budget, out bool open, out uint taken) {
     uint2 dims = passGroup.imageExtent;
     SdfReflectDepthBases bases = sdfReflectDepthBases(dims);
     float2 inverse = float2(((delta.x != 0.0) ? (1.0 / delta.x) : 1.0e30), ((delta.y != 0.0) ? (1.0 / delta.y) : 1.0e30));
@@ -98,6 +104,7 @@ float sdfReflectMarch(float2 start, float2 delta, float startInverse, float fini
     uint behind = 0u;
 
     open = false;
+    taken = 0u;
 
     [loop]
     for (uint step = 0u; ((step < budget) && (share < 1.0)); step++) {
@@ -111,6 +118,7 @@ float sdfReflectMarch(float2 start, float2 delta, float startInverse, float fini
         float leave = min(edges.x, edges.y);
 
         sdfWorkSteps++;
+        taken++;
         if (rayInverse > cellInverse) {
             // In front of everything the cell holds: the ray leaves it, unless it falls behind the cell's nearest surface
             // first, where it enters the cell a level finer.
@@ -225,7 +233,8 @@ uint4 sdfReflectTrace(SdfPixel p) {
     }
 
     bool open;
-    float hitShare = sdfReflectMarch(start, delta, startInverse, finishInverse, passGroup.reflectionSteps, open);
+    uint taken;
+    float hitShare = sdfReflectMarch(start, delta, startInverse, finishInverse, passGroup.reflectionSteps, open, taken);
 
     if (hitShare < 0.0) {
         // A ray that passed in front of everything it crossed and ended over open sky, away from the eye, sees the sky.
@@ -262,31 +271,13 @@ uint4 sdfReflectTrace(SdfPixel p) {
 
     // The lobe's footprint where the ray lands, seen from the preceding camera: GGX's half-width about the mirror
     // direction is near twice its alpha (the roughness squared), and a history pixel spans the preceding view's pixel
-    // footprint at the hit's distance from it.
+    // footprint at the hit's distance from it. The prefiltered level whose texels span that radius answers it in one
+    // filtered sample, the same every frame.
     float alpha = (material.roughness * material.roughness);
     float travelled = length((hitPoint - rows[0].xyz) - origin);
     float pixelMetres = (((2.0 * passGroup.previousView[1].w) / float(historyDims.y)) * previousT);
-    float radius = min(((2.0 * alpha * travelled) / max(pixelMetres, 1.0e-6)), SdfReflectRadius);
-    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
-    // SDF_VIEWS_REFLECTIONS_ONE_TAP, defined for a reload, reads the footprint's centre alone, so the taps' share of the
-    // pass's time reads apart from the march's.
-#if defined(SDF_VIEWS_REFLECTIONS_ONE_TAP)
-    uint taps = 1u;
-    radius = 0.0;
-#else
-    uint taps = ((radius < 0.5) ? 1u : SdfReflectTaps);
-#endif
-    float turn = (SdfReflectGoldenAngle * float(passGroup.historyFrames % SDF_TEMPORAL_PERIOD));
-
-    [loop]
-    for (uint tap = 0u; tap < taps; tap++) {
-        float along = (radius * sqrt((float(tap) + 0.5) / float(taps)));
-        float angle = ((SdfReflectGoldenAngle * float(tap)) + turn);
-        float2 offset = ((along * float2(cos(angle), sin(angle))) / float2(historyDims));
-
-        sum += sdfReflectionHistory.SampleLevel(samplers[SDF_FILTER_LINEAR], saturate(uv + offset), 0.0);
-    }
-    sum /= float(taps);
+    float radius = ((2.0 * alpha * travelled) / max(pixelMetres, 1.0e-6));
+    float4 sum = sdfReflectColorFootprint(uv, historyDims, radius);
 
     // The air between the preceding camera and the hit, which the composite added after the history was written.
     uint2 centre = min((uint2)(uv * float2(historyDims)), (historyDims - 1u));
@@ -296,7 +287,9 @@ uint4 sdfReflectTrace(SdfPixel p) {
 
     // The history is premultiplied by coverage: what of the footprint no surface covered is the open sky beyond it.
     float2 edge = (min(at, (dims - at)) / (SdfReflectEdge * min(dims.x, dims.y)));
-    float confidence = (glossy * smoothstep(0.0, 1.0, saturate(min(edge.x, edge.y))));
+    float budget = float(max(passGroup.reflectionSteps, 1u));
+    float late = smoothstep((SdfReflectBudgetFade * budget), budget, float(taken));
+    float confidence = (glossy * smoothstep(0.0, 1.0, saturate(min(edge.x, edge.y))) * (1.0 - late));
     float coverage = saturate(sum.a);
 
     if (!all(isfinite(sum)) || (confidence <= 0.0)) {
@@ -305,8 +298,94 @@ uint4 sdfReflectTrace(SdfPixel p) {
     return sdfViewsReflectionPack((sum.rgb / max(sum.a, 1.0e-4)), (confidence * coverage), (confidence * (1.0 - coverage)), normalWord, plane);
 }
 
+// Step zero: each lane takes one texel of level two of the reflection colour, the 4 by 4 history pixels under it, writes
+// its four texels of level one and its own, and the group reduces its 8 by 8 texels of level two to the levels above in
+// its own memory, each texel the mean of the history pixels inside the extent under it.
+void sdfReflectPrefilter(uint2 group, uint2 lane) {
+    uint2 dims = passGroup.viewsRate.zw;
+    SdfReflectDepthBases bases = sdfReflectDepthBases(dims);
+    uint2 texel = ((group * 8u) + lane);
+    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    float count = 0.0;
+
+    [unroll]
+    for (uint child = 0u; (child < 4u); child++) {
+        uint2 fine = ((texel * 2u) + uint2((child & 1u), (child >> 1u)));
+        float4 fineSum = float4(0.0, 0.0, 0.0, 0.0);
+        float fineCount = 0.0;
+
+        [unroll]
+        for (uint corner = 0u; (corner < 4u); corner++) {
+            uint2 pixel = ((fine * 2u) + uint2((corner & 1u), (corner >> 1u)));
+
+            if (all(pixel < dims)) {
+                fineSum += sdfReflectionHistory.Load(int3(int2(pixel), 0));
+                fineCount += 1.0;
+            }
+        }
+        if (fineCount > 0.0) {
+            uint word = sdfReflectColorWord(sdfReflectDepthBaseOf(bases, 1u), dims, 1u, fine);
+            uint2 packed = sdfReflectColorPack(fineSum / fineCount);
+
+            sdfReflectionColorRW[word] = packed.x;
+            sdfReflectionColorRW[word + 1u] = packed.y;
+        }
+        sum += fineSum;
+        count += fineCount;
+    }
+    if (count > 0.0) {
+        uint word = sdfReflectColorWord(sdfReflectDepthBaseOf(bases, 2u), dims, 2u, texel);
+        uint2 packed = sdfReflectColorPack(sum / count);
+
+        sdfReflectionColorRW[word] = packed.x;
+        sdfReflectionColorRW[word + 1u] = packed.y;
+    }
+    sdfReflectColorSums[(lane.y * 8u) + lane.x] = sum;
+    sdfReflectColorCounts[(lane.y * 8u) + lane.x] = count;
+
+    // Levels three and up: at each, the lanes on the level's grid take the sums of their block's four texels of the level
+    // below, which the lanes beside them hold.
+    [unroll]
+    for (uint level = 3u; (level <= SDF_REFLECTION_COLOR_LEVELS); level++) {
+        uint span = (1u << (level - 3u));
+        bool leads = all((lane & ((span << 1u) - 1u)) == 0u);
+        uint at = ((lane.y * 8u) + lane.x);
+
+        GroupMemoryBarrierWithGroupSync();
+        if (leads) {
+            sum = (((sum + sdfReflectColorSums[at + span]) + sdfReflectColorSums[at + (span * 8u)]) + sdfReflectColorSums[at + (span * 9u)]);
+            count = (((count + sdfReflectColorCounts[at + span]) + sdfReflectColorCounts[at + (span * 8u)]) + sdfReflectColorCounts[at + (span * 9u)]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+        if (leads) {
+            sdfReflectColorSums[at] = sum;
+            sdfReflectColorCounts[at] = count;
+            if (count > 0.0) {
+                uint word = sdfReflectColorWord(sdfReflectDepthBaseOf(bases, level), dims, level, (texel >> (level - 2u)));
+                uint2 packed = sdfReflectColorPack(sum / count);
+
+                sdfReflectionColorRW[word] = packed.x;
+                sdfReflectionColorRW[word + 1u] = packed.y;
+            }
+        }
+    }
+}
+
+#if SDF_VISIBILITY_GROUP_EDGE != 8
+#error Step zero's group is 8 by 8 texels of level two.
+#endif
+
 [numthreads(SDF_VISIBILITY_GROUP_EDGE, SDF_VISIBILITY_GROUP_EDGE, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
+void CSMain(uint3 id : SV_DispatchThreadID, uint3 lane : SV_GroupThreadID, uint3 group : SV_GroupID) {
+    // The pushed index is uniform over the dispatch, so every lane of a group reaches step zero's barriers.
+    if (pushedIndex.index == 0u) {
+        // A history of another epoch holds light at another scale; step one reads nothing then (sdfReflectTrace).
+        if ((passGroup.historyFrames != 0u) && all(passGroup.viewsRate.zw != 0u)) {
+            sdfReflectPrefilter(group.xy, lane.xy);
+        }
+        return;
+    }
+
     uint viewIndex = worldViewOf(id.z);
     uint cellEdge = max(passGroup.screenReflections, 1u);
     uint2 dims = passGroup.imageExtent;

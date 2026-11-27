@@ -82,7 +82,9 @@ public static class SourceLexemes {
     /// <returns>The exclusive end, or the original offset when no quoted token or comment starts there. A plain
     /// string that never closes ends with its line, which is as far as the grammar lets one run
     /// (<see cref="PuckStrings.TryRead"/>); any other unterminated token extends to the end of the source.</returns>
-    public static int End(string source, int offset) {
+    public static int End(string source, int offset) => End(source, offset, 0);
+
+    private static int End(string source, int offset, int nesting) {
         var start = offset;
 
         if (
@@ -91,22 +93,17 @@ public static class SourceLexemes {
             (source[(offset + 1)] == '"')
         ) { ++offset; }
         if (source[offset] == '"') {
-            if (source.AsSpan(start: offset).StartsWith(value: "\"\"\"")) {
-                var close = source.IndexOf(
-                    comparisonType: StringComparison.Ordinal,
-                    startIndex: (offset + 3),
-                    value: "\"\"\""
-                );
-
-                return ((close < 0)
-                    ? source.Length
-                    : (close + 3)
-                );
-            }
-            var plain = (offset == start);
-
-            for (++offset; (offset < source.Length); ++offset) {
-                if (source[offset] == '\\') { ++offset; } else if (source[offset] == '"') { return (offset + 1); } else if (plain && (source[offset] is '\n' or '\r')) { return offset; }
+            var interpolated = offset != start;
+            var fence = source.AsSpan(offset).StartsWith("\"\"\"") ? 3 : 1;
+            for (offset += fence; offset < source.Length; offset++) {
+                if (interpolated && source[offset] == '{') {
+                    if (offset + 1 < source.Length && source[offset + 1] == '{') { offset++; continue; }
+                    var close = HoleEnd(source, offset + 1, nesting + 1);
+                    if (close < 0) { return source.Length; }
+                    offset = close;
+                } else if (fence == 1 && source[offset] == '\\') { offset++; }
+                else if (source[offset] == '"' && (fence == 1 || source.AsSpan(offset).StartsWith("\"\"\""))) { return offset + fence; }
+                else if (fence == 1 && !interpolated && source[offset] is '\n' or '\r') { return offset; }
             }
             return source.Length;
         }
@@ -145,5 +142,30 @@ public static class SourceLexemes {
             );
         }
         return start;
+    }
+
+    /// <summary>Finds a hole's closing brace, skipping nested strings, comments and balanced braces.</summary>
+    /// <param name="source">The text containing the hole.</param>
+    /// <param name="start">The index just after its opening brace.</param>
+    /// <returns>The closing brace's index, or -1 when it is missing.</returns>
+    public static int HoleEnd(string source, int start) => HoleEnd(source, start, 0);
+
+    private static int HoleEnd(string source, int start, int nesting) {
+        if (nesting >= DocumentEvaluationBudget.DepthLimit) {
+            throw new PuckParseException("Source nesting exceeds 64 levels.", start, 1 + source.AsSpan(0, start).Count('\n'), start - source.LastIndexOf('\n', start - 1)) {
+                Code = PuckDiagnosticCodes.EvaluationLimit,
+            };
+        }
+        var depth = 0;
+        for (var index = start; index < source.Length; index++) {
+            var end = End(source, index, nesting);
+            if (end > index) { index = end - 1; continue; }
+            if (source[index] == '{') { depth++; }
+            else if (source[index] == '}') {
+                if (depth == 0) { return index; }
+                depth--;
+            }
+        }
+        return -1;
     }
 }

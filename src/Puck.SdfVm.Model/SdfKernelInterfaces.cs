@@ -115,8 +115,8 @@ public sealed class SdfKernelInterfaces {
     public const float MeshShadowFilterTexels = 14f;
     /// <summary>The texels past a shadow block's own, on every side, that its bounds also hold
     /// (<see cref="SdfWorldPackage.ShadowBlockEdge"/>): a receiver's blocker search and filter read texels within
-    /// <see cref="MeshShadowFilterTexels"/> of its own, so the bounds of the one block its texel lies in answer for every
-    /// texel it can read.</summary>
+    /// <see cref="MeshShadowFilterTexels"/> of its own, and a filter tap the four texels about its point, one more, so the
+    /// bounds of the one block its texel lies in answer for every texel it can read.</summary>
     public const int MeshShadowBlockApron = (((int)MeshShadowFilterTexels) + 1);
     /// <summary>The bit of the shadow block reduction's pushed index above the first block's column (bits 0 to 7) and
     /// row (bits 8 to 15) that makes a dispatch rewrite the blocks' glass flags alone, leaving their planes and bounds
@@ -342,7 +342,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
     /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
     /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>), which the residency writes as a region of its
-    /// tables, and the sky's environment map, which its graph producer renders. A kernel binds one only when it reads it.</summary>
+    /// tables, the sky's environment map, which its graph producer renders, and last the live field slice's words, which
+    /// only the composite reads. A kernel binds one only when it reads it. A table added here goes last, so no binding
+    /// before it moves in the bake's interface, whose bytecode keys the stored meshes.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
@@ -350,6 +352,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.World, name: SkyCoefficients),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: ShadowHandoffs, structure: ShaderInterfaceStructure.From<SdfShadowHandoff>()),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.World, name: SdfWorldPackage.FieldSliceWords),
     ];
     /// <summary>Gets the shared environment producer's typed interface. The map writes through its UAV; the reduction
     /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen

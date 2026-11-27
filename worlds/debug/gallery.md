@@ -437,16 +437,27 @@ display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expa
 - `gallery.station <display>` still films a display from the station view
   without using it.
 
-The owner asked for a restricted console at the stations: pressing the
-backtick while at one opens a console that sends shape changes straight to
-that station. So while she uses a display, the backtick opens its console (the
-standard's terminal console,
+The owner asked for a restricted console at the stations, and then ruled that
+it is diegetic: part of the station's own screen in its look, a secret baked
+into the world, which anyone watching that screen sees too
+([in-world consoles](../../docs/decisions/play.md#in-world-consoles)). So
+while she uses a display, the backtick turns its screen into a hidden terminal
+(the standard's terminal console,
 [terminal-console.puck](../standard/contexts/terminal-console.puck), with the
 gallery's command set `galleryConsole` in
-[gallery/gallery.puck](gallery/gallery.puck)), a panel in her view that takes
-every key she types, and the backtick closes it again (Escape is the pause
-menu's, so it stays unbound). It answers only these lines, and only for the
-display she stands at:
+[gallery/gallery.puck](gallery/gallery.puck)). The screen placement responds
+to the display's `terminalConsoleOpen` cell with its terminal mode
+(`terminalScreenPaints` in [shapes.puck](shapes.puck)): the same dark glass
+under faint scanlines, ochre rules in the console's palette, the last line run
+in teal over its reply in cream, and the line being typed in amber behind a
+prompt, in type large enough to read from a step or two behind her. Nothing on
+screen hints that it exists, and taps on the glass do nothing while it shows.
+Every key she types goes into the line, and the backtick returns the screen to
+its interface (Escape is the pause menu's, so it stays unbound); stepping back
+closes it too. The console's state is the display's, not hers, so another
+player engaged at the same display types into the same line, and everyone
+looking at the glass watches the characters appear. It answers only these
+lines, and only for the display it belongs to:
 
 | Line | What it does |
 |---|---|
@@ -463,15 +474,17 @@ command posts its action to the display's terminal mailbox, and the
 writes (`gallerySelect`, and the turntable's mailbox with `galleryTurnCodes`),
 so a typed command and a press on the glass leave the same state. The typed
 text reaches the simulation only as the seat's `terminalText` input events,
-which the authority admits only while the console is open, and the console's
-rules can write only the mailbox of the display she is engaged with, so no line
-reaches a console verb or another display.
+which the authority admits only while her body works the open console, and the
+console's rules can write only the line and mailbox of the display she is
+engaged with, so no line reaches a console verb or another display.
 
 Read the state with `world.state terminalNear` and `world.state terminalAt`
 (keyed by body index: the display's place in `galleryDisplays` plus one, 0 for
-none), `player.bindings 1` (`group=terminal` while engaged,
-`group=terminal-console` while the console is open), and the console's rows
-(`world.state terminalLine`, `terminalReply0`, `terminalAction`).
+none), `world.state terminalConsoleAt` (keyed by body: the display whose console
+she works), `player.bindings 1` (`group=terminal` while engaged,
+`group=terminal-console` while the console is open), and the console's rows,
+keyed by that display number (`world.state terminalConsoleOpen`,
+`terminalLine`, `terminalReply`, `terminalAction`).
 
 Every part of a display is an engine mechanism a world authors:
 
@@ -592,7 +605,7 @@ are four kinds:
 |---|---|---|
 | The sun | The world's sun, with its moon and the companion star ([day.puck](day.puck)) | Through the windows and skylights |
 | The flaw | The glowing tube that weaves through every floor ([flaw.puck](gallery/flaw.puck)) | A chain of tube lights along it, each in one storey, on that storey's switch |
-| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face, and the irradiance volume bounces it |
+| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face. The irradiance volume does not trace screens yet, so their light reaches only the surfaces before them and bounces nowhere ([open items](../../docs/plans/open-items.md#lighting-and-gi)) |
 | Lamps | The lift car's luminous ceiling and the south-west stair's pendant, hung from the soffit of level 2's half landing (the standard's `pendantLamp`) | A spot at the lamp's glowing face, in that face's colour, giving what the face shows (`glowSpotPower`); the pendant follows level 1's switch and goes dark with it |
 
 Glowing marquees, indicators and the display consoles' interfaces are emissive

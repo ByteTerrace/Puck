@@ -4,7 +4,8 @@ namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
     /// <summary>The glass raster pass's writable binding of the glass sums. Each render pixel holds the signed
-    /// path length, winding, RGB optical depth, bounded front records, nearest exit and signed material key.
+    /// path length, winding, RGB optical depth, the layer list of its nearest front faces, signed material key and
+    /// nearest exit.
     /// The raster integrates oriented crossings up to the opaque hit in integer arithmetic so draw order does not
     /// change the result. See <c>frame/sdf-glass.hlsli</c> for the packing and clipping rules.</summary>
     public const string GlassSumsWritten = "sdfGlassSumsRW";

@@ -183,17 +183,38 @@ public sealed partial class WorldBody {
     }
     private int StateSlotNamed(string? name) => ((name is { Length: > 0 }) ? FindActionState(name: name) : -1);
 
-    // The holdable casts the ResolveHold in progress has taken, so a ray it asks twice (a take probe straight down and
-    // the held floor's track along its own normal) is traced once. Live only inside ResolveHold, across which neither the
-    // contact field nor what it leaves out changes; a cast's origin and direction are its key, so the body moving within
-    // the resolve (an arrival) asks new rays.
+    // The holdable casts this body has taken, kept so a probe asked again with the same origin, direction and reach is
+    // answered without a cast: a settled body's take, track and edge probes repeat tick after tick. An answer is a
+    // function of the probe and the colliders it can meet, so a kept answer is given only for the exact probe, and only
+    // while the contact field's holdable stamp (IContactField.TryHoldableStamp) is the one it was cast under: a moving
+    // collider, a restore, a rebuilt field or another body's passes moves the stamp, and the memo empties. A field that
+    // cannot stamp its answers keeps them only for the ResolveHold in progress, across which nothing moves a collider.
+    // The memo never changes an answer, so it is no simulation state: checkpoints and replays ignore it.
     private HoldCastMemo m_holdCasts;
 
     private struct HoldCastMemo {
         public HoldCasts Entries;
         public int Count;
         public int Next;
+        public IContactField? Field;
+        public ContactHoldableStamp Stamp;
+        public bool Stamped;
+        // Whether a ResolveHold is in progress, the span an unstamped field's answers are kept for.
         public bool Live;
+
+        // Whether a probe's answer may be kept and given now, emptying the memo when its field or stamp moved on.
+        public bool Admit(IContactField field) {
+            if (field.TryHoldableStamp(stamp: out var stamp)) {
+                if (!Stamped || !ReferenceEquals(objA: Field, objB: field) || (Stamp != stamp)) {
+                    (Count, Next, Field, Stamp, Stamped) = (0, 0, field, stamp, true);
+                }
+                return true;
+            }
+            if (Stamped || !ReferenceEquals(objA: Field, objB: field)) {
+                (Count, Next, Field, Stamp, Stamped) = (0, 0, field, default, false);
+            }
+            return Live;
+        }
     }
 
     [System.Runtime.CompilerServices.InlineArray(4)]
@@ -203,27 +224,24 @@ public sealed partial class WorldBody {
 
     private readonly record struct HoldCast(FixedVector3 Origin, FixedVector3 Direction, FixedQ4816 MaxDistance, bool Hit, FixedSurfaceAttachCandidate Candidate);
 
-    // Casts for the first holdable surface along a ray, through the resolve's memo while one is live. A ray already cast
-    // answers from its record: a hit at a distance within the asked reach is the same first surface whatever that reach,
-    // a hit beyond it is a miss, and a miss answers any reach no longer than the one it searched; only a miss asked
-    // further is cast again.
+    // Casts for the first holdable surface along a ray, answering a probe the memo holds from its record.
     private bool TryCastHoldable(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
         if (m_contactField is not { } field) {
             return false;
         }
-        if (m_holdCasts.Live) {
+
+        var keeps = m_holdCasts.Admit(field: field);
+
+        if (keeps) {
             for (var index = 0; (index < m_holdCasts.Count); index++) {
                 ref readonly var cast = ref m_holdCasts.Entries[index];
 
-                if ((cast.Origin != origin) || (cast.Direction != direction)) { continue; }
-                if (cast.Hit) {
-                    if (cast.Candidate.Distance > maxDistance) { return false; }
+                if ((cast.Origin == origin) && (cast.Direction == direction) && (cast.MaxDistance == maxDistance)) {
                     candidate = cast.Candidate;
-                    return true;
+                    return cast.Hit;
                 }
-                if (maxDistance <= cast.MaxDistance) { return false; }
             }
         }
 
@@ -235,19 +253,14 @@ public sealed partial class WorldBody {
             origin: in origin
         );
 
-        if (m_holdCasts.Live) {
-            var slot = -1;
+        if (keeps) {
+            int slot;
 
-            for (var index = 0; (index < m_holdCasts.Count); index++) {
-                if ((m_holdCasts.Entries[index].Origin == origin) && (m_holdCasts.Entries[index].Direction == direction)) { slot = index; }
-            }
-            if (slot < 0) {
-                if (m_holdCasts.Count < 4) {
-                    slot = m_holdCasts.Count++;
-                } else {
-                    slot = m_holdCasts.Next;
-                    m_holdCasts.Next = ((m_holdCasts.Next + 1) & 3);
-                }
+            if (m_holdCasts.Count < 4) {
+                slot = m_holdCasts.Count++;
+            } else {
+                slot = m_holdCasts.Next;
+                m_holdCasts.Next = ((m_holdCasts.Next + 1) & 3);
             }
             m_holdCasts.Entries[slot] = new HoldCast(Candidate: candidate, Direction: direction, Hit: hit, MaxDistance: maxDistance, Origin: origin);
         }
@@ -571,8 +584,11 @@ public sealed partial class WorldBody {
             return;
         }
 
-        m_holdCasts.Count = 0;
-        m_holdCasts.Next = 0;
+        // An unstamped field's answers last one resolve; a stamped field's last while its stamp does (HoldCastMemo).
+        if (!m_holdCasts.Stamped) {
+            m_holdCasts.Count = 0;
+            m_holdCasts.Next = 0;
+        }
         m_holdCasts.Live = true;
         try {
             ResolveHoldRows(scratch: ref scratch);

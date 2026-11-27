@@ -82,6 +82,7 @@ public static partial class PuckParser {
             )) {
                 if (!TryReadRawString(
                     context: context,
+                    interpolated: interpolating,
                     quoteOffset: quoteOffset,
                     text: out text
                 )) {
@@ -94,6 +95,7 @@ public static partial class PuckParser {
                 if (!PuckStrings.TryRead(
                     end: out var closed,
                     error: out var failure,
+                    interpolated: interpolating,
                     offset: quoteOffset,
                     source: buffer,
                     value: out text
@@ -189,19 +191,16 @@ public static partial class PuckParser {
     // line and the closing fence begins its own line, the closing fence's indentation is stripped from every
     // content line and the bracketing newlines are dropped -- so the text reads at the indentation it is written
     // at, without carrying the surrounding code's.
-    private static bool TryReadRawString(ParseContext context, int quoteOffset, out string text) {
+    private static bool TryReadRawString(ParseContext context, int quoteOffset, bool interpolated, out string text) {
         var cursor = context.Scanner.Cursor;
         var buffer = context.Scanner.Buffer;
         var contentStart = (quoteOffset + RawFence.Length);
-        var closeOffset = buffer.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            startIndex: contentStart,
-            value: RawFence
-        );
+        var end = SourceLexemes.End(buffer, interpolated ? quoteOffset - 1 : quoteOffset);
+        var closeOffset = end - RawFence.Length;
 
         text = string.Empty;
 
-        if (closeOffset < 0) {
+        if (closeOffset < contentStart || !Matches(buffer, closeOffset, RawFence)) {
             return false;
         }
 
@@ -287,9 +286,9 @@ public static partial class PuckParser {
                 continue;
             }
 
-            var close = FindHoleEnd(
+            var close = SourceLexemes.HoleEnd(
                 start: (index + 1),
-                text: text
+                source: text
             );
 
             if (close < 0) {
@@ -323,44 +322,6 @@ public static partial class PuckParser {
             Line: span.Line,
             Column: span.Column
         );
-    }
-    // The matching '}' for a hole, counting nesting and skipping over any string the expression itself carries.
-    private static int FindHoleEnd(string text, int start) {
-        var depth = 0;
-
-        for (var index = start; (index < text.Length); ++index) {
-            var c = text[index];
-
-            if (c == '"') {
-                index++;
-
-                while (
-                    (index < text.Length) &&
-                    (text[index] != '"')
-                ) {
-                    index += ((text[index] == '\\')
-                        ? 2
-                        : 1
-                    );
-                }
-
-                continue;
-            }
-
-            if (c is '{' or '[' or '(') {
-                depth++;
-            } else if (c is ']' or ')') {
-                depth--;
-            } else if (c == '}') {
-                if (depth == 0) {
-                    return index;
-                }
-
-                depth--;
-            }
-        }
-
-        return -1;
     }
     private static bool Matches(string buffer, int offset, string token) =>
         (((offset + token.Length) <= buffer.Length) && (string.CompareOrdinal(
