@@ -95,7 +95,11 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
             omitted += families[index].Row.Held;
             omittedPeak += families[index].Row.AtSegmentPeak;
         }
-        text.Append(CultureInfo.InvariantCulture, $"omitted families={(families.Length - shown)} held={omitted} at-peak={omittedPeak}\nA family is an owner without its instance, then the part: every instance of one graph or residency adds into one row, and the room shared blocks hold unplaced is no family's (host.memory's device-blocks residual). at-peak is what a family held when its segment last stood at the most it ever held, read within a mebibyte of that moment; peak is the family's own most, at a moment of its own.]");
+        text.Append(CultureInfo.InvariantCulture, $"omitted families={(families.Length - shown)} held={omitted} at-peak={omittedPeak}\n");
+        foreach (var reservation in MemoryAccount.Shared.ReadReservations()) {
+            text.Append(CultureInfo.InvariantCulture, $"reservation {PoolName(pool: reservation.Pool)} {JsonSerializer.Serialize(reservation.Owner)} class={MemoryClasses.NameOf(memoryClass: reservation.Class)} peak={reservation.Peak} held={reservation.Held} promised={reservation.Promised} floor={reservation.Floor}\n");
+        }
+        text.Append(value: "A family is an owner without its instance, then the part: every instance of one graph or residency adds into one row, and the room shared blocks hold unplaced is no family's (host.memory's device-blocks residual). at-peak is what a family held when its segment last stood at the most it ever held, read within a mebibyte of that moment; peak is the family's own most, at a moment of its own. A reservation is an owner's promise in a pool before its resources exist: its families together hold held, and promised is the part of peak the pool counts as promised until they do.]");
 
         return text.ToString();
     }

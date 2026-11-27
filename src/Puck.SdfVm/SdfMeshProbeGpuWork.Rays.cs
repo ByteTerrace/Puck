@@ -147,7 +147,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
     // Creates a structure. m_structureBytes counts the client's top levels alone: a bottom belongs to the device's shared
     // table, which any claimant may be the last to let go of.
     private IGpuAccelerationStructure CreateStructure(GpuAccelerationStructureLevel level, ulong bytes, string part) {
-        var structure = m_structures!.Create(level: level, name: Name(part: part), sizeBytes: bytes);
+        var structure = m_structures!.Create(level: level, name: StructureName(part: part), sizeBytes: bytes);
 
         if (level == GpuAccelerationStructureLevel.Top) { m_structureBytes += (long)structure.SizeBytes; }
 
