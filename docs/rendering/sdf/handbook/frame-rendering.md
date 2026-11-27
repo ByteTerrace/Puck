@@ -822,6 +822,18 @@ This is a filtered cascade estimate: neighbouring texels describe their own
 first opaque receivers, as the opaque depth filter does. It does not trace
 glass for irradiance, reflections, or lights without cascades.
 
+`glass.castsColor` lets the light a glass passes take on its colour. Its
+engine default is zero, which casts no colour; at one the cascades add the
+glass's own absorption (the tint over its `depth`) to the density in each
+channel, so a pane colours the sunlit patch it casts as it colours what is seen
+through it. Only a program with a drawn glass that casts colour gives its
+cascades' optical buffers a colour plane, two more optical-depth sums a texel.
+The surface pass's filter then answers each channel apart and writes the key
+light's transmitted colour beside its visibility, and the light walk multiplies
+that light's colour by it, for the default response and an authored light
+phase alike. The standard's stained glass opts in; water and window panes
+keep their grey shadow or none.
+
 A view of a program with a glass shape runs the glass fragment
 (`SdfWorldPackage.WithGlass`), three passes between views and the sky, and
 every later pass reads the image the last of them writes in the lit image's
@@ -929,13 +941,13 @@ The limits: the nearest `SdfWorldPackage.GlassLayers` interfaces at most
 reflect, refract, emit and scatter. A farther front face's glass absorbs within
 the last interface's share, and what lies beyond the last shaded interface is
 the opaque image, never shaded as glass; the later interfaces' shares assume
-panes alike; light through coloured glass casts a grey shadow, not a coloured
-one (`glass.shadowDensity` is one density); the sky seen through glass is not refracted and is darkened rather than
+panes alike; coloured light reaches a surface only from the key light's
+cascades (`glass.castsColor`), so a second light and the irradiance volume's
+bounce stay uncoloured; the sky seen through glass is not refracted and is darkened rather than
 tinted; refraction reads a screen-space neighbour, so what lies off screen or
 behind a nearer surface reads the pixel's own sample; exit refraction and reflection for a submerged camera are open; the glass
 surface reads no screen-space occlusion and no cascade, its shadowing coming
-from the probes alone; and tinted shadows and glass in the
-irradiance volume are open items ([lighting and GI](../../../plans/open-items.md#lighting-and-gi)).
+from the probes alone; and glass in the irradiance volume is an open item ([lighting and GI](../../../plans/open-items.md#lighting-and-gi)).
 A world with no glass shape allocates and runs none of this; `world.budget`
 prints the glass storages' bytes and the glass draw count, and
 `world.counters gpu` the three passes' work.

@@ -174,31 +174,51 @@ deadlocks on hidden routed scenes whose GPU work correctly never starts.
 
 ## Mesh pipeline limits
 
-Glass shadow extinction is authored by `SdfGlass.ShadowDensity` (zero by
-default; standard water opts in). Cascade selection's optical indirect phase
-routes glass to `SdfMeshRasterPass.ShadowGlassKey`; opaque entry/exit stay in
-their own phases. Count glass vertices once and each executed opaque phase.
-Only a program with a drawn positive-density glass shape adds optical storage
-through `WithGlassShadows`; the graph's ports govern its allocation, clear and
-surface reads. Each texel holds three words (signed depth and nearest entry).
+Glass shadow extinction is authored by `SdfGlass.ShadowDensity`, grey (zero by
+default; standard water opts in), and `SdfGlass.CastsColor`, a share of the
+glass's own absorption added per channel (`ShadowColorExtinction`, zero by
+default; the standard's `stainedGlassPalette` opts in). Cascade selection's
+optical indirect phase routes glass to `SdfMeshRasterPass.ShadowGlassKey`;
+opaque entry/exit stay in their own phases. Count glass vertices once and each
+executed opaque phase. Only a program with a drawn glass that casts
+(`SdfProgram.HasGlassShadows`) gives the world's shadow entries an optical
+buffer (`SdfWorldShadows`' `Optical`, under the shadows' reservation), and only
+one whose glass casts colour (`HasColoredGlassShadows`) gives it the colour
+plane (`SdfWorldPackage.ShadowOpticalBytes`). Each texel holds three words (the
+red, or grey, signed depth and the nearest entry), then the dirty-tile bitmap,
+then the plane's green and blue sums; every kernel finds the plane by the bound
+buffer's length (`sdfShadowOpticalHoldsColor`), so the allocation is the one
+place the layout is decided. A buffer without the plane casts its red sum grey.
 `pipeline.inspect world` (or a session node named by `world.counters gpu`)
 reads the installed graph's named allocations and actual bytes. Read it beside
 `world.residency` and `host.memory`; those broader reports alone do not identify
 an optical buffer. A document reload clears the exposure pin, so pin the same
 EV again before comparing density-only reload stills.
-The glass fragment rejects a zero-density triangle before any optical write (an
-indexed draw's vertex belongs to no one triangle, so no vertex stage can);
-opaque vertices export only position and clip distance. Density has its own
-cadence signature, shared by cascades and surface, including palette-only uploads.
+The glass fragment rejects a triangle with zero extinction in every channel
+before any optical write (an indexed draw's vertex belongs to no one triangle,
+so no vertex stage can); opaque vertices export only position and clip
+distance. The extinction (density and colour) has its own cadence signature,
+shared by cascades and surface, including palette-only uploads.
 The cascade's optical-depth buffer integrates to its first opaque depth with
-the shared `frame/sdf-optical-depth.hlsli` accumulator. Surface shadow taps
-read extinction and nearest glass entry beside the opaque depths. Glass is
-still absent from the irradiance trace. Keep the separate glass descriptor
+the shared `frame/sdf-optical-depth.hlsli` accumulator, one sum a channel.
+Surface shadow taps read extinction and nearest glass entry beside the opaque
+depths; the filter accumulates its lit and known shares per channel, the
+role's visibility is the brightest channel, and the primary role's colour
+relative to it goes to the visibility record's tint plane (`sdfMeshShadow`'s
+`transmitted`, one word a pixel past every record,
+`SdfWorldPackage.VisibilityPixelByteLength`). Views filters the tint over the
+K row's window weighted by the primary visibility (a binned view's filter
+record carries it in its fourth word), and the light phase's door multiplies a
+directional's colour by `SdfLightInputs.transmitted` before the default
+response or a program reads it (`sdfLightTransmission`, role 0 only). Glass is
+still absent from the irradiance trace, so the coloured patch bounces white. Keep the separate glass descriptor
 set: binding the sampled entry depth while it is an attachment is invalid on
 Vulkan even when an earlier shader does not read that binding. Return the
 entry depth to its attachment layout before the graph's outgoing transition.
-Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
-and HLSL load together without changing the row stride.
+Material row 25 carries the glass's shadow extinction: the colour it casts in
+xyz and the grey density in w (`SdfAppearance.Pack`,
+`sdfMaterialShadowExtinction`); keep its C# pack and HLSL load together without
+changing the row stride.
 For a neutral-default comparison, omit density from both prototype palettes
 and field materials in `state.world`; changing only the prototypes leaves
 field water shadowing. Compare fresh base and head processes with lockstep and
@@ -620,7 +640,9 @@ records the options weighed.
 - **Layouts.** Every layer rests shader-readable between uploads; the recorder moves it to the attachment layout and
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
-  selection of every draw (`OpticalKind`).
+  selection of every draw (`OpticalKind`). It is replaced when the texels change or when a drawn glass starts or stops
+  casting colour (`m_opticalColor`), since the kernels find its colour plane by its length; `world.residency` names an
+  entry holding one `/optical` or `/optical-color`.
 - **Draws that cast no shadow.** A palette slot with `castsShadow: false` (`SdfMaterial.CastsNoShadow`, carried on the
   appearance outline) bakes its shapes into groups of their own (`SdfMeshBakeGroup.CastsNoShadow`), whose records carry
   `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging

@@ -35,6 +35,21 @@ float4 sdfUnpackShadowVisibility(uint word) {
         ((code.z == SDF_SHADOW_UNQUERIED) ? 1.0 : (float(code.z) / float(SDF_SHADOW_SCALE))),
         ((code.w == SDF_SHADOW_UNQUERIED) ? 1.0 : (float(code.w) / float(SDF_SHADOW_SCALE))));
 }
+// The key light's transmitted colour (the primary role's), as the share of its visibility each channel keeps: one in the
+// channel the light keeps most of, so the role's visibility times it is the light each channel receives (sdfMeshShadow).
+// A word holds each channel's lost share in SDF_SHADOW_TINT_BITS, red lowest, so a zero word, the clear and every pixel no
+// coloured glass reaches, reads white.
+static const uint SdfShadowTintMask = ((1u << SDF_SHADOW_TINT_BITS) - 1u);
+uint sdfPackShadowTint(float3 tint) {
+    uint3 lost = (uint3)floor((saturate(1.0 - tint) * float(SdfShadowTintMask)) + 0.5);
+
+    return (lost.x | (lost.y << SDF_SHADOW_TINT_BITS) | (lost.z << (2u * SDF_SHADOW_TINT_BITS)));
+}
+float3 sdfUnpackShadowTint(uint word) {
+    uint3 lost = ((uint3(word, word, word) >> (uint3(0u, 1u, 2u) * SDF_SHADOW_TINT_BITS)) & SdfShadowTintMask);
+
+    return (1.0 - (float3(lost) / float(SdfShadowTintMask)));
+}
 // One for each slot the surface pass queried, zero for each it did not.
 float4 sdfShadowQueried(uint word) {
     uint4 code = sdfShadowCodes(word);

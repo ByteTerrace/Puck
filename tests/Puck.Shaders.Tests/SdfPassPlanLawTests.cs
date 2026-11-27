@@ -62,7 +62,7 @@ public sealed partial class SdfPassPlanLawTests {
     // The bytes the kernels index a fragment buffer by at counts: one visibility record a pixel of every viewport, and
     // the depth pyramid's word a pixel.
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
-        SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityRecordByteLength),
+        SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityPixelByteLength),
         SdfWorldPackage.Parts.MeshPyramid => ((((ulong)counts.Width) * counts.Height) * sizeof(uint)),
         // One probe record a cell of every viewport, over whole tiles, and one history entry a cell.
         SdfWorldPackage.Parts.Probes => (ProbeCells(counts: counts) * SdfWorldPackage.ViewsProbeWords * sizeof(uint)),

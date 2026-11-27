@@ -443,9 +443,14 @@ bool sdfOcclusionHiddenWithin(float3 center, float3 halfX, float3 halfY, float3 
 groupshared uint sdfOpticalDirtyTiles;
 
 // The raster marks the bitmap before touching any sums. Between rasterizations each bitmap word has one
-// workgroup owner, which consumes its bits and clears every texel covered by those bits.
+// workgroup owner, which consumes its bits and clears every texel covered by those bits, its colour words included where
+// the buffer holds the colour plane.
 void sdfClearOpticalTiles(uint side, uint across, uint group, uint lane) {
     uint bitmap = sdfShadowOpticalBitmap(side) + group;
+    uint words;
+    uint stride;
+    sdfGlassSumsRW.GetDimensions(words, stride);
+    bool color = sdfShadowOpticalHoldsColor(words, side);
     if (lane == 0u) {
         sdfOpticalDirtyTiles = sdfGlassSumsRW[bitmap];
         if (sdfOpticalDirtyTiles != 0u) {
@@ -466,6 +471,12 @@ void sdfClearOpticalTiles(uint side, uint across, uint group, uint lane) {
                 uint word = sdfShadowOpticalWord(side, pixel);
                 [unroll] for (uint part = 0u; part < SDF_SHADOW_OPTICAL_TEXEL_WORDS; part++) {
                     sdfGlassSumsRW[word + part] = 0u;
+                }
+                if (color) {
+                    uint colorWord = sdfShadowOpticalColorWord(side, pixel);
+                    [unroll] for (uint part = 0u; part < SDF_SHADOW_OPTICAL_COLOR_WORDS; part++) {
+                        sdfGlassSumsRW[colorWord + part] = 0u;
+                    }
                 }
             }
         }

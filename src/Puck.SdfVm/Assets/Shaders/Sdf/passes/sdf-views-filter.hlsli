@@ -69,13 +69,15 @@ SdfShadeEdges sdfViewsEdgesUnpack(uint word) {
 #if defined(SDF_SHADE_HLSLI) && !defined(SDF_VIEWS_BINNED)
 // The group's tile: its pixels with the edge search's reach of apron on every side (SDF_EDGE_REACH; the pattern
 // filter reads two pixels before the group and one after), each as its surface point and the surface pass's occlusion,
-// a negative occlusion where it holds no hit, beside its K word, its face, its distance and its keys.
+// a negative occlusion where it holds no hit, beside its K word and tint, its face, its distance and its keys.
 #define SDF_VIEWS_FILTER_TILE_EDGE (SDF_VISIBILITY_GROUP_EDGE + (2u * SDF_EDGE_REACH))
 #define SDF_VIEWS_FILTER_TILE_ENTRIES (SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE)
 // The pattern filter's window starts two pixels before the pixel.
 #define SDF_VIEWS_FILTER_WINDOW (SDF_EDGE_REACH - 2u)
 groupshared float4 sdfViewsFilterTile[SDF_VIEWS_FILTER_TILE_ENTRIES];
 groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_ENTRIES];
+// An entry's tint plane word (sdfPackShadowTint), the key light's transmitted colour beside its K word's primary lane.
+groupshared uint sdfViewsFilterTints[SDF_VIEWS_FILTER_TILE_ENTRIES];
 // An entry's face: its unit normal, decoded once for every reader, and for the edge search the reach of its pixel
 // along its own surface, in metres (SdfViewsEdgeDepth). A miss holds zeros.
 groupshared float4 sdfViewsFilterFaces[SDF_VIEWS_FILTER_TILE_ENTRIES];
@@ -174,14 +176,16 @@ void sdfViewsEdgeMark(uint strip, uint pair, uint classes) {
 }
 
 // Loads the group's tile from the visibility records: the pattern filter's window alone unless `edges` asks for the
-// whole tile, the K words only when `shadows` asks for them, the keys only for `edges`. With `edges` it then seeds the
-// tile: every pair of neighbouring entries, once, into the masks of its row or its column. Every lane of the group
-// calls it, a lane past the render extent included, since it ends at the group's barriers.
+// whole tile, the K words and tints only when `shadows` asks for them (the tints in the window alone), the keys only for
+// `edges`. With `edges` it then seeds the tile: every pair of neighbouring entries, once, into the masks of its row or
+// its column. Every lane of the group calls it, a lane past the render extent included, since it ends at the group's
+// barriers.
 void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
     uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
     uint first = ((lane.y * SDF_VISIBILITY_GROUP_EDGE) + lane.x);
     int2 origin = (int2(p.pixel - lane) - (int)SDF_EDGE_REACH);
     int2 dims = int2(worldViewDims(p.view));
+    uint tintPlane = (shadows ? sdfVisibilityTintPlane() : 0u);
     uint index;
 
     for (index = first; (index < SDF_VIEWS_FILTER_TILE_ENTRIES); index += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
@@ -189,6 +193,7 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
         int2 pixel = (origin + int2(at));
         float4 entry = float4(0.0, 0.0, 0.0, -1.0);
         uint word = 0u;
+        uint tint = 0u;
         float4 face = float4(0.0, 0.0, 0.0, 0.0);
         float depth = 0.0;
         uint2 keys = uint2(0u, SdfViewsEdgeCut);
@@ -204,6 +209,7 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
                 float3 direction = cameraRayDirection(p.view, ((float2(pixel) + 0.5) / float2(dims)));
                 entry = float4((p.rayOrigin + (direction * t)), f16tof32(sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] >> 16u));
                 word = (shadows ? sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord] : 0u);
+                tint = ((shadows && windowed) ? sdfVisibilityRecordBuffer[sdfVisibilityTintWord(tintPlane, record)] : 0u);
                 depth = t;
                 if (shadows || edges) {
                     face.xyz = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
@@ -218,6 +224,7 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
 
         sdfViewsFilterTile[index] = entry;
         sdfViewsFilterShadows[index] = word;
+        sdfViewsFilterTints[index] = tint;
         sdfViewsFilterFaces[index] = face;
         sdfViewsFilterDepths[index] = depth;
         sdfViewsFilterKeys[index] = keys;
@@ -356,12 +363,15 @@ uint sdfViewsEdgesWord(SdfPixel p) {
 // would light the band beside it on the side that faces the light (on a curved surface, along the whole terminator),
 // with the light's whole illuminance under a cosine just above zero wherever the cascades shadow it. A pixel joins the
 // shadows' average only while its normal also turns little from this pixel's, so a crease's two lit faces keep their
-// own shadows. A slot no pixel of the window queried reads fully visible.
-void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out float ambient, out float4 shadows) {
+// own shadows. A slot no pixel of the window queried reads fully visible. `tint` is the key light's transmitted colour
+// over the same pixels, each weighed by its share of the primary visibility's sum, so the filtered visibility times it
+// is the window's mean of each channel's light; white where the window keeps none.
+void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out float ambient, out float4 shadows, out float3 tint) {
     uint2 lane = ((p.pixel % SDF_VISIBILITY_GROUP_EDGE) + SDF_VIEWS_FILTER_WINDOW);
     float tolerance = (2.0 * (p.pixelFootprint * t));
     float ambientSum = 0.0;
     float4 shadowSum = float4(0.0, 0.0, 0.0, 0.0);
+    float3 tintSum = float3(0.0, 0.0, 0.0);
     float weight = 0.0;
     float4 shadowWeight = float4(0.0, 0.0, 0.0, 0.0);
 
@@ -377,14 +387,18 @@ void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out
             uint word = sdfViewsFilterShadows[index];
             float4 ws = ((w * saturate((turn - SdfViewsShadowNormalLow) / (SdfViewsShadowNormalHigh - SdfViewsShadowNormalLow))) * sdfShadowQueried(word));
 
+            float4 visibility = (ws * sdfUnpackShadowVisibility(word));
+
             ambientSum += (w * entry.w);
-            shadowSum += (ws * sdfUnpackShadowVisibility(word));
+            shadowSum += visibility;
+            tintSum += (visibility.x * sdfUnpackShadowTint(sdfViewsFilterTints[index]));
             weight += w;
             shadowWeight += ws;
         }
     }
 
     ambient = (ambientSum / max(weight, 1.0e-4));
+    tint = ((shadowSum.x > 0.0) ? saturate(tintSum / shadowSum.x) : float3(1.0, 1.0, 1.0));
     shadows = float4(
         ((shadowWeight.x > 0.0) ? (shadowSum.x / shadowWeight.x) : 1.0),
         ((shadowWeight.y > 0.0) ? (shadowSum.y / shadowWeight.y) : 1.0),
@@ -396,8 +410,9 @@ void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out
 // A pixel's filter record: SDF_VIEWS_FILTER_WORDS words, addressed like its visibility record. The filtered occlusion is
 // UNORM16 in bits 0 to 15 of the first word; the four shadow visibilities are UNORM12, x in bits 16 to 27 of the first
 // word, y in bits 28 to 31 of the first and 0 to 7 of the second (its low four bits first), z in bits 8 to 19 and w in
-// bits 20 to 31 of the second. The third word is the pixel's edges (sdfViewsEdgesPack). The record holds only a hit's
-// values, and only those its view's mode filters or searches.
+// bits 20 to 31 of the second. The third word is the pixel's edges (sdfViewsEdgesPack), and the fourth the key light's
+// filtered transmitted colour (sdfPackShadowTint). The record holds only a hit's values, and only those its view's mode
+// filters or searches.
 uint sdfViewsFilterRecord(uint2 pixel, uint viewIndex) {
     return (SDF_VIEWS_FILTER_WORDS * ((((viewIndex * passGroup.imageExtent.y) + pixel.y) * passGroup.imageExtent.x) + pixel.x));
 }
