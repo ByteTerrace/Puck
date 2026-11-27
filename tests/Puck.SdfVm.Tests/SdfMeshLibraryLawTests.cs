@@ -442,7 +442,9 @@ public sealed class SdfMeshLibraryLawTests {
     [InlineData(false)]
     [InlineData(true)]
     public void AStoredMeshIsWhatItsEntryAnswersWithoutTheEntryBeingRead(bool chunked) {
-        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-mesh-library-stored-");
+        // A published mesh's store leases its set until the process ends (SdfMeshStore.Hold), so the scratch store is
+        // deleted as far as the lease allows.
+        using var scratch = new Puck.Testing.TemporaryDirectory(bestEffortDelete: true, prefix: "puck-mesh-library-stored-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0003ul);
         UInt128 identity = 5;
