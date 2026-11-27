@@ -154,13 +154,32 @@ let structureAcross = [0.7071, 0, 0, 0.7071]
 // exact half width and half depth where it meets the floor, unchamfered so its edge meets the floor there, and the foot
 // tapers on all four sides toward the shaft;
 // by default it splays from the shaft, tapering on its sides only.
+// The height of a pier's plinth (branchedPier), matched to a wall's skirting so the skirting runs into it.
+let pierPlinthHeight = 0.34
 template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null) {
-  shape Prism "pier-foot" {
-    material: (base + structureTeal)
-    position [0, 0.6, 0]
-    scale: ((foot != null) ? [foot[0], 0.6, foot[1]] : [(shaft * 1.5), 0.6, (depth * 1.18)])
-    taper: 0.7
-    chamfer: ((foot != null) ? 0 : 0.05)
+  if foot != null {
+    shape Prism "pier-foot" {
+      material: (base + structureTeal)
+      position [0, 0.6, 0]
+      scale [foot[0], 0.6, foot[1]]
+      taper: 0.7
+    }
+  }
+  // A pier with no square foot stands on a proper base: a plinth as tall as a wall's skirting, so the skirting dies into
+  // it, under a rounded moulding that steps in to the shaft.
+  if foot == null {
+    shape Box "pier-plinth" {
+      material: (base + structureTeal)
+      position [0, pierPlinthHeight / 2, 0]
+      scale [(shaft * 1.32), (pierPlinthHeight / 2), (depth * 1.22)]
+      chamfer: 0.02
+    }
+    shape Box "pier-moulding" {
+      material: (base + structureTeal)
+      position [0, (pierPlinthHeight + 0.045), 0]
+      scale [(shaft * 1.16), 0.045, (depth * 1.1)]
+      rounding: 0.04
+    }
   }
   // A prism tapers along its width only, so a square foot is the meet of two, one turned a quarter about Y.
   if foot != null {
