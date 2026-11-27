@@ -58,7 +58,7 @@ Use total standing height `H` as the design reference, measured from the sole to
 | Each boot | About `0.15H` wide and `0.23H` long | Weight, direction, and a stable planted stance |
 | Forearm armor | Visibly thicker than the upper arm | Readable powered-armor silhouette |
 
-Fit the authored character to the existing body's scale and foot origin. Document the actual author-frame axes, dimensions, and pivot convention before placing shapes. Read the geometry unit contract: a primitive's scale can encode dimensions differently from another primitive's scale. Do not assume every scale is a radius or a generic multiplier.
+Fit the authored character to the existing body's scale and foot origin. Document the actual creation-frame axes, dimensions, and pivot convention before placing shapes. Read the geometry unit contract: a primitive's scale can encode dimensions differently from another primitive's scale. Do not assume every scale is a radius or a generic multiplier.
 
 ### Shape language
 

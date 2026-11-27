@@ -278,6 +278,37 @@ examples; [references/diagnostics.md](references/diagnostics.md) the codes
 authors hit most. `PuckDiagnosticCodes.cs` declares every code once, with its
 meaning as the XML doc comment.
 
+## The creation frame migration
+
+A creation is authored in the engine's frame, `puck.creation.v2`
+([sdf-authoring](../sdf-authoring/SKILL.md#the-creation-frame)). A branch that
+predates the change may hold `puck.creation.v1` creations, written in the
+retired author frame; validation refuses them by name. After merging, run
+`puck migrate frame worlds` (the whole tree, so it sees every template a
+creation reads): it converts every `v1` creation and leaves `v2` ones alone, and
+proves each document draws as before. The rule it applies, by hand when it
+refuses a construct:
+
+- Every position, `joint`, swing `pivot` and `axis`, slide `axis`, effector
+  `direction` and `offset`, camera position, clip slide and turn axis, symmetry
+  fold `normal`, unridden text run or volume position, and prototype `mesh`
+  vertex negates its x and z: a literal element by element (`[a, b, c]` becomes
+  `[-a, b, -c]`, and `(0 - e)` becomes `e`), anything else as `v * [-1, 1, -1]`.
+  A state binding (`"state.row"`) is left alone.
+- Every rotation `q` of those rows becomes the half turn followed by it,
+  `compose(rotate([0, 1, 0], 180), q)` (a literal `[x, y, z, w]` folds to
+  `[z, w, -x, -y]`, a yaw `rotate([0, 1, 0], d)` to `d + 180`), and a row that
+  had none gains `rotation: rotate([0, 1, 0], 180)`.
+- A shape that cannot tell its own half turn apart (a sphere, box, cylinder,
+  capsule, cone, torus, plane, ellipsoid, superellipsoid, or a rectangular,
+  elliptic or trapezoid prism, with no paint, face, riding run, camera, chain,
+  frame or framed palette layer reading its axes) takes the conjugate instead:
+  the rotation's x and z negated, so an unrotated box stays unrotated.
+- Fold origins, insets, curve points, scalars and a shape-ridden run or volume
+  stay as they are, and `schema` becomes `"puck.creation.v2"`.
+
+Remove the verb with the `v1` refusal once no branch holds a `v1` creation.
+
 ## Authoring a console command
 
 The owner's ruling: a console command composed from existing verbs is authored

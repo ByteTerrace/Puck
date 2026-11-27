@@ -137,8 +137,8 @@ crosses its cell walls (a long diagonal in an axis-aligned lattice, a primitive
 parked against a wall by its `origin`) draws as the slices of it each cell
 holds. A strand set at an angle is a mirror fold whose mirrors lie along the
 strands (a `wallpaper` P4M's diagonals), not a repeat of a rotated shape.
-`CreationFrame` converts symmetry normals but leaves repeat/polar origins
-unchanged, so an author-space point `[x,y,z]` is origin `[-x,y,-z]`.
+Fold origins and symmetry normals, like every other point, are in the
+creation's frame.
 
 A shape carrying folds may not also carry a swing or a slide, may not carry a
 `panel`, may not be the reference of a trim, and may not be a chain bone: a fold

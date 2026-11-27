@@ -4205,7 +4205,7 @@ within a cell. A fold is two triangles across an edge turning past 120 degrees;
 where each faces the field's gradient at its own centroid within 30 degrees, the
 turn is the field's own crease (a carve's rim or a groove's lip meeting a face
 steeply), counted apart as `on the field's creases` and not as a defect. Its worst clusters of flagged samples follow, each at its world
-position at rest and in the creation's author frame, with its extent and the
+position at rest and in the creation's frame, with its extent and the
 shapes whose own surfaces lie nearest. The output is a pure function of the
 world, the stored meshes and the options, so a later run proves a fix.
 
@@ -4261,13 +4261,13 @@ body or placement of the world stands has no geometry to bake and is refused.
 - `--views` takes the standard names (`front`, `back`, `left`, `right`,
   `front-left`, `front-right`, `back-left`, `back-right`, `top`, `below`; `all`
   and the default are every one) and named views, `name=azimuth,elevation` in
-  degrees about the author frame (azimuth 0 the front, +90 the subject's own
-  left, elevation 90 from above), with `,x,y,z,halfWidth` a close window of
-  that half width in metres about an author-frame point. Commas separate
-  standard names in one `--views` value, so each named view goes in a
-  `--views` of its own. A close window's point is in the author frame at the
-  placement's scale, measured from the creation's origin (a perched bird's
-  feet), not in the creation's unit-scale numbers. The three-quarter views
+  degrees about the creation's frame (azimuth 0 stands before the front, its −Z
+  side; +90 on the subject's own left, its −X side; elevation 90 from above),
+  with `,x,y,z,halfWidth` a close window of that half width in metres about a
+  point in the creation's frame. Commas separate standard names in one
+  `--views` value, so each named view goes in a `--views` of its own. A close
+  window's point is in the creation's frame at the placement's scale, measured
+  from the creation's origin (a perched bird's feet), not in the creation's unit-scale numbers. The three-quarter views
   stand 18 degrees above the horizon. Each view frames the whole mesh, so
   its span is printed; a named close window fixes its own.
 - Lighting is one light fixed in the camera's frame, so every view is lit
@@ -4281,7 +4281,7 @@ body or placement of the world stands has no geometry to bake and is refused.
   (`--open-edges false` drops it); a darker line is a depth step, which parts
   overlapping shapes of one colour.
 - It prints the triangles, groups, open and non-manifold edges (the groups
-  holding the most), the extents in the author frame and the program material
+  holding the most), the extents in the creation's frame and the program material
   ids by triangle count. Exit codes: 0 written; 2 the world failed to load, a
   usage error, or the prototype baked no surface.
 
@@ -4463,7 +4463,7 @@ puck embed lock <path> [--check] [--provider <installed-type>] [--settings <json
 puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <installed-type>] [--settings <json-file>]
 puck lint <path> [--strict]
 puck lsp
-puck migrate <name> <path> [--check]
+puck migrate <name> <path> [--check] [--keep]
 ```
 
 `compile` requires source paths unless `--tree <root>` is supplied. With
@@ -4675,6 +4675,26 @@ not atomic is the *set* of files: if a move fails after earlier moves have
 succeeded, those destinations stay migrated and the refusal names each of them.
 The common causes of that failure—a read-only file, a lock, a permission—are
 refused at plan time instead, before anything is staged.
+
+A migration whose rewrite of one source changes what another compiles to (a
+library's templates expanded in documents) is proven across the run instead:
+every source is compiled first, every rewrite is spliced into its author's text
+and written, every source that compiled is compiled again against the others'
+rewrites and held to the migration's own verdict, and every source is restored
+when one fails, unless `--keep` asks for the rewritten sources to stay so the
+failures can be read and finished by hand.
+
+`puck migrate frame <path>` is that kind. It converts every `puck.creation.v1`
+creation, written in the retired author frame (x and z mirrored), into a
+`puck.creation.v2` creation in the engine's own frame, so it draws, collides and
+moves exactly as before ([the creation frame](../../.claude/skills/sdf-authoring/SKILL.md#the-creation-frame)).
+The schema version is its marker: a `v2` creation is left alone, so a second run
+changes nothing. Run it over the whole `worlds` tree, so it sees every template
+and function a creation reads; a template or function both a `v1` and a `v2`
+creation reach is refused by name for conversion by hand. Its proof is each
+document compared with the retired conversion of what it compiled to before.
+The rule it applies is in
+[puck-dsl](../../.claude/skills/puck-dsl/SKILL.md#the-creation-frame-migration).
 
 Exit codes: **0** success, **1** diagnostics at or above the failing severity
 (`--strict` promotes warnings; `migrate --check` uses it for work outstanding),

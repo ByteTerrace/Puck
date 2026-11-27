@@ -5,7 +5,7 @@ description: "Authors creations: shape rows, primitives, blends, folds, palettes
 
 # Authoring a Puck creation
 
-A creation is a `puck.creation.v1` document: a palette, a list of shapes, and
+A creation is a `puck.creation.v2` document: a palette, a list of shapes, and
 optional rig, motion, text, volume, and noise sections. Shapes are signed
 distance fields composed by blends, not meshes: a cut is a subtraction, a
 fillet is a blend radius, and repetition is a fold rather than copies.
@@ -16,32 +16,32 @@ id: `world.row.set creations moth …` edits what the file spells
 `prototypes[id=moth].document`. Read `references/loop.md` before driving it
 live.
 
-## The author frame
+## The creation frame
 
-Every creation position, rotation, joint, pivot, axis, and camera offset is
-authored in one frame that is a **180° yaw about +Y away from the engine's**:
+A `puck.creation.v2` creation is authored in the engine's own frame, and
+nothing converts it: a placement moves and turns it, and that is all.
 
-| Author axis | Points |
+| Axis | Points |
 |---|---|
 | +Y | up |
-| +Z | the front the subject faces, toward a front-facing camera |
-| +X | screen-right as you look at that front, which is the subject's own **left** |
+| −Z | the front the creation faces: the way a body walks and a camera looks |
+| +X | the creation's own **right** (facing −Z) |
 
-So a shape authored at +X appears on the viewer's right, on the character's left
-side. Getting this backwards is the most expensive mistake in this surface, and
-it looks like a correct sculpt mirrored rather than like a bug. The conversion
-is exact axis negation, `(x, y, z) → (−x, y, −z)`, and it is its own inverse
-(`src/Puck.World.Authoring/Authoring/CreationFrame.cs`). The frame is a document
-fact: it applies identically in raw JSON and in a `.puck` shape row.
+So a shape at +X sits on the character's right, which a viewer standing before
+its front sees on their left; a placement with yaw 0 faces −Z. Every position,
+rotation, joint, pivot, axis, camera offset, fold origin, inset frame and
+prototype mesh vertex is in this one frame, in raw JSON and in a `.puck` row
+alike.
 
-Scalars, camera yaw and pitch, and chain goal and pole do **not** convert.
-Shape position, rotation, and joint convert; `curve.a/b/c` remain shape-local
-and ride that converted pose. Repeat and polar fold origins do not convert, so
-an author-space position `[x, y, z]` needs origin `[-x, y, -z]`
-([composition](references/composition.md#domain-folds)). Palette
-`inset.origin` and `inset.rotation` do not convert either: author them in the
-shader's winning frame ([surface](references/surface.md#inset)).
-[rig](references/rig.md#what-crosses-the-author-frame) lists every field.
+A text run, a box's face light (`lightsAs: Face`) and a screen face their local
++Z, the side a viewer reads them from. One on a creation's front therefore turns
+a half turn about up (`rotation: rotate([0, 1, 0], 180)`), as does any shape
+whose local axes a paint, a face or a riding run reads.
+
+A `puck.creation.v1` creation was written in the retired author frame, a half
+turn about up from this one (x and z negated). Validation refuses it by name;
+`puck migrate frame <path>` converts it exactly (the rule is in
+[puck-dsl](../puck-dsl/SKILL.md#the-creation-frame-migration)).
 
 ## Authoring in `.puck`
 
@@ -437,7 +437,7 @@ Source first, then structure, then pixels:
    distance bands live.
 4. Preview on the CPU before a windowed batch:
    `puck mesh preview --world <file>.puck --prototype <id> --output <dir>` bakes
-   the creation with the engine's own CPU bake (no GPU lease, no World boot) and draws front, back, both sides, four three-quarter views, top and
+   the creation with the engine's own CPU bake (no GPU lease, no World boot) and draws front (seen from its −Z side), back, both sides, four three-quarter views, top and
    below as palette-coloured PNGs and one contact sheet. Look at the sheet from
    every side, as a missing part, a torn seam or a mirrored limb shows there
    (magenta is a surface seen from behind, red a triangle on an open edge), and
@@ -447,7 +447,7 @@ Source first, then structure, then pixels:
    until you have looked at a capture (`references/loop.md`).
 6. Audit what the boot baked:
    `puck mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>`
-   names the shapes at each group's worst clusters, in the author frame, and
+   names the shapes at each group's worst clusters, in the creation's frame, and
    says which way the mesh faces against the field's gradient at the worst
    sample: opposed directions with both shapes at 0 mm is a sliver between
    two surfaces, not a bake fault.
