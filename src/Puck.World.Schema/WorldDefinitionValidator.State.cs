@@ -1346,7 +1346,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A nested advance (StateAdvance.By) reads its parent's slot in closed form, so the parent is another numeric slot
     // row that advances itself, the nesting is a slot's, and no chain returns to a row it left or runs deeper than the
-    // read follows.
+    // read follows, and the degree its exact value composes to stays inside what an exact read affords.
     private static void ValidateNestedAdvances(IReadOnlyList<WorldStateRow> rows, IReadOnlyDictionary<string, WorldStateRow> byName, List<string> errors) {
         for (var index = 0; (index < rows.Count); index++) {
             if (rows[index] is not { Advance.By: { } parentName } row) {
@@ -1370,6 +1370,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             var depth = 0;
+            var degree = (long)row.Advance!.IntegralDegree();
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal) { row.Name.Value };
 
             for (var link = parent; (link is not null); link = ((link.Advance?.By is { } next) ? byName.GetValueOrDefault(key: next) : null)) {
@@ -1379,6 +1380,13 @@ public static partial class WorldDefinitionValidator {
                 }
                 if (++depth > StateAdvance.MaxNestingDepth) {
                     errors.Add(item: $"{path} ('{row.Name}') nests deeper than {StateAdvance.MaxNestingDepth} clocks.");
+                    break;
+                }
+                if (link.Advance?.By is not null) {
+                    degree *= link.Advance.IntegralDegree();
+                }
+                if (degree > StateAdvance.MaxExactDegree) {
+                    errors.Add(item: $"{path} ('{row.Name}') nests on a chain whose exact value composes to degree {degree}, past the {StateAdvance.MaxExactDegree} an exact read affords (each shaped rate multiplies the degree by one more than its highest power); shorten the chain or lower the shapes' degrees.");
                     break;
                 }
             }

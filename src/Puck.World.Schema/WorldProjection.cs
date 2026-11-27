@@ -825,7 +825,7 @@ public static class WorldProjection {
             }
 
             if (clock.Anchor is { IsWellFormed: false }) {
-                return $"projection anchors clock '{clock.Name}' with a curve of {clock.Anchor.Curve?.Count ?? 0} coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals, and its value at the anchor's tick is the anchor's phase.";
+                return $"projection anchors clock '{clock.Name}' with a curve of {clock.Anchor.Curve?.Count ?? 0} coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals of at most {WorldClockAnchor.MaxCurveCoefficientBits} bits a part, and its value at the anchor's tick is the anchor's phase.";
             }
         }
 
