@@ -670,7 +670,8 @@ the document's own spelling.
   through the vector functions.
 - A row fold nests at most once, and there's no `.puck` spelling for a
   subprogram call. A fold over a compile-time list has no such limit, since it
-  is written out before the program is built.
+  is written out before the program is built; written out, it counts toward the
+  expression's 256 tokens like the chain an author pastes.
 - Board mask functions and `board(mask, …)` handle topologies of at most 64
   cells, because an expression value is one 64-bit word.
 - `primeAt` covers the first 256 primes; `factorial` stops at 20; subsets stop

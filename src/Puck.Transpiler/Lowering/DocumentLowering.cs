@@ -973,10 +973,7 @@ public static partial class DocumentLowering {
         if (bin.Operator is "and" or "or") {
             var left = IsTruthy(node: leftNode);
 
-            if (((bin.Operator == "and") && !left) || ((bin.Operator == "or") && left)) {
-                return JsonValue.Create(value: (left ? 1L : 0L));
-            }
-            return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
+            return JsonValue.Create(value: ((ShortCircuits(left: left, symbol: bin.Operator) ? left : IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey))) ? 1L : 0L));
         }
 
         return ApplyBinary(
@@ -990,6 +987,12 @@ public static partial class DocumentLowering {
             scope: scope
         );
     }
+    /// <summary>Returns whether <c>and</c> or <c>or</c> is decided by its left operand's truth, so its right operand is
+    /// never read and the operation's value is the left operand's truth.</summary>
+    /// <param name="left">The left operand's truth.</param>
+    /// <param name="symbol">The operator, <c>and</c> or <c>or</c>.</param>
+    /// <returns><see langword="true"/> for a false left operand of <c>and</c> or a true one of <c>or</c>.</returns>
+    internal static bool ShortCircuits(bool left, string symbol) => ((symbol == "and") != left);
     /// <summary>Applies an arithmetic, comparison or equality operator to two operands already evaluated: the one
     /// fold an operator's expression and a collection builtin's reduction (<c>sum</c>, <c>scan</c>, <c>dot</c>) share,
     /// so a list folds exactly as the same operator written between its elements does.</summary>

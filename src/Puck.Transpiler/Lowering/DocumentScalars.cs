@@ -143,10 +143,6 @@ public static class DocumentScalars {
             );
         }
 
-        var numbers = new double[function.Arity];
-        var integers = new long[function.Arity];
-        var allIntegers = true;
-
         // A trigonometric function's argument is an angle in radians, and an inverse one's a ratio or a point, whatever
         // field the call's value fills.
         var argumentKey = call.Name switch {
@@ -154,21 +150,50 @@ public static class DocumentScalars {
             "arcCosine" or "arcSine" or "arcTangent" or "arcTangent2" => null,
             _ => fieldKey,
         };
+        var arguments = new JsonNode?[function.Arity];
 
-        for (var index = 0; (index < function.Arity); ++index) {
-            var lowered = DocumentLowering.EvaluateValue(
+        // An argument that is not a number refuses the call before a later argument is evaluated.
+        for (var index = 0; (index < arguments.Length); ++index) {
+            arguments[index] = DocumentLowering.EvaluateValue(
                 expr: call.Arguments[index].Value,
                 scope: scope,
                 fieldKey: argumentKey
             );
 
+            if (!DocumentLowering.TryReadNumber(node: arguments[index], number: out _)) {
+                return Refuse(
+                    scope: scope,
+                    call: call,
+                    message: $"{call.Name} reads numbers known at compile time"
+                );
+            }
+        }
+
+        return Apply(arguments: arguments, call: call, scope: scope);
+    }
+    /// <summary>Applies a scalar function folded in double (an <see cref="ExpressionDomain.Integer"/> one is
+    /// delegated instead) to arguments already evaluated: the one fold a call's expression and a list fold's
+    /// <c>minimum</c> and <c>maximum</c> share, so a list folds exactly as the nested calls written out do.</summary>
+    /// <param name="call">The call: its name selects the function, and it places a refusal; its arguments are not
+    /// read.</param>
+    /// <param name="arguments">The evaluated arguments, as many as the function's arity.</param>
+    /// <param name="scope">The lowering scope, whose diagnostics take a refusal.</param>
+    /// <returns>The folded number, exact when every argument is whole and the function keeps whole numbers whole, or
+    /// <see langword="null"/> after a refusal reported into the scope.</returns>
+    internal static JsonNode? Apply(CallExpressionNode call, IReadOnlyList<JsonNode?> arguments, DocumentScope scope) {
+        var function = ExpressionVocabulary.Functions[call.Name];
+        var numbers = new double[arguments.Count];
+        var integers = new long[arguments.Count];
+        var allIntegers = true;
+
+        for (var index = 0; (index < arguments.Count); ++index) {
             allIntegers &= DocumentNumbers.TryInteger(
-                node: lowered,
+                node: arguments[index],
                 number: out integers[index]
             );
 
             if (!DocumentLowering.TryReadNumber(
-                node: lowered,
+                node: arguments[index],
                 number: out numbers[index]
             )) {
                 return Refuse(

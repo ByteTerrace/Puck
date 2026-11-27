@@ -132,7 +132,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `maximum` (`name(list, x => term)`) and `first` (`first(list, x => cond, otherwise)`,
   `first(list, x => cond, x => value, otherwise)`) over a list literal, a `let`, a parameter or a collection builtin
   are written out as the chain an author would paste (`ListFolds`, the one shape both languages build): a document
-  value evaluates it, and a rule operand's body may read state (`OperandBinder.Expand`, after function inlining and
+  value evaluates it step by step (`ListFolds.Fold` over `DocumentFoldSteps`, so no evaluation depth grows with the list),
+  and a rule operand folds each step as it is written out and refuses by name a chain past
+  `RuleCapacity.MaxExpressionTokens`. A rule operand's body may read state (`OperandBinder.Expand`, after function inlining and
   before constant folding), so the lowered rule equals the hand-written one. The lambda marks the fold: `count(hand)`,
   `any(row, x -> …)`, `minimum(a, b)` and a gate's `all [...]` keep their meanings. An element stands as a binding of
   it is written (a number as a literal, a name or text as an atom), a record only through its members. Never paste a
