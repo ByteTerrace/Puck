@@ -3,6 +3,8 @@ namespace Puck.State;
 /// <summary>The kind signature of an <see cref="ExpressionOp"/>: which numeric kinds it is defined over, and how it
 /// shapes the stack.</summary>
 public enum ExpressionSignature : byte {
+    /// <summary>Consumes one numeric value and yields the conversion's named kind.</summary>
+    Conversion,
     /// <summary>Defined over Int and Fixed; every operand and the result share the expression's kind.</summary>
     Numeric,
     /// <summary>Int only.</summary>
@@ -129,6 +131,8 @@ public static class ExpressionOperators {
     }
 
     private static readonly ExpressionOperator[] Entries = [
+        Define(ExpressionOp.ToFixed, 1, ExpressionSignature.Conversion, 1L, "toFixed", null, false, PayloadShape.None),
+        Define(ExpressionOp.ToInt, 1, ExpressionSignature.Conversion, 1L, "toInt", null, false, PayloadShape.None),
         Define(ExpressionOp.Or, 2, ExpressionSignature.Truth, 1L, null, "or", false, PayloadShape.None, binding: 2),
         Define(ExpressionOp.And, 2, ExpressionSignature.Truth, 1L, null, "and", false, PayloadShape.None, binding: 3),
         Define(ExpressionOp.Not, 1, ExpressionSignature.Truth, 1L, null, "not", false, PayloadShape.None, binding: 4),

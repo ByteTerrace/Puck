@@ -117,7 +117,7 @@ public class StringGrammarTests {
     }
     // An interpolated name carries its holes through the same escaping, so a quote inside a hole's own string
     // argument stays inside the one string rather than closing it, and `{{` still spells one literal brace.
-    [InlineData("placement $\"stem-{row[\\\"id\\\"]}-{{literal}}\" {")]
+    [InlineData("placement $\"stem-{row[\"id\"]}-{{literal}}\" {")]
     [InlineData("placement $\"\"\"stem-{row[\"id\"]}-{{literal}}\"\"\" {")]
     [Theory]
     public void AnInterpolatedNameKeepsItsHolesAndItsFence(string header) {

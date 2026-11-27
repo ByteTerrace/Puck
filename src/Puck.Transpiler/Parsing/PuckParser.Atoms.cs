@@ -118,12 +118,6 @@ public static partial class PuckParser {
         if (buffer[quote] != '"') {
             return -1;
         }
-        if (Matches(buffer: buffer, offset: quote, token: RawFence)) {
-            var close = buffer.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: (quote + RawFence.Length), value: RawFence);
-
-            return ((close < 0) ? -1 : (close + RawFence.Length));
-        }
-
-        return (PuckStrings.TryRead(end: out var end, error: out _, offset: quote, source: buffer, value: out _) ? end : -1);
+        return SourceLexemes.End(buffer, offset);
     }
 }

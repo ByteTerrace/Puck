@@ -319,15 +319,38 @@ $"""
     """                      // raw AND interpolated
 ```
 
-A `$` prefix is what turns either string form into an interpolation; a plain `"..."` never reads a `{` specially, so
-every string written before interpolation existed still means what it did. `{{`/`}}` are the only escape an
-interpolated string has, standing for one literal brace each—there is no other escape character, so a raw string
-can hold anything up to its own closing fence.
+A `$` prefix turns either string form into an interpolation. Literal text uses `{{` and `}}` for braces;
+ordinary quoted text also uses the usual backslash escapes. Each hole parses an ordinary expression, including
+objects, comments, quoted strings and further interpolations. Quotes inside a hole belong to that expression
+and need no escaping for the outer string:
 
-A raw string runs to the next `"""` with no escape processing. When the opening fence ends its own line and the
+```puck
+let cond = true
+let x = 7
+documentId: $"{(cond) ? $"a-{x}" : "b"}"
+```
+
+This produces `a-7`. Raw interpolations admit the same nested expressions; their literal text has no backslash
+escape processing. Formatting preserves each hole's expression and escapes only the surrounding literal text.
+
+A raw string runs to its closing `"""`, skipping expressions inside interpolation holes. When the opening fence ends its own line and the
 closing fence begins its own line, the CLOSING fence's own indentation is stripped from every content line and the
 bracketing newlines are dropped, so the text reads at the indentation it is authored at rather than the
 surrounding block's.
+
+## Numeric promotion in rules
+
+An `Int` expression widens to `Fixed` wherever a destination expects it: a rule write, a record field,
+a function argument or an arm of a numeric expression. This includes body-state writes such as
+`setBodyState(...)` and copies from an `Int` cell into a `Fixed` cell. The shared rule compiler inserts
+`toFixed` at the typed boundary. Conversion shifts the integer left by 16 bits exactly, without floating point;
+a value outside Q48.16's representable range faults instead of wrapping.
+
+`Fixed` never narrows to `Int` implicitly. Write `toInt(value)` explicitly to truncate toward zero; the
+compiler's kind error names this conversion. `toFixed(value)` is also available explicitly. Conversions
+preserve values already in the requested kind. Reads keep their declared kinds, so an integer quotient
+computed from `Int` cells still truncates before its result is promoted. Literals use their expression's
+numeric context, so `1 / 2` in a `Fixed` expression remains one half.
 
 ## Indexing
 

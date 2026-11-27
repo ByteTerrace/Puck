@@ -307,7 +307,7 @@ public static class RuleBounds {
             var arity = (token.Operation switch {
                 ExpressionOp.Constant or ExpressionOp.Operand => 0,
                 ExpressionOp.Not => ((token.Call is null) ? 1 : 0),
-                ExpressionOp.Negate or ExpressionOp.Absolute or ExpressionOp.Sign or ExpressionOp.IsAbsent or ExpressionOp.And or ExpressionOp.Or => 1,
+                ExpressionOp.Negate or ExpressionOp.Absolute or ExpressionOp.Sign or ExpressionOp.IsAbsent or ExpressionOp.And or ExpressionOp.Or or ExpressionOp.ToFixed or ExpressionOp.ToInt => 1,
                 ExpressionOp.Clamp or ExpressionOp.Select => 3,
                 ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply or ExpressionOp.Divide or ExpressionOp.Minimum or ExpressionOp.Maximum or ExpressionOp.Coalesce or
                     ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual => 2,
@@ -333,6 +333,8 @@ public static class RuleBounds {
                 ExpressionOp.Maximum => (FixedInterval.Max(first: a.Value, second: b.Value), a.Kind),
                 ExpressionOp.Negate => (-a.Value, a.Kind),
                 ExpressionOp.Absolute => (FixedInterval.Abs(value: a.Value), a.Kind),
+                ExpressionOp.ToFixed => (a.Value, CellKind.Fixed),
+                ExpressionOp.ToInt => (new FixedInterval(lower: FixedQ4816.Truncate(a.Value.Lower), upper: FixedQ4816.Truncate(a.Value.Upper)), CellKind.Int),
                 ExpressionOp.Clamp => (FixedInterval.Min(first: FixedInterval.Max(first: a.Value, second: b.Value), second: c.Value), a.Kind),
                 ExpressionOp.Select => (FixedInterval.Union(first: b.Value, second: c.Value), b.Kind),
                 ExpressionOp.Coalesce => (FixedInterval.Union(first: a.Value, second: b.Value), a.Kind),

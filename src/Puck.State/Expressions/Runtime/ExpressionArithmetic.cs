@@ -206,6 +206,12 @@ public static partial class ExpressionArithmetic {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
         switch (operation) {
+            case ExpressionOp.ToFixed:
+                if (kind == CellKind.Fixed) { value = operand; return true; }
+                return Narrow(wide: ((Int128)operand << FixedQ4816.FractionBitCount), value: out value);
+            case ExpressionOp.ToInt:
+                value = kind == CellKind.Int ? operand : operand / (1L << FixedQ4816.FractionBitCount);
+                return true;
             case ExpressionOp.Negate:
                 if (operand == long.MinValue) { return false; }
                 value = -operand; return true;
