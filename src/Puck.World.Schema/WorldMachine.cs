@@ -88,12 +88,32 @@ public sealed record WorldMachineAttention(
 /// <param name="State">The state row read; any declared numeric row (never <see cref="CellKind.Text"/>).</param>
 /// <param name="Key">The cell inside <paramref name="State"/>, or <see langword="null"/> for its slot cell; refused when
 /// the row is keyed and this is absent, or unkeyed and this is present.</param>
+/// <param name="WrapFrom">The first title of the library's tail that a selection past the library's end folds into, or
+/// <see langword="null"/> for none: a selection n at or past it runs title <c>WrapFrom + (n - WrapFrom) mod
+/// (count - WrapFrom + 1)</c>, so a title inside the tail runs as itself and any larger number lands on one. A world
+/// that does not know how many titles a local folder holds draws a large number (a seeded draw) and lets the library
+/// decide; a library with no title at or past it runs the machine's own content, as any unmatched selection does.
+/// Refused below 1.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldMachineContentSelector(
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string State,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? WrapFrom = null
 ) {
+    /// <summary>Folds a selection into the library's tail as <see cref="WrapFrom"/> says.</summary>
+    /// <param name="title">The selected title, as <see cref="Read"/> returns it.</param>
+    /// <param name="titleCount">How many titles the machine's library holds (<see cref="WorldMachineContentFolder.TitleCount"/>).</param>
+    /// <returns>The title to run: <paramref name="title"/> itself unless it lies past the library's end at or past a
+    /// <see cref="WrapFrom"/> the library reaches.</returns>
+    public int Fold(int title, int titleCount) {
+        if ((WrapFrom is not { } from) || (title < from) || (title <= titleCount) || (titleCount < from)) {
+            return title;
+        }
+
+        return (from + ((title - from) % ((titleCount - from) + 1)));
+    }
+
     /// <summary>Reads the title the cell selects: its whole value, or 0 when the cell is absent or negative.</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="tick">The tick to read the cell as of.</param>

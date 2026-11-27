@@ -68,13 +68,15 @@ placements {
 // checkout). A title's number is its place in this listing (`machine.content` prints each file's `title=`), so the
 // shipped programs are titles 1 and 2 whatever the local folder holds. A path resolves beside this file.
 let toyboxLibrary = ["../cartridges/deck", "../../../roms/hgd"]
+// The first title of the local folder: the shipped deck programs come first and are two.
+let toyboxLocalFirst = 3
 
 // The cartridge in each station's deck: `toyboxCartridge[<station>]` is the rented cartridge's loan ordinal
 // (rentals.puck) while one is inserted, 0 while the deck runs its own program, and `toyboxTitle[<station>]` the library
 // title the deck runs, which its machine's `contentBy` reads. `toyboxSwap` is the insert rule's scratch. The rentals'
 // console rule writes all three and shows the inserted cartridge from `toyboxCartridge`.
 exports {
-  reads [toyboxCartridge, toyboxTitle, toyboxSwap]
+  reads [toyboxCartridge, toyboxTitle, toyboxSwap, toyboxPick]
   actions [toyboxCartridge, toyboxTitle, toyboxSwap]
 }
 state {
@@ -90,6 +92,23 @@ state {
       kind: Int
       capacity: length(toyboxStations)
       cells: map(toyboxStations, s => { key: s.id, value: 0 })
+    }
+    // Each deck's own pick from the owner's local deck folder, drawn once from the world's seeded stream at first
+    // fill: a large number its machine folds into the folder's titles (`contentBy.wrapFrom`), so the same seed and the
+    // same folder deal every deck the same title, and a deck with no cartridge in runs its pick.
+    row {
+      name: "toyboxPick"
+      kind: Int
+      capacity: length(toyboxStations)
+      cells: map(toyboxStations, s => { key: s.id, value: 0 })
+      draw {
+        generator {
+          source: "UniformRange"
+          rangeMin: toyboxLocalFirst
+          rangeMax: 1048575
+        }
+        timing: "Boot"
+      }
     }
     row {
       name: "toyboxSwap"
@@ -111,13 +130,13 @@ state {
 // the building, which sees no picture of that gallery.
 let toyboxAttention = 40
 let toyboxBehind = 2
-// Every deck boots its library's folder default (the owner's local deck folder's `folder.json`, written by
-// `machine.default`) when that folder is present and names one, and its shipped program otherwise, as in a clean
-// checkout.
+// Every deck runs its own pick from the owner's local deck folder (`toyboxPick`, dealt by `toybox-deal`) while no
+// cartridge is in; before the first deal, and in a clean checkout with no local folder, it boots its library's folder
+// default or its shipped program.
 machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
   contentFolders: toyboxLibrary
   preferFolderDefault: true
-  contentBy { state: toyboxTitle, key: s.id }
+  contentBy { state: toyboxTitle, key: s.id, wrapFrom: toyboxLocalFirst }
   attention { within: toyboxAttention, behind: toyboxBehind }
 }))
 
@@ -153,3 +172,12 @@ screens [
 ]
 
 kits [devicePadKit]
+
+// A deck with no cartridge in and no title runs its own pick: at boot, and again after its cartridge comes out. The
+// write closes the rule, so it fires once per deal.
+for s in toyboxStations {
+  rule $"toybox-deal-{s.id}" {
+    when toyboxCartridge[s.id] == 0 and toyboxTitle[s.id] == 0
+    toyboxTitle[s.id] = toyboxPick[s.id]
+  }
+}

@@ -10211,6 +10211,10 @@ export type WorldMachineContentSelector = {
    * The cell inside State, or null for its slot cell; refused when the row is keyed and this is absent, or unkeyed and this is present.
    */
   key?: string | null;
+  /**
+   * The first title of the library's tail that a selection past the library's end folds into, or null for none: a selection n at or past it runs title WrapFrom + (n - WrapFrom) mod (count - WrapFrom + 1), so a title inside the tail runs as itself and any larger number lands on one. A world that does not know how many titles a local folder holds draws a large number (a seeded draw) and lets the library decide; a library with no title at or past it runs the machine's own content, as any unmatched selection does. Refused below 1.
+   */
+  wrapFrom?: number | null;
 };
 
 export type WorldMachineMemory = {

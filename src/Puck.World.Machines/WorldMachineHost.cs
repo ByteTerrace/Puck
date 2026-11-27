@@ -411,7 +411,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                     machine: stock.Declaration,
                     reason: out _
                 ) &&
-                WorldMachineContentFolder.TryTitle(entries: entries, entry: out var entry, title: title)
+                WorldMachineContentFolder.TryTitle(
+                    entries: entries,
+                    entry: out var entry,
+                    title: (stock.Declaration.ContentBy?.Fold(title: title, titleCount: WorldMachineContentFolder.TitleCount(entries: entries)) ?? title)
+                )
             ) {
                 var authored = Documented(declaration: stock.Declaration, folderBoot: stock.FolderBoot).Configuration;
 
