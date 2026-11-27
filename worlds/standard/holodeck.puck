@@ -31,8 +31,8 @@
 //     when holodeckStands() and holodeckAt[$each] != cell[$each]
 //     forEach: cell
 //     mode: Level
-//     // A topology's cells are the world's unless a frame names the placement they are authored in.
-//     poseCell(key: `placement:$each`, topology: board, expression: cell[$each], offset [0, 0.05, 0], frame: boardRoot)
+//     // A topology a board facet anchors is read in that placement's frame; any other topology needs `frame:`.
+//     poseCell(key: `placement:$each`, topology: board, expression: cell[$each], offset [0, 0.05, 0])
 //     holodeckAt[$each] = cell[$each]
 //   }
 //
