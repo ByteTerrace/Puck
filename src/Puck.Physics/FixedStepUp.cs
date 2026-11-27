@@ -75,8 +75,10 @@ public static class FixedStepUpOutcomes {
 /// steeper face is never stepped onto), rises no more than the step height above the start, and stands higher than
 /// the blocked step did. Otherwise the blocked step stands, so a riser taller than the step height, or any wall, is
 /// still a wall.</para>
-/// <para>The lowering reaches no further than where the original step would have ended along the up axis, so a step
-/// that was rising (a jump) lands on nothing it would not otherwise have reached. It asks the sweep's own support
+/// <para>The lowering reaches down to the start's height, or to where the original step would have ended along the up
+/// axis where that is lower, so a step that rose along its ground finds a surface that rises less steeply beyond the
+/// riser (a crest), and a step down a slope finds the slope. The caller attempts a step only for a body on the ground,
+/// so a rising step here is one that follows its ground, never a jump. It asks the sweep's own support
 /// distance (<see cref="IFixedContactStep.TrySupportDistance"/>) and lands on it, the contact skin off the riser's top: the
 /// landing stands within the solve's resting band of the riser's top and resolves it as ground, where one deep move would read the riser's
 /// side as the nearer face.</para>
@@ -300,9 +302,12 @@ public static class FixedStepUp {
             return FixedStepUpOutcome.Wall;
         }
 
-        // Lower onto the support, down to where the original step would have ended along up. Nothing met in that range
-        // leaves the body in the air, which is not a step.
-        if (!TrySnap(distance: (lift - vertical), result: out var landingResult, start: in across, step: ref step,
+        // Lower onto the support, down to the start's height, or to where the original step would have ended along up
+        // where that is lower (a step down a slope). A step that rose along its ground (a walk up a slope) must still
+        // reach a surface that rises less steeply beyond the riser, as a deck does past a crest; the landing still
+        // has to stand higher than the blocked step did. Nothing met in that range leaves the body in the air, which is
+        // not a step.
+        if (!TrySnap(distance: (lift - FixedQ4816.Min(x: vertical, y: FixedQ4816.Zero)), result: out var landingResult, start: in across, step: ref step,
             up: in up, velocity: in moved, responseOrigin: intended)) {
             return FixedStepUpOutcome.NoLanding;
         }

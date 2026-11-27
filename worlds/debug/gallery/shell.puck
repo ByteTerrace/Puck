@@ -932,14 +932,6 @@ template shellPrototypes() {
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
     ]
   )
-  prototype "gallery-barrier" {
-    document {
-      name: "gallery-barrier"
-      schema: "puck.creation.v2"
-      palette: filmArchPalette(lookBarrier.film, [0, shellArchSpring, 0], lookBarrier.tints, pane: lookBarrier.pane, glow: lookBarrier.glow, step: lookBarrier.step)
-      filmArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, films: length(lookBarrier.tints))
-    }
-  }
   for kind in latticeKinds {
     prototype $"{kind.id}" {
       document {
@@ -963,14 +955,7 @@ template shellPrototypes() {
       }
     }
   }
-  prototype "gallery-branch-door" {
-    document {
-      name: "gallery-branch-door"
-      schema: "puck.creation.v2"
-      palette: shellKit
-      edgeDoorway(base: 0, width: treeDoorWidth, post: treeDoorPost)
-    }
-  }
+  shellTreeEdgePrototypes()
   prototype "gallery-planter" {
     occlusion: propOcclusion
     document {
@@ -1144,16 +1129,7 @@ template shellPlacements() {
       }
     }
   }
-  // A doorway where each of the tree's level-2 and level-3 branches steps onto its balcony (layout.puck's treeLimbs).
-  for (b, n) in filter(treeLimbs, b => (b.level >= 2)) {
-    placement $"gallery-branch-door-{n}" {
-      prototype: "gallery-branch-door"
-      parent: "gallery"
-      position [b.x, galleryFloor[b.level], ((b.side == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))]
-      yawDegrees: ((b.side == "south") ? 180 : 0)
-      solid
-    }
-  }
+  shellTreeEdges()
   for rail in shellRails {
     placement $"gallery-{rail.id}" {
       prototype: ((rail.short == 2) ? "gallery-rail-door-side" : ((rail.short == 1) ? "gallery-rail-short" : "gallery-rail"))
@@ -1170,16 +1146,6 @@ template shellPlacements() {
       position [panel.x, galleryFloor[1], panel.z]
       yawDegrees: panel.yaw
       solid
-    }
-  }
-  for panel in shellLatticeGates {
-    placement $"gallery-{panel.id}" {
-      prototype: panel.prototype
-      parent: "gallery"
-      position [panel.x, (galleryFloor[1] + panel.y), panel.z]
-      solid {
-        passes: wonderPasses
-      }
     }
   }
   for panel in filter(shellLattices, p => (p.slat != "")) {
@@ -1209,6 +1175,51 @@ template shellPlacements() {
       parent: "gallery"
       position [galleryTileX(bench.x), galleryFloor[bench.y], galleryTileZ(bench.z)]
       yawDegrees: bench.yaw
+      solid
+    }
+  }
+}
+
+// Where the tree's branches meet the balconies (layout.puck's treeLimbs): the magic barrier in the arcade's arch behind
+// each level-1 landing, which holds every body but one holding a wonder pass (wonder.puck declares the registers), and
+// a doorway where each level-2 and level-3 branch steps onto its balcony. The building and the tree's lab
+// (labs/tree.puck) both stand them.
+template shellTreeEdgePrototypes() {
+  prototype "gallery-barrier" {
+    document {
+      name: "gallery-barrier"
+      schema: "puck.creation.v2"
+      palette: filmArchPalette(lookBarrier.film, [0, shellArchSpring, 0], lookBarrier.tints, pane: lookBarrier.pane, glow: lookBarrier.glow, step: lookBarrier.step)
+      filmArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, films: length(lookBarrier.tints))
+    }
+  }
+  prototype "gallery-branch-door" {
+    document {
+      name: "gallery-branch-door"
+      schema: "puck.creation.v2"
+      palette: shellKit
+      edgeDoorway(base: 0, width: treeDoorWidth, post: treeDoorPost)
+    }
+  }
+}
+template shellTreeEdges() {
+  for panel in shellLatticeGates {
+    placement $"gallery-{panel.id}" {
+      prototype: panel.prototype
+      parent: "gallery"
+      position [panel.x, (galleryFloor[1] + panel.y), panel.z]
+      solid {
+        passes: wonderPasses
+      }
+    }
+  }
+  // A doorway where each of the tree's level-2 and level-3 branches steps onto its balcony (layout.puck's treeLimbs).
+  for (b, n) in filter(treeLimbs, b => (b.level >= 2)) {
+    placement $"gallery-branch-door-{n}" {
+      prototype: "gallery-branch-door"
+      parent: "gallery"
+      position [b.x, galleryFloor[b.level], ((b.side == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))]
+      yawDegrees: ((b.side == "south") ? 180 : 0)
       solid
     }
   }

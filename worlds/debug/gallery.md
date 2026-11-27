@@ -293,52 +293,68 @@ branches to the other floors. [gallery/tree.puck](gallery/tree.puck) grows it
 on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
 `treeZ`), as two creations on one spot:
 
-- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor with a
-  flare and six buttress fins that arch from high on the trunk down to the
-  floor, a spiral of bark shelves round it with shelf fungus on every fifth
-  and burls between the turns, and six walkable branches that swell from
-  collars at the trunk, taper, fork and carry knots. Everything a body stands
-  on or will climb is built from shapes contact admits, the standard's
-  [limbs.puck](../standard/limbs.puck): a branch or a root is a chain of
-  flattened superellipsoids along a curve (`limb`), the shelves stand round the
-  trunk's taper and wander in reach and width (`spiralTreads`), and the trunk
-  collides as a stack of cylinders inside the drawn cone (`trunkCore`). The
-  creation sets `contact: Shapes`, so those masses collide as analytic
-  primitives under the smooth blends that draw them as one grown surface, and
-  a body walking the tree runs no field solve; the cone, the forks, knots,
-  burls and fungus brackets are drawn only. Its bark carries no creation
-  relief, which would collide as drawn; its texture is a grain that runs along
-  each limb's own axis (foliage.puck's `landscapeSurface` with `grain`), and
-  twists as the trunk climbs.
-- `gallery-tree-canopy`, not solid: the limbs that carry the foliage and the
-  dark mass closing the crown over the trunk's top.
+- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor, braided
+  strands standing a little proud of it, five buttress roots that flare from
+  low on the trunk to the floor, a timber walkway spiralling up it on bark
+  brackets (shelf fungus under every fifth tread) with burls between the
+  turns, and six branches, each a bark limb carrying a timber deck from a
+  level pad on the spiral out to its balcony, forking and carrying knots, with
+  nests in two of the forks. A low rail of living branch runs along every
+  edge a body could fall from, about the Moth's hip, rising from a stub here
+  and there; it collides exactly as drawn, so a body can stand on it or jump
+  over it, and what keeps a walker on the walkway is its width. Lanterns hang
+  on brass arms over the treads and from a crook of branch at each pad.
+  Everything a body stands on or will climb is built from
+  shapes contact admits, the standard's [limbs.puck](../standard/limbs.puck):
+  a root or a branch's limb is a chain of flattened superellipsoids along a
+  curve (`limb`), a deck is boards on the chords of its walking line
+  (`deckedLimb`), the treads are boards round the trunk (`spiralTreads`), the
+  rails are capsules (`guardRun`, `spiralGuard`, `limbGuard`), and the trunk is
+  a stack of drums blended into one taper (`trunkCore`). The creation sets
+  `contact: Shapes`, so those shapes collide as analytic primitives under the
+  smooth blends that draw them as one grown surface, and a body walking the
+  tree runs no field solve; the strands, boughs, forks, knots, burls,
+  brackets, the rails' stubs, the lanterns and nests are drawn only. Its bark
+  carries no creation relief, which would collide as drawn; its texture is a
+  grain that runs along each limb's own axis (foliage.puck's
+  `landscapeSurface` with `grain`), and twists as the trunk climbs.
+- `gallery-tree-canopy`, not solid: the boughs that carry the foliage, each
+  crossing the walkway level between two of its turns, and the dark mass
+  closing the crown over the trunk's top.
 - The foliage, not solid: leafy clumps (foliage.puck's `leafyClump`, a dark
   mass clothed in whole flat leaves), one creation for each colour family
-  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed once for
-  every clump of the crown, of the two tiers under it and of each branch's fork
+  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed in rings
+  (tree.puck's `treeRings`: the crown, a flat ring of small clumps under the
+  roof, and two tiers under the crown) and round each branch's fork
   (`leafyClumps`: a sunflower spiral on a dome high in the void under the
-  skylights, so sky shows between the clumps). Every copy draws its family's
-  one baked mesh at its own size and turn, and shades as one soft volume
-  (`softVolume`), so a clump's outline is leaf tips while the light falls across
-  it as across a round mass. One fork in three is golden.
+  skylights, so sky shows between the clumps). No clump stands where a body
+  walks (`treeClumpClear`): the walkway's annulus and the space over every
+  deck stay clear, so the decks walk through lanes in the leaves. Every copy
+  draws its family's one baked mesh at its own size and turn, and shades as
+  one soft volume (`softVolume`), so a clump's outline is leaf tips while the
+  light falls across it as across a round mass. One fork in three is golden.
 
-**Climbing it.** The shelves start on the trunk's east side, just south of
+**Climbing it.** The treads start on the trunk's east side, just south of
 east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
 last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
-`treeTreadRise`). Each reaches about 1.4 m past the bark; a body pressed
-against the bark itself does not step up, so the walking line runs a little
-out from it. `debug.go` has no stop yet; in the gallery root,
-`body.pose spawn:tree 0` stands her at their foot.
+`treeTreadRise`). Each is a board out to a rim 4 m from the trunk's axis
+(`treeRim`), its risers radial, so its top spans its whole step at every
+radius, and a body walks the spiral 3.05 m from the axis (`treeWalkRadius`).
+The way in is the floor between the first riser and a root that flanks it.
+The tree's lab, [labs/tree.puck](labs/tree.puck) (document id `lab-tree`),
+holds the tree with just the floor and the balcony landings its branches
+reach; boot it to build, walk and judge the tree, and `body.pose spawn:tree 0`
+stands her at the foot there and in the gallery root.
 
-**The branches.** Two reach each of levels 1 to 3, one to each balcony edge in
-bay 6 (`treeLimbs`, `treeLandings`). Each leaves the trunk from a tread, so the
-walker steps off the spiral onto it, and each pair leaves two treads further
-round than the pair below, so the canopy turns as it climbs. A level's south
-branch rises to its floor from a little below it, its north branch falls to it
-from half a turn higher. Level 1's pair pass through the lattice's gate,
-level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
-step onto its open edge. Each branch's tip lies on the floor's edge, a few
-centimetres proud of it (`treeLandingLift`).
+**The branches.** Two reach each of levels 1 to 3, one to each balcony edge
+(`treeLimbs`, `treeLanding`), each landing at its own bay. Each leaves the
+spiral from a tread that opens onto a level pad (`treePadFrom`,
+`treePadReach`, `treePadWidth`), from whose outer edge its deck walks out to
+its balcony, so the canopy turns as the pairs climb. A level's south branch
+rises to its floor from below it, its north branch falls to it from higher.
+Level 1's pair cross the open bay of the lattice to a magic barrier, level 2's
+and 3's step through doorways in the balcony edge. Each deck ends at its
+balcony's edge, its top flush with the floor.
 
 **Level 1's branches give no size.** The owner's design: a level-1 branch ends at a magic barrier that sells the player a way across: carry the wonder key, and cross without level 1's size change affecting you. Without a pass the barrier holds every body, small or full size ([the lattice](#the-lattice)).
 
@@ -666,8 +682,10 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **Level 1's floor**: the two aisles and the bridge, never the nave's void.
-  Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
+- **Level 1's floor**: the two aisles to their arcades' plane and the bridge,
+  never the nave's void, and never the balcony strip outside the arcade where
+  a tree branch lands before its barrier. Alice's size throughout (`small`,
+  look.puck's `lookWonderSize`, 0.15).
 
 Outside these zones a body keeps the size it last took (the owner's design):
 the stairs and the lift are the routes that size a body, and a body with no
