@@ -1,14 +1,23 @@
-// The card table's scenarios (cardtable.puck, klondike.puck), each booted in the whole debug world:
-// `puck test worlds/debug/cardtable-tests.puck --reproduce`. The table deals by itself at boot from the seeded stream,
-// so every scenario sees the same deal: the tableau columns (piles 2 to 8) hold 1 to 7 cards and the stock (pile 0)
-// 24, and the cards on show are the jack of spades (card 10) on pile 2, the six of hearts (18) on 3, the jack of hearts
-// (23) on 4, the five of diamonds (43) on 5, the king of hearts (25) on 6, the nine of spades (9 of 0..12: card 8) on
-// 7 and the ace of diamonds (39) on 8. A card is suit * 13 + rank - 1 with suits spades, hearts, clubs, diamonds.
+// The game table's Klondike scenarios (cardtable.puck, klondike.puck), each booted in the whole debug world with the
+// table showing Klondike: `puck test worlds/debug/cardtable-tests.puck --reproduce`. The table deals by itself at boot
+// from the seeded stream, so every scenario sees the same deal: the tableau columns (piles 2 to 8) hold 1 to 7 cards and
+// the stock (pile 0) 24, and the cards on show are the jack of spades (card 10) on pile 2, the six of hearts (18) on 3,
+// the jack of hearts (23) on 4, the five of diamonds (43) on 5, the king of hearts (25) on 6, the nine of spades (9 of
+// 0..12: card 8) on 7 and the ace of diamonds (39) on 8. A card is suit * 13 + rank - 1 with suits spades, hearts, clubs,
+// diamonds.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "debug"
 import "stopped-machines"
+
+state {
+  world {
+    table tableGame {
+      game = 1
+    }
+  }
+}
 
 // The deal: a card a tick gathers, shuffles, then deals the 28 cards of the tableau; the stock keeps 24, and the last
 // card of each column shows its face.
