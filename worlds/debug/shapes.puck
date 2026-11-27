@@ -1300,9 +1300,10 @@ template displayCells(displays, name, values, kind = "Int") {
 
 // What each exhibit's learn panel shows (../standard/learn-panel.puck): the engine formula it reads (a typeset formula's
 // reference, `world.formula` lists them), a sentence that says it plainly, and the term a player may scrub, with its value
-// at full size and the least share of it the scrub reaches. A scrubbed exhibit is sized by its `learnSize` cell about its
-// centre (`learnSized`), so the scrub reshapes it with no bake. The blends and the primitives the formulas name fall out
-// of their own rows; the rest show the sentence alone.
+// at full size and the least share of it the scrub reaches. A scrubbed size term sizes the exhibit by its `learnSize` cell
+// about its centre (`learnSizeBy`), so the scrub reshapes it with no bake; a scrubbed softness binds the blend's `smooth`
+// to its `learnAmount` cell (`learnSoftness`), so each write re-emits the exhibit and rebakes its seam. The blends and the
+// primitives the formulas name fall out of their own rows; the rest show the sentence alone.
 let learnExhibits = [
   {
     name: "shape-sphere"
@@ -1332,11 +1333,19 @@ let learnExhibits = [
     name: "shape-smooth-union"
     formula: "blend:SmoothUnion"
     sentence: "Two shapes joined softly: near the seam the blend borrows from both distances, and a fillet as wide as the softness grows between them."
+    scrub { term: "smoothRadius", value: 0.15, least: 0.1 }
   }
   {
     name: "shape-cubic-smooth-union"
     formula: "blend:CubicSmoothUnion"
     sentence: "The soft join on a cubic curve, so the fillet's curvature has no step where it meets each shape."
+    scrub { term: "smoothRadius", value: 0.15, least: 0.1 }
+  }
+  {
+    name: "shape-chamfer-union"
+    formula: "blend:ChamferUnion"
+    sentence: "The join cut flat instead of rounded: the seam is a bevel at 45 degrees, as wide as the softness."
+    scrub { term: "smoothRadius", value: 0.1, least: 0.1 }
   }
   {
     name: "shape-blend-subtraction"
@@ -1364,6 +1373,11 @@ function learnExhibitOf(name) = first(learnExhibits, entry => (entry.name == nam
 // height every primitive exhibit stands its subject at.
 function galleryIndexOf(name) = indexOf(map(galleryCatalog, entry => entry.name), name)
 function learnSizeBy(name) = $"state.learnSize.{galleryIndexOf(name)}"
+// A blend exhibit whose scrub sets the softness binds its shape's `smooth` to the scrubbed amount (learnAmount); the others
+// keep their authored radius.
+function learnSoftness(entry) = ((learnSubjectOf(learnExhibitOf(entry.id)).scrub == null)
+  ? entry.smooth
+  : $"state.learnAmount.{galleryIndexOf(entry.id)}")
 let learnCentre = [0, 1.2, 0]
 
 // The state of `displays` and of the catalog their consoles list: the stations' rows, then every exhibit's copy.
@@ -1777,7 +1791,7 @@ template blendPrototypes() {
           material: accentMaterial
           position: (entry.tool * [-1, 1, -1])
           scale: entry.radius
-          smooth: entry.smooth
+          smooth: learnSoftness(entry)
         }
         exhibit(label: entry.label, extra: [accent])
       }

@@ -101,7 +101,7 @@ public sealed partial class WorldCreationInstances {
                 if (blend == SdfBlendOp.SmoothUnion) {
                     growth += MathF.Max(
                         x: 0f,
-                        y: (shape.Smooth ?? 0f)
+                        y: shape.SmoothRadius
                     );
                 }
             }

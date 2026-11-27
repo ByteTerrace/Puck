@@ -94,7 +94,7 @@ public sealed record PaletteEntryDocument(
 /// <param name="Scale">The per-axis scale — the primitive's size (see <see cref="CreationGeometry"/>).</param>
 /// <param name="Material">The palette slot (null = 0).</param>
 /// <param name="Blend">The blend op name (null = Union).</param>
-/// <param name="Smooth">The smooth-blend radius (null = 0).</param>
+/// <param name="Smooth">The smooth-blend radius (null = 0): a number, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference, so a blend's softness follows a cell and each write re-emits and rebakes the groups the shape sits in. Read it through <see cref="SmoothRadius"/>, which clamps a live value to <see cref="MaxSmooth"/>.</param>
 /// <param name="Group">The composition group (null = ungrouped).</param>
 /// <param name="Twist">The shape's local twist rate (null = 0).</param>
 /// <param name="Bend">The shape's local bend rate about Y (null = 0).</param>
@@ -200,7 +200,7 @@ public sealed record ShapeDocument(
     DocumentVector3 Scale,
     int? Material,
     SdfBlendOp? Blend,
-    float? Smooth,
+    DocumentScalar? Smooth,
     int? Group,
     float? Twist = null,
     float? Onion = null,
@@ -236,6 +236,14 @@ public sealed record ShapeDocument(
     /// <summary>Gets the document names of the members whose zero is the member omitted: a zero
     /// <see cref="Chamfer"/> or <see cref="Rounding"/> shapes nothing, so canonical form never writes one.</summary>
     public static IReadOnlyList<string> ZeroIsAbsent { get; } = ["chamfer", "rounding"];
+
+    /// <summary>Gets the smooth-blend radius as it is now: <see cref="Smooth"/> read live when a cell binds it, in
+    /// [0, <see cref="MaxSmooth"/>], zero when it is unauthored or not finite. The one door every consumer reads the
+    /// radius through, so a bound value is clamped as an authored one is, wherever it is read.</summary>
+    [JsonIgnore]
+    public float SmoothRadius => ((Smooth?.Value is { } radius) && float.IsFinite(f: radius))
+        ? Math.Clamp(value: radius, min: 0f, max: MaxSmooth)
+        : 0f;
     /// <summary>Gets each member a shape row may omit and the canonical JSON text of the value its omission means, in
     /// document order. A row omitting <c>id</c> takes its own position in its list. Composition refines a basis row
     /// by naming only the members it changes, so an omitted member is completed once, where a document is read

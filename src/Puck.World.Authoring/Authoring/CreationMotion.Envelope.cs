@@ -27,7 +27,7 @@ public static partial class CreationMotion {
 
         var document = rig.Document;
         var shapes = document.Shapes!;
-        var k = (shapes[blend.Shape].Smooth ?? 0f);
+        var k = shapes[blend.Shape].SmoothRadius;
 
         CreationBlendEnvelope Refuse(string why) => new(Displacement: float.PositiveInfinity, Refusal: why, Rotation: float.PositiveInfinity, Smooth: k);
 

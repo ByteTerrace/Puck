@@ -11909,6 +11909,19 @@
         "CubicSmoothSubtraction": "Subtraction with a smooth carve seam whose curvature stays continuous (blend radius = instruction Data1.x)."
       }
     },
+    "DocumentScalar": {
+      "title": "DocumentScalar",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
     "ShapeDomainOpSymmetry": {
       "description": "Reflection fold across a plane \u2014 Symmetry. One authored half repeats mirror-imaged across the plane.",
       "properties": {
@@ -12248,19 +12261,6 @@
         }
       ],
       "title": "ShapeDomainOp"
-    },
-    "DocumentScalar": {
-      "title": "DocumentScalar",
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "string",
-          "minLength": 1,
-          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-        }
-      ]
     },
     "ShapeSwingDocument": {
       "description": "One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude \u00B7 wave(\u03C6 \u002B phase) \u00B7 w. Presentation-only \u2014 nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing.",
@@ -12747,11 +12747,8 @@
           "description": "The blend op name (null = Union)."
         },
         "smooth": {
-          "description": "The smooth-blend radius (null = 0).",
-          "type": [
-            "number",
-            "null"
-          ]
+          "$ref": "#/$defs/DocumentScalar",
+          "description": "The smooth-blend radius (null = 0): a number, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference, so a blend\u0027s softness follows a cell and each write re-emits and rebakes the groups the shape sits in. Read it through SmoothRadius, which clamps a live value to MaxSmooth."
         },
         "group": {
           "description": "The composition group (null = ungrouped).",

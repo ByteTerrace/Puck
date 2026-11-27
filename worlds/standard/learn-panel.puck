@@ -17,9 +17,11 @@
 // A panel's subject is a row of the world's subject table, the index the world writes to the panel's `learnSubject`
 // cell (a station's chosen exhibit). The table, `learnSubjectsState(subjects)`, holds each subject's formula reference
 // (`shape:Sphere`, `blend:SmoothUnion`, or "" for none), its sentence, and the term a player may scrub, with its value
-// at full size and the least share of it the scrub reaches. A subject's scrubbed size is `learnSize[<index>]`, a share
-// in 0..1 its creation's `sizeBy` reads (with `sizeAbout` at its centre), so the scrub reshapes the drawn subject with no
-// bake: its root scales, and the term's value written into the formula is that share of its value at full size.
+// at full size and the least share of it the scrub reaches. A subject's scrubbed term is a share in 0..1 of its value at
+// full size, `learnSize[<index>]`, and that value itself, `learnAmount[<index>]`; the formula's number is the amount. A
+// creation reads whichever its term is: a size term binds `sizeBy` to the share (with `sizeAbout` at its centre), so the
+// scrub scales the drawn subject's root with no bake, and a blend's softness binds the shape's `smooth` to the amount, so
+// the scrub re-emits the creation and rebakes the groups its blend sits in.
 //
 // The pointer surface's regions a panel reads, by id (the world places them):
 //
@@ -158,12 +160,19 @@ template learnSubjectsState(subjects) {
     capacity: length(rows)
     cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? 1 : rows[i].scrub.least) })
   }
-  // Each subject's scrubbed size, the share its creation's sizeBy reads.
+  // Each subject's scrubbed term as a share of its value at full size (what a sizeBy reads), and as that value (what a
+  // bound smooth reads).
   row {
     name: "learnSize"
     kind: "Fixed"
     capacity: length(rows)
     cells: map(indices, i => { key: $"{i}", value: 1 })
+  }
+  row {
+    name: "learnAmount"
+    kind: "Fixed"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? 0 : rows[i].scrub.value) })
   }
 }
 
@@ -255,14 +264,15 @@ template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
     learnView[key] = view
   }
   // The value and the scrub bar follow the subject's size, whoever wrote it (a drag, a state write, a reset): the value is
-  // the term's value at full size times the size, and the bar lights its ticks up to the share the size stands at between
-  // the subject's least share and its whole size. The gate and the write share both numbers, so a firing closes its own.
+  // the term's value at full size times the size, also written as the subject's amount, and the bar lights its ticks up to
+  // the share the size stands at between the subject's least share and its whole size. The gate and the write share every number, so a firing closes its own.
   rule $"learn-value-{key}" {
     local value = learnSize[learnSubject[key]] * learnSubjectValues[learnSubject[key]]
     local fill = (learnSize[learnSubject[key]] - learnSubjectLeast[learnSubject[key]]) / maximum(1 - learnSubjectLeast[learnSubject[key]], 0.01)
-    when learnValue[key] != value or learnBarAt[key] != fill
+    when learnValue[key] != value or learnAmount[learnSubject[key]] != value or learnBarAt[key] != fill
     mode: Level
     learnValue[key] = value
+    learnAmount[learnSubject[key]] = value
     learnBarAt[key] = fill
     for tick in range(0, learnBarCells) {
       if (fill * learnBarCells) > tick {

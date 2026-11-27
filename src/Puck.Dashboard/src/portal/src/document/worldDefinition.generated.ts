@@ -4138,9 +4138,9 @@ export type ShapeDocument = {
    */
   blend?: SdfBlendOp | null;
   /**
-   * The smooth-blend radius (null = 0).
+   * The smooth-blend radius (null = 0): a number, or a state.<row>[.<key>] reference, so a blend's softness follows a cell and each write re-emits and rebakes the groups the shape sits in. Read it through SmoothRadius, which clamps a live value to MaxSmooth.
    */
-  smooth?: number | null;
+  smooth?: DocumentScalar;
   /**
    * The composition group (null = ungrouped).
    */

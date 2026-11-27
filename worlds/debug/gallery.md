@@ -400,7 +400,9 @@ typeset from the formula tree the renderer runs, the formula with its live
 value written in, its terms a row each (a tap highlights one wherever it
 appears) and the step by step, which a drag, a flick or the wheel scrolls. The
 sphere, box, torus and rounding exhibits scrub: dragging the bar at the panel's
-foot sizes the exhibit about its centre, and the formula's number follows. BACK
+foot sizes the exhibit about its centre, and the formula's number follows. The
+smooth union, cubic union and chamfer union exhibits scrub their softness: each
+drag step re-emits the exhibit and rebakes its seam. BACK
 returns to the catalog.
 
 Every exhibit turns on its turntable by default, once every 24 gallery seconds

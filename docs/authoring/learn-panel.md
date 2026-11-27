@@ -68,18 +68,27 @@ The wheel scrolls a panel for a seat engaged at its terminal. It arrives as the
 standard's `scroll` channel, which the terminal page and pointer capture bind
 to the mouse wheel; a world lists `scroll` in its `inputModes` to make it live.
 
-## Scrubbing reshapes without a bake
+## What a scrub drives
 
-A subject's scrubbed size is the share in its `learnSize[<index>]` cell, which
-its creation's `sizeBy` reads, and `sizeAbout` names the point the size scales
-about, so an exhibit on a stand grows and shrinks about its own centre. Only
-the root matrix changes, so nothing bakes and the drawn subject follows the
-finger. The term's value written into the formula, the scrub's reading and the
-bar's lit ticks all follow the share, so they stay true when a state write moves
-it. A term that changes the contour itself, such as a blend's softness,
-would need a new mesh; until a blend's smooth radius can bind state the panel
-shows its value and offers no scrub for it
-([open items](../plans/open-items.md#learn-panel)).
+A drag on the scrub writes `learnSize[<index>]`, the share of the term's value
+at full size, and a level rule derives `learnAmount[<index>]`, that value
+itself. The number written into the formula
+is the amount. A creation binds whichever suits the term.
+
+- A size term (a sphere's radius, a box's half extents) binds the creation's
+  `sizeBy` to `learnSize`, and `sizeAbout` names the point the size scales
+  about, so an exhibit on a stand grows and shrinks about its own centre. Only
+  the root matrix changes, so nothing bakes and the drawn subject follows the
+  finger.
+- A blend's softness binds the shape's `smooth` to `learnAmount`
+  (`ShapeDocument.Smooth` is a number or a `state.<row>.<key>` reference, as a
+  position is). The contour changes, so each write re-emits the creation and
+  rebakes the groups its blend sits in; the mesh follows when its bake lands,
+  and the formula's number changes at once.
+
+The term's value written into the formula, the scrub's reading and the bar's lit
+ticks all derive from `learnSize` in one level rule, which also writes
+`learnAmount`, so they stay true when a state write moves the share.
 
 ## Reading it back
 

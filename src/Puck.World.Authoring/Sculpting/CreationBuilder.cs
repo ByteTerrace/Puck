@@ -93,7 +93,7 @@ public sealed class SculptShape {
         Rounding: Rounding,
         Scale: new DocumentVector3(value: Scale),
         Slides: Slides,
-        Smooth: Smooth,
+        Smooth: ((Smooth is { } smooth) ? new DocumentScalar(value: smooth) : null),
         Swings: Swings,
         Taper: Taper,
         Twist: Twist,

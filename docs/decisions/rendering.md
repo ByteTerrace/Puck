@@ -2230,8 +2230,9 @@ formula to well-formed markup that names every term it reads.
 subject's size is its creation's `sizeBy`, scaled about `sizeAbout` so a
 stand's exhibit grows about its own centre: the root matrix changes and
 nothing bakes, so a scrub is live. A term that changes the contour itself (a
-blend's smooth radius) needs a new mesh; until `ShapeDocument.Smooth` can bind
-state the panel shows its value without a scrub (open items, the learn panel).
+blend's smooth radius) needs a new mesh: `ShapeDocument.Smooth` binds state as
+a position does, so each scrub step re-emits the creation and rebakes the
+groups its blend sits in, and the formula's number follows at once.
 
 ## In-world devices and screens
 
