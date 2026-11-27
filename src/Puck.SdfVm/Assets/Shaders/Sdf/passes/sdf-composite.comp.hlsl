@@ -168,7 +168,7 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
 
         if (kinds.x > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            surface += (sdfAirFogColor(ambient) * weights.x);
+            surface += (sdfAirFogColor(ambient, direction, airLight) * weights.x);
         }
         if (kinds.y > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);

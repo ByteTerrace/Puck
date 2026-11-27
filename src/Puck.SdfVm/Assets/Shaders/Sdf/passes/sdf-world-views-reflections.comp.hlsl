@@ -85,7 +85,7 @@ float3 sdfReflectInScatter(uint pixel, uint2 extent, float3 direction) {
     float airLight = saturate(passGroup.airLight);
     float3 ambient = (sdfAirInScatterReadsSky(weights) ? (sdfSkyPhysicalRadiance(direction) * airLight) : float3(0.0, 0.0, 0.0));
 
-    return (((sdfAirFogColor(ambient) * weights.x) + (sdfAirHazeColor(ambient, direction, airLight) * weights.y)) + (sdfSky[0].MediumColor * weights.z));
+    return (((sdfAirFogColor(ambient, direction, airLight) * weights.x) + (sdfAirHazeColor(ambient, direction, airLight) * weights.y)) + (sdfSky[0].MediumColor * weights.z));
 }
 
 // Where a mirror ray from `origin` along `direction` (relative to the eye of the view `rows` holds) meets the surface of the

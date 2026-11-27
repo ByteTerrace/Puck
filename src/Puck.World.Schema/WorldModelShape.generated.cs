@@ -5696,6 +5696,7 @@ public static partial class WorldModelShape {
                 M("color", typeof(global::System.Nullable<global::Puck.World.BindableColor>), typeof(global::Puck.World.WorldRenderFog), "Color", Read | Write, static value => ((global::Puck.World.WorldRenderFog)value).Color, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("height", typeof(global::Puck.World.WorldRenderAirHeight), typeof(global::Puck.World.WorldRenderFog), "Height", Read | Write, static value => ((global::Puck.World.WorldRenderFog)value).Height),
                 M("luminance", typeof(global::System.Nullable<global::Puck.World.BindableScalar>), typeof(global::Puck.World.WorldRenderFog), "Luminance", Read | Write, static value => ((global::Puck.World.WorldRenderFog)value).Luminance, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
+                M("anisotropy", typeof(global::System.Nullable<global::Puck.World.BindableScalar>), typeof(global::Puck.World.WorldRenderFog), "Anisotropy", Read | Write, static value => ((global::Puck.World.WorldRenderFog)value).Anisotropy, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
             ],
             []),
         T(typeof(global::Puck.World.WorldRenderHaze), true, JsonTypeInfoKind.Object, null,

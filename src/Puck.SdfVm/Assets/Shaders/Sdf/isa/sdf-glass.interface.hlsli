@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/27859f23968ddf85b76265d7d04a7445a846d5dac41c5f5b37071db1b2c29a94). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/75eb203ef5da6fe9e4c1888b9a4a0ecdb3eef71514ef751f041478ef872988c8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -39,7 +39,7 @@ struct SdfSkyBlock {
     [[vk::offset(120)]] float HazeFalloff;
     [[vk::offset(124)]] float HazeAnisotropy;
     [[vk::offset(128)]] float3 AirLight0Direction;
-    [[vk::offset(140)]] uint _pad140;
+    [[vk::offset(140)]] float FogAnisotropy;
     [[vk::offset(144)]] float3 AirLight0Radiance;
     [[vk::offset(156)]] uint _pad156;
     [[vk::offset(160)]] float3 AirLight1Direction;
@@ -116,8 +116,8 @@ struct SdfGlassFrame {
 [[vk::binding(17, 1)]] StructuredBuffer<uint> sdfMeshDraws : register(t17, space1);
 [[vk::binding(18, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t18, space1);
 #define sdfLights sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5
-[[vk::binding(19, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t19, space1);
-#define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
+[[vk::binding(19, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutfdef00bee49d9d72862c99f6620825913262775e3be134143ddefc291414f0b1 : register(t19, space1);
+#define sdfSky sdfSkyLayoutfdef00bee49d9d72862c99f6620825913262775e3be134143ddefc291414f0b1
 [[vk::binding(20, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t20, space1);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
 [[vk::binding(21, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t21, space1);

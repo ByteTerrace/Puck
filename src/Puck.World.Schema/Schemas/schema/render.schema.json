@@ -278,6 +278,11 @@
               "$ref": "./common.schema.json#/$defs/BindableScalar",
               "description": "The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky\u0027s own.",
               "default": null
+            },
+            "anisotropy": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The Henyey-Greenstein anisotropy of the light of the bodies that cast light (every directional light) which the fog scatters toward the eye, in [0, 0.9]: the fog glows about them, brightest toward a low sun, the more sharply the higher it is. Absent or zero scatters none, so the fog is its colour alone.",
+              "default": null
             }
           },
           "additionalProperties": false,

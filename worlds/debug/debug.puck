@@ -471,10 +471,13 @@ render {
     frames: 4
   }
   // A clear day's air (the standard's `clearDayAir` density), thinning with height as air does, so a ship climbing to
-  // the sky seam looks down on the valley through less and less of it.
+  // the sky seam looks down on the valley through less and less of it. The fog scatters the sun's light forward by a
+  // Henyey-Greenstein lobe of 0.5: half its peak thirty degrees off the sun and a fifth sixty degrees off, so a view
+  // toward a low sun glows across the valley floor, not only about the disc, and a view away from it takes almost none.
   atmosphere {
     fog {
       density: 0.0006
+      anisotropy: 0.5
       height {
         base: 0
         falloff: 900

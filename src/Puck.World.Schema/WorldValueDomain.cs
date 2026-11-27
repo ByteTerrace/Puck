@@ -225,6 +225,11 @@ public static class WorldValueFields {
         Maximum: SdfAtmosphere.MaxHazeAmount,
         Minimum: 0f
     ), Why: "a haze that takes all the light has no finite extinction");
+    /// <summary>The fog's Henyey-Greenstein anisotropy toward the bodies' light.</summary>
+    public static WorldValueField FogAnisotropy { get; } = new(typeof(WorldRenderFog), nameof(WorldRenderFog.Anisotropy), new WorldValueDomain(
+        Maximum: SdfAtmosphere.MaxFogAnisotropy,
+        Minimum: 0f
+    ), Why: "a sharper forward lobe collapses toward a point the composite cannot sample");
     /// <summary>The haze's Henyey-Greenstein anisotropy.</summary>
     public static WorldValueField HazeAnisotropy { get; } = new(typeof(WorldRenderHaze), nameof(WorldRenderHaze.Anisotropy), new WorldValueDomain(
         Maximum: SdfAtmosphere.MaxHazeAnisotropy,
@@ -413,6 +418,7 @@ public static class WorldValueFields {
         CloudSpin,
         CloudCurl,
         FogDensity,
+        FogAnisotropy,
         AirBase,
         AirFalloff,
         HazeAmount,

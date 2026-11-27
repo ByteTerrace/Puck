@@ -63,6 +63,9 @@ public record struct SdfSkyBlock {
     [FieldOffset(124)] public float HazeAnisotropy;
     /// <summary>Baked: the unit direction toward the first air light.</summary>
     [FieldOffset(128)] public Vector3 AirLight0Direction;
+    /// <summary>The fog's Henyey-Greenstein anisotropy, in the padding word after the first air light's direction; zero
+    /// in-scatters no light of the bodies, so the fog is its sky or authored colour alone.</summary>
+    [FieldOffset(140)] public float FogAnisotropy;
     /// <summary>Baked: the first air light's radiance.</summary>
     [FieldOffset(144)] public Vector3 AirLight0Radiance;
     /// <summary>Baked: the unit direction toward the second air light.</summary>
@@ -419,6 +422,7 @@ public sealed class SdfSky {
         block.FogBase = atmosphere.FogBase;
         block.FogFalloff = MathF.Max(x: atmosphere.FogFalloff, y: 0f);
         block.FogColor = atmosphere.FogColor;
+        block.FogAnisotropy = Math.Clamp(max: SdfAtmosphere.MaxFogAnisotropy, min: 0f, value: atmosphere.FogAnisotropy);
         block.HazeExtinction = (((atmosphere.HazeAmount > 0f) && (farDistance > 0f))
             ? ((float)(-Math.Log(d: (1d - Math.Min(val1: atmosphere.HazeAmount, val2: SdfAtmosphere.MaxHazeAmount))) / farDistance))
             : 0f);
