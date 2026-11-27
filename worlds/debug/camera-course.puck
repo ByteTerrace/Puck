@@ -129,9 +129,11 @@ prototypes {
         }
       ]
       palette [{ color: "#DDE8EA" }]
+      // A box's face is its local +Z: the panel's half turn faces the display to the creation's front (-Z).
       shape Box "panel" {
         material: 0
         position [0, 0, 0]
+        rotation [0, 1, 0, 0]
         scale [1.2, 0.675, 0.05]
       }
     }

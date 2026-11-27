@@ -751,7 +751,8 @@ internal sealed class CreationFrameMigration : PuckMigration {
         public CreationContext(JsonObject creation, bool slotFramed) {
             m_slotFramed = slotFramed;
             m_palette = creation["palette"] as JsonArray;
-            AddIds(list: creation["faces"], member: "shapeId");
+            // A creation declares its faces under `behavior` (CreationBehaviorDocument.Faces).
+            AddIds(list: creation["behavior"]?["faces"], member: "shapeId");
             AddIds(list: creation["cameras"], member: "shapeId");
             AddIds(list: creation["textRuns"], member: "shapeId");
             AddIds(list: creation["parts"], member: "shapeId");

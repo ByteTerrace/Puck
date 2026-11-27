@@ -448,13 +448,6 @@ public static class WorldPostBuildWiring {
             }
         };
 
-        // Binds the instance host's own cross-instance narration to stderr — the boot server's own hub and
-        // WorldMachineHost's already bound a sink at DI construction time (WorldBootComposition), before either one
-        // could narrate anything of its own; WorldInstanceHost narrates nothing during construction, so attaching
-        // here, after the container finishes building, loses nothing. Every headless script and canary reads the
-        // identical lines a direct Console.Error write would have produced.
-        services.GetRequiredService<WorldInstanceHost>().AttachNarrationSink(sink: new WorldConsoleNarrationSink());
-
         // A capture still owed a frame as the run ends, a scheduled row's or a world.screenshot's, is refused by name by
         // the host loop (IFixedStepSimulation.SettleOwedFrames, WorldCaptureScheduler.Drain) before it disposes the
         // render root, while the chain that would have served it is still alive.

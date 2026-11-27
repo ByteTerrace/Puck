@@ -1985,7 +1985,10 @@ hold that implementation itself (`build/Architecture.props` denies it a
 `System.Console` reference). A server's own
 narration must be attached from its constructor's `narrationSink` parameter,
 not after—the document's own authored grants narrate during construction,
-before any post-build wiring step could reach them. The machine host
+before any post-build wiring step could reach them. The instance host takes its
+sink the same way: the composition admits the boot row as it builds the host, and
+that admission starts the worlds the row's screens show, so a refused start
+narrates its reason before the container finishes. The machine host
 (`WorldMachineHost` in [`Puck.World.Machines`](../Puck.World.Machines/README.md),
 reached here through `IWorldMachineHost`) takes an optional `WorldOutputHub`/narration sink
 because it owns no single server of its own to share (a peer singleton to
