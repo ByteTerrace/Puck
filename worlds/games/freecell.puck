@@ -15,6 +15,11 @@
 
 let fcPowers = [1, 2, 4, 8, 16, 32, 64, 128, 256]
 
+// Every pile a rule chooses by number, and the table of the piles in `keep` alone: a transfer or a match between piles a
+// table picks live is priced by the dearest pile the table holds, so each rule names only the piles it can choose.
+let fcZones = map(range(0, 16), k => $"freecellPile{k}Of")
+function fcZonesOf(keep) = map(range(0, 16), k => (length(filter(keep, z => z == k)) > 0) ? fcZones[k] : "")
+
 // Each table's mailbox and door, one row a field keyed by table, with the value a table starts at.
 let fcFields = [
   { name: "Request", value: 0 }
@@ -46,32 +51,9 @@ function freecellIdle() = (solitaireTable[$each] == 2 and
 
 function freecellAsked(kind) = freecellIdle() and freecellStatus[$each] == 1 and freecellAction[$each] == kind
 
-// FreeCell's state for `count` tables, inside the world's `state.world` block beside solitaireState(count): the deck's
-// constants once, each table's mailbox as one row a field, and each table's deck and sixteen piles as pile families.
+// FreeCell's state for `count` tables, inside the world's `state.world` block (solitaireState(count) expands it): each
+// table's mailbox as one row a field, and each table's deck and sixteen piles as pile families.
 template freecellState(count) {
-  row {
-    name: "solitaireFreecellCards"
-    kind: "Int"
-    capacity: 52
-    cells: map(range(0, 52), i => { key: $"{i}", value: i })
-  }
-
-  row {
-    name: "solitaireFreecellRank"
-    kind: "Int"
-    domain: keysOf(row: solitaireFreecellCards)
-    capacity: 52
-    cells: map(range(0, 52), i => { key: $"{i}", value: i % 13 + 1 })
-  }
-
-  row {
-    name: "solitaireFreecellSuit"
-    kind: "Int"
-    domain: keysOf(row: solitaireFreecellCards)
-    capacity: 52
-    cells: map(range(0, 52), i => { key: $"{i}", value: floor(i / 13) })
-  }
-
   // The cards a move may carry for each count of empty columns: two to the power of that count.
   row {
     name: "solitaireFreecellPower"
@@ -84,77 +66,24 @@ template freecellState(count) {
     solitaireCells(name: $"freecell{field.name}", count: count, value: field.value)
   }
 
-  pile freecellDeckOf[count] of solitaireFreecellCards capacity(52) {
-    "0"
-    "1"
-    "2"
-    "3"
-    "4"
-    "5"
-    "6"
-    "7"
-    "8"
-    "9"
-    "10"
-    "11"
-    "12"
-    "13"
-    "14"
-    "15"
-    "16"
-    "17"
-    "18"
-    "19"
-    "20"
-    "21"
-    "22"
-    "23"
-    "24"
-    "25"
-    "26"
-    "27"
-    "28"
-    "29"
-    "30"
-    "31"
-    "32"
-    "33"
-    "34"
-    "35"
-    "36"
-    "37"
-    "38"
-    "39"
-    "40"
-    "41"
-    "42"
-    "43"
-    "44"
-    "45"
-    "46"
-    "47"
-    "48"
-    "49"
-    "50"
-    "51"
-  }
+  pile freecellDeckOf[count] of solitaireCards capacity(52) = map(range(0, 52), k => $"{k}")
 
-  pile freecellPile0Of[count] of solitaireFreecellCards capacity(1)
-  pile freecellPile1Of[count] of solitaireFreecellCards capacity(1)
-  pile freecellPile2Of[count] of solitaireFreecellCards capacity(1)
-  pile freecellPile3Of[count] of solitaireFreecellCards capacity(1)
-  pile freecellPile4Of[count] of solitaireFreecellCards capacity(13)
-  pile freecellPile5Of[count] of solitaireFreecellCards capacity(13)
-  pile freecellPile6Of[count] of solitaireFreecellCards capacity(13)
-  pile freecellPile7Of[count] of solitaireFreecellCards capacity(13)
-  pile freecellPile8Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile9Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile10Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile11Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile12Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile13Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile14Of[count] of solitaireFreecellCards capacity(19)
-  pile freecellPile15Of[count] of solitaireFreecellCards capacity(19)
+  pile freecellPile0Of[count] of solitaireCards capacity(1)
+  pile freecellPile1Of[count] of solitaireCards capacity(1)
+  pile freecellPile2Of[count] of solitaireCards capacity(1)
+  pile freecellPile3Of[count] of solitaireCards capacity(1)
+  pile freecellPile4Of[count] of solitaireCards capacity(13)
+  pile freecellPile5Of[count] of solitaireCards capacity(13)
+  pile freecellPile6Of[count] of solitaireCards capacity(13)
+  pile freecellPile7Of[count] of solitaireCards capacity(13)
+  pile freecellPile8Of[count] of solitaireCards capacity(19)
+  pile freecellPile9Of[count] of solitaireCards capacity(19)
+  pile freecellPile10Of[count] of solitaireCards capacity(19)
+  pile freecellPile11Of[count] of solitaireCards capacity(19)
+  pile freecellPile12Of[count] of solitaireCards capacity(19)
+  pile freecellPile13Of[count] of solitaireCards capacity(19)
+  pile freecellPile14Of[count] of solitaireCards capacity(19)
+  pile freecellPile15Of[count] of solitaireCards capacity(19)
 
   row {
     name: "solitaireFreecellStream"
@@ -168,27 +97,9 @@ template freecellState(count) {
   }
 }
 
-// The game's patterns and rules, once in the world whatever the number of tables.
+// The game's rules, once in the world whatever the number of tables. Whether a column's last card takes the moving card
+// reads that card itself (`zone(pile, last)`); the patterns they match are the collection's, solitaireGame's.
 template freecellGame() {
-
-  // A pile's length from a card to its end (matched with `prefix`), and whether its cards from one on run down a rank at
-  // a time in alternating colours. Whether a column's last card takes the moving card reads that card itself
-  // (`zone(pile, last)`), since a pattern's per-card value cannot read the table's cells.
-  pattern solitaireFreecellLength: Int {
-    value: "1"
-    symbols {
-      one = 1
-    }
-    match: any*
-  }
-  pattern solitaireFreecellRun: Int {
-    value: "1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2)"
-    symbols {
-      face = 1..2
-      next = 2
-    }
-    match: face next*
-  }
 
   rule "solitaireFreecell-new-deal" {
     forEach: solitaireTable
@@ -203,24 +114,7 @@ template freecellGame() {
   // those sixteen piles and moves on when the pile it names is empty.
   rule "solitaireFreecell-gather" {
     forEach: solitaireTable
-    zones [
-      freecellPile0Of
-      freecellPile1Of
-      freecellPile2Of
-      freecellPile3Of
-      freecellPile4Of
-      freecellPile5Of
-      freecellPile6Of
-      freecellPile7Of
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
+    zones: fcZones
     when (solitaireTable[$each] == 2 and
       freecellStage[$each] == 1 and
       count($zones[freecellGatherStep[$each]]) > 0)
@@ -229,24 +123,7 @@ template freecellGame() {
 
   rule "solitaireFreecell-gather-advance" {
     forEach: solitaireTable
-    zones [
-      freecellPile0Of
-      freecellPile1Of
-      freecellPile2Of
-      freecellPile3Of
-      freecellPile4Of
-      freecellPile5Of
-      freecellPile6Of
-      freecellPile7Of
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
+    zones: fcZones
     when (solitaireTable[$each] == 2 and
       freecellStage[$each] == 1 and
       freecellGatherStep[$each] < 15 and
@@ -275,24 +152,7 @@ template freecellGame() {
   // The deal: 52 cards, a card a tick, across the eight columns (card k goes to column k % 8).
   rule "solitaireFreecell-deal" {
     forEach: solitaireTable
-    zones [
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
+    zones: fcZonesOf(range(8, 16))
     when solitaireTable[$each] == 2 and freecellStage[$each] == 3
     draw freecellDeckOf[$each] to $zones[8 + freecellDealStep[$each] % 8]
   }
@@ -359,49 +219,15 @@ template freecellGame() {
   rule "solitaireFreecell-source" {
     forEach: solitaireTable
     when freecellAsked(2) and $zones[freecellFrom[$each]][freecellCard[$each]] == 1
-    zones [
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
-    freecellSourceOk[$each] = match(solitaireFreecellRun, $zones[freecellFrom[$each]])[freecellCard[$each]]
-    freecellRunLength[$each] = match(solitaireFreecellLength, $zones[freecellFrom[$each]], prefix)[freecellCard[$each]]
+    zones: fcZonesOf(range(8, 16))
+    freecellSourceOk[$each] = match(solitaireRun, $zones[freecellFrom[$each]])[freecellCard[$each]]
+    freecellRunLength[$each] = match(solitaireLength, $zones[freecellFrom[$each]], prefix)[freecellCard[$each]]
   }
 
   rule "solitaireFreecell-source-cell" {
     forEach: solitaireTable
     when freecellAsked(2) and $zones[freecellFrom[$each]][freecellCard[$each]] == 1
-    zones [
-      freecellPile0Of
-      freecellPile1Of
-      freecellPile2Of
-      freecellPile3Of
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-    ]
+    zones: fcZonesOf(range(0, 4))
     freecellSourceOk[$each] = 1
     freecellRunLength[$each] = 1
   }
@@ -411,24 +237,7 @@ template freecellGame() {
   rule "solitaireFreecell-target-column" {
     forEach: solitaireTable
     when freecellAsked(2) and freecellSourceOk[$each] == 1
-    zones [
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
+    zones: fcZonesOf(range(8, 16))
     freecellTargetOk[$each] = (
       (
         freecellRunLength[$each] <=
@@ -437,8 +246,8 @@ template freecellGame() {
       ) *
       (count($zones[freecellTo[$each]]) + freecellRunLength[$each] <= 19) *
       (count($zones[freecellTo[$each]]) == 0 ? 1 : (
-        (solitaireFreecellRank[zone($zones[freecellTo[$each]], last)] == solitaireFreecellRank[freecellCard[$each]] + 1) *
-        (solitaireFreecellSuit[zone($zones[freecellTo[$each]], last)] % 2 != solitaireFreecellSuit[freecellCard[$each]] % 2)
+        (solitaireRank[zone($zones[freecellTo[$each]], last)] == solitaireRank[freecellCard[$each]] + 1) *
+        (solitaireSuit[zone($zones[freecellTo[$each]], last)] % 2 != solitaireSuit[freecellCard[$each]] % 2)
       ))
     )
   }
@@ -447,24 +256,7 @@ template freecellGame() {
   rule "solitaireFreecell-target-cell" {
     forEach: solitaireTable
     when freecellAsked(2) and freecellSourceOk[$each] == 1
-    zones [
-      freecellPile0Of
-      freecellPile1Of
-      freecellPile2Of
-      freecellPile3Of
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-    ]
+    zones: fcZonesOf(range(0, 4))
     freecellTargetOk[$each] = (freecellRunLength[$each] == 1) * (count($zones[freecellTo[$each]]) == 0)
   }
 
@@ -472,28 +264,11 @@ template freecellGame() {
   rule "solitaireFreecell-target-foundation" {
     forEach: solitaireTable
     when freecellAsked(2) and freecellSourceOk[$each] == 1
-    zones [
-      ""
-      ""
-      ""
-      ""
-      freecellPile4Of
-      freecellPile5Of
-      freecellPile6Of
-      freecellPile7Of
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-      ""
-    ]
+    zones: fcZonesOf(range(4, 8))
     freecellTargetOk[$each] = (
       (freecellRunLength[$each] == 1) *
-      (solitaireFreecellSuit[freecellCard[$each]] == freecellTo[$each] - 4) *
-      (solitaireFreecellRank[freecellCard[$each]] == count($zones[freecellTo[$each]]) + 1)
+      (solitaireSuit[freecellCard[$each]] == freecellTo[$each] - 4) *
+      (solitaireRank[freecellCard[$each]] == count($zones[freecellTo[$each]]) + 1)
     )
   }
 
@@ -513,24 +288,7 @@ template freecellGame() {
   // The move: the run from its leading card goes from the source pile to the target pile, whichever two they are.
   rule "solitaireFreecell-move" {
     forEach: solitaireTable
-    zones [
-      freecellPile0Of
-      freecellPile1Of
-      freecellPile2Of
-      freecellPile3Of
-      freecellPile4Of
-      freecellPile5Of
-      freecellPile6Of
-      freecellPile7Of
-      freecellPile8Of
-      freecellPile9Of
-      freecellPile10Of
-      freecellPile11Of
-      freecellPile12Of
-      freecellPile13Of
-      freecellPile14Of
-      freecellPile15Of
-    ]
+    zones: fcZones
     when freecellMoveReady[$each] == 1 and freecellRequest[$each] != freecellApplied[$each]
     transaction {
       transform transfer(from: $zones[freecellFrom[$each]], to: $zones[freecellTo[$each]], selector: Slice, key: freecellCard[$each])

@@ -104,7 +104,7 @@ test "a game at one station never touches another" {
     freecellDeals[0] == 1
     freecellDeals[1] == 0
     count(freecellDeckOf1) == 52
-    two.solitaire.table == 0
+    solitaireTable[1] == 0
     two.turn == 0
     freecellRequest[1] == 0
   }

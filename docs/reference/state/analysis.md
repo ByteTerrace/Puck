@@ -681,7 +681,12 @@ binding. A rule's `zones` table may list families instead of rows
 (`zones [ pile0 pile1 … ]` over `pile pile0[n]`, `pile pile1[n]`): `$zones[i]`
 then selects family `i`'s member at the binding's own index, so a sweep picks
 one of its own station's piles by a computed index and is still reached and
-priced per binding, where a table of rows is judged in place every tick. A host fact read for the body bound to `$each` marks
+priced per binding, where a table of rows is judged in place every tick. A
+literal index is live in such a table (`$zones[2]` differs per binding), so a
+rule written once per column names its piles by number. In `.puck` a table
+may be any value known at compile time, such as a `let` or a function over the
+piles (`zones: kdZonesOf(kdColumns)`, worlds/games/klondike.puck), so a world
+writes its piles once and each rule names only the piles it can choose. A host fact read for the body bound to `$each` marks
 that body's binding the same way, and in a sweep whose keys are bodies it marks
 nothing for a body outside the set the sweep last bound: that body has no
 binding until the set itself moves, which reaches the sweep through the set's

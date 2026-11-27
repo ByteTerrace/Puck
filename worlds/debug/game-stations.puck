@@ -9,14 +9,14 @@
 //
 //   - expanding the world's part over its list of stations: `gameStationSetPrototypes`, `gameStationSetPlacements`,
 //     `gameStationSetGrids` and `gameStationSetState` in their blocks, `gameStationSetRules` at its top level (the
-//     rules one set plays for every station: FreeCell's), `gameStationSetCommands` as its commands, and the deck
+//     rules one set plays for every station: the patience games'), `gameStationSetCommands` as its commands, and the deck
 //     (`patienceDeck`, `patienceStationCards`) where its body order wants the cards;
 //   - declaring the chess game's three vocabularies (`PieceKind`, `MoveKind`, `TurnColor`, chess.puck's header) in its
 //     own `state` block, since a template cannot carry them;
 //   - and making one instance a station, `use gameStationGames as <id>(station: <station>, index: <i>)`, with the
 //     station's id as the alias, so every row and rule the instance declares is `<id>$<name>` and the console commands
 //     reach it, and `i` the station's place in the list, which keys its cells in the rules one set plays for every
-//     station (`freecellRequest[i]`, `freecellPile8Of<i>`).
+//     station (`klondikeRequest[i]`, `freecellPile8Of<i>`).
 import "../standard/game-station"
 import "../games/chess"
 import "../games/chess-station"
@@ -52,13 +52,12 @@ module gameStationGames(station, index) {
       gameStationSeatState()
       chessGameState(settleTicks: chessGameSettleTicks, digital: true)
       chessStationState(station: station)
-      solitaireState()
       patienceStationState(station: station)
     }
   }
   placements {
     chessStationTokens(station: station, game: 0)
-    patienceStationSpots(station: station)
+    patienceStationSpots(station: station, index: index)
   }
 
   gameStationRules(station: station, catalog: gameStationCatalog)
@@ -74,7 +73,6 @@ module gameStationGames(station, index) {
   chessFreshGame()
   chessStationRules(station: station, game: 0)
 
-  klondikeGame()
   patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
 }
 
@@ -88,19 +86,17 @@ module gameStationSharedChess(station, index) {
     world {
       gameStationSeatState()
       chessStationState(station: station)
-      solitaireState()
       patienceStationState(station: station)
     }
   }
   placements {
     chessStationTokens(station: station, game: 0)
-    patienceStationSpots(station: station)
+    patienceStationSpots(station: station, index: index)
   }
 
   gameStationRules(station: station, catalog: gameStationCatalog)
   chessStationRules(station: station, game: 0, owns: false)
 
-  klondikeGame()
   patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
 }
 
@@ -133,14 +129,13 @@ template gameStationSetState(stations) {
   gameStationState(stations: stations, catalog: gameStationCatalog)
   chessStationDisplayState(stations: stations)
   patienceDisplayState()
-  solitaireTables(count: length(stations))
-  freecellState(count: length(stations))
+  solitaireState(count: length(stations))
 }
 
-// The rules the world holds once for every station, at the world's top level: FreeCell's, each sweeping the stations'
-// tables (`solitaireTable`, keyed by a station's place in the list, the `index` its instance is made with).
+// The rules the world holds once for every station, at the world's top level: the patience games', each sweeping the
+// stations' tables (`solitaireTable`, keyed by a station's place in the list, the `index` its instance is made with).
 template gameStationSetRules() {
-  freecellGame()
+  solitaireGame()
 }
 
 // A small room holding `stations` on their own: a floor, the seats and visitors with the stations' decks above them,

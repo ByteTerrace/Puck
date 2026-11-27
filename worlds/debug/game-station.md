@@ -50,16 +50,20 @@ every station.
   with the station's id as the alias and `i` its place in the world's list of
   stations: its chairs and presses, its chess game (the chess library,
   [`../games/chess.puck`](../games/chess.puck), in its digital mode), its
-  chess display ([`../games/chess-station.puck`](../games/chess-station.puck)),
-  its Klondike ([`klondike.puck`](../games/klondike.puck)) and the patience
-  layout ([`../games/patience-station.puck`](../games/patience-station.puck)).
+  chess display ([`../games/chess-station.puck`](../games/chess-station.puck))
+  and the patience layout
+  ([`../games/patience-station.puck`](../games/patience-station.puck)).
   Every row and rule the instance declares is the instance's own, `<id>$<name>`
-  (`world.state south3$solitaireKlondike`).
+  (`world.state south3$patienceSeat`).
 - **The rules one set plays for every station**, `gameStationSetRules()` at the
-  world's top level: FreeCell ([`freecell.puck`](../games/freecell.puck)). Each
-  rule sweeps the stations' tables (`forEach: solitaireTable`, keyed by `i`);
-  a table's mailbox is a cell under its key (`freecellRequest[i]`) and its deck
-  and piles are members of pile families (`freecellPile8Of<i>`), so a change at
+  world's top level: the patience collection
+  ([`solitaire.puck`](../games/solitaire.puck)), Klondike
+  ([`klondike.puck`](../games/klondike.puck)) and FreeCell
+  ([`freecell.puck`](../games/freecell.puck)). Each rule sweeps the stations'
+  tables (`forEach: solitaireTable`, keyed by `i`); a table's mailbox is a cell
+  under its key (`klondikeRequest[i]`, `freecellRequest[i]`) and its decks and
+  piles are members of pile families (`klondikePile2Of<i>`,
+  `freecellPile8Of<i>`), so a change at
   one station wakes and costs that station's binding alone
   ([analysis](../../docs/reference/state/analysis.md)).
 - **The shared-chess instance**, `gameStationSharedChess`, is the same station
@@ -141,7 +145,8 @@ another pile plays the run there.
 | Read chess at the glass | `world.state <station>$chessStationCursor`, `<station>$chessStationPicked`, `<station>$chessStationRingCode` |
 | Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
 | Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
-| Deal or move in patience | `klondike.deal <station> 1`, `klondike.draw <station>`, `klondike.move <station> <from> <to> <card>`, `freecell.deal <i>`, `freecell.move <i> <from> <to> <card>` (FreeCell takes the station's number) |
+| Deal or move in patience | `klondike.deal <i> 1`, `klondike.draw <i>`, `klondike.move <i> <from> <to> <card>`, `freecell.deal <i>`, `freecell.move <i> <from> <to> <card>` (each takes the station's number, 0 for the first) |
+| Read a station's Klondike | `world.state klondikeRequest`, `klondikeStatus`, `klondikeDeals` (one cell a station), `world.state klondikePile2Of<i>`, `klondikeDown2Of<i>` (a column's face-down part) |
 | Read a station's FreeCell | `world.state freecellRequest`, `freecellStatus`, `freecellDeals` (one cell a station), `world.state freecellPile8Of<i>` |
 | Read where each card lies | `world.state <station>$patienceSlotOf`, `world.state <station>$patienceSeat` |
 

@@ -1,8 +1,9 @@
 // The Klondike scenarios (../games/klondike.puck, ../games/patience-station.puck) on a game station of its own
 // (game-stations.puck's gameStationRoom), showing Klondike: `puck test worlds/debug/klondike-tests.puck --reproduce`.
 // The station deals by itself, from its own seeded stream, once Klondike is shown. Piles are 0 the stock, 1 the waste,
-// 2 to 8 the tableau and 10 to 13 the foundations. What any one card's place is depends on the seeded deal, so these
-// claims read only what every deal shares.
+// 2 to 8 the tableau's face-up parts (each column's face-down part its own pile) and 10 to 13 the foundations; the
+// station is table 0, so its cells are `klondike<Field>[0]` and its piles the families' members `klondike<Pile>Of0`.
+// What any one card's place is depends on the seeded deal, so these claims read only what every deal shares.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -49,13 +50,16 @@ test "the seeded deal fills the tableau and leaves 24 in the stock" {
     ticks 400
   }
   expect {
-    station.solitaireKlondike.deals == 1
-    station.solitaireKlondike.status == 1
-    count(station.solitaireKlondikePile0) == 24
-    count(station.solitaireKlondikePile1) == 0
-    count(station.solitaireKlondikePile2) == 1
-    count(station.solitaireKlondikePile5) == 4
-    count(station.solitaireKlondikePile8) == 7
+    klondikeDeals[0] == 1
+    klondikeStatus[0] == 1
+    count(klondikeStockOf0) == 24
+    count(klondikeWasteOf0) == 0
+    count(klondikePile2Of0) == 1
+    count(klondikeDown2Of0) == 0
+    count(klondikePile5Of0) == 1
+    count(klondikeDown5Of0) == 3
+    count(klondikePile8Of0) == 1
+    count(klondikeDown8Of0) == 6
   }
 }
 
@@ -66,14 +70,14 @@ test "the stock draws a card to the waste" {
   }
   when {
     ticks 400
-    seat1: world.state.cell.set station$solitaireKlondike action 3
-    seat1: world.state.cell.set station$solitaireKlondike request 1 add
+    seat1: world.state.cell.set klondikeAction 0 3
+    seat1: world.state.cell.set klondikeRequest 0 1 add
     ticks 20
   }
   expect {
-    station.solitaireKlondike.result == 1
-    count(station.solitaireKlondikePile0) == 23
-    count(station.solitaireKlondikePile1) == 1
+    klondikeResult[0] == 1
+    count(klondikeStockOf0) == 23
+    count(klondikeWasteOf0) == 1
   }
 }
 
@@ -84,16 +88,16 @@ test "a move out of the empty waste is refused" {
   }
   when {
     ticks 400
-    seat1: world.state.cell.set station$solitaireKlondike from 1
-    seat1: world.state.cell.set station$solitaireKlondike to 2
-    seat1: world.state.cell.set station$solitaireKlondike card 0
-    seat1: world.state.cell.set station$solitaireKlondike action 2
-    seat1: world.state.cell.set station$solitaireKlondike request 1 add
+    seat1: world.state.cell.set klondikeFrom 0 1
+    seat1: world.state.cell.set klondikeTo 0 2
+    seat1: world.state.cell.set klondikeCard 0 0
+    seat1: world.state.cell.set klondikeAction 0 2
+    seat1: world.state.cell.set klondikeRequest 0 1 add
     ticks 20
   }
   expect {
-    station.solitaireKlondike.result == -1
-    station.solitaireKlondike.moves == 0
-    count(station.solitaireKlondikePile2) == 1
+    klondikeResult[0] == -1
+    klondikeMoves[0] == 0
+    count(klondikePile2Of0) == 1
   }
 }

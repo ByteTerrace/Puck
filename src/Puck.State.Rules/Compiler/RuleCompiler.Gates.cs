@@ -571,8 +571,19 @@ public static partial class RuleCompiler {
         )) {
             throw Malformed(detail: $"index '{inner}' does not parse: {error}");
         }
-        if (!TryResolveDynamicKey(
-            cell: out var index,
+        CompiledCellRef index;
+
+        // An entry of a family table is live at any index, a literal one included: `$zones[2]` is entry 2's member at
+        // the binding's own key, which differs per binding, so a fixed index there still selects a row live.
+        if (overZones && (context.Zones is { PerBinding: true }) && long.TryParse(s: inner, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
+            index = CompileKeyExpression(
+                context: context,
+                ruleName: ruleName,
+                text: inner,
+                where: where
+            );
+        } else if (!TryResolveDynamicKey(
+            cell: out index,
             context: context,
             reference: StateChannelRef.OfNullable(spelling: key),
             keyFieldLabel: "index",

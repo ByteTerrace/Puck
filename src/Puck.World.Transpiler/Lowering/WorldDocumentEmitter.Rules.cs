@@ -153,7 +153,7 @@ public static partial class WorldDocumentEmitter {
                     obj["forEach"] = LowerSweepSource(scope: stmtScope, sweep: sweep);
                     break;
                 case PropertyNode prop:
-                    var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: stmtScope);
+                    var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: ZoneTableLiteral(property: prop, scope: stmtScope), scope: stmtScope);
                     DocumentLowering.AssignMember(
                         key: prop.Name,
                         scope: stmtScope,
@@ -243,6 +243,31 @@ public static partial class WorldDocumentEmitter {
         }
 
         return JsonValue.Create(value: text.ToString());
+    }
+    // A rule's zone table written as a value known at compile time (a `let` bound to a list of names, or a function
+    // that computes one) lowers as the literal list it evaluates to, each name bare and "" for a gap, so one table is
+    // written once and shared by every rule that chooses among the same piles. Any other spelling lowers as written.
+    private static PropertyNode ZoneTableLiteral(PropertyNode property, DocumentScope scope) {
+        if ((property.Name != "zones") ||
+            (property.Value is not (IdentifierExpressionNode or CallExpressionNode)) ||
+            (DocumentLowering.EvaluateValue(expr: property.Value, scope: scope) is not JsonArray names)) {
+            return property;
+        }
+
+        var elements = new ExpressionNode[names.Count];
+        var value = property.Value;
+
+        for (var index = 0; (index < elements.Length); index++) {
+            if ((names[index] is not JsonValue element) || !element.TryGetValue<string>(value: out var name)) {
+                return property;
+            }
+
+            elements[index] = ((name.Length == 0)
+                ? new LiteralExpressionNode(Column: value.Column, Length: value.Length, Line: value.Line, Offset: value.Offset, Value: name)
+                : new IdentifierExpressionNode(Column: value.Column, Length: value.Length, Line: value.Line, Name: name, Offset: value.Offset));
+        }
+
+        return property with { Value = new ArrayExpressionNode(Column: value.Column, Elements: elements, Length: value.Length, Line: value.Line, Offset: value.Offset) };
     }
     private static JsonNode? LowerModelMember(Type? holder, PropertyNode property, DocumentScope scope) => DocumentLowering.LowerMember(
         fieldKey: property.Name,
