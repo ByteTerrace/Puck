@@ -86,7 +86,7 @@ call instead.
    whichever scene and probes the asynchronous work has landed (the window follows the
    first view's camera, so it moves as a camera riding a body does), and adapt
    exposure over the frame's own presentation time. An ordinary settled still
-   under lockstep converges over one fresh jitter period
+   under lockstep converges over a fresh history (`SdfWorldPackage.ConvergedRenders`)
    (`FrameCaptureRequest.ConvergeOver`, armed by `WorldCaptureScheduler`), so a
    temporally resolved view, the motion layout's cameras included, shows those
    samples alone rather than the history the display's frames built before

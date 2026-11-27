@@ -31,10 +31,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Null(@object: Outcome(request: request).Error);
         Assert.Equal(expected: 0, actual: view.Discards);
     }
-    // A settled capture over retained taint the package can discard has it discarded on its first frame, and that frame,
-    // rendered over the gate's fills, serves it.
+    // A settled capture over retained taint the package can discard has it discarded on its first frame, and converges
+    // over the renders the discarded state needs, rendered over the gate's fills, so it never reads the restarted one.
     [Fact]
-    public void ASettledCaptureDiscardsRetainedTaintAndServesTheFirstCleanFrame() {
+    public void ASettledCaptureDiscardsRetainedTaintAndConvergesOverItsRefill() {
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
         var recorders = new Recorders();
         var view = new ViewPackage { RetainedTainted = true };
@@ -50,9 +50,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var request = CaptureRequest();
 
         runtime.RequestCapture(request: request);
+        Assert.Equal(expected: 0, actual: request.Converge);
         TestLiveness.Until(step: () => { frames.Next(); return request.Completion.IsCompleted; });
         Assert.Null(@object: Outcome(request: request).Error);
         Assert.Equal(expected: 1, actual: view.Discards);
+        Assert.Equal(expected: view.RefillFrames, actual: request.Converge);
     }
     // A presented capture holds no frame to converge over, so retained history carrying external pixels would taint every
     // frame while it is armed. Its first frame discards that history once, and the capture skips the renders the

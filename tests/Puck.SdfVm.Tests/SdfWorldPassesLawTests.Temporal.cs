@@ -67,7 +67,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
     }
     // A presented capture holds nothing, so tainted history is discarded on its own: once, restarting the sequence for
-    // one period, while clean history keeps its samples.
+    // until it converges, while clean history keeps its samples.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -78,7 +78,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var preceding = rig.HistoryFrames();
 
         if (tainted) { rig.Filling = true; }
-        Assert.Equal(expected: (tainted ? ((int)SdfWorldPackage.TemporalPeriod) : 0), actual: rig.Passes.DiscardTaintedState(instance: "world"));
+        Assert.Equal(expected: (tainted ? ((int)SdfWorldPackage.ConvergedRenders) : 0), actual: rig.Passes.DiscardTaintedState(instance: "world"));
         Assert.Equal(expected: 0, actual: rig.Passes.DiscardTaintedState(instance: "world"));
         rig.Produce();
         Assert.Equal(expected: (tainted ? 0u : (preceding + 1u)), actual: rig.HistoryFrames());
@@ -333,17 +333,17 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Produce();
         Assert.NotEqual(expected: SdfTemporalHistory.Sample(index: (frames + 1u)), actual: rig.Jitter());
     }
-    // Under cadence a still temporal view renders one jitter period from the frame its inputs last changed, the first at
-    // the pixel center with no history, and then stands converged, whatever sample would come next.
+    // Under cadence a still temporal view whose history restarted renders until it converges (SdfWorldPackage.ConvergedRenders),
+    // the first at the pixel center with no history, and then stands converged, whatever sample would come next.
     [Fact]
-    public void AStillTemporalViewRendersOnePeriodAndThenStands() {
+    public void AStillTemporalViewRendersUntilItConvergesAndThenStands() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true);
 
         // A debug view resets the epoch twice: on, then off again.
         rig.Selected.DebugMode = 1;
         rig.Produce();
         rig.Selected.DebugMode = 0;
-        for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
+        for (var sample = 0U; (sample < SdfWorldPackage.ConvergedRenders); sample++) {
             rig.Produce();
             Assert.False(condition: rig.Stood(), userMessage: $"sample {sample}");
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());
@@ -358,7 +358,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
 
-        for (var frame = 0U; (frame <= SdfWorldPackage.TemporalPeriod); frame++) {
+        for (var frame = 0U; (frame <= SdfWorldPackage.ConvergedRenders); frame++) {
             rig.Produce();
         }
         Assert.True(condition: rig.Stood());
@@ -456,7 +456,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void ARenderGridDipRendersAFullPeriodBeforeStandingAgain() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.5f);
 
-        for (var frame = 0; (frame <= SdfWorldPackage.TemporalPeriod); frame++) { rig.Produce(); }
+        for (var frame = 0; (frame <= SdfWorldPackage.ConvergedRenders); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         foreach (var scale in new[] { 0.25f, 0.5f }) {
             rig.ResolvedScale = scale;
@@ -469,7 +469,7 @@ public sealed partial class SdfWorldPassesLawTests {
         }
     }
     // A view the display stops showing is parked: nothing renders it. Shown again, a temporal view starts a new epoch, its
-    // first render at the pixel center with no history and a full period before it stands, even though its binding,
+    // first render at the pixel center with no history, and it stands only once it converges, even though its binding,
     // camera, poses and extent never moved; a spatial view's still output stands at once, costing no render.
     [InlineData(true)]
     [InlineData(false)]
@@ -477,7 +477,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AParkedViewShownAgainStartsANewEpochOnlyWhereItReconstructs(bool temporal) {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal);
 
-        for (var frame = 0; (frame <= SdfWorldPackage.TemporalPeriod); frame++) { rig.Produce(); }
+        for (var frame = 0; (frame <= SdfWorldPackage.ConvergedRenders); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         rig.Parked = true;
         for (var frame = 0; (frame < 3); frame++) {
@@ -490,7 +490,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood());
             return;
         }
-        for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
+        for (var sample = 0U; (sample < SdfWorldPackage.ConvergedRenders); sample++) {
             if (sample != 0U) { rig.Produce(); }
             Assert.False(condition: rig.Stood(), userMessage: $"sample {sample} after it is shown again");
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());

@@ -1329,7 +1329,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
   occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
   share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. What it
+  screen's edge, so where rays stop answering the volume takes over with no line. The
+  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
+  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
+  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
+  render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:
@@ -1340,9 +1344,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   offset blocks that break up as the camera moves. With it comes the air's in-scatter the composite added there, which the history does not hold
   (the history surface's transport words, `sdfAirFogColor`, `sdfAirHazeColor`). A
   record is one cell's: colour at the stored scale, the screen and open-sky shares,
-  and the representative's normal and tangent plane; views reads the cells whose
-  representatives lie nearest its pixel and keeps those on its own surface by the probe
-  lookup's tolerances (`sdfViewsScreenReflection`), so the volume
+  and the representative's normal and tangent plane; views weighs the 2x2 cells about its
+  pixel by a tent of one cell about each representative and by how nearly that
+  representative lies on its own surface, falling smoothly to nothing at the probe
+  lookup's tolerances (`sdfViewsScreenReflection`); never accept or reject a cell whole,
+  which turns a silhouette into steps of a cell as the representatives take turns. The volume
   (`sdfViewsReflectionSeen`) still answers what no kept ray reaches, and a view whose
   fragment holds no pass (`passGroup.screenReflections` zero) reflects the volume
   alone. The records' cell is read back from their allocation
@@ -1444,10 +1450,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   wall-clock moments as the window follows the first view's camera) and adapt
   exposure over the frame's own presentation time
   (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
-  converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
-  since without it a temporally resolved view's still depends on how many
-  frames the display rendered before the hold. Together these make stills
-  of one tick repeat across Worlds to a 1-level per-render residue.
+  converges over a fresh history (`SdfWorldPackage.ConvergedRenders`,
+  `FrameCaptureRequest.ConvergeOver`), since without it a temporally resolved
+  view's still depends on how many frames the display rendered before the hold.
+  Together these make stills of one tick repeat across Worlds to a 1-level
+  per-render residue. A settled still's first capture frame discards history
+  that read external content the capture gate fills (a screen showing the
+  desktop or a camera, `DiscardTaintedState`), so a still that does not converge
+  already converges over the renders the discard reports
+  (`RenderGraphRuntime.AwaitDiscardedState`): a still served on the render that
+  restarted the epoch is one unjittered sample, aliased and with no screen-space
+  reflection. `ConvergedRenders` is a period and one more because the epoch's
+  first render reads no preceding frame, so it reflects nothing on screen; a
+  temporal view stands only after that many renders too.
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
   dresses: seat views, the operator pose and `views.layouts` slots that name a

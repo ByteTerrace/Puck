@@ -951,7 +951,7 @@ for the world's own views; the quality presets carry it, off at `low` and on at
 `medium` and `high`. The world's own views are every view the presentation lays
 out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
 layout slots that name a camera alike, so a named-camera slot reconstructs and
-its settled still converges over a jitter period. A camera view a screen films
+its settled still converges over the held renders. A camera view a screen films
 never reconstructs (its quality restriction,
 `WorldRenderSettings.NestedRestriction`, does not ask), and neither does a session
 view. Beyond that a nested view gives up only what the world's `render.nested`
@@ -1106,7 +1106,9 @@ portal crossing, a view or extent change, a parked view shown again, a debug vie
 reconstruction turned on is the spatial path's frame exactly, at the sequence's
 first sample, the pixel center. Under `world.cadence on`, a still temporal view
 renders one jitter period after its inputs last change and then stands, its
-output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
+output converged (`SdfTemporalHistory.Stands`); after its history restarts it
+renders one more (`SdfWorldPackage.ConvergedRenders`), since the epoch's first
+render reads no preceding frame and so reflects nothing on screen. A render-grid dip or recovery
 restarts this settling period, including a grid change that takes effect only
 when a replacement graph installs. A view the display stopped showing is parked:
 the render graph counts the frames its schedule leaves an instance unread, which
