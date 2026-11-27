@@ -1249,52 +1249,38 @@ template chessPutSettled() {
 }
 
 // The fresh-game door of a drawn board: a request sets every piece on its starting square with its starting code and
-// the game's turn, rights, clocks, history and doors as they stood at the start, then the judge reads the board again
-// as at boot (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a
-// live door, never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces
-// back instead.
+// the game's turn, rights, clocks and doors as they stood at the start, then the judge reads the board again as at boot
+// (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a live door,
+// never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces back instead.
+//
+// It writes only what something reads before the judge's first settled pass recomputes it: the status line and the
+// rings (the turn, a check, a draw limit, the last move), the doors and the computer (their requests, a relocation or
+// put-down in flight, the enable bit), and the cells the next game carries forward (rights, the en-passant target, the
+// clocks). The settled pass writes every other cell of the judge before anything reads it: the collision and
+// mismatch counts, the candidate move's kind, mover and capture, the history's flags and length, the previous checks
+// and the pending promotions; and a search answer belongs to the revision the moved pieces bump.
 template chessFreshGame() {
-  rule "chess-fresh-pieces" {
+  rule "chess-fresh" {
     when search(ply) == 0 and chessFresh.request == 1
     mode: Level
     transform copyRow(row: pieceCode, from: pieceStartCode)
     transform copyRow(row: pieceCell, from: pieceStartCell)
-  }
-
-  rule "chess-fresh" {
-    when search(ply) == 0 and chessFresh.request == 1
-    mode: Level
     turn = 0
     verdict = 1
     castleRights = 0
     enPassantTarget = -1
     halfmoveClock = 0
     repetitionCount = 0
-    historyLength = 0
-    historyPending = 0
-    historyReset = 0
     gameStarted = 0
     settleHold = 0
     illegalCount = 0
-    boardMismatch = 0
-    boardChanged = 0
-    boardCollisions = 0
     inCheck[0] = 0
     inCheck[1] = 0
-    previousInCheck[0] = 0
-    previousInCheck[1] = 0
-    promotionPending[0] = -1
-    promotionPending[1] = -1
     move.from = -1
     move.to = -1
-    move.kind = 0
-    move.mover = 0
-    move.captured = 0
     ai.pending = 0
     aiEnabled = 0
-    aiBest.token = -1
     putDown.judging = 0
-    putDown.revert = 0
     chessPut.request = 0
     chessInput.request = 0
     chessFresh.request = 0

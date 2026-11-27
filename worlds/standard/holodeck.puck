@@ -37,9 +37,11 @@
 // never touches another's):
 //
 //   holodeckLive   1 while the body stands, 0 while it is released: the placement's count
-//   holodeckAt     the cell the game last posed the body at, or, below zero, a body to pose afresh (a fresh body, a body
-//                  the game moved by rule, a body the game asks to tidy) from the tick its negation names: a deadline
-//                  the rules' due lists wake at, never a clock read every tick
+//   holodeckAt     what the game last posed the body at (its cell, or the game's own non-negative code for the pose),
+//                  or, below zero, a body to pose afresh (a fresh body, a body the game moved by rule, a body the game
+//                  asks to tidy) from the tick its negation names: a deadline the rules' due lists wake at, never a
+//                  clock read every tick. A game that stands every body again at once folds a parity into its code
+//                  and flips it (../games/chess-station.puck), rather than tidying each body.
 //
 // The one door: a body is asked for or released only through `holodeckSet`, which writes both cells together, so no
 // pose can address a body the population has not admitted (a pose waits on `holodeckStands`, which reads the deadline
