@@ -1548,6 +1548,21 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   frozen pose image; this transaction is what the state-writing kits wait on.
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
+- [medium] Rule programs and gates evaluate as closure trees
+  (`ProgramClosures`); what that change left: common-subexpression elimination
+  of pure reads within one rule, which needs a structural identity for an
+  operand (two spellings of one read compile to two `IRuleOperand`s); one
+  version snapshot per sweep rather than per binding (`RuleEvaluator.VersionsMatch`),
+  valid until a binding's firing commits; order-free folds (`all`, `any`,
+  `count`) over a row's cells in vector lanes, `sum` staying scalar for its
+  overflow fault; and gates a dataflow proof shows binding-invariant decided
+  once per sweep. The rule work price (`RuleCapacity.MaxWorkUnitsPerTick`'s
+  1.6 ns a unit) is recalibrated against a measured board sweep once the lead's
+  quiet window has read the closures. A tree deeper than
+  `ProgramClosures.MaxDepth` (only an expression nested to its token ceiling
+  inside calls nested to theirs) answers `Domain` where the interpreter it
+  replaced answered a value; the cause fix is a lowering that evaluates such a
+  subtree without recursing, if an author ever needs one.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most lies in the serial tail or the subscribers'
   `DeliverSnapshot`: profile it before T3 or R1 assumes otherwise. The

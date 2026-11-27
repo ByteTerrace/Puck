@@ -169,16 +169,20 @@ value expression, uses the same intermediate representation (IR): an
 | `ExpressionSpellingJsonConverter` | Puck.State | Reads and writes a program as infix text, the shape a cartridge document holds. |
 | `ExpressionVocabulary` | Puck.State | The named functions, projected from the operator table, which the `.puck` document language also reads. |
 | `ExpressionArithmetic` | Puck.State | Evaluates Int and Q48.16 operations without per-operation allocation. |
-| `RuleExpressions` | Puck.State.Rules | The operator dispatch that gates, locals, effect sources, and the constant folder all evaluate through. |
+| `RuleExpressions` | Puck.State.Rules | The evaluator that gates, locals, effect sources, and the constant folder all evaluate through, over each program's closure tree (`CompiledProgram`, `ProgramClosures`). |
 
 Each operation has a single row in `ExpressionOperators`, so its spelling,
 arity, and cost live in one place. Domain checks, such as division by zero,
-remain in the evaluator. Evaluation allocates nothing: the value stack and
-its absence marks are one block of machine stack per evaluation, and a call,
-a fold's member body and a short-circuit body run on that block above the
-values beneath them. Each compiled token carries the arm of the one dispatch
-it runs and how many values it consumes (`CompiledExpressionToken.Step`,
-`Consumes`), derived from its operation and payload when the token is built.
+remain in the evaluator. Evaluation allocates nothing once a program's tree is
+built: values pass between nodes as return values, a call's arguments sit in
+the calling node's frame, and an absence travels beside the value until a
+consumer answers it. Each compiled token carries the step it lowers to and how
+many values it consumes (`CompiledExpressionToken.Step`, `Consumes`), derived
+from its operation and payload when the token is built; the tree builder reads
+both, and a chain of binary operations becomes one node. A tree that would
+recurse deeper than `ProgramClosures.MaxDepth` nodes, through every body it
+reaches, faults (`Domain`) wherever it is evaluated, so no program's
+evaluation outgrows a thread's stack.
 
 An operand reads through the evaluation's `EvaluationFrame`, which asks the
 host for its arena and clocks once per evaluation. A literal key of a fixed,

@@ -88,6 +88,28 @@ internal abstract class ProgramNode {
                 return false;
         }
     }
+    // Runs a body for its truth: a nonzero number holds, zero or an absence does not. A fault stops the caller.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    protected static bool Truth(ProgramNode body, ref EvaluationFrame frame, ref ProgramContext context, out bool truth) {
+        var answered = body.Run(frame: ref frame, context: ref context);
+
+        switch (context.Halt) {
+            case Halt.None:
+                truth = (answered != 0L);
+
+                return true;
+            case Halt.Marked:
+            case Halt.Absent:
+                context.Halt = Halt.None;
+                truth = false;
+
+                return true;
+            default:
+                truth = false;
+
+                return false;
+        }
+    }
     // Stops the program: an operator that consumed an absence answers the program's absence.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     protected static long Stop(ref ProgramContext context, Halt halt) {
@@ -187,7 +209,7 @@ internal static class ProgramClosures {
                     case ExpressionStep.NotBody: {
                             var body = Body(body: token.Call!.Body, kind: kind);
 
-                            Add(body: body, node: new NotBodyNode(body: body), stack: stack);
+                            Add(body: body, node: new BodyTruthNode(body: body, negated: true), stack: stack);
                         }
 
                         continue;
@@ -195,8 +217,8 @@ internal static class ProgramClosures {
                             var value = Pop(stack: stack);
 
                             // `not` over a negated body is the body's truth: the shape a short-circuit's left operand takes.
-                            if (value is NotBodyNode negated) {
-                                Add(body: negated.Body, node: new TruthNode(body: negated.Body), stack: stack);
+                            if (value is BodyTruthNode { Negated: true } negated) {
+                                Add(body: negated.Body, node: new BodyTruthNode(body: negated.Body, negated: false), stack: stack);
                             } else {
                                 Add(node: new NotNode(value: value), operands: [value], stack: stack);
                             }
@@ -425,7 +447,7 @@ internal static class ProgramClosures {
         // definition in ExpressionArithmetic; the rest through its one dispatch.
         private static BinaryOperation Operation(ExpressionOp operation, CellKind carrier) {
             if (carrier is not (CellKind.Int or CellKind.Fixed)) {
-                return new ArithmeticOperation(carrier: carrier, operation: operation);
+                return new KernelOperation<ArithmeticKernel>(kernel: new ArithmeticKernel(carrier: carrier, operation: operation));
             }
 
             return operation switch {
@@ -437,7 +459,7 @@ internal static class ProgramClosures {
                 ExpressionOp.LessOrEqual => KernelOperation<LessOrEqualKernel>.Instance,
                 ExpressionOp.Greater => KernelOperation<GreaterKernel>.Instance,
                 ExpressionOp.GreaterOrEqual => KernelOperation<GreaterOrEqualKernel>.Instance,
-                _ => new ArithmeticOperation(carrier: carrier, operation: operation),
+                _ => new KernelOperation<ArithmeticKernel>(kernel: new ArithmeticKernel(carrier: carrier, operation: operation)),
             };
         }
         private static ProgramNode[] Arity(int count, ProgramNode[] operands) => ((operands.Length == count)
@@ -605,43 +627,15 @@ internal sealed class NotNode(ProgramNode value) : ProgramNode {
         }
     }
 }
-// The negated truth of a body: an absent body is false, so its negation holds; a fault is the program's.
-internal sealed class NotBodyNode(ProgramNode body) : ProgramNode {
-    public ProgramNode Body { get; } = body;
+// The truth of a body, or its negation: a body that answered a nonzero number holds, one that answered zero or an
+// absence does not, and a fault is the program's.
+internal sealed class BodyTruthNode(ProgramNode body, bool negated) : ProgramNode {
+    public ProgramNode Body => body;
+    public bool Negated => negated;
 
-    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var answered = Body.Run(frame: ref frame, context: ref context);
-
-        switch (context.Halt) {
-            case Halt.None:
-                return ((answered == 0L) ? 1L : 0L);
-            case Halt.Marked:
-            case Halt.Absent:
-                context.Halt = Halt.None;
-
-                return 1L;
-            default:
-                return 0L;
-        }
-    }
-}
-// The truth of a body: one when it answered a nonzero number, zero when it answered zero or an absence.
-internal sealed class TruthNode(ProgramNode body) : ProgramNode {
-    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var answered = body.Run(frame: ref frame, context: ref context);
-
-        switch (context.Halt) {
-            case Halt.None:
-                return ((answered != 0L) ? 1L : 0L);
-            case Halt.Marked:
-            case Halt.Absent:
-                context.Halt = Halt.None;
-
-                return 0L;
-            default:
-                return 0L;
-        }
-    }
+    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) => (Truth(body: body, context: ref context, frame: ref frame, truth: out var truth)
+        ? ((truth != negated) ? 1L : 0L)
+        : 0L);
 }
 // `and` runs its right body only when the truth on its left holds, `or` only when it fails; an absent right is false.
 internal sealed class ShortCircuitNode(ProgramNode left, ProgramNode body, bool isAnd) : ProgramNode {
@@ -662,23 +656,8 @@ internal sealed class ShortCircuitNode(ProgramNode left, ProgramNode body, bool 
             default:
                 return 0L;
         }
-        if (isAnd == truth) {
-            var right = body.Run(frame: ref frame, context: ref context);
-
-            switch (context.Halt) {
-                case Halt.None:
-                    truth = (right != 0L);
-
-                    break;
-                case Halt.Marked:
-                case Halt.Absent:
-                    context.Halt = Halt.None;
-                    truth = false;
-
-                    break;
-                default:
-                    return 0L;
-            }
+        if ((isAnd == truth) && !Truth(body: body, context: ref context, frame: ref frame, truth: out truth)) {
+            return 0L;
         }
 
         return (truth ? 1L : 0L);
@@ -878,76 +857,62 @@ internal sealed class CallNode(ProgramNode[] arguments, ProgramNode body) : Prog
     }
 }
 
-/// <summary>A binary operation's one definition, specialized into the node that applies it.</summary>
+/// <summary>A binary operation's one definition, specialized into the node that applies it: a kernel is a struct, so
+/// a node generic over it runs the operation with no dispatch.</summary>
 internal interface IBinaryKernel {
-    static abstract bool TryApply(long left, long right, out long value);
+    bool TryApply(long left, long right, out long value);
 }
 internal readonly struct AddKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TryAdd(left: left, right: right, value: out value);
+    public bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TryAdd(left: left, right: right, value: out value);
 }
 internal readonly struct SubtractKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TrySubtract(left: left, right: right, value: out value);
+    public bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TrySubtract(left: left, right: right, value: out value);
 }
+// The six comparisons, each answering the Int truth of its order over raw values (Q48.16 orders as its raw bits do).
 internal readonly struct EqualKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left == right));
-
-        return true;
-    }
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left == right), value: out value);
 }
 internal readonly struct NotEqualKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left != right));
-
-        return true;
-    }
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left != right), value: out value);
 }
 internal readonly struct LessKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left < right));
-
-        return true;
-    }
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left < right), value: out value);
 }
 internal readonly struct LessOrEqualKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left <= right));
-
-        return true;
-    }
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left <= right), value: out value);
 }
 internal readonly struct GreaterKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left > right));
-
-        return true;
-    }
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left > right), value: out value);
 }
 internal readonly struct GreaterOrEqualKernel : IBinaryKernel {
-    public static bool TryApply(long left, long right, out long value) {
-        value = ExpressionArithmetic.Truth(holds: (left >= right));
+    public bool TryApply(long left, long right, out long value) => Kernels.Answer(holds: (left >= right), value: out value);
+}
+// Every other binary operation through ExpressionArithmetic's one dispatch, in the carrier the token reads.
+// Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked semantics are kept
+// without an exception per evaluation.
+internal readonly struct ArithmeticKernel(ExpressionOp operation, CellKind carrier) : IBinaryKernel {
+    public bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TryBinary(operation, carrier, left, right, out value);
+}
+internal static class Kernels {
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static bool Answer(bool holds, out long value) {
+        value = ExpressionArithmetic.Truth(holds: holds);
 
         return true;
     }
 }
-// A binary operation as a value: the kernel or dispatch a node or a chain applies, and the node that applies it alone.
+// A binary operation as a value: the kernel a chain applies, and the node that applies it alone.
 internal abstract class BinaryOperation {
     public abstract bool TryApply(long left, long right, out long value);
     public abstract ProgramNode Node(ProgramNode left, ProgramNode right);
 }
-internal sealed class KernelOperation<TKernel> : BinaryOperation where TKernel : struct, IBinaryKernel {
-    public static KernelOperation<TKernel> Instance { get; } = new();
+internal sealed class KernelOperation<TKernel>(TKernel kernel) : BinaryOperation where TKernel : struct, IBinaryKernel {
+    public static KernelOperation<TKernel> Instance { get; } = new(kernel: default);
 
-    public override bool TryApply(long left, long right, out long value) => TKernel.TryApply(left: left, right: right, value: out value);
+    public override bool TryApply(long left, long right, out long value) => kernel.TryApply(left: left, right: right, value: out value);
     public override ProgramNode Node(ProgramNode left, ProgramNode right) => ((right is ConstantNode constant)
-        ? new KernelConstantNode<TKernel>(left: left, right: constant)
-        : new KernelNode<TKernel>(left: left, right: right));
-}
-internal sealed class ArithmeticOperation(ExpressionOp operation, CellKind carrier) : BinaryOperation {
-    // Data-dependent arithmetic refusal can occur thousands of times in a dense sample; the checked semantics are
-    // kept without an exception per evaluation.
-    public override bool TryApply(long left, long right, out long value) => ExpressionArithmetic.TryBinary(operation, carrier, left, right, out value);
-    public override ProgramNode Node(ProgramNode left, ProgramNode right) => new BinaryNode(left: left, operation: this, right: right);
+        ? new BinaryConstantNode<TKernel>(kernel: kernel, left: left, operation: this, right: constant)
+        : new BinaryNode<TKernel>(kernel: kernel, left: left, operation: this, right: right));
 }
 // A node applying one binary operation to two operands, which a chain extends.
 internal interface IBinaryNode {
@@ -955,54 +920,7 @@ internal interface IBinaryNode {
     BinaryOperation Operation { get; }
     ProgramNode Right { get; }
 }
-internal sealed class KernelNode<TKernel>(ProgramNode left, ProgramNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
-    public ProgramNode Left => left;
-    public BinaryOperation Operation => KernelOperation<TKernel>.Instance;
-    public ProgramNode Right => right;
-
-    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var absent = false;
-
-        if (
-            !Operand(absent: ref absent, context: ref context, frame: ref frame, node: left, value: out var leftValue) ||
-            !Operand(absent: ref absent, context: ref context, frame: ref frame, node: right, value: out var rightValue)
-        ) {
-            return 0L;
-        }
-        if (absent) {
-            return Stop(context: ref context, halt: Halt.Absent);
-        }
-
-        return (TKernel.TryApply(left: leftValue, right: rightValue, value: out var value)
-            ? value
-            : Stop(context: ref context, halt: Halt.Domain));
-    }
-}
-internal sealed class KernelConstantNode<TKernel>(ProgramNode left, ConstantNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
-    private readonly long m_right = right.Value;
-
-    public ProgramNode Left => left;
-    public BinaryOperation Operation => KernelOperation<TKernel>.Instance;
-    public ProgramNode Right => right;
-
-    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var answered = left.Run(frame: ref frame, context: ref context);
-
-        switch (context.Halt) {
-            case Halt.None:
-                break;
-            case Halt.Marked:
-                return Stop(context: ref context, halt: Halt.Absent);
-            default:
-                return 0L;
-        }
-
-        return (TKernel.TryApply(left: answered, right: m_right, value: out var value)
-            ? value
-            : Stop(context: ref context, halt: Halt.Domain));
-    }
-}
-internal sealed class BinaryNode(ProgramNode left, BinaryOperation operation, ProgramNode right) : ProgramNode, IBinaryNode {
+internal sealed class BinaryNode<TKernel>(ProgramNode left, TKernel kernel, BinaryOperation operation, ProgramNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
     public ProgramNode Left => left;
     public BinaryOperation Operation => operation;
     public ProgramNode Right => right;
@@ -1020,7 +938,31 @@ internal sealed class BinaryNode(ProgramNode left, BinaryOperation operation, Pr
             return Stop(context: ref context, halt: Halt.Absent);
         }
 
-        return (operation.TryApply(left: leftValue, right: rightValue, value: out var value)
+        return (kernel.TryApply(left: leftValue, right: rightValue, value: out var value)
+            ? value
+            : Stop(context: ref context, halt: Halt.Domain));
+    }
+}
+internal sealed class BinaryConstantNode<TKernel>(ProgramNode left, TKernel kernel, BinaryOperation operation, ConstantNode right) : ProgramNode, IBinaryNode where TKernel : struct, IBinaryKernel {
+    private readonly long m_right = right.Value;
+
+    public ProgramNode Left => left;
+    public BinaryOperation Operation => operation;
+    public ProgramNode Right => right;
+
+    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
+        var answered = left.Run(frame: ref frame, context: ref context);
+
+        switch (context.Halt) {
+            case Halt.None:
+                break;
+            case Halt.Marked:
+                return Stop(context: ref context, halt: Halt.Absent);
+            default:
+                return 0L;
+        }
+
+        return (kernel.TryApply(left: answered, right: m_right, value: out var value)
             ? value
             : Stop(context: ref context, halt: Halt.Domain));
     }
@@ -1282,7 +1224,7 @@ internal sealed class GateLiteralCompareNode<TKernel>(GateToken token, ValueSour
 
         if (leftFact.Outcome.TryFinite(raw: out var value)) {
             // A comparison kernel always answers.
-            _ = TKernel.TryApply(left: value, right: m_literal, value: out var truth);
+            _ = default(TKernel).TryApply(left: value, right: m_literal, value: out var truth);
             holds = (truth != 0L);
         } else {
             holds = ((leftCase == FaultCase.Forever) && m_foreverHolds);
