@@ -95,8 +95,8 @@ The cabinet is the standard's `arcadeCabinet` with two players: a tapering
 upright with a chamfered hood, a glowing marquee flanked by speaker grilles,
 one picture in a deep dark well with its glass leaning back, and a control deck
 sloping out below it with a cream panel for each player (a ball-top stick, a
-start button and an arc of five buttons, marked 1P and 2P), a brushed coin door
-under each panel, lit T-molding down its fronts and a neon underglow. The
+six buttons in two curved rows and a start button, marked 1P and 2P under the
+stick), lit T-molding down its fronts and a neon underglow. The
 television set is the standard's
 `televisionSet` and `lounge`: a toy television with rabbit ears on a low stand,
 the deck on the stand's shelf with a pad cabled to each of its two ports lying

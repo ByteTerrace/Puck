@@ -744,7 +744,7 @@ template banner(base, width = 0.9, drop = 2.3) {
 // A toy arcade cabinet's materials, in slot order from `base`: its body, the cheeks, kick and marquee housing, the dark
 // glass bezel (and the control deck), the control panels' cream and the players' marks, the stick's ball and the first
 // button, the second button, the marquee's glowing panel, the marquee's lettering, the cabinet's neon (its T-molding,
-// the start buttons, the coin slots and the underglow) and its brushed metal (the coin doors, the grilles, the stick's
+// the start buttons and the underglow) and its brushed metal (the grilles, the stick's
 // shaft and the buttons' collars).
 let cabinetBody = 0
 let cabinetTrim = 1
@@ -782,6 +782,9 @@ let cabinetDeckRot = rotate([1, 0, 0], 17.46)
 function cabinetDeckAt(x, u, h) = [x, (1.19 - (u * 0.3) + (h * 0.9539)), (0.2 + (u * 0.9539) + (h * 0.3))]
 // A cabinet's half-width: a one-player cabinet's, or the wider two-player one whose deck carries a control panel for
 // each player side by side.
+// A control panel's buttons, [x from the panel's centre, u down the deck]: two rows of three, the first column set a
+// little lower so the rows follow the fingers' curve, clear of the stick on the left and the player's mark in front.
+let cabinetButtonLayout = [[-0.08, 0.21], [0.07, 0.18], [0.22, 0.18], [-0.08, 0.35], [0.07, 0.32], [0.22, 0.32]]
 function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 
 // A bar stool at `at` (on y 0): a round padded seat `height` up on a single post over a weighted foot disc. `seat` and
@@ -833,17 +836,16 @@ template cabinetSideSlab(label, x, material, z0, z1, y0, y1, points, half = 0.06
 }
 // A toy arcade cabinet that faces +Z, a premium upright built as if the future still made them: a hood with chamfered
 // corners carrying a backlit marquee that shows `title`, flanked by speaker grilles; a CRT bay below it tapering toward
-// the back, the glass leaning back in a deep dark well; a control deck that slopes out below the screen; a coin-door
+// the back, the glass leaning back in a deep dark well; a control deck that slopes out below the screen; a plain lower
 // section with a kick plate under it; and side panels in the trim colour, a lit T-molding down each front edge and a
 // neon underglow. Each of its `players` (one or two) has a cream control panel on the deck: a ball-top stick on the
-// left, a neon start button and an arc of five buttons on the right, marked 1P or 2P; a two-player cabinet is wider,
-// its panels side by side under one picture, each with its own coin door below. A one-player cabinet is about 2.0 m
+// left, six buttons in two curved rows and a neon start button on the right, marked 1P or 2P; a two-player cabinet is
+// wider, its panels side by side under one picture. A one-player cabinet is about 2.0 m
 // wide, a two-player one 2.6 m; both are 1.2 m deep and 2.94 m tall, the deck 1.03 to 1.19 m up, at a standing
 // player's hands. The picture is a screen row of the world's (`cabinetPicture`), 1.76 m up and 0.13 m out of the front
 // at its centre. The marquee's panel stands 3 cm proud of its housing, so the glow stays its own surface however
 // coarsely the bake meshes the cabinet. Every shape is a rounded box, cylinder, sphere or convex slab joined by union,
-// so the analytic contact collides it as drawn; the controls and the coin doors' small parts are detail a body walks
-// through.
+// so the analytic contact collides it as drawn; the controls are detail a body walks through.
 template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   let w = cabinetHalfWidth(players)
   let ch = (w + 0.06)
@@ -852,7 +854,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
   // corners are chamfered, so the panels' silhouette is the body's.
   let bayOutline = [[-0.3, 2.52], [0.36, 2.52], [0.36, 1], [-0.5, 1]]
   let hoodOutline = [[-0.38, 2.76], [-0.24, 2.94], [0.4, 2.94], [0.52, 2.86], [0.52, 2.52], [-0.38, 2.52]]
-  // The body between the side panels: a kick plate recessed under the coin-door section, the deck's apron and its
+  // The body between the side panels: a kick plate recessed under the lower section, the deck's apron and its
   // neon underglow, and the hood.
   shape Box "cabinet-kick" {
     material: (base + cabinetBezel)
@@ -1030,7 +1032,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
       }
     }
   }
-  // The side panels: the cabinet's silhouette in the trim colour, a cheek each for the coin-door section, the deck
+  // The side panels: the cabinet's silhouette in the trim colour, a cheek each for the lower section, the deck
   // (a wedge sloping with it), the bay and the hood, with a body-coloured band and a neon band slanting across the bay's,
   // a round badge on the lower cheek, and a lit T-molding down each front edge.
   for side in [-1, 1] {
@@ -1130,8 +1132,8 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
   }
   // The control deck: a dark slab sloping from the screen bay to a rounded lip, a cream panel for each player, and on
-  // it the player's controls, in the deck's own frame (`cabinetDeckAt`): a stick on the left and a start button and an
-  // arc of five buttons on the right, which a body walks through.
+  // it the player's controls, in the deck's own frame (`cabinetDeckAt`): a stick on the left, six buttons in two curved
+  // rows of three to its right (cabinetButtonLayout) and a start button beyond them, which a body walks through.
   shape Box "cabinet-deck" {
     material: (base + cabinetBezel)
     position: cabinetDeckAt(0, 0.27, -0.04)
@@ -1155,7 +1157,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-stick-base-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.34), 0.26, 0.023)
+      position: cabinetDeckAt((c - 0.32), 0.27, 0.023)
       rotation: cabinetDeckRot
       scale [0.075, 0.008, 0.075]
       rounding: 0.004
@@ -1163,20 +1165,20 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-stick-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.34), 0.26, 0.101)
+      position: cabinetDeckAt((c - 0.32), 0.27, 0.101)
       rotation: cabinetDeckRot
       scale [0.017, 0.07, 0.017]
       detail: true
     }
     shape Sphere $"cabinet-stick-ball-{p}" {
       material: (base + cabinetButton)
-      position: cabinetDeckAt((c - 0.34), 0.26, 0.221)
+      position: cabinetDeckAt((c - 0.32), 0.27, 0.221)
       scale [0.065, 0.065, 0.065]
       detail: true
     }
     shape Cylinder $"cabinet-start-collar-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.17), 0.12, 0.021)
+      position: cabinetDeckAt((c + 0.4), 0.2, 0.021)
       rotation: cabinetDeckRot
       scale [0.05, 0.006, 0.05]
       rounding: 0.003
@@ -1184,16 +1186,16 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-start-{p}" {
       material: (base + cabinetNeon)
-      position: cabinetDeckAt((c - 0.17), 0.12, 0.027)
+      position: cabinetDeckAt((c + 0.4), 0.2, 0.027)
       rotation: cabinetDeckRot
       scale [0.04, 0.01, 0.04]
       rounding: 0.006
       detail: true
     }
-    for (b, i) in [[-0.3, 0.3], [-0.15, 0.23], [0, 0.2], [0.15, 0.23], [0.3, 0.3]] {
+    for (b, i) in cabinetButtonLayout {
       shape Cylinder $"cabinet-button-collar-{p}-{i}" {
         material: (base + cabinetMetal)
-        position: cabinetDeckAt((c + 0.16 + b[0]), b[1], 0.021)
+        position: cabinetDeckAt((c + b[0]), b[1], 0.021)
         rotation: cabinetDeckRot
         scale [0.064, 0.006, 0.064]
         rounding: 0.003
@@ -1201,50 +1203,10 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
       }
       shape Cylinder $"cabinet-button-{p}-{i}" {
         material: (base + (((i % 2) == 0) ? cabinetButtonAlt : cabinetButton))
-        position: cabinetDeckAt((c + 0.16 + b[0]), b[1], 0.03)
+        position: cabinetDeckAt((c + b[0]), b[1], 0.03)
         rotation: cabinetDeckRot
         scale [0.052, 0.012, 0.052]
         rounding: 0.009
-        detail: true
-      }
-    }
-  }
-  // The coin-door section: a brushed door under each player's panel, two lit coin slots over a coin return with its own
-  // glow.
-  for (c, p) in panels {
-    shape Box $"cabinet-door-{p}" {
-      material: (base + cabinetMetal)
-      position [c, 0.52, 0.432]
-      scale [0.25, 0.27, 0.012]
-      rounding: 0.01
-    }
-    shape Box $"cabinet-door-return-{p}" {
-      material: (base + cabinetBezel)
-      position [c, 0.4, 0.447]
-      scale [0.08, 0.045, 0.008]
-      rounding: 0.004
-      detail: true
-    }
-    shape Box $"cabinet-door-return-glow-{p}" {
-      material: (base + cabinetNeon)
-      position [c, 0.345, 0.452]
-      scale [0.065, 0.008, 0.006]
-      rounding: 0.004
-      detail: true
-    }
-    for (x, i) in [-0.09, 0.09] {
-      shape Box $"cabinet-door-slot-{p}-{i}" {
-        material: (base + cabinetBezel)
-        position [(c + x), 0.64, 0.447]
-        scale [0.045, 0.075, 0.008]
-        rounding: 0.004
-        detail: true
-      }
-      shape Box $"cabinet-door-slot-glow-{p}-{i}" {
-        material: (base + cabinetNeon)
-        position [(c + x), 0.64, 0.456]
-        scale [0.01, 0.05, 0.006]
-        rounding: 0.004
         detail: true
       }
     }
@@ -1264,14 +1226,14 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (c, p) in ((players == 2) ? panels : []) {
       {
         text: $"{p + 1}P"
-        position: cabinetDeckAt(c, 0.45, 0.015)
+        position: cabinetDeckAt((c - 0.32), 0.45, 0.015)
         rotation: rotate([1, 0, 0], -72.54)
         emHeight: 0.075
         depth: 0.008
         mode: "emboss"
         material: (base + cabinetInk)
         align: "center"
-        maxWidth: 0.4
+        maxWidth: 0.2
       }
     }
   ]
