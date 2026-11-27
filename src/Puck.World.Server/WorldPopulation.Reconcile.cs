@@ -22,6 +22,9 @@ public sealed partial class WorldPopulation {
     private long[] m_inhabitCountCache = [];
     // The forecast's scratch slot table, reused from one forecast to the next.
     private SlotForecast? m_forecast;
+    // The cell-driven placements whose count moved in the current count pass, with their kit and desired count, reused
+    // from one pass to the next.
+    private readonly List<(int Ordinal, byte KitIndex, int Desired)> m_countMoves = [];
 
     // What a reconcile reads of the slot table and the changes it makes to it.
     private interface ISlots {
@@ -447,7 +450,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            ReconcileOneInhabitedCount(
+            _ = ReconcileOneInhabitedCount(
                 definition: definition,
                 desired: LiteralInhabitants(inhabit: inhabit),
                 inhabit: inhabit,
@@ -472,12 +475,20 @@ public sealed partial class WorldPopulation {
         slots.Settle(definition: definition);
     }
 
+    // The cell-driven count pass runs in two phases over the placements whose cell moved: every shrink first, then every
+    // growth, so the bodies one count releases free the slots another count admits into in the same pass (a game board
+    // releasing one game's tokens as it stands the next). A growth the full table cannot meet leaves its placement's
+    // cache unobserved, so the next pass (every state write calls one) admits what then fits rather than trusting a raw
+    // value whose bodies never all stood.
     private bool ReconcileCounts<TSlots>(TSlots slots, WorldDefinition definition, StateArena? arena, ulong tick) where TSlots : struct, ISlots {
         var placements = definition.Placements;
 
         slots.SizeCountCache(placements: placements.Count);
 
         var changed = false;
+        var moved = m_countMoves;
+
+        moved.Clear();
 
         for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
             var placement = placements[ordinal];
@@ -528,14 +539,35 @@ public sealed partial class WorldPopulation {
                 );
             }
 
-            ReconcileOneInhabitedCount(
+            moved.Add(item: (ordinal, kitIndex, desired));
+        }
+
+        foreach (var (ordinal, kitIndex, desired) in moved) {
+            _ = ReconcileOneInhabitedCount(
+                admits: false,
                 definition: definition,
                 desired: desired,
-                inhabit: inhabit,
+                inhabit: placements[ordinal].Inhabit!,
                 kitIndex: kitIndex,
-                placement: placement,
+                placement: placements[ordinal],
                 slots: slots
             );
+        }
+        foreach (var (ordinal, kitIndex, desired) in moved) {
+            if (!ReconcileOneInhabitedCount(
+                definition: definition,
+                desired: desired,
+                inhabit: placements[ordinal].Inhabit!,
+                kitIndex: kitIndex,
+                placement: placements[ordinal],
+                retires: false,
+                slots: slots
+            )) {
+                slots.CacheCount(
+                    ordinal: ordinal,
+                    raw: NoInhabitCountObserved
+                );
+            }
         }
 
         if (changed) {
@@ -555,20 +587,22 @@ public sealed partial class WorldPopulation {
     // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
     // — since admission always fills the highest slot first, the lowest index is always the first one admitted, and
     // skipping a human-occupied one here is what keeps a possessed inhabitant standing through a shrink instead of
-    // being torn out from under its player. Shared by the structural (literal-count) pass and the cell-driven counts.
-    private void ReconcileOneInhabitedCount<TSlots>(TSlots slots, WorldDefinition definition, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int desired) where TSlots : struct, ISlots {
+    // being torn out from under its player. Shared by the structural (literal-count) pass and the cell-driven counts,
+    // which run its retiring and admitting halves as separate phases (`admits`, `retires`). Answers false when the table
+    // had no free slot for a body the count asked for.
+    private bool ReconcileOneInhabitedCount<TSlots>(TSlots slots, WorldDefinition definition, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int desired, bool admits = true, bool retires = true) where TSlots : struct, ISlots {
         var live = CountInhabitants(
             placementId: placement.Id,
             slots: slots
         );
 
-        for (var ordinal = live; (ordinal < desired); ordinal++) {
+        for (var ordinal = live; (admits && (ordinal < desired)); ordinal++) {
             var slot = HighestFreeSlot(slots: slots);
 
             if (slot < 0) {
                 slots.TableFull(placement: placement);
 
-                return;
+                return false;
             }
 
             slots.AdmitInhabitant(
@@ -582,7 +616,7 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        for (var extra = desired; (extra < live); extra++) {
+        for (var extra = desired; (retires && (extra < live)); extra++) {
             var slot = LowestRetirableInhabitant(
                 placementId: placement.Id,
                 slots: slots
@@ -590,11 +624,13 @@ public sealed partial class WorldPopulation {
 
             if (slot < 0) {
                 // Every remaining inhabitant is seat-driven — nothing left this pass can retire.
-                return;
+                return true;
             }
 
             slots.RetireInhabitant(index: slot);
         }
+
+        return true;
     }
 
     // The census selection: the first `count` eligible slots in ascending order, clamped to the eligible slots.
