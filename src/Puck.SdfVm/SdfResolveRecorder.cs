@@ -74,7 +74,7 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
 
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
             width: render.Width, height: render.Height, temporal: temporal, temporalEnabled: m_temporal, residency: residency,
-            lightMask: tables.LightMaskOf(frame: frame, view: index));
+            lightMask: tables.LightMaskOf(frame: frame, view: index), occluderMask: tables.OccluderMaskOf(frame: frame, view: index));
         BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[((int)SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: SdfWorldPackage.UpscaleSharpness))..], value: frame.Views[index].UpscaleSharpness);
         var set = m_sets.PassSet(slot: recording.Slot);
 

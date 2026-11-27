@@ -59,41 +59,13 @@ public sealed class PackLightsAndSkyLawTests {
         Assert.Equal(expected: 0.9f, actual: records[4].Weight);
         Assert.Equal(expected: SdfLightKind.Directional, actual: records[4].Kind);
     }
-    [Fact]
-    public void OccluderPositionAndAnchorPackWithoutDirectionNormalization() {
-        var lights = new SdfLights { Count = 1 };
-
-        lights.Set(
-            index: 0,
-            light: new(
-                SdfLightKind.Occluder,
-                new(
-                    x: 12f,
-                    y: 3f,
-                    z: -4f
-                ),
-                Vector3.Zero,
-                0.6f,
-                2.5f,
-                false,
-                7
-            )
-        );
-        var record = Packed(lights: lights)[0];
-
-        Assert.Equal(expected: new Vector3(x: 12f, y: 3f, z: -4f), actual: record.Direction);
-        Assert.Equal(actual: record.Weight, expected: 0.6f);
-        Assert.Equal(actual: record.Kind, expected: SdfLightKind.Occluder);
-        Assert.Equal(actual: record.Param, expected: 2.5f);
-        Assert.Equal(actual: record.DynamicSlot, expected: 7);
-    }
-    // A point or occluder light packs its slot for the kernels to test against SDF_TRANSFORM_SLOT_NONE, so it is the
+    // A point or line light packs its slot for the kernels to test against SDF_TRANSFORM_SLOT_NONE, so it is the
     // sentinel or a slot a program can name, and nothing else; every other kind packs no slot, so its value is ignored.
     [Fact]
     public void ALightPacksTheStaticSentinelOrASlotAndNothingElse() {
         var lights = new SdfLights { Count = 1 };
 
-        foreach (var kind in ((SdfLightKind[])[SdfLightKind.Point, SdfLightKind.Occluder])) {
+        foreach (var kind in ((SdfLightKind[])[SdfLightKind.Point, SdfLightKind.Line])) {
             foreach (var slot in ((int[])[SdfProgram.NoDynamicTransformSlot, 0, SdfProgram.MaxDynamicTransformSlot])) {
                 lights.Set(index: 0, light: Light(kind: kind, slot: slot));
                 Assert.Equal(expected: slot, actual: lights[0].DynamicSlot);

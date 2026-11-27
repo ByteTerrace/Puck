@@ -23,6 +23,7 @@
 // arcadeCabinet, televisionSet and lounge), and their colours and the screens' luminance look.puck's.
 
 import "../../standard/architecture"
+import "../../standard/occlusion"
 import "../../standard/machines"
 import "layout"
 import "look"
@@ -31,6 +32,7 @@ import "look"
 prototypes {
   for (c, i) in lookCabinets {
     prototype $"toybox-cabinet-{i}" {
+      occlusion: propOcclusion
       document {
         name: $"toybox-cabinet-{i}"
         schema: "puck.creation.v2"

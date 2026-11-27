@@ -37,6 +37,7 @@
 // tray, or when its holder leaves the gallery or the world.
 
 import "../../standard/architecture"
+import "../../standard/occlusion"
 import "../../standard/machines"
 import "../../standard/pad-kit"
 import "../../standard/reach"
@@ -764,6 +765,7 @@ template rentalKioskArm(arm) {
 
 prototypes {
   prototype "rental-counter" {
+    occlusion: propOcclusion
     document {
       name: "rental-counter"
       schema: "puck.creation.v2"
@@ -892,6 +894,7 @@ prototypes {
   // The cartridge rack: a counter in the stalls' colours, its top at rentalRackTop, the returns tray inset at its east
   // end (+x). Its front faces -Z, the creation's front.
   prototype "rental-cartridge-rack" {
+    occlusion: propOcclusion
     document {
       name: "rental-cartridge-rack"
       schema: "puck.creation.v2"

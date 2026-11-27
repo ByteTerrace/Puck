@@ -429,18 +429,83 @@ Two rules give it its shape. It multiplies into **ambient light only, never
 direct**—folding occlusion into the whole lighting equation causes ghosting;
 the sun stays governed by the soft shadow above. And it sees only what the
 camera sees: an occluder off screen or hidden behind a nearer surface occludes
-nothing.
+nothing. The analytic occluders below fill that gap for the creations that cast
+them.
+
+## Analytic occlusion: proxy spheres, capsules and boxes
+
+A creation that carries an `occlusion` (`WorldPrototype.Occlusion`) stands for
+itself as one analytic solid, an `SdfOccluder`: a sphere, a capsule along its
+long axis, or its box, fitted to the box its shapes fill at rest
+(`SdfOccluder.Fit`, `WorldCreationOccluders.LocalOf`). Every placement showing
+the creation and every body wearing it as a look carries the solid at its scale,
+posed each frame from the anchor the frame draws it at (`WorldAnchorPoses`), so
+a rigid body, a walking character and a moving placement move their occluders
+through the same poses their meshes ride. An authored `render.lighting` occluder
+row is a sphere of the same table. The frame carries up to
+`SdfOccluders.MaxOccluders` of them, the nearest the presentation's first view
+when more stand.
+
+An occluder does two things, both in the views and glass passes and both
+presentation float:
+
+- It takes its share of the **ambient, indirect and reflected environment
+  light** of the surfaces about it: the cosine-weighted share of the hemisphere
+  it covers (`sdfOccludersAmbient` in `frame/sdf-occluders.hlsli`). A sphere's
+  share is its form factor, Quilez's sphere occlusion with Lagarde and de
+  Rousiers' horizon clip; a capsule's is the sphere's at the axis point nearest
+  the surface; a box's sums Lambert's polygon formula over the faces the surface
+  sees (Quilez's box occlusion, unclipped by the horizon). It multiplies the
+  screen-space estimate in those terms only, never a light's visibility.
+- It casts a **soft shadow toward each ranged light**: a point or spot light, a
+  tube (toward the segment's nearest point), a screen and an emitter face
+  (toward the face's centre, as a disc of its area). The shadow is the light's
+  visible share across the solid's silhouette, smoothstepped over a penumbra
+  whose half width grows with the distance along the ray from the surface by the
+  wider of the light's half slope and the occluder's `Softness`
+  (`sdfOccludersShadow`; Quilez's sphere and capsule soft shadows, a box's least
+  distance along the ray found by a golden-section search). It multiplies the
+  light's visibility in `sdfLightInputs`, so the default response and an
+  authored light phase both read it. **A directional light is never touched**:
+  its cascades shadow it.
+
+Both terms are eased to exactly zero at the occluder's `Reach` from its centre,
+by the window a point light's falloff takes (`sdfLightWindow`), so the culling
+is the lights' own: each view's pass block carries a mask of the occluders whose
+sphere of reach its frustum may see (`SdfLightSelection.SelectOccluders`,
+`SdfWorldTables.OccluderMaskOf`), each views tile narrows it to those whose
+sphere meets one of the tile's two boxes (`sdfViewsTileLights`, the third mask of
+`SdfLightMasks`, written into the shade bins for a binned view), and glass
+narrows it by its wave's box (`sdfWaveLightMasks`). A view whose mask is empty
+reads no occluder record, and a view stands while every occluder its mask keeps
+stands (their records fold into its lighting inputs).
+
+A body's own surfaces take nothing from its own occluder: its record names the
+slots its stamp rides (`SdfOccluder.OwnSlot`, `OwnSlots`), and a surface whose
+frame slot lies among them skips it. A static creation's surfaces are not
+excluded; its box, which is its rest bound, darkens none of its own faces, while
+a fitted sphere or capsule darkens the faces it holds a little.
+
+The values are the author's: `strength` and `shadow` (shares of the light,
+default one and the strength), `reach` (past the solid's bounding sphere, default
+that sphere's radius), `softness` (default zero, a point light's hard edge) and
+`shape` (`Auto`, `Sphere`, `Capsule`, `Box`). With no `occlusion` a creation
+casts nothing. The standard package's `bodyOcclusion` and `propOcclusion`
+(`worlds/standard/occlusion.puck`) are the values its walker, its citizens and
+the debug world's characters and props cast with.
 
 ## Every light answers through one interface
 
 The views pass lights a surface by walking one list of lights: the lights
-table's (directional, point and spot, rim and occluder, in authored order) that
-the view shades, then every bound screen. Each is one `SdfLightSource`, and one
-function, `sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at
-the surface: a diffuse term that joins the radiance the material shade lights
-by, a specular lobe (a directional's or a point's own, scaled by its
-illuminance), a rim brighten, and a factor on reflected light (an occluder's
-dimming). The stage sums each kind of term over the walk and adds each total
+table's (directional, point and spot, rim, in authored order) that the view
+shades, then every bound screen. An occluder row's place in the table lights
+nothing; its sphere is an analytic occluder
+([above](#analytic-occlusion-proxy-spheres-capsules-and-boxes)). Each is one
+`SdfLightSource`, and one function, `sdfLightResponse` in
+`shade/sdf-light.hlsli`, answers what it adds at the surface: a diffuse term
+that joins the radiance the material shade lights by, a specular lobe (a
+directional's or a point's own, scaled by its illuminance), a rim brighten, and
+a factor on reflected light (an authored light phase's attenuation). The stage sums each kind of term over the walk and adds each total
 once, so the order the terms combine in is the walk's. No other kernel source
 branches on a light's kind, so a new kind is one branch of that function.
 

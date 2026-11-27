@@ -166,10 +166,18 @@ Resolved in `WorldFramePresenter` through `WorldAnchorPoses`, the resolver
 cameras, speakers and overlays read, fresh every produced frame. Renderer
 contract: `rendering` skill sync pairs, the lights table.
 
-`WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
-surface illumination. It declares `position`, positive `radius`,
-`weight`, and an optional entity, entity-part, or placement `anchor`.
-Anchors resolve each frame; unavailable anchors give weight zero.
+`WorldRenderLight.Occluder` is a hand-placed analytic sphere: it declares
+`position`, positive `radius`, `weight` (its strength and shadow) and an
+optional entity, entity-part, or placement `anchor`, and resolves into the
+frame's occluders table (`SdfOccluders`), darkening out to three of its radii.
+Its row keeps its place among the lights and lights nothing. Anchors resolve
+each frame; an unavailable anchor drops the sphere for that frame. A creation
+casts its own occluder through its prototype's `occlusion`
+(`WorldPrototypeOcclusion`: `strength`, `shadow`, `reach`, `softness`,
+`shape`), carried by every placement and body showing it
+([analytic occlusion](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes));
+the standard's values are `bodyOcclusion` and `propOcclusion`
+(`worlds/standard/occlusion.puck`).
 Point and Occluder positions are `BindableVector3`: keyed, they blend linearly, never along an arc.
 `world.lighting` reads back the authored light definitions and the allocator's
 slots at this tick, naming each light and its selection reason (`always`, or

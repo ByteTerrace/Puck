@@ -37,6 +37,14 @@ The result modulates ambient contribution
 only; it does not darken direct light a second time. Occluders off screen or
 behind a nearer surface do not occlude.
 
+A creation that carries an `occlusion` also casts an analytic occluder (a
+sphere, capsule or box fitted to its rest bound, `SdfOccluder`), which takes
+its share of the ambient, indirect and reflected environment light of the
+surfaces about it wherever they are on screen, and casts a soft shadow toward
+every point, spot and tube light, screen and emitter face, never toward a
+directional light
+([analytic occlusion](../handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes)).
+
 ## Shadows
 
 The first two stable shadow slots' directional lights cast shadows from the

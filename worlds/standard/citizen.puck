@@ -10,6 +10,7 @@
 // crowd can batch its motion through an `autonomy` row; they pass through one another rather than collide.
 
 import "kits"
+import "occlusion"
 
 // A citizen's stroll: the standard walker's motion (kits.puck) at a walking pace of 1.4 m/s, never running.
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
@@ -81,6 +82,7 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
     for (coat, c) in coats {
       for (hat, h) in hats {
         prototype $"citizen-{c}-{h}" {
+          occlusion: bodyOcclusion
           document {
             name: $"citizen-{c}-{h}"
             schema: "puck.creation.v2"

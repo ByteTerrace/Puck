@@ -143,10 +143,18 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.probed = sdfMeshAnswers(probes);
     surface.probes = probes;
 
+    // The view's lights and occluders that can reach a point some lane shading glass beside this one shades
+    // (sdfWaveLightMasks). The occluders take their share of the ambient and indirect light the glass receives
+    // (sdfOccludersAmbient) and shadow the ranged lights in the walk.
+    SdfLightMasks masks = sdfWaveLightMasks(position);
+    float analyticOcclusion = sdfOccludersAmbient(masks.occluders, position, normal, SDF_TRANSFORM_SLOT_NONE);
+
+    surface.occluders = masks.occluders;
+    surface.frameSlot = SDF_TRANSFORM_SLOT_NONE;
+
     bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
-    radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
-    // The view's lights that can reach a point some lane shading glass beside this one shades (sdfWaveLightMasks).
-    SdfLightWalk walk = sdfLightWalkStart(sdfWaveLightMasks(position));
+    radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : (worldSkyIrradiance(normal) * analyticOcclusion));
+    SdfLightWalk walk = sdfLightWalkStart(masks);
     SdfLightSource light;
     SdfShadeCarry shadeCarry = sdfShadeLightPrologue(shadeBinding, shadeStamp);
 
@@ -162,7 +170,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
         if (sdfShadeBound(shadeBinding)) { rim += response.rim; attenuation *= response.attenuation; }
     }
 
-    indirect = sdfMeshIndirectSeen(probes, normal);
+    indirect = (sdfMeshIndirectSeen(probes, normal) * analyticOcclusion);
 
     incoming = dot((radiance + indirect), PuckRec709Luminance);
 

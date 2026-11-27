@@ -1,0 +1,16 @@
+// The standard's analytic occlusion, a library: the values its creations cast with (a prototype's `occlusion`). A
+// creation that carries one darkens the ambient and indirect light of the floors and walls about it by the share of
+// their sky it hides, and casts a soft shadow toward every lamp, tube, screen and glowing face, never the sun, whose
+// shadows are the cascades'. The engine fits the solid to the box the creation's shapes fill at rest and moves it with
+// every placement and body that shows the creation; a body's own surfaces take nothing from it.
+//
+//   import "../standard/occlusion"
+//   prototype "lamp-post" { occlusion: propOcclusion  document { ... } }
+//
+// `bodyOcclusion` is for a character or a creature: its solid is the one the box suggests (a capsule for an upright
+// body), its contact shade a little short of black, and its shadow's edge widening a twentieth of its distance from
+// the body toward a lamp, as a bulb a few centimetres across gives at a few metres. `propOcclusion` is for furniture,
+// machines and exhibits: the box itself, which is what most of them are. Each reaches past its bounding sphere by that
+// sphere's radius, the engine's default.
+let bodyOcclusion = { strength: 0.8, shadow: 0.85, softness: 0.05 }
+let propOcclusion = { strength: 0.75, shadow: 0.8, softness: 0.05, shape: Box }

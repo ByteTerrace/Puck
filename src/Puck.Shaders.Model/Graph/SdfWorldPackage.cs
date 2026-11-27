@@ -76,6 +76,13 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the lights the view shades, one bit a record of the lights table, which
     /// <c>SdfLightSelection</c> chooses by whether each light can reach what the view shows (<c>uint4</c>).</summary>
     public const string LightMask = "lightMask";
+    /// <summary>The pass-group value holding the analytic occluders the occluders table holds this frame, at most its
+    /// records (<c>uint</c>).</summary>
+    public const string OccluderCount = "occluderCount";
+    /// <summary>The pass-group value holding the analytic occluders the view shades, one bit a record of the occluders
+    /// table, which <c>SdfLightSelection</c> chooses by whether each occluder's reach meets what the view shows
+    /// (<c>uint4</c>).</summary>
+    public const string OccluderMask = "occluderMask";
     /// <summary>The pass-group value holding the view's exposure: the multiplier, per nit, its composite maps the
     /// luminance it shades to the display by before its display pass, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
@@ -366,6 +373,8 @@ public static partial class SdfWorldPackage {
         Value(name: DebugOptions, type: ShaderValueType.Float4),
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
+        Value(name: OccluderCount, type: ShaderValueType.Uint),
+        Value(name: OccluderMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
         Value(name: LightScale, type: ShaderValueType.Float),
         Value(name: ShadePrograms, type: ShaderValueType.Uint),

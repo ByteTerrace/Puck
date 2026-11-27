@@ -15,6 +15,7 @@ import "moth-jetpack"
 import "moth-climb"
 import "moth-camera"
 import "../../standard/stars"
+import "../../standard/occlusion"
 
 walkMotion()
 
@@ -2418,6 +2419,8 @@ prototypes {
   }
   allow PUCK133 "her wall toes solve after her ground feet on the same legs: on a face the ground feet have let go, and at a wall's foot the toes are meant to win"
   prototype "moth" {
+    // Her capsule darkens the floor at her feet and the wall beside her, and shadows her from a lamp onto them.
+    occlusion: bodyOcclusion
     document {
       schema: "puck.creation.v2"
       name: "moth"

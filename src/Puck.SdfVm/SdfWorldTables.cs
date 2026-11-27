@@ -379,6 +379,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_meshStore = selector.AttachStore(client: this, copyPipeline: m_regionCopyPipeline, device: device);
         _ = scope.Own(created: new StoreAttachment(tables: this));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
+        m_occluderRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_occluderRecords), region: OccluderRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
         // The frame's sampled table starts a few words long and grows to the first program with a height field.

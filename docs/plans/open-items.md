@@ -2600,6 +2600,19 @@ the last sample's light.
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+The analytic occluders
+([handbook](../rendering/sdf/handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes)):
+
+- [medium] One solid stands for a whole creation at its rest box
+  (`WorldCreationOccluders.LocalOf`), so a part that swings away leaves its
+  solid behind and a creation whose box holds a rug or stools casts as the box.
+  The structural answer is a solid per motion owner, riding its part's slot
+  (the record's `OwnSlot` already names the body's slots), fitted from the
+  part's shapes.
+- [low] A session scene (`WorldSessionSceneEmitter`) carries only the authored
+  occluder rows: its placements' and bodies' occluders need the session
+  mirror's anchor scope.
+
 The air's in-scatter:
 
 - [medium] The sky's in-scatter is lit by one scalar a view, the camera

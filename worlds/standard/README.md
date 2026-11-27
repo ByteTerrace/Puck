@@ -15,6 +15,11 @@ content path from where it stands, since a machine's paths resolve beside the
 document that names them. The debug world's devices, its range and its
 gallery's toybox all write their machines through it.
 
+[occlusion.puck](occlusion.puck) holds the values the standard's creations cast
+analytic occlusion with (`bodyOcclusion`, `propOcclusion`), which a prototype's
+`occlusion` names; the walker, the citizens and the debug world's characters and
+props write them.
+
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 

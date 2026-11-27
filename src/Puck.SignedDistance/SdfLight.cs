@@ -24,7 +24,8 @@ public enum SdfLightKind : uint {
     /// volume, which bounces its light and occludes it by the probes' visibility of it; a moving one lights through every
     /// wall and bounces nothing.</summary>
     Point = 2,
-    /// <summary>A bounded attenuation field with position, radius, and weight in [0, 1].</summary>
+    /// <summary>A world occluder row's place in the lights table, which lights nothing: its weight is zero, so no view
+    /// selects it, and the occluder it authors is a sphere of the occluders table (<see cref="SdfOccluders"/>).</summary>
     Occluder = 3,
     /// <summary>A tube (line) light, such as a fluorescent or neon tube: a straight segment whose every length element
     /// emits alike in every direction, <see cref="SdfLight.Weight"/> its luminous intensity per metre over π
@@ -51,24 +52,23 @@ public enum SdfLightKind : uint {
 [StructLayout(LayoutKind.Explicit, Size = 64)]
 public record struct SdfLight {
     /// <summary>A directional's direction from the surface toward the light, any nonzero length (normalized on
-    /// upload); a point's or an occluder's world-space POSITION instead (see <see cref="SdfLightKind.Point"/>), and a
-    /// line's midpoint (see <see cref="SdfLightKind.Line"/>).</summary>
+    /// upload); a point's world-space POSITION instead (see <see cref="SdfLightKind.Point"/>), and a line's midpoint (see
+    /// <see cref="SdfLightKind.Line"/>).</summary>
     [FieldOffset(0)] public Vector3 Direction;
     /// <summary>The strength: a directional's illuminance over π, a point's or spot's luminous intensity over π, a rim's
-    /// luminance, an occluder's attenuation in [0, 1].</summary>
+    /// luminance; zero for an occluder row's place.</summary>
     [FieldOffset(12)] public float Weight;
     /// <summary>The linear RGB color, of unit luminance for a photometric light.</summary>
     [FieldOffset(16)] public Vector3 Color;
     /// <summary>What the light is.</summary>
     [FieldOffset(28)] public SdfLightKind Kind;
-    /// <summary>The kind's second scalar: penumbra half-slope, rim exponent, a point's range or an occluder's
-    /// radius.</summary>
+    /// <summary>The kind's second scalar: penumbra half-slope, rim exponent, or a point's or line's range.</summary>
     [FieldOffset(32)] public float Param;
     /// <summary>One when the directional participates in a stable shadow slot or active handoff, or when the point or
     /// spot light is static, so the irradiance volume traces it and occludes it (<see cref="IsTraced"/>); zero
     /// otherwise.</summary>
     [FieldOffset(36)] public uint Shadows;
-    /// <summary>A point's or an occluder's dynamic-transform slot its position is read from every frame, or
+    /// <summary>A point's or a line's dynamic-transform slot its position is read from every frame, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/> for the static authored position in <see cref="Direction"/>;
     /// zero for every other kind.</summary>
     [FieldOffset(40)] public int DynamicSlot;
@@ -86,14 +86,13 @@ public record struct SdfLight {
 
     /// <summary>Creates a light.</summary>
     /// <param name="Kind">What the light is.</param>
-    /// <param name="Direction">A directional's direction toward the light, or a point's or an occluder's
-    /// position.</param>
+    /// <param name="Direction">A directional's direction toward the light, or a point's position.</param>
     /// <param name="Color">The linear RGB color.</param>
     /// <param name="Weight">The strength.</param>
     /// <param name="Param">The kind's second scalar.</param>
     /// <param name="Shadows">A directional: whether this light may cast a shadow; the frame's slots select its march. A
     /// point or spot: whether it is static, so the irradiance volume traces and occludes it.</param>
-    /// <param name="DynamicSlot">A point or an occluder only: the dynamic-transform slot its position rides, or
+    /// <param name="DynamicSlot">A point or a line only: the dynamic-transform slot its position rides, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/>. Packed as zero for every other kind.</param>
     /// <param name="Bounce">The indirect diffuse gain, one by default.</param>
     public SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = SdfProgram.NoDynamicTransformSlot, float Bounce = 1f) {
@@ -121,11 +120,10 @@ public record struct SdfLight {
     /// <summary>Gets a line's length, twice its half segment (<see cref="SpotAxis"/>); zero for every other kind.</summary>
     public readonly float LineLength => ((Kind == SdfLightKind.Line) ? (2f * SpotAxis.Length()) : 0f);
 
-    /// <summary>Returns whether a light of a kind sits at a position its <see cref="DynamicSlot"/> may ride: a point, a
-    /// line or an occluder.</summary>
+    /// <summary>Returns whether a light of a kind sits at a position its <see cref="DynamicSlot"/> may ride: a point or
+    /// a line.</summary>
     /// <param name="kind">The kind.</param>
-    /// <returns><see langword="true"/> for <see cref="SdfLightKind.Point"/>, <see cref="SdfLightKind.Line"/> and
-    /// <see cref="SdfLightKind.Occluder"/>.</returns>
+    /// <returns><see langword="true"/> for <see cref="SdfLightKind.Point"/> and <see cref="SdfLightKind.Line"/>.</returns>
     public static bool IsPositional(SdfLightKind kind) =>
-        (kind is SdfLightKind.Point or SdfLightKind.Line or SdfLightKind.Occluder);
+        (kind is SdfLightKind.Point or SdfLightKind.Line);
 }

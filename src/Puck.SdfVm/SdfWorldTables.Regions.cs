@@ -21,7 +21,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 6;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 13;
+    private const int RegionCount = 14;
     private const int ScreenMappingRegionIndex = 5;
     private const int ScreenSurfaceRegionIndex = 2;
     private const int VolumeRegionIndex = 3;
@@ -202,6 +202,7 @@ public sealed partial class SdfWorldTables {
         SkyLayerRegionIndex => m_skyLayerRegion,
         FrameSampledRegionIndex => m_frameSampledRegion,
         FieldEntriesRegionIndex => m_fieldEntriesRegion,
+        OccluderRegionIndex => m_occluderRegion,
         _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
@@ -220,6 +221,7 @@ public sealed partial class SdfWorldTables {
         SkyLayerRegionIndex => "sky-layers",
         FrameSampledRegionIndex => "frame-sampled",
         FieldEntriesRegionIndex => "field-entries",
+        OccluderRegionIndex => "occluders",
         _ => "shadow-handoffs",
     };
     /// <summary>Describes what the latest upload flushed of the tables' regions (<see cref="GpuRegion.LastFlushedBytes"/>):

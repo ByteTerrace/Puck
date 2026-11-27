@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/851e013ad07cf38855235d73ffddc0ad3e9e40e70b1154ad6131d84d72d81b49). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/d6f1fe3df918069184b658348403bfa166713fee87e2cee96103b953f46c7081). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -84,6 +84,21 @@ struct SdfShadowHandoff {
     [[vk::offset(12)]] float Weight;
 };
 
+struct SdfOccluder {
+    [[vk::offset(0)]] float3 Center;
+    [[vk::offset(12)]] float Strength;
+    [[vk::offset(16)]] float3 AxisX;
+    [[vk::offset(28)]] uint Shape;
+    [[vk::offset(32)]] float3 AxisY;
+    [[vk::offset(44)]] float Radius;
+    [[vk::offset(48)]] float3 AxisZ;
+    [[vk::offset(60)]] float Reach;
+    [[vk::offset(64)]] float Shadow;
+    [[vk::offset(68)]] float Softness;
+    [[vk::offset(72)]] int OwnSlot;
+    [[vk::offset(76)]] uint OwnSlots;
+};
+
 // The Frame group: descriptor set 0, register space 0.
 struct SdfSkyFrame {
     [[vk::offset(0)]] float2 pointer;
@@ -125,6 +140,8 @@ struct SdfSkyFrame {
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
 [[vk::binding(24, 1)]] StructuredBuffer<float4> sdfFieldEntries : register(t24, space1);
+[[vk::binding(25, 1)]] StructuredBuffer<SdfOccluder> sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb : register(t25, space1);
+#define sdfOccluders sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfSkyPass {
@@ -211,61 +228,62 @@ struct SdfSkyPass {
     [[vk::offset(880)]] float4 meterLight[6];
     [[vk::offset(976)]] float meterLuminance;
     [[vk::offset(980)]] float nearDistance;
-    [[vk::offset(984)]] uint _pad984;
+    [[vk::offset(984)]] uint occluderCount;
     [[vk::offset(988)]] uint _pad988;
-    [[vk::offset(992)]] uint3 poseOverlay;
-    [[vk::offset(1004)]] uint _pad1004;
-    [[vk::offset(1008)]] float4 previousView[6];
-    [[vk::offset(1104)]] uint reflectionSteps;
-    [[vk::offset(1108)]] uint resolvedSurface;
-    [[vk::offset(1112)]] uint screenCount;
-    [[vk::offset(1116)]] float screenFidelity;
-    [[vk::offset(1120)]] uint screenReflections;
-    [[vk::offset(1124)]] uint _pad1124;
-    [[vk::offset(1128)]] uint _pad1128;
-    [[vk::offset(1132)]] uint _pad1132;
-    [[vk::offset(1136)]] float4 screenWindows[128];
-    [[vk::offset(3184)]] uint4 shadeBinWidths;
-    [[vk::offset(3200)]] uint4 shadeDefault;
-    [[vk::offset(3216)]] float4 shadeDemand;
-    [[vk::offset(3232)]] uint4 shadeIdentity[2];
-    [[vk::offset(3264)]] uint shadePrograms;
-    [[vk::offset(3268)]] uint shadowFadeCount;
-    [[vk::offset(3272)]] uint _pad3272;
-    [[vk::offset(3276)]] uint _pad3276;
-    [[vk::offset(3280)]] int4 shadowRoles;
-    [[vk::offset(3296)]] uint shadowSlotCount;
-    [[vk::offset(3300)]] uint _pad3300;
-    [[vk::offset(3304)]] uint _pad3304;
-    [[vk::offset(3308)]] uint _pad3308;
-    [[vk::offset(3312)]] int4 shadowSlots;
-    [[vk::offset(3328)]] uint2 skyFieldExtent;
-    [[vk::offset(3336)]] float skyPeakLuminance;
-    [[vk::offset(3340)]] uint _pad3340;
-    [[vk::offset(3344)]] float4 skyViews[40];
-    [[vk::offset(3984)]] float3 stampFade;
-    [[vk::offset(3996)]] float tanHalfFieldOfView;
-    [[vk::offset(4000)]] uint temporal;
-    [[vk::offset(4004)]] float toonMode;
-    [[vk::offset(4008)]] uint viewBase;
-    [[vk::offset(4012)]] uint _pad4012;
-    [[vk::offset(4016)]] float3 viewForward;
+    [[vk::offset(992)]] uint4 occluderMask;
+    [[vk::offset(1008)]] uint3 poseOverlay;
+    [[vk::offset(1020)]] uint _pad1020;
+    [[vk::offset(1024)]] float4 previousView[6];
+    [[vk::offset(1120)]] uint reflectionSteps;
+    [[vk::offset(1124)]] uint resolvedSurface;
+    [[vk::offset(1128)]] uint screenCount;
+    [[vk::offset(1132)]] float screenFidelity;
+    [[vk::offset(1136)]] uint screenReflections;
+    [[vk::offset(1140)]] uint _pad1140;
+    [[vk::offset(1144)]] uint _pad1144;
+    [[vk::offset(1148)]] uint _pad1148;
+    [[vk::offset(1152)]] float4 screenWindows[128];
+    [[vk::offset(3200)]] uint4 shadeBinWidths;
+    [[vk::offset(3216)]] uint4 shadeDefault;
+    [[vk::offset(3232)]] float4 shadeDemand;
+    [[vk::offset(3248)]] uint4 shadeIdentity[2];
+    [[vk::offset(3280)]] uint shadePrograms;
+    [[vk::offset(3284)]] uint shadowFadeCount;
+    [[vk::offset(3288)]] uint _pad3288;
+    [[vk::offset(3292)]] uint _pad3292;
+    [[vk::offset(3296)]] int4 shadowRoles;
+    [[vk::offset(3312)]] uint shadowSlotCount;
+    [[vk::offset(3316)]] uint _pad3316;
+    [[vk::offset(3320)]] uint _pad3320;
+    [[vk::offset(3324)]] uint _pad3324;
+    [[vk::offset(3328)]] int4 shadowSlots;
+    [[vk::offset(3344)]] uint2 skyFieldExtent;
+    [[vk::offset(3352)]] float skyPeakLuminance;
+    [[vk::offset(3356)]] uint _pad3356;
+    [[vk::offset(3360)]] float4 skyViews[40];
+    [[vk::offset(4000)]] float3 stampFade;
+    [[vk::offset(4012)]] float tanHalfFieldOfView;
+    [[vk::offset(4016)]] uint temporal;
+    [[vk::offset(4020)]] float toonMode;
+    [[vk::offset(4024)]] uint viewBase;
     [[vk::offset(4028)]] uint _pad4028;
-    [[vk::offset(4032)]] float3 viewPosition;
+    [[vk::offset(4032)]] float3 viewForward;
     [[vk::offset(4044)]] uint _pad4044;
-    [[vk::offset(4048)]] float3 viewRight;
+    [[vk::offset(4048)]] float3 viewPosition;
     [[vk::offset(4060)]] uint _pad4060;
-    [[vk::offset(4064)]] float3 viewUp;
-    [[vk::offset(4076)]] uint viewportCount;
-    [[vk::offset(4080)]] uint4 viewsRate;
-    [[vk::offset(4096)]] uint workCounterRow;
-    [[vk::offset(4100)]] uint workCounterRowDetail;
-    [[vk::offset(4104)]] uint _pad4104;
-    [[vk::offset(4108)]] uint _pad4108;
-    [[vk::offset(4112)]] float4 worldLanes;
+    [[vk::offset(4064)]] float3 viewRight;
+    [[vk::offset(4076)]] uint _pad4076;
+    [[vk::offset(4080)]] float3 viewUp;
+    [[vk::offset(4092)]] uint viewportCount;
+    [[vk::offset(4096)]] uint4 viewsRate;
+    [[vk::offset(4112)]] uint workCounterRow;
+    [[vk::offset(4116)]] uint workCounterRowDetail;
+    [[vk::offset(4120)]] uint _pad4120;
+    [[vk::offset(4124)]] uint _pad4124;
+    [[vk::offset(4128)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa40EA2C3F : register(b0, space3);
-#define passGroup passGroupIsa40EA2C3F
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa76623804 : register(b0, space3);
+#define passGroup passGroupIsa76623804
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);

@@ -75,6 +75,68 @@
         },
         "default": null
       },
+      "occlusion": {
+        "description": "How the creation darkens what stands about it (WorldPrototypeOcclusion): an analytic sphere, capsule or box fitted to its shapes that takes its share of the ambient and indirect light of the surfaces about it and casts a soft shadow toward every ranged light, screen and emitter face, wherever a placement or a body wearing it as a look stands. null, the engine default, casts none.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "strength": {
+            "description": "The share, in [0, 1], of the ambient and indirect light the occluder takes away where it covers a surface\u0027s whole hemisphere; one by default.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "shadow": {
+            "description": "The share, in [0, 1], of a ranged light, screen or emitter face its shadow takes away where it covers the light whole; Strength by default.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "reach": {
+            "description": "How far past the occluder\u0027s bounding sphere, in the creation\u0027s units, it still darkens and shadows, eased to nothing there; the bounding sphere\u0027s own radius by default.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "softness": {
+            "description": "The penumbra\u0027s half slope toward a light of no size (a point or spot light): its shadow\u0027s edge widens by this much for each unit from the occluder; zero by default, a point light\u0027s hard edge.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "shape": {
+            "description": "Which solid is fitted: a sphere, a capsule along the long axis, the box itself, or by default the one the box\u0027s proportions suggest.",
+            "enum": [
+              "Auto",
+              "Sphere",
+              "Capsule",
+              "Box",
+              null
+            ],
+            "default": null,
+            "title": "SdfOccluderFit",
+            "x-enumDescriptions": {
+              "Auto": "The solid the box\u0027s proportions suggest: a sphere for a box near a cube, a capsule along the long axis for a box whose two short sides are alike, and the box itself otherwise.",
+              "Sphere": "A sphere.",
+              "Capsule": "A capsule along the box\u0027s longest axis.",
+              "Box": "The box itself."
+            }
+          }
+        },
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldPrototypeOcclusion"
+      },
       "document": {
         "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.",
         "title": "CreationDocument",

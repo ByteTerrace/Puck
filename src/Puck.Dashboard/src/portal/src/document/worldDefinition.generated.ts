@@ -3564,6 +3564,8 @@ export type SdfLiftNullable = "Revolve" | "Extrude";
 
 export type SdfNoiseFlavor = "White" | "Blue" | "Gaussian";
 
+export type SdfOccluderFit = "Auto" | "Sphere" | "Capsule" | "Box";
+
 /**
  * A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.
  */
@@ -11876,6 +11878,10 @@ export type WorldPrototype = {
    */
   lights?: (WorldRenderLight | null)[] | null;
   /**
+   * How the creation darkens what stands about it (WorldPrototypeOcclusion): an analytic sphere, capsule or box fitted to its shapes that takes its share of the ambient and indirect light of the surfaces about it and casts a soft shadow toward every ranged light, screen and emitter face, wherever a placement or a body wearing it as a look stands. null, the engine default, casts none.
+   */
+  occlusion?: WorldPrototypeOcclusion | null;
+  /**
    * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument and Rig, which are normalized whichever way the row arrived.
    */
   document: CreationDocument | null;
@@ -11894,6 +11900,29 @@ export type WorldPrototypeMesh = {
    * The index of the creation palette entry the triangles shade with.
    */
   material?: number;
+};
+
+export type WorldPrototypeOcclusion = {
+  /**
+   * The share, in [0, 1], of the ambient and indirect light the occluder takes away where it covers a surface's whole hemisphere; one by default.
+   */
+  strength?: number | null;
+  /**
+   * The share, in [0, 1], of a ranged light, screen or emitter face its shadow takes away where it covers the light whole; Strength by default.
+   */
+  shadow?: number | null;
+  /**
+   * How far past the occluder's bounding sphere, in the creation's units, it still darkens and shadows, eased to nothing there; the bounding sphere's own radius by default.
+   */
+  reach?: number | null;
+  /**
+   * The penumbra's half slope toward a light of no size (a point or spot light): its shadow's edge widens by this much for each unit from the occluder; zero by default, a point light's hard edge.
+   */
+  softness?: number | null;
+  /**
+   * Which solid is fitted: a sphere, a capsule along the long axis, the box itself, or by default the one the box's proportions suggest.
+   */
+  shape?: SdfOccluderFit | null;
 };
 
 export type WorldQualityPreset = {

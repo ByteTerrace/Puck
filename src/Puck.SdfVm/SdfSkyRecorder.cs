@@ -173,7 +173,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
 
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
             width: recording.RenderWidth, height: recording.RenderHeight, temporal: m_owner.SkyTemporalOf(instance: m_context.Instance), temporalEnabled: m_temporal, residency: residency,
-            lightMask: tables.LightMaskOf(frame: frame, view: index));
+            lightMask: tables.LightMaskOf(frame: frame, view: index), occluderMask: tables.OccluderMaskOf(frame: frame, view: index));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[ResolvedSurfaceOffset..], value: ((m_resolved && (m_kernel == SdfKernel.Composite)) ? 1u : 0u));
         var fieldFraction = frame.Views[index].Quality.SkyFieldFraction;
         var fieldWidth = ((fieldFraction == .5f) ? ((recording.RenderWidth + 1u) / 2u) : recording.RenderWidth);
