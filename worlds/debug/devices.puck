@@ -179,7 +179,6 @@ let pictureHalfHeight = ((deckVideo.rows * deckPitchY) / 2)
 let tubeHalfWidth = (pictureHalfWidth + 0.009)
 let tubeHalfHeight = (pictureHalfHeight + 0.008)
 let tubeTop = (pictureY + tubeHalfHeight)
-let tubeBottom = (pictureY - tubeHalfHeight)
 let tvCabinet = 0
 let tvTrim = 1
 let tvTube = 2

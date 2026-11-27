@@ -207,9 +207,6 @@ let fallHole = 1
 // Whether level 1's floor opens over the fall, railed round: tabled by the owner until the fall is revisited, so the
 // floor is whole over it and the wing's fall paintings below stand as they are.
 let fallOpen = false
-// The same axis in the debug world, for the paintings' and the exhibits' documents.
-let fallX = (gallerySite[0] + fallPlan[0])
-let fallZ = (gallerySite[2] + fallPlan[1])
 
 // The flaw's route (flaw.puck): the corners of one closed polyline in the building's frame, metres, which the flaw
 // follows with each corner rounded (look.puck's `lookFlaw.bend`). It is one loop that rises through the building and
@@ -293,8 +290,6 @@ let flawCrossings = filter(loopCrossings(flawRoute, flawCuts), c => ((c.point[2]
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
-let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
-let displaySouth = 4.4
 // A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, so its cap spans about four
 // fifths of its pad's width (look.puck's lookPadTiles) with a cream margin round it, and the exhibit on its turntable
 // stands at `displayExhibitScale`, in proportion, set down so the plinth's cap of the exhibits' own frame (0.75 m) meets
@@ -420,12 +415,10 @@ let treeLandingLift = 0.08
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
 // middle line `out` metres from the bark.
 function treeTreadAngle(k) = (treeTreadStart + (treeTreadStep * k))
-function treeTreadTop(k) = (treeTreadRise * (k + 1))
-function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
-  (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + out),
-  treeTreadAngle(k),
-  treeTreadTop(k)
-))
+function treeTreadTop(k) = treadTop(treeTreadRise, k)
+function treeTreadPlan(k, out) = (
+  [treeX, galleryFloor[0], treeZ] + treadPoint(treeTreadStart, treeTreadStep, treeTreadRise, treeTrunk.base, treeTrunk.apex, k, out)
+)
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
 function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))]

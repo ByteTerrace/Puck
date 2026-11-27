@@ -45,15 +45,3 @@ function sectorFaceAt(sector, y, x) = (sector.foot + sector.radial * squareRoot(
   )
 // The face on the sector's axis.
 function sectorFace(sector, y) = sectorFaceAt(sector, y, 0)
-// How far the face at `x` stands further out per metre it rises at height y (dr/dy of `sectorFaceAt`): the face's slope,
-// from which a piece resting on it takes its tilt and its normal.
-function sectorFaceSlopeAt(sector, y, x) = sector.radial * sectorFaceRise(sector, y) / ((sector.peak /
-  (1 - valleySink)) * squareRoot(
-  1 - sectorFaceRise(sector, y) * sectorFaceRise(sector, y) - (x / sector.across) * (x / sector.across)
-))
-// The height of the same face at distance r from the centre, on the side facing it.
-function sectorHeight(sector, r) = (sector.peak / (1 - valleySink)) * squareRoot(
-  1 -
-    ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial) *
-      ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial)
-) - (sector.peak / (1 - valleySink)) * valleySink
