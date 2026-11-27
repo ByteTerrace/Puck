@@ -913,6 +913,59 @@ visits fall to the lights that are seen: at the lift lobby on Direct3D 12 at
 alone keeps 18.3 million. A visit costs the same whichever kernel makes it, so
 the views pass's time follows the visits it no longer makes.
 
+## A creation's occlusion is an analytic solid culled as a light is
+
+**The problem.** The screen-space ambient occlusion sees only what the camera
+sees within its radius: a character standing at the screen's edge, or wider than
+0.75 m, leaves the floor about it lit as open ground. The irradiance volume's
+probes are metres apart and trace no moving body. And a point light, a tube, a
+screen or an emitter face has no shadow but those probes: a body under a lamp
+casts nothing on the floor.
+
+**What was weighed.**
+
+| Option | What it would give | Decision |
+|---|---|---|
+| An analytic solid per creation (Quilez's sphere, capsule and box occlusion and soft shadows), culled per view and tile as lights are | Contact shade and soft shadows from what stands anywhere about a surface, at a few solids a tile | Built |
+| A shadow map or cube map per ranged light | Exact shadows of every caster | Not built here: memory and redraws per fixture, as the light-walk decision weighed ([above](#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)) |
+| A wider screen-space radius | More contact shade on screen | Not built: it still misses what is off screen, and costs every pixel |
+| Solids taken from each mesh draw's box on the GPU | Per-part solids that ride the draws' slots with no host work | Not built yet: a draw carries no author's opt-in, a bake group's box is no fit for a part, and a view's mask holds 128 records, not a world's draws |
+| Occluders as records of the lights table | No new table | Not built: the lights table's 128 records are the lights', which the validator holds a world to, and an occluder is visited by every ranged light rather than walked as one |
+
+**The rule.** An occluder adds nothing at and past its `Reach` from its centre:
+both its terms are scaled by the window a point light's falloff takes, which is
+exactly zero there. On that rule the view's mask, each views tile's mask and a
+glass wave's mask leave out the occluders whose sphere of reach misses what they
+shade, by the same machinery and the same two boxes the lights are culled by
+(`SdfLightSelection.SelectOccluders`, `sdfViewsTileLights`,
+`sdfWaveLightMasks`): one mechanism, a third mask beside the lights' and
+screens'. An occluder takes from the ambient, indirect and reflected environment
+terms and from a ranged light's, screen's or emitter face's visibility; it never
+takes from a directional light, whose cascades are its shadow, nor from the
+lights' screen-space contact term.
+
+**What it reads.** Presentation float only: the occluders table the frame
+carries (`SdfFrame.Occluders`), posed on the host from the anchors the frame
+draws its placements and bodies at (`WorldCreationOccluders`,
+`WorldAnchorPoses`). It reads no field and feeds nothing back.
+
+**What enforces it, and where that stops.** `sdfOccludersAmbient` and
+`sdfOccludersShadow` are the only readers of an occluder, and each multiplies by
+`sdfOccluderWindow`, so a culled occluder changes no pixel. A body's own
+surfaces skip its occluder by the frame slots its record names, which only a
+body's stamp provides; a static creation's sphere or capsule darkens the faces of
+its own it holds. One solid stands for a whole creation at rest: a creation
+whose rest box holds far more than its body (a lounge's rug, a stool before a
+cabinet) casts as its box, and a part that swings away from the rest pose leaves
+its solid behind.
+
+**What it costs.** A view with no occluder in its mask reads no record and runs
+no loop. A pixel pays a sphere or capsule test for each occluder its tile keeps
+in the ambient term, and one more for each ranged light it shades; a box costs
+three faces of Lambert's formula and a ten-step search per light. The frame's
+occluders are posed on the host each frame, one anchor each, and the views stand
+while the occluders their masks keep stand.
+
 ## A diagnostic view never covers its evidence
 
 A debug view that flags a suspect value never draws over the pixels it flags

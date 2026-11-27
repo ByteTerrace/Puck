@@ -561,7 +561,8 @@ second way.
 `name(list, item => term)` (`first(list, item => condition, otherwise)` or
 `first(list, item => condition, item => value, otherwise)`). `ListFolds` (`Lowering/ListFolds.cs`) is the one
 description of the expression each fold stands for: `sum` is `t0 + t1 + …`, `any` is `t0 or t1 or …`, `first` the
-choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values;
+choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values
+one step at a time, so a fold over a list of any length gives what the expression written out gives;
 in a rule, where the body may read state, the operand binder writes it out with each element in place of the binder,
 so the lowered rule is the one an author would paste by hand and is priced the same
 ([the rule language's side](state/expressions.md#fold-over-a-compile-time-list)):
@@ -570,6 +571,10 @@ so the lowered rule is the one an author would paste by hand and is priced the s
 let total = sum(range(1, 5), k => k * k)                                        // 30, at compile time
 freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)  // four reads, in a rule
 ```
+
+Each step of a rule's chain folds what constants decide as it is written out, so a run of constants costs one literal.
+A fold whose chain still needs more instructions than one expression holds (`RuleCapacity.MaxExpressionTokens`) is refused at the fold, by name; fold
+part of the list into each of several rule locals instead.
 
 The lambda is what makes a call a list fold: `any(array)` and `sum(array)` are [the list library's](#the-list-library)
 own, `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its
@@ -652,7 +657,7 @@ A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absenc
 nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
 its right operand when the left is false; `or` skips it when the left is true. A skipped
 operand neither reads state nor faults, but must still be well-typed. Logical operands may read different
-numeric kinds; arithmetic requires matching kinds. Other arithmetic
+numeric kinds; arithmetic over mixed kinds widens its Int operands to Fixed. Other arithmetic
 propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
@@ -784,7 +789,7 @@ function's parameter reads as the point; everything else it reads (a `let`, a pa
 value at the point, so a pattern's phase or weight can be fixed while its shape is differentiated.
 
 ```text
-let slope = gradient(surface.position, q => 0.01 * shadeFbm(q * 4, uint(7)))
+let slope = gradient(surface.position, q => 0.01 * shadeFbm(q * 4, uint(7), pixel: surface.footprint * 4))
 normal: tilt(surface.normal, slope * -1, 1.2)
 ```
 
@@ -801,6 +806,13 @@ Only slope makes relief. `floor`, `step`, `quantize`, a comparison and a cell's 
 jump, so a pattern built from hard steps gets no relief and reads as painted on. Carve an edge by ramping across it:
 the standard edge helpers (`shadeCellBorder`, `shadeBrick`) ramp over a `bevel` the author sets, never narrower than
 two display pixels' footprint, so the groove has a slope wider than a pixel and does not alias.
+
+The standard noise (`shadeFbm`, `shadeRidged`, `shadeTurbulence`) band-limits itself the same way: each octave fades
+out as its features approach a pixel, by `shadeFade` of `pixel * filterScale * lacunarity^i` cells a pixel, so distant
+noise converges on its mean instead of shimmering. `pixel` is the footprint in the pattern's own units, so a point scaled
+by 4 passes `pixel: surface.footprint * 4`, as the edge helpers do. `filterScale` is 1 by default, blurs sooner above it,
+and keeps every octave at any distance at 0. The shade language has no branch that skips work, so a faded octave still
+runs its lattice, and the fade costs a smoothstep and a multiply an octave.
 
 ## A section written twice composes
 

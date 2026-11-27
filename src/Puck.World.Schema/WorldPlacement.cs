@@ -33,13 +33,18 @@ namespace Puck.World;
 /// creation places its light, moving the placement moves it, and a placement whose response shows another prototype
 /// shows that prototype's lights instead. A light of a placement that stands still (no attach, inhabit, turn or deal)
 /// is traced and occluded by the irradiance volume as an unanchored light is. <see langword="null"/> carries none.</param>
+/// <param name="Occlusion">How the creation darkens what stands about it (<see cref="WorldPrototypeOcclusion"/>): an
+/// analytic sphere, capsule or box fitted to its shapes that takes its share of the ambient and indirect light of the
+/// surfaces about it and casts a soft shadow toward every ranged light, screen and emitter face, wherever a placement
+/// or a body wearing it as a look stands. <see langword="null"/>, the engine default, casts none.</param>
 public sealed record WorldPrototype(
     [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Declares)] DocumentIdentifier Id,
     CreationDocument Document,
     [property: DocumentText("a content digest")]
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLight>? Lights = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLight>? Lights = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeOcclusion? Occlusion = null
 ) {
     // Both caches derive from Document alone. A `with` copies them, so Document's init clears them; a `with` that
     // keeps Document keeps caches that still hold.

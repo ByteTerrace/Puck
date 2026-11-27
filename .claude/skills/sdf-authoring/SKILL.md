@@ -179,7 +179,7 @@ Two rules decide whether facets are available at all:
    `ShapePointOps` derives the warp predicate from the point chain's emission
    mask; static and pooled scopes, bake partitioning, bounds and detail share it.
 2. **The creation-wide scope.** If a creation has a `noise` facet, an engraved
-   text run, **or any shape blend outside `Union` and `SmoothUnion`**, the whole
+   text run, **or any shape blend outside `Union` and the smooth unions**, the whole
    static creation emits inside one scope, and `panel`, `trims`, and `cells`
    are refused on **every** shape in it, whatever the placement kind.
 
@@ -243,6 +243,14 @@ round sections, roundings and thickness, down to 2 mm) frays into
 jagged steps, so never sculpt a millimetre-proud stripe. Painted metal and
 clearcoat read only against something to reflect: the world's sky `panel`
 highlights. Ranges, defaults and examples are in `references/surface.md`.
+
+Contact shade and lamp shadows on the floor and walls about a creation are its
+prototype's `occlusion` (a sibling of `document`, not a palette field): one
+analytic sphere, capsule or box fitted to its rest bound, which every placement
+and body showing it carries. Write the standard's `bodyOcclusion` or
+`propOcclusion` (`worlds/standard/occlusion.puck`); a creation whose rest box
+holds far more than its body (a rug, stools) casts as that box, so leave those
+out or split them ([analytic occlusion](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes)).
 
 ## Binding to state
 

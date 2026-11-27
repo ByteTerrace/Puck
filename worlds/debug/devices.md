@@ -16,11 +16,11 @@ it running, and each lists the folders its swappable content comes from in
 `contentFolders`: its shipped folders, then the owner's local folder under the
 git-ignored `roms/` at the repository root.
 
-| At (x, z) | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
+| Stand at | Device | Instance | Engine and model | Screen | Boots, with no local default | `contentFolders` |
 |---|---|---|---|---|---|---|
-| 6.6, 29.4 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
-| 5, 31.6 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
-| 1.4, 30.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.deck` | `cartridges/deck`, `roms/hgd` |
+| `device-humble-gaming-brick` | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
+| `device-advanced-gaming-brick` | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
+| `device-humble-gaming-deck` | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.deck` | `cartridges/deck`, `roms/hgd` |
 
 ## The devices
 
@@ -178,15 +178,15 @@ Every line runs at the console; `<instance>` is a name from the table.
 | Reset a device on its current content | `machine.operation <instance> <generation> machine.reset {"schema":"puck.<engine>.machine-reset.v1"}` |
 | Eject the content, leaving the device on with nothing in it | `machine.operation <instance> <generation> content.eject {"schema":"puck.<engine>.content-eject.v1"}`; `machine.swap` puts one back |
 | Change a brick's revision live | `machine.operation <instance> <generation> device.model {"schema":"puck.gaming-brick.device-model-set.v1","model":"sgb"}` |
-| Stand at a device, facing it | `body.pose <x + 1> 0.05 <z> 90 0 0`, with the device's `x` and `z` from the first table |
+| Stand at a device, facing it | `body.pose spawn:<id>`, with the spawn point from the first table (the devices stand where [gallery/layout.puck](gallery/layout.puck)'s `brickAt`, `advancedAt` and `deckAt` put them, and the spawn points at its `brickPlayAt`, `advancedPlayAt` and `deckPlayAt`) |
 | Engage it (within 3 m at full size, 0.75 m at a quarter), playing it with the Moth's controls | the context button: E, or RB on a pad (`player.signal keyboard.e press`, then `release`); or `body.engage <screen>` |
 | Leave it | the context button again; or `body.disengage` |
 | Detach the screen while the machine keeps running, then show it again | `screen.eject <screen>`, then `screen.source <screen> row` |
 | Put every device back on its boot cartridge, its local default or its shipped one (and pick up an edit to `devices.puck` or a `folder.json`) | `world.reload` |
-| Frame the whole room from the mouse hole, at a quarter-size Moth's eye | `view.override camera look 8.8 0.45 30.5 1.4 0.9 30.5`, then `view.override camera auto` |
-| Frame the Humble Gaming Brick, square to its face | `view.override camera look 7.103 0.343 29.4 6.586 0.155 29.4` |
-| Frame the Advanced Gaming Brick | `view.override camera look 5.441 1.227 31.6 4.964 0.952 31.6` |
-| Frame the deck and its television | `view.override camera look 3 1.45 30.5 1.4 0.95 30.5` |
+| Frame the whole room from the mouse hole, at a quarter-size Moth's eye | `view.override camera look 4.875 0.45 30.5 -2.525 0.9 30.5`, then `view.override camera auto` |
+| Frame the Humble Gaming Brick, square to its face | `view.override camera look 3.178 0.343 29.4 2.661 0.155 29.4` |
+| Frame the Advanced Gaming Brick | `view.override camera look 1.516 1.227 31.6 1.039 0.952 31.6` |
+| Frame the deck and its television | `view.override camera look -0.925 1.45 30.5 -2.525 0.95 30.5` |
 
 `<engine>` in a schema is the instance's engine: `gaming-brick`,
 `advanced-gaming-brick` or `humble-gaming-deck`. `machine.state <instance>`

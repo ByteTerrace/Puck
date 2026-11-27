@@ -273,7 +273,7 @@ internal sealed class WorldShadeLowering {
         if ((statement is not BlockNode block) || !Enum.TryParse<SdfShadePhase>(block.Identifier, true, out var phase) || !Enum.IsDefined(value: phase)) {
             throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Keep a shade template's body to 'surface', 'light', 'compose' and 'ink' blocks", problem: "A shade template holds a statement that is not one of those blocks"));
         }
-        var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal);
+        var constants = scope.Constants.Derive();
         var local = scope.WithConstants(constants);
 
         m_phase = phase;
@@ -301,7 +301,7 @@ internal sealed class WorldShadeLowering {
         }
     }
     private void BindLet(LetNode let, DocumentScope scope) {
-        var snapshot = scope.WithConstants(new(scope.Constants, StringComparer.Ordinal)).WithLocals(new(scope.Locals, StringComparer.Ordinal));
+        var snapshot = scope.WithConstants(scope.Constants.Derive()).WithLocals(scope.Locals);
         var bound = new Bound(let.Value, snapshot);
         bound.Values.Add(0, Expression(let.Value, snapshot));
         scope.Constants[let.Name] = bound;
@@ -380,7 +380,7 @@ internal sealed class WorldShadeLowering {
             case CallExpressionNode call when (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is { } function):
                 var indices = DocumentLowering.BindFunctionArguments(call.Name, function, call.Arguments.Select(selector: a => a.Name).ToArray(), call.Span, scope);
                 if (indices is null) { return Literal(JsonValue.Create(0)); }
-                var bindings = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal);
+                var bindings = scope.Constants.Derive();
                 for (var i = 0; (i < indices.Length); i++) {
                     var argument = ((indices[i] >= 0) ? call.Arguments[indices[i]].Value : function.Parameters[i].DefaultValue!);
 
@@ -409,7 +409,7 @@ internal sealed class WorldShadeLowering {
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
                     call.Name == "hash" ? SdfShadeType.UInt3 :
-                    ((((call.Name is "lattice" or "latticeGradient" or "lines" or "cells") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
+                    ((((call.Name is "lattice" or "latticeGradient" or "lines" or "cells" or "cellBorder" or "cellBorderGradient") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
                     call.Name == "select" && i > 0 ? expected : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Rewrite it with the shade operations, names and numbers a shade program admits", problem: "This expression uses something a shade program has no word for"));
         }
@@ -424,7 +424,7 @@ internal sealed class WorldShadeLowering {
         if (function.Parameters.Count != 1) {
             throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(example: "'q => shadeFbm(q, seed)'", fix: "Write the height as a function of one point", problem: $"A gradient's height function takes {function.Parameters.Count} parameters"));
         }
-        var constants = new Dictionary<string, ExpressionNode>(lexical.Constants, StringComparer.Ordinal) { [function.Parameters[0]] = new Variable() };
+        var constants = lexical.Constants.With(name: function.Parameters[0], value: new Variable());
 
         return new("gradient", [Expression(point, scope), Expression(function.Body, lexical.WithConstants(constants), SdfShadeType.Float)]);
     }
@@ -453,10 +453,7 @@ internal sealed class WorldShadeLowering {
         foreach (var value in items) {
             var held = new Bound(fold.Arguments[1].Value, scope);
             held.Values.Add(0, running);
-            var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal) {
-                [step.Parameters[0]] = held,
-                [step.Parameters[1]] = Structural.Syntax(value: value),
-            };
+            var constants = scope.Constants.With(first: step.Parameters[0], firstValue: held, second: step.Parameters[1], secondValue: Structural.Syntax(value: value));
             running = Expression(step.Body, scope.WithConstants(constants), expected);
         }
         return running;

@@ -170,6 +170,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the views
     /// pass.</summary>
     public const string Lights = "sdfLights";
+    /// <summary>The analytic occluders table: <see cref="SdfOccluders.MaxOccluders"/> <see cref="SdfOccluder"/> records,
+    /// read by the views and glass passes.</summary>
+    public const string Occluders = "sdfOccluders";
     /// <summary>The active shadow handoffs, one generated 16-byte record per fade, which the views pass fades each
     /// outgoing light's shadow by.</summary>
     public const string ShadowHandoffs = "sdfShadowHandoffs";
@@ -342,8 +345,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
     /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
     /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>), which the residency writes as a region of its
-    /// tables, the sky's environment map, which its graph producer renders, and last the field view's entries, which only
-    /// the field pass reads. A kernel binds one only when it reads it. A table added here goes last, so no binding
+    /// tables, the sky's environment map, which its graph producer renders, the field view's entries, which only the field
+    /// pass reads, and last the analytic occluders, which the views and glass passes read. A kernel binds one only when it
+    /// reads it. A table added here goes last, so no binding
     /// before it moves in the bake's interface, whose bytecode keys the stored meshes.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
@@ -353,6 +357,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: ShadowHandoffs, structure: ShaderInterfaceStructure.From<SdfShadowHandoff>()),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.World, name: SdfWorldPackage.FieldEntries),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Occluders, structure: ShaderInterfaceStructure.From<SdfOccluder>()),
     ];
     /// <summary>Gets the shared environment producer's typed interface. The map writes through its UAV; the reduction
     /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen

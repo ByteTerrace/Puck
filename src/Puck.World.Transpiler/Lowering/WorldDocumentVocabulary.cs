@@ -127,11 +127,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         // A file path is written relative to the source that wrote its literal, which a module used from another
         // directory is not the document's own, so the value is re-expressed from there whatever expression carries it.
         if (ReferenceEquals(objA: DocumentLowering.MemberContext(scope: scope), objB: FileReferencePosition)) {
-            var borrowed = DocumentLowering.At(
-                context: null,
-                lower: () => DocumentLowering.EvaluateValue(expr: expression, fieldKey: fieldKey, scope: scope),
-                scope: scope
-            );
+            var borrowed = DocumentLowering.EvaluateAtNoPosition(expr: expression, fieldKey: fieldKey, scope: scope);
 
             value = (((borrowed is System.Text.Json.Nodes.JsonValue written) && written.TryGetValue<string>(value: out var path) && (path.Length > 0))
                 ? System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(

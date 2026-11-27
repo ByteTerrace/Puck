@@ -455,7 +455,7 @@ uint sdfShadeTileBinWord(uint viewIndex, uint tile) {
 uint sdfShadeListWord(uint viewIndex, uint entry) {
     return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + sdfShadeTileCount()) + entry);
 }
-// The first word of a tile's light masks: the tile's light mask words, then its screen mask.
+// The first word of a tile's light masks: the tile's light mask words, then its screen mask, then its occluder mask.
 uint sdfShadeTileLightsWord(uint viewIndex, uint tile) {
     return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + (2u * sdfShadeTileCount())) + (SDF_SHADE_TILE_LIGHT_WORDS * tile));
 }

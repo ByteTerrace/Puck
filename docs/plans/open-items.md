@@ -2600,6 +2600,19 @@ the last sample's light.
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+The analytic occluders
+([handbook](../rendering/sdf/handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes)):
+
+- [medium] One solid stands for a whole creation at its rest box
+  (`WorldCreationOccluders.LocalOf`), so a part that swings away leaves its
+  solid behind and a creation whose box holds a rug or stools casts as the box.
+  The structural answer is a solid per motion owner, riding its part's slot
+  (the record's `OwnSlot` already names the body's slots), fitted from the
+  part's shapes.
+- [low] A session scene (`WorldSessionSceneEmitter`) carries only the authored
+  occluder rows: its placements' and bodies' occluders need the session
+  mirror's anchor scope.
+
 The air's in-scatter:
 
 - [medium] The sky's in-scatter is lit by one scalar a view, the camera
@@ -3411,6 +3424,15 @@ the caldera water's first proof, then the per-milestone review across every
 place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
+
+- [high] Materials switch hard across a smooth blend: a baked mesh carries one material a triangle
+  (`SdfMeshMaterialCut` places the boundary where the blend's winner, `SdfFieldFormulas.NearerWins` and its siblings,
+  flips), so a fillet between two colours is two colours with a line between. The fix is a mix the author opts into
+  per blend: the blend factor as a catalogue formula beside `Winner` (Quilez's `smin` weight, `h²/2` for the quadratic
+  and `h³/2` for the cubic, nearer side first), a second material and a unorm16 weight per mesh vertex beside
+  `SdfMesh.Influences` (kept through the store, restore, collapse levels, chunks and planar merge, which must keep
+  blend-zone vertices), and the shading door reading both materials and lerping their appearance rows by the
+  barycentric weight before any authored phase runs. Without the opt-in the weight is zero and nothing changes.
 
 - [high] FreeCell on the game station grew without bound: freecell-tests' World on the RTX 2060 reached 6.1 GB
   private after 5.5 minutes, still climbing about 100 MB every 4 s, and the memory guard killed it; klondike-tests
@@ -5437,13 +5459,6 @@ their lane order; this packet keeps the single duplicates and leads.
   `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
   `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
   form-aware child walk would fold in too.
-- The document evaluator copies its whole environment to bind one name: a lambda call
-  (`DocumentBuiltins.ApplyOwned`), a fold, a `let` expression and each `for` iteration build a new
-  `Dictionary<string, JsonNode?>` from `DocumentScope.Locals`, and `DocumentScope.Derive`, `BindArgument`,
-  `WithConstants` and `WithBasePath` copy their tables per scope. A gallery compile's allocation trace (`puck host
-  allocations` over a `dotnet-trace` gc-verbose run) puts these sites above every JSON cost left in the pipeline. A
-  persistent environment (a binding chained to its parent scope, looked up by walking a short chain) replaces the
-  copies; `Locals` is a public mutable `Dictionary` today, so its callers in `Puck.World.Transpiler` move with it.
 - `DocumentScope.TryLowerBindingAt` answers a let placed at a position as a `DeepClone` of its memo, outside the
   budget's copy door (`DocumentEvaluationBudget.Take`), so the copy is charged only by the caller's `Adopt` and drops
   the `NoteWrittenBeside` records the door carries. Answering the memo borrowed and letting `LowerValue` take it would

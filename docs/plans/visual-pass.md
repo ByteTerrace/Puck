@@ -54,7 +54,7 @@ The display stations stay as they are; they are iterated in their own root world
 ## Tools
 
 - **Patterns:** the standard package's pattern library in `worlds/standard/shading.puck`: fractal noise, ridged
-  noise, turbulence, domain warp, cellular borders and per-cell values, colour ramps and bricks.
+  noise and turbulence (each octave fading by the pixel footprint, so distant noise does not shimmer), domain warp, cellular borders and per-cell values, colour ramps and bricks.
 - **Relief:** the `relief` form, once it lands, gives any pattern exact bump lighting. Hard steps give no relief;
   soften an edge to carve it.
 - **Debug views:** the per-pixel SDF slice and the proximity contours, for finding geometry flaws (the rendering

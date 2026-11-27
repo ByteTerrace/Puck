@@ -99,8 +99,11 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         private FixedQ4816 Share(uint blend, FixedQ4816 smooth, FixedQ4816 current, FixedQ4816 candidate, FixedQ4816 operand, bool sameOwner) {
-            if ((smooth > FixedQ4816.Zero) && (blend is ((uint)SdfBlendOp.SmoothUnion) or ((uint)SdfBlendOp.SmoothIntersection) or ((uint)SdfBlendOp.SmoothSubtraction))) {
-                var difference = (blend switch {
+            // Every smooth kind blends over one band, so an owner's share ramps across it alike whichever kind rounds the seam.
+            var family = (uint)SdfFieldBlends.SmoothFamilyOf(value: (SdfBlendOp)blend);
+
+            if ((smooth > FixedQ4816.Zero) && (family is ((uint)SdfBlendOp.SmoothUnion) or ((uint)SdfBlendOp.SmoothIntersection) or ((uint)SdfBlendOp.SmoothSubtraction))) {
+                var difference = (family switch {
                     ((uint)SdfBlendOp.SmoothUnion) => (current - candidate),
                     ((uint)SdfBlendOp.SmoothIntersection) => (candidate - current),
                     _ => (-candidate - current),
@@ -108,7 +111,7 @@ public sealed partial class SdfFieldEvaluator {
 
                 return FixedQ4816.Clamp(value: (Half + ((Half * difference) / smooth)), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
             }
-            if (!sameOwner && (blend is not (((uint)SdfBlendOp.Union) or ((uint)SdfBlendOp.Intersection) or ((uint)SdfBlendOp.Subtraction) or ((uint)SdfBlendOp.SmoothUnion) or ((uint)SdfBlendOp.SmoothIntersection) or ((uint)SdfBlendOp.SmoothSubtraction)))) { Valid = false; }
+            if (!sameOwner && (family is not (((uint)SdfBlendOp.Union) or ((uint)SdfBlendOp.Intersection) or ((uint)SdfBlendOp.Subtraction) or ((uint)SdfBlendOp.SmoothUnion) or ((uint)SdfBlendOp.SmoothIntersection) or ((uint)SdfBlendOp.SmoothSubtraction)))) { Valid = false; }
             return (CandidateWins(blend: blend, candidate: candidate, current: current, operand: operand) ? FixedQ4816.One : FixedQ4816.Zero);
         }
     }

@@ -1,7 +1,8 @@
 // The gaming devices: one of each the World hosts, each on its stand, whose screen shows the machine running, with the
 // cartridges it can swap to in the folders its `contentFolders` name. The debug world imports this file whole. They
 // stand in Wonderland (wonderland.puck), the room beyond the gallery lobby's west wall that the Moth reaches a quarter
-// her size through the lobby's big painting, every device facing +X, toward the mouse hole she comes out of:
+// her size through the lobby's big painting, every device facing +X, toward the mouse hole she comes out of (each x
+// below before `galleryWestShift`, which moves the room out with the west wall):
 //
 //   (1.4, 30.5)   the Humble Gaming Deck: a top-loading console (160 x 168 x 64 mm) and its pad beside a 27-inch
 //                 television, on a walnut AV cabinet whose top is 0.65 m up, its back to the west wall; a flight of
@@ -38,12 +39,9 @@ let deviceFloor = 0.05
 // The handhelds' plinths: 0.4 m square and 0.8 m tall, so a handheld's screen stands about 0.95 m up, well under the
 // Moth's 1.75 m eye and turned up toward it.
 let plinthTop = 0.8
-// Where each device stands on the floor. Every placement turns -90 degrees about up, so a device's front, -Z in its
-// own frame, faces +X: a prototype offset (dx, dy, dz) at no yaw lands at (-dz, dy, dx) from its placement, and a
-// screen's axes turn the same way (the screens below).
-let deckAt = [(1.4 + galleryWestShift), deviceFloor, 30.5]
-let advancedAt = [(5 + galleryWestShift), deviceFloor, 31.6]
-let brickAt = [(6.6 + galleryWestShift), deviceFloor, 29.4]
+// Each device stands at its `deckAt`, `advancedAt` or `brickAt` (gallery/layout.puck). Every placement turns -90 degrees
+// about up, so a device's front, -Z in its own frame, faces +X: a prototype offset (dx, dy, dz) at no yaw lands at
+// (-dz, dy, dx) from its placement, and a screen's axes turn the same way (the screens below).
 let deviceYaw = -90
 
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }
@@ -1166,6 +1164,14 @@ placements {
     yawDegrees: deviceYaw
   }
 }
+
+// Where a body stands to play each device, facing it, inside its screen's engage radius: `body.pose spawn:<id> <body>`
+// stands one there (the machine debugger's scenarios, machine-debugger-tests.puck).
+spawnPoints [
+  { id: "device-humble-gaming-brick", position: brickPlayAt, yawDegrees: 90 }
+  { id: "device-advanced-gaming-brick", position: advancedPlayAt, yawDegrees: 90 }
+  { id: "device-humble-gaming-deck", position: deckPlayAt, yawDegrees: 90 }
+]
 
 // Each machine boots a shipped cartridge, so the world boots the same on every machine, and swaps to any file
 // `machine.content` lists from its folders. The brick is the Color model, which runs the forge's cgb and dmg targets

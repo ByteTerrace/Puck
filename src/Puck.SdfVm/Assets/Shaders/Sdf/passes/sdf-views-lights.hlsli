@@ -9,15 +9,16 @@
 // views kernels read them there (SDF_VIEWS_BINNED), so they hold no barrier and none of the tile's state. The filter pass
 // forms each pixel's surface point as the views stage does, from the same record.
 //
-// The invariant: a light or screen the tile leaves out adds nothing at any point either box holds. A point or spot light's
-// falloff is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the cone's angle; an
-// occluder is taken as reaching SDF_LIGHT_OCCLUDER_REACH of its radii, the reach the view's selection already takes; a
-// screen lights only what lies in front of its face's plane, and nothing while its mean luminance is zero
+// The invariant: a light, screen or occluder the tile leaves out adds nothing at any point either box holds. A point or
+// spot light's falloff is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the
+// cone's angle; a screen lights only what lies in front of its face's plane, and nothing while its mean luminance is zero
 // (sdfLightResponse); and a point, spot or screen light fades to exactly zero where its light falls under the view's
 // cutoff (sdfLightCutoffFade), so one whose bound over a box stays under it adds nothing there. Every other kind (a
-// directional, a rim) reaches everything and is kept. The boxes hold every hit point of the tile exactly, the same point
-// the light stage shades (the views stage passes the one it forms), so the only difference from walking the view's whole
-// masks is the rounding of a response within SdfLightReachMargin of where it falls to zero (sdfLightReachesBox).
+// directional, a rim) reaches everything and is kept. An analytic occluder adds nothing at and past its Reach from its
+// center (frame/sdf-occluders.hlsli), so the tile keeps those whose sphere of reach meets a box
+// (sdfOccluderReachesBox). The boxes hold every hit point of the tile exactly, the same point the light stage shades
+// (the views stage passes the one it forms), so the only difference from walking the view's whole masks is the rounding
+// of a response within SdfLightReachMargin of where it falls to zero (sdfLightReachesBox).
 //
 // A tile also leaves out a light the irradiance volume traced (sdfLightTraces) that the probes about none of its shaded
 // pixels see: such a light's share of the probes is zero at every one of them (sdfViewsCellLightsSeen over the cells the
@@ -39,8 +40,8 @@
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-filter.hlsli"
 
-#if SDF_SHADE_TILE_LIGHT_WORDS != 8
-#error A tile's light masks are the four words of a light mask and the four of a screen mask.
+#if SDF_SHADE_TILE_LIGHT_WORDS != 12
+#error A tile's light masks are the four words of a light mask, the four of a screen mask and the four of an occluder mask.
 #endif
 #if (SDF_SHADE_TILE_SHARED_LIGHTS != 8) || ((SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE) != 2) || (SDF_SHADE_TILE_SHARE_WORDS != (4 + (16 * (SDF_SHADE_TILE_SHARED_LIGHTS / 2))))
 #error A tile's shares are a light mask and four words for each of the four by four cells its pixels blend, which its 64 lanes store a word each.
@@ -70,6 +71,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 
     masks.lights = uint4(sdfShadeTiles[word], sdfShadeTiles[word + 1u], sdfShadeTiles[word + 2u], sdfShadeTiles[word + 3u]);
     masks.screens = uint4(sdfShadeTiles[word + 4u], sdfShadeTiles[word + 5u], sdfShadeTiles[word + 6u], sdfShadeTiles[word + 7u]);
+    masks.occluders = uint4(sdfShadeTiles[word + 8u], sdfShadeTiles[word + 9u], sdfShadeTiles[word + 10u], sdfShadeTiles[word + 11u]);
 #endif
     return masks;
 }
@@ -78,8 +80,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 groupshared uint sdfViewsLightDepths[2];
 // The two boxes in ordered bits (puckOrderedFromFloat): the near hits' low corner and high corner, then the far hits'.
 groupshared uint sdfViewsLightBoxes[12];
-// The tile's light mask words, then its screen mask words.
-groupshared uint sdfViewsLightTile[8];
+// The tile's light mask words, then its screen mask words, then its occluder mask words.
+groupshared uint sdfViewsLightTile[12];
 // The lights of the tile's mask the volume traced, and the traced lights the probes about some shaded pixel of the tile
 // see.
 groupshared uint sdfViewsLightTraced[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
@@ -195,7 +197,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     if (lane < 12u) {
         sdfViewsLightBoxes[lane] = (((lane % 6u) < 3u) ? PuckOrderedHighest : PuckOrderedLowest);
     }
-    if (lane < 8u) {
+    if (lane < 12u) {
         sdfViewsLightTile[lane] = 0u;
     }
     if (lane < SDF_MESH_IRRADIANCE_LIGHT_WORDS) {
@@ -286,6 +288,26 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
                 }
             }
         }
+
+        // An occluder a lane, striding by the group's lanes: each of the view's whose sphere of reach meets a box
+        // (sdfOccluderReachesBox), past which it adds nothing.
+        uint occluders = worldOccluderCount();
+
+        [loop]
+        for (uint occluder = lane; (occluder < occluders); occluder += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
+            uint occluderWord = (occluder / 32u);
+            uint occluderBit = (1u << (occluder % 32u));
+
+            if ((sdfComponent(viewMasks.occluders, occluderWord) & occluderBit) == 0u) {
+                continue;
+            }
+
+            SdfOccluder record = sdfOccluders[occluder];
+
+            if ((nearHeld && sdfOccluderReachesBox(record, nearLow, nearHigh)) || (farHeld && sdfOccluderReachesBox(record, farLow, farHigh))) {
+                InterlockedOr(sdfViewsLightTile[8u + occluderWord], occluderBit);
+            }
+        }
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -320,6 +342,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 
     masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]) & ~(traced & ~seenTraced));
     masks.screens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
+    masks.occluders = uint4(sdfViewsLightTile[8], sdfViewsLightTile[9], sdfViewsLightTile[10], sdfViewsLightTile[11]);
 #if defined(SDF_VIEWS_FILTER_PASS)
     sdfViewsStoreTileShares(p, lane, seenTraced);
 #endif

@@ -99,7 +99,7 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
         settled?.Invoke(obj: null);
     }
     // Issues every queued sparse operation before the door it is called from returns the queue: one graphics checkpoint, the bindings in queued order, each waiting the value before it, then one graphics
-    // wait on the last, so whatever the queue takes next follows them all (VulkanQueueTimeline.BindSparse). Every
+    // wait on the last (on a binary semaphore it signals, VulkanQueueTimeline.BindSparse), so whatever the queue takes next follows them all. Every
     // operation then hears the last value. Then releases what the arena's sparse retirement holds behind values the
     // timeline has passed. A door read inside the issue issues nothing, nor one inside a checkpoint's signal, whose
     // value is taken already (the checkpoint's own door read, GpuQueueTimeline.BeforeCheckpoint, issued before it took

@@ -119,3 +119,25 @@ precise float sdfBlendStairsSubtraction(float current, float candidate, float sm
     precise float stairs = (0.5 * ((u + current) + abs((m - s))));
     return max(max(current, (-candidate)), (-stairs));
 }
+
+precise float sdfBlendCubicSmoothMinimum(float a, float b, float k) {
+    precise float gap = abs((b - a));
+    if ((gap >= k)) { return min(a, b); }
+    precise float h = (1.0 - (gap / k));
+    return ((((a + b) - gap) * 0.5) - ((((k * h) * h) * h) / 6.0));
+}
+
+precise float sdfBlendCubicSmoothUnion(float current, float candidate, float smoothRadius) {
+    precise float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return sdfBlendCubicSmoothMinimum(current, candidate, k);
+}
+
+precise float sdfBlendCubicSmoothIntersection(float current, float candidate, float smoothRadius) {
+    precise float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return (-sdfBlendCubicSmoothMinimum((-current), (-candidate), k));
+}
+
+precise float sdfBlendCubicSmoothSubtraction(float current, float candidate, float smoothRadius) {
+    precise float k = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    return (-sdfBlendCubicSmoothMinimum(candidate, (-current), k));
+}

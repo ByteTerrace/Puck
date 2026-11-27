@@ -126,6 +126,61 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Equal(expected: (0, (1, 1)), actual: (selector.Bias, selector.BiasSteps));
     }
     [Fact]
+    public void TheRoomGoesToTheResidenciesThatAskForItAndEvenlyWhileNoneAsks() {
+        var (account, _, segments) = Discrete();
+        var clock = VirtualClock.ForDevice();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device, time: clock);
+        using var valley = selector.Register(name: "valley");
+        using var painting = selector.Register(name: "painting");
+        using var moon = selector.Register(name: "moon");
+        var quiet = new SdfDetailReport(AnySpare: false, CanLower: true, Elapsed: SdfMeshTier.MeasureFrames, Over: false);
+
+        Budget(account: account, localBudget: (4L * Gibibyte), segments: segments, serial: 1UL);
+
+        // Every residency is asked twice, so each answer saw every other's bytes.
+        (long Valley, long Painting, long Moon) Ask(long valleyWants, long paintingWants) {
+            for (var pass = 0; (pass < 2); pass++) {
+                var answer = (
+                    Valley: valley.Budget(filled: Gibibyte, named: Gibibyte, wanted: valleyWants),
+                    Painting: painting.Budget(filled: (10L * Mebibyte), named: (10L * Mebibyte), wanted: paintingWants),
+                    Moon: moon.Budget(filled: 0L, named: 0L)
+                );
+
+                if (pass == 1) { return answer; }
+            }
+            throw new InvalidOperationException();
+        }
+
+        // With nothing asked, each residency takes an even part of the room beside what it fills.
+        var even = Ask(valleyWants: 0L, paintingWants: 0L);
+        var part = even.Moon;
+
+        Assert.True(condition: (part > (64L * Mebibyte)));
+        Assert.Equal(expected: ((Gibibyte + part), ((10L * Mebibyte) + part)), actual: (even.Valley, even.Painting));
+        // An ask counts only while its residency's report is fresh: one never made asks for nothing.
+        Assert.Equal(expected: even, actual: Ask(valleyWants: (256L * Mebibyte), paintingWants: 0L));
+        _ = valley.Decide(report: in quiet);
+        _ = painting.Decide(report: in quiet);
+        _ = moon.Decide(report: in quiet);
+
+        // The valley owes finer tiers its budget held back and the others owe none: the whole room is the valley's, the
+        // others hold what they fill, and the budgets together are no more than the even ones were.
+        var asked = Ask(valleyWants: (256L * Mebibyte), paintingWants: 0L);
+
+        Assert.Equal(expected: ((10L * Mebibyte), 0L), actual: (asked.Painting, asked.Moon));
+        Assert.True(condition: (asked.Valley >= (Gibibyte + (3L * part))));
+        Assert.True(condition: ((asked.Valley + asked.Painting + asked.Moon) <= (even.Valley + even.Painting + even.Moon + 2L)));
+        // Two that ask share the room by what each asks.
+        var shared = Ask(valleyWants: (300L * Mebibyte), paintingWants: (100L * Mebibyte));
+
+        Assert.Equal(expected: 0L, actual: shared.Moon);
+        Assert.InRange(actual: (shared.Valley - Gibibyte), low: ((3L * (shared.Painting - (10L * Mebibyte))) - 3L), high: ((3L * (shared.Painting - (10L * Mebibyte))) + 3L));
+        Assert.Contains(expectedSubstring: $"wanted={300L * Mebibyte}B", actualString: selector.Describe());
+        // A residency no frame decides any more stops asking, and the room is split evenly again.
+        clock.Advance(by: TimeSpan.FromSeconds(value: 3d));
+        Assert.Equal(expected: even, actual: Ask(valleyWants: (300L * Mebibyte), paintingWants: (100L * Mebibyte)));
+    }
+    [Fact]
     public void ARegionGrowsOnlyUnderItsGrantsReservationAndARefusedGrowthKeepsWhatStands() {
         var (account, ledger, segments) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);

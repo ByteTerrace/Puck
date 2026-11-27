@@ -118,10 +118,10 @@ let companionAttractions = concat(
     kind: 1
   }),
   [
-    { x: 7, y: 0.17, z: 29.4, kind: 2 }
-    { x: 5.5, y: 0.96, z: 31.6, kind: 2 }
-    { x: 2, y: 1.15, z: 30.5, kind: 2 }
-    { x: 11.2, y: 1.35, z: 23.7, kind: 2 }
+    { x: brickPlayAt[0], y: 0.17, z: brickPlayAt[2], kind: 2 }
+    { x: advancedPlayAt[0], y: 0.96, z: advancedPlayAt[2], kind: 2 }
+    { x: deckPlayAt[0], y: 1.15, z: deckPlayAt[2], kind: 2 }
+    { x: 11.2 + galleryWestShift, y: 1.35, z: 23.7, kind: 2 }
     { x: 11, y: 2.5, z: 35, kind: 3 }
     { x: 52.2, y: 1.65, z: 34.5, kind: 4 }
     { x: 68.5, y: 1.65, z: 34.5, kind: 4 }

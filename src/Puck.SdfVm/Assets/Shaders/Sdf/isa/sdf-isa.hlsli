@@ -56,23 +56,26 @@
 #define SDF_SHAPE_PATH                20u
 
 // Puck.SignedDistance.SdfBlendOp.
-#define SDF_BLEND_UNION                0u
-#define SDF_BLEND_SMOOTH_UNION         1u
-#define SDF_BLEND_SUBTRACTION          2u
-#define SDF_BLEND_INTERSECTION         3u
-#define SDF_BLEND_XOR                  4u
-#define SDF_BLEND_SMOOTH_INTERSECTION  5u
-#define SDF_BLEND_SMOOTH_SUBTRACTION   6u
-#define SDF_BLEND_CHAMFER_UNION        7u
-#define SDF_BLEND_CHAMFER_INTERSECTION 8u
-#define SDF_BLEND_CHAMFER_SUBTRACTION  9u
-#define SDF_BLEND_GROOVE_UNION         10u
-#define SDF_BLEND_PIPE_UNION           11u
-#define SDF_BLEND_MORPH                12u
-#define SDF_BLEND_GROOVE_SUBTRACTION   13u
-#define SDF_BLEND_PIPE_SUBTRACTION     14u
-#define SDF_BLEND_STAIRS_UNION         15u
-#define SDF_BLEND_STAIRS_SUBTRACTION   16u
+#define SDF_BLEND_UNION                     0u
+#define SDF_BLEND_SMOOTH_UNION              1u
+#define SDF_BLEND_SUBTRACTION               2u
+#define SDF_BLEND_INTERSECTION              3u
+#define SDF_BLEND_XOR                       4u
+#define SDF_BLEND_SMOOTH_INTERSECTION       5u
+#define SDF_BLEND_SMOOTH_SUBTRACTION        6u
+#define SDF_BLEND_CHAMFER_UNION             7u
+#define SDF_BLEND_CHAMFER_INTERSECTION      8u
+#define SDF_BLEND_CHAMFER_SUBTRACTION       9u
+#define SDF_BLEND_GROOVE_UNION              10u
+#define SDF_BLEND_PIPE_UNION                11u
+#define SDF_BLEND_MORPH                     12u
+#define SDF_BLEND_GROOVE_SUBTRACTION        13u
+#define SDF_BLEND_PIPE_SUBTRACTION          14u
+#define SDF_BLEND_STAIRS_UNION              15u
+#define SDF_BLEND_STAIRS_SUBTRACTION        16u
+#define SDF_BLEND_CUBIC_SMOOTH_UNION        17u
+#define SDF_BLEND_CUBIC_SMOOTH_INTERSECTION 18u
+#define SDF_BLEND_CUBIC_SMOOTH_SUBTRACTION  19u
 
 // Puck.SignedDistance.SdfLift.
 #define SDF_LIFT_REVOLVE 0u
@@ -86,6 +89,7 @@
 // Puck.SignedDistance.SdfCellMode.
 #define SDF_CELL_MODE_F1          0u
 #define SDF_CELL_MODE_F2_MINUS_F1 1u
+#define SDF_CELL_MODE_BORDER      2u
 
 // Puck.SignedDistance.SdfAxis.
 #define SDF_AXIS_X 0u

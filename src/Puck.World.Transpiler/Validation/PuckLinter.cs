@@ -56,7 +56,7 @@ public static partial class PuckLinter {
         // 3. Pass 3: Check for unused declarations: the source's own, and none of a library's, whose every
         // declaration is for its importers. A statement the parser could not read may hold the use, so nothing is
         // reported unused until the source parses whole.
-        if (library || (diagnostics.HasErrors && HoldsUnreadStatement(node: document))) {
+        if (library || (diagnostics.HasErrors && SyntaxWalk.Holds<ErrorStatementNode>(node: document))) {
             return;
         }
 
@@ -91,7 +91,6 @@ public static partial class PuckLinter {
 
         return names;
     }
-    private static bool HoldsUnreadStatement(SyntaxNode node) => ((node is ErrorStatementNode) || node.Children().Any(predicate: HoldsUnreadStatement));
     private static bool IsImported(StatementNode statement) => (statement is LetNode { DefinitionPath: not null } or TemplateNode { DefinitionPath: not null });
 
     // Every node is walked through its own children; the arms below are only the nodes that name something, report

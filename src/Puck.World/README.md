@@ -2521,8 +2521,9 @@ an ink outline through the `inkLow`/`inkHigh` curvature band.
 `sunDisc`, `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama`
 and `panel` layers, with opacity, blend, visibility, masks, transforms and
 quality tiers. `render.atmosphere` controls the air outside that stack: a
-`fog { density, color, height { base, falloff } }` in-scatters the sky or its
-authored colour; a `haze { amount, anisotropy, height }` scatters the sky and
+`fog { density, color, anisotropy, height { base, falloff } }` in-scatters the
+sky or its authored colour, and the light of the directional lights by its
+anisotropy's phase when positive (zero by default); a `haze { amount, anisotropy, height }` scatters the sky and
 directional lights; a `medium { surface, extinction, color }` fills the space
 below a level surface. An absent section supplies the default fog, and a
 present section contains exactly its authored kinds. A bounded volume's

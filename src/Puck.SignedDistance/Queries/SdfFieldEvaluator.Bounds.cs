@@ -1068,12 +1068,12 @@ public sealed partial class SdfFieldEvaluator {
         var root = Point(value: SqrtHalf);
 
         return SdfFieldBlends.IntervalBlendOf(value: ((SdfBlendOp)blend)) switch {
-            SdfIntervalBlendAction.SmoothUnion => SmoothUnionBounds(a: current, b: candidate, k: smoothK),
+            SdfIntervalBlendAction.SmoothUnion => SmoothUnionBounds(a: current, b: candidate, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
             SdfIntervalBlendAction.Subtraction => FixedInterval.Max(first: current, second: -candidate),
             SdfIntervalBlendAction.Intersection => FixedInterval.Max(first: current, second: candidate),
             SdfIntervalBlendAction.Xor => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: -FixedInterval.Max(first: current, second: candidate)),
-            SdfIntervalBlendAction.SmoothIntersection => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
-            SdfIntervalBlendAction.SmoothSubtraction => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK),
+            SdfIntervalBlendAction.SmoothIntersection => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
+            SdfIntervalBlendAction.SmoothSubtraction => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
             SdfIntervalBlendAction.GrooveUnion => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
             SdfIntervalBlendAction.PipeUnion => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
             SdfIntervalBlendAction.GrooveSubtraction => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
@@ -1085,20 +1085,42 @@ public sealed partial class SdfFieldEvaluator {
             _ => throw new InvalidOperationException(message: "Invalid IntervalBlend action."),
         };
     }
-    // The smooth minimum (SdfBlendSmoothMinimum) over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
-    // (h, 1 − h)), so over the box it lies between its values at the operands' lower ends and at their upper ends, and
-    // the point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the
-    // point blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
+    // The smooth minimum of either kind (SdfBlendSmoothMinimum, SdfBlendCubicSmoothMinimum) over intervals. The exact
+    // polynomial smooth minimum rises with each operand (its gradient is (h, 1 − h), the cubic's (1 − h²/2, h²/2) with its
+    // own h), so over the box it lies between its values at the operands' lower ends and at their upper ends, and the
+    // point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the point
+    // blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
     // operation hull (the h ≤ 0 select joining both arms wherever the box reaches both) reads b − a twice and doubles its
     // width at every blend, which leaves the carrier over a few trees' smooth unions and with it collapses the frame; it
     // is kept only as the proof that no step of the point blend leaves the carrier, and the two are intersected.
-    // Over a radius enclosure the exact smooth minimum also falls as k rises (min(a, b) less k/4·max(0, 1 − |a − b|/k)²),
-    // so the lower corner reads the greatest radius and the upper corner the least, each allowance at the greatest.
-    private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedInterval k) {
+    // Over a radius enclosure the exact smooth minimum also falls as k rises (min(a, b) less k/4·max(0, 1 − |a − b|/k)²,
+    // or less (k − |a − b|)³/(6k²) inside the cubic's band), so the lower corner reads the greatest radius and the upper
+    // corner the least, each allowance at the greatest.
+    private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedInterval k, SdfSmoothKind kind) {
         if (k.IsUnbounded) {
             return FixedInterval.Entire;
         }
 
+        var cubic = (kind == SdfSmoothKind.Cubic);
+        var stepped = (cubic ? CubicSmoothMinimumHull(a: a, b: b, k: k) : QuadraticSmoothMinimumHull(a: a, b: b, k: k));
+
+        if (stepped.IsUnbounded) {
+            return stepped;
+        }
+
+        var rounding = (2L * SmoothBlendRoundingRaws(k: k.Upper, kind: kind));
+        var lower = (cubic ? SdfBlendCubicSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper) : SdfBlendSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper));
+        var upper = (cubic ? SdfBlendCubicSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower) : SdfBlendSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower));
+
+        return Intersect(
+            first: stepped,
+            second: Within(
+                lower: (((Int128)lower.Value) - rounding),
+                upper: (((Int128)upper.Value) + rounding)
+            )
+        );
+    }
+    private static FixedInterval QuadraticSmoothMinimumHull(FixedInterval a, FixedInterval b, FixedInterval k) {
         var h = FixedInterval.Clamp(
             value: (Point(value: Half) + ((Point(value: Half) * (b - a)) / k)),
             minimum: FixedQ4816.Zero,
@@ -1111,21 +1133,18 @@ public sealed partial class SdfFieldEvaluator {
             : ((h.Lower > FixedQ4816.Zero)
                 ? lerp
                 : FixedInterval.Union(first: b, second: lerp)));
-        var stepped = (blended - ((k * h) * oneMinusH));
 
-        if (stepped.IsUnbounded) {
-            return stepped;
-        }
-
-        var rounding = (2L * SmoothBlendRoundingRaws(k: k.Upper));
-
-        return Intersect(
-            first: stepped,
-            second: Within(
-                lower: (((Int128)SdfBlendSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper).Value) - rounding),
-                upper: (((Int128)SdfBlendSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower).Value) + rounding)
-            )
+        return (blended - ((k * h) * oneMinusH));
+    }
+    // The cubic's weight clamped to [0, 1], so the hull joins both of the point blend's arms.
+    private static FixedInterval CubicSmoothMinimumHull(FixedInterval a, FixedInterval b, FixedInterval k) {
+        var h = FixedInterval.Clamp(
+            value: (Point(value: FixedQ4816.One) - (FixedInterval.Abs(value: (b - a)) / k)),
+            minimum: FixedQ4816.Zero,
+            maximum: FixedQ4816.One
         );
+
+        return (FixedInterval.Min(first: a, second: b) - ((((k * h) * h) * h) / Point(value: FixedQ4816.FromInteger(value: 6))));
     }
     // The interval between two raw ends, each held to the carrier: every point answer lies in the carrier, so clamping an
     // end that bounds them keeps it a bound.
@@ -1152,6 +1171,12 @@ public sealed partial class SdfFieldEvaluator {
             (cy != (point.Y.Upper.Value >> FixedQ4816.FractionBitCount)) ||
             (cz != (point.Z.Upper.Value >> FixedQ4816.FractionBitCount))
         ) {
+            // The border distance is at most the radius of a ball inside the nearest feature's cell, which lies within
+            // sqrt(3)·(1/2 + |randomness|/2) of that feature (every point lies that near its own cell's feature).
+            if (mode == SdfCellMode.Border) {
+                return CellBorderReach(randomness: randomness);
+            }
+
             // Each delta component lies within |x| + 1/2 + |randomness|/2 + 1 of zero; the own cell (x = 0) bounds the
             // nearest feature and a face neighbour bounds the second, and F2 − F1 is at most the second.
             var reach = (FixedInterval.Abs(value: randomness).Upper * Half);
@@ -1173,21 +1198,19 @@ public sealed partial class SdfFieldEvaluator {
         ));
         var first = Point(value: FixedQ4816.MaxValue);
         var second = Point(value: FixedQ4816.MaxValue);
+        var nearest = new IntervalVector3(X: first, Y: first, Z: first);
+        var (nearestX, nearestY, nearestZ) = (0, 0, 0);
 
         for (var z = -1; (z <= 1); z++) {
             for (var y = -1; (y <= 1); y++) {
                 for (var x = -1; (x <= 1); x++) {
-                    var h = Pcg3dLatticeNoise.Pcg3d(
-                        x: unchecked((uint)(cx + x)) ^ seed,
-                        y: unchecked((uint)(cy + y)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamY),
-                        z: unchecked((uint)(cz + z)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamZ)
-                    );
-                    var feature = new IntervalVector3(
-                        X: (Point(value: (FixedQ4816.FromInteger(value: x) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.X >> 16))) - Point(value: Half)))),
-                        Y: (Point(value: (FixedQ4816.FromInteger(value: y) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.Y >> 16))) - Point(value: Half)))),
-                        Z: (Point(value: (FixedQ4816.FromInteger(value: z) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.Z >> 16))) - Point(value: Half))))
-                    );
+                    var feature = CellFeatureBounds(cx: cx, cy: cy, cz: cz, randomness: randomness, seed: seed, x: x, y: y, z: z);
                     var distance = FixedInterval.Magnitude(x: (feature.X - fraction.X), y: (feature.Y - fraction.Y), z: (feature.Z - fraction.Z));
+
+                    if (distance.Upper < first.Upper) {
+                        nearest = feature;
+                        (nearestX, nearestY, nearestZ) = (x, y, z);
+                    }
 
                     // The two smallest of the running set, each an order statistic monotone in every argument.
                     var lowest = FixedInterval.Min(first: first, second: distance);
@@ -1198,9 +1221,84 @@ public sealed partial class SdfFieldEvaluator {
             }
         }
 
-        return ((mode == SdfCellMode.F1)
-            ? first
-            : (second - first));
+        return mode switch {
+            SdfCellMode.F1 => first,
+            SdfCellMode.Border => CellBorderBounds(cx: cx, cy: cy, cz: cz, first: first, fraction: fraction, nearest: nearest, nearestX: nearestX, nearestY: nearestY, nearestZ: nearestZ, randomness: randomness, second: second, seed: seed),
+            _ => (second - first),
+        };
+    }
+    // The border distance (SdfFieldEvaluator.CellBorder) over a box inside one lattice cell. Where the box leaves the
+    // nearest feature in doubt (the second nearest distance can reach the nearest's), it takes the cell-wide reach.
+    // Otherwise each plane's distance (S·D)/(2|D|), S the sum of the two offsets and D the features' separation, is
+    // enclosed with D free of the box, so the bound is about the box's own width; a cell is skipped by the point reader's
+    // rule over the box's nearest reach. 16 raws widen it each way for the point reader's rounding.
+    private static FixedInterval CellBorderBounds(long cx, long cy, long cz, FixedInterval first, FixedInterval second, IntervalVector3 fraction, IntervalVector3 nearest, int nearestX, int nearestY, int nearestZ, FixedInterval randomness, uint seed) {
+        if (second.Lower <= first.Upper) {
+            return CellBorderReach(randomness: randomness);
+        }
+
+        var spread = (FixedInterval.Abs(value: randomness).Upper * Half);
+        var border = Point(value: FixedQ4816.MaxValue);
+
+        for (var z = (nearestZ - 2); (z <= (nearestZ + 2)); z++) {
+            for (var y = (nearestY - 2); (y <= (nearestY + 2)); y++) {
+                for (var x = (nearestX - 2); (x <= (nearestX + 2)); x++) {
+                    if ((x == nearestX) && (y == nearestY) && (z == nearestZ)) { continue; }
+                    var reach = FixedInterval.Magnitude(
+                        x: FixedInterval.Max(first: (FixedInterval.Abs(value: (fraction.X - Point(value: (FixedQ4816.FromInteger(value: x) + Half)))) - Point(value: spread)), second: Point(value: FixedQ4816.Zero)),
+                        y: FixedInterval.Max(first: (FixedInterval.Abs(value: (fraction.Y - Point(value: (FixedQ4816.FromInteger(value: y) + Half)))) - Point(value: spread)), second: Point(value: FixedQ4816.Zero)),
+                        z: FixedInterval.Max(first: (FixedInterval.Abs(value: (fraction.Z - Point(value: (FixedQ4816.FromInteger(value: z) + Half)))) - Point(value: spread)), second: Point(value: FixedQ4816.Zero))
+                    );
+
+                    if (((reach.Lower - first.Upper) * Half) >= border.Upper) { continue; }
+                    var feature = CellFeatureBounds(cx: cx, cy: cy, cz: cz, randomness: randomness, seed: seed, x: x, y: y, z: z);
+                    var apart = new IntervalVector3(X: (feature.X - nearest.X), Y: (feature.Y - nearest.Y), Z: (feature.Z - nearest.Z));
+                    var separation = apart.Length;
+
+                    // Two features the randomness can bring together bound nothing this rule can enclose.
+                    if (separation.IsUnbounded || (separation.Lower <= FixedQ4816.Zero)) {
+                        return CellBorderReach(randomness: randomness);
+                    }
+                    var sum = new IntervalVector3(
+                        X: ((feature.X + nearest.X) - (fraction.X + fraction.X)),
+                        Y: ((feature.Y + nearest.Y) - (fraction.Y + fraction.Y)),
+                        Z: ((feature.Z + nearest.Z) - (fraction.Z + fraction.Z))
+                    );
+                    var plane = ((((sum.X * apart.X) + (sum.Y * apart.Y)) + (sum.Z * apart.Z)) / (separation + separation));
+
+                    border = FixedInterval.Min(first: border, second: plane);
+                }
+            }
+        }
+
+        var slack = FixedQ4816.FromRawBits(value: 16L);
+
+        return new(lower: (border.Lower - slack), upper: (border.Upper + slack));
+    }
+    // The border distance over a box the nearest feature is not certain over: at most the radius of a ball inside that
+    // feature's cell, within sqrt(3)·(1/2 + |randomness|/2) of it, widened by 64 raws each way for the point reader's
+    // rounding of a plane's distance.
+    private static FixedInterval CellBorderReach(FixedInterval randomness) {
+        var corner = (Half + (FixedInterval.Abs(value: randomness).Upper * Half));
+        var radius = FixedInterval.Magnitude(x: Point(value: corner), y: Point(value: corner), z: Point(value: corner)).Upper;
+        var slack = FixedQ4816.FromRawBits(value: 64L);
+
+        return new(lower: -slack, upper: (radius + slack));
+    }
+    // The feature of the cell (x, y, z) about (cx, cy, cz) in that cell's frame, over the randomness's enclosure
+    // (SdfFieldEvaluator.CellFeatureDelta's feature).
+    private static IntervalVector3 CellFeatureBounds(long cx, long cy, long cz, FixedInterval randomness, uint seed, int x, int y, int z) {
+        var h = Pcg3dLatticeNoise.Pcg3d(
+            x: unchecked((uint)(cx + x)) ^ seed,
+            y: unchecked((uint)(cy + y)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamY),
+            z: unchecked((uint)(cz + z)) ^ (seed ^ Pcg3dLatticeNoise.NoiseSeedStreamZ)
+        );
+
+        return new IntervalVector3(
+            X: (Point(value: (FixedQ4816.FromInteger(value: x) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.X >> 16))) - Point(value: Half)))),
+            Y: (Point(value: (FixedQ4816.FromInteger(value: y) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.Y >> 16))) - Point(value: Half)))),
+            Z: (Point(value: (FixedQ4816.FromInteger(value: z) + Half)) + (randomness * (Point(value: FixedQ4816.FromRawBits(value: (h.Z >> 16))) - Point(value: Half))))
+        );
     }
     private static FixedInterval ShapeBounds(in CompiledInstruction instruction, IntervalVector3 p) {
         return instruction.ShapeIntervalAction switch {

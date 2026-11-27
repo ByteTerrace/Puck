@@ -34,6 +34,18 @@ public static class SyntaxWalk {
         return path;
     }
 
+    /// <summary>Returns whether <paramref name="node"/> is a <typeparamref name="TNode"/> or holds one among the nodes
+    /// below it, walked through <see cref="SyntaxNode.Children"/>.</summary>
+    /// <typeparam name="TNode">The node type to find.</typeparam>
+    /// <param name="node">The node to search from.</param>
+    /// <returns><see langword="true"/> at the first such node found; <see langword="false"/> when none stands in the subtree.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
+    public static bool Holds<TNode>(SyntaxNode node) where TNode : SyntaxNode {
+        ArgumentNullException.ThrowIfNull(argument: node);
+
+        return ((node is TNode) || node.Children().Any(predicate: Holds<TNode>));
+    }
+
     /// <summary>Returns whether <paramref name="offset"/> falls within <paramref name="node"/>'s source span.</summary>
     /// <param name="node">The syntax node to test.</param>
     /// <param name="offset">The 0-based character offset.</param>

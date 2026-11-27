@@ -150,7 +150,7 @@ public sealed partial class DocumentScope {
     /// <summary>Creates the root scope of a lowering pass.</summary>
     /// <param name="vocabulary">The document vocabulary being lowered against.</param>
     /// <param name="basePath">The base directory relative asset paths resolve against, or <see langword="null"/>.</param>
-    /// <param name="constants">The <c>let</c> bindings in scope; a fresh dictionary when null.</param>
+    /// <param name="constants">The <c>let</c> bindings in scope, copied into the scope's own; none when null.</param>
     /// <param name="templates">The <c>template</c> declarations in scope; a fresh dictionary when null.</param>
     /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/> to record none.</param>
     /// <param name="diagnostics">The bag refusals are reported into; a fresh bag when null.</param>
@@ -160,7 +160,7 @@ public sealed partial class DocumentScope {
     public DocumentScope(
         IDocumentVocabulary vocabulary,
         string? basePath = null,
-        Dictionary<string, ExpressionNode>? constants = null,
+        IEnumerable<KeyValuePair<string, ExpressionNode>>? constants = null,
         Dictionary<string, TemplateNode>? templates = null,
         SourceMap? sourceMap = null,
         DiagnosticBag? diagnostics = null,
@@ -169,14 +169,14 @@ public sealed partial class DocumentScope {
         Dictionary<string, object?>? annotations = null
     ) : this(
         annotations: (annotations ?? new(comparer: StringComparer.Ordinal)),
-        arguments: new(comparer: StringComparer.Ordinal),
+        arguments: new(),
         basePath: basePath,
         budget: new(),
-        constants: (constants ?? []),
+        constants: new DocumentBindings<ExpressionNode>().With(bindings: (constants ?? [])),
         currentPointer: currentPointer,
         diagnostics: (diagnostics ?? new DiagnosticBag()),
         evaluating: new(comparer: StringComparer.Ordinal),
-        locals: [],
+        locals: DocumentBindings<JsonNode?>.Empty,
         schema: schema,
         sourceMap: sourceMap,
         sourcePath: null,
@@ -193,7 +193,7 @@ public sealed partial class DocumentScope {
     private DocumentScope(
         IDocumentVocabulary vocabulary,
         string? basePath,
-        Dictionary<string, ExpressionNode> constants,
+        DocumentBindings<ExpressionNode> constants,
         Dictionary<string, TemplateNode> templates,
         SourceMap? sourceMap,
         string? sourcePath,
@@ -201,10 +201,10 @@ public sealed partial class DocumentScope {
         string? schema,
         string currentPointer,
         Dictionary<string, object?> annotations,
-        Dictionary<string, JsonNode?> locals,
+        DocumentBindings<JsonNode?> locals,
         DocumentEvaluationBudget budget,
         Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> values,
-        Dictionary<string, DocumentScope> arguments,
+        DocumentBindings<DocumentScope> arguments,
         Dictionary<string, DocumentScope> templateScopes,
         HashSet<string> evaluating
     ) {
@@ -231,7 +231,7 @@ public sealed partial class DocumentScope {
     /// <summary>Gets the base directory relative asset paths resolve against.</summary>
     public string? BasePath { get; }
     /// <summary>Gets the <c>let</c> bindings in scope.</summary>
-    public Dictionary<string, ExpressionNode> Constants { get; }
+    public DocumentBindings<ExpressionNode> Constants { get; }
     /// <summary>Gets the <c>template</c> declarations in scope.</summary>
     public Dictionary<string, TemplateNode> Templates { get; }
     /// <summary>Gets the JSON-pointer-to-span map being filled, or <see langword="null"/>.</summary>
@@ -247,7 +247,7 @@ public sealed partial class DocumentScope {
     /// <summary>Gets the lambda parameters bound in this scope, as already-lowered values.</summary>
     /// <remarks>Separate from <see cref="Constants"/> because a bound value is a JSON node, not an expression that
     /// could be lowered again; a local shadows a constant of the same name.</remarks>
-    public Dictionary<string, JsonNode?> Locals { get; }
+    public DocumentBindings<JsonNode?> Locals { get; }
     /// <summary>Gets schema-agnostic user annotations attached to this compilation scope.</summary>
     public Dictionary<string, object?> Annotations { get; init; }
 
@@ -259,7 +259,7 @@ public sealed partial class DocumentScope {
     // Each binding's value by the expression bound and the field it lowered for, memoized on the scope that owns it
     // (MemoFor), shared with every scope derived without a fresh memo.
     private readonly Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> m_values;
-    private readonly Dictionary<string, DocumentScope> m_arguments;
+    private readonly DocumentBindings<DocumentScope> m_arguments;
     private readonly Dictionary<string, DocumentScope> m_templateScopes;
     private readonly HashSet<string> m_evaluating;
 
@@ -390,10 +390,18 @@ public sealed partial class DocumentScope {
         (ByReference<ExpressionNode> Expression, string? Field) key = (expression, fieldKey);
 
         if (!memo.TryGetValue(key: key, value: out value)) {
-            value = memo[key] = Guarded(evaluate: _ => EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical), expression: expression, lexical: lexical, name: name);
+            value = memo[key] = EvaluateBinding(expression: expression, fieldKey: fieldKey, lexical: lexical, name: name);
         }
         return true;
     }
+    // A closure is built at the start of the method that declares what it captures, so each binding's guarded
+    // evaluation is its own method: the closure is built for a binding evaluated, never for a read of a local or the
+    // memo. A binding's value is data until something uses it, and it is kept across uses, so it is evaluated at no
+    // position: what it holds is classified where it lands, never where it was first read.
+    private JsonNode? EvaluateBinding(string name, ExpressionNode expression, string? fieldKey, DocumentScope lexical) =>
+        Guarded(evaluate: _ => DocumentLowering.EvaluateAtNoPosition(expr: expression, fieldKey: fieldKey, scope: lexical), expression: expression, lexical: lexical, name: name);
+    private JsonNode? LowerBindingAt(string name, ExpressionNode expression, string? fieldKey, object position, DocumentScope lexical) =>
+        Guarded(evaluate: _ => DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical), expression: expression, lexical: lexical, name: name);
 
     /// <summary>Lowers a <c>let</c> holding a record at the position it lands in, as the record written there would
     /// lower: its closed words read as that position's words, never as a name some other declaration binds.</summary>
@@ -414,7 +422,7 @@ public sealed partial class DocumentScope {
         (ByReference<ExpressionNode> Expression, string? Field) key = (expression, $"{fieldKey}\0{position}");
 
         if (!memo.TryGetValue(key: key, value: out var lowered)) {
-            lowered = memo[key] = Guarded(evaluate: _ => DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical), expression: expression, lexical: lexical, name: name);
+            lowered = memo[key] = LowerBindingAt(expression: expression, fieldKey: fieldKey, lexical: lexical, name: name, position: position);
         }
         value = lowered?.DeepClone();
         return true;
@@ -449,28 +457,16 @@ public sealed partial class DocumentScope {
     // locals is kept only for the invocation it was bound to. A memoized value depends only on bindings its owning
     // scope holds fixed: a scope without locals reads nothing a loop or lambda binds, and its bindings are keyed by the
     // expression node, so a name another expression rebinds misses.
-    private Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> MemoFor(DocumentScope lexical) => ((lexical.Locals.Count == 0)
+    private Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> MemoFor(DocumentScope lexical) => (lexical.Locals.IsEmpty
         ? lexical.m_values
         : m_values
-    );
-    // A binding's value is data until something uses it, and its result is cached across uses, so it is evaluated at
-    // no position: what it holds is classified where it lands, never where it was first read. Its own method so the
-    // closure is built only for a binding evaluated, never for one read from a local or the cache.
-    private static JsonNode? EvaluateAtNoPosition(ExpressionNode expression, string? fieldKey, DocumentScope lexical) => DocumentLowering.At(
-        context: null,
-        lower: () => DocumentLowering.EvaluateValue(
-            expr: expression,
-            fieldKey: fieldKey,
-            scope: lexical
-        ),
-        scope: lexical
     );
 
     /// <summary>Gets a scope for lowering a CONSTANT: the same constants and templates, with no locals in scope.</summary>
     /// <remarks>A <c>let</c> is a document-level value and cannot read a loop binding or a lambda parameter — which
     /// is both what a reader expects of it and what makes its lowered value safe to keep.</remarks>
     /// <returns>This scope when it already binds no locals, or a locals-free one.</returns>
-    public DocumentScope ForConstant() => ((Locals.Count == 0)
+    public DocumentScope ForConstant() => (Locals.IsEmpty
         ? this
         : new(
             annotations: new(comparer: StringComparer.Ordinal),
@@ -481,7 +477,7 @@ public sealed partial class DocumentScope {
             currentPointer: CurrentPointer,
             diagnostics: Diagnostics,
             evaluating: m_evaluating,
-            locals: [],
+            locals: DocumentBindings<JsonNode?>.Empty,
             schema: Schema,
             sourceMap: SourceMap,
             sourcePath: SourcePath,
@@ -507,7 +503,7 @@ public sealed partial class DocumentScope {
                 currentPointer: CurrentPointer,
                 diagnostics: Diagnostics,
                 evaluating: m_evaluating,
-                locals: [],
+                locals: DocumentBindings<JsonNode?>.Empty,
                 schema: Schema,
                 sourceMap: SourceMap,
                 sourcePath: definitionPath,
@@ -660,9 +656,11 @@ public sealed partial class DocumentScope {
         if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
             return false;
         }
-        var lexical = LexicalScopeOf(name: name);
-
-        value = Guarded(evaluate: bindingSourcePath => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: new DocumentScope(
+        value = LowerContextualBinding(expression: expression, fieldKey: fieldKey, lexical: LexicalScopeOf(name: name), name: name);
+        return true;
+    }
+    private JsonNode? LowerContextualBinding(string name, ExpressionNode expression, string? fieldKey, DocumentScope lexical) =>
+        Guarded(evaluate: bindingSourcePath => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: new DocumentScope(
             annotations: Annotations,
             arguments: lexical.m_arguments,
             basePath: lexical.BasePath,
@@ -680,28 +678,27 @@ public sealed partial class DocumentScope {
             values: lexical.m_values,
             vocabulary: Vocabulary
         )), expression: expression, lexical: lexical, name: name);
-        return true;
-    }
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>
-    /// <param name="invocationConstants">The constants the nested scope sees.</param>
+    /// <param name="invocationConstants">The constants the nested scope sees and binds into, usually derived from
+    /// <see cref="Constants"/> (<see cref="DocumentBindings{TValue}.Derive"/>).</param>
     /// <param name="annotations">An optional annotation set isolated to the invocation.</param>
     /// <param name="sourcePath">The source file that owns the template body, or <see langword="null"/> to inherit this scope's.</param>
-    /// <returns>The nested scope.</returns>
+    /// <returns>The nested scope, whose template arguments start as this scope's and change apart from them.</returns>
     public DocumentScope WithConstants(
-        Dictionary<string, ExpressionNode> invocationConstants,
+        DocumentBindings<ExpressionNode> invocationConstants,
         Dictionary<string, object?>? annotations = null,
         string? sourcePath = null
     ) => new(
         annotations: (annotations ?? Annotations),
-        arguments: new(dictionary: m_arguments, comparer: StringComparer.Ordinal),
+        arguments: m_arguments.Derive(),
         basePath: BasePath,
         budget: Budget,
         constants: invocationConstants,
         currentPointer: CurrentPointer,
         diagnostics: Diagnostics,
         evaluating: new(comparer: StringComparer.Ordinal),
-        locals: [],
+        locals: DocumentBindings<JsonNode?>.Empty,
         schema: Schema,
         sourceMap: SourceMap,
         sourcePath: (sourcePath ?? SourcePath),
@@ -715,14 +712,14 @@ public sealed partial class DocumentScope {
     /// <returns>The rebased lexical scope.</returns>
     public DocumentScope WithBasePath(string? basePath) => new(
         annotations: Annotations,
-        arguments: new(dictionary: m_arguments, comparer: StringComparer.Ordinal),
+        arguments: m_arguments.Derive(),
         basePath: basePath,
         budget: Budget,
         constants: Constants,
         currentPointer: CurrentPointer,
         diagnostics: Diagnostics,
         evaluating: new(comparer: StringComparer.Ordinal),
-        locals: [],
+        locals: DocumentBindings<JsonNode?>.Empty,
         schema: Schema,
         sourceMap: SourceMap,
         sourcePath: SourcePath,
@@ -731,12 +728,26 @@ public sealed partial class DocumentScope {
         values: [],
         vocabulary: Vocabulary
     ) { RuleBinders = RuleBinders };
-    /// <summary>Creates a scope identical to this one but carrying a different local set, for one application of a
-    /// lambda.</summary>
+    /// <summary>Creates a scope identical to this one but carrying a different local set: the only locals a function's
+    /// body sees, or another scope's locals carried over.</summary>
     /// <param name="lambdaLocals">The locals the nested scope sees.</param>
     /// <returns>The nested scope.</returns>
-    public DocumentScope WithLocals(Dictionary<string, JsonNode?> lambdaLocals) => Derive(locals: lambdaLocals, ruleBinders: RuleBinders);
-    private DocumentScope Derive(Dictionary<string, JsonNode?> locals, IReadOnlySet<string> ruleBinders) => new(
+    public DocumentScope WithLocals(DocumentBindings<JsonNode?> lambdaLocals) => Derive(locals: lambdaLocals, ruleBinders: RuleBinders);
+    /// <summary>Creates a scope identical to this one that also binds one local over its own, for one application of a
+    /// lambda, an iteration of a loop or a value <c>let</c>.</summary>
+    /// <param name="name">The local's name, hiding a local or constant of the same name.</param>
+    /// <param name="value">The local's already-lowered value.</param>
+    /// <returns>The nested scope.</returns>
+    public DocumentScope WithLocal(string name, JsonNode? value) => WithLocals(lambdaLocals: Locals.With(name: name, value: value));
+    /// <summary>Creates a scope identical to this one that also binds two locals over its own; the second wins when the
+    /// names are the same.</summary>
+    /// <param name="first">The first local's name.</param>
+    /// <param name="firstValue">The first local's already-lowered value.</param>
+    /// <param name="second">The second local's name.</param>
+    /// <param name="secondValue">The second local's already-lowered value.</param>
+    /// <returns>The nested scope.</returns>
+    public DocumentScope WithLocals(string first, JsonNode? firstValue, string second, JsonNode? secondValue) => WithLocals(lambdaLocals: Locals.With(first: first, firstValue: firstValue, second: second, secondValue: secondValue));
+    private DocumentScope Derive(DocumentBindings<JsonNode?> locals, IReadOnlySet<string> ruleBinders) => new(
         annotations: Annotations,
         arguments: m_arguments,
         basePath: BasePath,

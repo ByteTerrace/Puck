@@ -67,3 +67,15 @@ case SDF_BLEND_STAIRS_SUBTRACTION:
 {
     result = sdfBlendStairsSubtraction(current, candidate, smoothRadius, operand); break;
 }
+case SDF_BLEND_CUBIC_SMOOTH_UNION:
+{
+    result = sdfBlendCubicSmoothUnion(current, candidate, smoothRadius); break;
+}
+case SDF_BLEND_CUBIC_SMOOTH_INTERSECTION:
+{
+    result = sdfBlendCubicSmoothIntersection(current, candidate, smoothRadius); break;
+}
+case SDF_BLEND_CUBIC_SMOOTH_SUBTRACTION:
+{
+    result = sdfBlendCubicSmoothSubtraction(current, candidate, smoothRadius); break;
+}

@@ -671,8 +671,8 @@ A condition converts its result to truth: numeric zero and absence are false;
 nonzero Int and Fixed values are true. `and`, `or` and `not` produce Int 0 or 1.
 `and` reads its right operand only when the left is true; `or` reads it only
 when the left is false. A skipped operand neither reads state nor faults.
-Their operands may use different numeric kinds, while each arithmetic operation
-requires matching operand kinds. Both operands must still name declared values
+Their operands may use different numeric kinds, and arithmetic over mixed kinds
+widens as [numeric kinds](#numeric-kinds) states. Both operands must still name declared values
 at compile time. Other arithmetic keeps its existing absence propagation; use `??` to
 provide a missing value or `isAbsent` to test it.
 
@@ -714,8 +714,7 @@ comparison. Parentheses override that order.
 State declarations and earlier locals determine operand kinds. Numeric
 literals take the expression's carrier; an Int carrier rounds them to even,
 while a comparison against an Int cell keeps its exact threshold. Comparisons
-and truth operators yield Int even when they read Fixed operands. Int and
-Fixed state reads do not silently convert into one another. An unconstrained
+and truth operators yield Int even when they read Fixed operands. An unconstrained
 integral expression infers Int; a decimal spelling such as `1.0` selects Fixed
 for an unconstrained expression. A gate converts its result to truth without
 a kind annotation.
@@ -724,6 +723,43 @@ Declarations after a gate or effect are refused: move the declaration before
 the gate to request that pre-effect read. A local may read earlier locals,
 never a later declaration. This keeps the runtime's existing evaluation
 model visible in the source.
+
+### Numeric kinds
+
+Int and Fixed (Q48.16) meet in one rule: a conversion the compiler inserts
+never loses precision, so it either is exact or is refused by name.
+
+- **Int widens to Fixed implicitly.** Wherever Fixed is expected (a write, a
+  record field, a function argument, an arm or operand beside a Fixed value,
+  either side of a comparison), the Int value is shifted left 16 bits exactly,
+  without floating point, and a value past Q48.16's range faults instead of
+  wrapping (`RuleCompiler.ImplicitConversion`, `ExpressionArithmetic.TryUnary`).
+- **Fixed never narrows implicitly.** An Int destination refuses a Fixed value,
+  a fractional literal included, and the refusal names `toInt(value)`, which
+  truncates toward zero. Truncation is the precision change, so the author
+  writes it.
+- **Fixed context reaches the operations under it.** A Fixed destination,
+  comparison operand or arithmetic operand computes its numeric subexpressions
+  in Fixed before they run, so `clock >= (h / 24)` keeps the day fraction when
+  `h` is Int. An Int quotient truncates only in Int context. Discrete
+  operations are boundaries: an Int-only function (`pair`, the bit functions),
+  a comparison, a truth operator and an explicit `toInt` compute in Int, and
+  only their result widens.
+- **Mixed comparisons compare exactly.** An Int and a Fixed side compare in
+  Fixed under every spelling: `compareValue`, an expression, and a
+  `compareState` between two cells. A `compareState` between two cells whose
+  kinds differ and are not Int and Fixed (a Text or Bool cell against any other
+  kind) has no common kind and is refused as `ComparandKindMismatch`. A lone
+  fractional literal against an Int side stays
+  D6's exact integer comparison, including under a declared Int `compareValue`,
+  so `score < 0.5` is `score <= 0` in both spellings.
+
+The reasoning: widening is exact and deterministic, so admitting it costs
+nothing and removes `toFixed` noise from every mixed formula, while a context
+that silently truncated (computing `h / 24` in Int and then widening the zero)
+would move a gate without the author seeing why. A program whose reads and
+destination share one kind computes in that kind, and where kinds mix, the only
+implicit change of value is toward the exact answer.
 
 ### Rule faults
 

@@ -31,7 +31,7 @@ public static partial class CreationMotion {
 
         CreationBlendEnvelope Refuse(string why) => new(Displacement: float.PositiveInfinity, Refusal: why, Rotation: float.PositiveInfinity, Smooth: k);
 
-        if (blend.Blend is not (SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction)) { return Refuse(why: "blend has no continuous share"); }
+        if (SdfFieldBlends.SmoothKindOf(value: blend.Blend) == SdfSmoothKind.None) { return Refuse(why: "blend has no continuous share"); }
         if (!(k > 0f)) { return Refuse(why: "smooth radius is zero"); }
         if ((document.TextRuns ?? []).Any(predicate: static run => run.Engraves)) { return Refuse(why: "CPU field does not read glyphs; engraving follows rigid owner surfaces"); }
         if (shapes.Any(predicate: s => ((s.Group == blend.Group) && (s.Profile is { Kind: SdfPrismProfileKind.Polygon })))) { return Refuse(why: "CPU field does not read regular polygons"); }

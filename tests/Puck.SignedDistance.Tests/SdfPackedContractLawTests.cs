@@ -575,9 +575,11 @@ public sealed class SdfPackedContractLawTests {
     }
     [Fact]
     public void TheConstructorRefusesAnUnpackableScreenIndex() {
+        // A screen index is an identity whose width the material id and the kernels' identity-to-slot map pack; the
+        // resident slot count bounds a residency, never a program.
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
-            screenSurfaces: [Screen(index: SdfProgramBuilder.MaxScreenSurfaces)]
+            screenSurfaces: [Screen(index: SdfProgramBuilder.MaxScreenIdentities)]
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
@@ -590,10 +592,10 @@ public sealed class SdfPackedContractLawTests {
             screenSurfaces: [Screen(index: 3), Screen(index: 3)]
         ));
 
-        // Control: two distinct in-range indices pack two distinct slots.
+        // Control: two distinct in-range indices pack, and so does an identity past the resident slots.
         _ = Build(
             instructions: [Shape()],
-            screenSurfaces: [Screen(index: 3), Screen(index: 4)]
+            screenSurfaces: [Screen(index: 3), Screen(index: 4), Screen(index: SdfProgramBuilder.MaxScreenSurfaces)]
         );
     }
     [Fact]
@@ -758,7 +760,9 @@ public sealed class SdfPackedContractLawTests {
         var program = Build(instructions: [Shape()]);
 
         _ = Assert.Single(collection: program.Instructions);
-        _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfInstruction>)program.Instructions)[0] = Shape(shape: ((uint)SdfShapeType.Box)));
+        // The instructions are a read-only view of the program's own storage, which offers no mutable interface at all.
+        Assert.False(condition: (program.Instructions is IList<SdfInstruction>));
+        Assert.False(condition: (program.Instructions is ICollection<SdfInstruction>));
         _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfInstanceRange>)program.Instances).Clear());
         _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfScreenSurface>)program.Appearance.ScreenSurfaces).Clear());
 

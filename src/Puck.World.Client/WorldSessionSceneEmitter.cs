@@ -481,6 +481,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 DynamicTransforms = transforms,
                 MovedTransforms = moved,
                 Lights = environment.Lights,
+                Occluders = environment.Occluders,
                 Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
                 Sky = environment.Sky,
                 // The mirrored world's static placements' meshes, then its stamp pool's.

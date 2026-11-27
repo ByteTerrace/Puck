@@ -577,6 +577,8 @@ public sealed class SdfFieldBoundsLawTests {
         Shape(name: "chain SmoothUnion", emit: (b, m) => SmoothChain(builder: b, carve: false, material: m));
         Shape(name: "chain SmoothUnion carved", emit: (b, m) => SmoothChain(builder: b, carve: true, material: m));
         Shape(name: "chain SmoothUnion scoped", emit: (b, m) => SmoothChain(builder: b.PushField(compose: SdfBlendOp.SmoothUnion, smooth: 0.2f), carve: true, material: m).PopField());
+        Shape(name: "chain CubicSmoothUnion carved", emit: (b, m) => SmoothChain(builder: b, carve: true, material: m, kind: SdfSmoothKind.Cubic));
+        Shape(name: "chain CubicSmoothUnion scoped", emit: (b, m) => SmoothChain(builder: b.PushField(compose: SdfBlendOp.CubicSmoothUnion, smooth: 0.2f), carve: true, material: m, kind: SdfSmoothKind.Cubic).PopField());
 
         foreach (var blend in ((SdfBlendOp[])[
             SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,
@@ -584,6 +586,7 @@ public sealed class SdfFieldBoundsLawTests {
             SdfBlendOp.ChamferUnion, SdfBlendOp.ChamferIntersection, SdfBlendOp.ChamferSubtraction,
             SdfBlendOp.GrooveUnion, SdfBlendOp.PipeUnion, SdfBlendOp.Morph,
             SdfBlendOp.GrooveSubtraction, SdfBlendOp.PipeSubtraction, SdfBlendOp.StairsUnion, SdfBlendOp.StairsSubtraction,
+            SdfBlendOp.CubicSmoothUnion, SdfBlendOp.CubicSmoothIntersection, SdfBlendOp.CubicSmoothSubtraction,
         ])) {
             Shape(name: $"blend {blend}", emit: (b, m) => {
                 _ = b.Sphere(material: m, radius: 0.9f);
@@ -625,20 +628,20 @@ public sealed class SdfFieldBoundsLawTests {
         FixedQ4816.FromRawBits(value: (lower.Value + random.NextInt64(minValue: 0L, maxValue: ((upper.Value - lower.Value) + 1L))));
     // Sixteen flat superellipsoids a few centimetres apart, each smooth-unioned onto the one accumulator; carved, a small
     // sphere is subtracted after the fifth and a wide one smoothly intersected after the tenth.
-    private static SdfProgramBuilder SmoothChain(SdfProgramBuilder builder, int material, bool carve, Vector3 origin = default) {
+    private static SdfProgramBuilder SmoothChain(SdfProgramBuilder builder, int material, bool carve, Vector3 origin = default, SdfSmoothKind kind = SdfSmoothKind.Quadratic) {
         for (var index = 0; (index < 16); index++) {
             var angle = (index * 0.4f);
 
             _ = builder.ResetPoint()
                 .Translate(offset: (origin + new Vector3(x: (0.12f * MathF.Cos(x: angle)), y: (0.02f * index), z: (0.12f * MathF.Sin(x: angle)))))
-                .Superellipsoid(blend: SdfBlendOp.SmoothUnion, exponent: 2.05f, material: material, radii: new Vector3(x: 1.2f, y: 0.3f, z: 1f), smooth: (0.2f + (0.02f * index)));
+                .Superellipsoid(blend: SdfFieldBlends.WithSmoothKind(value: SdfBlendOp.SmoothUnion, kind: kind), exponent: 2.05f, material: material, radii: new Vector3(x: 1.2f, y: 0.3f, z: 1f), smooth: (0.2f + (0.02f * index)));
 
             if (carve && (index == 5)) {
                 _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.9f, y: 0f, z: 0f)).Sphere(blend: SdfBlendOp.Subtraction, material: material, radius: 0.3f);
             }
 
             if (carve && (index == 10)) {
-                _ = builder.ResetPoint().Sphere(blend: SdfBlendOp.SmoothIntersection, material: material, radius: 2.5f, smooth: 0.3f);
+                _ = builder.ResetPoint().Sphere(blend: SdfFieldBlends.WithSmoothKind(value: SdfBlendOp.SmoothIntersection, kind: kind), material: material, radius: 2.5f, smooth: 0.3f);
             }
         }
 

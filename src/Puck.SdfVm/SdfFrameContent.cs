@@ -83,6 +83,10 @@ public readonly record struct SdfFrameContent(SdfProgram Program, bool ProgramCh
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading, or <see langword="null"/>, the
     /// default, for the pinned sun an unauthored world renders (<see cref="SdfFrame.Lights"/>).</summary>
     public SdfLights? Lights { get; init; }
+    /// <summary>The analytic occluders that darken the ambient light about them and shadow the ranged lights
+    /// (<see cref="SdfOccluder"/>), or <see langword="null"/>, the default, for none. The producer owns the table and may
+    /// rewrite it at its next capture, as it does its lights.</summary>
+    public SdfOccluders? Occluders { get; init; }
     /// <summary>The sky: its open layer stack, fog and environment gains, or <see langword="null"/>, the default, for the
     /// default look an unauthored world renders: the two-stop gradient and the default fog, as data
     /// (<see cref="SdfFrame.Sky"/>).</summary>

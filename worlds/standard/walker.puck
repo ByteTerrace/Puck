@@ -10,6 +10,7 @@
 // Distances are full-size metres: the capsule stands 1.7 m, its eye at 1.6 m.
 import "standard"
 import "motion"
+import "occlusion"
 import "camera"
 import "kits"
 
@@ -97,6 +98,7 @@ looks {
 
 prototypes {
   prototype "walker" {
+    occlusion: bodyOcclusion
     document {
       name: "walker"
       schema: "puck.creation.v2"

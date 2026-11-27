@@ -389,9 +389,7 @@ public static partial class DocumentLowering {
                     expr: let.Body,
                     fieldKey: fieldKey,
                     owned: out owned,
-                    scope: scope.WithLocals(lambdaLocals: new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-                        [let.Name] = EvaluateValue(expr: let.Value, scope: scope, fieldKey: fieldKey),
-                    })
+                    scope: scope.WithLocal(name: let.Name, value: EvaluateValue(expr: let.Value, scope: scope, fieldKey: fieldKey))
                 );
 
             case CallExpressionNode call when (FunctionNamed(name: call.Name, scope: scope) is { } function): {
@@ -684,7 +682,8 @@ public static partial class DocumentLowering {
         if (BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: call.Span) is not { } bound) {
             return null;
         }
-        var locals = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
+        // The body reads its parameters and nothing the caller binds.
+        var locals = new DocumentBindings<JsonNode?>();
 
         for (var at = 0; (at < bound.Length); at++) {
             var argument = ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!);
@@ -799,6 +798,19 @@ public static partial class DocumentLowering {
             scope.Annotations[MemberContextKey] = outer;
         }
     }
+    /// <summary>Evaluates an expression at no position, so what it holds is classified where it lands rather than where
+    /// it is read: a binding's value, kept for every reading, or a file path re-expressed from the source that wrote
+    /// it.</summary>
+    /// <param name="expr">The expression.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="fieldKey">The key a unit on the value is classified by.</param>
+    /// <returns>The value, borrowed as <see cref="EvaluateValue"/> returns it.</returns>
+    public static JsonNode? EvaluateAtNoPosition(ExpressionNode expr, DocumentScope scope, string? fieldKey) => At(
+        context: null,
+        lower: static state => EvaluateValue(expr: state.Expression, fieldKey: state.FieldKey, scope: state.Scope),
+        scope: scope,
+        state: (Expression: expr, FieldKey: fieldKey, Scope: scope)
+    );
 
     // The vocabulary classifies a member after parsing. Convert its syntax structurally, preserving explicit
     // grouping and atom identity. An array lowers element by element at the same position.
@@ -973,10 +985,7 @@ public static partial class DocumentLowering {
         if (bin.Operator is "and" or "or") {
             var left = IsTruthy(node: leftNode);
 
-            if (((bin.Operator == "and") && !left) || ((bin.Operator == "or") && left)) {
-                return JsonValue.Create(value: (left ? 1L : 0L));
-            }
-            return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
+            return JsonValue.Create(value: ((ShortCircuits(left: left, symbol: bin.Operator) ? left : IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey))) ? 1L : 0L));
         }
 
         return ApplyBinary(
@@ -990,6 +999,12 @@ public static partial class DocumentLowering {
             scope: scope
         );
     }
+    /// <summary>Returns whether <c>and</c> or <c>or</c> is decided by its left operand's truth, so its right operand is
+    /// never read and the operation's value is the left operand's truth.</summary>
+    /// <param name="left">The left operand's truth.</param>
+    /// <param name="symbol">The operator, <c>and</c> or <c>or</c>.</param>
+    /// <returns><see langword="true"/> for a false left operand of <c>and</c> or a true one of <c>or</c>.</returns>
+    internal static bool ShortCircuits(bool left, string symbol) => ((symbol == "and") != left);
     /// <summary>Applies an arithmetic, comparison or equality operator to two operands already evaluated: the one
     /// fold an operator's expression and a collection builtin's reduction (<c>sum</c>, <c>scan</c>, <c>dot</c>) share,
     /// so a list folds exactly as the same operator written between its elements does.</summary>
@@ -1897,18 +1912,9 @@ public static partial class DocumentLowering {
                 span: span
             );
 
-            var locals = new Dictionary<string, JsonNode?>(
-                dictionary: scope.Locals,
-                comparer: StringComparer.Ordinal
-            ) {
-                [itemName] = sequence[index],
-            };
-
-            if (indexName is { } ordinal) {
-                locals[ordinal] = JsonValue.Create(value: ((long)index));
-            }
-
-            yield return scope.WithLocals(lambdaLocals: locals);
+            yield return ((indexName is { } ordinal)
+                ? scope.WithLocals(first: itemName, firstValue: sequence[index], second: ordinal, secondValue: JsonValue.Create(value: ((long)index)))
+                : scope.WithLocal(name: itemName, value: sequence[index]));
         }
     }
     /// <summary>Binds one block- or loop-scoped <c>let</c> into a derived child scope: a function goes into
@@ -1922,19 +1928,10 @@ public static partial class DocumentLowering {
         ArgumentNullException.ThrowIfNull(scope);
 
         if (binding.Value is FunctionExpressionNode) {
-            var constants = new Dictionary<string, ExpressionNode>(dictionary: scope.Constants, comparer: StringComparer.Ordinal) {
-                [binding.Name] = binding.Value,
-            };
-
-            return scope.WithConstants(invocationConstants: constants);
+            return scope.WithConstants(invocationConstants: scope.Constants.With(name: binding.Name, value: binding.Value));
         }
 
-        var value = EvaluateValue(expr: binding.Value, scope: scope);
-        var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-            [binding.Name] = value,
-        };
-
-        return scope.WithLocals(lambdaLocals: locals);
+        return scope.WithLocal(name: binding.Name, value: EvaluateValue(expr: binding.Value, scope: scope));
     }
     private static void AppendArrayElements(IReadOnlyList<ExpressionNode> elements, JsonArray into, string? fieldKey, DocumentScope scope) {
         for (var index = 0; (index < elements.Count); index++) {
@@ -2055,10 +2052,9 @@ public static partial class DocumentLowering {
         var definitionScope = scope.TemplateDefinitionScope(name: templateName);
 
         if (template.DefinitionPath is not null) { definitionScope = definitionScope.WithBasePath(basePath: Path.GetDirectoryName(path: template.DefinitionPath)); }
-        var localConstants = new Dictionary<string, ExpressionNode>(dictionary: definitionScope.Constants);
         var invocationScope = definitionScope.WithConstants(
             annotations: (annotations ?? scope.Annotations),
-            invocationConstants: localConstants,
+            invocationConstants: definitionScope.Constants.Derive(),
             sourcePath: template.DefinitionPath
         );
         var consumed = new HashSet<int>();

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/266c7f30785ae81dc83764ec590fc247b65f20f8be5dede0a193eeedfdb58b0f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/58d9d17f83ac93175c1093d6d193652b0fb23b15e908eabfea488f4b23f3fb45). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -39,7 +39,7 @@ struct SdfSkyBlock {
     [[vk::offset(120)]] float HazeFalloff;
     [[vk::offset(124)]] float HazeAnisotropy;
     [[vk::offset(128)]] float3 AirLight0Direction;
-    [[vk::offset(140)]] uint _pad140;
+    [[vk::offset(140)]] float FogAnisotropy;
     [[vk::offset(144)]] float3 AirLight0Radiance;
     [[vk::offset(156)]] uint _pad156;
     [[vk::offset(160)]] float3 AirLight1Direction;
@@ -84,6 +84,21 @@ struct SdfShadowHandoff {
     [[vk::offset(12)]] float Weight;
 };
 
+struct SdfOccluder {
+    [[vk::offset(0)]] float3 Center;
+    [[vk::offset(12)]] float Strength;
+    [[vk::offset(16)]] float3 AxisX;
+    [[vk::offset(28)]] uint Shape;
+    [[vk::offset(32)]] float3 AxisY;
+    [[vk::offset(44)]] float Radius;
+    [[vk::offset(48)]] float3 AxisZ;
+    [[vk::offset(60)]] float Reach;
+    [[vk::offset(64)]] float Shadow;
+    [[vk::offset(68)]] float Softness;
+    [[vk::offset(72)]] int OwnSlot;
+    [[vk::offset(76)]] uint OwnSlots;
+};
+
 // The Frame group: descriptor set 0, register space 0.
 struct SdfMeshBakeFrame {
     [[vk::offset(0)]] float2 pointer;
@@ -116,8 +131,8 @@ struct SdfMeshBakeFrame {
 [[vk::binding(17, 1)]] StructuredBuffer<uint> sdfMeshDraws : register(t17, space1);
 [[vk::binding(18, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t18, space1);
 #define sdfLights sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5
-[[vk::binding(19, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t19, space1);
-#define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
+[[vk::binding(19, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutfdef00bee49d9d72862c99f6620825913262775e3be134143ddefc291414f0b1 : register(t19, space1);
+#define sdfSky sdfSkyLayoutfdef00bee49d9d72862c99f6620825913262775e3be134143ddefc291414f0b1
 [[vk::binding(20, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t20, space1);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
 [[vk::binding(21, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t21, space1);
@@ -125,6 +140,8 @@ struct SdfMeshBakeFrame {
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
 [[vk::binding(24, 1)]] StructuredBuffer<float4> sdfFieldEntries : register(t24, space1);
+[[vk::binding(25, 1)]] StructuredBuffer<SdfOccluder> sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb : register(t25, space1);
+#define sdfOccluders sdfOccludersLayout1ee5b9129421340ef17acf996aed0e8e75902434e1e044ca975870520f7526fb
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfMeshBakePass {
@@ -135,8 +152,8 @@ struct SdfMeshBakePass {
     [[vk::offset(15376)]] uint workCounterRow;
     [[vk::offset(15380)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfMeshBakePass> passGroupIsaE996F113 : register(b0, space3);
-#define passGroup passGroupIsaE996F113
+[[vk::binding(0, 3)]] ConstantBuffer<SdfMeshBakePass> passGroupIsaD39055F8 : register(b0, space3);
+#define passGroup passGroupIsaD39055F8
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u3, space3);

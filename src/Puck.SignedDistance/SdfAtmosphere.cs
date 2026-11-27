@@ -9,8 +9,9 @@ namespace Puck.SignedDistance;
 /// <item><description>The <b>fog</b>, an exponential medium of <see cref="FogDensity"/> per world unit, everywhere alike,
 /// or, with a positive <see cref="FogFalloff"/>, falling by a factor of e over each <see cref="FogFalloff"/> world units
 /// above <see cref="FogBase"/> (height fog). It in-scatters the sky (the environment map) or, when
-/// <see cref="FogColorAuthored"/>, <see cref="FogColor"/>, and it ends at the sky: the sky is its colour at
-/// infinity.</description></item>
+/// <see cref="FogColorAuthored"/>, <see cref="FogColor"/>, and, with a positive <see cref="FogAnisotropy"/>, the light of
+/// the bodies that cast light by its Henyey-Greenstein phase, so it glows about them. It ends at the sky: the sky is its
+/// colour at infinity.</description></item>
 /// <item><description>The <b>haze</b>, aerial perspective: an exponential medium that takes <see cref="HazeAmount"/> of the
 /// light along a level ray the far distance long (at <see cref="HazeBase"/> when it falls off with
 /// <see cref="HazeFalloff"/>), and in-scatters the sky and the light of the bodies that cast light, forward by the
@@ -39,9 +40,14 @@ public record struct SdfAtmosphere {
     /// <summary>The largest haze anisotropy: past it the forward lobe concentrates into a point the composite cannot
     /// sample.</summary>
     public const float MaxHazeAnisotropy = 0.9f;
+    /// <summary>The largest fog anisotropy, the same bound as <see cref="MaxHazeAnisotropy"/> for the same reason.</summary>
+    public const float MaxFogAnisotropy = MaxHazeAnisotropy;
 
     /// <summary>The fog's density per world unit at its base; zero draws no fog.</summary>
     public float FogDensity;
+    /// <summary>The Henyey-Greenstein anisotropy of the light of the bodies the fog scatters toward the eye, in
+    /// <c>[0, <see cref="MaxFogAnisotropy"/>]</c>. Zero scatters none, so the fog is its sky or authored colour alone.</summary>
+    public float FogAnisotropy;
     /// <summary>The height at which a height fog's density is <see cref="FogDensity"/>.</summary>
     public float FogBase;
     /// <summary>The rise over which a height fog thins by a factor of e; zero is a fog of the same density everywhere.</summary>
@@ -87,7 +93,7 @@ public readonly record struct SdfAirSpan(float Transmittance, float Fog, float H
     public static SdfAirSpan Clear => new(Fog: 0f, Haze: 0f, Medium: 0f, Transmittance: 1f);
 }
 /// <summary>Each atmosphere kind's in-scatter colour in one direction.</summary>
-/// <param name="Fog">The fog's: its authored colour, or the sky.</param>
+/// <param name="Fog">The fog's: its authored colour, or the sky, and the bodies' light by the fog's phase.</param>
 /// <param name="Haze">The haze's: the sky and the bodies' light by the haze's phase.</param>
 /// <param name="Medium">The medium's colour.</param>
 public readonly record struct SdfAirColors(Vector3 Fog, Vector3 Haze, Vector3 Medium);
@@ -234,7 +240,9 @@ public static class SdfAir {
     /// <param name="sky">The sky the fog and the haze in-scatter in that direction, the environment map's.</param>
     /// <returns>The colours.</returns>
     public static SdfAirColors Colors(in SdfSkyBlock block, Vector3 direction, Vector3 sky) => new(
-        Fog: (((block.AirFlags & FogColorAuthored) != 0u) ? block.FogColor : sky),
+        Fog: ((((block.AirFlags & FogColorAuthored) != 0u) ? block.FogColor : sky) + ((block.FogAnisotropy > 0f)
+            ? Bodies(anisotropy: block.FogAnisotropy, block: in block, direction: direction)
+            : Vector3.Zero)),
         Haze: (sky + Bodies(anisotropy: block.HazeAnisotropy, block: in block, direction: direction)),
         Medium: block.MediumColor
     );

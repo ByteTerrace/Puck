@@ -127,8 +127,8 @@ public sealed class SdfLights {
     /// <returns>The light's index in the table.</returns>
     public int RoleLight(int role) => ((RoleSlot(role: role) is >= 0 and var slot) ? ShadowSlots[slot] : -1);
 
-    // What a point or occluder light's dynamic slot may be.
-    private static string LightSlotRule => $"a point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
+    // What a point or line light's dynamic slot may be.
+    private static string LightSlotRule => $"a point or line light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
 
     /// <summary>Creates the lights an unauthored world renders: the pinned sun with shadows, a point source (a directional
     /// light's <see cref="SdfLight.Param"/> is its penumbra half-slope, the tangent of its angular radius, and zero
@@ -198,7 +198,7 @@ public sealed class SdfLights {
     /// <param name="index">The light's index in the table.</param>
     /// <param name="light">The light.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the table, or a point or
-    /// occluder light's <see cref="SdfLight.DynamicSlot"/> is neither <see cref="SdfProgram.NoDynamicTransformSlot"/>
+    /// line light's <see cref="SdfLight.DynamicSlot"/> is neither <see cref="SdfProgram.NoDynamicTransformSlot"/>
     /// nor a slot in [0, <see cref="SdfProgram.MaxDynamicTransformSlot"/>], or its
     /// <see cref="SdfLight.Bounce"/> is negative or nonfinite.</exception>
     public void Set(int index, SdfLight light) {

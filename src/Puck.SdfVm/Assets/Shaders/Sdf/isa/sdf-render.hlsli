@@ -76,7 +76,7 @@
 #define SDF_SCREEN_EMISSION_EDGE         4u
 #define SDF_LIGHT_MINIMUM_DISTANCE       0.05
 #define SDF_LIGHT_RANGE_THRESHOLD        0.00390625
-#define SDF_LIGHT_OCCLUDER_REACH         3.0
+#define SDF_MAX_OCCLUDERS                128u
 #define SDF_LUMINANCE_CEILING            65000.0
 #define SDF_WINDOW_ADAPTATION            0.75
 #define SDF_LOCAL_ADAPTATION_RANGE       6.0
@@ -110,6 +110,11 @@
 #define SDF_LIGHT_OCCLUDER    3u
 #define SDF_LIGHT_LINE        4u
 
+// Puck.SignedDistance.SdfOccluderShape.
+#define SDF_OCCLUDER_SPHERE  0u
+#define SDF_OCCLUDER_CAPSULE 1u
+#define SDF_OCCLUDER_BOX     2u
+
 // Puck.SdfVm.SdfVisibilityKind.
 #define SDF_VISIBILITY_KIND_BACKGROUND 0u
 #define SDF_VISIBILITY_KIND_SDF        1u
@@ -121,7 +126,7 @@
 #define SDF_VISIBILITY_GROUP_EDGE        8u
 #define SDF_SHADE_BINS                   2u
 #define SDF_SHADE_TILE_HEADER_WORDS      6u
-#define SDF_SHADE_TILE_LIGHT_WORDS       8u
+#define SDF_SHADE_TILE_LIGHT_WORDS       12u
 #define SDF_SHADE_TILE_SHARE_WORDS       68u
 #define SDF_SHADE_TILE_SHARED_LIGHTS     8u
 #define SDF_VIEWS_FILTER_WORDS           4u

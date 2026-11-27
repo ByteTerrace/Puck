@@ -578,6 +578,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             frame: frame,
             height: height,
             lightMask: tables.LightMaskOf(frame: frame, view: view),
+            occluderMask: tables.OccluderMaskOf(frame: frame, view: view),
             tables: tables.PassValues,
             view: view,
             width: width

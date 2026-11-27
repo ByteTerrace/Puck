@@ -237,6 +237,27 @@ public static partial class WorldDefinitionValidator {
             ValidateLight(definition: definition, errors: errors, light: light, lightPath: lightPath);
         }
     }
+    // A prototype's occlusion (WorldPrototype.Occlusion): its strengths shares of the light in [0, 1], and its reach and
+    // softness finite and never negative.
+    private static void ValidatePrototypeOcclusion(WorldPrototype creation, string path, List<string> errors) {
+        if (creation.Occlusion is not { } occlusion) {
+            return;
+        }
+
+        foreach (var (name, value) in new (string, float?)[] { ("strength", occlusion.Strength), ("shadow", occlusion.Shadow) }) {
+            if ((value is { } share) && !((share >= 0f) && (share <= 1f))) {
+                errors.Add(item: $"{path}.occlusion.{name} is {share}; it is a share of the light, in [0, 1].");
+            }
+        }
+        foreach (var (name, value) in new (string, float?)[] { ("reach", occlusion.Reach), ("softness", occlusion.Softness) }) {
+            if ((value is { } length) && !(float.IsFinite(f: length) && (length >= 0f))) {
+                errors.Add(item: $"{path}.occlusion.{name} is {length}; it must be finite and not negative.");
+            }
+        }
+        if ((occlusion.Shape is { } shape) && !Enum.IsDefined(value: shape)) {
+            errors.Add(item: $"{path}.occlusion.shape '{shape}' names no shape; it is Auto, Sphere, Capsule or Box.");
+        }
+    }
     // One light's fields, wherever it is authored.
     private static void ValidateLight(WorldDefinition definition, WorldRenderLight? light, string lightPath, List<string> errors) {
         if (light is null) {
@@ -1257,6 +1278,7 @@ public static partial class WorldDefinitionValidator {
         if (atmosphere.Fog is { } fog) {
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogDensity, path: $"{path}.fog.density", scalar: fog.Density);
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogLuminance, path: $"{path}.fog.luminance", scalar: fog.Luminance);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogAnisotropy, path: $"{path}.fog.anisotropy", scalar: fog.Anisotropy);
             JudgeColor(color: fog.Color, definition: definition, errors: errors, path: $"{path}.fog.color");
             JudgeHeight(definition: definition, errors: errors, height: fog.Height, path: $"{path}.fog.height");
         }

@@ -62,7 +62,7 @@ public sealed class CellDisplaceLawTests {
             Seed: 0u
         );
 
-        foreach (var p in new[] { valid with { Frequency = 0 }, valid with { Frequency = float.NaN }, valid with { Amplitude = -1 }, valid with { Amplitude = float.PositiveInfinity }, valid with { Mode = ((SdfCellMode)2) }, valid with { Randomness = -.1f }, valid with { Randomness = .47f }, valid with { Mode = SdfCellMode.F2MinusF1, Randomness = .21f }, valid with { Randomness = float.NaN } }) {
+        foreach (var p in new[] { valid with { Frequency = 0 }, valid with { Frequency = float.NaN }, valid with { Amplitude = -1 }, valid with { Amplitude = float.PositiveInfinity }, valid with { Mode = ((SdfCellMode)3) }, valid with { Randomness = -.1f }, valid with { Randomness = .47f }, valid with { Mode = SdfCellMode.F2MinusF1, Randomness = .21f }, valid with { Randomness = float.NaN } }) {
             Assert.ThrowsAny<ArgumentException>(testCode: () => new SdfProgramBuilder().CellDisplace(
                 p.Frequency,
                 p.Amplitude,

@@ -176,8 +176,8 @@ refusal inside the rule, such as `gate`, `locals[0]`, or
 | `StateRowUnknown` | A name that is neither a declared row nor a reserved channel. |
 | `StateCellUnaddressable` | A keyed row with no key, a text row used as a number, or a malformed dynamic key. |
 | `StateCellUndeclared` | A read of a cell its row doesn't declare. Writes are exempt because a write mints its cell. |
-| `ComparandAmbiguous`, `ComparandKindMismatch` | A `compareState` with both or neither comparand, or two sides of different kinds. |
-| `EffectSourceAmbiguous`, `EffectSourceKindMismatch` | An effect with more or fewer than one value source, or a copy between kinds. |
+| `ComparandAmbiguous`, `ComparandKindMismatch` | A `compareState` with both or neither comparand, or two sides with no common kind (Text or Bool against another kind). |
+| `EffectSourceAmbiguous`, `EffectSourceKindMismatch` | An effect with more or fewer than one value source, or a value of a kind its destination does not take (Int widens to Fixed; Fixed into Int needs `toInt`). |
 | `TargetInadmissible` | A participant target other than `Self`. |
 | `GeneratorUnknown` | A `generate` of a row with no draw, or of a `Boot` draw site. |
 | `DurationNotExactEngineTicks`, `DurationEngineTicksOutOfRange` | A duration that is negative or isn't a whole number of engine ticks, or one past the 64-bit carrier. |
@@ -210,9 +210,12 @@ integer comparison:
 | `coins == 1.5` | never holds |
 | `coins != 1.5` | always holds |
 
-A `compareState` against a literal accepts this conversion. A `compareState`
-between two cells refuses when their kinds differ (`ComparandKindMismatch`),
-because mixing scales silently would move the gate.
+A `compareState` against a literal accepts this conversion, and so does a
+`compareValue` declared Int. A `compareState` between an Int cell and a Fixed
+cell compares in Fixed, the Int side widened exactly, so neither scale is
+rounded to the other. Between a Text or Bool cell and a cell of another kind
+it refuses (`ComparandKindMismatch`), since the two have no common kind
+([numeric kinds](../../decisions/state-and-language.md#numeric-kinds)).
 
 A host can expose a channel whose value exceeds every number, called
 **`forever`**. A comparison treats it as positive infinity: it's greater than

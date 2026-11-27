@@ -61,7 +61,7 @@ public static class SdfMeshTier {
     public const int MaxBias = 16;
     /// <summary>The frames the meshes a residency's demand would name half a rung finer must have fit its mesh region's
     /// budget before its bake takes one half rung of bias back; the wait doubles each time the budget presses again
-    /// soon after. A bias coarsens every group it reaches as far as its floor, so it is given back within seconds of
+    /// soon after, and halves back toward this at each step down no press follows. A bias coarsens every group it reaches as far as its floor, so it is given back within seconds of
     /// the room returning, and the doubling is what holds a budget that stays short.</summary>
     public const int BiasQuietFrames = 120;
     /// <summary>The eighths of the mesh region's limit a residency's bake budgets its meshes to; the rest is the room a

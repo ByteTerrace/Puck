@@ -788,6 +788,7 @@ add the row you found.
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. A job past what is left holds the presentation's budget (`SdfGpuWorkBudget.Hold`, `holds:`/`holding:` on `work-budget`): other services queue nothing new until it runs, and over the frame's period it waits for the share to pay its price, so a lattice past the allowance lands behind a busy queue or frames that stay over their period An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`) and the relights a lighting jump owes the probes a view may read (`OwesSeenRelight`, `SdfMeshIrradiance.OwedAfterJump`, ordered first in the worker's list), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World.Presentation/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
+| Darken what stands about a creation, or shadow a lamp, a tube, a screen or an emitter face by it, wherever it is on screen | The analytic occluders: `SdfOccluder` records (a sphere, capsule or box, `SdfOccluder.Fit` from a creation's rest box, `WorldCreationOccluders` posing one for each placement and body showing a creation with an `occlusion`), the frame's `SdfOccluders` table, culled into each view's, tile's and glass wave's third mask beside the lights' and screens' (`SdfLightSelection.SelectOccluders`, `sdfViewsTileLights`, `sdfWaveLightMasks`), read only by `sdfOccludersAmbient` and `sdfOccludersShadow` | `src/Puck.SignedDistance/SdfOccluder.cs`, `frame/sdf-occluders.hlsli`; [the handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#analytic-occlusion-proxy-spheres-capsules-and-boxes) |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
 | Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
@@ -1084,7 +1085,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   may leave out only a light that adds nothing at the points its lanes shade,
   so a new light kind or reach (an authored falloff past `Param`, a screen
   that lights behind its face) widens the tile test in the same change, or
-  tiles cut its light off. The probes' half rests on one rule the light
+  tiles cut its light off. `SdfLightMasks` carries a third mask, the analytic
+  occluders (`SdfOccluder`, `frame/sdf-occluders.hlsli`), culled by the same
+  boxes on the same rule: an occluder adds nothing at or past its `Reach` from
+  its centre, because `sdfOccludersAmbient` and `sdfOccludersShadow`, its only
+  readers, multiply by `sdfOccluderWindow`. A new occluder term that reaches
+  farther widens `sdfOccluderReachesBox` and the view selection in the same
+  change. An occluder takes from the ambient, indirect and environment terms and
+  from a ranged light's, screen's or emitter face's visibility in
+  `sdfLightInputs`, never from a directional's, and never from a body's own
+  surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot). A binned
+  view's tile words hold the three masks (`SdfWorldPackage.ShadeTileLightWords`,
+  twelve). The probes' half rests on one rule the light
   phase's door enforces: a traced light whose probe share is zero adds nothing,
   whatever the program (`SdfLightInputs.none` in the generated
   `sdfShadeLightPhase`, which also answers for a point, spot or screen light
@@ -1860,7 +1872,13 @@ paired arithmetic. Carry author-facing parameters through
   frame thread. The queue's door (`GraphicsQueue`, `PresentQueue`, `WaitIdle`
   and the batch's hand-over) issues every queued operation in order before it
   hands anything else over (`IssueSparse`): one graphics checkpoint, each bind
-  waiting the value before it, one graphics wait on the last. A checkpoint
+  waiting the value before it, one graphics wait on the last. That wait is on a
+  binary semaphore the last bind signals, never on the bind's timeline value:
+  synchronization validation does not model `vkQueueBindSparse`, so a graphics
+  wait on a value only a bind signals stalls its model of the queue for good,
+  after which it checks no submission and reports `WRITE_AFTER_PRESENT` on
+  presents (`VulkanQueueTimeline.BindSparse`). Keep any new GPU wait on a
+  bind's signal binary for the same reason. A checkpoint
   reads the door before it takes its value (`GpuQueueTimeline.BeforeCheckpoint`),
   and the door issues nothing inside a checkpoint's signal (`Signaling`), so
   the timeline's values reach the queue in order. Both signals share the
