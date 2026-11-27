@@ -1,4 +1,228 @@
-# The Moth’s seed lantern
+# The Moth’s companion
+
+## Round two
+
+The owner's verdict on Pip was “a decent start, but I'd like it to be more
+inspired! It looks too similar to EVE from WALL-E in my opinion, generic happy
+bot vs original new idea; I want the latter.”
+
+**Knotwhistle** is a living fork of Gallery wood fitted with a brass hinge
+and a sail of waxed paper. The Moth carries a little piece of the Gallery
+with her. When Knotwhistle has something to show her, it flies there on a
+short arc and turns its sail towards her. When it speaks, light opens and
+closes along a reed in the cleft of the wood.
+
+The Gallery tree gives it its branching shape and warm timber. Its opening
+sail borrows the broad fold and visible pivot of the Gallery's sunshades.
+The valley's pollinators supply the dart, hover and settle. Bioluminescence
+gives the reed and paper distinct ways to light up. Firefall, Mega Man and
+MechWarrior inform the large parts, visible hardware and pose that make an
+object readable at a distance. The fork and folded paper make this one
+specific to Puck.
+[Valley and gallery](../valley-and-gallery.md#selected-art-treatment) ·
+[Gallery tree](../gallery-tree-pack/README.md) ·
+[Gallery inspiration](../gallery-inspiration-pack/README.md)
+
+### Four directions
+
+![Four companion explorations. Knotwhistle at top left, Spore Choir at top right, Lichen Kite at bottom left, Foldbell at bottom right.](r2-01-exploration.png)
+
+Read the sheet at thumbnail size with the lights mentally removed. The
+test is whether the outline and its first motion could be mistaken for EVE
+or a stock drone.
+
+| Concept | What it is and how it reads at a glance | What decided it |
+| --- | --- | --- |
+| **Knotwhistle**, upper left | A living instrument with a wooden fork for a resonator. The long lower prong, open gap and single paper sail read as a branch carrying a flag. Even edge-on, the cap and heel carry a handmade wood-and-brass profile. In broadside the EVE or stock-drone read falls away immediately. | The cleft gives speech a clear source and the sail works as a signal flag. A few solid parts and one hinge carry both functions. **Selected.** |
+| **Spore Choir**, upper right | Six independent spores make a flying chorus. The staggered stack reads as windborne flakes at thumbnail size. A tight formation could merge into one luminous blob at chase range, which is where the stock-orb reading returns. | Formation can draw a superb marker, but a line of speech has no natural mouth and a crowd of companions would multiply moving points. |
+| **Lichen Kite**, lower left | A grown lichen frond that sails root-first, then unfurls its fan of light-bearing veins. The flattened scallops, trailing roots and crooked stem give it the immediate read of a leaf or ray, well away from EVE. | Strong organic shape in broadside. Edge-on it loses both silhouette and cues, and its many glowing veins leave the mouth and selected point hard to locate. |
+| **Foldbell**, lower right | A clockwork trail stamp that hoists an accordion pennant. Open, it reads as a mechanical flag and hanging clapper. Folded, it looks like a small hovering parcel and could briefly read as a utility drone. | Excellent for marking a place. In transit its folded state loses the shape that makes it recognizable, and the clapper competes with the speech light. |
+
+Knotwhistle keeps its identity with the light off and can show a warning
+while it speaks. The sail's thin edge is the weak angle. Address it with
+the way the companion banks and presents itself, and judge the result at
+the player's camera before thickening the sail.
+
+### Character, silhouette and scale
+
+The silhouette has three large masses. The low chestnut fork splits from
+one thick heel into a long, brass-shod tine and a shorter bare tine. The
+upper tine sits a little farther back in depth so a three-quarter view
+still catches the gap and the reed. A single dark teal paper sail rises
+from the heel, its two facets meeting at one deep fold. One transverse
+brass pin and a broad saddle make the attachment visible. Paint the tan
+cross-wrap over the heel and keep a small raised knot for the close view.
+Use satin brass, varied chestnut planes and matte paper with a stronger
+value break at the fold. [Turnaround](r2-02-turnaround.png)
+
+Start at 31 cm from heel to toe and about 25 cm high with the sail raised,
+roughly a gauntlet in length beside the 2.06 m suited Moth. Float outside
+her shoulder and leave a gap between the sail and her silhouette. Give it
+the manner of an attentive pollinator. It darts in a shallow arc, feints
+once when curious and then settles, holding the sail broadside when it has
+something to show. The fork holds its shape as the body pitches. The sail
+lags a little on takeoff and opens against the motion as the body brakes.
+When worried, it draws closer and holds still.
+[Scale sheet](r2-03-scale.png) · [Moth reference](../moth-concept-pack/README.md)
+
+### Light language
+
+Ink the cue into the same broad face on either side of the teal sail. One
+shape stays recognizable throughout its pulse. Give each cue a visible
+brightness floor and a broad stroke, and keep the interior of open symbols
+dark. The reduced-motion option holds the pose and shapes steady. Test the
+symbols from a moving chase camera in daylight and at night, then repeat in
+grayscale and under common colour-vision simulations. A player should be
+able to tell a ring from a diamond and a triangle from two chevrons in a
+single still, before rhythm can help. The sheet shows the peak shapes in
+this order, left to right across each row. Rhythms are starting values.
+[Light-language sheet](r2-04-light-language.png)
+
+| State | Colour and shape | Rhythm and body cue |
+| --- | --- | --- |
+| Idle | Warm ivory short horizontal dash | Gentle three-second breath at the Moth's shoulder. |
+| Interest | Cyan pair of upright strokes | Two soft swells, then hold. Tip toward what drew its attention. |
+| Discovery | Mint open circle | One smooth rise, then hold. Stop over the exhibit's approach. |
+| Selected objective | Gold open diamond | Slow two-second swell. Lead to a reachable approach and wait. |
+| Locked target | Ice-blue four square corners | Steady while valid. Track the target's visible flank. |
+| Combat | Violet double chevron | Two rounded accents on entry, then hold. Take a watch position off the Moth's shoulder. |
+| Immediate danger | Coral upright outline triangle | One quick rise and a steady hold. Brake on the safe side and turn broadside. |
+| Low energy | Amber solid square | Slow three-second swell at lower intensity. Shorten excursions and settle closer to the Moth. |
+
+The authored cue rule picks one sail cue per companion. Immediate danger
+wins, then a forced rest, then player lock, combat, objective, discovery,
+ordinary low energy, interest and idle. A higher-priority cue can suspend a
+mark. Validate the target again before resuming it. Keep the shape readable
+through each transition and avoid repeated brightness spikes if danger or
+combat is asserted on consecutive ticks.
+
+### The speaking reed
+
+Set a shallow, dark groove into the inner ledge of the lower tine. Speech
+opens an ivory oval in the groove. Onset has a short narrow oval, vowels
+widen it, release draws it into a thin line, and spaces and punctuation let
+the groove rest. Its placement inside the open fork lets the light read as a
+mouth even though the wood is still. Turn slightly to show the inner ledge
+while speaking. The sail can hold a warning throughout a line.
+
+Drive the reed from the voice's scheduled boundaries so it follows the
+same line when audio is muted, and clear it immediately on cancellation or
+world crossing. Give reduced-motion mode a compact steady oval for each
+voiced interval. Reuse the timing from `TextSpeechSource`. The existing
+HUD speech feed supplies scheduled speech. A per-companion hookup has
+to deliver that schedule to the presenting body and its emitter.
+[Speech sequence](r2-05-speech.png) · [Text speech](../../../reference/audio.md#text-speech)
+
+### Marking a place or body
+
+For an exhibit, take a short arc to the reachable side of the plinth. Hold
+the brass toe over its lip and put a mint ring on the surface. One short
+mint thread joins toe and ring on arrival. The Moth sees the route, the
+object and the mark together. For an objective, use the same approach with
+a diamond on the sail and a diamond on the landing surface. A moving lock
+uses the four corners on the sail and the companion's position at the
+target's visible flank. Keep that hover clear of the target and the
+player's aim. Danger interrupts the excursion, clears its surface mark,
+and brings Knotwhistle back across the player's path on the safe side of
+the hazard with its triangle held upright.
+[Gallery mark](r2-06-gallery-mark.png) · [Valley danger](r2-07-valley-danger.png)
+
+Every displayed mark must resolve to the current owner's live, local
+target. The destination's authored cue rule owns target validity and the
+placement check owns the clear path to the hit. Position, glyph and thread
+use that same validated result. Clear the mark when a target despawns,
+becomes occluded or changes generation. An unreachable approach can show
+interest near the Moth. With many players in a hall, drive the sail from
+its own body and show the projected mark only to the requesting player.
+This keeps another player's objective from reading as yours.
+[Point designation example](../../../../worlds/debug/point-designation-tests.puck)
+
+The Moth's companion travels under the existing custody rules. A world
+can accept its pinned driver or author its own. An authored world can
+award an enduring behaviour, such as reading a moon's survey cairns.
+Persist the declared unlock with Knotwhistle's identity and let each host
+decide how to use it. A surface hit, target generation and line in progress
+belong to the current instance. After crossing, the destination can resolve
+a new local mark. At MMO scale this gives each host one clear decision and
+keeps a stale target or an arriving driver from claiming another world or
+player's points of interest.
+[Companion custody](../../../decisions/companions.md) ·
+[Standard companion role](../../../../worlds/standard/companions.puck)
+
+### Build and prove the design
+
+1. **Block out the fork and sail.** Shape the heel with a `Superellipsoid`
+   and blend two tapered, rounded `Prism` tines into it. Soften the inside
+   of the fork with a rounded cutter where the tines meet. Cut a shallow
+   rounded groove into the lower tine and seat a contrasting reed within
+   it. Fit the brass toe over the long tine. Make the pin with a
+   `Cylinder` and the saddle with a rounded box. Join two thin extruded
+   `Prism` profiles along the sail fold and attach the sail to the pin as
+   one rig part. Start with about 15 degrees of travel either side of the
+   rest pose. Check both limits against the upper tine and the Moth's
+   shoulder. Validate the prototype offline, then compare its broadside,
+   top, heel and three-quarter views to the turnaround after it settles.
+   [SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md) ·
+   [Rigging](../../../../.claude/skills/sdf-authoring/references/rig.md)
+2. **Paint state and speech on fixed geometry.** Give the sail and reed
+   separate palette slots. Author local-coordinate distance masks for
+   the sail strokes and an expanding oval for the reed. Bind the cue
+   index, cue envelope, reed width and speech envelope per body. Select
+   the index discretely and ease the other lanes. Replace the existing
+   `companion-glow` fixed-body sample with each companion's own cue
+   binding. In the lab, place two guides beside each other, change their
+   cues independently, and look for any intervening glyph or fresh bake.
+   Hold a danger triangle through a short spoken line, then mute, cancel
+   and cross mid-line. The reed should follow the schedule and clear
+   without disturbing the triangle.
+   [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Current glow rule](../../../../worlds/debug/companion-senses.puck)
+3. **Extend the existing free-flight driver and point designation.** Keep
+   bank and sail poses visual. Reuse the driver for arrival, avoidance
+   and follow, and prove an actual plinth target, a reachable objective
+   and a moving lock. Put an emissive ring or diamond on the resolved
+   surface and try a short volume from the toe during arrival. Hide it
+   when the hit fails. In the lab, change or despawn a lock, occlude a
+   plinth and trigger `companion.threat` during an excursion. Check that
+   the mark clears and the triangle appears on the safe side. Then pass
+   through the lab's Gallery portal and through a federated crossing
+   with an authored unlock. The unlock should survive. Each mark should
+   follow its own host's target and clear on departure.
+   [Current driver](../../../../worlds/debug/addons/companion.wat) ·
+   [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes)
+
+### Panel audit
+
+Seven panels passed the artist's written audit below. The checking
+partner's independent verdict is pending. Use the turnaround and scale
+sheet for proportions and the scene panels for placement and light.
+[Review criteria](../README.md#concept-art-review) ·
+[Built-in ImageGen prompts](r2-prompts.md)
+
+| Panel | Artist's verdict |
+| --- | --- |
+| [Exploration](r2-01-exploration.png) | Pass. Four silhouettes stay legible at the same viewing size. Knotwhistle and Foldbell show seated hinges and continuous contact between the parts. The grown frond leads into one connected root and the six independent spores hold coherent stagger and depth. There is no Moth or moving joint at an extreme to check. |
+| [Turnaround](r2-02-turnaround.png) | Pass. The wood, cross-wrap, long shod tine and short bare tine stay recognizable. The heel view shows the two ends of the single axle mounted to the saddle. The thin top view follows the sail fold and passes over the laterally offset tines. The neutral pose clears the wood and the air gap stays open. |
+| [Scale](r2-03-scale.png) | Pass. The boot soles agree with the ground plane and her relaxed arms leave the joints in range. Her right-cheek braid, brown skin, ivory hood rim and lavender plates match the Moth reference. The small fork, pin and fold remain continuous off her shoulder, with clear air between the two silhouettes. |
+| [Light language](r2-04-light-language.png) | Pass. All eight views share the same neutral pose, wood, pin and sail. Each mark stays on the same facet. The filled area, gaps and stroke count distinguish the shapes with hue removed. |
+| [Speech sequence](r2-05-speech.png) | Pass. Four matched poses keep the joint, shoe and fork gap fixed. The oval and line stay on the inner ledge and change width without spilling into the gap. The rest shows the naturally pale inset with its light off. |
+| [Gallery marking](r2-06-gallery-mark.png) | Pass. The fork and pin read at the little guide's intended scale. The toe connects to a foreshortened ring on the plinth and the soft shadow leaves an air gap. The Moth's planted stance, braid, open hood and layered plates carry through under the same warm tree light. |
+| [Valley danger](r2-07-valley-danger.png) | Pass. The small fork hovers on the Moth's side of the rockfall with visible air below it. Its attached sail holds a hollow triangle broadside. Her bent knees track over planted boots and her near cheek carries the braid out of the open hood. Rock, path, shadows and figures agree with the same view and sun. |
+
+### Open questions
+
+- The checking partner should inspect all seven sheets against the art
+  audit before the builder takes them as references.
+- The lead's settled companion lab pass should establish how large the
+  sail and reed need to appear at chase range. Use moving daylight and
+  dusk passes, especially edge-on at a turn and during speech and danger
+  together. Repeat with reduced motion and colour removed.
+- The design can use a short rest in the first build. The owner can decide
+  after play whether helping Knotwhistle recharge should become an action.
+
+## Earlier round
+
+### The Moth’s seed lantern
 
 Pip is the working name for a palm-sized guide that looks as if the Gallery’s
 sunshades and seedpods shared a workshop. An ivory ceramic hood peaks over a
@@ -18,7 +242,7 @@ square to the Moth when worried. The Moth decides where they go.
 [Canyon workshop direction](../valley-and-gallery.md#selected-art-treatment) ·
 [Gallery tree pack](../gallery-tree-pack/README.md)
 
-## Panels and review
+### Panels and review
 
 The retained panels passed the artist’s written audit for attachment, joint
 range, pose, turnaround agreement, perspective, seams and character facts.
@@ -35,7 +259,7 @@ read as a larger machine, so both were regenerated. [Generation prompts](prompts
 | [Gallery discovery](05-gallery-discovery.png) | Pass. Both fins read as attached in three-quarter. The vertical beam joins the nozzle to a ring that lies on the plinth plane. The gap, scale against the plinth and shared daylight make the hover believable. |
 | [Valley danger](06-valley-danger.png) | Pass. The small seed silhouette and triangle stand clear of the path. The fins stay on their hinges, the body is near upright at the stop, and its shadow places it on the near side of the rockfall. |
 
-## Options
+### Options
 
 | Direction | What it offered and what decided it |
 | --- | --- |
@@ -43,7 +267,7 @@ read as a larger machine, so both were regenerated. [Generation prompts](prompts
 | Wind-up survey crab | Twin feelers and a pair of folding landing claws give it a comic gait and a convincing perch. The legs and tool heads crowd a 24 cm outline and start to read as a small utility vehicle. |
 | Floating spore | A luminous bud with a trailing leaf could tilt and unfurl expressively. Backlight and bloom erase too much of the form, and a bright body offers poor separation between an expression and a warning. |
 
-## Light language
+### Light language
 
 Every cue has a stable shape. Brightness shifts gently above a visible floor,
 so one frame can convey the state and a second glance can confirm the rhythm.
@@ -89,7 +313,7 @@ for contrast, bloom and repeated flashes. No accessibility claim has been
 verified in play. [W3C guidance on use of color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html) ·
 [W3C guidance on flashes](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html)
 
-## Marking the world
+### Marking the world
 
 At the Gallery, Pip makes a short arc toward the near edge of an exhibit and
 waits there. A brief, close-range beam from the keel connects it to a ring on
@@ -119,7 +343,7 @@ shaded so the glyph survives bright ochre and sky behind it. At night, lower
 emitted light and spill enough to keep the dark centre of a ring visible and
 the ivory body legible. Judge those transitions in motion.
 
-## Build and check in the debug world
+### Build and check in the debug world
 
 Prototype the cues and movement in a focused companion lab linked from the
 Gallery. Use the full debug world for the lead’s composition pass through the
@@ -168,13 +392,13 @@ Gallery and valley. Judge motion and light once the scene has settled.
    checks. Per-body voice sync, quest and lock wiring, and camera-range
    readability remain unverified.
 
-## Open product question
+### Open product question
 
 The first implementation can treat low energy as a reason for shorter trips
 and a brief rest. Should recharge later become something the Moth actively
 helps with, or stay part of Pip’s routine?
 
-## References
+### References
 
 - Ocarina of Time makes the target marker a companion with a place in the
   scene. Pip uses that relationship when it moves alongside a selected body.
