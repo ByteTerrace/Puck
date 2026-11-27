@@ -230,6 +230,18 @@ refuses a parent that is not an advancing slot row, a keyed or pooled nested
 cell, a chain that returns to itself and a chain deeper than
 `StateAdvance.MaxNestingDepth`.
 
+The closed form a recipient predicts from (`StateAdvance.TryValueCurve`) is bounded.
+Each link multiplies the curve's degree by its rate piece's integral degree, so a
+chain of shaped rates reaches degree 9, 81, 729 in three links of the largest
+piece. A curve holds at most `StateAdvance.MaxCurveCoefficients` coefficients
+(degree 63), each reduced numerator and denominator at most
+`StateAdvance.MaxCurveCoefficientBits` bits. The read checks the composed degree
+(`RationalPolynomial.ComposedDegree`) and the inputs' sizes before it composes,
+and the result's after, so a chain past the bound is refused at the link that
+passes it at no more than that link's cost. The clock then has no curve:
+projection sends its value as ordinary updates, and the authority's own read
+(`ComputeCurrentValue`) is unchanged. Every curve inside the bound is exact.
+
 ## Smooth a value for presentation
 
 A **dynamics** trait gives a cell a smoothed reading for display. The stored

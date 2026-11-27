@@ -44,9 +44,9 @@ public sealed record WorldClockAnchor(
     [property: DocumentText("exact rational coefficients")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Curve = null
 ) {
-    /// <summary>The most coefficients a curve carries: a nested clock's degree is the product of its chain's, so a
-    /// curve past it is refused as malformed.</summary>
-    public const int MaxCurveCoefficients = 64;
+    /// <summary>The most coefficients a curve carries, the bound the state side composes under
+    /// (<see cref="StateAdvance.MaxCurveCoefficients"/>): a curve past it is refused as malformed.</summary>
+    public const int MaxCurveCoefficients = StateAdvance.MaxCurveCoefficients;
 
     // 2^-64: one phase unit as a share of a turn.
     private const double TurnPerUnit = (1d / 18446744073709551616d);
