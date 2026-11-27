@@ -5299,6 +5299,11 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
+  `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
+  document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)
+  is written twice. One reader driven by the model table, with the decoder's strictness (unknown and duplicate
+  members refused by name), replaces the family.
 - Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
   and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
   chunk of a range before binding any, and revoke the chunks wholly inside a
