@@ -176,12 +176,18 @@ same judgement the due list's schedule is built from and charges the line
   every binding's check and firing. An Edge fires on the crossing, so an Edge
   line over inputs at rest fires nothing at rest; over a moving input it can
   cross again, and is charged every binding. A Level rule whose firing closes
-  its own gate fires nothing at rest, whatever moves.
+  its own gate fires nothing at rest, whatever moves, and so does one whose
+  firing settles (`RuleResponse.Settles`): every effect is a plain set and
+  nothing its values, keys or branches are computed from is a row it writes,
+  so a second firing writes what the first wrote and the evaluator takes the
+  binding as settled. Such a line is charged two firings for a change, the
+  second being the one that proves it settled.
 - **A firing closes its own gate** (`RuleResponse.ClosesItself`) when the gate
   is a comparison, or a conjunction with a comparison among its terms, of a
   cell the binding itself names (a literal key, or `row[$each]`); the rule's
   one write to that row is an unconditional set of that cell; and the value
-  written fails the comparison. `when state[$each] == 0` with
+  written fails the comparison; a set inside a `transaction` with no refusal
+  branch counts as unconditional. `when state[$each] == 0` with
   `state[$each] = 1` is one, and so is
   `when at[$each] != goal[group[$each]]` with `at[$each] = goal[group[$each]]`.
   Such a binding fires once and stays closed until another line writes. The
@@ -665,7 +671,13 @@ reaches each row it reads (`RowReach`): the cell under the key bound to
 cell `row[k]` then marks only binding `k` of a rule that reads the row as
 `row[$each]`, a move of another literal cell marks nothing, and only a move
 of a cell every binding may read, or a change to the row's members or order,
-marks the rule in full. A host fact read for the body bound to `$each` marks
+marks the rule in full. A family member selected by the binding's own key
+(`pile[$each]`, `count(pile[$each])`, a transfer between `deck[$each]` and
+`hand[$each]`) is reached as that member alone (`RowReach.Member`): any move of
+member `k`, a cell or the row whole, marks only the binding whose key spells
+`k`, so one rule sweeping a set of stations whose piles are families judges one
+station's binding when one station's pile moves, and the sheet prices it at one
+binding. A host fact read for the body bound to `$each` marks
 that body's binding the same way, and in a sweep whose keys are bodies it marks
 nothing for a body outside the set the sweep last bound: that body has no
 binding until the set itself moves, which reaches the sweep through the set's

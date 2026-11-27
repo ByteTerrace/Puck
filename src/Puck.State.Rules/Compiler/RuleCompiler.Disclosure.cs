@@ -16,6 +16,54 @@ public static partial class RuleCompiler {
         }
         return cost;
     }
+    /// <summary>Settles a transform's audience check for one firing: the rows its kernel reads besides its live ends
+    /// (<see cref="ArenaTransform.DisclosureReads"/>) and the price of the check. A firing checks the one row each live
+    /// end's index selects (<c>ArenaTransforms</c>' disclosure walk reads the bound ends), so the price is the dearest
+    /// pairing of one candidate per live end with the transform's fixed reads and writes, never every candidate at
+    /// once.</summary>
+    /// <param name="scalar">The transform effect.</param>
+    /// <param name="controls">The rows whose cells decide whether the transform runs.</param>
+    /// <param name="context">The compile context.</param>
+    private static void SettleDisclosure(TransformStateEffect scalar, IEnumerable<int> controls, RuleCompileContext context) {
+        var accesses = new List<CellAccess>();
+
+        scalar.FromRow?.CollectRows(into: accesses, isSet: false);
+
+        var froms = accesses.Select(selector: static access => access.RowOrdinal).Distinct().ToArray();
+
+        accesses.Clear();
+        scalar.ToRow?.CollectRows(into: accesses, isSet: false);
+
+        var tos = accesses.Select(selector: static access => access.RowOrdinal).Distinct().ToArray();
+        var candidates = new HashSet<int>(collection: froms.Concat(tos));
+
+        accesses.Clear();
+        scalar.CollectReads(into: accesses);
+
+        var reads = accesses.Select(selector: static access => access.RowOrdinal).Concat(controls).Where(predicate: row => !candidates.Contains(item: row)).Distinct().ToList();
+
+        scalar.Arena.DisclosureReads = [.. reads];
+
+        var writes = new List<int>();
+
+        accesses.Clear();
+        scalar.CollectWrites(into: accesses);
+        ArenaTransforms.CollectAccesses(transform: scalar.Arena, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
+        writes.AddRange(collection: accesses.Select(selector: static access => access.RowOrdinal).Where(predicate: row => !candidates.Contains(item: row)));
+
+        var cost = RuleWork.Zero;
+
+        foreach (var from in ((froms.Length == 0) ? new[] { -1 } : froms)) {
+            foreach (var to in ((tos.Length == 0) ? new[] { -1 } : tos)) {
+                int[] bound = [.. new[] { from, to }.Where(predicate: static row => (row >= 0))];
+                var pair = DisclosureCost(context: context, reads: reads.Concat(bound), writes: writes.Concat(bound));
+
+                cost = ((pair.Units > cost.Units) || !pair.IsKnown) ? pair : cost;
+            }
+        }
+
+        scalar.DisclosureCost = cost;
+    }
     /// <summary>Checks and retains state dependencies that decide whether a transform runs. Hosts with additional
     /// choice policies pass their gates, scores and membership dependencies through this same door.</summary>
     /// <param name="effects">The effects controlled by those dependencies.</param>
@@ -25,15 +73,20 @@ public static partial class RuleCompiler {
     public static void RequireTransformControlAudience(IRuleEffect[] effects, IReadOnlyList<CellAccess> controls, RuleCompileContext context, string ruleName) {
         foreach (var effect in effects) {
             if (effect is TransformStateEffect { Arena: not ArenaTransform.Observe } scalar) {
-                scalar.Arena.DisclosureReads = scalar.Arena.DisclosureReads.Concat(controls.Select(static read => read.RowOrdinal)).Distinct().ToArray();
-                var reads = new List<int>();
+                var reads = new List<int>(collection: scalar.Arena.DisclosureReads.Concat(controls.Select(static read => read.RowOrdinal)));
                 var writes = new List<int>();
+                var liveAccesses = new List<CellAccess>();
+
+                // The audience refusal reads every row a live end can select; the per-firing check reads only the
+                // bound ones.
+                scalar.CollectReads(into: liveAccesses);
+                reads.AddRange(collection: liveAccesses.Select(static access => access.RowOrdinal));
                 ArenaTransforms.CollectAccesses(transform: scalar.Arena, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
-                var liveWrites = new List<CellAccess>();
-                scalar.CollectWrites(into: liveWrites);
-                writes.AddRange(collection: liveWrites.Select(static access => access.RowOrdinal));
+                liveAccesses.Clear();
+                scalar.CollectWrites(into: liveAccesses);
+                writes.AddRange(collection: liveAccesses.Select(static access => access.RowOrdinal));
                 RequireEnclosedAudience(reads: reads, writes: writes, context: context, ruleName: ruleName);
-                scalar.DisclosureCost = DisclosureCost(reads: reads, writes: writes, context: context);
+                SettleDisclosure(context: context, controls: scalar.Arena.DisclosureReads.Concat(controls.Select(static read => read.RowOrdinal)), scalar: scalar);
             } else if (effect is VectorEffect and not VectorCopyEffect) {
                 var vector = (VectorEffect)effect;
                 vector.DisclosureControls = vector.DisclosureControls.Concat(controls.Select(static read => read.RowOrdinal)).Distinct().ToArray();

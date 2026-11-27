@@ -1789,6 +1789,11 @@ public static partial class ExpressionSpelling {
             var family = m_value;
             var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
 
+            // A reduction of a family member selected live (`count(pile[$each])`).
+            if (IsReduceSugar(name: name) && !m_quoted && (m_position < text.Length) && (text[m_position] == '[')) {
+                return ParseReduce(name: name);
+            }
+
             Advance();
             Prime();
 
@@ -1867,14 +1872,40 @@ public static partial class ExpressionSpelling {
                 throw Fail(message: $"a channel takes names and numbers here{Found()}");
             }
 
-            var text = (negative
+            var argument = (negative
                 ? $"-{m_value}"
                 : m_value
             );
 
+            // A family member a reduction selects live (`count(pile[$each])`) keeps its bracketed index in the row
+            // spelling, as a live zone does; the rule compiler resolves it against the declared family.
+            if ((m_kind == Lexeme.Name) && !m_quoted && !negative && (m_position < text.Length) && (text[m_position] == '[')) {
+                var close = BracketEnd(open: m_position);
+
+                if (close < 0) {
+                    throw Fail(message: $"'{argument}[' never closes its index");
+                }
+                argument = $"{argument}{text[m_position..(close + 1)]}";
+                m_position = (close + 1);
+            }
+
             Advance();
 
-            return text;
+            return argument;
+        }
+        // The closing bracket matching the one at `open`, or -1.
+        private int BracketEnd(int open) {
+            var depth = 0;
+
+            for (var index = open; (index < text.Length); index++) {
+                if (text[index] == '[') {
+                    depth++;
+                } else if ((text[index] == ']') && (--depth == 0)) {
+                    return index;
+                }
+            }
+
+            return -1;
         }
         // The arguments of `name(`, already opened, as the reserved channel they spell.
         private string ParseChannel(string name) {

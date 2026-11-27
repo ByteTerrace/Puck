@@ -196,7 +196,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   (`StateArena.RowStructureVersion`). A new operand that reads `row[$each]`
   and does not say so is merely judged more often; one that claims
   `Each` for a cell another binding's key can reach is a wrong skip, which the
-  same replay catches.
+  same replay catches. A family member selected by the binding's own key
+  (`pile[$each]`) is declared by `LiveRow.CollectReads` as `CellReach.Member`
+  with the member's family index, which `RuleSchedule` keeps as
+  `RowReach.Member` and the due list maps back to the one binding whose key
+  spells that index; a selection by any other index stays every member, any
+  cell.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content

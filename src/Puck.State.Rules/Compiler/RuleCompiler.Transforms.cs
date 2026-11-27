@@ -155,10 +155,10 @@ public static partial class RuleCompiler {
             ArenaTransforms.CollectAccesses(transform: resolved, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
         }
         RequireEnclosedAudience(context: context, reads: reads, ruleName: ruleName, writes: writes);
-        var disclosureCost = DisclosureCost(context: context, reads: reads, writes: writes);
-
-        if (effect is TransformStateEffect scalar) { scalar.DisclosureCost = disclosureCost; }
-        if (effect is VectorEffect vector) { vector.DisclosureCost = disclosureCost; }
+        if (effect is TransformStateEffect scalar) {
+            SettleDisclosure(context: context, controls: [], scalar: scalar);
+        }
+        if (effect is VectorEffect vector) { vector.DisclosureCost = DisclosureCost(context: context, reads: reads, writes: writes); }
         return effect;
     }
     private static IRuleEffect ResolveStateTransformCore(StateTransform transform, string ruleName, RuleCompileContext context, out ArenaTransform? resolved) {

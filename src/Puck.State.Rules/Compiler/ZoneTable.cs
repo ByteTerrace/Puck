@@ -188,16 +188,14 @@ public sealed class LiveRow {
                 isSet: false
             );
         } else {
-            foreach (var ordinal in m_family.Ordinals()) {
-                into.Add(item: new CellAccess(
-                    Key: default,
-                    RowOrdinal: ordinal
-                ));
-            }
+            CollectMembers(into: into, isSet: false);
         }
 
         CollectIndexReads(into: into);
     }
+    /// <summary>Gets a value indicating whether the selection is the family member the binding's own <c>$each</c> key
+    /// spells: each binding of a sweep then reaches its own member row and no other.</summary>
+    public bool SelectsEachMember => ((Table is null) && Index.IsEach);
     /// <summary>Appends every row this reference can select, without the cells its index resolves through.</summary>
     /// <param name="into">The access set being collected.</param>
     /// <param name="isSet">Whether the access replaces the row's contents.</param>
@@ -213,10 +211,26 @@ public sealed class LiveRow {
             return;
         }
 
-        foreach (var ordinal in m_family.Ordinals()) {
+        CollectMembers(into: into, isSet: isSet);
+    }
+    // Every member row, as any cell of it: under the binding's own $each key, each tagged with the family index that
+    // selects it, so a due list wakes the one binding whose key spells it.
+    private void CollectMembers(List<CellAccess> into, bool isSet) {
+        var each = SelectsEachMember;
+        var slots = m_family.Slots;
+        var count = ((slots is null) ? m_family.Count : slots.Length);
+
+        for (var index = 0; (index < count); index++) {
+            var ordinal = ((slots is null) ? (m_family.FirstOrdinal + index) : slots[index]);
+
+            if (ordinal < 0) {
+                continue;
+            }
             into.Add(item: new CellAccess(
                 IsSet: isSet,
                 Key: default,
+                Member: (each ? index : -1),
+                Reach: (each ? CellReach.Member : CellReach.Key),
                 RowOrdinal: ordinal
             ));
         }

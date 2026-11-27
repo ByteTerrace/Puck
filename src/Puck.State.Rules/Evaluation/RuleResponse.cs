@@ -13,6 +13,11 @@ public enum RuleLatching : byte {
     /// <summary>The firing closes its own gate (<see cref="RuleResponse.ClosesItself"/>): a binding fires once, and
     /// again only after another line's write reopens it.</summary>
     ClosesItself,
+
+    /// <summary>The firing settles (<see cref="RuleResponse.Settles"/>): a second firing over unmoved reads writes what
+    /// the first wrote, so the evaluator takes the binding as settled and visits it again only when something its
+    /// firing reads or writes moves.</summary>
+    Settles,
 }
 /// <summary>How many of a line's bindings the work sheet charges a check and a firing for: the bindings one tick at
 /// rest runs, plus the bindings one change reaches. It is read off the same judgement walk a
@@ -47,7 +52,9 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
         var firings = RuleWorkBudget.Firings(multiplier: multiplier, rule: rule);
         var closure = ((rule.Mode == ActionTriggerMode.Edge) ? Closure.None : Prove(context: context, rule: rule));
-        var latching = ((rule.Mode == ActionTriggerMode.Edge) ? RuleLatching.Edge : ((closure != Closure.None) ? RuleLatching.ClosesItself : RuleLatching.None));
+        var latching = ((rule.Mode == ActionTriggerMode.Edge)
+            ? RuleLatching.Edge
+            : ((closure != Closure.None) ? RuleLatching.ClosesItself : (Settles(rule: rule) ? RuleLatching.Settles : RuleLatching.None)));
 
         // A sweep of this tick's events binds nothing at rest, and one event, the change the sheet prices, binds one
         // binding whatever it reads. A maxFirings bound or a host that judges in place keeps the capacity price.
@@ -93,7 +100,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             var token = rule.Gate[deadline.Token];
 
             (deadline.TickOnLeft ? token.RightSource : token.LeftSource).CollectReads(into: due);
-            opened = (((due.Count > 0) && due.TrueForAll(match: static access => access.Each)) ? 1L : multiplier);
+            opened = (((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember))) ? 1L : multiplier);
         }
 
         if (built.ReadsTick) {
@@ -118,7 +125,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            if (access.Each || access.Members) {
+            if (access.Each || access.Members || access.IsMember) {
                 opened = Math.Max(val1: opened, val2: 1L);
 
                 continue;
@@ -139,19 +146,28 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         if ((closure == Closure.Mirror) && (moving is not null)) {
             latching = RuleLatching.None;
         }
+        // A settled firing stands on everything the firing reads (RuleEvaluator's firing schedule): one that reads
+        // something moving with time never settles, so the line is priced as a Level gate nothing latches.
+        if ((latching == RuleLatching.Settles) && ((moving is not null) || FiringMoves(context: context, deadline: deadline, rule: rule))) {
+            latching = RuleLatching.None;
+        }
 
         // At rest: a Level gate nothing latches fires every tick it holds, so every binding may be judged and fire;
         // an Edge over a moving input can cross again and again.
         var refires = ((latching == RuleLatching.None) || ((latching == RuleLatching.Edge) && (moving is not null)));
         var judgedAtRest = (((moving is not null) || refires) ? multiplier : 0L);
         var firedAtRest = (refires ? firings : 0L);
+        // A settling binding fires twice for a change: once with it, and once more on the next tick, which proves the
+        // firing changed nothing and settles it.
+        var echo = ((latching == RuleLatching.Settles) ? 2L : 1L);
         var judged = Math.Min(val1: multiplier, val2: BinaryIntegerFunctions.AddSaturating(left: judgedAtRest, right: (shared ? multiplier : Math.Min(val1: opened, val2: 1L))));
-        var fired = Math.Min(val1: firings, val2: BinaryIntegerFunctions.AddSaturating(left: firedAtRest, right: opened));
+        var fired = Math.Min(val1: firings, val2: BinaryIntegerFunctions.AddSaturating(left: firedAtRest, right: BinaryIntegerFunctions.MultiplySaturating(left: opened, right: echo)));
         var rest = ((judgedAtRest == 0L)
             ? "not visited at rest"
             : ((moving is not null) ? $"judged every tick ({moving})" : "judged every tick (a Level gate that holds fires again)"));
         var fire = latching switch {
             RuleLatching.ClosesItself => "its firing closes its own gate",
+            RuleLatching.Settles => "its firing settles after one more",
             RuleLatching.Edge => ((moving is null) ? "an Edge fires on the crossing" : "an Edge over a moving input can cross every tick"),
             _ => "a Level gate that holds fires every tick",
         };
@@ -176,6 +192,75 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     /// alone.</param>
     /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
     public static bool ClosesItself(CompiledRule rule, RuleCompileContext? context = null) => (Prove(context: context, rule: rule) != Closure.None);
+    /// <summary>Returns whether a Level rule's firing provably settles: every effect, at any depth of its transactions
+    /// and branches, is a plain set of an arena cell, and nothing the firing computes its values, keys, rows or
+    /// branches from (its locals and its effects' reads) is a row the firing writes. A second firing over reads that
+    /// have not moved then writes exactly what the first wrote, and <see cref="RuleEvaluator"/> takes a Level firing
+    /// that moved nothing as settled, so the binding is not visited again until something its firing reads or writes
+    /// moves. Whether the reads rest is the caller's to judge.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
+    public static bool Settles(CompiledRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        if ((rule.Mode == ActionTriggerMode.Edge) || (rule.Effects.Length == 0) || !PlainSets(effects: rule.Effects)) {
+            return false;
+        }
+
+        var reads = new List<CellAccess>();
+        var writes = RuleDataflow.Writes(rule: rule);
+
+        foreach (var local in (rule.Locals ?? [])) {
+            RuleDataflow.CollectExpression(into: reads, tokens: local.Expression);
+        }
+        foreach (var effect in rule.Effects) {
+            effect.CollectReads(into: reads);
+        }
+
+        return !reads.Exists(match: read => writes.Exists(match: write => (write.RowOrdinal == read.RowOrdinal)));
+
+        static bool PlainSets(IReadOnlyList<IRuleEffect> effects) {
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case WriteEffect { Write: StateWriteKind.Set, IsTextEdit: false }:
+                        break;
+                    case TransactionEffect or IfEffect:
+                        foreach (var arm in effect.Arms) {
+                            if (!PlainSets(effects: arm)) {
+                                return false;
+                            }
+                        }
+                        break;
+                    default:
+                        return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    // Whether anything a firing reads beyond its judgement moves with time: the tick, the search ply, a host-owned row,
+    // a host fact that does not rest or a row carrying a value-over-time trait.
+    private static bool FiringMoves(CompiledRule rule, RuleCompileContext context, RuleDeadline? deadline) {
+        var reads = new List<CellAccess>();
+        var needs = new RuleNeedsBuilder();
+
+        RuleDataflow.CollectFiring(deadline: deadline, facts: needs, reads: reads, rule: rule);
+
+        var built = needs.Build();
+
+        if (built.ReadsTick || (built.ReadsSearchPly && !context.SearchPlyIsFixed) || (built.HostOwnedRows.Count > 0)) {
+            return true;
+        }
+        foreach (var fact in needs.FacetFacts) {
+            if (!context.FactRests(each: out _, fact: fact)) {
+                return true;
+            }
+        }
+
+        return !reads.TrueForAll(match: access => context.RowRests(rowOrdinal: access.RowOrdinal));
+    }
 
     // How a firing closes its own gate: against a literal, which holds whatever moves, or by writing the value the gate
     // compares against, which holds only while that value stands.
@@ -318,16 +403,27 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         if (count != 1) {
             return false;
         }
-        foreach (var effect in rule.Effects) {
-            if ((effect is WriteEffect { Write: StateWriteKind.Set, RowFrom: null, Text: null } set) &&
-                (set.RowOrdinal == read.RowOrdinal) && (set.Key == read.Key) && Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
-                written = set.Source;
 
-                return true;
+        return Find(effects: rule.Effects, read: read, written: out written);
+
+        // A savepoint with no refusal branch lands its steps whenever the firing lands, as the firing's top-level steps
+        // do; one with a refusal branch can land that branch instead.
+        static bool Find(IReadOnlyList<IRuleEffect> effects, StateCellOperand read, out CompiledValueSource written) {
+            foreach (var effect in effects) {
+                if ((effect is WriteEffect { Write: StateWriteKind.Set, RowFrom: null, Text: null } set) &&
+                    (set.RowOrdinal == read.RowOrdinal) && (set.Key == read.Key) && Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
+                    written = set.Source;
+
+                    return true;
+                }
+                if ((effect is TransactionEffect { OnFailure.Length: 0 } savepoint) && Find(effects: savepoint.Effects, read: read, written: out written)) {
+                    return true;
+                }
             }
-        }
+            written = default;
 
-        return false;
+            return false;
+        }
     }
     // Whether the rule's one write to what a host fact reads is an unconditional, exact set of it. Every effect at any
     // depth is an arena effect or a fact setter, so no host effect the proof cannot see moves the fact.

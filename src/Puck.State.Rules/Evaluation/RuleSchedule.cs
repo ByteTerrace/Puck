@@ -46,6 +46,11 @@ public enum RowReach : byte {
     /// <summary>The row's key set, which a sweep binds: only a change to its members or their order reaches the
     /// judgement, and no cell's value does.</summary>
     Members = 8,
+
+    /// <summary>Every cell of a family member the binding's own <c>$each</c> key selects
+    /// (<see cref="RuleSchedule.MemberIndices"/>): a move of any cell of the row, or of the row whole, reaches the one
+    /// binding whose key spells the member's family index.</summary>
+    Member = 16,
 }
 /// <summary>A rule's or a binding's memoized read schedule: every dependency one judgement can have — the arena rows
 /// its locals, live-row selection and gate read, and the host facts they read, each versioned — and, for a sweep, the
@@ -75,6 +80,9 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
     public RowReach[] Reaches { get; init; } = [];
     /// <summary>Gets the literal cells the judgement reads, each a row of <see cref="Rows"/> and a key.</summary>
     public CellAccess[] Cells { get; init; } = [];
+    /// <summary>Gets, aligned with <see cref="Rows"/>, the family index of each row the judgement reaches as
+    /// <see cref="RowReach.Member"/> alone, and <c>-1</c> for every other row.</summary>
+    public int[] MemberIndices { get; init; } = [];
     /// <summary>Gets a value indicating whether versions alone cannot prove the reads unchanged.</summary>
     public bool Volatile => (Volatility != RuleVolatility.None);
     /// <summary>Gets how many versions one capture of the schedule holds: one per row, then one per fact.</summary>
@@ -180,11 +188,20 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
 
         void Reach(int ordinal, RowReach reach) => reaches[ordinal] = (reaches.GetValueOrDefault(key: ordinal) | reach);
 
+        var members = new Dictionary<int, int>();
+
         foreach (var access in reads) {
             Row(ordinal: access.RowOrdinal);
+            // A row two family indices reach is no one binding's member, so any move of it reaches every binding.
+            var member = (access.IsMember && (!members.TryGetValue(key: access.RowOrdinal, value: out var held) || (held == access.Member)));
+
+            if (access.IsMember) {
+                members[access.RowOrdinal] = (member ? access.Member : -1);
+            }
             Reach(ordinal: access.RowOrdinal, reach: (access.Reach switch {
                 CellReach.Each => RowReach.Each,
                 CellReach.Members => RowReach.Members,
+                CellReach.Member when member => RowReach.Member,
                 CellReach.Key when access.Key.IsValid => RowReach.Cells,
                 _ => RowReach.Any,
             }));
@@ -225,6 +242,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         ) {
             Cells = [.. cells.Where(predicate: cell => seen.Contains(item: cell.RowOrdinal))],
             Reaches = [.. seen.Select(selector: ordinal => reaches.GetValueOrDefault(key: ordinal, defaultValue: RowReach.Any))],
+            MemberIndices = [.. seen.Select(selector: ordinal => ((reaches.GetValueOrDefault(key: ordinal) == RowReach.Member) ? members.GetValueOrDefault(key: ordinal, defaultValue: -1) : -1))],
         };
     }
     /// <summary>Spells the schedule for a read-back: the rows and host facts it depends on by name, and every reason it
@@ -339,6 +357,8 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
             text.Append(value: RowName(reader: reader, rowOrdinal: rows[index]));
             if ((reaches is not null) && (index < reaches.Length) && ((reaches[index] & ~RowReach.Members) == RowReach.Each)) {
                 text.Append(value: "[$each]");
+            } else if ((reaches is not null) && (index < reaches.Length) && (reaches[index] == RowReach.Member)) {
+                text.Append(value: "(member)");
             }
         }
     }

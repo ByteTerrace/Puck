@@ -95,6 +95,8 @@ internal sealed class RuleDueList {
     private readonly Dictionary<int, int[]> m_eachRowReaders;
     private readonly Dictionary<(int Row, int Key), int[]> m_cellReaders;
     private readonly Dictionary<int, int[]> m_wholeRowReaders;
+    // The keyed sweeps that read a row as the family member one binding's key selects, with that member's index.
+    private readonly Dictionary<int, (int Rule, int Member)[]> m_memberRowReaders;
     private readonly Dictionary<(int Source, int Body), int[]> m_literalFactReaders;
     // Every literal reader of a source, whatever body it names: a move the host reports for the source as a whole
     // (FactRead.Whole) reaches each of them, as it reaches the source's $each and whole readers.
@@ -141,6 +143,7 @@ internal sealed class RuleDueList {
         var each = new Dictionary<int, List<int>>();
         var whole = new Dictionary<int, List<int>>();
         var snapshots = new Dictionary<int, RowSnapshot>();
+        var memberRow = new Dictionary<int, List<(int Rule, int Member)>>();
 
         static void Add<TKey>(Dictionary<TKey, List<int>> index, TKey key, int rule) where TKey : notnull {
             if (!index.TryGetValue(key: key, value: out var readers)) {
@@ -171,6 +174,22 @@ internal sealed class RuleDueList {
                 for (var position = 0; (position < read.Rows.Length); position++) {
                     var row = read.Rows[position];
                     var reach = ((position < read.Reaches.Length) ? read.Reaches[position] : RowReach.Any);
+                    var member = ((position < read.MemberIndices.Length) ? read.MemberIndices[position] : -1);
+
+                    // A family member the binding's own key selects: any move of the row, a cell or the row whole,
+                    // reaches the one binding whose key spells the member's index. Only a keyed sweep has such a
+                    // binding; any other rule reading it, or a row read some other way too, is reached whole.
+                    if ((reach == RowReach.Member) && (member >= 0) && (kind is Visit.RowSweep or Visit.BodySweep)) {
+                        if (!memberRow.TryGetValue(key: row, value: out var readers)) {
+                            memberRow[row] = readers = [];
+                        }
+                        readers.Add(item: (index, member));
+
+                        continue;
+                    }
+                    if ((reach & RowReach.Member) != RowReach.None) {
+                        reach = RowReach.Any;
+                    }
 
                     Add(index: wholeRow, key: row, rule: index);
                     // Only a keyed sweep has a binding a moved key can name; any other rule that reads under $each is
@@ -227,6 +246,7 @@ internal sealed class RuleDueList {
         m_literalFactReadersBySource = Freeze(index: literalBySource);
         m_eachFactReaders = Freeze(index: each);
         m_wholeFactReaders = Freeze(index: whole);
+        m_memberRowReaders = memberRow.ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value.Distinct().ToArray());
         MarkAll();
     }
 
@@ -342,7 +362,7 @@ internal sealed class RuleDueList {
             m_arena = arena;
             m_movesRead = -1L;
             // Every row a schedule names is one the list follows; the read below takes every row as moved.
-            foreach (var row in m_wholeRowReaders.Keys) {
+            foreach (var row in m_wholeRowReaders.Keys.Concat(m_memberRowReaders.Keys)) {
                 arena.WatchCellMoves(rowOrdinal: row);
             }
             // Another arena counts its structure versions from its own start, so no snapshot stands against it.
@@ -362,6 +382,11 @@ internal sealed class RuleDueList {
             MarkAll();
         } else {
             foreach (var move in m_moves) {
+                if (m_memberRowReaders.TryGetValue(key: move.Row, value: out var members)) {
+                    foreach (var (reader, member) in members) {
+                        MarkBody(body: member, index: reader);
+                    }
+                }
                 if (!move.Key.IsValid) {
                     MarkReaders(index: m_wholeRowReaders, key: move.Row);
 

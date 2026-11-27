@@ -16,6 +16,11 @@ public enum CellReach : byte {
     /// <summary>The row's key set, which a sweep binds, and no cell's value: only a change to the row's members or
     /// their order reaches the access.</summary>
     Members,
+
+    /// <summary>Any cell of one member of a row family, the member a family selection under the <c>$each</c> key picks
+    /// (<c>family[$each]</c>): the binding whose key spells <see cref="CellAccess.Member"/> reaches every cell of
+    /// this row, and no other binding reaches any.</summary>
+    Member,
 }
 /// <summary>One state cell a compiled rule reads or writes, addressed by ordinal: the row's catalog ordinal and the
 /// interned cell key, never a name. An invalid <paramref name="Key"/> means "any cell of the row" — what a read that
@@ -25,13 +30,18 @@ public enum CellReach : byte {
 /// <param name="IsSet">For a write, whether it replaces the cell rather than accumulating into it.</param>
 /// <param name="Reach">How the access reaches the row when no one key names its cell: which of the row's cells
 /// moving can change what the access answers.</param>
-public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet = false, CellReach Reach = CellReach.Key) {
+/// <param name="Member">For a <see cref="CellReach.Member"/> access, the family index the row carries, which is the
+/// integer the binding's <c>$each</c> key spells; otherwise <c>-1</c>.</param>
+public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet = false, CellReach Reach = CellReach.Key, int Member = -1) {
     /// <summary>Gets a value indicating whether the cell is the one under the key bound to <c>$each</c>.</summary>
     public bool Each => (Reach == CellReach.Each);
     /// <summary>Gets a value indicating whether the cell is one a cell under the <c>$each</c> key names.</summary>
     public bool Indexed => (Reach == CellReach.Indexed);
     /// <summary>Gets a value indicating whether the access reads the row's key set and no cell's value.</summary>
     public bool Members => (Reach == CellReach.Members);
+    /// <summary>Gets a value indicating whether the access reaches the family member its binding selects, and no other
+    /// binding's.</summary>
+    public bool IsMember => ((Reach == CellReach.Member) && (Member >= 0));
 
     /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
     /// <param name="other">The other access.</param>
