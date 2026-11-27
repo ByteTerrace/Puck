@@ -5019,6 +5019,13 @@ private-install activation measurement.
   the client was given.
 - Time the front's swap to a newly activated build from a private install root
   (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`).
+- [medium] One malformed client line still ends the operator session and stops
+  every World it owns: `BoundedMcpInput` fails the session on a line over
+  64 KiB, more than 128 unconsumed messages or invalid UTF-8. A line it cannot
+  admit should be dropped and named, not end the session.
+- [medium] A front that ends says why only on standard error, which Claude Code
+  records only while the server connects. Write the reason where an operator
+  can read it after the session is gone.
 - [low] Investigate the reported operator attachment loss on `world.reset`:
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint.
