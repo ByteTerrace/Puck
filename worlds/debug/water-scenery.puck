@@ -17,8 +17,8 @@ render {
   lanes [{ name: "fallsFlow", value: "state.fallsFlow" }]
 }
 
-// The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
-let wallYaw = wallSector.compass + 180
+// The wall's own sector frame (terrain.puck's sectorYaw).
+let wallYaw = sectorYaw(wallSector.compass)
 
 // The world's X/Z of a point `radial` out from the ring's centre and `lateral` along the wall (the author frame's +X is
 // the placement yaw's own turn of world (cos compass, -sin compass)).

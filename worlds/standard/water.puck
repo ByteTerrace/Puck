@@ -2,10 +2,10 @@
 // the caller's: every colour, size and rate is a parameter, and the defaults are a plain turquoise and white. What moves
 // is bound to the gauges `hydrology.puck` writes, or to the clock, so the scenery shows the cycle and carries none of it.
 //
-// A creation is authored in its own frame, whose +Z is the way the placement's yaw points the other way round: a
-// placement of yaw (bearing + 180) points the author +Z at compass `bearing` (0 is world +Z, 90 is world +X), as the
-// terrain library's sectors do. A stream segment's +Z is its flow, and a falls or glacier shares its wall's sector frame,
-// where +Z points out from the ring's centre and a wall faces -Z.
+// A piece's rows are written in a sector frame as the terrain library's are (terrain.puck's sectorPoint, sectorTurn and
+// sectorYaw): a placement of yaw sectorYaw(bearing) points the frame's +Z at compass `bearing` (0 is world +Z, 90 is
+// world +X). A stream segment's +Z is its flow, and a falls or glacier shares its wall's sector frame, where +Z points out
+// from the ring's centre and a wall faces -Z.
 
 // The standard's water is glass with a medium: its colour is the tint the light behind takes on through `depth`, its
 // `scatter` the turquoise a deep body shows under the light arriving at its surface, filling 1 - exp(-scattering * d) of
@@ -14,6 +14,7 @@
 // the basins and the lake hold metres of water; the stream and the falls are thin sheets and scatter more per metre.
 import "shading"
 import "rig"
+import "terrain"
 let waterGlass = {
   depth: 4
   ior: 1.333
@@ -430,12 +431,9 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = {
         shape Superellipsoid $"stone-{i}" {
           material: stone.material
           exponent: exponent
-          position: (stone.position * [-1, 1, -1])
+          position: sectorPoint(stone.position)
           scale: stone.radii
-          rotation [(0 - (sine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)))
-  cosine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648), sine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648)
-  cosine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)
-]
+          rotation: sectorTurn(compose(rotate([0, 1, 0], stone.yaw), rotate([1, 0, 0], stone.tilt)))
         }
       }
     }
