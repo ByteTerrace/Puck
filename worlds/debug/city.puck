@@ -160,7 +160,10 @@ let terraceLots = flatMap(range(0, 7), c => map(range(0, 18), r => {
 
 // The works' workshops, 22 by 16 m, three across and four deep about the works road; the quay's warehouses, 18 by 12 m,
 // six across in two rows; the civic halls west of the avenue.
-let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z, yaw: (z == -72) ? 180 : 0 }))
+let shedLots = flatMap(
+  map(range(0, 3), c => 62 + 30 * c),
+  x => map([20, -2, -26, -72], z => { x: x, z: z, yaw: (z == -72) ? 180 : 0 })
+)
 let warehouseLots = flatMap(map(range(0, 6), c => 20 + 24 * c), x => map([-160, -190], z => { x: x, z: z }))
 let hallLots = map([-110, -160, -190], z => { x: -22, z: z })
 
@@ -218,8 +221,10 @@ function loopPoint(loop, corner) = [(corner[0] == 0) ? loop.x0 : loop.x1, (corne
 let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
   group: loop.group
   route: loop.route
-  x: loopPoint(loop, vehicleSides[side][0])[0] + (loopPoint(loop, vehicleSides[side][1])[0] - loopPoint(loop, vehicleSides[side][0])[0]) * (k + 0.5) / loop.perSide
-  z: loopPoint(loop, vehicleSides[side][0])[1] + (loopPoint(loop, vehicleSides[side][1])[1] - loopPoint(loop, vehicleSides[side][0])[1]) * (k + 0.5) / loop.perSide
+  x: loopPoint(loop, vehicleSides[side][0])[0] +
+    (loopPoint(loop, vehicleSides[side][1])[0] - loopPoint(loop, vehicleSides[side][0])[0]) * (k + 0.5) / loop.perSide
+  z: loopPoint(loop, vehicleSides[side][0])[1] +
+    (loopPoint(loop, vehicleSides[side][1])[1] - loopPoint(loop, vehicleSides[side][0])[1]) * (k + 0.5) / loop.perSide
 })))
 let vehicleCount = length(vehicleSpots)
 
@@ -230,10 +235,43 @@ let vehicleCount = length(vehicleSpots)
 // side and east along the south side.
 let cityCrossings = [
   { group: "ring", region: "place-city-crossing-north", cx: 0, cz: -15, hx: 3, hz: 5, x0: 3, x1: 11, z0: -20, z1: -10 }
-  { group: "ring", region: "place-city-crossing-west", cx: -35, cz: -50, hx: 5, hz: 3, x0: -40, x1: -30, z0: -47, z1: -39 }
-  { group: "ring", region: "place-city-crossing-south", cx: 0, cz: -85, hx: 3, hz: 5, x0: -11, x1: -3, z0: -90, z1: -80 }
+  {
+    group: "ring"
+    region: "place-city-crossing-west"
+    cx: -35
+    cz: -50
+    hx: 5
+    hz: 3
+    x0: -40
+    x1: -30
+    z0: -47
+    z1: -39
+  }
+  {
+    group: "ring"
+    region: "place-city-crossing-south"
+    cx: 0
+    cz: -85
+    hx: 3
+    hz: 5
+    x0: -11
+    x1: -3
+    z0: -90
+    z1: -80
+  }
   { group: "ring", region: "place-city-crossing-east", cx: 35, cz: -50, hx: 5, hz: 3, x0: 30, x1: 40, z0: -61, z1: -53 }
-  { group: "works", region: "place-city-crossing-works", cx: 90, cz: -50, hx: 3, hz: 5, x0: 93, x1: 101, z0: -55, z1: -45 }
+  {
+    group: "works"
+    region: "place-city-crossing-works"
+    cx: 90
+    cz: -50
+    hx: 3
+    hz: 5
+    x0: 93
+    x1: 101
+    z0: -55
+    z1: -45
+  }
 ]
 
 // The town's navigation areas (../standard/domains.puck's `townAreaTypes`): every road strip is `road`, and each
@@ -257,10 +295,17 @@ navigation {
   )
 }
 
-curves: map(vehicleLoops, loop => roadLoop(name: loop.group, x0: loop.x0, x1: loop.x1, z0: loop.z0, z1: loop.z1, radius: 5))
+curves: map(
+  vehicleLoops,
+  loop => roadLoop(name: loop.group, x0: loop.x0, x1: loop.x1, z0: loop.z0, z1: loop.z1, radius: 5)
+)
 bodyMotionPrograms: map(vehicleLoops, loop => vehicleRoute(name: loop.route, road: loop.group))
 
-vehicleDesign(domain: "city-square", shaping: vehicleGripShaping, routes: { ringRoute: vehicleRouteSteering, worksRoute: vehicleRouteSteering })
+vehicleDesign(
+  domain: "city-square",
+  shaping: vehicleGripShaping,
+  routes: { ringRoute: vehicleRouteSteering, worksRoute: vehicleRouteSteering }
+)
 vehicleLooks(colors: vehicleColors)
 
 // The market (../standard/market.puck): each stall sells to the Moth from a 2 by 2 m spot on the fountain side of its
@@ -302,7 +347,10 @@ let cityLampSpots = concat(
   map(range(0, 15), k => [(-150 + 20 * k), -123.5]),
   map(range(0, 6), k => [(46 + 20 * k), -43.5]),
   map(range(0, 10), k => [(-50 + 20 * k), -202.5]),
-  map(range(0, 8), k => [(24 * sine((k + 0.5) * 0.7853981633974483)), (-50 + 24 * cosine((k + 0.5) * 0.7853981633974483))])
+  map(
+    range(0, 8),
+    k => [(24 * sine((k + 0.5) * 0.7853981633974483)), (-50 + 24 * cosine((k + 0.5) * 0.7853981633974483))]
+  )
 )
 
 // The lamps' power: on (`cityLampLumens`) from half past six in the evening to six in the morning, off by day.
@@ -342,7 +390,10 @@ let citizenWorks = concat(
   map(hallLots, lot => [lot.x, (lot.z - 11.5)]),
   map(stallRing, stall => [(20.5 * sine(stall.yaw * pi / 180)), (-50 + 20.5 * cosine(stall.yaw * pi / 180))])
 )
-let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * pi / 180)), (-50 + 14 * cosine(stall.yaw * pi / 180))])
+let citizenMarkets = map(
+  stallRing,
+  stall => [(14 * sine(stall.yaw * pi / 180)), (-50 + 14 * cosine(stall.yaw * pi / 180))]
+)
 let citizenPeople = map(range(0, citizenCount), i => {
   key: citizenTop - i
   home: citizenHomes[i % length(citizenHomes)]
@@ -628,7 +679,16 @@ prototypes {
       palette: cityPalette
       schema: "puck.creation.v2"
       for strip in roadStrips {
-        boundsBox(label: $"road-{strip.id}", x0: strip.x0, x1: strip.x1, y0: 0, y1: 0.02, z0: strip.z0, z1: strip.z1, slot: road)
+        boundsBox(
+          label: $"road-{strip.id}",
+          x0: strip.x0,
+          x1: strip.x1,
+          y0: 0,
+          y1: 0.02,
+          z0: strip.z0,
+          z1: strip.z1,
+          slot: road
+        )
       }
     }
   }
@@ -886,8 +946,7 @@ render {
   farDistance: 600
   lighting {
     lights: concat(
-      [
-      ],
+      [],
       map(range(0, length(cityLampSpots)), i => point(
         name: $"lamp-{i}",
         position: [cityLampSpots[i][0], 4.2, cityLampSpots[i][1]],

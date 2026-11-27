@@ -294,8 +294,8 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
           blend: Subtraction
           material: 2
           position [(a[0] + b[0]) / 2,
-  (bed + top + reach) / 2, (a[1] + b[1]) / 2
-]
+            (bed + top + reach) / 2, (a[1] + b[1]) / 2
+          ]
           scale [topHalf, (top + reach - bed) / 2, legLength / 2 + join]
           taper: bedHalf / topHalf
           rotation [-halfTurnSine(legCosine), 0, -halfTurnCosine(legCosine), 0]
@@ -338,7 +338,10 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
                 (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])
             ) / 2
           ]
-          rotation: compose(rotate([0, 1, 0], 180), [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))])
+          rotation: compose(
+            rotate([0, 1, 0], 180),
+            [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
+          )
           swings [
             swing(
               "fold",
@@ -650,9 +653,9 @@ template stoneBridge(id, length = 9, width = 3, rise = 1.1, ramp = 3, palette = 
           position [0, rise / 2 - 0.1, (0 - (end * (length / 2 + ramp / 2 - 0.05)))]
           scale [width / 2, 0.15, squareRoot(ramp * ramp + rise * rise) / 2]
           rotation [(0 - (end * halfTurnSine(ramp / squareRoot(ramp * ramp + rise * rise))))
-  0, 0
-  halfTurnCosine(ramp / squareRoot(ramp * ramp + rise * rise))
-]
+            0, 0
+            halfTurnCosine(ramp / squareRoot(ramp * ramp + rise * rise))
+          ]
         }
       }
       for side in [-1, 1] {
@@ -711,9 +714,9 @@ template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9
         shape Box $"step-{i}" {
           material: 0
           position [(half[0] - (0.8 * (length(stepTops) - i)) / 2),
-  (top + floorY) / 2,
-  0
-]
+            (top + floorY) / 2,
+            0
+          ]
           scale [(0.8 * (length(stepTops) - i)) / 2, (top - floorY) / 2, 2]
         }
       }

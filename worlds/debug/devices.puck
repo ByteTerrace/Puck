@@ -1177,11 +1177,11 @@ machines [
   (brickMachine("humble-gaming-brick", "cartridges/cgb/tetromino.cgb.puck") with {
     contentFolders ["cartridges/cgb", "cartridges/dmg", "../../roms/hgb"]
     preferFolderDefault: true
-  })
+  }),
   (advancedBrickMachine("advanced-gaming-brick", "cartridges/agb/pip.agb.puck") with {
     contentFolders ["cartridges/agb", "../../roms/agb"]
     preferFolderDefault: true
-  })
+  }),
   (deckMachine("humble-gaming-deck", "cartridges/deck/colour-bars.deck") with {
     contentFolders ["cartridges/deck", "../../roms/hgd"]
     preferFolderDefault: true

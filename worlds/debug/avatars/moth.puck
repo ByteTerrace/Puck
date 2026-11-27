@@ -241,7 +241,12 @@ template mothLimbs(side, isRight) {
         phase: 15
       }
       // And lift forward 0.12 rad, 0.2 rising.
-      swing("air", signed(isRight, [-0.987688, -0.156434, 0], [1, -1, 1]), -0.015, mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+      swing(
+        "air",
+        signed(isRight, [-0.987688, -0.156434, 0], [1, -1, 1]),
+        -0.015,
+        mirrorX(isRight, [-0.295, 1.4515, 0])
+      ) with {
         wave: "linear"
         phase: 8
       }
@@ -1550,7 +1555,10 @@ template mothLimbs(side, isRight) {
   shape Box $"podVent-{side}" {
     id: 1113 + isRight * 100
     position: mirrorX(isRight, [-0.1141, 1.3772, 0.4123])
-    rotation: compose(rotate([0, 1, 0], 180), bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774]))
+    rotation: compose(
+      rotate([0, 1, 0], 180),
+      bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774])
+    )
     scale [0.039, 0.0109, 0.0281]
     material: bySide(isRight, violetPodLeft, violetPodRight)
     blend: "SmoothSubtraction"
@@ -2408,7 +2416,6 @@ prototypes {
       }
     }
   }
-
   allow PUCK133 "her wall toes solve after her ground feet on the same legs: on a face the ground feet have let go, and at a wall's foot the toes are meant to win"
   prototype "moth" {
     document {
@@ -3525,7 +3532,14 @@ prototypes {
         { name: "swim", signal: "time", cadence: 3.2, blendInSeconds: 0.3, blendOutSeconds: 0.2, when ["InMedium"] }
         // On a wall: the reach she holds, and the cycle her hands and feet plant on, one round every metre and a half
         // of travel along the face.
-        { name: "cling", signal: "time", cadence: 1, blendInSeconds: 0.15, blendOutSeconds: 0.2, when ["HoldingUnwalkable"] }
+        {
+          name: "cling"
+          signal: "time"
+          cadence: 1
+          blendInSeconds: 0.15
+          blendOutSeconds: 0.2
+          when ["HoldingUnwalkable"]
+        }
         { name: "climb", signal: "travel", cadence: 4.2, when ["HoldingUnwalkable", "moving"] }
         {
           name: "dash"
@@ -3942,10 +3956,42 @@ prototypes {
         // a wall's foot with a hand on it, the wall feet win. A boot stays level with its toe on the face, its centre
         // the toe's length off it.
         for limb in [
-          { name: "hand-left", chain ["upperArm-left", "forearm-left"], tip: "palm-left", reach: 0.75, standoff: 0.04, align: 0, window [0, 3.1415925] }
-          { name: "hand-right", chain ["upperArm-right", "forearm-right"], tip: "palm-right", reach: 0.75, standoff: 0.04, align: 0, window [3.1415925, 6.28] }
-          { name: "toe-right", chain ["thigh-right", "shin-right"], tip: "boot-right", reach: 0.7, standoff: 0.22, align: 1, window [0.7853981, 3.9269906] }
-          { name: "toe-left", chain ["thigh-left", "shin-left"], tip: "boot-left", reach: 0.7, standoff: 0.22, align: 1, window [3.9269906, 0.7853981] }
+          {
+            name: "hand-left"
+            chain ["upperArm-left", "forearm-left"]
+            tip: "palm-left"
+            reach: 0.75
+            standoff: 0.04
+            align: 0
+            window [0, 3.1415925]
+          }
+          {
+            name: "hand-right"
+            chain ["upperArm-right", "forearm-right"]
+            tip: "palm-right"
+            reach: 0.75
+            standoff: 0.04
+            align: 0
+            window [3.1415925, 6.28]
+          }
+          {
+            name: "toe-right"
+            chain ["thigh-right", "shin-right"]
+            tip: "boot-right"
+            reach: 0.7
+            standoff: 0.22
+            align: 1
+            window [0.7853981, 3.9269906]
+          }
+          {
+            name: "toe-left"
+            chain ["thigh-left", "shin-left"]
+            tip: "boot-left"
+            reach: 0.7
+            standoff: 0.22
+            align: 1
+            window [3.9269906, 0.7853981]
+          }
         ] {
           {
             name: limb.name

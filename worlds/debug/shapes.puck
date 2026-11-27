@@ -101,7 +101,11 @@ let warpRow = [
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds, motion" }
+  {
+    level: 0
+    title: "LEVEL 0  SHAPE AND SURFACE"
+    what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds, motion"
+  }
   { level: 1, title: "LEVEL 1  TOYBOX", what: "deck stations: arcade cabinets and television sets" }
   { level: 2, title: "LEVEL 2  GAMES", what: "the board game room" }
   { level: 3, title: "LEVEL 3  GALLERIES", what: "open galleries over the nave" }
@@ -196,7 +200,8 @@ let turntableHolds = ["PLAY", "PAUSE"]
 // step the speed by code - 2), hold or release it (its pause and play button), set it turning or stop it, or take the
 // signed speed galleryTurnTo holds.
 let galleryTurnCodes = { slower: 1, hold: 2, faster: 3, on: 4, off: 5, pace: 6 }
-function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / speed} S  >" : $"<  {turntableSecondsPerTurn / (0 - speed)} S")
+function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / speed} S  >" :
+  $"<  {turntableSecondsPerTurn / (0 - speed)} S")
 
 // Where each group's list starts in the catalog, and every exhibit in walking order, group by group: its name, the group
 // it belongs to (its index in galleryDisplayRows), its place in that group's list (`slot`) and in the catalog (`index`).
@@ -208,7 +213,10 @@ let galleryDisplayFirsts = map(
 )
 let galleryCatalog = flatMap(
   range(0, length(galleryDisplayRows)),
-  i => map(galleryDisplayRows[i].names, (name, slot) => { name: name, group: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) })
+  i => map(
+    galleryDisplayRows[i].names,
+    (name, slot) => { name: name, group: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) }
+  )
 )
 let galleryLast = (length(galleryCatalog) - 1)
 function galleryGroupOf(entry) = galleryDisplayRows[entry.group]
@@ -240,7 +248,10 @@ let displayStand = [0, 0, 1.75]
 let displayExhibitDrop = (((plinthCapTop * displayScale) - (0.75 * displayExhibitScale)) + displayExhibitLift)
 
 // The display an exhibit is home to, among `displays`: the first whose `homes` name the exhibit's group.
-function stationHome(displays, entry) = filter(displays, display => (length(filter(display.homes, home => (home == galleryGroupOf(entry).id))) > 0))[0]
+function stationHome(displays, entry) = filter(
+  displays,
+  display => (length(filter(display.homes, home => (home == galleryGroupOf(entry).id))) > 0)
+)[0]
 // An exhibit's station: its name, its catalog index and slot, and its home display's place (the turntable's centre, its
 // level and floor height, the yaw it stands at, `front` and the `site` of its frame).
 function stationRow(entry, display) = {
@@ -372,9 +383,18 @@ let galleryCopy = {
   "shape-ellipsoid-xyz" { title: "ELLIPSOID XYZ", note: "An ellipsoid scaled unevenly." }
   "shape-round-cone-xyz" { title: "ROUND CONE XYZ", note: "A round cone scaled unevenly." }
   "shape-cone-xz" { title: "CONE XZ", note: "A cone with X and Z scaled differently." }
-  "shape-superellipsoid-xyz" { title: "SUPER XYZ", note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth." }
-  "shape-stretch-cut" { title: "STRETCH CUT", note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth." }
-  "shape-stretch-smooth" { title: "STRETCH SMOOTH", note: "The same three cut smoothly at 0.04 m: each rim's fillet one width all the way round." }
+  "shape-superellipsoid-xyz" {
+    title: "SUPER XYZ"
+    note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth."
+  }
+  "shape-stretch-cut" {
+    title: "STRETCH CUT"
+    note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth."
+  }
+  "shape-stretch-smooth" {
+    title: "STRETCH SMOOTH"
+    note: "The same three cut smoothly at 0.04 m: each rim's fillet one width all the way round."
+  }
   "shape-trapezoid" { title: "TRAPEZOID", note: "A trapezoid profile, extruded." }
   "shape-rounded-rectangle" { title: "ROUNDED RECT", note: "A rounded rectangle profile, extruded." }
   "shape-polygon-6" { title: "POLYGON 6", note: "A hexagon profile, extruded." }
@@ -392,46 +412,145 @@ let galleryCopy = {
   "shape-revolve-ellipse" { title: "REV ELLIPSE", note: "An ellipse revolved into a ring." }
   "shape-revolve-chamfered-rectangle" { title: "REV CHAMFER", note: "A chamfered rectangle revolved into a ring." }
   "shape-revolve-convex" { title: "REV CONVEX", note: "A convex pentagon revolved into a ring." }
-  "shape-sweep" { title: "SWEEP", note: "A tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable." }
-  "shape-sweep-tapered" { title: "SWEEP TAPER", note: "The radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch." }
-  "shape-sweep-strands" { title: "SWEEP STRANDS", note: "Three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced." }
-  "shape-rounding" { title: "ROUNDING", note: "A cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact." }
-  "shape-chamfer" { title: "CHAMFER", note: "A box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round." }
-  "shape-onion" { title: "ONION", note: "A 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even." }
-  "shape-dilate" { title: "DILATE", note: "A 0.3 box inflated by 0.1: rounded by the inflation, 0.4 across, no creases." }
-  "shape-flare" { title: "FLARE", note: "A cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here." }
-  "shape-shear" { title: "SHEAR", note: "A box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z." }
-  "shape-bumps" { title: "BUMPS", note: "Two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring." }
-  "shape-cells-f1" { title: "CELLS F1", note: "Worley F1 relief, amplitude 0.18: raised cells with creased walls, like chitin." }
-  "shape-cells-f2" { title: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls, hollows at their centres." }
-  "shape-polar-fold" { title: "POLAR FOLD", note: "One box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors." }
-  "shape-blend-union" { title: "UNION", note: "Min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface." }
-  "shape-blend-subtraction" { title: "SUBTRACTION", note: "The sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp." }
-  "shape-blend-intersection" { title: "INTERSECTION", note: "Only where both overlap: a box with spherical corners, the sphere's colour on its own faces." }
-  "shape-blend-xor" { title: "XOR", note: "Either but not both: the overlap is cut away, leaving a void you can see into from the seam." }
-  "shape-smooth-union" { title: "SMOOTH UNION", note: "A 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step." }
+  "shape-sweep" {
+    title: "SWEEP"
+    note: "A tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable."
+  }
+  "shape-sweep-tapered" {
+    title: "SWEEP TAPER"
+    note: "The radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch."
+  }
+  "shape-sweep-strands" {
+    title: "SWEEP STRANDS"
+    note: "Three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced."
+  }
+  "shape-rounding" {
+    title: "ROUNDING"
+    note: "A cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact."
+  }
+  "shape-chamfer" {
+    title: "CHAMFER"
+    note: "A box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round."
+  }
+  "shape-onion" {
+    title: "ONION"
+    note: "A 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even."
+  }
+  "shape-dilate" {
+    title: "DILATE"
+    note: "A 0.3 box inflated by 0.1: rounded by the inflation, 0.4 across, no creases."
+  }
+  "shape-flare" {
+    title: "FLARE"
+    note: "A cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here."
+  }
+  "shape-shear" {
+    title: "SHEAR"
+    note: "A box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z."
+  }
+  "shape-bumps" {
+    title: "BUMPS"
+    note: "Two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring."
+  }
+  "shape-cells-f1" {
+    title: "CELLS F1"
+    note: "Worley F1 relief, amplitude 0.18: raised cells with creased walls, like chitin."
+  }
+  "shape-cells-f2" {
+    title: "CELLS F2 F1"
+    note: "F2 minus F1 relief: ridges along the cell walls, hollows at their centres."
+  }
+  "shape-polar-fold" {
+    title: "POLAR FOLD"
+    note: "One box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors."
+  }
+  "shape-blend-union" {
+    title: "UNION"
+    note: "Min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface."
+  }
+  "shape-blend-subtraction" {
+    title: "SUBTRACTION"
+    note: "The sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp."
+  }
+  "shape-blend-intersection" {
+    title: "INTERSECTION"
+    note: "Only where both overlap: a box with spherical corners, the sphere's colour on its own faces."
+  }
+  "shape-blend-xor" {
+    title: "XOR"
+    note: "Either but not both: the overlap is cut away, leaving a void you can see into from the seam."
+  }
+  "shape-smooth-union" {
+    title: "SMOOTH UNION"
+    note: "A 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step."
+  }
   "shape-smooth-subtraction" { title: "SMOOTH SUBTRACT", note: "The carve's rim rounded over 0.1 m into the box." }
   "shape-smooth-intersection" { title: "SMOOTH INTERSECT", note: "The intersection's edges rounded over 0.1 m." }
-  "shape-chamfer-union" { title: "CHAMFER UNION", note: "A flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet." }
+  "shape-chamfer-union" {
+    title: "CHAMFER UNION"
+    note: "A flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet."
+  }
   "shape-chamfer-subtraction" { title: "CHAMFER SUBTRACT", note: "The carve's rim bevelled at 45 degrees." }
   "shape-chamfer-intersection" { title: "CHAMFER INTERSECT", note: "The intersection's edges bevelled at 45 degrees." }
-  "shape-groove-union" { title: "GROOVE UNION", note: "A round groove cut along the seam curve, 0.05 m: a recessed line following the join." }
-  "shape-pipe-union" { title: "PIPE UNION", note: "A round bead laid along the seam curve, 0.04 m: a raised weld following the join." }
+  "shape-groove-union" {
+    title: "GROOVE UNION"
+    note: "A round groove cut along the seam curve, 0.05 m: a recessed line following the join."
+  }
+  "shape-pipe-union" {
+    title: "PIPE UNION"
+    note: "A round bead laid along the seam curve, 0.04 m: a raised weld following the join."
+  }
   "shape-groove-subtraction" { title: "GROOVE SUBTRACT", note: "A groove cut along the carve's rim." }
   "shape-pipe-subtraction" { title: "PIPE SUBTRACT", note: "A bead laid along the carve's rim." }
-  "shape-symmetry" { title: "SYMMETRY", note: "One tilted capsule mirrored across x = 0: a V, the pair exactly symmetric." }
-  "shape-repeat" { title: "REPEAT 5", note: "One sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each." }
+  "shape-symmetry" {
+    title: "SYMMETRY"
+    note: "One tilted capsule mirrored across x = 0: a V, the pair exactly symmetric."
+  }
+  "shape-repeat" {
+    title: "REPEAT 5"
+    note: "One sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each."
+  }
   "shape-repeat-grid" { title: "REPEAT 3X3", note: "One box on a 3 by 3 lattice in x and z." }
-  "shape-repeat-even" { title: "REPEAT EVEN", note: "An even count from a symmetry over an odd repeat: four spheres, the middle gap closed." }
-  "shape-repeat-clipped" { title: "REPEAT CLIPPED", note: "An unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut." }
-  "shape-polar-mirror" { title: "POLAR MIRROR", note: "Five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls." }
-  "shape-polar-z" { title: "POLAR Z", note: "Eight copies about z through an origin above the plinth: a wheel facing you." }
-  "shape-polar-stride" { title: "POLAR STRIDE", note: "Six sectors, each striding the palette one row: six colours, one sphere." }
-  "shape-wallpaper-pmm" { title: "WALLPAPER PMM", note: "A tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images." }
-  "shape-wallpaper-p4m" { title: "WALLPAPER P4M", note: "Square symmetry with mirrors through the 4-fold centres: eight images per cell." }
-  "shape-wallpaper-p3m1" { title: "WALLPAPER P3M1", note: "A hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases." }
-  "shape-wallpaper-p6m" { title: "WALLPAPER P6M", note: "The richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly." }
-  "shape-wallpaper-stride" { title: "WALLPAPER STRIDE", note: "P4m with a material stride: cells alternate colour by parity, a checkerboard." }
+  "shape-repeat-even" {
+    title: "REPEAT EVEN"
+    note: "An even count from a symmetry over an odd repeat: four spheres, the middle gap closed."
+  }
+  "shape-repeat-clipped" {
+    title: "REPEAT CLIPPED"
+    note: "An unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut."
+  }
+  "shape-polar-mirror" {
+    title: "POLAR MIRROR"
+    note: "Five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls."
+  }
+  "shape-polar-z" {
+    title: "POLAR Z"
+    note: "Eight copies about z through an origin above the plinth: a wheel facing you."
+  }
+  "shape-polar-stride" {
+    title: "POLAR STRIDE"
+    note: "Six sectors, each striding the palette one row: six colours, one sphere."
+  }
+  "shape-wallpaper-pmm" {
+    title: "WALLPAPER PMM"
+    note: "A tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images."
+  }
+  "shape-wallpaper-p4m" {
+    title: "WALLPAPER P4M"
+    note: "Square symmetry with mirrors through the 4-fold centres: eight images per cell."
+  }
+  "shape-wallpaper-p3m1" {
+    title: "WALLPAPER P3M1"
+    note: "A hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases."
+  }
+  "shape-wallpaper-p6m" {
+    title: "WALLPAPER P6M"
+    note: "The richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly."
+  }
+  "shape-wallpaper-stride" {
+    title: "WALLPAPER STRIDE"
+    note: "P4m with a material stride: cells alternate colour by parity, a checkerboard."
+  }
   "shape-erode" { title: "ERODE", note: "A lane erodes the sphere, here halfway through." }
   "shape-noise-mask" { title: "RELIEF MASK", note: "The bowl stays smooth; the slab around it stays rough." }
   "shape-noise" { title: "NOISE", note: "FBm noise lumps the sphere; the plinth stays clean." }
@@ -439,13 +558,25 @@ let galleryCopy = {
   "motion-rock" { title: "ROCK", note: "A sine swing about a pivot." }
   "motion-slide" { title: "SLIDE", note: "A translation on the gallery clock." }
   "motion-chain" { title: "PARENT CHAIN", note: "A chain of parented swings." }
-  "motion-smooth-blend" { title: "MOVING BLEND", note: "A skinned fillet: the sphere slides 6 cm and the fillet stretches with it, never tearing, stepping or popping." }
+  "motion-smooth-blend" {
+    title: "MOVING BLEND"
+    note: "A skinned fillet: the sphere slides 6 cm and the fillet stretches with it, never tearing, stepping or popping."
+  }
   "motion-state-blend" { title: "STATE BLEND", note: "The blend placed by state; each write rebakes." }
-  "motion-carve" { title: "MOVING CUT", note: "A smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it." }
+  "motion-carve" {
+    title: "MOVING CUT"
+    note: "A smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it."
+  }
   "motion-mirror" { title: "MOVING MIRROR", note: "A mirrored shape riding a yawing hinge." }
   "motion-polar" { title: "MOVING POLAR", note: "A polar-folded blade spinning on its hub." }
-  "motion-nod" { title: "NODDING BLEND", note: "A head nods on its neck: the throat fillet bends with the nod, no crack, spike or fold at either extreme." }
-  "motion-three" { title: "THREE OWNERS", note: "Three moving owners meet: the bake splits them into rigid parts, so expect creases where they join, never tears." }
+  "motion-nod" {
+    title: "NODDING BLEND"
+    note: "A head nods on its neck: the throat fillet bends with the nod, no crack, spike or fold at either extreme."
+  }
+  "motion-three" {
+    title: "THREE OWNERS"
+    note: "Three moving owners meet: the bake splits them into rigid parts, so expect creases where they join, never tears."
+  }
   "motion-paint" { title: "MOVING PAINT", note: "Paints riding a swinging panel." }
   "motion-inset" { title: "MOVING INSET", note: "An eye inset that turns with its shape." }
   "motion-twist" { title: "TWIST", note: "A twist, drawn on the stamp-pool path." }
@@ -455,16 +586,46 @@ let galleryCopy = {
   "motion-volume" { title: "MOVING VOLUME", note: "A plume riding a tilting nozzle." }
   "motion-ik" { title: "IK REACH", note: "A two-bone arm reaching for a state point." }
   "motion-frames" { title: "FRAMES", note: "Timeline frames stepped on the render clock." }
-  "motion-seam-paint" { title: "PAINT ACROSS A SEAM", note: "Expected to fail until step 4: the stripe holds on box and sphere but slides across the fillet as the sphere moves." }
-  "shape-warp" { title: "DOMAIN WARP", note: "A sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases." }
-  "shape-displace" { title: "SINE RELIEF", note: "A box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face." }
-  "shape-elongate" { title: "ELONGATE", note: "A sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere." }
-  "shape-jitter" { title: "JITTER", note: "A repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall." }
-  "shape-jitter-tumble" { title: "JITTER TUMBLE", note: "Boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped." }
-  "shape-log-sphere" { title: "LOG SPHERE", note: "Self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward." }
-  "shape-stairs-union" { title: "STAIRS UNION", note: "A union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet." }
-  "shape-stairs-subtraction" { title: "STAIRS SUBTRACT", note: "A carve whose rim steps three times over 0.15 m: terraces into the cut." }
-  "shape-morph" { title: "MORPH", note: "The box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge." }
+  "motion-seam-paint" {
+    title: "PAINT ACROSS A SEAM"
+    note: "Expected to fail until step 4: the stripe holds on box and sphere but slides across the fillet as the sphere moves."
+  }
+  "shape-warp" {
+    title: "DOMAIN WARP"
+    note: "A sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases."
+  }
+  "shape-displace" {
+    title: "SINE RELIEF"
+    note: "A box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face."
+  }
+  "shape-elongate" {
+    title: "ELONGATE"
+    note: "A sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere."
+  }
+  "shape-jitter" {
+    title: "JITTER"
+    note: "A repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall."
+  }
+  "shape-jitter-tumble" {
+    title: "JITTER TUMBLE"
+    note: "Boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped."
+  }
+  "shape-log-sphere" {
+    title: "LOG SPHERE"
+    note: "Self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward."
+  }
+  "shape-stairs-union" {
+    title: "STAIRS UNION"
+    note: "A union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet."
+  }
+  "shape-stairs-subtraction" {
+    title: "STAIRS SUBTRACT"
+    note: "A carve whose rim steps three times over 0.15 m: terraces into the cut."
+  }
+  "shape-morph" {
+    title: "MORPH"
+    note: "The box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge."
+  }
   "shape-superellipsoid-2" { title: "SUPER EXP 2", note: "A superellipsoid at exponent 2." }
   "shape-superellipsoid-8" { title: "SUPER EXP 8", note: "A superellipsoid at exponent 8, nearly a box." }
   "shape-prism-triangle" { title: "TAPER 0", note: "A prism at taper 0." }
@@ -497,11 +658,23 @@ let galleryCopy = {
   "shape-volume-flow" { title: "VOLUME FLOW", note: "A flow volume pulsing from a nozzle." }
   "shape-volume-cloud" { title: "VOLUME CLOUD", note: "A cloud volume." }
   "shape-state-color" { title: "STATE COLOR", note: "A colour bound to state: galleryInputs.tint." }
-  "shape-cel" { title: "CEL STYLE", note: "Left: its own cel style, the shadow kept under the band; right: continuous." }
+  "shape-cel" {
+    title: "CEL STYLE"
+    note: "Left: its own cel style, the shadow kept under the band; right: continuous."
+  }
   "shape-cel-hard" { title: "CEL HARD", note: "Left: the band over light and shadow together; right: continuous." }
-  "shape-grey-card" { title: "GREY CARD", note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly." }
-  "shape-paint-tiles" { title: "PAINT TILES", note: "One box paint repeated on a 30 cm lattice: 1 cm joints, each tile's tone hashed." }
-  "shape-glass" { title: "GLASS", note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods." }
+  "shape-grey-card" {
+    title: "GREY CARD"
+    note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly."
+  }
+  "shape-paint-tiles" {
+    title: "PAINT TILES"
+    note: "One box paint repeated on a 30 cm lattice: 1 cm joints, each tile's tone hashed."
+  }
+  "shape-glass" {
+    title: "GLASS"
+    note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods."
+  }
 }
 
 // A display's console is one interactive screen (gallery.md, "Display consoles"): a glass a little proud of the
@@ -545,7 +718,12 @@ let consoleGroupEm = 0.0125
 function consoleMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.y0 + rect.y1) / 2)]
 function consoleHalf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.y1 - rect.y0) / 2)]
 // A button's face less a margin, the box its label fits.
-function consoleInset(rect) = { x0: (rect.x0 + 0.008), x1: (rect.x1 - 0.008), y0: (rect.y0 + 0.006), y1: (rect.y1 - 0.006) }
+function consoleInset(rect) = {
+  x0: (rect.x0 + 0.008)
+  x1: (rect.x1 - 0.008)
+  y0: (rect.y0 + 0.006)
+  y1: (rect.y1 - 0.006)
+}
 // A rectangle as the fractions of the glass a pointer hit reads: x right from the glass's left edge, y down from its
 // top edge.
 function consoleRegion(id, rect, rows = 1) = {
@@ -584,25 +762,77 @@ function consoleText(display, rect, template, ink, em, align, wrap = false, mark
 // a row's group.
 function consoleNameLine(display, row) = $"[color={{state.galleryRowInk.{display.id}-{row}}}]{{state.galleryRowName.{display.id}-{row}}}[/color]"
 function consoleGroupLine(display, row) = $"{{state.galleryRowGroup.{display.id}-{row}}}"
-function consoleNameLines(display) = reduce(range(0, consoleRows), "", (text, row) => ((row == 0) ? consoleNameLine(display, row) : $"{text}\n{consoleNameLine(display, row)}"))
-function consoleGroupLines(display) = reduce(range(0, consoleRows), "", (text, row) => ((row == 0) ? consoleGroupLine(display, row) : $"{text}\n{consoleGroupLine(display, row)}"))
+function consoleNameLines(display) = reduce(
+  range(0, consoleRows),
+  "",
+  (text, row) => ((row == 0) ? consoleNameLine(display, row) : $"{text}\n{consoleNameLine(display, row)}")
+)
+function consoleGroupLines(display) = reduce(
+  range(0, consoleRows),
+  "",
+  (text, row) => ((row == 0) ? consoleGroupLine(display, row) : $"{text}\n{consoleGroupLine(display, row)}")
+)
 function consolePaints(display) = [
   // The elbow: the left column's head turning into the top bar, its inner corner a quarter round the field cuts.
-  consoleFill(display, { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: 0.06, y1: consoleBar.y1 }, consoleLook.frame, 0.03)
-  consoleFill(display, { x0: (consoleColumn.x0 + 0.03), x1: 0.3, y0: consoleBar.y0, y1: consoleBar.y1 }, consoleLook.frame)
-  consoleFill(display, { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.03), y0: (consoleBar.y0 - 0.03), y1: consoleBar.y0 }, consoleLook.frame)
-  consoleFill(display, { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.12), y0: (consoleBar.y0 - 0.12), y1: consoleBar.y0 }, consoleLook.field, 0.03)
+  consoleFill(
+    display,
+    { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: 0.06, y1: consoleBar.y1 },
+    consoleLook.frame,
+    0.03
+  )
+  consoleFill(
+    display,
+    { x0: (consoleColumn.x0 + 0.03), x1: 0.3, y0: consoleBar.y0, y1: consoleBar.y1 },
+    consoleLook.frame
+  )
+  consoleFill(
+    display,
+    { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.03), y0: (consoleBar.y0 - 0.03), y1: consoleBar.y0 },
+    consoleLook.frame
+  )
+  consoleFill(
+    display,
+    { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.12), y0: (consoleBar.y0 - 0.12), y1: consoleBar.y0 },
+    consoleLook.field,
+    0.03
+  )
   // The top bar's cap, which names the catalog, and the left column's buttons and foot.
   consoleFill(display, { x0: 0.33, x1: 0.72, y0: consoleBar.y0, y1: consoleBar.y1 }, consoleLook.frame, 0.02)
   consoleFill(display, consolePrev, consoleLook.cream, 0.012)
   consoleFill(display, consoleNext, consoleLook.teal, 0.012)
-  consoleFill(display, { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.165, y1: -0.11 }, consoleLook.terracotta, 0.025)
+  consoleFill(
+    display,
+    { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.165, y1: -0.11 },
+    consoleLook.terracotta,
+    0.025
+  )
   // The rule closing the list's foot, and the divider between the list and the chosen exhibit.
   consoleFill(display, { x0: (consoleColumn.x1 + 0.025), x1: 0.72, y0: -0.165, y1: -0.153 }, consoleLook.frame, 0.006)
   consoleFill(display, { x0: 0.125, x1: 0.133, y0: consoleList.y0, y1: consoleList.y1 }, consoleLook.frame, 0.004)
-  consoleText(display, { x0: 0.35, x1: 0.70, y0: consoleBar.y0, y1: consoleBar.y1 }, $"SHAPE CATALOG {galleryCount}", consoleLook.ink, 0.02, "right")
-  consoleText(display, { x0: (consolePrev.x0 + 0.01), x1: (consolePrev.x1 - 0.01), y0: consolePrev.y0, y1: (consolePrev.y0 + 0.035) }, "PREV", consoleLook.ink, 0.017, "right")
-  consoleText(display, { x0: (consoleNext.x0 + 0.01), x1: (consoleNext.x1 - 0.01), y0: consoleNext.y0, y1: (consoleNext.y0 + 0.035) }, "NEXT", consoleLook.ink, 0.017, "right")
+  consoleText(
+    display,
+    { x0: 0.35, x1: 0.70, y0: consoleBar.y0, y1: consoleBar.y1 },
+    $"SHAPE CATALOG {galleryCount}",
+    consoleLook.ink,
+    0.02,
+    "right"
+  )
+  consoleText(
+    display,
+    { x0: (consolePrev.x0 + 0.01), x1: (consolePrev.x1 - 0.01), y0: consolePrev.y0, y1: (consolePrev.y0 + 0.035) },
+    "PREV",
+    consoleLook.ink,
+    0.017,
+    "right"
+  )
+  consoleText(
+    display,
+    { x0: (consoleNext.x0 + 0.01), x1: (consoleNext.x1 - 0.01), y0: consoleNext.y0, y1: (consoleNext.y0 + 0.035) },
+    "NEXT",
+    consoleLook.ink,
+    0.017,
+    "right"
+  )
   // The list: every row's title in its ink (the chosen one lit), and its group beside it.
   consoleText(
     display,
@@ -624,7 +854,14 @@ function consolePaints(display) = [
     spacing: (consoleRowPitch / (consoleGroupEm * consoleFontLine))
   )
   // The chosen exhibit: its title, its group and place in the catalog, and its note.
-  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: 0.05, y1: 0.105 }, $"{{state.galleryScreenTitle.{display.id}}}", consoleLook.lit, 0.034, "left")
+  consoleText(
+    display,
+    { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: 0.05, y1: 0.105 },
+    $"{{state.galleryScreenTitle.{display.id}}}",
+    consoleLook.lit,
+    0.034,
+    "left"
+  )
   consoleText(
     display,
     { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: 0.022, y1: 0.048 },
@@ -633,15 +870,37 @@ function consolePaints(display) = [
     0.015,
     "left"
   )
-  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: (consoleTurnRow.y1 + 0.01), y1: 0.016 }, $"{{state.galleryScreenNote.{display.id}}}", consoleLook.dim, 0.0145, "left", wrap: true)
+  consoleText(
+    display,
+    { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: (consoleTurnRow.y1 + 0.01), y1: 0.016 },
+    $"{{state.galleryScreenNote.{display.id}}}",
+    consoleLook.dim,
+    0.0145,
+    "left",
+    wrap: true
+  )
   // The turntable's row: slower, pause or play (the label names what a tap does), faster, and the pace it keeps.
   consoleFill(display, consoleSlower, consoleLook.teal, 0.012)
   consoleFill(display, consoleHold, consoleLook.cream, 0.012)
   consoleFill(display, consoleFaster, consoleLook.teal, 0.012)
   consoleText(display, consoleInset(consoleSlower), "<", consoleLook.ink, 0.02, "center")
-  consoleText(display, consoleInset(consoleHold), $"{{state.galleryTurnHold.{display.id}}}", consoleLook.ink, 0.017, "center")
+  consoleText(
+    display,
+    consoleInset(consoleHold),
+    $"{{state.galleryTurnHold.{display.id}}}",
+    consoleLook.ink,
+    0.017,
+    "center"
+  )
   consoleText(display, consoleInset(consoleFaster), ">", consoleLook.ink, 0.02, "center")
-  consoleText(display, consoleInset(consolePace), $"{{state.galleryTurnPace.{display.id}}}", consoleLook.quiet, 0.015, "right")
+  consoleText(
+    display,
+    consoleInset(consolePace),
+    $"{{state.galleryTurnPace.{display.id}}}",
+    consoleLook.quiet,
+    0.015,
+    "right"
+  )
 ]
 // The pointer surface a display's screen placement carries: the glass's front face, carried from the plinth's author
 // frame into the placement's (author x and z point the other way), with the list and the buttons as its regions.
@@ -675,7 +934,11 @@ let terminalScreenPromptEm = 0.03
 let terminalScanHalf = 0.0009
 let terminalScanPitch = 0.006
 function terminalScreenPaints(display, number) = [
-  consoleFill(display, { x0: (0 - plinthGlassHalf[0]), x1: plinthGlassHalf[0], y0: (0 - plinthGlassHalf[1]), y1: plinthGlassHalf[1] }, consoleLook.terminal)
+  consoleFill(
+    display,
+    { x0: (0 - plinthGlassHalf[0]), x1: plinthGlassHalf[0], y0: (0 - plinthGlassHalf[1]), y1: plinthGlassHalf[1] },
+    consoleLook.terminal
+  )
   {
     type: "Box"
     position: displayWorld(display, plinthOnFace(0, 0, displayGlassFront))
@@ -685,7 +948,14 @@ function terminalScreenPaints(display, number) = [
   }
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: 0.15, y1: 0.156 }, consoleLook.frame, 0.003)
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: -0.117, y1: -0.111 }, consoleLook.frame, 0.003)
-  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.teal, 0.012, "right")
+  consoleText(
+    display,
+    { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 },
+    $"{display.title}  {number}",
+    consoleLook.teal,
+    0.012,
+    "right"
+  )
   consoleText(
     display,
     terminalScreenText,
@@ -694,9 +964,17 @@ function terminalScreenPaints(display, number) = [
     terminalScreenEm,
     "left",
     markup: true,
-    spacing: (((terminalScreenText.y1 - terminalScreenText.y0) / (terminalConsoleReplyLines + 1)) / (terminalScreenEm * consoleFontLine))
+    spacing: (((terminalScreenText.y1 - terminalScreenText.y0) / (terminalConsoleReplyLines + 1)) /
+      (terminalScreenEm * consoleFontLine))
   )
-  consoleText(display, terminalScreenPrompt, terminalConsolePrompt(number), consoleLook.lit, terminalScreenPromptEm, "left")
+  consoleText(
+    display,
+    terminalScreenPrompt,
+    terminalConsolePrompt(number),
+    consoleLook.lit,
+    terminalScreenPromptEm,
+    "left"
+  )
 ]
 // One screen creation over a display's console glass, wearing `paints`.
 template consoleScreen(name, paints) {
@@ -733,7 +1011,12 @@ let galleryCommands = [
     name: "gallery.go"
     help: "Walks a body to an exhibit's display and shows that exhibit on its turntable (its prototype name), to the entrance (gallery, the default), or onto level 1's toybox floor (toybox), where it takes the size its pass gives it, and returns the view to the chase camera."
     parameters [
-      { name: "exhibit", kind: Choice, values: concat(["gallery", "toybox"], map(galleryCatalog, entry => entry.name)), default: "gallery" }
+      {
+        name: "exhibit"
+        kind: Choice
+        values: concat(["gallery", "toybox"], map(galleryCatalog, entry => entry.name))
+        default: "gallery"
+      }
       { name: "body", kind: Body, default: "0" }
     ]
     lines [
@@ -920,9 +1203,17 @@ template displayState(displays = galleryDisplays) {
   let consoleSlots = consoleSlotsOf(displays)
   displayCells(displays: displays, name: "gallerySelect", values: map(displays, display => displayDefault(display)))
   displayCells(displays: displays, name: "galleryShownAt", values: map(displays, display => displayDefault(display)))
-  displayCells(displays: displays, name: "galleryPlace", values: map(displays, display => (displayDefault(display) + 1)))
+  displayCells(
+    displays: displays,
+    name: "galleryPlace",
+    values: map(displays, display => (displayDefault(display) + 1))
+  )
   displayCells(displays: displays, name: "galleryScroll", values: map(displays, display => displayScroll(display)))
-  displayCells(displays: displays, name: "galleryRowsView", values: map(displays, display => consoleView(displayScroll(display), displayDefault(display))))
+  displayCells(
+    displays: displays,
+    name: "galleryRowsView",
+    values: map(displays, display => consoleView(displayScroll(display), displayDefault(display)))
+  )
   displayCells(displays: displays, name: "galleryPress", values: map(displays, display => 0))
   displayCells(displays: displays, name: "galleryPressRow", values: map(displays, display => -1))
   displayCells(displays: displays, name: "galleryPressScroll", values: map(displays, display => displayScroll(display)))
@@ -934,13 +1225,28 @@ template displayState(displays = galleryDisplays) {
   // pace a pace request asks for, and the two labels its console shows.
   displayCells(displays: displays, name: "galleryTurnSpeed", values: map(displays, display => turntableSpeed))
   displayCells(displays: displays, name: "galleryTurnPlay", values: map(displays, display => 1))
-  displayCells(displays: displays, name: "galleryTurnRate", kind: "Fixed", values: map(displays, display => $"{turntableSpeed * turntableRate}"))
+  displayCells(
+    displays: displays,
+    name: "galleryTurnRate",
+    kind: "Fixed",
+    values: map(displays, display => $"{turntableSpeed * turntableRate}")
+  )
   displayCells(displays: displays, name: "galleryTurnPhase", kind: "Fixed", values: map(displays, display => "0"))
   displayCells(displays: displays, name: "galleryTurnNext", kind: "Fixed", values: map(displays, display => "0"))
   displayCells(displays: displays, name: "galleryTurnAt", values: map(displays, display => 0))
   displayCells(displays: displays, name: "galleryTurnTo", values: map(displays, display => 0))
-  displayCells(displays: displays, name: "galleryTurnHold", kind: "Text", values: map(displays, display => turntableHolds[1]))
-  displayCells(displays: displays, name: "galleryTurnPace", kind: "Text", values: map(displays, display => turntablePace(turntableSpeed)))
+  displayCells(
+    displays: displays,
+    name: "galleryTurnHold",
+    kind: "Text",
+    values: map(displays, display => turntableHolds[1])
+  )
+  displayCells(
+    displays: displays,
+    name: "galleryTurnPace",
+    kind: "Text",
+    values: map(displays, display => turntablePace(turntableSpeed))
+  )
   row {
     name: "galleryTurnHolds"
     kind: Text
@@ -952,13 +1258,19 @@ template displayState(displays = galleryDisplays) {
     name: "galleryTurnRates"
     kind: Fixed
     capacity: (2 * turntableSpeeds)
-    cells: map(filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)), speed => { key: $"{speed}", value: $"{speed * turntableRate}" })
+    cells: map(
+      filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)),
+      speed => { key: $"{speed}", value: $"{speed * turntableRate}" }
+    )
   }
   row {
     name: "galleryTurnPaces"
     kind: Text
     capacity: (2 * turntableSpeeds)
-    cells: map(filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)), speed => { key: $"{speed}", value: turntablePace(speed) })
+    cells: map(
+      filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)),
+      speed => { key: $"{speed}", value: turntablePace(speed) }
+    )
   }
   // One cell a row of every console's list, keyed `<display>-<row>`, seeded from each row's boot slot.
   row {
@@ -1014,25 +1326,37 @@ template displayState(displays = galleryDisplays) {
     name: "galleryScreenTitle"
     kind: Text
     capacity: length(displays)
-    cells: map(displays, display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].title })
+    cells: map(
+      displays,
+      display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].title }
+    )
   }
   row {
     name: "galleryScreenNote"
     kind: Text
     capacity: length(displays)
-    cells: map(displays, display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].note })
+    cells: map(
+      displays,
+      display => { key: display.id, value: galleryCopy[galleryCatalog[displayDefault(display)].name].note }
+    )
   }
   row {
     name: "galleryScreenGroup"
     kind: Text
     capacity: length(displays)
-    cells: map(displays, display => { key: display.id, value: galleryGroupOf(galleryCatalog[displayDefault(display)]).title })
+    cells: map(
+      displays,
+      display => { key: display.id, value: galleryGroupOf(galleryCatalog[displayDefault(display)]).title }
+    )
   }
   row {
     name: "galleryPick"
     kind: Int
     capacity: (length(galleryCatalog) + 2)
-    cells: concat([{ key: "gallery", value: 0 }, { key: "toybox", value: 0 }], map(galleryCatalog, entry => { key: entry.name, value: 0 }))
+    cells: concat(
+      [{ key: "gallery", value: 0 }, { key: "toybox", value: 0 }],
+      map(galleryCatalog, entry => { key: entry.name, value: 0 })
+    )
   }
 }
 

@@ -122,7 +122,15 @@ let liftCells = 72
 // Moth's body can stand between -0.93 and 0.93; the outer two reach to the walls.
 let liftPads = map(
   range(0, 4),
-  k => { level: k, x0: 19.3, x1: 20.25, z0: galleryWall, z1: 1.6, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) }
+  k => {
+    level: k
+    x0: 19.3
+    x1: 20.25
+    z0: galleryWall
+    z1: 1.6
+    y0: (galleryFloor[k] - 0.5)
+    y1: (galleryFloor[k] + 1)
+  }
 )
 let carPadHi = 0.95
 let carPadPitch = (1.9 / 6)
@@ -180,7 +188,11 @@ let stairPendantPower = glowSpotPower(lookStairPendant.luminance, pendantGlowAre
 // The pendant's diffuser lit and dark: the two prototypes differ only in that slot, so a flip bakes nothing. The lit one
 // carries the pendant's light, so the placement's response to level 1's switch turns the light with the diffuser.
 let stairPendantStates = [
-  { name: "on", lit: true, glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance } }
+  {
+    name: "on"
+    lit: true
+    glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance }
+  }
   { name: "off", lit: false, glow { color: lookStairPendant.off, roughness: 0.5, specular: 0.04 } }
 ]
 // The car's luminous ceiling panel, in the cab's frame: its half extents across and along, and its glowing face's
@@ -823,22 +835,41 @@ render {
 spawnPoints: concat(
   map(
     galleryLevels,
-    level => { id: $"gallery-level-{level.level}", parent: gallery, position [liftX, galleryFloor[level.level], 3.2], yawDegrees: 0 }
+    level => {
+      id: $"gallery-level-{level.level}"
+      parent: gallery
+      position [liftX, galleryFloor[level.level], 3.2]
+      yawDegrees: 0
+    }
   ),
   map(
     galleryLevels,
-    level => { id: $"hall-switch-{level.level}", parent: gallery, position [switchX, galleryFloor[level.level], 1.3], yawDegrees: 0 }
+    level => {
+      id: $"hall-switch-{level.level}"
+      parent: gallery
+      position [switchX, galleryFloor[level.level], 1.3]
+      yawDegrees: 0
+    }
   ),
   [
     { id: "boardroom", parent: gallery, position [(wingWest + 2), galleryFloor[wingLevel], 4.6], yawDegrees: 270 }
     // Outside the entrance, facing in; in the lift's car, facing its door; and on the south-west stair's first half
     // landing, facing across it to the second flight.
-    { id: "gallery", parent: gallery, position [((entranceWest + entranceEast) / 2), galleryFloor[0], -4], yawDegrees: 180 }
+    {
+      id: "gallery"
+      parent: gallery
+      position [((entranceWest + entranceEast) / 2), galleryFloor[0], -4]
+      yawDegrees: 180
+    }
     { id: "lift", parent: gallery, position [liftX, 0.1, liftZ], yawDegrees: 180 }
     {
       id: "stairs"
       parent: gallery
-      position [(galleryStair("south-west").well.x1 - 0.9), ((galleryFloor[0] + (galleryStorey / 2)) + 0.05), (galleryStair("south-west").well.z0 + (switchbackLanding / 2))]
+      position [
+        (galleryStair("south-west").well.x1 - 0.9),
+        ((galleryFloor[0] + (galleryStorey / 2)) + 0.05),
+        (galleryStair("south-west").well.z0 + (switchbackLanding / 2))
+      ]
       yawDegrees: 90
     }
   ]
@@ -1169,7 +1200,14 @@ rule "lift-fall" {
 rule "lift-ride" {
   when liftAt >= 0
   mode: Level
-  poseCell(key: `placement:lift-car`, topology: liftShaft, expression: liftAt, offset: [0, liftRoot, 0], glide: true, frame: gallery)
+  poseCell(
+    key: `placement:lift-car`,
+    topology: liftShaft,
+    expression: liftAt,
+    offset: [0, liftRoot, 0],
+    glide: true,
+    frame: gallery
+  )
 }
 
 // Departure closes the car and every landing before the car moves.

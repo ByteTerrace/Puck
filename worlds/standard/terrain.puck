@@ -36,7 +36,9 @@ template terrainMass(label, foot, peak, radial, across, offset = 0, sink = 0.3, 
   shape Superellipsoid $"{label}" {
     exponent: exponent
     material: material
-    position: sectorPoint([offset, (0 - ((peak / (1 - sink)) * sink)), (foot + (radial * squareRoot((1 - (sink * sink)))))])
+    position: sectorPoint(
+      [offset, (0 - ((peak / (1 - sink)) * sink)), (foot + (radial * squareRoot((1 - (sink * sink)))))]
+    )
     scale [across, (peak / (1 - sink)), radial]
   }
 }

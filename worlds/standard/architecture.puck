@@ -339,7 +339,12 @@ template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
       scale [0.028, (height * 0.18), 0.045]
     }
   }
-  for bar in [{ y: 0.05, half: 0.05 }, { y: (height - 0.05), half: 0.05 }, { y: (height * 0.36), half: 0.04 }, { y: (height * 0.87), half: 0.028 }] {
+  for bar in [
+    { y: 0.05, half: 0.05 }
+    { y: (height - 0.05), half: 0.05 }
+    { y: (height * 0.36), half: 0.04 }
+    { y: (height * 0.87), half: 0.028 }
+  ] {
     shape Box $"bay-bar-{bar.y}" {
       material: (base + kitTeal)
       position [0, (sill + bar.y), 0]
@@ -449,7 +454,9 @@ template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150
       scale [((radius * leaf) / 2), (radius / 2), 0.008]
       taper: 0.16
       swings [
-        swing("spread", [0, 0, -1], (((i - ((leaves - 1) / 2)) * (spread / leaves)) * 0.017453293), [0, 0, 0]) with { wave: "linear" }
+        swing("spread", [0, 0, -1], (((i - ((leaves - 1) / 2)) * (spread / leaves)) * 0.017453293), [0, 0, 0]) with {
+          wave: "linear"
+        }
       ]
     }
   }
@@ -497,16 +504,15 @@ template balustrade(base, length = 4, posts = 3, height = 1.1) {
 // rise at the top of step n of `count`, `stairStepHeight`. The count rounds up past the share a size-1 body takes, by
 // the growth over one step (`size1 / size0`'s larger over its smaller, less one), so a riser never exceeds the share
 // at its smaller end. Equal sizes give `risers / size0` even risers: the plain flight at size 1.
-function stairRiserCount(risers, size0, size1) = (
-  (size0 == size1) ? ceiling((risers / size0)) : ceiling((
-      ((risers * absolute(((1 / size1) - (1 / size0)))) / absolute(logarithm((size1 / size0), 2.718281828459045))) +
-        ((maximum(size0, size1) / minimum(size0, size1)) - 1)
-    ))
-)
+function stairRiserCount(risers, size0, size1) = ((size0 == size1) ? ceiling((risers / size0)) : ceiling((((risers *
+  absolute(((1 / size1) - (1 / size0)))) /
+  absolute(logarithm((size1 / size0), 2.718281828459045))) +
+  ((maximum(size0, size1) / minimum(size0, size1)) - 1))))
 function stairStepSize(n, count, size0, size1) = (1 / ((1 / size0) + ((((1 / size1) - (1 / size0)) * n) / count)))
-function stairStepHeight(n, count, size0, size1) = (
-  (size0 == size1) ? (n / count) : logarithm((stairStepSize(n, count, size0, size1) / size0), (size1 / size0))
-)
+function stairStepHeight(n, count, size0, size1) = ((size0 == size1) ? (n / count) : logarithm(
+  (stairStepSize(n, count, size0, size1) / size0),
+  (size1 / size0)
+))
 
 // One straight flight of stairs between `x0` and `x1`, from its foot at z `foot` to its head at z `head` (either way
 // along Z), climbing `rise` from `y0`: a tread box for each riser but the last, which steps onto whatever stands at the
@@ -669,7 +675,11 @@ template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, t
       material: (base + kitBrass)
       curve {
         a: polarPoint((radius - 0.05), angle, (top + rail))
-        b: polarPoint(((radius - 0.05) / cosine(halfStep)), (angle + (step / 2)), ((top + rail) + ((rise / risers) / 2)))
+        b: polarPoint(
+          ((radius - 0.05) / cosine(halfStep)),
+          (angle + (step / 2)),
+          ((top + rail) + ((rise / risers) / 2))
+        )
         c: polarPoint((radius - 0.05), (angle + step), ((top + rail) + (rise / risers)))
         radiusStart: 0.03
         radiusEnd: 0.03
@@ -707,10 +717,10 @@ template planter(base, length = 1.7) {
     shape Prism $"planter-blade-{i}" {
       material: (base + (((i % 2) == 0) ? kitLeafDeep : kitLeaf))
       position [
-  (((sine((blade.lean * 0.017453293)) * blade.tall) / 2) - (0 - (length * 0.27))),
-  (0.6 + ((cosine((blade.lean * 0.017453293)) * blade.tall) / 2)),
-  (-0.02 * (i - 2.5))
-]
+        (((sine((blade.lean * 0.017453293)) * blade.tall) / 2) - (0 - (length * 0.27))),
+        (0.6 + ((cosine((blade.lean * 0.017453293)) * blade.tall) / 2)),
+        (-0.02 * (i - 2.5))
+      ]
       rotation: (compose(rotate([0, 0, 1], blade.lean), rotate([0, 1, 0], blade.turn)) * [-1, 1, -1, 1])
       scale [0.07, (blade.tall / 2), 0.014]
       taper: 0.1
@@ -718,7 +728,12 @@ template planter(base, length = 1.7) {
     }
   }
   for (leaf, i) in [
-    { x: 0.02, y: 0.98, tilt: -35, size: 0.2 }, { x: 0.2, y: 1.08, tilt: 30, size: 0.22 }, { x: 0.1, y: 0.86, tilt: 55, size: 0.18 }
+    { x: 0.02, y: 0.98, tilt: -35, size: 0.2 }, { x: 0.2, y: 1.08, tilt: 30, size: 0.22 }, {
+      x: 0.1
+      y: 0.86
+      tilt: 55
+      size: 0.18
+    }
     { x: -0.04, y: 1.16, tilt: -8, size: 0.19 }
   ] {
     shape Ellipsoid $"planter-leaf-{i}" {
@@ -736,7 +751,14 @@ template planter(base, length = 1.7) {
       detail: true
     }
   }
-  for (tuft, i) in [[0.42, 0.7, 0.1], [0.55, 0.74, -0.08], [0.66, 0.69, 0.06], [0.5, 0.78, 0.02], [0.36, 0.69, -0.1], [0.61, 0.8, -0.02]] {
+  for (tuft, i) in [
+    [0.42, 0.7, 0.1]
+    [0.55, 0.74, -0.08]
+    [0.66, 0.69, 0.06]
+    [0.5, 0.78, 0.02]
+    [0.36, 0.69, -0.1]
+    [0.61, 0.8, -0.02]
+  ] {
     shape Sphere $"planter-tuft-{i}" {
       material: (base + kitLeafPale)
       position [(0 - ((tuft[0] / 0.85) * ((length / 2) - 0.12))), tuft[1], (0 - tuft[2])]
@@ -810,7 +832,10 @@ template banner(base, width = 0.9, drop = 2.3) {
     position [0, (-0.14 - (drop * 0.34)), -0.12]
     rotation: rotate([0, 1, 0], 180)
     scale [(width * 0.2), (width * 0.3), 0.013]
-    profile { kind: "Polygon", sides: 4 }
+    profile {
+      kind: "Polygon"
+      sides: 4
+    }
   }
   shape Prism "banner-arrow" {
     material: (base + kitCream)
@@ -1303,7 +1328,11 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     for (c, p) in ((players == 2) ? panels : []) {
       {
         text: $"P{p + 1}"
-        position: (cabinetDeckAt((c + (((p * 2) - 1) * (cabinetPanelHalf[0] - cabinetMarkMargin))), ((cabinetPanelMid + cabinetPanelHalf[1]) - cabinetMarkMargin), 0.015) * [-1, 1, -1])
+        position: (cabinetDeckAt(
+          (c + (((p * 2) - 1) * (cabinetPanelHalf[0] - cabinetMarkMargin))),
+          ((cabinetPanelMid + cabinetPanelHalf[1]) - cabinetMarkMargin),
+          0.015
+        ) * [-1, 1, -1])
         rotation: compose(rotate([0, 1, 0], 180), rotate([1, 0, 0], -72.54))
         emHeight: 0.075
         depth: 0.008
@@ -1643,13 +1672,15 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     // to the posts' and the sill's and head's middles, where they hide its ends. The net comes before every other shape,
     // so its intersection clips the net alone.
     let cell = (net.pitch * 0.70710678)
-    let fold = { cell: [cell, cell], limit: [ceiling(((length / 2) / cell)), ceiling((height / cell))] }
+    let fold = { cell [cell, cell], limit [ceiling(((length / 2) / cell)), ceiling((height / cell))] }
     shape Box "lattice-net-strand" {
       material: (base + latticeBar)
       rotation: compose(rotate([0, 1, 0], 180), rotate([0, 0, 1], 45deg))
       scale [(cell * 0.72), (net.strand / 2), (net.strand / 2)]
       rounding: (net.strand * 0.45)
-      domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit, materialStride: (latticeRail - latticeBar))]
+      domain [
+        wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit, materialStride: (latticeRail - latticeBar))
+      ]
       detail: true
     }
     for corner in [-1, 1] {
@@ -1773,7 +1804,10 @@ template filmArch(base, radius, spring, films, inset = 0.24, gap = 0.035, thickn
 function filmArchPalette(film, centre, tints, pane = "#F4F8FF", glow = 60, step = 0.17) = concat(
   [magicFilmed({ color: pane, roughness: 0.02, emissive: glow, glass { depth: 0.04, ior: 1.2 } }, film, centre)],
   map(range(0, length(tints)), k => magicFilmed(
-    { color: tints[k], roughness: 0.03, emissive: glow, glass { depth: 0.012, ior: 1.05 } }, film, centre, phase: ((k + 1) * step)
+    { color: tints[k], roughness: 0.03, emissive: glow, glass { depth: 0.012, ior: 1.05 } },
+    film,
+    centre,
+    phase: ((k + 1) * step)
   ))
 )
 

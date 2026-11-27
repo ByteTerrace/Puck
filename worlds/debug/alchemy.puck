@@ -374,16 +374,16 @@ prototypes {
       shape Box "tile-reset" {
         material: 0
         position [(alchemyOriginX + (alchemyCellSize * 0.5)),
-  (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * 0.5))
-]
+          (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * 0.5))
+        ]
         scale [0.062, 0.0075, 0.062]
       }
       for e in elementIds {
         shape Box $"tile-{e}" {
           material: e
           position [(alchemyOriginX + (alchemyCellSize * (alchemyTokenHomeColumn[(e - 1)] + 0.5))),
-  (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5)))
-]
+            (alchemySurface - 0.0075), (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5)))
+          ]
           scale [0.062, 0.0075, 0.062]
         }
       }
