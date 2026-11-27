@@ -202,7 +202,10 @@ routes [
           { $type: "line", text: "gallery.wonder pass on" }
           stand(1)
         ] : []),
-        map(treeWalkSections[i].points, w => { $type: "go", point: w.point, pace: treeWalkPace, direct: true, within: w.within })
+        map(
+          treeWalkSections[i].points,
+          w => { $type: "go", point: w.point, pace: treeWalkPace, direct: true, within: w.within }
+        )
       )
     })
   }

@@ -489,7 +489,8 @@ function treeBranchB(b) = ((b.level >= 2) ? [
 // The plan point on a branch's walking line `t` of the way from the bark (0) to its landing (1): the quadratic the
 // creation draws the branch along (treeBranchA, treeBranchB, treeBranchC), carried back from the creation's frame into
 // the plan's. The walkway's route (tree-walk.puck) and the flaw read the branches here.
-function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t) in [
+function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), t) in
+[
   (treeX - p[0]),
   (p[1] + galleryFloor[0]),
   (treeZ - p[2])

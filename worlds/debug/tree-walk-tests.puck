@@ -40,12 +40,16 @@ let treeWalkFloorBand = [-0.05, 0.3]
 let treeWalkNone = -2
 
 let treeWalkCount = length(treeWalk)
-let treeWalkSectionEnds = map(range(1, (length(treeWalkSections) + 1)), s => (scan(map(treeWalkSections, x => length(x.points)))[s] - 1))
+let treeWalkSectionEnds = map(
+  range(1, (length(treeWalkSections) + 1)),
+  s => (scan(map(treeWalkSections, x => length(x.points)))[s] - 1)
+)
 let treeWalkLandings = filter(range(0, treeWalkCount), k => (treeWalk[k].kind == "landing"))
 // The waypoints the walk climbs to over treads from the one before, each of which costs at least one step-up.
 let treeWalkStairs = ["foot", "tread", "junction"]
 let treeWalkClimbing = filter(range(1, treeWalkCount), k => (contains(slice(treeWalkStairs, 1, 3), treeWalk[k].kind) and
-  contains(treeWalkStairs, treeWalk[(k - 1)].kind) and (treeWalk[k].point[1] > treeWalk[(k - 1)].point[1])))
+  contains(treeWalkStairs, treeWalk[(k - 1)].kind) and
+  (treeWalk[k].point[1] > treeWalk[(k - 1)].point[1])))
 // The world height of the floor each waypoint's level stands on (level 0's for the trunk's treads).
 let treeWalkFloors = map(treeWalk, w => galleryWorld(0, galleryFloor[maximum(w.level, 0)], 0)[1])
 
@@ -63,7 +67,7 @@ state {
     slot treeWalkStepMark = 0
     table treeWalkLanded {
       for k in treeWalkLandings {
-        [$"{k}"] = 0
+        $"{k}" = 0
       }
     }
   }
@@ -77,30 +81,32 @@ for (w, k) in treeWalk {
   let lands = (contains(treeWalkLandings, k) ? 1 : 0)
 
   rule $"tree-walk-{k}" {
-    when (treeWalkReached == (k - 1)) and
-      (abs((bodyPosition(body, 0, x) - w.point[0])) <= (w.within + treeWalkMargin)) and
-      (abs((bodyPosition(body, 0, z) - w.point[2])) <= (w.within + treeWalkMargin)) and
-      (abs((bodyPosition(body, 0, y) - w.point[1])) <= treeWalkRise)
+    when (treeWalkReached == (k - 1) and
+      abs((bodyPosition(body, 0, x) - w.point[0])) <= (w.within + treeWalkMargin) and
+      abs((bodyPosition(body, 0, z) - w.point[2])) <= (w.within + treeWalkMargin) and
+      abs((bodyPosition(body, 0, y) - w.point[1])) <= treeWalkRise)
     mode: Level
-    if (k > 0) {
-      if (($tick > treeWalkDue) and (treeWalkLateAt == treeWalkNone)) {
+    if k > 0 {
+      if $tick > treeWalkDue and treeWalkLateAt == treeWalkNone {
         treeWalkLateAt = k
       }
     }
-    if (climbs == 1) {
-      if ((kinematics(body, 0, stepUps) == treeWalkStepMark) and (treeWalkFlatAt == treeWalkNone)) {
+    if climbs == 1 {
+      if kinematics(body, 0, stepUps) == treeWalkStepMark and treeWalkFlatAt == treeWalkNone {
         treeWalkFlatAt = k
       }
     }
-    if (lands == 1) {
-      treeWalkLanded[$"{k}"] = ((fact(body, 0, Grounded) == 1) and
+    if lands == 1 {
+      treeWalkLanded[$"{k}"] = (
+        (fact(body, 0, Grounded) == 1) and
         (bodyPosition(body, 0, y) >= (treeWalkFloors[k] + treeWalkFloorBand[0])) and
-        (bodyPosition(body, 0, y) <= (treeWalkFloors[k] + treeWalkFloorBand[1])))
+        (bodyPosition(body, 0, y) <= (treeWalkFloors[k] + treeWalkFloorBand[1]))
+      )
     }
-    if (k == 0) {
+    if k == 0 {
       treeWalkRefusalBase = kinematics(body, 0, stepRefusals)
     }
-    if ((k + 1) < treeWalkCount) {
+    if (k + 1) < treeWalkCount {
       schedule treeWalkDue in treeWalk[(k + 1)].seconds
     }
     treeWalkStepMark = kinematics(body, 0, stepUps)
@@ -110,22 +116,24 @@ for (w, k) in treeWalk {
 
 // The first waypoint after which each failure showed, once the walk reached the trunk's foot.
 rule "tree-walk-fell" {
-  when (treeWalkReached >= 0) and (treeWalkFellAt == treeWalkNone) and (kinematics(body, 0, airborne) > treeWalkAirborne)
+  when treeWalkReached >= 0 and treeWalkFellAt == treeWalkNone and kinematics(body, 0, airborne) > treeWalkAirborne
   mode: Level
   treeWalkFellAt = treeWalkReached
 }
 rule "tree-walk-stuck" {
-  when (treeWalkReached >= 0) and (treeWalkStuckAt == treeWalkNone) and (kinematics(body, 0, stuck) > treeWalkStuck)
+  when treeWalkReached >= 0 and treeWalkStuckAt == treeWalkNone and kinematics(body, 0, stuck) > treeWalkStuck
   mode: Level
   treeWalkStuckAt = treeWalkReached
 }
 rule "tree-walk-refused" {
-  when (treeWalkReached >= 0) and (treeWalkRefusedAt == treeWalkNone) and (kinematics(body, 0, stepRefusals) > treeWalkRefusalBase)
+  when (treeWalkReached >= 0 and
+    treeWalkRefusedAt == treeWalkNone and
+    kinematics(body, 0, stepRefusals) > treeWalkRefusalBase)
   mode: Level
   treeWalkRefusedAt = treeWalkReached
 }
 rule "tree-walk-deep" {
-  when (treeWalkReached >= 0) and (treeWalkDeepAt == treeWalkNone) and (kinematics(body, 0, depth) >= treeWalkSkin)
+  when treeWalkReached >= 0 and treeWalkDeepAt == treeWalkNone and kinematics(body, 0, depth) >= treeWalkSkin
   mode: Level
   treeWalkDeepAt = treeWalkReached
 }

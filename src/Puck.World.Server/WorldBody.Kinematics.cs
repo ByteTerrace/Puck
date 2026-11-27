@@ -137,8 +137,7 @@ public sealed partial class WorldBody {
         var ticks = scratch.StepTicks;
         var wasAirborne = (witness.AirborneTicks > 0UL);
         var driven = DrivenBy(intent: in scratch.Intent);
-        var moved = (scratch.NextPosition - m_position);
-        var stuck = (driven && ((moved.LengthSquared) <= (StuckDisplacement * StuckDisplacement)));
+        var stuck = (driven && (scratch.NextPosition - m_position).IsWithin(radius: StuckDisplacement));
         var obstruction = resolution.ObstructionNormal;
         var facing = FixedVector3.Dot(left: obstruction, right: scratch.Up);
         var slope = (driven && (obstruction != FixedVector3.Zero) && (facing > SlopeFacing));

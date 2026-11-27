@@ -50,9 +50,19 @@ function treeWalkTread(k) = treeWalkPoint(
 // A branch's waypoints out from its junction to its landing on its balcony, and back.
 function treeWalkOutAlong(b) = map(
   range(1, (treeWalkBranchSamples + 1)),
-  n => ((n == treeWalkBranchSamples)
-    ? treeWalkPoint($"level {b.level} {b.side} landing", "landing", treeBranchAt(b, 1), treeWalkLandingWithin, b.level)
-    : treeWalkPoint($"level {b.level} {b.side} branch out {n}", "branch", treeBranchAt(b, (n / treeWalkBranchSamples)), treeWalkBranchWithin, b.level))
+  n => ((n == treeWalkBranchSamples) ? treeWalkPoint(
+    $"level {b.level} {b.side} landing",
+    "landing",
+    treeBranchAt(b, 1),
+    treeWalkLandingWithin,
+    b.level
+  ) : treeWalkPoint(
+    $"level {b.level} {b.side} branch out {n}",
+    "branch",
+    treeBranchAt(b, (n / treeWalkBranchSamples)),
+    treeWalkBranchWithin,
+    b.level
+  ))
 )
 function treeWalkBackAlong(b) = map(
   range(1, treeWalkBranchSamples),
@@ -75,7 +85,8 @@ function treeWalkTreads(from, to) = map(
 // bark on it. The walk starts three and a half metres out, facing the trunk (a heading of 90 degrees less the bearing:
 // heading 0 faces -z, the bearing turns from +x toward +z), and comes in to the trunk's foot.
 let treeWalkFootBearing = treeTreadAngle(-0.5)
-function treeWalkFloor(out) = ([treeX, galleryFloor[0], treeZ] + polarPoint((treeTrunk.base + out), treeWalkFootBearing, 0))
+function treeWalkFloor(out) = ([treeX, galleryFloor[0], treeZ] +
+  polarPoint((treeTrunk.base + out), treeWalkFootBearing, 0))
 let treeWalkStart = treeWalkWorld(treeWalkFloor(3.5))
 let treeWalkStartYaw = (90 - treeWalkFootBearing)
 
@@ -96,9 +107,11 @@ let treeWalkSections = concat(
     }
     {
       name: $"the level {treeLimbs[i].level} {treeLimbs[i].side} branch"
-      points: ((treeLimbs[i].tread == treeWalkLast.tread)
-        ? treeWalkOutAlong(treeLimbs[i])
-        : concat(treeWalkOutAlong(treeLimbs[i]), treeWalkBackAlong(treeLimbs[i]), [treeWalkTread(treeLimbs[i].tread)]))
+      points: ((treeLimbs[i].tread == treeWalkLast.tread) ? treeWalkOutAlong(treeLimbs[i]) : concat(
+        treeWalkOutAlong(treeLimbs[i]),
+        treeWalkBackAlong(treeLimbs[i]),
+        [treeWalkTread(treeLimbs[i].tread)]
+      ))
     }
   ])
 )
@@ -108,6 +121,8 @@ let treeWalkPlain = flatMap(treeWalkSections, s => s.points)
 let treeWalk = map(
   range(0, length(treeWalkPlain)),
   k => (treeWalkPlain[k] with {
-    seconds: (treeWalkTurnSeconds + (vectorLength((((k == 0) ? treeWalkStart : treeWalkPlain[(k - 1)].point) - treeWalkPlain[k].point) * [1, 0, 1]) / treeWalkSlowest))
+    seconds: (treeWalkTurnSeconds +
+      (vectorLength((((k == 0) ? treeWalkStart : treeWalkPlain[(k - 1)].point) - treeWalkPlain[k].point) * [1, 0, 1]) /
+        treeWalkSlowest))
   })
 )
