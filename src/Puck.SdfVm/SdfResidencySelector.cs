@@ -4,6 +4,7 @@ using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -27,8 +28,10 @@ public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool Can
 /// every class holds and has promised stays under the pool's limit. What the limit leaves the regions, less room for the
 /// largest replacement a region that grows by copy holds beside its buffer until the old one's readers finish (a mapped
 /// region, <see cref="GpuRegion.Mapped"/>, grows and shrinks in place and holds none), is the elastic budget; <see cref="SdfMeshTier.BudgetEighths"/> of it is what the bakes fill. A residency's budget is
-/// what its own draws name and its finer tiers in flight are expected to add, with an equal part of the room left, so
-/// the budgets together are the whole and no two residencies are promised the same room; when the residencies together
+/// what its own draws name and its finer tiers in flight are expected to add, with a part of the room left in proportion
+/// to the finer tiers its budget held back (an even part while no residency held any back), so the budgets together are
+/// the whole, no two residencies are promised the same room, and a world that owes detail is not held to the part a
+/// world owing none leaves idle; when the residencies together
 /// name more than the budget, each gives up its part of the excess. The bias rises half a rung when the budget has
 /// pressed with no residency holding detail it can still give up, and is taken back once every residency would fit half
 /// a rung finer: one bias, so an over-budget picture is coarser by the same number of pixels in every world it shows.
@@ -246,7 +249,7 @@ public sealed class SdfResidencySelector {
                 var share = Whole(budget: budget);
 
                 if (share != long.MaxValue) { granted += share; }
-                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B");
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B wanted={WantedOf(grant: grant, now: Time.GetTimestamp())}B");
             }
             if (m_region is { } region) {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | region named={m_regionNamed}B region-limit={Bytes(bytes: ((region.LimitBytes == long.MaxValue) ? null : region.LimitBytes))} region-held-limit={Bytes(bytes: ((region.HeldLimitBytes == long.MaxValue) ? null : region.HeldLimitBytes))} region-held={region.Capacity}B region-reserved={region.Reserved}B region-retiring={region.Retiring}B region-spare={m_spare}B");
@@ -331,13 +334,14 @@ public sealed class SdfResidencySelector {
             return Whole(budget: BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null)));
         }
     }
-    // The bytes a bake may fill, for a residency that names and expects the given bytes.
-    internal long Budget(SdfResidencyGrant grant, long named, long filled) {
+    // The bytes a bake may fill, for a residency that names, expects and asks for the given bytes.
+    internal long Budget(SdfResidencyGrant grant, long named, long filled, long wanted) {
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
         lock (m_gate) {
             grant.Named = named;
             grant.Filled = Math.Max(val1: named, val2: filled);
+            grant.Wanted = Math.Max(val1: 0L, val2: wanted);
 
             return BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null));
         }
@@ -356,28 +360,45 @@ public sealed class SdfResidencySelector {
         // The spare chunk memory is held, and only a mapped region takes it, so it is the regions' with what they reserved.
         return Math.Max(val1: 0L, val2: ((limit - Math.Max(val1: 0L, val2: (((held + promised) - reserved) - m_spare))) - largest));
     }
-    // Under m_gate: one residency's budget: what it fills, and an equal part of the room the budget has left or its
-    // part of the excess.
+    // Under m_gate: one residency's budget: what it fills, and its part of the room the budget has left or of the excess.
+    // The room goes to the residencies that asked for it by what they asked (SdfResidencyGrant.Wanted: the finer tiers
+    // the budget held back at their last decision, read only while their report is fresh), so an occupied world that
+    // owes detail is not held to the part a painting that owes none would leave idle; with nothing asked anywhere it is
+    // split evenly. Either way the parts are floors of the room's shares, so the budgets together never pass it.
     private long BudgetOf(SdfResidencyGrant grant, long? usable) {
         if (usable is not { } bytes) { return long.MaxValue; }
 
         var budget = ((bytes / 8L) * SdfMeshTier.BudgetEighths);
         var filled = 0L;
+        var wanted = 0L;
+        var now = Time.GetTimestamp();
 
-        foreach (var other in m_grants) { filled += other.Filled; }
+        foreach (var other in m_grants) {
+            filled += other.Filled;
+            wanted = wanted.AddSaturating(right: WantedOf(grant: other, now: now));
+        }
 
         var room = (budget - filled);
 
-        if (room >= 0L) { return (grant.Filled + (room / Math.Max(val1: 1, val2: m_grants.Count))); }
+        if (room >= 0L) {
+            return (grant.Filled + ((wanted > 0L)
+                ? ((long)((((Int128)room) * WantedOf(grant: grant, now: now)) / wanted))
+                : (room / Math.Max(val1: 1, val2: m_grants.Count))));
+        }
 
         return Math.Max(val1: 0L, val2: (grant.Filled + ((long)((((double)room) * grant.Filled) / Math.Max(val1: 1L, val2: filled)))));
     }
+    // Under m_gate: the bytes a residency asked the room for, while its last report counts (FreshSeconds); a residency no
+    // frame decides any more asks for nothing, so its last ask does not hold room another could fill.
+    private long WantedOf(SdfResidencyGrant grant, long now) =>
+        (((grant.ReportedAt != 0L) && ((now - grant.ReportedAt) <= ((long)(FreshSeconds * Time.TimestampFrequency)))) ? grant.Wanted : 0L);
 
     // Moves the one bias on the report of the residency that names the most among those reporting: it presses when the
     // residencies together name more than the budget holds or any fresh report presses (its draws past its own budget,
     // or a mesh its region refuses), rises half a rung once the budget has pressed for the hold with no residency holding
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
-    // which doubles when a rise follows a fall closely.
+    // which doubles when a rise follows a fall closely and halves again, down to SdfMeshTier.BiasQuietFrames, at each
+    // fall that follows a fall with no rise between.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
         var now = Time.GetTimestamp();
         var fresh = ((long)(FreshSeconds * Time.TimestampFrequency));
@@ -439,6 +460,9 @@ public sealed class SdfResidencySelector {
                         Volatile.Write(location: ref m_bias, value: (bias - 1));
                         m_biasLowered++;
                         m_biasQuiet = 0;
+                        // A step down that follows a step down held: no rise came after it, so the room has returned and
+                        // the wait a bounce doubled halves back toward the quiet wait.
+                        if (m_biasSinceLowered != int.MaxValue) { m_biasWait = Math.Max(val1: SdfMeshTier.BiasQuietFrames, val2: (m_biasWait / 2)); }
                         m_biasSinceLowered = 0;
                     }
                 } else {
@@ -512,6 +536,8 @@ public sealed class SdfResidencyGrant : IDisposable {
     // selector's gate.
     internal long Named;
     internal long Filled;
+    // The bytes the finer tiers its budget held back at its last decision would add: what it asks of the room.
+    internal long Wanted;
     internal SdfDetailReport Report;
     internal long ReportedAt;
     // The report's serial among the selector's reports, and the pool limit it was made under (long.MaxValue unbounded).
@@ -648,12 +674,15 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// expected to add, and its part of the room the selector's budget has left, never past
     /// <see cref="SdfMeshTier.BudgetEighths"/> of the most its region may place (<see cref="LimitBytes"/>), so a list
     /// the region would refuse presses the budget and the bake coarsens before a mesh is left out;
-    /// <see cref="long.MaxValue"/> where nothing bounds the pool or the region.</summary>
+    /// <see cref="long.MaxValue"/> where nothing bounds the pool or the region. The room is shared among the
+    /// residencies by what each asks (<paramref name="wanted"/>), evenly while none asks.</summary>
     /// <param name="named">The bytes the residency's draws name.</param>
     /// <param name="filled">The bytes they are expected to name once every finer replacement in flight has landed.</param>
+    /// <param name="wanted">The bytes the finer tiers the budget held back at the residency's last decision would add;
+    /// zero when it held none back. Negative reads as zero.</param>
     /// <returns>The budget, in bytes.</returns>
-    public long Budget(long named, long filled) {
-        var budget = m_selector.Budget(filled: filled, grant: this, named: named);
+    public long Budget(long named, long filled, long wanted = 0L) {
+        var budget = m_selector.Budget(filled: filled, grant: this, named: named, wanted: wanted);
         var limit = m_selector.RegionLimitBytes;
 
         return ((limit == long.MaxValue) ? budget : Math.Min(val1: budget, val2: ((limit / 8L) * SdfMeshTier.BudgetEighths)));
