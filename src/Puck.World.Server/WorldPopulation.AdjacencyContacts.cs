@@ -78,13 +78,19 @@ public sealed partial class WorldPopulation {
     //   applies to a step's end), the admitted end is owned behind it too, and the body's outward speed through it does
     //   not grow. A crossing the sweep reports therefore comes from the body's own motion, never from a neighbour's push.
     //   While its incoming velocity retreats from a face, no outward correction or reduction of that retreat is admitted.
-    // A body index with no local body admits nothing. No budget is refunded on a failed retry.
-    // It reads the ownership faces and the body's radius and writes the named body's budget and the caller's own
-    // position and velocity, nothing else, so a kit partition's sweep may pass it for the body it steps.
-    internal void AdmitAdjacencyResponse(int entityIndex, FixedQ4816 overlapDepth, ref FixedVector3 position, ref FixedVector3 velocity,
+    // A body this population does not hold admits nothing. No budget is refunded on a failed retry.
+    // It reads the ownership faces and the body's radius and writes the body's budget and the caller's own position and
+    // velocity, nothing else. The budget is the slot of the body handed in, never of an index: a sweep hands in the body
+    // it moves (WorldBody.SweepContact), and while a kit fork runs the door throws for any body but the one the calling
+    // thread is stepping (MoveBody), so no partition writes another's budget.
+    internal void AdmitAdjacencyResponse(WorldBody body, FixedQ4816 overlapDepth, ref FixedVector3 position, ref FixedVector3 velocity,
         FixedVector3 displacement, FixedVector3 proposedVelocity) {
-        if ((((uint)entityIndex) >= ((uint)m_adjacencyCorrectionSpent.Length)) ||
-            (m_entries[entityIndex].Body is not { } body)) { return; }
+        var entityIndex = body.EntityIndex;
+
+        if ((((uint)entityIndex) >= ((uint)m_adjacencyCorrectionSpent.Length)) || !ReferenceEquals(objA: m_entries[entityIndex].Body, objB: body)) { return; }
+        if (m_partitioned && !ReferenceEquals(objA: MovingBody, objB: body)) {
+            throw new InvalidOperationException(message: "A sweep in a kit partition reported a neighbour's response for a body other than the one its thread is stepping.");
+        }
 
         var faces = OwnershipFaces();
         var start = position;
@@ -140,7 +146,7 @@ public sealed partial class WorldPopulation {
         var position = carrier.FixedPosition;
         var velocity = carrier.ApproximateWorldVelocity();
         var proposedVelocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -displacement.Normalize());
-        AdmitAdjacencyResponse(entityIndex: carrier.EntityIndex, overlapDepth: overlapDepth, position: ref position,
+        AdmitAdjacencyResponse(body: carrier, overlapDepth: overlapDepth, position: ref position,
             velocity: ref velocity, displacement: displacement, proposedVelocity: proposedVelocity);
         carrier.ApplyAdmittedContactResponse(position: position, velocity: velocity);
     }

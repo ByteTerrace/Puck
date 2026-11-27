@@ -22,8 +22,25 @@ public sealed partial class WorldBody {
     public ulong InputEpoch => InputImages.Epoch;
 
     /// <summary>Installs a committed input barrier by logical identity, clearing released edges and timed input.</summary>
+    /// <remarks>Every image the body holds by channel ordinal is addressed under the installed mapping once this
+    /// returns. The submitted and held images are rebuilt from <paramref name="accepted"/>; the tape's segments, the
+    /// producer's staged image and <paramref name="steering"/> cross by logical identity (<c>CarryAcross</c>), so a
+    /// step that resolves its intent after the barrier never reads the replaced mapping's ordinals as the new one's.
+    /// This is the one door that changes the mapping under live images; a restore rebinds the bank its images were
+    /// captured with (<see cref="RestoreInputMapping"/>).</remarks>
+    /// <param name="catalog">The input catalog that says which logical channels keep their identity.</param>
+    /// <param name="previous">The mapping being replaced.</param>
+    /// <param name="next">The mapping to install.</param>
+    /// <param name="kit">The body's kit as compiled for <paramref name="next"/>.</param>
+    /// <param name="accepted">The owner's accepted image, addressed under <paramref name="next"/>.</param>
+    /// <param name="epoch">The owner's epoch at the barrier.</param>
+    /// <param name="reset">Whether no channel continues across the barrier.</param>
+    /// <param name="decisions">The barrier's continuation decision for each logical channel it judged.</param>
+    /// <param name="steering">The steering image the population keeps for the body between producer runs, addressed as
+    /// the producer's staged image is; re-addressed in place.</param>
+    /// <param name="recompiled">Whether the mapping was recompiled, so every surviving logical channel keeps its identity.</param>
     public void InstallInputMapping(WorldInputCatalog catalog, WorldInputMapping previous, WorldInputMapping next,
-        FixedWorldKit kit, PlayerIntent accepted, ulong epoch, bool reset, ReadOnlySpan<WorldInputContinuation> decisions, bool recompiled = false) {
+        FixedWorldKit kit, PlayerIntent accepted, ulong epoch, bool reset, ReadOnlySpan<WorldInputContinuation> decisions, ref PlayerIntent steering, bool recompiled = false) {
         Span<ulong> timers = stackalloc ulong[ActionLaneCount];
         Span<FixedQ4816> timerValues = stackalloc FixedQ4816[ActionLaneCount];
         Span<bool> previousBits = stackalloc bool[ActionLaneCount];
@@ -86,20 +103,33 @@ public sealed partial class WorldBody {
         InputImagesEdit.HasTransferHeld = false;
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             ref var segment = ref m_tape[((m_tapeHead + offset) % m_tape.Length)];
-            var image = default(PlayerIntent);
 
-            if (!reset) {
-                foreach (var logical in next.Live) {
-                    var destination = next.Address(logicalId: logical);
+            segment.Intent = CarryAcross(carried: carried, continuing: continuing, image: in segment.Intent, next: next, reset: reset);
+        }
+        if (InputImages.HasProducer) {
+            var staged = InputImages.Producer;
+            var producer = CarryAcross(carried: carried, continuing: continuing, image: in staged, next: next, reset: reset);
 
-                    if ((destination >= 0) && continuing[destination]) {
-                        image = image.WithChannel(ordinal: destination, value: segment.Intent[carried[destination]]);
-                    }
+            if (staged != producer) { InputImagesEdit.Producer = producer; }
+        }
+        steering = CarryAcross(carried: carried, continuing: continuing, image: in steering, next: next, reset: reset);
+        BindInputMapping(epoch: epoch, kit: kit, next: next, recencySources: recencySources);
+    }
+    // Carries an image addressed under the mapping being replaced across the barrier: a channel that continues takes
+    // its value to its new ordinal, and every other ordinal reads zero.
+    private static PlayerIntent CarryAcross(in PlayerIntent image, WorldInputMapping next, ReadOnlySpan<bool> continuing, ReadOnlySpan<int> carried, bool reset) {
+        var across = default(PlayerIntent);
+
+        if (!reset) {
+            foreach (var logical in next.Live) {
+                var destination = next.Address(logicalId: logical);
+
+                if ((destination >= 0) && continuing[destination]) {
+                    across = across.WithChannel(ordinal: destination, value: image[carried[destination]]);
                 }
             }
-            segment.Intent = image;
         }
-        BindInputMapping(epoch: epoch, kit: kit, next: next, recencySources: recencySources);
+        return across;
     }
     /// <summary>Rebinds a restored bank without altering checkpointed levels, timers or edge latches.</summary>
     public void RestoreInputMapping(WorldInputMapping next, FixedWorldKit kit, ulong epoch) {

@@ -82,14 +82,14 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
     private sealed class FieldStep(WorldAdjacencyContactField field, WorldBody body) : IFixedContactStep {
         public List<string> Trace { get; } = [];
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) {
-            var result = field.ResolveEntitySweep(0, previousPosition, ref position, ref velocity, FixedQuaternion.Identity,
+            var result = field.ResolveEntitySweep(body, previousPosition, ref position, ref velocity, FixedQuaternion.Identity,
                 body.ScaledColliderVolumes(), FixedVector3.UnitY);
             Trace.Add($"sweep {previousPosition} -> {position}: {result}");
             return result;
         }
         public ContactResolution SweepSupport(in FixedVector3 previousPosition, in FixedVector3 responseOrigin,
             ref FixedVector3 position, ref FixedVector3 velocity) {
-            var result = field.ResolveEntitySupportSweep(0, previousPosition, responseOrigin, ref position, ref velocity,
+            var result = field.ResolveEntitySupportSweep(body, previousPosition, responseOrigin, ref position, ref velocity,
                 FixedQuaternion.Identity, body.ScaledColliderVolumes(), FixedVector3.UnitY);
             Trace.Add($"support {responseOrigin} via {previousPosition} -> {position}: {result}");
             return result;
@@ -193,7 +193,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
     }
     private static ContactResolution Resolve(WorldAdjacencyContactField field, WorldBody body,
         ref FixedVector3 position, ref FixedVector3 velocity) =>
-        field.ResolveEntitySweep(0, position, ref position, ref velocity, FixedQuaternion.Identity,
+        field.ResolveEntitySweep(body, position, ref position, ref velocity, FixedQuaternion.Identity,
             body.ScaledColliderVolumes(), FixedVector3.UnitY);
 
     [Theory]
@@ -292,7 +292,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         var position = body.FixedPosition;
         var velocity = FixedVector3.Zero;
         var before = WorldBodyWork.Process.Read(WorldBodyWork.AdjacencyCorrectionClamps);
-        var result = field.ResolveEntitySupportSweep(0, position, position, ref position, ref velocity,
+        var result = field.ResolveEntitySupportSweep(body, position, position, ref position, ref velocity,
             FixedQuaternion.Identity, body.ScaledColliderVolumes(), FixedVector3.UnitY);
         Assert.True(result.Grounded);
         Assert.True((position - body.FixedPosition).IsWithin(radius));

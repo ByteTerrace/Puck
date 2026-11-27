@@ -25,6 +25,10 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
     public static WorkKind LocalSteers { get; } = new(name: "physics.bodies.local-steers", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting kit partitions run: each partition holding a local body counts once a tick.</summary>
     public static WorkKind KitPartitions { get; } = new(name: "physics.bodies.kit-partitions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the kit phases whose partitions the job pool ran as more than one job, so some ran
+    /// off the stepping thread. A phase with too few bodies, or a host with one worker, runs its partitions on the
+    /// stepping thread and counts none, so the count follows the host's worker count.</summary>
+    public static WorkKind KitForks { get; } = new(name: "physics.bodies.kit-forks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the bodies a tick's curve order sorted again: those that joined the step or crossed
     /// into another cell. The rest of the step bodies kept their place.</summary>
     public static WorkKind CurveResorts { get; } = new(name: "physics.bodies.curve-resorts", unit: "count", workClass: WorkClass.Deterministic);
@@ -62,7 +66,7 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
 
     /// <summary>Initializes a new instance of the <see cref="WorldBodyWork"/> class, every kind at zero.</summary>
     public WorldBodyWork() : base(counters: new(
-        kinds: [Advances, LocalAdvances, LocalSteers, KitPartitions, CurveResorts, StepSaves, StepSavedBytes, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
+        kinds: [Advances, LocalAdvances, LocalSteers, KitPartitions, KitForks, CurveResorts, StepSaves, StepSavedBytes, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
         name: SourceName
     )) { }
 
