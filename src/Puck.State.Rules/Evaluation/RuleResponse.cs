@@ -39,6 +39,12 @@ public enum RuleLatching : byte {
 /// <param name="Latching">What stops a binding that fired from firing again.</param>
 /// <param name="Why">The derivation, for the read-back.</param>
 public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching Latching, string Why) {
+    /// <summary>Gets a value indicating whether the line is a sweep over a row family that a member's change alone
+    /// opens: nothing fires at rest, and every read at rest reaches the binding through its member (a family selection
+    /// or a cell under <c>$member</c>), none under <c>$each</c> or shared. Its firings in one tick are then one member's,
+    /// so a gate pin on a cell under <c>$member</c> discriminates it from another such line
+    /// (<see cref="RuleWorkBudget.PinnedCells"/>).</summary>
+    public bool PinsByMember { get; init; }
     /// <summary>Derives a line's response.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="multiplier">The bindings one sweep can hold.</param>
@@ -100,6 +106,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var members = ((rule.ForEachFamily is { } family) ? MemberShape(context: context, family: family) : (Count: 1L, Capacity: 1L));
 
         long Own(CellAccess access) => (access.Members ? 1L : (access.Each ? members.Count : ((access.IsMember || access.MemberKey) ? members.Capacity : 1L)));
+        // A read at rest under $each, or a host fact read for $each's body, opens that key in every member.
+        var eachRead = false;
 
         if (deadline is not null) {
             var due = new List<CellAccess>();
@@ -124,6 +132,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             }
             opened = Math.Max(val1: opened, val2: (each ? members.Count : multiplier));
             shared |= !each;
+            eachRead |= each;
         }
         foreach (var access in reads) {
             if (!context.RowRests(rowOrdinal: access.RowOrdinal)) {
@@ -133,6 +142,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             }
             if (access.Each || access.Members || access.IsMember || access.MemberKey) {
                 opened = Math.Max(val1: opened, val2: Own(access: access));
+                eachRead |= access.Each;
 
                 continue;
             }
@@ -183,7 +193,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Judged: judged,
             Latching: latching,
             Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s)"
-        );
+        ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && !eachRead && (judgedAtRest == 0L) && (firedAtRest == 0L)) };
     }
     // A swept family's member count and its widest member's capacity, read from declarations.
     private static (long Count, long Capacity) MemberShape(RuleCompileContext context, RowFamily family) {

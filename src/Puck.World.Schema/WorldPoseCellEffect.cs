@@ -16,6 +16,8 @@ namespace Puck.World;
 public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default, string? frame = null) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
     /// <summary>The position of the cell ordinal among the sources.</summary>
     public const int CellSource = 0;
+    /// <summary>The frame spelling that names the placement whose id is the swept key (<see cref="FrameEach"/>).</summary>
+    public const string FrameEachSpelling = "placement:$each";
 
     /// <summary>Gets the addressed body.</summary>
     public WorldBodyRef Body { get; } = body;
@@ -26,6 +28,9 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     /// <summary>Gets the placement whose frame the cells and the offset are read in, or <see langword="null"/> for
     /// the world.</summary>
     public string? Frame { get; } = frame;
+    /// <summary>Gets whether the frame is the placement whose id is the key bound to <c>$each</c> when the effect
+    /// fires, rather than one named placement.</summary>
+    public bool FrameEach => string.Equals(a: Frame, b: FrameEachSpelling, comparisonType: StringComparison.Ordinal);
     /// <summary>Gets the cell expression.</summary>
     public CompiledExpressionToken[] Expression { get; } = expression;
     /// <summary>Gets the displacement from the cell centre.</summary>

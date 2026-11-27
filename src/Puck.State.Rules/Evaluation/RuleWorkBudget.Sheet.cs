@@ -42,16 +42,26 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
     /// <param name="other">The other range.</param>
     /// <returns><see langword="true"/> when they are disjoint.</returns>
     public bool Disjoint(RulePinnedCell other) => ((High < other.Low) || (other.High < Low));
+    /// <summary>Gets a value indicating whether the pin is the cell under a family sweep's own <c>$member</c> key
+    /// rather than a literal cell: its <see cref="RowOrdinal"/> holds the row's ordinal complemented, so it never meets
+    /// a literal pin of the same row.</summary>
+    public bool ByMember => (RowOrdinal < 0);
+    /// <summary>Gets the catalog ordinal of the row the pin reads.</summary>
+    public int SourceRow => (ByMember ? ~RowOrdinal : RowOrdinal);
     /// <summary>Formats the pinned cell as <c>row.key</c>.</summary>
     /// <param name="catalog">The catalog the ordinal and key were minted against.</param>
     /// <returns>The name.</returns>
     public string Name(StateCatalog catalog) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
-        var row = ((((uint)RowOrdinal) < ((uint)catalog.Descriptors.Count))
-            ? catalog.Descriptors[RowOrdinal].Name
-            : RowOrdinal.ToString(provider: CultureInfo.InvariantCulture)
+        var row = ((((uint)SourceRow) < ((uint)catalog.Descriptors.Count))
+            ? catalog.Descriptors[SourceRow].Name
+            : SourceRow.ToString(provider: CultureInfo.InvariantCulture)
         );
+
+        if (ByMember) {
+            return $"{row}[$member]";
+        }
 
         return (catalog.Keys.TryGetName(
             key: Key,
@@ -266,6 +276,7 @@ public static partial class RuleWorkBudget {
             Discriminators: (isInteraction
             ? []
             : PinnedCells(
+                    byMember: response.PinsByMember,
                     contradictory: out _,
                     gate: rule.Gate
                 )),
@@ -332,6 +343,7 @@ public static partial class RuleWorkBudget {
         }
         foreach (var (rule, _, _) in rules) {
             foreach (var pinned in PinnedCells(
+                byMember: true,
                 contradictory: out _,
                 gate: rule.Gate
             )) {
@@ -342,9 +354,21 @@ public static partial class RuleWorkBudget {
                 }
             }
         }
+        var literal = writers.Where(predicate: static pair => (pair.Key.RowOrdinal >= 0)).ToArray();
+
         foreach (var (cell, cellWriters) in writers) {
-            if (byRow.TryGetValue(key: cell.RowOrdinal, value: out var rowWriters)) {
+            // A cell under $member is every member's cell of its row: every writer of the row reaches it.
+            var row = ((cell.RowOrdinal < 0) ? ~cell.RowOrdinal : cell.RowOrdinal);
+
+            if (byRow.TryGetValue(key: row, value: out var rowWriters)) {
                 cellWriters.AddAll(other: rowWriters);
+            }
+            if (cell.RowOrdinal < 0) {
+                foreach (var (other, otherWriters) in literal) {
+                    if (other.RowOrdinal == row) {
+                        cellWriters.AddAll(other: otherWriters);
+                    }
+                }
             }
         }
 
@@ -409,7 +433,11 @@ public static partial class RuleWorkBudget {
     /// <param name="gate">The compiled gate.</param>
     /// <param name="contradictory">Whether some cell's range is empty, so the gate can never hold.</param>
     /// <returns>The pins, in cell order.</returns>
-    public static IReadOnlyList<RulePinnedCell> PinnedCells(GateToken[] gate, out bool contradictory) {
+    /// <param name="byMember">Whether a comparison of the cell under a family sweep's <c>$member</c> key pins too
+    /// (<see cref="RulePinnedCell.ByMember"/>): sound only for a line whose firings one member's change alone opens
+    /// (<see cref="RuleResponse.PinsByMember"/>), so two such lines pinning one row's member cell to disjoint ranges
+    /// never fire for the same member in one tick.</param>
+    public static IReadOnlyList<RulePinnedCell> PinnedCells(GateToken[] gate, out bool contradictory, bool byMember = false) {
         ArgumentNullException.ThrowIfNull(argument: gate);
         if (Array.Exists(array: gate, match: static token => (token.Op == GateOp.ShortCircuit))) {
             gate = Array.FindAll(array: gate, match: static token => (token.Op != GateOp.ShortCircuit));
@@ -443,11 +471,13 @@ public static partial class RuleWorkBudget {
             if (predicate.Op != GateOp.Compare) {
                 return [];
             }
+            var memberCell = (byMember && (predicate.LeftSource.Operand is StateCellOperand { KeyFrom: { IsMember: true }, RowFrom: null }));
+
             if (
                 !predicate.RightSource.IsLiteral ||
                 predicate.LeftSource.IsExpression ||
-                (predicate.LeftSource.Operand is not StateCellOperand { KeyFrom: null, RowFrom: null } state) ||
-                !state.Key.IsValid
+                (predicate.LeftSource.Operand is not StateCellOperand { RowFrom: null } state) ||
+                (!memberCell && ((state.KeyFrom is not null) || !state.Key.IsValid))
             ) {
                 continue;
             }
@@ -482,7 +512,7 @@ public static partial class RuleWorkBudget {
                 continue;
             }
 
-            var cell = (state.RowOrdinal, state.Key);
+            var cell = (memberCell ? (~state.RowOrdinal, default(CellKey)) : (state.RowOrdinal, state.Key));
 
             pinned[cell] = (pinned.TryGetValue(
                 key: cell,

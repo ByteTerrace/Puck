@@ -553,7 +553,12 @@ public static partial class WorldFactsCompiler {
             !VectorFunctions.IsFinite(vector: effect.Offset) || !float.IsFinite(f: effect.RollDegrees) || !float.IsFinite(f: effect.PitchDegrees)) {
             throw new RuleException(detail: "poseCell requires a declared topology, a finite offset, a finite roll and a finite pitch", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
-        if ((effect.Frame is { } frame) && (WorldDefinitionRows.FindPlacement(placements: context.Definition.Placements, id: frame) is not { Attach: null, Inhabit: null })) {
+        var frameEach = string.Equals(a: effect.Frame, b: WorldPoseCellEffect.FrameEachSpelling, comparisonType: StringComparison.Ordinal);
+
+        if (frameEach && (context.ForEachRow is null)) {
+            throw new RuleException(detail: $"poseCell frame '{WorldPoseCellEffect.FrameEachSpelling}' names the placement the swept key spells, which requires the rule to declare 'forEach'", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
+        }
+        if (!frameEach && (effect.Frame is { } frame) && (WorldDefinitionRows.FindPlacement(placements: context.Definition.Placements, id: frame) is not { Attach: null, Inhabit: null })) {
             throw new RuleException(detail: $"poseCell frame '{frame}' must name a declared placement that neither attaches nor inhabits", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");

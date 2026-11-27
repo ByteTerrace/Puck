@@ -695,7 +695,11 @@ public sealed partial class WorldRuleHost {
             var centre = topology.CellCentre(cell: ((int)cell));
             var position = new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z));
 
-            if ((effect.Frame is { } frameId) && (WorldDefinitionRows.FindPlacement(placements: Host.Definition.Placements, id: frameId) is { } framePlacement)) {
+            var frameId = (effect.FrameEach
+                ? (Host.Arena.Keys.TryGetName(key: BoundEachKey, name: out var eachName) ? eachName.Value : null)
+                : effect.Frame);
+
+            if ((frameId is not null) && (WorldDefinitionRows.FindPlacement(placements: Host.Definition.Placements, id: frameId) is { } framePlacement)) {
                 var frame = WorldDefinitionRows.ResolvedFrame(definition: Host.Definition, placement: framePlacement);
 
                 position = (frame.FixedPosition + frame.FixedRotation.Rotate(vector: (position * frame.FixedScale)));

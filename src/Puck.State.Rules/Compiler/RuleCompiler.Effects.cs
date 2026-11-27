@@ -965,6 +965,7 @@ public static partial class RuleCompiler {
             describe: $"{verb} {rowName}.{destination.Spelling} := {source.Describe}",
             key: destination.Key,
             keyFrom: destination.KeyFrom,
+            rowFrom: liveRow,
             rowOrdinal: rowOrdinal,
             source: ConvertOperand(source.Operand, row.Kind, ruleName, verb),
             text: null,
