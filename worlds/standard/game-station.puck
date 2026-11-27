@@ -71,7 +71,10 @@ let gameStationFarLine = { x0: -0.84, x1: 0.84, z0: 0.695, z1: 0.78 }
 let gameStationStatusEm = 0.046
 let gameStationBoard = { x0: -0.84, x1: 0.84, z0: -0.6, z1: 0.68 }
 // The board area's middle, which a game's layout centres on.
-let gameStationBoardMid = [((gameStationBoard.x0 + gameStationBoard.x1) / 2), ((gameStationBoard.z0 + gameStationBoard.z1) / 2)]
+let gameStationBoardMid = [
+  ((gameStationBoard.x0 + gameStationBoard.x1) / 2),
+  ((gameStationBoard.z0 + gameStationBoard.z1) / 2)
+]
 
 // The pick grid: 2.7 cm cells over the whole glass (a topology holds at most 4096 cells) from its near right corner, its columns running +X (column 0 at the
 // near player's right) and its rows +Z (row 0 nearest the near chair). A cell's centre in the station's frame is
@@ -88,9 +91,13 @@ function gameStationCellZ(cell) = (gameStationGlass.z0 + (gameStationCell * (gam
 // right of the GAMES label, `gameStationGap` apart. A button's index from a point across is `gameStationButtonsX1`
 // less the point over the pitch.
 let gameStationButtonsX1 = ((gameStationMenu.x1 - gameStationMenuLabel) - gameStationGap)
-function gameStationButtonPitch(count) = ((((gameStationButtonsX1 - gameStationMenu.x0) - (gameStationGap * (count - 1))) / count) + gameStationGap)
+function gameStationButtonPitch(count) = ((((gameStationButtonsX1 - gameStationMenu.x0) -
+  (gameStationGap * (count - 1))) /
+  count) +
+  gameStationGap)
 function gameStationButtonRect(button, count) = {
-  x0: ((gameStationButtonsX1 - (gameStationButtonPitch(count) * button)) - (gameStationButtonPitch(count) - gameStationGap))
+  x0: ((gameStationButtonsX1 - (gameStationButtonPitch(count) * button)) -
+    (gameStationButtonPitch(count) - gameStationGap))
   x1: (gameStationButtonsX1 - (gameStationButtonPitch(count) * button))
   z0: gameStationMenu.z0
   z1: gameStationMenu.z1
@@ -226,7 +233,11 @@ function gameStationLabels(catalog, labelSlot, titleSlot) = concat(
   [
     {
       text: "GAMES"
-      position [(gameStationMenu.x1 - (gameStationMenuLabel / 2)), gameStationSurface, gameStationMid(gameStationMenu)[1]]
+      position [
+        (gameStationMenu.x1 - (gameStationMenuLabel / 2))
+        gameStationSurface
+        gameStationMid(gameStationMenu)[1]
+      ]
       rotation: displayReading
       emHeight: 0.05
       depth: 0.0015
@@ -504,27 +515,25 @@ template gameStationSeatState() {
 }
 
 // The buttons seat `seat` holds past half way this tick, one bit each.
-function gameStationWord(seat) = (
-  gameStationBits.pick * seatPastOf(seat, "confirm", 1) +
+function gameStationWord(seat) = (gameStationBits.pick * seatPastOf(seat, "confirm", 1) +
   gameStationBits.cancel * seatPastOf(seat, "cancel", 1) +
   gameStationBits.ahead * seatPastOf(seat, "forward", 1) +
   gameStationBits.behind * seatPastOf(seat, "forward", -1) +
   gameStationBits.right * seatPastOf(seat, "strafe", 1) +
-  gameStationBits.left * seatPastOf(seat, "strafe", -1)
-)
+  gameStationBits.left * seatPastOf(seat, "strafe", -1))
 // The seat sitting in the chair on side `side` of the board `cells`, the lowest-numbered if several do, or 0.
-function gameStationSeatIn(cells, side) = (seatAtSide(cells, 1, side) ? 1 :
-  (seatAtSide(cells, 2, side) ? 2 : (seatAtSide(cells, 3, side) ? 3 : (seatAtSide(cells, 4, side) ? 4 : 0))))
+function gameStationSeatIn(cells, side) = (seatAtSide(cells, 1, side) ? 1 : (seatAtSide(cells, 2, side) ? 2 :
+  (seatAtSide(cells, 3, side) ? 3 : (seatAtSide(cells, 4, side) ? 4 : 0))))
 // The buttons and the pick cell of seat `seat` (1 to 4; 0 holds none and points nowhere).
-function gameStationButtonsOf(seat) = (
-  ((seat == 1) * gameStationWord(1)) |
+function gameStationButtonsOf(seat) = (((seat == 1) * gameStationWord(1)) |
   ((seat == 2) * gameStationWord(2)) |
   ((seat == 3) * gameStationWord(3)) |
-  ((seat == 4) * gameStationWord(4))
-)
-function gameStationPointedBy(cells, seat) = ((seat == 1) ? board(pointer, cells, 1) :
-  ((seat == 2) ? board(pointer, cells, 2) :
-    ((seat == 3) ? board(pointer, cells, 3) : ((seat == 4) ? board(pointer, cells, 4) : -1))))
+  ((seat == 4) * gameStationWord(4)))
+function gameStationPointedBy(cells, seat) = ((seat == 1) ? board(pointer, cells, 1) : ((seat == 2) ? board(
+  pointer,
+  cells,
+  2
+) : ((seat == 3) ? board(pointer, cells, 3) : ((seat == 4) ? board(pointer, cells, 4) : -1))))
 
 // A station's rules, inside its module instance. The chairs rule reads who sits where; it reads only whether a seat is
 // at the board and where, so it runs when one sits down or stands up. A chair's presses rule reads its seat's buttons
@@ -555,9 +564,11 @@ template gameStationRules(station, catalog) {
     local button = toInt((gameStationButtonsX1 - x) / pitch)
     local onButton = onMenu and (x <= gameStationButtonsX1) and (x >= gameStationMenu.x0) and (button <= games)
     local tap = (button == games) ? gameStationBits.action : gameStationBits.list
-    local edges = onMenu ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * onButton * tap)) : rose
+    local edges = (
+      onMenu ? ((rose & ~(gameStationBits.pick)) | (((rose & gameStationBits.pick) != 0) * onButton * tap)) : rose
+    )
     local chosen = onButton ? button : -1
-    when (seat != 0 or gameStationDown.near != 0 or gameStationPointer.near != -1) and (gameStationDown.near != now or
+    when (seat or gameStationDown.near or gameStationPointer.near != -1) and (gameStationDown.near != now or
         gameStationEdges.near != edges or
         gameStationPointer.near != pointed or
         gameStationButton != chosen)
@@ -573,7 +584,7 @@ template gameStationRules(station, catalog) {
     local pointed = gameStationPointedBy(cells, seat)
     local now = gameStationButtonsOf(seat)
     local edges = now & ~(gameStationDown.far)
-    when (seat != 0 or gameStationDown.far != 0 or gameStationPointer.far != -1) and (gameStationDown.far != now or
+    when (seat or gameStationDown.far or gameStationPointer.far != -1) and (gameStationDown.far != now or
         gameStationEdges.far != edges or
         gameStationPointer.far != pointed)
     mode: Level

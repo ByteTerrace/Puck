@@ -246,8 +246,7 @@ template patienceStationSlots(station) {
             station,
             kSlotX[z],
             (kTopRow[z] == 1 ? patienceTopRowZ : patienceTableauZ - patienceFan * j)
-          ) +
-            [0, patienceSurface + patienceCardLayer * j, 0]
+          ) + [0, patienceSurface + patienceCardLayer * j, 0]
         })),
         flatMap(range(0, 16), z => map(range(0, fCaps[z]), j => {
           id: $"f{z}-{j}",

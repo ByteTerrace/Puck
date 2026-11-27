@@ -235,8 +235,9 @@ template chessStationRules(station, game, owns = true) {
       local pointed = gameStationPointer[chair.name]
       local x = gameStationCellX(pointed) - chessStationX0
       local z = gameStationCellZ(pointed) - chessStationZ0
-      local onBoard = (pointed >= 0) and (x >= 0) and (x < 8 * chessStationSquare) and (z >= 0) and
-        (z < 8 * chessStationSquare)
+      local onBoard = (
+        (pointed >= 0) and (x >= 0) and (x < 8 * chessStationSquare) and (z >= 0) and (z < 8 * chessStationSquare)
+      )
       when search(ply) == 0 and gameStationGame[key] == game and pointed != chessStationPointer[chair.name]
       mode: Level
       if onBoard {
