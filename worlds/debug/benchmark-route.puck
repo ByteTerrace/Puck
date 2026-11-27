@@ -1,5 +1,6 @@
 // The debug world's benchmark routes: `world.benchmark run debug` (or `puck benchmark --route debug`) plays the walk,
-// `seams` the three crossings at each pace, and `tree-walk` the gallery tree's walkway. Each chapter is a list of places to go to and how, played by the standard's
+// `seams` the three crossings at each pace, `tree-walk` the gallery tree's walkway and `climbing-wall` the gallery's
+// climbing wall. Each chapter is a list of places to go to and how, played by the standard's
 // `walker` seat program (standard/benchmark.puck) through seat 1's own controls: the left stick toward the next corner of
 // the navigation path, the right stick turning the camera onto the way ahead, Left Shift held to run and the dash tapped on
 // its cooldown, the context button pressed where a step presses `interact`. A step that strays plans its path again from
@@ -208,6 +209,53 @@ routes [
         )
       )
     })
+  }
+  // The gallery's climbing wall (gallery/climbing-wall.puck), climbed as a player climbs it: from the place before its
+  // pad onto the pad, then straight at the face with the stick held forward, which takes the face, climbs it and,
+  // where it ends under the ledge, pulls up onto the ledge, and through the doorway behind it onto level 3. The climb is
+  // a crossing whose arrival is the ledge's place, since a body on a face gains no ground toward any point.
+  // `seat1: route.play climbing-wall` plays the same route headless in climbing-wall-tests.puck.
+  {
+    name: "climbing-wall"
+    program: "walker"
+    chapters [
+      {
+        name: "the floor onto the pad"
+        steps [
+          {
+            $type: "pose"
+            point: galleryWorld(climbWallX, floor0, ((climbWallFace - climbWallPad.depth) - 2.5))
+            yawDegrees: 180
+          }
+          stand(1)
+          {
+            $type: "go"
+            point: galleryWorld(climbWallStart[0], climbWallStart[1], climbWallStart[2])
+            pace: "walk"
+            direct: true
+            within: 0.3
+          }
+        ]
+      }
+      {
+        name: "the face to the ledge"
+        steps [
+          { $type: "cross", headingDegrees: 180, until: "place-climbing-wall-top", pace: "walk", metres: 3 }
+        ]
+      }
+      {
+        name: "the ledge onto level 3"
+        steps [
+          {
+            $type: "go"
+            point: galleryWorld(climbWallLanding[0], climbWallLanding[1], climbWallLanding[2])
+            pace: "walk"
+            direct: true
+            within: 0.4
+          }
+        ]
+      }
+    ]
   }
   {
     name: "seams"

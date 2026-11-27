@@ -538,18 +538,24 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 ]))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece. Level
 // 2's balcony edges take them; level 1's are its lattice (below).
-// Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a tree branch lands; there
-// the bay takes a doorway (below) with a short length either side of it.
+// Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a doorway stands
+// (layout.puck's galleryEdgeDoors: a tree branch's landing, the climbing wall's ledge); there the bay takes the doorway
+// (below) with a short length either side of it.
 let shellBalconyBays = range(arcadeWestBays, galleryBays)
-function shellDoorSides(k, side, z, yaw) = map([-1, 1], s => {
-  id: $"rail-door-{side}-{k}-{s}", x: (treeLanding(k, side) + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2)))), y: galleryFloor[k], z: z, yaw: yaw, short: 2
-})
+function shellDoorSides(k, side, z, yaw) = flatMap(galleryEdgeDoorsOn(k, side), d => map([-1, 1], s => {
+  id: $"rail-door-{side}-{k}-{bayOf(d.x)}-{s}"
+  x: (d.x + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2))))
+  y: galleryFloor[k]
+  z: z
+  yaw: yaw
+  short: 2
+}))
 let shellRails = concat(
   flatMap([2, 3], k => concat(
-    map(filter(shellBalconyBays, b => (bayX(b) != treeLanding(k, "south"))), b => {
+    map(filter(shellBalconyBays, b => galleryEdgeRailed(k, "south", bayX(b))), b => {
       id: $"rail-south-{k}-{b}", x: bayX(b), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0
     }),
-    map(filter(shellBalconyBays, b => (bayX(b) != treeLanding(k, "north"))), b => {
+    map(filter(shellBalconyBays, b => galleryEdgeRailed(k, "north", bayX(b))), b => {
       id: $"rail-north-{k}-{b}", x: bayX(b), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0
     }),
     shellDoorSides(k, "south", (naveSouth - balconyInset), 180),
@@ -963,9 +969,9 @@ template shellPrototypes() {
       }
     }
   }
-  prototype "gallery-branch-door" {
+  prototype "gallery-edge-door" {
     document {
-      name: "gallery-branch-door"
+      name: "gallery-edge-door"
       schema: "puck.creation.v2"
       palette: shellKit
       edgeDoorway(base: 0, width: treeDoorWidth, post: treeDoorPost)
@@ -1144,13 +1150,14 @@ template shellPlacements() {
       }
     }
   }
-  // A doorway where each of the tree's level-2 and level-3 branches steps onto its balcony (layout.puck's treeLimbs).
-  for (b, n) in filter(treeLimbs, b => (b.level >= 2)) {
-    placement $"gallery-branch-door-{n}" {
-      prototype: "gallery-branch-door"
+  // A doorway in each bay of levels 2 and 3 where something meets the floor from over the void: each of the tree's
+  // branches on those levels and the climbing wall's ledge (layout.puck's galleryEdgeDoors).
+  for d in galleryEdgeDoors {
+    placement $"gallery-edge-door-{d.level}-{d.side}-{bayOf(d.x)}" {
+      prototype: "gallery-edge-door"
       parent: "gallery"
-      position [b.x, galleryFloor[b.level], ((b.side == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))]
-      yawDegrees: ((b.side == "south") ? 180 : 0)
+      position [d.x, galleryFloor[d.level], ((d.side == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))]
+      yawDegrees: ((d.side == "south") ? 180 : 0)
       solid
     }
   }

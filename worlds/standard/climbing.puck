@@ -1,0 +1,294 @@
+// Climbing-wall pieces: a face of softened canyon planes over teal seams, the frame a face stands in with the ledge a
+// climb tops out on, hold families (jugs, crimps, slopers, pinches, foot chips and volumes) each carrying a recessed
+// bolt, and a segmented landing pad. A module library: it hands its importers palettes and templates and emits no
+// document. Each template takes `base`, the palette slot its palette's first entry stands at.
+//
+// Every piece is authored in the creation frame: its front faces -Z, the way a climber looks when she stands before
+// the wall, +X is the piece's right and +Y up. A face's climbing plane is z 0 and its foot y 0; a hold's back sits on
+// z 0 and it stands out toward -Z, so a world places a hold on a face at the face's plane, turned as the face is.
+//
+// Only the face is meant to be held: a world gives the face's placement `grip { holdable: true }` (the standard's
+// `climbAbility` climbs what is holdable) and leaves the frame, the holds and the pad without it. The face's plates are
+// drawn only (`detail: true`), so a climber's contact is the face's flat backing and the climb's hold probe reads one
+// plane however the plates and holds stand out of it; the hands and feet a rig plants on the drawn surface find them.
+import "paths"
+
+// A face's and its frame's materials, in slot order from `base`: four panel tones the plates take in turn, the seam
+// colour of the backing that shows between them, the frame's body and the coping band over the face. Panels are a matte
+// sandstone dielectric; `climbingPalette` takes exactly four panel colours.
+let climbPanelSlots = 4
+let climbSeam = 4
+let climbFrameBody = 5
+let climbCoping = 6
+function climbingPalette(panels = ["#F3D5A8", "#EFB48C", "#E7998A", "#F2C6B0"], seam = "#3C8C8A", frame = "#EFE3C8", coping = "#C8862E") = concat(
+  map(panels, c => { color: c, roughness: 0.85, specular: 0.04 }),
+  [
+    { color: seam, roughness: 0.7, specular: 0.04 }
+    { color: frame, roughness: 0.6, specular: 0.04 }
+    { color: coping, roughness: 0.55, specular: 0.04 }
+  ]
+)
+// A hold's materials from `base`: its grippy plastic, then its bolt's dark steel.
+let climbHold = 0
+let climbBolt = 1
+function climbingHoldPalette(color, bolt = "#2B2E33") = [
+  { color: color, roughness: 0.8, specular: 0.04 }
+  { color: bolt, roughness: 0.35, metal: 0.8 }
+]
+// A pad's two foam tones from `base`, its blocks alternating between them.
+function climbingPadPalette(tones = ["#8DAE88", "#7C9E79"]) = map(
+  tones,
+  c => { color: c, roughness: 0.92, specular: 0.03 }
+)
+
+// The facet grid of a face `width` by `height` in `columns` by `rows` cells: node (i, j) is the regular grid's, nudged
+// by up to `wobble` of a cell along each axis that does not lie on the face's edge, so the plates still meet the edges.
+// The nudges are the plastic-number pair of low-discrepancy shares (paths.puck's weylShare), so neighbouring plates
+// never repeat a shape and the pattern is the same at every compile; `salt` gives a second face another pattern.
+function climbFacetNudge(k, last, n, wobble, ratio, salt) = (((k > 0) and (k < last)) ? (wobble *
+  ((2 * weylShare(n, ratio, salt)) - 1)) : 0)
+function climbFacetNode(width, height, columns, rows, wobble, salt, i, j) = (let n = ((j * (columns + 1)) + i + 1) in
+[
+  (((width / columns) * (i + climbFacetNudge(i, columns, n, wobble, 0.7548776662, salt))) - (width / 2)),
+  ((height / rows) * (j + climbFacetNudge(j, rows, n, wobble, 0.569840291, salt)))
+])
+// Cell (i, j)'s plate: its four corners clockwise in the face's own axes (x, y), from the corner at least x and most y,
+// pulled toward their middle so a seam `seam` wide shows between neighbours. `centre` is the middle, `half` the plate's
+// half extents and `profile` its corners over them, each within [-1, 1] (a Convex profile's frame).
+function climbFacet(width, height, columns, rows, wobble, seam, salt, i, j) = (let corners = [
+  climbFacetNode(width, height, columns, rows, wobble, salt, i, (j + 1))
+  climbFacetNode(width, height, columns, rows, wobble, salt, (i + 1), (j + 1))
+  climbFacetNode(width, height, columns, rows, wobble, salt, (i + 1), j)
+  climbFacetNode(width, height, columns, rows, wobble, salt, i, j)
+] in
+(let centre = ((corners[0] + corners[1] + corners[2] + corners[3]) / 4) in
+(let pulled = map(
+  corners,
+  c => (centre + ((c - centre) * (1 - (seam / minimum((width / columns), (height / rows))))))
+) in
+(let half = [
+  maximum(map(pulled, c => absolute((c[0] - centre[0]))))
+  maximum(map(pulled, c => absolute((c[1] - centre[1]))))
+] in
+{
+  centre: centre
+  half: half
+  profile: map(pulled, c => [((c[0] - centre[0]) / half[0]), ((c[1] - centre[1]) / half[1])])
+}))))
+// A plate's tone: neighbours along a row step one tone and rows step two plus a shift per row of zero or one, so no two
+// plates sharing an edge ever wear the same tone.
+function climbFacetTone(i, j, salt) = ((i + (2 * j) + floor((2 * weylShare((j + 1), 0.6180339887, salt)))) %
+  climbPanelSlots)
+
+// A climbing face, facing -Z, `width` across and `height` tall from its foot at y 0: a flat backing `thickness` deep
+// behind the plane z 0, in the seam colour, and over it a plate in each cell of a `columns` by `rows` grid of canyon
+// planes with rounded corners, each standing between `relief`'s two depths proud of the plane and leaning up to `tilt`
+// degrees about each of the face's axes, so the light picks out every plane. Each plate's back sinks `embed` into the
+// backing, deep enough that its lean never lifts an edge off it. The plates are drawn only: the backing is the face a
+// climber holds.
+template climbingFace(base, width, height, columns = 3, rows = 10, wobble = 0.22, seam = 0.04, relief = [0.025, 0.055], tilt = 3.5, embed = 0.05, thickness = 0.2, salt = 0) {
+  shape Box "face-backing" {
+    material: (base + climbSeam)
+    position [0, (height / 2), (thickness / 2)]
+    scale [(width / 2), (height / 2), (thickness / 2)]
+  }
+  for j in range(0, rows) {
+    for i in range(0, columns) {
+      let n = ((j * columns) + i + 1)
+      let facet = climbFacet(width, height, columns, rows, wobble, seam, salt, i, j)
+      let proud = (relief[0] + ((relief[1] - relief[0]) * weylShare(n, 0.4142135624, salt)))
+      shape Prism $"face-plate-{i}-{j}" {
+        detail: true
+        material: (base + climbFacetTone(i, j, salt))
+        position [facet.centre[0], facet.centre[1], ((embed - proud) / 2)]
+        rotation: compose(
+          rotate([1, 0, 0], (tilt * ((2 * weylShare(n, 0.7548776662, (salt + 0.31))) - 1))),
+          rotate([0, 1, 0], (tilt * ((2 * weylShare(n, 0.5698402910, (salt + 0.57))) - 1)))
+        )
+        scale [facet.half[0], facet.half[1], ((embed + proud) / 2)]
+        profile {
+          kind: "Convex"
+          vertices: facet.profile
+          cornerRadius: 0.05
+        }
+      }
+    }
+  }
+}
+
+// The frame a face stands in, facing -Z with the face's plane at z 0 and its foot at y 0, `height` from the foot to
+// the top of its ledge: a cheek either side of the face, `cheek` wide and standing `lip` proud of the plane; the body
+// behind the face's backing (`thickness`, as the face was given) back to `depth`; and the coping, a band `coping` tall
+// along the top whose upper face is the ledge a climb tops out on, `depth` deep from a rounded nose `lip` proud of the
+// face. Its back and the ledge's back edge are square, so a frame stood against a floor's edge with its ledge level
+// with the floor carries a walker straight from one onto the other. `width` is the face's; the frame adds its cheeks.
+template climbingFrame(base, width, height, depth, cheek = 0.2, coping = 0.3, lip = 0.06, thickness = 0.2) {
+  shape Box "frame-body" {
+    material: (base + climbFrameBody)
+    position [0, ((height - coping) / 2), ((thickness + depth) / 2)]
+    scale [((width / 2) + cheek), ((height - coping) / 2), ((depth - thickness) / 2)]
+  }
+  for side in [-1, 1] {
+    shape Box $"frame-cheek-{side}" {
+      material: (base + climbFrameBody)
+      position [(side * ((width / 2) + (cheek / 2))), ((height - coping) / 2), ((thickness - lip) / 2)]
+      scale [(cheek / 2), ((height - coping) / 2), ((thickness + lip) / 2)]
+      rounding: 0.03
+    }
+  }
+  shape Box "frame-coping" {
+    material: (base + climbCoping)
+    position [0, (height - (coping / 2)), ((depth + (2 * lip)) / 2)]
+    scale [((width / 2) + cheek), (coping / 2), ((depth - (2 * lip)) / 2)]
+  }
+  shape Box "frame-nose" {
+    material: (base + climbCoping)
+    position [0, (height - (coping / 2)), (2 * lip)]
+    scale [(((width / 2) + cheek) + lip), (coping / 2), (3 * lip)]
+    rounding: (lip * 0.8)
+  }
+}
+
+// A bolt recessed into a hold: a counterbore `radius` across cut `depth` into the hold at `at`, a point on its front,
+// along the hold's +Z (into the wall), and the dark cap screw seated on its floor. Written after the hold's own shapes,
+// whose surface the cut carves, and before nothing else.
+template climbingBolt(base, at, radius = 0.02, depth = 0.018) {
+  shape Cylinder "bolt-bore" {
+    blend: Subtraction
+    material: (base + climbHold)
+    position: at
+    rotation: rotate([1, 0, 0], 90)
+    scale [radius, depth, radius]
+  }
+  shape Cylinder "bolt-screw" {
+    material: (base + climbBolt)
+    position: (at + [0, 0, (depth - 0.004)])
+    rotation: rotate([1, 0, 0], 90)
+    scale [(radius * 0.62), 0.004, (radius * 0.62)]
+    rounding: 0.002
+  }
+}
+
+// The hold families, each facing -Z and standing out of the origin toward -Z, its back reaching at least 0.05 m behind
+// the origin so it seats into a face's plates whatever their lean. `size` scales the whole hold; a world sets sizes
+// with a placement's scale rather than one prototype a size.
+//
+// A jug: a big rounded handle with a pocket scooped behind a lip along its top, the hold a hand closes over.
+template climbingJug(base, size = 1) {
+  shape Superellipsoid "jug-body" {
+    material: (base + climbHold)
+    position: ([0, 0, -0.01] * size)
+    scale: ([0.13, 0.08, 0.075] * size)
+    exponent: 2.6
+  }
+  shape Ellipsoid "jug-pocket" {
+    blend: SmoothSubtraction
+    smooth: (0.012 * size)
+    material: (base + climbHold)
+    position: ([0, 0.065, -0.035] * size)
+    scale: ([0.095, 0.045, 0.035] * size)
+  }
+  climbingBolt(base: base, at: ([0, -0.03, -0.083] * size), radius: (0.02 * size), depth: (0.018 * size))
+}
+// A crimp: a narrow edge a few fingertips wide, its top tipped out from the wall.
+template climbingCrimp(base, size = 1) {
+  shape Box "crimp-body" {
+    material: (base + climbHold)
+    position [0, 0, 0]
+    rotation: rotate([1, 0, 0], -10)
+    scale: ([0.1, 0.028, 0.05] * size)
+    rounding: (0.018 * size)
+  }
+  climbingBolt(base: base, at: ([0, -0.004, -0.05] * size), radius: (0.013 * size), depth: (0.014 * size))
+}
+// A sloper: a broad smooth dome with no edge, held by the palm's friction.
+template climbingSloper(base, size = 1) {
+  shape Superellipsoid "sloper-body" {
+    material: (base + climbHold)
+    position [0, 0, 0]
+    scale: ([0.16, 0.12, 0.075] * size)
+    exponent: 2.2
+  }
+  climbingBolt(base: base, at: ([0, 0.02, -0.073] * size), radius: (0.02 * size), depth: (0.018 * size))
+}
+// A pinch: an upright blade gripped between thumb and fingers.
+template climbingPinch(base, size = 1) {
+  shape Superellipsoid "pinch-body" {
+    material: (base + climbHold)
+    position: ([0, 0, -0.01] * size)
+    scale: ([0.04, 0.11, 0.065] * size)
+    exponent: 2.6
+  }
+  climbingBolt(base: base, at: ([0, -0.04, -0.07] * size), radius: (0.012 * size), depth: (0.014 * size))
+}
+// A foot chip: a small nub a toe stands on.
+template climbingFoot(base, size = 1) {
+  shape Superellipsoid "foot-body" {
+    material: (base + climbHold)
+    position: ([0, 0, 0.02] * size)
+    scale: ([0.05, 0.035, 0.05] * size)
+    exponent: 2.4
+  }
+  climbingBolt(base: base, at: ([0, 0, -0.03] * size), radius: (0.01 * size), depth: (0.012 * size))
+}
+// A volume: a broad, low triangular block bolted over the face, point up, its sides bevelled at 45 degrees down to the
+// wall, so it adds a feature the size of a body's chest that stands only 0.09 m out. `spin` turns it about the wall's
+// normal. A bolt sits low on its front.
+template climbingVolume(base, size = 1, spin = 0) {
+  shape Prism "volume-body" {
+    material: (base + climbHold)
+    position [0, 0, 0]
+    rotation: rotate([0, 0, 1], spin)
+    scale: ([0.45, 0.38, 0.09] * size)
+    taper: 0
+    chamfer: (0.075 * size)
+  }
+  climbingBolt(base: base, at: ([0, -0.12, -0.09] * size), radius: (0.02 * size), depth: (0.016 * size))
+}
+// Every hold family by name, as a world's prototypes list them: a jug, a crimp, a sloper, a pinch, a foot chip or a
+// volume.
+let climbingHoldKinds = ["jug", "crimp", "sloper", "pinch", "foot", "volume"]
+template climbingHold(base, kind) {
+  if kind == "jug" {
+    climbingJug(base: base)
+  } else if kind == "crimp" {
+    climbingCrimp(base: base)
+  } else if kind == "sloper" {
+    climbingSloper(base: base)
+  } else if kind == "pinch" {
+    climbingPinch(base: base)
+  } else if kind == "foot" {
+    climbingFoot(base: base)
+  } else {
+    climbingVolume(base: base)
+  }
+}
+
+// A landing pad, its back edge on z 0 and reaching `depth` toward -Z: `segments` foam blocks side by side across
+// `width`, each `height` tall with softly rounded edges, their tones alternating. Its top is ground a body steps up onto
+// and lands on.
+template climbingPad(base, width, depth, height, segments = 3, rounding = 0.07) {
+  for k in range(0, segments) {
+    shape Box $"pad-block-{k}" {
+      material: (base + (k % 2))
+      position [((0 - (width / 2)) + ((k + 0.5) * (width / segments))), (height / 2), (0 - (depth / 2))]
+      scale [((width / segments) / 2), (height / 2), (depth / 2)]
+      rounding: rounding
+    }
+  }
+}
+
+// A route set on a face: holds laid along a line of `points` (face coordinates: metres across from the face's middle
+// and up from its foot) every `pitch` metres, stepping `reach` to either side of the line in turn as hands and feet
+// move, the hold families taking `kinds` and the sizes `sizes` in turn. Each hold is { kind, at, size }, where `at` is
+// its face coordinate. A world places one copy of its prototype per hold, so a route of any length costs one bake per
+// family. The side a hold steps to is the line's direction turned a quarter turn (paths.puck's open polylines).
+function climbRoute(points, pitch, reach, kinds, sizes = [1]) = map(
+  range(0, (floor((polylineLength(points) / pitch)) + 1)),
+  n => (let along = polylineDirection(points, (n * pitch)) in
+  {
+    kind: kinds[(n % length(kinds))]
+    at: (polylineAt(points, (n * pitch)) + ([along[1], (0 - along[0])] * (reach * (((n % 2) == 0) ? -1 : 1))))
+    size: sizes[(n % length(sizes))]
+  })
+)
