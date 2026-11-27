@@ -113,7 +113,7 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   viewport layout; publishes the audio director's per-frame snapshot through
   `IWorldAudioFrameFeed`.
 - `WorldSceneEmitter.cs`—the boot world's own document-to-geometry emission
-  path for scene rows and `puck.creation.v1` placements.
+  path for scene rows and `puck.creation.v2` placements.
 - `WorldViewComposer.cs`—offscreen view composition (the diegetic world
   cameras): layout selection and eased transitions for the main window.
 - `WorldDynamicResolution.cs`, `WorldFramePresenter.DynamicResolution.cs`,
@@ -142,7 +142,7 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
 - `WorldPlacementStamper.cs`, `WorldCreationInstances.cs`, `WorldPrototypeFacets.cs`—
-  the document-to-geometry emission path for scene rows and `puck.creation.v1`
+  the document-to-geometry emission path for scene rows and `puck.creation.v2`
   placements; `WorldSceneEmitter` drives them for the boot world. A
   body-rooted `BodyStamp` carrying a `WorldLookMotion` with `Dynamics`/
   `PartDynamics` gets a root `SecondOrderFollower3`/`4` (position/orientation)

@@ -528,7 +528,7 @@ public static class MeshCommand {
 
         builder.Append(provider: CultureInfo.InvariantCulture, handler: $"score {cluster.Score:0.0} at {Point(point: world)}");
         if (outcome.Owner is { } owner) {
-            builder.Append(provider: CultureInfo.InvariantCulture, handler: $" (author {Point(point: owner.ToAuthor(world: world))})");
+            builder.Append(provider: CultureInfo.InvariantCulture, handler: $" (creation {Point(point: owner.ToCreation(world: world))})");
         }
         builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Rough} rough, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg at {Point(point: outcome.ToWorld(arg: cluster.Worst))}");
         if (cluster.WorstFacing != Vector3.Zero) {

@@ -51,7 +51,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         m_population = population;
     }
 
-    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedVector3? responseOrigin = null, WorldBody? carrier = null) {
+    private ContactResolution ResolveCore(WorldBody? body, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedVector3? responseOrigin = null, WorldBody? carrier = null) {
         var entryVelocity = velocity;
         var intended = position;
         var resolution = m_inner.ResolveSweep(
@@ -69,12 +69,12 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         }
         // A query naming no local body (a probe) takes nothing from a neighbour: every answer that moves a body passes
         // the population's door for that body.
-        if (entityIndex < 0) {
+        if (body is not { EntityIndex: >= 0 and var entityIndex }) {
             return resolution;
         }
         if ((carrier is not null) && !resolution.Unproved) {
             carrier.ApplyCarryBlock(correction: position - intended,
-                ceiling: m_population.EntryBody(index: entityIndex)!.RigidBoundingRadius);
+                ceiling: body.RigidBoundingRadius);
         }
         // A descent selected by untrusted support is not the body's own motion. Unless the local landing grounds,
         // retain the local stationary answer as the baseline and admit the neighbour's entire landing below.
@@ -228,7 +228,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             var before = position;
             m_population.AdmitAdjacencyResponse(
                 displacement: proposedPosition - position,
-                entityIndex: entityIndex,
+                body: body,
                 overlapDepth: projection.OverlapDepth,
                 position: ref position,
                 proposedVelocity: velocity + WorldAdjacencyPath.MapDisplacementIntoSource(
@@ -307,7 +307,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
-            entityIndex: -1,
+            body: null,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,
@@ -317,10 +317,10 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         );
     }
     /// <inheritdoc/>
-    public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+    public ContactResolution ResolveEntitySweep(WorldBody body, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
-            entityIndex: entityIndex,
+            body: body,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,
@@ -329,24 +329,24 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             volumes: volumes
         );
     /// <inheritdoc/>
-    public ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
+    public ContactResolution ResolveEntitySupportSweep(WorldBody body, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
+        ResolveCore(body: body, previousPosition: in previousPosition, position: ref position,
             velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, responseOrigin: responseOrigin);
     /// <summary>Resolves a carried body's sweep and admits each neighbour's propagated block against its carrier.</summary>
     /// <exception cref="InvalidOperationException">A kit partition is running: the sweep writes the carrier, another
     /// body than the one it names.</exception>
-    public ContactResolution ResolveCarriedSweep(int entityIndex, WorldBody carrier, in FixedVector3 previousPosition,
+    public ContactResolution ResolveCarriedSweep(WorldBody body, WorldBody carrier, in FixedVector3 previousPosition,
         ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         m_population.ThrowIfPartitioned();
-        return ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
+        return ResolveCore(body: body, previousPosition: in previousPosition, position: ref position,
             velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, carrier: carrier);
     }
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
-            entityIndex: -1,
+            body: null,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,

@@ -4,7 +4,9 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldInputRuntime {
-    private readonly List<(Owner Owner, WorldInputOwnerCheckpoint Input, int Generation, string? KitName)> m_kitUndo = [];
+    // What a kit step puts back when its sweep is refused: each owner as it stood before the step first changed it, and
+    // the steering image kept for its body, which a mapping install re-addresses beside the body's own images.
+    private readonly List<(Owner Owner, WorldInputOwnerCheckpoint Input, int Generation, string? KitName, Protocol.PlayerIntent Steering)> m_kitUndo = [];
 
     private WorldInputHoldCheckpoint? m_kitHoldUndo;
     private bool m_kitStep;
@@ -28,7 +30,7 @@ public sealed partial class WorldInputRuntime {
         if (!m_kitStep) { return; }
         foreach (var saved in m_kitUndo) { if (ReferenceEquals(objA: saved.Owner, objB: owner)) { return; } }
         m_kitHoldUndo ??= m_host.InputHold.Capture();
-        m_kitUndo.Add(item: (owner, owner.Input.Capture(), owner.Generation, owner.KitName));
+        m_kitUndo.Add(item: (owner, owner.Input.Capture(), owner.Generation, owner.KitName, ((owner.Body >= 0) ? m_host.Population.SteeringImage(bodyIndex: owner.Body) : default)));
     }
 
     /// <summary>Commits input barriers with an admitted step, or restores them with a refused sweep.</summary>
@@ -46,7 +48,9 @@ public sealed partial class WorldInputRuntime {
             }
             m_host.Population.RestoreInputEffectSelections(definition: m_host.Definition, revision: m_kitPopulationRevision);
             foreach (var saved in m_kitUndo) {
-                if (OwnsBodyMapping(owner: saved.Owner)) { m_host.Population.RestoreInputMapping(bodyIndex: saved.Owner.Body, owner: saved.Owner.Input); }
+                if (!OwnsBodyMapping(owner: saved.Owner)) { continue; }
+                m_host.Population.RestoreInputMapping(bodyIndex: saved.Owner.Body, owner: saved.Owner.Input);
+                m_host.Population.RestoreSteeringImage(bodyIndex: saved.Owner.Body, image: in saved.Steering);
             }
             m_host.InputHold.Restore(checkpoint: m_kitHoldUndo!);
         }

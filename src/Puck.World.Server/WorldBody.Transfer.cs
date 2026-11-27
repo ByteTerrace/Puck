@@ -132,7 +132,7 @@ public sealed partial class WorldBody {
 
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
     /// authority's own contact field. No input, action, timer, gravity, or motion-program operation is evaluated.</summary>
-    public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, int entityIndex, ulong destinationCompletedEngineTick) {
+    public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, ulong destinationCompletedEngineTick) {
         var next = m_position;
         var velocity = ComposedVelocity();
         var resolution = default(ContactResolution);
@@ -146,7 +146,6 @@ public sealed partial class WorldBody {
             var volumes = ScaledColliderVolumes();
 
             resolution = SweepContact(
-                entityIndex: entityIndex,
                 field: field,
                 previousPosition: trajectory.PreviousPosition,
                 position: ref next,

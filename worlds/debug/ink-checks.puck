@@ -53,7 +53,7 @@ spawnPoints [{ id: "start", position [0, 1, 4], yawDegrees: 180 }]
 prototypes {
   prototype "ink-sphere" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: inkPalette
       shape Sphere "sphere" {
         position [0, 1, 0]
@@ -63,7 +63,7 @@ prototypes {
   }
   prototype "ink-capsule" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: inkPalette
       shape Capsule "capsule" {
         position [0, 1.5, 0]
@@ -73,7 +73,7 @@ prototypes {
   }
   prototype "ink-box" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: inkPalette
       shape Box "box" {
         position [0, 1, 0]
@@ -83,14 +83,14 @@ prototypes {
   }
   prototype "ink-blend" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: inkPalette
       shape Sphere "body" {
         position [0, 1, 0]
         scale [1, 1, 1]
       }
       shape Sphere "limb" {
-        position [0.9, 1.5, 0]
+        position [-0.9, 1.5, 0]
         scale [0.6, 0.6, 0.6]
         blend: "Union"
         smooth: 0.25
@@ -99,7 +99,7 @@ prototypes {
   }
   prototype "edge-sphere" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: edgePalette
       shape Sphere "sphere" {
         position [0, 1, 0]
@@ -109,7 +109,7 @@ prototypes {
   }
   prototype "edge-capsule" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: edgePalette
       shape Capsule "capsule" {
         position [0, 1.5, 0]
@@ -119,7 +119,7 @@ prototypes {
   }
   prototype "edge-box" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: edgePalette
       shape Box "box" {
         position [0, 0.8, 0]
@@ -129,7 +129,7 @@ prototypes {
   }
   prototype "edge-stack" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: edgePalette
       shape Box "plinth" {
         position [0, 0.4, 0]
@@ -143,7 +143,7 @@ prototypes {
   }
   prototype "edge-paints" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: edgePalette
       shape Box "lower" {
         position [0, 0.4, 0]
@@ -158,7 +158,7 @@ prototypes {
   }
   prototype "edge-hatched" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: hatchPalette
       shape Sphere "ball" {
         position [0, 1.3, 0]
@@ -172,7 +172,7 @@ prototypes {
   }
   prototype "ink-stack" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       palette: inkPalette
       shape Box "plinth" {
         position [0, 0.4, 0]

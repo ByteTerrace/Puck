@@ -23,15 +23,10 @@ public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Or
     /// <summary>Gets each authored shape's actual motion-owner slot relative to the root.</summary>
     public int[] ShapeSlots { get; init; } = [];
 
-    /// <summary>Returns a world point in the creation's author frame: about the body, unscaled, then turned a half turn
-    /// about up (<see cref="Puck.World.Authoring.CreationFrame"/>).</summary>
+    /// <summary>Returns a world point in the creation's frame: about the body, unscaled.</summary>
     /// <param name="world">The world point, in metres.</param>
     /// <returns>The point as the creation's document spells it.</returns>
-    public Vector3 ToAuthor(Vector3 world) {
-        var local = ((world - Origin) / Scale);
-
-        return new Vector3(x: -local.X, y: local.Y, z: -local.Z);
-    }
+    public Vector3 ToCreation(Vector3 world) => ((world - Origin) / Scale);
 }
 /// <summary>One bake group of a rest scene, named by the hash of the geometry it seals at its finest tier
 /// (<see cref="RestScene.PlanKeys"/>).</summary>

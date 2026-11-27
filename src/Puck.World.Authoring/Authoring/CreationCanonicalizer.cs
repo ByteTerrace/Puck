@@ -2578,10 +2578,16 @@ public static partial class CreationCanonicalizer {
     /// normalization cannot repair without silently discarding meaning (duplicate ids, non-finite numerics, a
     /// palette overflowing its 16 slots, an orphaned frame transform, a feed-name collision) are.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.creation.v1</c> value.</returns>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.creation.v2</c> value.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
+        if (string.Equals(a: document.Schema, b: CreationDocument.RetiredSchema, comparisonType: StringComparison.Ordinal)) {
+            return [new DocumentValidationError(
+                    Message: $"declares '{CreationDocument.RetiredSchema}', a creation written in the retired author frame (x and z mirrored); convert it with `puck migrate frame <path>`, which writes it as '{CreationDocument.CurrentSchema}' in the engine's frame and draws it as before.",
+                    Path: "schema"
+                )];
+        }
         if (DocumentCanonicalizer.SchemaViolationMessage(
             declared: document.Schema,
             recognized: CreationDocument.CurrentSchema

@@ -148,7 +148,7 @@ public class ConstructSugarGuardLawTests {
             expected: "type"
         );
 
-        var document = Compile(source: "schema: \"puck.creation.v1\"\n\nshape Box \"b\" {\n    size [1, 1, 1]\n}\n");
+        var document = Compile(source: "schema: \"puck.creation.v2\"\n\nshape Box \"b\" {\n    size [1, 1, 1]\n}\n");
 
         _ = NodeAt(
             document: document,

@@ -139,7 +139,7 @@ prototypes {
           specular: 0.08
         }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "ground" {
         material: 0
         position [0, -0.2, 0]
@@ -170,7 +170,7 @@ prototypes {
           roughness: 0.4
         }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "bowl" {
         material: 0
         position [0, 0.4, 0]

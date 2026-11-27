@@ -204,7 +204,7 @@ prototypes {
         { color: "#141816", roughness: 0.7 }
         { color: "#4A3526", roughness: 0.8, specular: 0.05 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       twoPedestalTable(0)
       // The board: a dark base the lines show through, inside a dark rim flush with the tiles' faces.
       shape Box "base" {
@@ -214,33 +214,33 @@ prototypes {
       }
       shape Box "rim-north" {
         material: 1
-        position [0, 1.3275, 0.645]
+        position [0, 1.3275, -0.645]
         scale [0.685, 0.0275, 0.04]
       }
       shape Box "rim-south" {
         material: 1
-        position [0, 1.3275, -0.645]
+        position [0, 1.3275, 0.645]
         scale [0.685, 0.0275, 0.04]
       }
       shape Box "rim-east" {
         material: 1
-        position [0.645, 1.3275, 0]
+        position [-0.645, 1.3275, 0]
         scale [0.04, 0.0275, 0.605]
       }
       shape Box "rim-west" {
         material: 1
-        position [-0.645, 1.3275, 0]
+        position [0.645, 1.3275, 0]
         scale [0.04, 0.0275, 0.605]
       }
       // The trays: a walnut lid under each side's discs.
       shape Box "lid-west" {
         material: 2
-        position [-1.26, 1.302, 0]
+        position [1.26, 1.302, 0]
         scale [0.44, 0.002, 0.44]
       }
       shape Box "lid-east" {
         material: 2
-        position [1.26, 1.302, 0]
+        position [-1.26, 1.302, 0]
         scale [0.44, 0.002, 0.44]
       }
     }
@@ -250,7 +250,7 @@ prototypes {
     document {
       name: "reversiTile"
       palette [{ color: "#1F6B3A", roughness: 0.85, specular: 0.04 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "tile" {
         material: 0
         position [0, 0, 0]
@@ -263,7 +263,7 @@ prototypes {
     document {
       name: "reversiDot"
       palette [{ color: "#141816", roughness: 0.7 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "dot" {
         material: 0
         position [0, 0, 0]
@@ -280,7 +280,7 @@ prototypes {
         { color: "#1A1B1E", roughness: 0.4, specular: 0.25 }
         { color: "#EEECE6", roughness: 0.4, specular: 0.25 }
       ]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Cylinder "black" {
         material: 0
         position [0, 0.008, 0]
@@ -299,25 +299,25 @@ prototypes {
     document {
       name: "reversiCursor"
       palette [{ color: "#3FA9F5", roughness: 0.4, specular: 0.3 }]
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       shape Box "near" {
-        material: 0
-        position [0, 0, -0.068]
-        scale [0.075, 0.003, 0.007]
-      }
-      shape Box "far" {
         material: 0
         position [0, 0, 0.068]
         scale [0.075, 0.003, 0.007]
       }
+      shape Box "far" {
+        material: 0
+        position [0, 0, -0.068]
+        scale [0.075, 0.003, 0.007]
+      }
       shape Box "left" {
         material: 0
-        position [-0.068, 0, 0]
+        position [0.068, 0, 0]
         scale [0.007, 0.003, 0.075]
       }
       shape Box "right" {
         material: 0
-        position [0.068, 0, 0]
+        position [-0.068, 0, 0]
         scale [0.007, 0.003, 0.075]
       }
     }

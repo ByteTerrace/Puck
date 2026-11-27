@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// THE LAW: a <c>puck.creation.v1</c> palette entry's <see cref="PaletteEntryDocument.Roughness"/>/
+/// THE LAW: a <c>puck.creation.v2</c> palette entry's <see cref="PaletteEntryDocument.Roughness"/>/
 /// <see cref="PaletteEntryDocument.Sheen"/> — the fields that replaced the retired raw <c>shininess</c> exponent —
 /// are refused by name when non-finite, and a document still spelling <c>shininess</c> never reaches validation at
 /// all: it is an unmapped member the deserializer itself refuses.

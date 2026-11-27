@@ -333,7 +333,7 @@ public sealed partial class WorldBody {
         ContactResolution resolution;
 
         using (field.ExcludeRideSupport(row: supportRow)) {
-            resolution = SweepContact((m_contactField ?? field), m_entityIndex, m_position, ref next, ref velocity,
+            resolution = SweepContact((m_contactField ?? field), m_position, ref next, ref velocity,
                 m_orientation, ScaledColliderVolumes(), m_up);
         }
         if (resolution.Refusal != ContactRefusal.None) { NoteSweepRefusal(refusal: resolution.Refusal); return; }
@@ -373,7 +373,7 @@ public sealed partial class WorldBody {
     // The body's contact step at the pose the step is integrating: the one binding the ordinary step, the support search
     // and the hold's mantle and corner proofs sweep through, so each proof resolves against what the next step will.
     private BodyContactStep ContactStep(IContactField field, ref BodyMotionScratch scratch) => new(
-        entityIndex: scratch.EntityIndex,
+        body: this,
         field: field,
         memo: ref scratch.SupportMemo,
         orientation: scratch.Orientation,
@@ -386,17 +386,17 @@ public sealed partial class WorldBody {
     // asked through the step's memo.
     private readonly ref struct BodyContactStep : IFixedContactStep {
         private readonly IContactField m_field;
-        private readonly int m_entityIndex;
+        private readonly WorldBody m_body;
         private readonly FixedQuaternion m_orientation;
         private readonly FixedVector3 m_axis;
         private readonly ReadOnlySpan<FixedBodyColliderVolume> m_volumes;
         private readonly long m_volumesRevision;
         private readonly ref BodySupportMemo m_memo;
 
-        public BodyContactStep(IContactField field, int entityIndex, FixedQuaternion orientation, FixedVector3 up,
+        public BodyContactStep(IContactField field, WorldBody body, FixedQuaternion orientation, FixedVector3 up,
             ReadOnlySpan<FixedBodyColliderVolume> volumes, long volumesRevision, ref BodySupportMemo memo) {
             m_field = field;
-            m_entityIndex = entityIndex;
+            m_body = body;
             m_orientation = orientation;
             m_axis = up;
             m_volumes = volumes;
@@ -408,23 +408,23 @@ public sealed partial class WorldBody {
             m_memo.Query(descent: out descent, field: m_field, orientation: in m_orientation, position: in start, reach: reach,
                 up: in m_axis, volumes: m_volumes, volumesRevision: m_volumesRevision);
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
-            SweepContact(entityIndex: m_entityIndex, field: m_field, orientation: in m_orientation, position: ref position,
+            m_body.SweepContact(field: m_field, orientation: in m_orientation, position: ref position,
                 previousPosition: in previousPosition, up: in m_axis, velocity: ref velocity, volumes: m_volumes);
         public ContactResolution SweepSupport(in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position, ref FixedVector3 velocity) =>
             ((m_field is IEntityContactField entityField)
-                ? entityField.ResolveEntitySupportSweep(entityIndex: m_entityIndex, orientation: in m_orientation,
+                ? entityField.ResolveEntitySupportSweep(body: m_body, orientation: in m_orientation,
                     position: ref position, previousPosition: in previousPosition, responseOrigin: in responseOrigin, up: in m_axis,
                     velocity: ref velocity, volumes: m_volumes)
                 : Sweep(position: ref position, previousPosition: in previousPosition, velocity: ref velocity));
     }
 
-    // The one dispatch every sweep that moves a body goes through: an entity-aware field learns which local body it
-    // moves, so what a neighbour answers is admitted against that body (WorldPopulation.AdmitAdjacencyResponse). A probe
-    // that moves no body calls the field directly and names none.
-    internal static ContactResolution SweepContact(IContactField field, int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+    // The one dispatch every sweep that moves this body goes through: the body hands itself to an entity-aware field,
+    // so what a neighbour answers is admitted against this body's own budget and no caller names a body by index
+    // (WorldPopulation.AdmitAdjacencyResponse). A probe that moves no body calls the field directly and names none.
+    private ContactResolution SweepContact(IContactField field, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ((field is IEntityContactField entityField)
-            ? entityField.ResolveEntitySweep(entityIndex: entityIndex, orientation: in orientation, position: ref position,
+            ? entityField.ResolveEntitySweep(body: this, orientation: in orientation, position: ref position,
                 previousPosition: in previousPosition, up: in up, velocity: ref velocity, volumes: volumes)
             : field.ResolveSweep(orientation: in orientation, position: ref position, previousPosition: in previousPosition,
                 up: in up, velocity: ref velocity, volumes: volumes));

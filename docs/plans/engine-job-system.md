@@ -560,7 +560,8 @@ mechanism and its invariant; in short:
   fields and sight tests partition, and so does a world with a seam: a sweep
   through its entity-aware contact field (`WorldAdjacencyContactField`) reads
   the tick's pinned projections and writes only the correction budget of the
-  body it names (`WorldPopulation.AdmitAdjacencyResponse`). The standard walker
+  body it moves (`WorldPopulation.AdmitAdjacencyResponse`, which throws in a fork
+  for any body but the one its thread is stepping). The standard walker
   kit's registers and its ground and fall holds pass.
 - **The phases.** A plan fork (every step body's sleep, field inputs and
   cadence, and whether its step is local, each partition planning its share of
@@ -604,7 +605,9 @@ mechanism and its invariant; in short:
 
 Open: the city's per-tick kit advance read in the lead's quiet window on the
 2060 against the 30 Hz authority target (`physics.bodies.local-advances` against
-`physics.bodies.advances` shows the share that runs in partitions).
+`physics.bodies.advances` shows the share that runs in partitions, and
+`physics.bodies.kit-forks` counts the phases the job pool ran as more than one
+job).
 
 Built: the serial input pass admits by what changed. The runtime keeps what
 each program owner's last admission read and answered and reads those facts

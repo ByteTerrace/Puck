@@ -84,7 +84,10 @@ same change.
   (`WorldPopulation.Partitions.cs` holds the phases and the invariant). A world
   with a seam partitions too: a sweep through `WorldAdjacencyContactField` reads
   the tick's pinned projections and writes only the correction budget of the
-  body it names. A step that reaches shared population state,
+  body it moves. Each body's input pass (`WorldBody.AdmitProducerObservation`)
+  runs before any body moves, and a body takes an ordinary step only on a tick
+  whose pass found it could; `physics.bodies.kit-forks` counts the phases that
+  left the stepping thread. A step that reaches shared population state,
   the input runtime or a register from a partition throws
   (`ThrowIfPartitioned`, `WriteStateRaw`); a new shared write a body step can
   reach goes through the body's `WorldBodyStepLog` or makes the body serial.
@@ -102,12 +105,25 @@ same change.
   sensor source rests only once it is named there with its waking door, and
   every wake withdraws the verdict (`WorldBody.WakeUp`).
 - **One door for every moving sweep.** `WorldBody.SweepContact` is the
-  dispatch every sweep that moves a body goes through; an
-  `IEntityContactField` (today `WorldAdjacencyContactField`) learns which
-  local body moves, so a neighbour's answer is admitted against that body. A
+  dispatch every sweep that moves a body goes through; the body hands itself
+  to an `IEntityContactField` (today `WorldAdjacencyContactField`), so a
+  neighbour's answer is admitted against that body's own budget and no sweep
+  names a body by index. While a kit fork runs, the door
+  (`WorldPopulation.AdmitAdjacencyResponse`) throws for any body but the one
+  its thread is stepping, and the doors that move a carrier
+  (`WorldBody.ApplyCarryBlock`, `ApplyAdmittedContactResponse`) throw. A
   probe that moves no body calls the field directly and names none. A new
   path that moves a body calls `SweepContact` or the `BodyContactStep` bound to
   it, never `IContactField.ResolveSweep` directly.
+- **An image addressed by channel ordinal crosses a mapping change by logical
+  identity.** `WorldBody.InstallInputMapping` is the one door that changes a
+  body's input mapping under live images: it rebuilds the submitted and held
+  images and carries the tape, the producer's staged image and the steering
+  image the population keeps between producer runs across, so a step that
+  resolves its intent after another body retuned it reads no stale ordinal. A
+  new image kept by ordinal crosses there too, and a kit step that can install
+  a mapping saves what a refusal must put back
+  (`WorldInputRuntime.CompleteKitStep`).
 - **A refused sweep is a full block.** `ContactRefusal` means the body keeps
   the pose it started the tick with. `WorldBody.SweepRefusal.cs` captures
   everything the step writes (`WorldBodyTransferState`,
@@ -299,16 +315,6 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
 
 ## Look-alikes
 
-- A solid creation that holds bodies only up to a straight line, with the cut
-  moving when the creation's shapes move, is usually not a contact defect: a
-  creation's shapes are in its author frame, so a shape authored at `[x, y, z]`
-  lies at world `(−x, y, −z)` about the placement
-  ([the author frame](../sdf-authoring/SKILL.md#the-author-frame)). Collider,
-  drawn mesh and navigation all agree on the mirrored footprint, which is why
-  the colliders report stays clean. Ground written in world coordinates uses
-  `boundsBox` (`worlds/standard/bounds.puck`), which negates for the author;
-  `worlds/debug/large-floor-tests.puck` stands a body at a 300 m floor's far
-  corner and drops one past its mirrored edge.
 - The chase camera's clearance sweeps and an effector's surface probe query
   the rendered field for presentation (`WorldFieldAnswer`, `puck-world`), not
   the contact seam.

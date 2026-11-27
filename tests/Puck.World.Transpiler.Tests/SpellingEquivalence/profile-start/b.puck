@@ -4,7 +4,7 @@ documentId: "pair"
 prototypes {
   prototype "p" {
     document {
-      schema: "puck.creation.v1"
+      schema: "puck.creation.v2"
       name: "p"
       shape Prism "b" {
         profile {

@@ -11,8 +11,7 @@ namespace Puck.World.Authoring;
 /// </summary>
 /// <param name="Kind">One of <see cref="KindSurface"/>, <see cref="KindBody"/>, <see cref="KindState"/> or
 /// <see cref="KindShape"/>.</param>
-/// <param name="Direction"><see cref="KindSurface"/>: the probe direction in the creation's author frame (see
-/// <see cref="CreationFrame"/>), so it turns with the body — <c>[0, -1, 0]</c> is "below the body", which on a wall-held
+/// <param name="Direction"><see cref="KindSurface"/>: the probe direction in the creation's frame, so it turns with the body — <c>[0, -1, 0]</c> is "below the body", which on a wall-held
 /// body points at the wall's own down. <see cref="KindShape"/> (optional): the way the tip approaches the point, carried
 /// by <see cref="Shape"/>'s motion; its reverse is the normal an effector's align turns the tip onto. Normalized at
 /// canonicalization; zero names no direction and is refused.</param>
@@ -26,8 +25,8 @@ namespace Puck.World.Authoring;
 /// <param name="Index"><see cref="KindBody"/>: the population entity index whose pose is the target, fixed in the
 /// document. A body target names this or <paramref name="Reference"/>, never both.</param>
 /// <param name="Offset"><see cref="KindBody"/>: the offset from that body's root (or its <see cref="Part"/>), in the
-/// creation's author frame, riding the target's attitude (null = the point exactly). <see cref="KindShape"/>: a point
-/// in the creation at rest, author frame, that rides <see cref="Shape"/>'s motion (null = the shape's own
+/// creation's frame, riding the target's attitude (null = the point exactly). <see cref="KindShape"/>: a point
+/// in the creation at rest, in its frame, that rides <see cref="Shape"/>'s motion (null = the shape's own
 /// origin).</param>
 /// <param name="Reference"><see cref="KindState"/>: a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference to a text cell
 /// spelling a world-space <c>[x, y, z]</c>, read at the frame's tick — a target a rule, a console write, or another

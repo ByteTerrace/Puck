@@ -277,10 +277,10 @@ A `target` is `{ kind }` of `surface`, `body`, `state`, or `shape`:
 
 | Kind | Fields |
 |---|---|
-| `surface` | `direction` (author frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
+| `surface` | `direction` (creation frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
 | `body` | exactly one of `index` (fixed) and `reference` (a numeric `state.<row>[.<key>]` holding the body's index, read as stored truth: a whole number naming an active body selects it, anything else selects none, so zero is body zero and -1 clears it); `part` (optional, a part id the body's look publishes, read as last drawn, the root when it publishes none); `offset` ≤ 16 riding the target's attitude |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
-| `shape` | `shape`, a shape of the same creation; `offset` ≤ 16, a rest point in the author frame that rides the shape (omitted, the shape's origin); `direction` (optional), the approach the shape carries, whose reverse is the normal `align` turns the tip onto |
+| `shape` | `shape`, a shape of the same creation; `offset` ≤ 16, a rest point in the creation frame that rides the shape (omitted, the shape's origin); `direction` (optional), the approach the shape carries, whose reverse is the normal `align` turns the tip onto |
 
 A `shape` target is read on the pose of the same frame, after every driver and
 every earlier effector. Refused by name: a target shape that is, or hangs from, a
@@ -420,14 +420,11 @@ the motion vocabulary scales a shape over time.
 | `noise` | `{ frequency, amplitude, octaves, gain, lacunarity, seed }` | frequency in (0, 8], amplitude in (0, 4] creation units, octaves 1 to 8. Forces the creation-wide scope. Root motion and `sizeBy` carry the baked relief; independently moving parts (frames, shape drivers, effectors or look part followers) refuse it. Static scale changes amplitude and wavelength together in render and contact. |
 | `volumes` | see `surface.md` | up to 64 |
 
-## What crosses the author frame
+## The frame
 
-Converted on the way to the engine: shape `position`, `rotation`, and `joint`;
-`symmetry` fold normals; swing `pivot` and `axis`; slide `axis`; frame transform
-`position` and `rotation`; camera `position`; effector target `direction` and
-`offset`; a clip key's turn axes and slide; a root-parented volume's `position` and `rotation`; and an unridden
-text run's `position` and `rotation`.
-
-Not converted: scalars, camera `yaw` and `pitch`, chain `goal` and `pole`, a
-shape-ridden run or volume (its host shape carries it), and a `state` target's
-cell, which is already a world point.
+Every point and direction a rig names (a swing's `pivot` and `axis`, a slide's
+`axis`, a `joint`, a frame transform, a camera offset, an effector's `direction`
+and `offset`, a clip key's turn axes and slide) is in the creation's frame
+([the creation frame](../SKILL.md#the-creation-frame)). A shape-ridden run or
+volume is in its host shape's frame, and a `state` target's cell holds a world
+point.
