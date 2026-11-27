@@ -465,7 +465,8 @@ public sealed partial class SdfMeshPathBake {
                     group.FirstDetailOwed = false;
                 } else {
                     firstsOwed++;
-                    if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded, group)); }
+                    // A floor a copy waits on (StandIns) starts its detail ahead of every other.
+                    if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: ((AwaitedByStandIn(group: group) ? float.NegativeInfinity : pixel), index, demanded, group)); }
                     return;
                 }
             }

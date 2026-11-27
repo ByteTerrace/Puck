@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 // door) for as long as that bake waits behind the rest of the world's. No variant is baked before it is shown.
 //
 // The invariant: the dresser draws every copy whose previous template drew through that template, never through
-// none, until each group of the template it now names draws a mesh or found none (RangeShown). Enforced by
+// none, until each group of the template it now names shows what a settled bake of it shows: its own product past the
+// floor an arrival plans first, or no surface (RangeShown with settled, ShowsProduct). Enforced by
 // DressedCopiesOf, the one list the dresser reads a group's copies from (FrameAccess.CopiesOf). Demand reads the
 // copies a template is named by and those still standing in on it (CopiesOf), so the template a copy names is
 // measured, planned and baked as if it already drew, and the one it stands in on keeps its demand until the copy
@@ -42,7 +43,7 @@ public sealed partial class SdfMeshPathBake {
 
                 var drew = (((held is not null) && held.TryGetValue(key: index, value: out var standing)) ? standing : before.TemplateRange);
 
-                if ((drew is not { } old) || (old == range) || RangeShown(range: range) || !RangeShown(range: old)) { continue; }
+                if ((drew is not { } old) || (old == range) || RangeShown(range: range, settled: true) || !RangeShown(range: old, settled: false)) { continue; }
                 m_standIns[index] = old;
             }
         }
@@ -57,7 +58,7 @@ public sealed partial class SdfMeshPathBake {
         List<int>? released = null;
 
         foreach (var (copy, _) in m_standIns) {
-            if ((m_copyLayout[copy].TemplateRange is not { } range) || RangeShown(range: range)) { (released ??= []).Add(item: copy); }
+            if ((m_copyLayout[copy].TemplateRange is not { } range) || RangeShown(range: range, settled: true)) { (released ??= []).Add(item: copy); }
         }
         if (released is not null) {
             foreach (var copy in released) { _ = m_standIns.Remove(key: copy); }
@@ -116,18 +117,25 @@ public sealed partial class SdfMeshPathBake {
             if (group.Waiter is { } waiter) { waiter.Priority = float.MaxValue; }
         }
     }
-    // Whether every listed group of a template's instances draws a mesh or found no surface.
-    private bool RangeShown(SdfMeshTemplateRange range) {
+    // Whether every listed group of a template's instances shows what a settled bake of it shows (ShowsProduct), or,
+    // unsettled, draws anything at all or found no surface: what a copy may stand in on.
+    private bool RangeShown(SdfMeshTemplateRange range, bool settled) {
         for (var instance = range.FirstInstance; (instance < (range.FirstInstance + range.InstanceCount)); instance++) {
             for (var at = m_groups.FirstOf(dynamic: false, key: instance); (at >= 0); at = m_groups.NextOf(index: at)) {
                 var group = m_groups[at];
 
-                if (group.Retired || (group.Shown is not null) || (group.Done && (group.Mesh is null))) { continue; }
+                if (group.Retired || (settled ? ShowsProduct(group: group) : ((group.Shown is not null) || (group.Done && (group.Mesh is null))))) { continue; }
                 return false;
             }
         }
         return true;
     }
+    // Whether a group draws its own product, the tier its demand asks or one a retier since chose, or finished with no
+    // surface: not nothing, not a replaced group's mesh it draws while its own bakes or waits ahead (DrawsOwn), and not
+    // the floor an arrival plans first while it still owes its first detail (FirstDetailOwed). A floor's coarse lattice
+    // can sit off a thin face's plane, where the face's paints and lettering do not reach it.
+    private static bool ShowsProduct(Group group) =>
+        ((group.Shown is null) ? (group.Done && (group.Mesh is null)) : (group.DrawsOwn && !group.FirstDetailOwed));
     // The copies at a static template's instance: those the dresser draws there, or those demand reads there (the copies
     // naming it and those standing in on it). Null where the instance is no template's.
     private IReadOnlyList<int>? StandInCopiesOf(int instance, bool drawn) =>

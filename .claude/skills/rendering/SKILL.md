@@ -280,8 +280,10 @@ template for every creation it can show; a template that drew itself once would 
 the creations it does not show at their templates' frame, on top of the shown one, and
 the irradiance volume would trace two coincident surfaces with two materials, whichever
 the CPU and the GPU walks each meet first. A variant bakes only once a copy names it,
-so a copy moved to a template with no mesh yet keeps drawing the one it drew, and that
-template bakes ahead of every other group (`SdfMeshPathBake.StandIns.cs`): the dresser
+so a copy moved to a template with no mesh yet keeps drawing the one it drew until the
+template's own product lands (past the floor an arrival plans first, which a thin face's
+paints can miss), and that template bakes ahead of every other group, its first detail
+included (`SdfMeshPathBake.StandIns.cs`): the dresser
 reads a group's copies through `FrameAccess.CopiesOf` (the stand-ins applied), demand
 through `CopiesOf` (the named copies plus those standing in). `IsDynamic` selects
 static lighting membership; `UsesRootMaterialFrame` independently selects material
