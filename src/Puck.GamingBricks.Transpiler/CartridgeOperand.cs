@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Parsing;
 
 using Puck.GamingBricks.Forge;
 
@@ -202,14 +203,43 @@ public static class CartridgeOperand {
             : new ExpressionProgram(Instructions: resolved)
         );
     }
+    /// <summary>Returns whether an expression reads machine state: whether it names anything no compile-time binding of
+    /// the scope declares. A value function's call reads state when its arguments do; inline it first
+    /// (<see cref="DocumentLowering.InlineFunctions"/>) to ask about its body too.</summary>
+    /// <param name="expression">The expression.</param>
+    /// <param name="scope">The lowering scope, whose constants and locals are compile-time.</param>
+    /// <returns><see langword="true"/> when the expression reads machine state.</returns>
+    public static bool ReadsState(ExpressionNode expression, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(scope);
+        using var checking = scope.Budget.Enter(span: expression.Span);
+
+        return expression switch {
+            // A dotted name (`drill.left`) reads a member of its head, so the head decides.
+            IdentifierExpressionNode name => (QualifiedName.Parse(text: name.Name).Head is var head && !scope.Constants.ContainsKey(key: head) && !scope.Locals.ContainsKey(key: head)),
+            BinaryExpressionNode binary => (ReadsState(expression: binary.Left, scope: scope) || ReadsState(expression: binary.Right, scope: scope)),
+            ConditionalExpressionNode conditional => (ReadsState(expression: conditional.Condition, scope: scope) || ReadsState(expression: conditional.WhenTrue, scope: scope) || ReadsState(expression: conditional.WhenFalse, scope: scope)),
+            UnaryExpressionNode unary => ReadsState(expression: unary.Operand, scope: scope),
+            IndexExpressionNode index => (ReadsState(expression: index.Target, scope: scope) || ReadsState(expression: index.Index, scope: scope)),
+            CallExpressionNode call => call.Arguments.Any(predicate: argument => ReadsState(expression: argument.Value, scope: scope)),
+            _ => false,
+        };
+    }
     /// <summary>Lowers an authored expression without folding machine state as compile-time data.</summary>
     /// <param name="expression">The parsed expression.</param>
     /// <param name="scope">The compile-time bindings.</param>
     /// <param name="reason">The refusal, if any.</param>
     /// <returns>The canonical runtime operand.</returns>
     public static JsonNode? FromExpression(ExpressionNode expression, DocumentScope scope, out string? reason) {
+        ArgumentNullException.ThrowIfNull(scope);
         using var evaluation = scope.Budget.Enter(span: expression.Span);
 
+        // A value function is the expression it stands for: its body is spelled where it is called, and whatever part
+        // of it compile-time bindings decide is evaluated as any other compile-time value is.
+        expression = DocumentLowering.InlineFunctions(
+            expression: expression,
+            scope: scope
+        );
         if (!Runtime(node: expression)) {
             return FromLoweredValue(
                 DocumentLowering.LowerValue(
@@ -226,19 +256,7 @@ public static class CartridgeOperand {
             out reason
         );
 
-        bool Runtime(ExpressionNode node) {
-            using var checking = scope.Budget.Enter(span: node.Span);
-
-            return node switch {
-                IdentifierExpressionNode name => (!scope.Constants.ContainsKey(key: name.Name) && !scope.Locals.ContainsKey(key: name.Name)),
-                BinaryExpressionNode binary => (Runtime(node: binary.Left) || Runtime(node: binary.Right)),
-                ConditionalExpressionNode conditional => (Runtime(node: conditional.Condition) || Runtime(node: conditional.WhenTrue) || Runtime(node: conditional.WhenFalse)),
-                UnaryExpressionNode unary => Runtime(node: unary.Operand),
-                IndexExpressionNode index => (Runtime(node: index.Target) || Runtime(node: index.Index)),
-                CallExpressionNode call => call.Arguments.Any(predicate: argument => Runtime(node: argument.Value)),
-                _ => false,
-            };
-        }
+        bool Runtime(ExpressionNode node) => ReadsState(expression: node, scope: scope);
         string Spell(ExpressionNode node) {
             using var spelling = scope.Budget.Enter(span: node.Span);
 
@@ -338,20 +356,69 @@ public static class CartridgeOperand {
             return new JsonObject { ["state"] = rowRef.Name };
         }
 
-        var index = Expression(
-            text: rowRef.Key,
+        // The parser hands the key over in the expression language's key grammar: a bare number or cell, a computed
+        // index behind the expression prefix, or an index read from another cell.
+        ExpressionProgram written;
+
+        try {
+            written = CartridgeExpressions.Index(key: rowRef.Key)!;
+        } catch (FormatException error) {
+            reason = $"the index of '{rowRef.Name}' does not parse: {error.Message}";
+
+            return null;
+        }
+
+        var resolved = Resolve(
+            reason: out reason,
             scope: scope,
-            reason: out reason
+            tokens: written.Instructions
         );
 
-        if (index is null) {
+        if (resolved is null) {
             return null;
         }
 
         return new JsonObject {
             ["state"] = rowRef.Name,
-            ["key"] = CartridgeExpressions.Key(index: index),
+            ["key"] = CartridgeExpressions.Key(index: new ExpressionProgram(Instructions: resolved)),
         };
+    }
+    /// <summary>Converts a parsed operand into an expression node, its value function calls written out
+    /// (<see cref="DocumentLowering.InlineFunctions"/>), so a function reads as the expression it stands for.</summary>
+    /// <param name="operand">The operand as parsed.</param>
+    /// <param name="scope">The lowering scope, whose functions inline and whose <c>let</c> and <c>for</c> bindings
+    /// resolve.</param>
+    /// <param name="reason">Why the conversion failed, or <see langword="null"/>.</param>
+    /// <returns>The operand, or <see langword="null"/> when <paramref name="reason"/> says why not.</returns>
+    public static JsonNode? FromOperand(OperandExpressionNode operand, DocumentScope scope, out string? reason) {
+        ArgumentNullException.ThrowIfNull(operand);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // An operand that calls a value function or reads a compile-time record is read as the expression it spells, so
+        // the call inlines and its compile-time parts evaluate (FromExpression); any other operand is the text as
+        // written.
+        return ((operand.Syntax is { } syntax) && CallsFunction(node: syntax)
+            ? FromExpression(
+                expression: PuckParser.ParseExpression(source: operand.Text),
+                reason: out reason,
+                scope: scope
+            )
+            : FromText(
+                reason: out reason,
+                scope: scope,
+                text: operand.Text
+            )
+        );
+
+        // A call of a value function, or a member read from a compile-time record (`adaptation.gain`), needs the
+        // document's evaluation; a bare name the substitution in FromText resolves.
+        bool CallsFunction(ExpressionSpelling.SyntaxNode node) => (node switch {
+            ExpressionSpelling.SourceCall call when (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is not null) => true,
+            ExpressionSpelling.SourceName { Quoted: false } name when name.Name.Contains(value: '.') => Bound(name: QualifiedName.Parse(text: name.Name).Head),
+            ExpressionSpelling.SourceAccess { Target: ExpressionSpelling.SourceName root } => Bound(name: root.Name),
+            _ => false,
+        } || ExpressionSpelling.SourceChildren(node: node).Any(predicate: CallsFunction));
+        bool Bound(string name) => (scope.Constants.ContainsKey(key: name) || scope.Locals.ContainsKey(key: name));
     }
     /// <summary>Converts one operand's source text into an expression node.</summary>
     /// <param name="text">The text as written.</param>

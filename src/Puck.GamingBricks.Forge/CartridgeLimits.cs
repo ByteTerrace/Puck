@@ -18,7 +18,8 @@ public static class CartridgeLimits {
     public const int ArrayByteCount = 7168;
     /// <summary>The maximum number of named arrays.</summary>
     public const int ArrayCount = 32;
-    /// <summary>The maximum number of elements in one array; a byte index cannot address more.</summary>
+    /// <summary>The elements a byte index reaches. An array may be longer, up to <see cref="ArrayByteCount"/>; its
+    /// elements past this are reached only through a sixteen-bit index (<see cref="CartridgeExpressions.WideIndex"/>).</summary>
     public const int ArrayLength = 256;
     /// <summary>The blend weight that leaves the translucent surface fully opaque.</summary>
     public const int BlendWeights = 16;
@@ -94,4 +95,7 @@ public static class CartridgeLimits {
     /// declared layers fill them nearest first.
     /// </remarks>
     public static readonly string[] BlendSurfaces = ["background", "panel", "middle", "far", "sprites", "backdrop"];
+    /// <summary>The tile maps a map step can write at run time: the scrolling background's, or the panel's. A step that
+    /// names no surface writes the background.</summary>
+    public static readonly string[] MapSurfaces = ["background", "panel"];
 }

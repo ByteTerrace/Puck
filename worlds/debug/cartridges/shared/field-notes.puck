@@ -1,0 +1,1445 @@
+schema: "puck.cartridge.v1"
+
+import "../../../standard/learning/text"
+import "../../../standard/learning/questions"
+import "../../../standard/learning/clues"
+import "../../../standard/learning/finds"
+import "../../../standard/learning/places"
+
+// Field Notes on the humble brick: the Moth walks the valley floor, befriends the critters that wander it by
+// answering their questions, follows the clue a right answer gives to the spot hiding the key, opens the chest and
+// walks through the gallery door to the next place. The questions, clues, critters, treasures, places and the notes
+// record are the standard learning content (worlds/standard/learning); this module draws them and plays them. A
+// target's own source imports it, declares `target` and `palettes`, and calls fieldNotes().
+
+// Background palettes, by what they colour; a target declares them in this order.
+let grassPalette = 0
+let earthPalette = 1
+let waterPalette = 2
+let firPalette = 3
+let stonePalette = 4
+let flowerPalette = 5
+let woodPalette = 6
+let panelPalette = 7
+// Object palettes: the Moth's hood and face, her suit, then each critter's and the key's.
+let headPalette = 0
+let suitPalette = 1
+let critterPalettes = [2, 3, 4]
+let keyPalette = 5
+
+// Every tile after the font, each with the background palette its cells draw through. Sprite tiles carry the
+// palette of the sprites that show them only for completeness; a sprite names its own.
+let art = [
+  {
+    name: "frame-tl"
+    palette: panelPalette
+    pixels ["00000000", "01111111", "01222222", "01200000", "01200000", "01200000", "01200000", "01200000"]
+  }
+  {
+    name: "frame-t"
+    palette: panelPalette
+    pixels ["00000000", "11111111", "22222222", "00000000", "00000000", "00000000", "00000000", "00000000"]
+  }
+  {
+    name: "frame-tr"
+    palette: panelPalette
+    pixels ["00000000", "11111110", "22222210", "00000210", "00000210", "00000210", "00000210", "00000210"]
+  }
+  { name: "frame-l", palette: panelPalette, pixels: map(range(0, 8), r => "01200000") }
+  { name: "frame-r", palette: panelPalette, pixels: map(range(0, 8), r => "00000210") }
+  {
+    name: "frame-bl"
+    palette: panelPalette
+    pixels ["01200000", "01200000", "01200000", "01200000", "01200000", "01222222", "01111111", "00000000"]
+  }
+  {
+    name: "frame-b"
+    palette: panelPalette
+    pixels ["00000000", "00000000", "00000000", "00000000", "00000000", "22222222", "11111111", "00000000"]
+  }
+  {
+    name: "frame-br"
+    palette: panelPalette
+    pixels ["00000210", "00000210", "00000210", "00000210", "00000210", "22222210", "11111110", "00000000"]
+  }
+  {
+    name: "hud-key"
+    palette: panelPalette
+    pixels ["00000000", "03330000", "30003000", "30003333", "30003030", "03330030", "00000000", "00000000"]
+  }
+  {
+    name: "hud-gem"
+    palette: panelPalette
+    pixels ["00000000", "00111100", "01222210", "12222221", "01222210", "00122100", "00011000", "00000000"]
+  }
+  {
+    name: "hud-moon"
+    palette: panelPalette
+    pixels ["00000000", "00333000", "03300000", "03300000", "03300000", "00333000", "00000000", "00000000"]
+  }
+  {
+    name: "grass"
+    palette: grassPalette
+    pixels ["00000000", "00010000", "00000000", "00000001", "01000000", "00000000", "00000100", "00000000"]
+  }
+  {
+    name: "tuft"
+    palette: grassPalette
+    pixels ["00000000", "00000000", "00010000", "01010100", "01121100", "00111000", "00000000", "00000000"]
+  }
+  {
+    name: "sprig"
+    palette: flowerPalette
+    pixels ["00000000", "00100000", "01210000", "00103000", "00030020", "00000232", "00000020", "00000300"]
+  }
+  {
+    name: "path"
+    palette: earthPalette
+    pixels ["00000000", "00000100", "00000000", "01000000", "00000000", "00001000", "00000000", "00000001"]
+  }
+  {
+    name: "pebbles"
+    palette: earthPalette
+    pixels ["00000000", "01100000", "12210000", "01100110", "00001221", "00000110", "00110000", "01221000"]
+  }
+  {
+    name: "water"
+    palette: waterPalette
+    pixels ["11111111", "11111111", "11222111", "11111111", "11111111", "11111122", "11111111", "11111111"]
+  }
+  {
+    name: "ripple"
+    palette: waterPalette
+    pixels ["11111111", "11000111", "10111011", "11111111", "11111111", "11110001", "11101110", "11111111"]
+  }
+  {
+    name: "reeds"
+    palette: firPalette
+    pixels ["00100100", "01101100", "01101101", "01121101", "11121121", "12121121", "22222222", "22222222"]
+  }
+  {
+    name: "fir-tl"
+    palette: firPalette
+    pixels ["00000001", "00000011", "00000112", "00001112", "00011122", "00000112", "00001122", "00011222"]
+  }
+  {
+    name: "fir-tr"
+    palette: firPalette
+    pixels ["10000000", "11000000", "21100000", "21110000", "22111000", "21100000", "22110000", "22211000"]
+  }
+  {
+    name: "fir-bl"
+    palette: firPalette
+    pixels ["00111122", "01111222", "11112222", "00000003", "00000003", "00000033", "00000000", "00000000"]
+  }
+  {
+    name: "fir-br"
+    palette: firPalette
+    pixels ["22111100", "22211110", "22221111", "30000000", "30000000", "33000000", "00000000", "00000000"]
+  }
+  {
+    name: "old-fir-bl"
+    palette: firPalette
+    pixels ["00111122", "01111222", "11112222", "00000033", "00000333", "00000303", "00000033", "00000000"]
+  }
+  {
+    name: "boulder-tl"
+    palette: stonePalette
+    pixels ["00000000", "00000222", "00022222", "00222211", "02221111", "02211111", "03111111", "03111111"]
+  }
+  {
+    name: "boulder-tr"
+    palette: stonePalette
+    pixels ["00000000", "22200000", "22222000", "11222200", "11112220", "11111220", "11111130", "11111130"]
+  }
+  {
+    name: "boulder-bl"
+    palette: stonePalette
+    pixels ["03111111", "03111111", "03311111", "00331111", "00033111", "00000333", "00000000", "00000000"]
+  }
+  {
+    name: "boulder-br"
+    palette: stonePalette
+    pixels ["11111130", "11111130", "11111330", "11113300", "11133000", "33300000", "00000000", "00000000"]
+  }
+  {
+    name: "stump"
+    palette: woodPalette
+    pixels ["00000000", "00333300", "03111130", "31121113", "31111113", "32222223", "32222223", "03333330"]
+  }
+  {
+    name: "flowers"
+    palette: flowerPalette
+    pixels ["01000010", "12100121", "01030010", "00303000", "02030020", "23230232", "02030020", "00330330"]
+  }
+  {
+    name: "sign"
+    palette: woodPalette
+    pixels ["03333330", "31111113", "31222113", "31111113", "03333330", "00032000", "00032000", "00033000"]
+  }
+  {
+    name: "post"
+    palette: woodPalette
+    pixels ["00000000", "00033000", "03333330", "00321000", "00321000", "00321000", "00321000", "03333300"]
+  }
+  {
+    name: "chest"
+    palette: woodPalette
+    pixels ["00000000", "03333330", "32222223", "31111113", "32213223", "32222223", "32222223", "03333330"]
+  }
+  {
+    name: "chest-open"
+    palette: woodPalette
+    pixels ["03333330", "31111113", "33333333", "31211213", "32222223", "32222223", "32222223", "03333330"]
+  }
+  {
+    name: "door-tl"
+    palette: panelPalette
+    pixels ["33333333", "30000000", "30111111", "30122222", "30122222", "30122222", "30122222", "30122222"]
+  }
+  {
+    name: "door-tr"
+    palette: panelPalette
+    pixels ["33333333", "00000003", "11111103", "22222103", "22222103", "22222103", "22222103", "22222103"]
+  }
+  {
+    name: "door-bl"
+    palette: panelPalette
+    pixels ["30122222", "30121212", "30121212", "30121212", "30121212", "30111111", "30000000", "33333333"]
+  }
+  {
+    name: "door-br"
+    palette: panelPalette
+    pixels ["22222103", "21212103", "21212103", "21212103", "21212103", "11111103", "00000003", "33333333"]
+  }
+  {
+    name: "door-open-bl"
+    palette: panelPalette
+    pixels ["30133333", "30133333", "30133333", "30133333", "30133333", "30133333", "30000000", "33333333"]
+  }
+  {
+    name: "door-open-br"
+    palette: panelPalette
+    pixels ["33333103", "33333103", "33333103", "33333103", "33333103", "33333103", "00000003", "33333333"]
+  }
+  {
+    name: "cliff"
+    palette: earthPalette
+    pixels ["11112111", "11111111", "22222222", "00000000", "00010000", "11111111", "22222122", "33333333"]
+  }
+  {
+    name: "cliff-foot"
+    palette: earthPalette
+    pixels ["11111111", "22222222", "33333333", "33333333", "01000100", "00000000", "00100010", "00000000"]
+  }
+  {
+    name: "moth-down-head-l"
+    palette: headPalette
+    pixels ["00000111", "00011111", "00111333", "01113222", "11132322", "11132222", "01133222", "00113333"]
+  }
+  {
+    name: "moth-down-head-r"
+    palette: headPalette
+    pixels ["11100000", "11111000", "33311100", "22231110", "22323111", "22223111", "22233110", "33331100"]
+  }
+  {
+    name: "moth-down-body-l"
+    palette: suitPalette
+    pixels ["01111222", "11112111", "11112111", "03312222", "01100331", "02200110", "00000110", "00003330"]
+  }
+  {
+    name: "moth-down-body-r"
+    palette: suitPalette
+    pixels ["22211110", "11121111", "11121111", "22221330", "13300110", "01100220", "01100000", "03330000"]
+  }
+  {
+    name: "moth-down-step-l"
+    palette: suitPalette
+    pixels ["01111222", "11112111", "11112111", "03312222", "01100331", "02200110", "00001100", "00033300"]
+  }
+  {
+    name: "moth-down-step-r"
+    palette: suitPalette
+    pixels ["22211110", "11121111", "11121111", "22221330", "13300110", "01100220", "00110000", "00333000"]
+  }
+  {
+    name: "moth-up-head-l"
+    palette: headPalette
+    pixels ["00000111", "00011111", "00111111", "01111111", "11111111", "11111111", "01111111", "00111222"]
+  }
+  {
+    name: "moth-up-head-r"
+    palette: headPalette
+    pixels ["11100000", "11111000", "11111100", "11111110", "11111111", "11111111", "11111110", "22211100"]
+  }
+  {
+    name: "moth-up-body-l"
+    palette: suitPalette
+    pixels ["01111111", "11122111", "11211211", "01211213", "01122113", "00133001", "00000110", "00003330"]
+  }
+  {
+    name: "moth-up-body-r"
+    palette: suitPalette
+    pixels ["11111110", "11122111", "11211211", "31211210", "31122110", "10033100", "01100000", "03330000"]
+  }
+  {
+    name: "moth-up-step-l"
+    palette: suitPalette
+    pixels ["01111111", "11122111", "11211211", "01211213", "01122113", "00133001", "00001100", "00033300"]
+  }
+  {
+    name: "moth-up-step-r"
+    palette: suitPalette
+    pixels ["11111110", "11122111", "11211211", "31211210", "31122110", "10033100", "00110000", "00333000"]
+  }
+  {
+    name: "moth-side-head-l"
+    palette: headPalette
+    pixels ["00000111", "00011111", "00111111", "01111111", "11111111", "01111111", "00111111", "00011111"]
+  }
+  {
+    name: "moth-side-head-r"
+    palette: headPalette
+    pixels ["11100000", "11111000", "33331100", "22223100", "22232110", "23222110", "33333100", "11111000"]
+  }
+  {
+    name: "moth-side-body-l"
+    palette: suitPalette
+    pixels ["00011111", "00111111", "02211111", "02211331", "00211331", "00000110", "00000110", "00000333"]
+  }
+  {
+    name: "moth-side-body-r"
+    palette: suitPalette
+    pixels ["11110000", "11211000", "11211000", "11211000", "11110000", "11000000", "01100000", "00333000"]
+  }
+  {
+    name: "moth-side-step-l"
+    palette: suitPalette
+    pixels ["00011111", "00111111", "02211111", "02211331", "00211331", "00000011", "00000011", "00000033"]
+  }
+  {
+    name: "moth-side-step-r"
+    palette: suitPalette
+    pixels ["11110000", "11211000", "11211000", "11211000", "11110000", "10000000", "10000000", "33000000"]
+  }
+  {
+    name: "swallow-a"
+    palette: critterPalettes[0]
+    pixels ["11000011", "01100110", "00133100", "00122100", "00122100", "00011000", "00100100", "01000010"]
+  }
+  {
+    name: "swallow-b"
+    palette: critterPalettes[0]
+    pixels ["00000000", "00033000", "11122111", "01122110", "00122100", "00011000", "00100100", "01000010"]
+  }
+  {
+    name: "dragonfly-a"
+    palette: critterPalettes[1]
+    pixels ["22033022", "22211222", "02211220", "00011000", "22211222", "02211220", "00011000", "00011000"]
+  }
+  {
+    name: "dragonfly-b"
+    palette: critterPalettes[1]
+    pixels ["00033000", "22211222", "22211222", "00011000", "02211220", "22211222", "00011000", "00010000"]
+  }
+  {
+    name: "pup-a"
+    palette: critterPalettes[2]
+    pixels ["03000000", "33100000", "31110001", "01111111", "00211111", "00111110", "00100100", "03303300"]
+  }
+  {
+    name: "pup-b"
+    palette: critterPalettes[2]
+    pixels ["03000000", "33100000", "31110001", "01111111", "00211111", "00111110", "01000010", "33000330"]
+  }
+  {
+    name: "key"
+    palette: keyPalette
+    pixels ["00111000", "01202100", "01020100", "00111000", "00010000", "00011000", "00010000", "00011000"]
+  }
+  {
+    name: "sparkle"
+    palette: keyPalette
+    pixels ["00010000", "00010000", "00121000", "11222110", "00121000", "00010000", "00010000", "00000000"]
+  }
+  {
+    name: "pointer"
+    palette: suitPalette
+    pixels ["10000000", "11000000", "13100000", "13310000", "13100000", "11000000", "10000000", "00000000"]
+  }
+]
+let artNames = map(art, a => a.name)
+function tileOf(name) = (length(glyphs) + indexOf(artNames, name))
+
+// The valley floor: one character a cell, 32 by 32. `#` cliff, `^` cliff foot, `.` path, `:` pebbles, space grass,
+// `'` tuft, `;` sprig, `~` water, `w` ripple, `R` reeds, `{}` over `[]` a fir, `AB` over `()` the old fir, `mn` over
+// `uv` the mossy boulder, `*` the flower patch, `S` the stump, `P` the signpost, `p` the swallow post, `C` the chest,
+// `gh` over `jk` the gallery door.
+let layout = [
+  "###############gh###############"
+  "###############jk###############"
+  "#^^^^^^^^^^^^^^..^^^^^^^^^^^^^^#"
+  "#              ..              #"
+  "#  {}  '{}     .. '{}   ;      #"
+  "#  [] ' []   ; ..  []   {} '   #"
+  "#       ;   ;*;..       []     #"
+  "#    {}      ; ..       '     '#"
+  "#   ;[]        ..          {}  #"
+  "#         AB   ..          []  #"
+  "#  ;      ()   ..              #"
+  "#              ..        C     #"
+  "#             '..::......      #"
+  "#    ' p       ..      ''      #"
+  "#'  ; ;   '    ..  '      {}   #"
+  "#            ' ..   mn    [] ; #"
+  "# ;{}         '..   uv         #"
+  "#  []          ..P             #"
+  "#              ..              #"
+  "#  RRRRRRRR   '..              #"
+  "#  ~~~~~~~~    ..          ;   #"
+  "# ;~~~~~~~~    ..  ' ''   '   '#"
+  "#  ~~w~~w~~    ..              #"
+  "# '~~~~~~~~    ..  '     S     #"
+  "#  ~~~w~~~~    .. '            #"
+  "#  ~~~~~~w~    ..     '        #"
+  "#  ~~~~~~~~    ..              #"
+  "#       '  '   .. ;  {}        #"
+  "#     ;        ..    []   {} ' #"
+  "#              .. '       []   #"
+  "#              ..              #"
+  "################################"
+]
+let layoutScalars = flatMap(layout, row => scalars(row))
+let legend = [
+  { glyph: "#", tile: "cliff", solid: 1 }
+  { glyph: "^", tile: "cliff-foot", solid: 1 }
+  { glyph: ".", tile: "path", solid: 0 }
+  { glyph: ":", tile: "pebbles", solid: 0 }
+  { glyph: " ", tile: "grass", solid: 0 }
+  { glyph: "'", tile: "tuft", solid: 0 }
+  { glyph: ";", tile: "sprig", solid: 0 }
+  { glyph: "~", tile: "water", solid: 1 }
+  { glyph: "w", tile: "ripple", solid: 1 }
+  { glyph: "R", tile: "reeds", solid: 1 }
+  { glyph: "{", tile: "fir-tl", solid: 1 }
+  { glyph: "}", tile: "fir-tr", solid: 1 }
+  { glyph: "[", tile: "fir-bl", solid: 1 }
+  { glyph: "]", tile: "fir-br", solid: 1 }
+  { glyph: "A", tile: "fir-tl", solid: 1 }
+  { glyph: "B", tile: "fir-tr", solid: 1 }
+  { glyph: "(", tile: "old-fir-bl", solid: 1 }
+  { glyph: ")", tile: "fir-br", solid: 1 }
+  { glyph: "m", tile: "boulder-tl", solid: 1 }
+  { glyph: "n", tile: "boulder-tr", solid: 1 }
+  { glyph: "u", tile: "boulder-bl", solid: 1 }
+  { glyph: "v", tile: "boulder-br", solid: 1 }
+  { glyph: "*", tile: "flowers", solid: 1 }
+  { glyph: "S", tile: "stump", solid: 1 }
+  { glyph: "P", tile: "sign", solid: 1 }
+  { glyph: "p", tile: "post", solid: 1 }
+  { glyph: "C", tile: "chest", solid: 1 }
+  { glyph: "g", tile: "door-tl", solid: 1 }
+  { glyph: "h", tile: "door-tr", solid: 1 }
+  { glyph: "j", tile: "door-bl", solid: 1 }
+  { glyph: "k", tile: "door-br", solid: 1 }
+]
+let legendScalars = map(legend, entry => scalars(entry.glyph)[0])
+let legendTiles = map(legend, entry => tileOf(entry.tile))
+let legendPalettes = map(legend, entry => art[indexOf(artNames, entry.tile)].palette)
+function legendOf(scalar) = legend[indexOf(legendScalars, scalar)]
+// Where a layout glyph stands: its first cell's column and row.
+function cellOf(glyph) = let at = indexOf(layoutScalars, scalars(glyph)[0]) in
+{ column: floorModulo(at, 32), row: ((at - floorModulo(at, 32)) / 32) }
+
+// The spots a clue names, each the box of layout cells its glyphs cover.
+let spotGlyphs = { post: "p", fir: "AB()", boulder: "mnuv", reeds: "R", flowers: "*", stump: "S", sign: "P" }
+let valley = placesOn("brick")[0]
+let valleySpots = map(valley.spots, id => spotOf(id))
+function spotCells(id) = let glyphs = scalars(spotGlyphs[id]) in
+filter(range(0, 1024), i => contains(glyphs, layoutScalars[i]))
+function spotBox(id) = let cells = spotCells(id) in
+let columns = map(cells, i => floorModulo(i, 32)) in
+let rows = map(cells, i => ((i - floorModulo(i, 32)) / 32)) in
+{
+  column: minimum(columns)
+  row: minimum(rows)
+  width: ((maximum(columns) - minimum(columns)) + 1)
+  height: ((maximum(rows) - minimum(rows)) + 1)
+}
+let spotBoxes = map(valley.spots, id => spotBox(id))
+let spotCount = length(valleySpots)
+
+let chestCell = cellOf("C")
+let doorCell = cellOf("j")
+let doorRight = (doorCell.column + 1)
+// The solid grid, one bit a cell: row r's columns 8b..8b+7 are byte r * 4 + b, column 8b + i its bit i.
+let bitValues = [1, 2, 4, 8, 16, 32, 64, 128]
+let solidBytes = flatMap(
+  range(0, 32),
+  r => map(
+    range(0, 4),
+    b => sum(map(range(0, 8), i => (legendOf(layoutScalars[(((r * 32) + (b * 8)) + i)]).solid * bitValues[i])))
+  )
+)
+function solidAt(x, y) = ((solid[(((y >> 3) * 4) + (x >> 6))] >> ((x >> 3) & 7)) & 1)
+let doorByteLeft = ((doorCell.row * 4) + ((doorCell.column - floorModulo(doorCell.column, 8)) / 8))
+let doorBitLeft = bitValues[floorModulo(doorCell.column, 8)]
+let doorByteRight = ((doorCell.row * 4) + ((doorRight - floorModulo(doorRight, 8)) / 8))
+let doorBitRight = bitValues[floorModulo(doorRight, 8)]
+
+// The text the cartridge shows, as blocks of three lines of `textWidth` codes. Each question takes two blocks: its
+// prompt, then its answers (`answerWidth` codes each) and which is right. Questions run by subject, then level.
+function linesBlock(lines) = flatMap(
+  range(0, textRows),
+  r => padCodes(((r < length(lines)) ? textCodes(lines[r]) : []), textWidth)
+)
+let blockSize = (textWidth * textRows)
+let groups = flatMap(subjects, s => map(range(1, (questionLevels + 1)), l => questionsOf(s, l)))
+let orderedQuestions = flatMap(groups, g => g)
+let groupStarts = scan(map(groups, g => length(g)))
+let questionBlocks = flatMap(orderedQuestions, q => concat(
+  textBlock(q.prompt, textWidth, textRows),
+  flatMap(q.choices, c => padCodes(textCodes(c), answerWidth)),
+  [q.answer],
+  map(range(0, (blockSize - ((3 * answerWidth) + 1))), i => 0)
+))
+let clueBlock = (2 * length(orderedQuestions))
+let clueBlocks = flatMap(
+  valleySpots,
+  s => flatMap(range(1, (questionLevels + 1)), l => textBlock(clueText(s, l), textWidth, textRows))
+)
+let messageBlock = (clueBlock + (questionLevels * length(valleySpots)))
+let brickPlaces = placesOn("brick")
+let fixedMessages = [
+  linesBlock(["FIELD NOTES", "MOTH IN THE VALLEY", "PRESS START"])
+  textBlock("Nothing here. A critter's clue may help.", textWidth, textRows)
+  textBlock("You found a key! Now open the chest.", textWidth, textRows)
+  textBlock("The chest is locked. Find its key first.", textWidth, textRows)
+  textBlock("The chest is empty now.", textWidth, textRows)
+  textBlock("Not quite! It flew off. The answer was:", textWidth, textRows)
+  textBlock("Right! You already hold the key.", textWidth, textRows)
+  textBlock("No clue yet. Catch a critter and answer!", textWidth, textRows)
+]
+let messageTitle = messageBlock
+let messageNothing = (messageBlock + 1)
+let messageKey = (messageBlock + 2)
+let messageLocked = (messageBlock + 3)
+let messageEmpty = (messageBlock + 4)
+let messageWrong = (messageBlock + 5)
+let messageAlready = (messageBlock + 6)
+let messageNoClue = (messageBlock + 7)
+let introBlock = (messageBlock + length(fixedMessages))
+let treasureBlock = (introBlock + length(brickPlaces))
+let doneBlock = (treasureBlock + length(brickPlaces))
+let placeMessages = concat(
+  map(brickPlaces, p => textBlock($"{p.name}. Catch a critter for a clue.", textWidth, textRows)),
+  map(brickPlaces, p => textBlock($"Inside: {treasureOf(p.treasure).name}! The door is open.", textWidth, textRows)),
+  map(
+    range(0, length(brickPlaces)),
+    i => textBlock(
+      ((i < (length(brickPlaces) - 1)) ? $"Back to the gallery! Next: {brickPlaces[(i + 1)].name}." :
+        "The valley is done! Play on for fun."),
+      textWidth,
+      textRows
+    )
+  )
+)
+let scriptBytes = concat(questionBlocks, clueBlocks, flatMap(fixedMessages, m => m), flatMap(placeMessages, m => m))
+let rightCodes = padCodes(textCodes(" RIGHT!"), textWidth)
+let lastPlace = (length(brickPlaces) - 1)
+
+// The panel: its top row is the status line, which is all that shows while the Moth walks; below it, the text box.
+let panelColumns = 20
+let statusKeyColumn = 0
+let statusTreasureColumn = 3
+let statusPlaceColumn = 15
+function panelCell(r, c) = ((r == 0) ? ((c == 2) ? tileOf("hud-gem") : ((c == 3) ? glyphDigitZero : ((c == 14) ? tileOf(
+  "hud-moon"
+) : ((c == 15) ? (glyphDigitZero + 1) : glyphSpace)))) : ((r == 1) ? ((c == 0) ? tileOf("frame-tl") : ((c ==
+  (panelColumns - 1)) ? tileOf("frame-tr") : tileOf("frame-t"))) : ((r == 7) ? ((c == 0) ? tileOf("frame-bl") : ((c ==
+  (panelColumns - 1)) ? tileOf("frame-br") : tileOf("frame-b"))) : ((r < 7) ? ((c == 0) ? tileOf("frame-l") : ((c ==
+  (panelColumns - 1)) ? tileOf("frame-r") : glyphSpace)) : glyphSpace))))
+let panelTop = 80
+let statusTop = 136
+// Text box rows 0..2 hold three lines of text, row 3 the answers; on the panel they are rows 2..4 and 6.
+let answerRow = 6
+
+// Where things start and how critters move, from the content's own descriptions.
+let mothStart = { x: 120, y: 224 }
+let critterSpawns = [{ x: 64, y: 120 }, { x: 96, y: 144 }, { x: 200, y: 208 }]
+let valleyCritters = map(valley.critters, id => critterOf(id))
+let critterTiles = map(valleyCritters, c => tileOf($"{c.id}-a"))
+// A critter steps once every (mask + 1) frames: pace 3 every frame, 2 every other, 1 every fourth.
+let paceMasks = [3, 1, 0]
+// The facing point's offset from the Moth's feet, by facing: down, up, left, right (bytes wrap, so 246 is -10).
+let faceX = [8, 8, 254, 18]
+let faceY = [20, 4, 12, 12]
+let musicTempo = 9
+// The Moth's tiles by facing (down, up, left, right): the hood's two halves and the suit's. Facing left draws the
+// side view mirrored, so each half shows the other half's tile.
+let mothHeadLeft = map(["moth-down-head-l", "moth-up-head-l", "moth-side-head-r", "moth-side-head-l"], n => tileOf(n))
+let mothHeadRight = map(["moth-down-head-r", "moth-up-head-r", "moth-side-head-l", "moth-side-head-r"], n => tileOf(n))
+let mothBodyLeft = map(["moth-down-body-l", "moth-up-body-l", "moth-side-body-r", "moth-side-body-l"], n => tileOf(n))
+let mothBodyRight = map(["moth-down-body-r", "moth-up-body-r", "moth-side-body-l", "moth-side-body-r"], n => tileOf(n))
+// A maths drill's operation as the result the cartridge computes from its operands `a` and `b`.
+// An inclusive range's lowest value and how many values it holds.
+function lowest(range) = range[0]
+function breadth(range) = ((range[1] - range[0]) + 1)
+function drillResult(operation) = ((operation == "+") ? "a + b" : ((operation == "-") ? "a - b" : "a * b"))
+
+template fieldNotes() {
+  title: "FIELD NOTES"
+
+  gameCode: "FNVF"
+
+  tiles: concat(
+    map(range(0, length(glyphs)), c => { name: $"glyph-{c}", pixels: glyphPixels(c, "0", "3") }),
+    map(art, a => { name: a.name, pixels: a.pixels })
+  )
+
+  map: map(layoutScalars, s => legendTiles[indexOf(legendScalars, s)])
+  mapPalettes: map(layoutScalars, s => legendPalettes[indexOf(legendScalars, s)])
+
+  window {
+    map: map(range(0, 1024), i => panelCell(((i - floorModulo(i, 32)) / 32), floorModulo(i, 32)))
+    mapPalettes: map(range(0, 1024), i => panelPalette)
+    x: "0"
+    y: "panely"
+    visible: "1"
+  }
+
+  scene: "phase"
+
+  variables [
+    { name: "src", initial: 0, max: 65535 }
+    { name: "phase", initial: 0 }
+    { name: "frame", initial: 0 }
+    { name: "rnd", initial: 1 }
+    { name: "px", initial: mothStart.x }
+    { name: "py", initial: mothStart.y }
+    { name: "nx", initial: 0 }
+    { name: "ny", initial: 0 }
+    { name: "dir", initial: 0 }
+    { name: "walk", initial: 0 }
+    { name: "moved", initial: 0 }
+    { name: "step", initial: 0 }
+    { name: "camx", initial: 0 }
+    { name: "camy", initial: 0 }
+    { name: "panely", initial: panelTop }
+    { name: "k", initial: 0 }
+    { name: "j", initial: 0 }
+    { name: "i", initial: 0 }
+    { name: "t", initial: 0 }
+    { name: "u", initial: 0 }
+    { name: "fx", initial: 0 }
+    { name: "fy", initial: 0 }
+    { name: "found", initial: 0 }
+    { name: "haskey", initial: 0 }
+    { name: "keyshow", initial: 0 }
+    { name: "chestopen", initial: 0 }
+    { name: "dooropen", initial: 0 }
+    { name: "keyspot", initial: 0 }
+    { name: "clueknown", initial: 0 }
+    { name: "cluelevel", initial: 1 }
+    { name: "talker", initial: 0 }
+    { name: "subject", initial: 0 }
+    { name: "level", initial: 1 }
+    { name: "q", initial: 0 }
+    { name: "lastq", initial: 255 }
+    { name: "group", initial: 0 }
+    { name: "rot", initial: 0 }
+    { name: "correct", initial: 0 }
+    { name: "answer", initial: 0 }
+    { name: "sel", initial: 0 }
+    { name: "a", initial: 0 }
+    { name: "b", initial: 0 }
+    { name: "c", initial: 0 }
+    { name: "tc", initial: 0 }
+    { name: "tpos", initial: 0 }
+    { name: "dkind", initial: 0 }
+    { name: "after", initial: 1 }
+    { name: "lblk", initial: 0 }
+    { name: "lneed", initial: 0 }
+    { name: "cblk", initial: 0 }
+    { name: "cneed", initial: 0 }
+    { name: "aneed", initial: 0 }
+    { name: "r3mode", initial: 0 }
+    { name: "pidx", initial: 0 }
+    { name: "ask", initial: 0 }
+  ]
+
+  arrays [
+    { name: "script", initial: scriptBytes }
+    { name: "tbuf", initial: map(range(0, (blockSize + textWidth)), n => 0) }
+    { name: "cbuf", initial: map(range(0, 16), n => 0) }
+    { name: "r3text", initial: map(range(0, textWidth), n => 0) }
+    { name: "righttext", initial: rightCodes }
+    { name: "solid", initial: solidBytes }
+    { name: "notes", initial: map(notesRecord, f => f.initial) }
+    { name: "gstart", initial: slice(groupStarts, 0, length(groups)) }
+    { name: "gcount", initial: map(groups, g => length(g)) }
+    { name: "pfloor", initial: map(brickPlaces, p => p.floor) }
+    { name: "cx", initial: map(critterSpawns, s => s.x) }
+    { name: "cy", initial: map(critterSpawns, s => s.y) }
+    { name: "sx", initial: map(critterSpawns, s => s.x) }
+    { name: "sy", initial: map(critterSpawns, s => s.y) }
+    { name: "cdir", initial [0, 1, 2] }
+    { name: "ctime", initial [10, 20, 30] }
+    { name: "calive", initial [0, 0, 0] }
+    { name: "cwait", initial [0, 0, 0] }
+    { name: "csub", initial: map(valleyCritters, c => subjectIndex(c.subject)) }
+    { name: "cmask", initial: map(valleyCritters, c => paceMasks[(c.pace - 1)]) }
+    { name: "cturn", initial: map(valleyCritters, c => c.turn) }
+    { name: "fdx", initial: faceX }
+    { name: "fdy", initial: faceY }
+    { name: "bx", initial: map(spotBoxes, s => s.column) }
+    { name: "by", initial: map(spotBoxes, s => s.row) }
+    { name: "bw", initial: map(spotBoxes, s => s.width) }
+    { name: "bh", initial: map(spotBoxes, s => s.height) }
+    { name: "mhl", initial: mothHeadLeft }
+    { name: "mhr", initial: mothHeadRight }
+    { name: "mbl", initial: mothBodyLeft }
+    { name: "mbr", initial: mothBodyRight }
+  ]
+
+  screens []
+
+  layers []
+
+  raster []
+
+  save {
+    version: 1
+    variables []
+    arrays ["notes"]
+  }
+
+  sounds [
+    {
+      name: "theme"
+      music [
+        {
+          voice: "pulse2"
+          part {
+            schema: "puck.tune.v1"
+            name: "valley-lead"
+            tempo: musicTempo
+            effects: null
+            order [0, 1, 0, 2]
+            patterns: map(
+              [
+                ["E5", "---", "G5", "---", "A5", "---", "G5", "E5", "D5", "---", "E5", "---", "G5", "---", "---", "---"]
+                ["C5", "---", "D5", "---", "E5", "---", "G5", "---", "A5", "---", "G5", "E5", "D5", "---", "---", "---"]
+                ["C5", "---", "D5", "---", "E5", "---", "D5", "C5", "A4", "---", "C5", "---", "C5", "---", "---", "---"]
+              ],
+              pattern => map(pattern, note => { duty: 2, envelope: 162, note: note })
+            )
+          }
+        }
+        {
+          voice: "wave"
+          waveform [
+            8, 10, 12, 13, 14, 15, 15, 15, 14, 13, 12, 10, 8, 6, 4, 3, 2, 1, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 8, 8, 8, 8
+          ]
+          part {
+            schema: "puck.tune.v1"
+            name: "valley-bass"
+            tempo: musicTempo
+            effects: null
+            order [0, 1, 0, 2]
+            patterns: map(
+              [
+                ["C3", "---", "G3", "---", "C3", "---", "G3", "---", "A2", "---", "E3", "---", "A2", "---", "E3", "---"]
+                ["F2", "---", "C3", "---", "F2", "---", "C3", "---", "G2", "---", "D3", "---", "G2", "---", "D3", "---"]
+                [
+                  "F2", "---", "C3", "---", "G2", "---", "D3", "---", "C3", "---", "G3", "---", "C3", "---", "---",
+                  "---"
+                ]
+              ],
+              pattern => map(pattern, note => { duty: null, envelope: 2, note: note })
+            )
+          }
+        }
+      ]
+    }
+    {
+      name: "chirp"
+      frames: 2
+      effect {
+        voice: "pulse1"
+        rows [
+          { duty: 2, envelope: 180, note: "A5" }
+          { duty: 2, envelope: 164, note: "E6" }
+          { duty: 2, envelope: 132, note: "A6" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+    {
+      name: "right"
+      frames: 4
+      effect {
+        voice: "pulse1"
+        rows [
+          { duty: 1, envelope: 196, note: "C5" }
+          { duty: 1, envelope: 196, note: "E5" }
+          { duty: 1, envelope: 196, note: "G5" }
+          { duty: 1, envelope: 180, note: "C6" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+    {
+      name: "wrong"
+      frames: 6
+      effect {
+        voice: "pulse1"
+        rows [
+          { duty: 0, envelope: 180, note: "E4" }
+          { duty: 0, envelope: 164, note: "C4" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+    {
+      name: "found"
+      frames: 5
+      effect {
+        voice: "pulse1"
+        rows [
+          { duty: 2, envelope: 212, note: "G5" }
+          { duty: 2, envelope: 212, note: "C6" }
+          { duty: 2, envelope: 212, note: "E6" }
+          { duty: 2, envelope: 196, note: "G6" }
+          { duty: 2, envelope: 162, note: "C7" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+    {
+      name: "rustle"
+      frames: 2
+      effect {
+        voice: "noise"
+        rows [
+          { duty: null, envelope: 113, note: "C5" }
+          { duty: null, envelope: 81, note: "C4" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+    {
+      name: "tick"
+      frames: 1
+      effect {
+        voice: "noise"
+        rows [
+          { duty: null, envelope: 50, note: "C6" }
+          { duty: null, envelope: null, note: "OFF" }
+        ]
+      }
+    }
+  ]
+
+  // The Moth: four sprites, her hood and face over her suit, facing the way she last walked; walking alternates the
+  // suit's step. Facing left mirrors the side view.
+  sprites [
+    {
+      name: "moth-head-l"
+      palette: headPalette
+      tile: mhl[dir]
+      flipX: (dir == 2)
+      x: (px - camx)
+      y: (py - camy)
+      visible: "1"
+    }
+    {
+      name: "moth-head-r"
+      palette: headPalette
+      tile: mhr[dir]
+      flipX: (dir == 2)
+      x: ((px - camx) + 8)
+      y: (py - camy)
+      visible: "1"
+    }
+    {
+      name: "moth-body-l"
+      palette: suitPalette
+      tile: (mbl[dir] + step)
+      flipX: (dir == 2)
+      x: (px - camx)
+      y: ((py - camy) + 8)
+      visible: "1"
+    }
+    {
+      name: "moth-body-r"
+      palette: suitPalette
+      tile: (mbr[dir] + step)
+      flipX: (dir == 2)
+      x: ((px - camx) + 8)
+      y: ((py - camy) + 8)
+      visible: "1"
+    }
+    for (critter, n) in valleyCritters {
+      {
+        name: $"critter-{n}"
+        palette: critterPalettes[n]
+        tile: (critterTiles[n] + ((frame >> 3) & 1))
+        flipX: (cdir[n] == 2)
+        x: (cx[n] - camx)
+        y: (cy[n] - camy)
+        visible: calive[n]
+      }
+    }
+    {
+      name: "key"
+      palette: keyPalette
+      tile: ((keyshow & 4) ? tileOf("sparkle") : tileOf("key"))
+      x: ((px - camx) + 4)
+      y: ((py - camy) - 10)
+      visible: keyshow
+    }
+    {
+      name: "pointer"
+      palette: suitPalette
+      tile: tileOf("pointer")
+      x: (8 + (48 * sel))
+      y: (panelTop + (8 * answerRow))
+      visible: (phase == 3)
+    }
+  ]
+
+  scrollX: "camx"
+
+  scrollY: "camy"
+
+  // Every frame: the clock and the seeded draw, a 255-step linear feedback shift register.
+  rule "draw" {
+    frame += 1
+    rnd = ((rnd >> 1) ^ ((rnd & 1) ? 184 : 0))
+  }
+
+  // The first frame restores the notes record from the battery, starts the music and shows the title.
+  rule "boot" {
+    when phase == 0
+    load()
+    play(sound: "theme")
+    lblk = messageTitle
+    lneed = 1
+    r3mode = 0
+    tpos = 0
+    dkind = 3
+    after = 5
+    panely = panelTop
+    phase = 2
+  }
+
+  // A place begins: a new hiding spot for the key, a closed chest and door, the critters out, the Moth at the path's
+  // foot, and the place's own introduction.
+  rule "place" {
+    when phase == 5
+    pidx = minimum(notes[0], lastPlace)
+    keyspot = rnd % spotCount
+    haskey = 0
+    keyshow = 0
+    clueknown = 0
+    chestopen = 0
+    dooropen = 0
+    map(row: chestCell.row, column: chestCell.column, tile: tileOf("chest"), palette: woodPalette)
+    map(row: doorCell.row, column: doorCell.column, tile: tileOf("door-bl"), palette: panelPalette)
+    map(row: doorCell.row, column: doorRight, tile: tileOf("door-br"), palette: panelPalette)
+    solid[doorByteLeft] |= doorBitLeft
+    solid[doorByteRight] |= doorBitRight
+    repeat 3 as i {
+      calive[i] = 1
+      cwait[i] = 0
+      cx[i] = sx[i]
+      cy[i] = sy[i]
+    }
+    px = mothStart.x
+    py = mothStart.y
+    dir = 1
+    lblk = introBlock + pidx
+    lneed = 1
+    r3mode = 0
+    tpos = 0
+    dkind = 2
+    after = 1
+    panely = panelTop
+    phase = 2
+  }
+
+  // Walking: one step a frame, two with B held, each axis tried alone so the Moth slides along what stops her. Her
+  // feet are the box 3..12 across and 10..15 down from her corner.
+  rule "walk" {
+    when phase == 1
+    moved = 0
+    repeat 2 as j {
+      if j == 0 or key(b, held) {
+        nx = px
+        ny = py
+        if key(left, held) {
+          nx -= 1
+          dir = 2
+        }
+        if key(right, held) {
+          nx += 1
+          dir = 3
+        }
+        if nx != px {
+          if (solidAt(nx + 3, py + 10) == 0 and
+            solidAt(nx + 12, py + 10) == 0 and
+            solidAt(nx + 3, py + 15) == 0 and
+            solidAt(nx + 12, py + 15) == 0) {
+            px = nx
+            moved = 1
+          }
+        }
+        if key(up, held) {
+          ny -= 1
+          dir = 1
+        }
+        if key(down, held) {
+          ny += 1
+          dir = 0
+        }
+        if ny != py {
+          if (solidAt(px + 3, ny + 10) == 0 and
+            solidAt(px + 12, ny + 10) == 0 and
+            solidAt(px + 3, ny + 15) == 0 and
+            solidAt(px + 12, ny + 15) == 0) {
+            py = ny
+            moved = 1
+          }
+        }
+      }
+    }
+    if moved {
+      walk += 1
+      step = 2 * ((walk >> 3) & 1)
+      if (walk & 15) == 0 {
+        play(sound: "tick")
+      }
+    } else {
+      walk = 0
+      step = 0
+    }
+  }
+
+  // The critters wander: each picks a heading, or a rest, for a while, steps at its own pace and turns back from
+  // anything solid. One that flew off returns to its spawn when its wait runs out.
+  rule "critters" {
+    when phase == 1
+    repeat 3 as i {
+      if calive[i] {
+        if ctime[i] == 0 {
+          t = rnd
+          rnd = ((rnd >> 1) ^ ((rnd & 1) ? 184 : 0))
+          cdir[i] = (((t >> 2) & 3) == 0) ? 4 : (t & 3)
+          ctime[i] = cturn[i] + (t >> 4)
+        }
+        ctime[i] -= 1
+        if (frame & cmask[i]) == 0 and cdir[i] < 4 {
+          nx = cx[i]
+          ny = cy[i]
+          if cdir[i] == 0 {
+            ny += 1
+          } else if cdir[i] == 1 {
+            ny -= 1
+          } else if cdir[i] == 2 {
+            nx -= 1
+          } else {
+            nx += 1
+          }
+          if solidAt(nx + 4, ny + 4) or nx < 8 or nx > 240 or ny < 24 or ny > 236 {
+            cdir[i] ^= 1
+          } else {
+            cx[i] = nx
+            cy[i] = ny
+          }
+        }
+      } else if cwait[i] {
+        cwait[i] -= 1
+        if cwait[i] == 0 {
+          calive[i] = 1
+          cx[i] = sx[i]
+          cy[i] = sy[i]
+        }
+      }
+    }
+  }
+
+  // Catching: touching a wandering critter makes it ask a question of its subject, at the Moth's level in that subject
+  // and never below the place's floor. A maths question is half the time one the cartridge writes itself.
+  rule "catch" {
+    when phase == 1
+    found = 0
+    repeat 3 as i {
+      if calive[i] and ((cx[i] - px) + 6) < 20 and ((cy[i] - py) + 4) < 20 {
+        found = i + 1
+        break
+      }
+    }
+    if found {
+      talker = found - 1
+      subject = csub[talker]
+      t = notes[3 + subject]
+      level = minimum(questionLevels, 1 + (t / adaptation.perLevel))
+      level = maximum(level, pfloor[pidx])
+      rot = rnd % 3
+      rnd = ((rnd >> 1) ^ ((rnd & 1) ? 184 : 0))
+      sel = 0
+      play(sound: "chirp")
+      ask = ((subject == 1) & (rnd & 1)) ? 2 : 1
+      tpos = 0
+      dkind = 1
+      panely = panelTop
+      phase = 2
+    }
+  }
+
+  // A maths drill: two operands drawn from the level's ranges, the true result and two near misses.
+  rule "drill" {
+    when ask == 2
+    repeat 72 as k {
+      tbuf[k] = 0
+    }
+    for drill in mathsDrills {
+      if level == drill.level {
+        a = lowest(drill.left) + (rnd % breadth(drill.left))
+        rnd = ((rnd >> 1) ^ ((rnd & 1) ? 184 : 0))
+        b = lowest(drill.right) + (rnd % breadth(drill.right))
+        t = textCodes(drill.operation)[0]
+        c = drillResult(drill.operation)
+      }
+    }
+    tc = 1
+    if a >= 10 {
+      tbuf[tc] = glyphDigitZero + (a / 10)
+      tc += 1
+    }
+    tbuf[tc] = glyphDigitZero + (a % 10)
+    tc += 2
+    tbuf[tc] = t
+    tc += 2
+    if b >= 10 {
+      tbuf[tc] = glyphDigitZero + (b / 10)
+      tc += 1
+    }
+    tbuf[tc] = glyphDigitZero + (b % 10)
+    tc += 2
+    tbuf[tc] = textCodes("=")[0]
+    tc += 2
+    tbuf[tc] = textCodes("?")[0]
+    repeat 16 as k {
+      cbuf[k] = 0
+    }
+    repeat 3 as j {
+      if j == 0 {
+        u = c
+      } else if j == 1 {
+        u = c + 1 + (rnd & 1)
+      } else if c <= 2 {
+        u = c + 3
+      } else {
+        u = c - 1 - ((rnd >> 1) & 1)
+      }
+      k = j * answerWidth
+      if u >= 10 {
+        cbuf[k] = glyphDigitZero + (u / 10)
+        k += 1
+      }
+      cbuf[k] = glyphDigitZero + (u % 10)
+    }
+    cbuf[15] = 0
+    aneed = 1
+    ask = 0
+  }
+
+  // A question from the bank: one of the subject's questions at the level, never the one asked last.
+  rule "pick" {
+    when ask == 1
+    group = (subject * questionLevels) + (level - 1)
+    q = gstart[group] + (rnd % gcount[group])
+    if q == lastq {
+      q = gstart[group] + (((q - gstart[group]) + 1) % gcount[group])
+    }
+    lastq = q
+    lblk = 2 * q
+    lneed = 1
+    cblk = (2 * q) + 1
+    cneed = 1
+    aneed = 1
+    ask = 0
+  }
+
+  // Searching: A looks at the cell the Moth faces. The chest opens with the key and opens the door; a spot holds the
+  // key only where the clue says.
+  rule "search" {
+    when phase == 1
+    if key(a, pressed) {
+      fx = (px + fdx[dir]) >> 3
+      fy = (py + fdy[dir]) >> 3
+      found = 0
+      if fx == chestCell.column and fy == chestCell.row {
+        if chestopen {
+          lblk = messageEmpty
+        } else if haskey {
+          chestopen = 1
+          dooropen = 1
+          haskey = 0
+          map(row: chestCell.row, column: chestCell.column, tile: tileOf("chest-open"), palette: woodPalette)
+          map(row: doorCell.row, column: doorCell.column, tile: tileOf("door-open-bl"), palette: panelPalette)
+          map(row: doorCell.row, column: doorRight, tile: tileOf("door-open-br"), palette: panelPalette)
+          solid[doorByteLeft] &= 255 - doorBitLeft
+          solid[doorByteRight] &= 255 - doorBitRight
+          notes[1] |= 1 << pidx
+          play(sound: "found")
+          lblk = treasureBlock + pidx
+        } else {
+          lblk = messageLocked
+        }
+        found = 1
+      } else {
+        repeat spotCount as k {
+          if (fx - bx[k]) < bw[k] and (fy - by[k]) < bh[k] {
+            found = k + 1
+            break
+          }
+        }
+        if found {
+          if (found - 1) == keyspot and haskey == 0 and chestopen == 0 {
+            haskey = 1
+            keyshow = 90
+            play(sound: "found")
+            lblk = messageKey
+          } else {
+            play(sound: "rustle")
+            lblk = messageNothing
+          }
+        }
+      }
+      if found {
+        lneed = 1
+        r3mode = 0
+        tpos = 0
+        dkind = 2
+        after = 1
+        panely = panelTop
+        phase = 2
+      }
+    }
+  }
+
+  // The notebook: select shows the clue again, once a critter has told it.
+  rule "notebook" {
+    when phase == 1
+    if key(select, pressed) {
+      if clueknown {
+        lblk = clueBlock + ((keyspot * questionLevels) + (cluelevel - 1))
+      } else {
+        lblk = messageNoClue
+      }
+      lneed = 1
+      r3mode = 0
+      tpos = 0
+      dkind = 2
+      after = 1
+      panely = panelTop
+      phase = 2
+    }
+  }
+
+  // Through the open door: the place is finished, its count and the notes saved, and the next place follows.
+  rule "door" {
+    when phase == 1
+    if dooropen and py < (doorCell.row * 8) {
+      if notes[0] < 255 {
+        notes[0] += 1
+      }
+      save()
+      play(sound: "right")
+      lblk = doneBlock + pidx
+      lneed = 1
+      r3mode = 0
+      tpos = 0
+      dkind = 2
+      after = 5
+      panely = panelTop
+      phase = 2
+    }
+  }
+
+  // Answering: left and right pick, A answers. A right answer raises the subject's skill and tells the clue, or says
+  // the key is already found; a wrong one lowers it, sends the critter off for a while and shows the right answer.
+  rule "choose" {
+    when phase == 3
+    if key(left, pressed) and sel > 0 {
+      sel -= 1
+      play(sound: "tick")
+    }
+    if key(right, pressed) and sel < 2 {
+      sel += 1
+      play(sound: "tick")
+    }
+    if key(a, pressed) {
+      calive[talker] = 0
+      t = notes[3 + subject]
+      if sel == correct {
+        notes[3 + subject] = minimum(adaptation.ceiling, t + adaptation.gain)
+        cwait[talker] = 240
+        play(sound: "right")
+        if haskey or chestopen {
+          lblk = messageAlready
+          r3mode = 0
+        } else {
+          clueknown = 1
+          cluelevel = level
+          lblk = clueBlock + ((keyspot * questionLevels) + (level - 1))
+          repeat textWidth as k {
+            r3text[k] = righttext[k]
+          }
+          r3mode = 1
+        }
+      } else {
+        notes[3 + subject] = (t >= adaptation.loss) ? (t - adaptation.loss) : 0
+        cwait[talker] = 120
+        play(sound: "wrong")
+        lblk = messageWrong
+        repeat textWidth as k {
+          r3text[k] = 0
+        }
+        u = answer * answerWidth
+        repeat answerWidth as k {
+          r3text[k + 1] = cbuf[u]
+          u += 1
+        }
+        r3mode = 1
+      }
+      lneed = 1
+      tpos = 0
+      dkind = 2
+      after = 1
+      phase = 2
+    }
+  }
+
+  // The text loaders, which run after every rule that asks for text and before the typewriter: a block into the box's
+  // three lines and the answer row from r3text or blank; a question's answers into cbuf; then the answers laid out in
+  // the row, rotated so the right one is not always first.
+  rule "load-text" {
+    when lneed
+    src = 0
+    repeat blockSize as k {
+      src += lblk
+    }
+    repeat blockSize as k {
+      tbuf[k] = script[src]
+      src += 1
+    }
+    repeat textWidth as k {
+      tbuf[blockSize + k] = r3mode ? r3text[k] : 0
+    }
+    r3mode = 0
+    lneed = 0
+  }
+
+  rule "load-answers" {
+    when cneed
+    src = 0
+    repeat blockSize as k {
+      src += cblk
+    }
+    repeat 16 as k {
+      cbuf[k] = script[src]
+      src += 1
+    }
+    cneed = 0
+  }
+
+  rule "lay-answers" {
+    when aneed
+    answer = cbuf[15]
+    correct = ((answer + 3) - rot) % 3
+    repeat 3 as j {
+      u = j + rot
+      if u >= 3 {
+        u -= 3
+      }
+      u *= answerWidth
+      t = (blockSize + 1) + (j * (answerWidth + 1))
+      repeat answerWidth as k {
+        tbuf[t] = cbuf[u]
+        t += 1
+        u += 1
+      }
+    }
+    aneed = 0
+  }
+
+  // The typewriter: six cells a frame onto the panel, the box's three lines and then the answer row.
+  rule "type" {
+    when phase == 2
+    repeat 6 as k {
+      if tpos >= (blockSize + textWidth) {
+        break
+      }
+      t = tpos / textWidth
+      u = tpos % textWidth
+      if t == textRows {
+        t = answerRow
+      } else {
+        t += 2
+      }
+      map(row: t, column: u + 1, tile: tbuf[tpos], palette: panelPalette, surface: "panel")
+      tpos += 1
+    }
+    if tpos >= (blockSize + textWidth) {
+      phase = (dkind == 1) ? 3 : 4
+    }
+  }
+
+  // A message waits for A or start; the title for start, which also seeds the draw from how long it waited.
+  rule "wait" {
+    when phase == 4
+    if dkind == 3 {
+      if key(start, pressed) {
+        rnd = (frame | 1)
+        phase = after
+      }
+    } else if key(a, pressed) or key(start, pressed) {
+      if after == 1 {
+        panely = statusTop
+      }
+      phase = after
+    }
+  }
+
+  // The camera follows the Moth, held inside the valley's 256 by 256 pixels.
+  rule "camera" {
+    camx = (px < 72) ? 0 : minimum(px - 72, 96)
+    camy = (py < 64) ? 0 : minimum(py - 64, 112)
+  }
+
+  // The status line: the key while held, the treasures returned and the place.
+  rule "status" {
+    if keyshow {
+      keyshow -= 1
+    }
+    map(
+      row: 0,
+      column: statusKeyColumn,
+      tile: haskey ? tileOf("hud-key") : glyphSpace,
+      palette: panelPalette,
+      surface: "panel"
+    )
+    map(
+      row: 0,
+      column: statusTreasureColumn,
+      tile: glyphDigitZero + minimum(notes[0], 9),
+      palette: panelPalette,
+      surface: "panel"
+    )
+    map(row: 0, column: statusPlaceColumn, tile: glyphDigitZero + pidx + 1, palette: panelPalette, surface: "panel")
+  }
+}

@@ -211,14 +211,6 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 Height: (screen.Tiles.Length / screen.Width)),
             comparer: StringComparer.Ordinal
         );
-        // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them.
-        var arrayInitial = document.Arrays.SelectMany(selector: static array => array.Initial.Select(selector: static value => ((byte)value))).ToArray();
-        var arrayData = data.Add(
-            name: "arrays",
-            bytes: ((arrayInitial.Length == 0)
-            ? [0]
-            : arrayInitial)
-        );
         // A sound is a list of voice parts: a track has one per voice it occupies, an effect exactly one.
         var sounds = document.Sounds.ToDictionary(
             keySelector: static sound => sound.Name,
@@ -284,6 +276,16 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                 ),
                 version: ((byte)document.Save.Version)
             )
+        );
+        // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them. It is read once, at
+        // boot, so it is placed after everything the running game reads from the fixed window and rides a switchable
+        // bank when that window is full.
+        var arrayInitial = document.Arrays.SelectMany(selector: static array => array.Initial.Select(selector: static value => ((byte)value))).ToArray();
+        var arrayData = Place(
+            name: "arrays",
+            bytes: ((arrayInitial.Length == 0)
+            ? [0]
+            : arrayInitial)
         );
         var boot = emitter.NewLabel();
         var loop = emitter.NewLabel();
@@ -475,12 +477,19 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             if (arrayInitial.Length != 0) {
+                Select(placement: arrayData)?.Invoke(obj: emitter);
                 FrameworkKernel.EmitBlockCopy(
                     emitter: emitter,
                     sourceAddress: arrayData.Address,
                     destinationAddress: ArrayBaseAddress,
                     byteCount: ((ushort)arrayInitial.Length)
                 );
+                if (arrayData.Bank != 1) {
+                    Sm83BankedData.EmitSelect(
+                        bank: 1,
+                        emitter: emitter
+                    );
+                }
             }
         }
         void Frame() {
@@ -1063,7 +1072,8 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                         }
                     case "map": {
                             // The queue push takes DE = cell address, A = tile. Row and column are runtime values, so the
-                            // address is built as 0x9800 + row * 32 + column with the row's low three bits carried into H.
+                            // address is built as the surface's map base + row * 32 + column with the row's low three bits
+                            // carried into H; the panel's map is the window map, the background's the background map.
                             Load(expression: statement.Row!);
                             emitter.ArithmeticImmediate(
                                 op: AluOp.And,
@@ -1136,7 +1146,9 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
                             );
                             emitter.ArithmeticImmediate(
                                 op: AluOp.Add,
-                                value: (Hw.VramBackgroundMap >> 8)
+                                value: ((byte)(((statement.Surface == "panel")
+                                    ? Hw.VramWindowMap
+                                    : Hw.VramBackgroundMap) >> 8))
                             );
                             emitter.Load(
                                 destination: Reg8.D,
@@ -2001,6 +2013,57 @@ public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
             var length = lengths[key: array];
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
+
+            if (CartridgeExpressions.WideIndex(
+                index: index,
+                widths: widths
+            )) {
+                // A sixteen-bit index: HL - length borrows exactly when the index is inside the array.
+                LoadWide(
+                    expression: index,
+                    guard: guard,
+                    pair: Reg16.Hl
+                );
+                emitter.Load(
+                    destination: Reg8.A,
+                    source: Reg8.L
+                );
+                emitter.ArithmeticImmediate(
+                    op: AluOp.Subtract,
+                    value: ((byte)length)
+                );
+                emitter.Load(
+                    destination: Reg8.A,
+                    source: Reg8.H
+                );
+                emitter.ArithmeticImmediate(
+                    op: AluOp.SubtractWithCarry,
+                    value: ((byte)(length >> 8))
+                );
+                emitter.JumpRelative(
+                    condition: Condition.Carry,
+                    label: inside
+                );
+                emitter.XorA();
+                emitter.LoadImmediate(
+                    pair: Reg16.Hl,
+                    value: VoidAddress
+                );
+                emitter.Load(
+                    destination: Reg8.Memory,
+                    source: Reg8.A
+                );
+                emitter.JumpRelative(label: done);
+                emitter.MarkLabel(label: inside);
+                emitter.LoadImmediate(
+                    pair: Reg16.De,
+                    value: ((ushort)arrays[array])
+                );
+                emitter.AddToHl(pair: Reg16.De);
+                emitter.MarkLabel(label: done);
+
+                return;
+            }
 
             Load(
                 expression: index,

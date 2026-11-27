@@ -267,6 +267,25 @@ public static class CartridgeExpressions {
 
         return true;
     }
+    /// <summary>Returns whether an array index is read as sixteen bits: a bare read of a two-byte slot, or a lone literal
+    /// past a byte. Such an index reaches every element of an array longer than <see cref="CartridgeLimits.ArrayLength"/>;
+    /// any other index is a byte expression and reaches only the first <see cref="CartridgeLimits.ArrayLength"/>.</summary>
+    /// <param name="index">The index expression.</param>
+    /// <param name="widths">The declared slots' widths in bytes, by name.</param>
+    /// <returns><see langword="true"/> when the index is read as sixteen bits.</returns>
+    public static bool WideIndex(ExpressionProgram index, IReadOnlyDictionary<string, int> widths) {
+        ArgumentNullException.ThrowIfNull(argument: index);
+        ArgumentNullException.ThrowIfNull(argument: widths);
+
+        return (index.Instructions switch {
+            [{ Payload: InstructionPayload.Constant constant }] => (constant.Value > CartridgeLimits.NarrowMaximum),
+            [{ Payload: InstructionPayload.State { Key: null } state }] => (widths.TryGetValue(
+                key: state.Name.Spelling,
+                value: out var width
+            ) && (width == 2)),
+            _ => false,
+        });
+    }
     /// <summary>Returns the whole number a one-token literal expression carries.</summary>
     /// <param name="expression">The expression.</param>
     /// <returns>The literal, or <see langword="null"/> when the expression is anything else.</returns>

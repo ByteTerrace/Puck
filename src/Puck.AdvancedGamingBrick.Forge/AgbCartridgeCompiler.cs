@@ -17,6 +17,9 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </remarks>
 public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint ArrayBaseAddress = 0x02000900u;
+    // Screenblock 31 holds the background's map and screenblock 30, directly below it, the panel's; the map-write
+    // queue's drain relies on that adjacency.
+    private const uint BackgroundMapAddress = (PanelMapAddress + 0x800u);
     private const uint BitmapFillAddress = 0x02000400u;
     private const uint ClockReplyAddress = 0x020003F0u;
     private const uint DirectSoundStateAddress = 0x02000160u;
@@ -25,6 +28,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint RasterTableAddress = 0x02000500u;
     private const uint SaveMirrorAddress = 0x02000200u;
     private const uint SoundStateAddress = 0x02000130u;
+    private const uint PanelMapAddress = 0x0600F000u;
     private const uint VoidAddress = 0x020000C0u;
     // The declared scene variable, read once before any rule evaluates. Every guard on it compares against THIS byte,
     // so a rule that writes the variable changes which scene runs next frame and never opens a second one in this.
@@ -154,7 +158,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             : document.Map);
 
         if (document.Bitmap is null) {
-            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: cells)), destination: 0x0600F800, count: 2048);
+            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: cells)), destination: BackgroundMapAddress, count: 2048);
         }
 
         // Keep one baked sine table for both turning surfaces. Allocate it at the sprite site when present so
@@ -215,7 +219,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                 ? panel.Map.Select(selector: (tile, index) => tile | ((tint[index] & 0x0F) << 12)).ToArray()
                 : panel.Map);
 
-            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: panelCells)), destination: 0x0600F000, count: 2048);
+            Copy(sourceAddress: Add(bytes: CartridgeGraphics.Halfwords(values: panelCells)), destination: PanelMapAddress, count: 2048);
             // Screenblock 30, priority above the first layer.
             StoreHalf(address: AgbAddresses.Background1Control, value: (30 << 8));
             // A background layer tiles the whole screen, so the window unit is what clips the panel to its corner:
@@ -482,13 +486,14 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.Branch(condition: ThumbCondition.Equal, label: done);
             emitter.LoadConstant(destination: LowRegister.R4, value: QueueBaseAddress);
             emitter.MarkLabel(label: drain);
-            // address = 0x0600F800 + (row * 32 + column) * 2
+            // address = PanelMapAddress + (row * 32 + column) * 2. A queued row carries its surface: rows 0..31 are the
+            // panel's screenblock and rows 32..63 the background's, the next screenblock up (EmitQueuePush).
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 0, destination: LowRegister.R0);
             emitter.ShiftImmediate(amount: 5, destination: LowRegister.R0, op: ThumbShift.LogicalLeft, source: LowRegister.R0);
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 1, destination: LowRegister.R1);
             emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R1, source: LowRegister.R0);
             emitter.ShiftImmediate(amount: 1, destination: LowRegister.R0, op: ThumbShift.LogicalLeft, source: LowRegister.R0);
-            emitter.LoadConstant(destination: LowRegister.R2, value: 0x0600F800u);
+            emitter.LoadConstant(destination: LowRegister.R2, value: PanelMapAddress);
             emitter.AddRegister(destination: LowRegister.R0, operand: LowRegister.R2, source: LowRegister.R0);
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 2, destination: LowRegister.R1);
             // A map entry carries its cell's palette in its top four bits.
@@ -525,6 +530,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.MoveImmediate(destination: LowRegister.R0, value: 31);
             emitter.Alu(destination: LowRegister.R5, op: ThumbAlu.And, source: LowRegister.R0);
             emitter.Alu(destination: LowRegister.R6, op: ThumbAlu.And, source: LowRegister.R0);
+            if (statement.Surface != "panel") {
+                emitter.AddImmediate(register: LowRegister.R5, value: 32);
+            }
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: LowRegister.R5);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 1, source: LowRegister.R6);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 2, source: LowRegister.R7);
@@ -539,7 +547,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
             for (var line = 0; (line < height); ++line) {
-                var destination = (0x0600F800u + (((uint)(((CartridgeExpressions.Whole(expression: statement.Row)!.Value + line) * 32) + CartridgeExpressions.Whole(expression: statement.Column)!.Value)) * 2u));
+                var destination = (BackgroundMapAddress + (((uint)(((CartridgeExpressions.Whole(expression: statement.Row)!.Value + line) * 32) + CartridgeExpressions.Whole(expression: statement.Column)!.Value)) * 2u));
 
                 Copy(count: (width * 2), destination: destination, sourceAddress: (sourceAddress + ((uint)((line * width) * 2))));
             }
@@ -1168,9 +1176,18 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             var inside = emitter.NewLabel();
             var length = lengths[key: array];
 
+            // A sixteen-bit index (a bare two-byte slot, or a literal past a byte) arrives whole in r3, so it is bounded
+            // against the full length; a byte index can only miss an array shorter than a byte reaches.
+            var wideIndex = CartridgeExpressions.WideIndex(index: index, widths: widths);
+
             Load(expression: index, guard: guard, register: LowRegister.R3);
-            if (length < CartridgeLimits.ArrayLength) {
-                emitter.CompareImmediate(register: LowRegister.R3, value: ((byte)length));
+            if (wideIndex || (length < CartridgeLimits.ArrayLength)) {
+                if (length <= CartridgeLimits.NarrowMaximum) {
+                    emitter.CompareImmediate(register: LowRegister.R3, value: ((byte)length));
+                } else {
+                    emitter.LoadConstant(destination: address, value: ((uint)length));
+                    emitter.Alu(destination: LowRegister.R3, op: ThumbAlu.Compare, source: address);
+                }
                 emitter.Branch(condition: ThumbCondition.CarryClear, label: inside);
                 emitter.MoveImmediate(destination: LowRegister.R3, value: 0);
                 emitter.LoadConstant(destination: address, value: VoidAddress);

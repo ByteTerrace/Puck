@@ -1,0 +1,22 @@
+// Clues that name a spot in the scene. A spot is a landmark of the valley a player can search; each place lists the
+// spots it holds (places.puck) and a device draws and positions them in its own scene. A clue tells where the key
+// lies, more indirectly as the level rises: by the spot's name, then by how it looks, then by a riddle. Every clue a
+// spot can produce fits `textRows` lines of `textWidth` (text.puck).
+
+let spots = [
+  { id: "post", name: "the swallow post", look: "tall and wooden", riddle: "Where the swallow rests" }
+  { id: "fir", name: "the old fir", look: "tall and dark green", riddle: "Green all winter long" }
+  { id: "boulder", name: "the mossy boulder", look: "grey with soft moss", riddle: "Heavy, still and furry on top" }
+  { id: "reeds", name: "the pond reeds", look: "thin and swaying", riddle: "Where the frogs sing" }
+  { id: "flowers", name: "the flower patch", look: "bright and sweet", riddle: "The bees visit it daily" }
+  { id: "stump", name: "the old stump", look: "short, round and cut", riddle: "Once a tree, now a seat" }
+  { id: "sign", name: "the signpost", look: "a board on a pole", riddle: "It points the way home" }
+  { id: "lamp", name: "the gallery lamp", look: "glowing and warm", riddle: "It shines when the sun sleeps" }
+  { id: "crater", name: "the little crater", look: "round and hollow", riddle: "A bowl the sky dropped" }
+  { id: "ice", name: "the ice shelf", look: "cold, blue and smooth", riddle: "Water that stands still" }
+]
+
+// The clue for the key hidden at a spot, at a question level from 1 to `questionLevels`.
+function clueText(spot, level) = ((level <= 1) ? $"The key is by {spot.name}." :
+  ((level == 2) ? $"Look near something {spot.look}." : $"{spot.riddle}. Look there!"))
+function spotOf(id) = find(spots, s => (s.id == id))
