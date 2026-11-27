@@ -63,7 +63,7 @@ internal static class WorldShapeDetail {
         // A blend's seam is a feature of the blend's own radius, which neither shape's bound measures: a smooth seam's
         // fillet, a pipe's bead and a groove's channel turn at `smooth`; a chamfer's bevel is a face `smooth` wide, kept
         // as a face by a cell per half width; stairs are `steps` turns of a share of `smooth` each.
-        if ((shape.Smooth is > 0f and var smooth) && (shape.Blend is { } blend)) {
+        if ((shape.SmoothRadius is > 0f and var smooth) && (shape.Blend is { } blend)) {
             switch (SdfFieldBlends.SmoothFamilyOf(value: blend)) {
                 case SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction
                     or SdfBlendOp.GrooveUnion or SdfBlendOp.GrooveSubtraction or SdfBlendOp.PipeUnion or SdfBlendOp.PipeSubtraction:
@@ -158,7 +158,7 @@ internal static class WorldShapeDetail {
     /// <returns>The part.</returns>
     internal static SdfInstancePart PartOf(CreationDocument document, int index, CreationStampTransform transform, int slot, float grow = 0f) {
         var (low, high) = BoxOf(document: document, index: index, transform: transform);
-        var halo = new Vector3(value: (((document.Shapes![index].Smooth ?? 0f) * transform.Scale) + grow));
+        var halo = new Vector3(value: ((document.Shapes![index].SmoothRadius * transform.Scale) + grow));
 
         return new SdfInstancePart(Detail: Of(scale: transform.Scale, shape: document.Shapes[index]), High: (high + halo), Low: (low - halo), Slot: slot);
     }
@@ -187,7 +187,7 @@ internal static class WorldShapeDetail {
             var shape = shapes[index];
 
             parts.Add(item: PartOf(document: document, index: index, transform: transform, slot: slot, grow: grow));
-            surface = SdfBoundAlgebra.ComposeBox(accumulated: surface, blend: (shape.Blend ?? SdfBlendOp.Union), operand: BoxOf(document: document, index: index, transform: transform), radius: ((shape.Smooth ?? 0f) * transform.Scale));
+            surface = SdfBoundAlgebra.ComposeBox(accumulated: surface, blend: (shape.Blend ?? SdfBlendOp.Union), operand: BoxOf(document: document, index: index, transform: transform), radius: (shape.SmoothRadius * transform.Scale));
         }
 
         if ((relief is not null) && (relief.DetailSpacing() is > 0f and var spacing)) {

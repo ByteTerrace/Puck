@@ -1,7 +1,7 @@
 // The garden: a destination of the debug world's painting wing, a small sunset plot with a green floor and a golden
 // obelisk, so a window onto it reads at a glance. The debug world's garden painting (`painting-garden`, hung on the
-// north wall of the wing, paintings.puck) opens onto the arrival frame here: a body walking +Z into the painting comes
-// out of the arrival frame walking -Z. Turn round and the arrival frame is the way back. Walk on and the far frame,
+// south wall of the wing, paintings.puck) opens onto the arrival frame here: a body walking into the painting comes out
+// of the arrival frame walking -Z. Turn round and the arrival frame is the way back. Walk on and the far frame,
 // twelve metres further along the line the painting's window looks along, shows the debug world again, so it is also a
 // frame seen through a frame from the wing. Boot the debug world, never this one: it is reached through the debug
 // world's painting, and `world.reload` there recompiles only the debug world. See debug.md beside this file.

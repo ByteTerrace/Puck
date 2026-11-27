@@ -1,8 +1,8 @@
-namespace Puck.Hosting.Jobs;
+namespace Puck.Abstractions.Jobs;
 
 /// <summary>
 /// Runs a fork's partitions across the runtime's thread pool, for background work (a bake's stage) that must not take
-/// <see cref="JobPool"/>'s workers from the frame or a tick. It keeps <see cref="JobPool.Fork(JobClass, int, IJobPartitions)"/>'s
+/// <c>Puck.Hosting.Jobs.JobPool</c>'s workers from the frame or a tick. It keeps <c>JobPool.Fork</c>'s
 /// contract: the calling thread takes partitions itself until none is left and then waits only for the partitions other
 /// threads hold, so a pool busy with work queued before the fork never holds the caller behind it (a helper that starts
 /// after every partition is taken takes none and returns), and every partition runs before the lowest-numbered failing
@@ -36,6 +36,18 @@ public static class PoolFork {
         }
         fork.Take();
         fork.Join();
+    }
+
+    /// <summary>Runs <paramref name="body"/> for every partition index, as <see cref="Run(IJobPartitions, int, int)"/>
+    /// runs a body's partitions.</summary>
+    /// <param name="partitions">The partition count; zero or less runs nothing.</param>
+    /// <param name="body">The work of one partition, given its index.</param>
+    /// <param name="helpers">The most thread-pool threads asked to help, or a negative count for one fewer than the
+    /// processors.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+    public static void Run(int partitions, Action<int> body, int helpers = -1) {
+        ArgumentNullException.ThrowIfNull(argument: body);
+        Run(body: new DelegatedPartitions(body: body), helpers: helpers, partitions: partitions);
     }
 
     // One fork's partitions: the next unclaimed one, how many have finished, the event the last to finish sets, and the

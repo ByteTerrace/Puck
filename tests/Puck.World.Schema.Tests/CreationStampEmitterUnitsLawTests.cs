@@ -1,5 +1,5 @@
 using System.Numerics;
-
+using Puck.Assets.Documents;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Xunit;
@@ -106,7 +106,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
         Scale: scale,
         Material: 0,
         Blend: blend,
-        Smooth: smooth,
+        Smooth: ((smooth is { } radius) ? new DocumentScalar(value: radius) : null),
         Group: 0,
         Rounding: rounding,
         Chamfer: chamfer,

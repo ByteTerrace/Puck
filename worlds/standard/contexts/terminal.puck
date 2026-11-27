@@ -126,11 +126,13 @@ function terminalRoute(radius = 3, fill = "#000000") = {
 
 // Pointer capture, a binding overlay row: while a seat's pointer rests on a pointer surface (a console's glass, a
 // Simulation screen), and until a press that landed there is released (the host's `pointer` context family), the left
-// mouse button (`tapSources`) is the surface's tap alone, so a drag on the surface scrolls it and never turns the camera.
-// A press that lands anywhere else stays the camera's drag, even when it crosses a surface. Everything else is the
+// mouse button (`tapSources`) is the surface's tap alone, so a drag on the surface scrolls it and never turns the camera,
+// and the wheel (`scrollSources`) is the surface's `scroll`, so it scrolls what the surface shows rather than the camera's
+// boom. A press that lands anywhere else stays the camera's drag, even when it crosses a surface. Everything else is the
 // resting page's (`restingPage`, which the pointer page inherits). `terminalPlay` lists it after the terminals' controls;
-// a world with pointer surfaces and no terminals lists it in its own `bindingOverlays`.
-function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = {
+// a world with pointer surfaces and no terminals lists it in its own `bindingOverlays`. A world whose surfaces read the
+// wheel makes `scroll` live in its `inputModes`.
+function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base", scrollSources = ["mouse.wheel"]) = {
   id: "pointer-capture"
   document {
     version: "puck.input.bindings.v1"
@@ -148,6 +150,7 @@ function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = 
           label: "Pointer"
           entries [
             { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
+            { channel: "scroll", id: "scroll", label: "Scroll", scale: 1, sources: scrollSources }
           ]
         }
       }
@@ -167,7 +170,8 @@ function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = 
 // while its pointer rests on the terminal's own glass; `restingPage` is the page pointer capture refines. `console` is
 // the terminals' console (terminal-console.puck's `terminalConsole`), or null for none; `consoleSources` open and close
 // it, and the console's own page closes it on `consoleCloseSources` too, runs its line on `consoleEnterSources` and
-// erases on `consoleEraseSources`.
+// erases on `consoleEraseSources`. `scrollSources` (the wheel) are the terminal's and pointer capture's `scroll`, which a
+// screen's rules read to scroll what it shows.
 template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near = 0, seats = 4, capacity = 16, tapSources = [
   "mouse.button1"
 ], leaveSources = [
@@ -178,7 +182,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
   "gamepad.buttonEast"
 ], restingPage = "base", console = null, consoleSources = ["keyboard.backtick"], consoleCloseSources = [], consoleEnterSources = [
   "keyboard.enter"
-], consoleEraseSources = ["keyboard.backspace"]) {
+], consoleEraseSources = ["keyboard.backspace"], scrollSources = ["mouse.wheel"]) {
   let count = length(terminals)
   let gated = map(terminals, terminal => ({ needs [] } with terminal))
 
@@ -358,6 +362,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
               entries: concat(
                 [
                   { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
+                  { channel: "scroll", id: "scroll", label: "Scroll", scale: 1, sources: scrollSources }
                   { channel: "interact", id: "interact", label: "Leave", scale: 1, sources: leaveSources }
                   { channel: "cancel", id: "cancel", label: "Back", scale: 1, sources: backSources }
                 ],
@@ -376,6 +381,6 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
         ]
       }
     }
-    pointerCapture(tapSources: tapSources, restingPage: restingPage)
+    pointerCapture(tapSources: tapSources, restingPage: restingPage, scrollSources: scrollSources)
   ]
 }

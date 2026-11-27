@@ -1,6 +1,6 @@
-namespace Puck.Hosting.Jobs;
+namespace Puck.Abstractions.Jobs;
 
-/// <summary>The work one fork of a <see cref="JobPool"/> runs: a fixed number of partitions, each a fixed range of
+/// <summary>The work one fork runs (<c>Puck.Hosting.Jobs.JobPool</c>, <see cref="PoolFork"/>): a fixed number of partitions, each a fixed range of
 /// elements, whose results do not depend on which thread runs a partition or in what order.</summary>
 public interface IJobPartitions {
     /// <summary>Runs one partition. Partitions of one fork run concurrently, so a partition writes only state it owns
