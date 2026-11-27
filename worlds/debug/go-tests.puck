@@ -2,13 +2,15 @@
 // Points use 19 * row + column. The centre is 180, neighbours 161, 179, 181 and 199.
 // The table fills a given accepted position one point per reading.
 // Every scenario but the opponent's own leaves both sides to the steps (goAiSide 0).
+// A seat sits down from the `go` spawn point, which go.puck derives from goTable, so it follows the table. A stone posed
+// by hand names world coordinates: point 180 lies under (44, 10.3), goTable's x and z, and the board's face is at y 9.905.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "go-tests"
 import "stopped-machines"
 
-// Seat 1 stands at Black's edge and sits down with the context button. The cursor starts on the centre; she steps it one
+// Seat 1 stands at Black's edge (the `go` spawn point) and sits down with the context button. The cursor starts on the centre; she steps it one
 // point up the board (+Z from Black's side) and one to the right (-X), plays with the pick button, and the cancel button
 // passes.
 test "a seated player steps the cursor, plays and passes" {
@@ -16,7 +18,7 @@ test "a seated player steps the cursor, plays and passes" {
     goAiSide = 0
   }
   when {
-    seat1: body.pose 56.5 9.25 29 0 0 0 0
+    seat1: body.pose spawn:go 0
     ticks 150
     seat1: body.press interact
     ticks 5
@@ -192,7 +194,7 @@ test "a stone stacked on an occupied point is returned even when the board proje
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 480
+    seat1: body.pose 44 10.05 10.3 0 0 0 480
     ticks 400
   }
   expect {
@@ -215,7 +217,7 @@ test "two stones of the accepted colour keep one point and return the duplicate"
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 479
+    seat1: body.pose 44 10.05 10.3 0 0 0 479
     ticks 400
   }
   expect {
@@ -239,7 +241,7 @@ test "a higher-ordinal wrong-colour stone does not replace or duplicate the acce
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 299
+    seat1: body.pose 44 10.05 10.3 0 0 0 299
     ticks 400
   }
   expect {
@@ -349,7 +351,7 @@ test "a reset drains its deterministic return queue" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.5 10 30.6 0 0 0 480
+    seat1: body.pose 44 10 10.3 0 0 0 480
     ticks 150
     seat1: world.state.cell.set goReset $value 1
     ticks 400

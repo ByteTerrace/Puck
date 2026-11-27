@@ -55,10 +55,11 @@ let patienceTableauZ = ((patienceTopRowZ - (2 * patienceCardHalfTall)) - 0.03)
 let patienceSurface = 0.002
 
 // Klondike's piles: zone 0 the stock (52 before a deal), 1 the waste, 2 to 8 the tableau, 10 to 13 the foundations (zone 9
-// unused); pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on. A pile's column, from the player's left.
+// unused); pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on, and kBase ends with the slot count. A
+// pile's column, from the player's left.
 let kCaps = [52, 24, 19, 19, 19, 19, 19, 19, 19, 0, 13, 13, 13, 13]
 let kBase = scan(kCaps)
-let kSlotCount = (kBase[13] + kCaps[13])
+let kSlotCount = kBase[14]
 let kColumn = [0, 1, 0, 1, 2, 3, 4, 5, 6, 0, 3, 4, 5, 6]
 let kTopRow = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]
 let kTopRowZones = [0, 1, -1, 10, 11, 12, 13]
@@ -80,7 +81,7 @@ let kReadCount = length(kReadTurns)
 // the cards wait while another game is shown.
 let fCaps = [1, 1, 1, 1, 13, 13, 13, 13, 19, 19, 19, 19, 19, 19, 19, 19]
 let fBase = map(scan(fCaps), base => kSlotCount + base)
-let fDeckBase = (fBase[15] + fCaps[15])
+let fDeckBase = fBase[16]
 let fSlotCount = (fDeckBase + 24)
 let fSlotX = map(range(0, 16), z => patienceCentreX + (3.5 - (z < 8 ? z : z - 8)) * patienceFreePitch)
 let patienceAwaySlot = fSlotCount
@@ -320,8 +321,8 @@ let patienceFields = [
 template patienceDisplayState(stations) {
   let count = length(stations)
 
-  table patienceSlotBase capacity(14) = kBase
-  table patienceFreeBase capacity(16) = fBase
+  table patienceSlotBase capacity(14) = slice(kBase, 0, 14)
+  table patienceFreeBase capacity(16) = slice(fBase, 0, 16)
   table patienceTopSlot capacity(14) = map(range(0, 14), z => z == 0 ? 23 : kCaps[z] - 1)
   table patienceTopZone capacity(7) = kTopRowZones
   table patienceLines capacity(auto) = patienceLineTexts

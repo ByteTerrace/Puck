@@ -1,9 +1,10 @@
 # Debug world Reversi table
 
 The debug world stands a Reversi (Othello) table in the gallery hall's board
-game room, the east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)),
-east of the chess table ([`chess.md`](chess.md)). The board is 8x8, its centre at
-(65, 9.905, 22.6) on a table 3.5 m by 1.7 m whose top is 0.8 m over the floor.
+game room on level 2 ([`shapes.md`](shapes.md#the-board-game-room)),
+east of the Go table ([`go.md`](go.md)). The board is 8x8, its centre at
+(51, 9.905, 10.3), over the table's placement (`reversiTable` in `reversi.puck`), on a
+table 3.5 m by 1.7 m whose top is 0.8 m over the floor.
 Black sits on the table's -Z side and White on its +Z side, and each has a tray
 of 32 discs at the end of the table on their right: Black's at -X, White's at
 +X. Every disc is black on one face and white on the other. [`reversi.puck`](reversi.puck)
@@ -60,9 +61,9 @@ tray. Seat 1 plays every side the computer does not (`reversiAiSide`).
 A cell's ordinal is 8 × row + column, the column along +X and the row along +Z,
 so cell 0 is the -X, -Z corner, at Black's right hand. The opening holds white
 on 27 and 36 and black on 28 and 35; Black's first legal moves are 19, 26, 37
-and 44. Cell (column, row) is centred at x = 64.475 + 0.15 × column,
-z = 22.075 + 0.15 × row. The discs are `reversiDisc0` to `reversiDisc63`, the
-first 32 in Black's tray; disc n is body 108 - n, below the cursor (body 109),
+and 44. Cell (column, row) is centred at x = 50.475 + 0.15 × column,
+z = 9.775 + 0.15 × row. The discs are `reversiDisc0` to `reversiDisc63`, the
+first 32 in Black's tray; disc n is body 118 - n, below the cursor (body 119),
 and seat 1 drives each of them.
 
 | To | Console line |
@@ -75,7 +76,7 @@ and seat 1 drives each of them.
 | The last move's bracket reach in each direction | `world.state reversiRay` |
 | The disc counts and the winner (1 Black, 2 White, 3 a draw) | `world.state reversiBlack`, `world.state reversiWhite`, `world.state reversiWinner` |
 | The opponent's search | `world.search` |
-| Frame the table from Black's side | `view.override camera look 65 11.2 20.6 65 9.9 22.6`, then `view.override camera auto` |
+| Frame the table from Black's side | `view.override camera look 51 11.2 8.3 51 9.9 10.3`, then `view.override camera auto` |
 
 ## The opponent
 

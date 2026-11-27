@@ -5,10 +5,10 @@ import "../standard/kits"
 import "shapes"
 import "gametable"
 
-// Physical Alchemy at the board room's north-east table on level 2 (gallery/gallery.puck): 31 element tokens, four starters (Air,
+// Physical Alchemy at a board room table on level 2 (gallery/gallery.puck): 31 element tokens, four starters (Air,
 // Earth, Fire, Water), a cauldron with two hand wells (left and right), and a lectern recipe-book screen showing
-// discoveries, open hints and the latest mix. The debug world imports this file whole. The table stands east of the Go
-// table, its workbench centred at (65, 9.905, 30.6) on level 2. alchemy.md beside this file says how to play, read the
+// discoveries, open hints and the latest mix. The debug world imports this file whole. The table stands east of the Reversi
+// table, its workbench centred over alchemyTable on level 2. alchemy.md beside this file says how to play, read the
 // book and reset the table.
 //
 // Each element is an ordinal in the Element enum: Nothing is 0, Air is 1, and House, the last, is 31. A recipe is an
