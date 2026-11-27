@@ -263,12 +263,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Names what keeps the meshes from being resident (<see cref="SdfWorldTables.MeshResidencyPending"/>),
     /// or <see langword="null"/> once resident. Read on the frame thread; never waits.</summary>
     public string? MeshResidencyPending => ((m_tables is { } tables) ? tables.MeshResidencyPending() : "its tables are not built");
-    /// <summary>Gets whether the residency's meshes are still arriving, and only frames that render one of its views
-    /// bring them: its bake owes the frame a mesh (<see cref="SdfMeshPathBake.Pending"/>), whose GPU sampling such a frame
-    /// dispatches, or its tables still owe the staged meshes' words or their upload
-    /// (<see cref="SdfWorldTables.MeshesArriving"/>), which land only after such a frame's upload. A frame that renders
-    /// none of its views still prepares the residency and may pack a frame, which moves what the background work binds,
-    /// so a residency nobody renders stops landing until one of its views renders again. A parked residency
+    /// <summary>Gets whether the residency's meshes are still arriving: its bake owes the frame a mesh
+    /// (<see cref="SdfMeshPathBake.Pending"/>), or its tables still owe the staged meshes' words or their upload
+    /// (<see cref="SdfWorldTables.MeshesArriving"/>). Both proceed only against an upload that binds the bake's program,
+    /// which a frame that renders one of its views stages, and which the presentation's minimum stages for a residency
+    /// nobody renders (<see cref="OwesPreparation"/>, <see cref="SdfWorldPasses.BeginFrame"/>). A parked residency
     /// (<see cref="IsParked"/>) has nothing arriving until a reader wakes it. Read on the frame thread; never
     /// waits.</summary>
     public bool MeshesArriving => (!m_parked && (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false)));
@@ -470,6 +469,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         m_disposed = true;
+        // The bake's groups end from here as the release lets them go, which is no bake finishing.
+        MeshPathBake.EndReports();
         if (m_deviceContext is { } device) {
             device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: () => ReleaseDeviceObjects(deviceLost: false)));
         } else {

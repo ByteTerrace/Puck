@@ -485,7 +485,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// (<see cref="SdfWorldResidency.OwesPreparation"/>): on a frame that rates views
     /// (<see cref="SdfUpdateRates.Views"/>, no locked tick, no converging capture, a host paced to a display) one
     /// residency, the one that has gone longest past the slowest tier's period without a capture, so the worlds nothing
-    /// shows cost a frame at most one capture; on any other frame every owed residency. Every other residency is
+    /// shows cost a frame at most one capture; on any other frame every owed residency. Each residency the minimum serves
+    /// is staged once the frame's packs are done (<see cref="ReadsPrepared"/>). Every other residency is
     /// prepared only for an instance the frame reads (<see cref="PrepareRead"/>), or when a recording or a new binding
     /// reaches it.</remarks>
     public void BeginFrame(in FrameContext context, JobPool? jobs = null) {
@@ -537,11 +538,13 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var waited = 0d;
         var held = 0;
 
+        m_minimumServed.Clear();
         foreach (var residency in m_residencies.Keys) {
             if (residency.IsReleased || ReferenceEquals(objA: residency, objB: m_host) || !residency.OwesPreparation) { continue; }
             if (!rated) {
                 SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Minimum);
                 _ = residency.Prepare(context: in context);
+                m_minimumServed.Add(item: residency);
                 continue;
             }
             held++;
@@ -557,6 +560,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             held--;
             SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Minimum);
             CaptureForPack(residency: due, context: in context);
+            m_minimumServed.Add(item: due);
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.MinimumHeld, amount: held);
         // The host's pack needs nothing the readers' rounds resolve: its screens' sources were published before the frame
@@ -577,7 +581,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // Parks at most one residency a frame (SdfWorldResidency.Park): of the residencies other than the host that hold
     // tables, the one no reader has asked for longest, once that is SdfWorldResidency.PressedParkAfter while the
     // device's pool stands past its limit (SdfResidencySelector.Excess, less what parks in the last ParkSettleSeconds gave
-    // back and the retirement has yet to dispose) or SdfWorldResidency.IdleParkSeconds otherwise. The pool's limit follows
+    // back and the retirement has yet to dispose) or SdfWorldResidency.IdleParkSeconds otherwise, when its meshes are no
+    // longer making their arrival (SdfWorldResidency.MeshesFirstArriving). The pool's limit follows
     // the system's budget for the process, so a world nobody looks at gives its fixed storage back before the system
     // moves memory a view reads out of the device. Runs after every residency began its frame and before any is
     // captured, so no residency it parks has begun a preparation.
@@ -602,6 +607,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         foreach (var residency in m_residencies.Keys) {
             if (residency.IsReleased || ReferenceEquals(objA: residency, objB: m_host) || (residency.Tables is null)) { continue; }
+
+            // A world still making its arrival is not parked for idleness alone: a park stops its bake (a parked residency
+            // owes no preparation), so the glance that comes for it would find holes. Pressure parks it all the same.
+            if (!pressed && residency.MeshesFirstArriving) { continue; }
 
             var unobserved = residency.UnobservedSeconds();
 
@@ -691,11 +700,32 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// frames may pack beside others (<see cref="SdfWorldResidency.PacksBeside"/>) pack as the partitions of one fork of
     /// the pool's frame class, one residency a partition, and the rest pack here in turn. A partition touches only its
     /// own residency (<see cref="SdfWorldResidency.RunPack"/>), so the residencies' packed state is the same whichever
-    /// thread ran each. Then stages one residency while the shared mesh region owes copies only an upload carries
-    /// (<see cref="StageOwedCopies"/>).</remarks>
+    /// thread ran each. Then stages every residency the frame's minimum served (<see cref="StageMinimum"/>), and one
+    /// residency while the shared mesh region owes copies only an upload carries (<see cref="StageOwedCopies"/>).</remarks>
     public void ReadsPrepared(in FrameContext context, JobPool? jobs) {
         if (m_packsPending.Count > 0) { PackPending(context: in context, jobs: jobs); }
+        StageMinimum(context: in context);
         StageOwedCopies(context: in context);
+    }
+
+    // The residencies BeginFrame's minimum served this frame (SdfWorldResidency.OwesPreparation), staged once the packs
+    // are done (StageMinimum).
+    private readonly List<SdfWorldResidency> m_minimumServed = [];
+
+    // Invariant: a residency whose meshes are arriving or whose lighting is settling gets background GPU turns whether or
+    // not any view renders it. Its bake samples and its probes trace only against an upload whose World set binds the
+    // program the bake meshes (SdfWorldTables.BindsBackgroundWork), and a pack alone moves what that set binds without
+    // uploading it, so a residency the minimum only packed (a routed scene seen through a sky or a portal, a world no
+    // view shows yet) never bound its work and never sampled. Enforced here, for every residency the minimum serves:
+    // each is staged (SdfWorldResidency.Stage, its upload submitted and its work pumped) after the packs and before any
+    // render is scheduled, so its upload reaches the queue ahead of every view of the frame, as the shared mesh region's
+    // owed copies require. Between minimums, each frame's upkeep (SdfWorldResidency.Upkeep) pumps the work against that
+    // upload while no pack has moved its binding. A render later in the frame finds the residency staged.
+    private void StageMinimum(in FrameContext context) {
+        foreach (var residency in m_minimumServed) {
+            if (residency is { IsReleased: false, IsParked: false }) { _ = residency.Stage(context: in context); }
+        }
+        m_minimumServed.Clear();
     }
     // Invariant: the copies the shared mesh region owes that only an upload's opening records (a probe scene's chunks and
     // root, a compaction's moves, a grown region's carry; SdfMeshRegionStore.OwesUploadCopies) reach the queue within a
