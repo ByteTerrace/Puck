@@ -81,6 +81,16 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         if (visible) { InterlockedOr(probeSet[index >> 5], bit); }
         else { InterlockedOr(probeCleared[index >> 5], bit); }
     }
+    // The emitting patches, a share of them a lane as the lights are shared, into the lane's local sums at the weight the
+    // combine divides by (the axis totals), so the combined local cube holds what they send the centre.
+    if (valid && !reuse) {
+        float3 emitted[6];
+        [unroll] for (uint clear = 0; clear < 6; clear++) { emitted[clear] = 0; }
+        sdfProbeEmitters(origin, slice * SDF_PROBE_GROUP_SIZE + lane, SDF_PROBE_RELIGHT_SLICES * SDF_PROBE_GROUP_SIZE, lane, emitted);
+        [unroll] for (uint axis = 0; axis < 6; axis++) {
+            probeLocal[axis * SDF_PROBE_GROUP_SIZE + lane] += emitted[axis] * sdfProbeLighting[9 + axis / 4][axis % 4];
+        }
+    }
     GroupMemoryBarrierWithGroupSync();
     uint count, stride;
     sdfProbeOrigins.GetDimensions(count, stride);

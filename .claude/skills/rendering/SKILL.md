@@ -1144,7 +1144,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   reduces a grid of the face's points through `sdfApplyPaints`
   (`shade/shade-paints.hlsli`, the paints' one implementation) times the
   material's emissive. The face's own material and paints shade as before.
-  A face on a stamp that rides a slot declares none yet.
+  A face lights where its surface is drawn: a face declared in a mesh
+  template's instances (`SdfScreenSurface.Instance`, a responding static row's
+  template, which `WorldRigidAssets` emits at the prototype's origin) lights
+  once for every copy that draws the template, carried by the copy's root
+  matrix (`SdfWorldResidency`'s `CollectEmitterFaces`), and every resident
+  emitter slot's rows are written from that list each settle, so a copy that
+  moves or swaps templates moves its light. A face on a stamp that rides a slot
+  (a body, an animated placement) declares none yet. An emitter face's material
+  emits nothing into the irradiance volume (`SdfMeshIrradianceScene.Emits`),
+  which every other emissive reaches as sampled patches ([mesh GI](references/mesh-gi.md)).
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no

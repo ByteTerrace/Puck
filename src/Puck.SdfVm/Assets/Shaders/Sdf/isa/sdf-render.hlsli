@@ -22,8 +22,9 @@
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS               58u
 #define SDF_PROBE_RELIGHT_INPUT_WORDS                309u
 #define SDF_PROBE_RELIGHT_HEADER_ROWS                155u
-#define SDF_PROBE_RELIGHT_MATERIAL_ROWS              2u
+#define SDF_PROBE_RELIGHT_MATERIAL_ROWS              1u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS                 4u
+#define SDF_PROBE_RELIGHT_EMITTER_ROWS               3u
 #define SDF_PROBE_SELECT_INPUT_WORDS                 8u
 #define SDF_PROBE_SELECT_HEADER_ROWS                 5u
 #define SDF_PROBE_CACHE_WORDS                        290u

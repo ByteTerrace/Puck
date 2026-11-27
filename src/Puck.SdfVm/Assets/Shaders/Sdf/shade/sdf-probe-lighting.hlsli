@@ -61,14 +61,49 @@ float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool re
             if (mode.w == 0) { varying += value; } else { local += value; }
         }
     }
-    if (!reuse && sources.y != 0) {
-        local += sdfProbeLighting[SDF_PROBE_RELIGHT_HEADER_ROWS + material * SDF_PROBE_RELIGHT_MATERIAL_ROWS + 1].xyz * gains.y;
-    }
+    // A hit's own emission adds nothing: every emitting triangle the scene traces is a patch the relight samples from the
+    // probe's centre (sdfProbeEmitters), which a ray meeting it would count again.
     if (sources.z != 0 && any(surface.xyz != 0)) {
         SdfMeshProbes probes = sdfMeshProbesAt(positionWorld, normal);
         if (probes.share > 0) { varying += surface.xyz * sdfMeshIndirect(probes, normal) * gains.z; }
         else { unanswered = surface.xyz * gains.z; }
     }
     return varying;
+}
+// The area an emitting patch shows along a unit direction leaving it, from its area-weighted normal sum and area
+// (`normalArea`): its flat part's projection plus a quarter of the area its normals cancel. KEEP IN SYNC with
+// SdfMeshEmitter.ProjectedArea.
+float sdfProbeEmitterArea(float4 normalArea, float3 direction) {
+    return max(0, dot(normalArea.xyz, direction)) + 0.25 * max(0, normalArea.w - length(normalArea.xyz));
+}
+// Adds to `light`, one value an axis (+X, -X, +Y, -Y, +Z, -Z) in the cube's units (the light a surface facing the axis
+// receives, over pi), what the emitting patches `first`, `first + stride`, ... after the lights send `origin`: each one
+// within its range that `origin` sees (probeClear toward it, so the solid holding it never hides it) lights it as a
+// Lambertian face of the area it shows toward it does, E = L * P * cos / (d^2 + P / pi), eased to zero at its range, the
+// cosine each axis's with the direction toward it. KEEP IN SYNC with SdfMeshIrradiance.AddEmitters.
+void sdfProbeEmitters(float3 origin, uint first, uint stride, uint lane, inout float3 light[6]) {
+    const float pi = 3.14159265358979;
+    float4 counts = sdfProbeLighting[0];
+    uint emitterBase = SDF_PROBE_RELIGHT_HEADER_ROWS + (uint)counts.x * SDF_PROBE_RELIGHT_MATERIAL_ROWS + (uint)(counts.y + counts.z) * SDF_PROBE_RELIGHT_LIGHT_ROWS;
+    uint emitters = (uint)sdfProbeLighting[SDF_PROBE_RELIGHT_EPOCH_ROW].w;
+    for (uint emitter = first; emitter < emitters; emitter += stride) {
+        uint row = emitterBase + emitter * SDF_PROBE_RELIGHT_EMITTER_ROWS;
+        // The patch's centroid and range (`centroid` is an HLSL interpolation keyword).
+        float4 at = sdfProbeLighting[row];
+        float3 toward = at.xyz - origin;
+        float distanceSquared = dot(toward, toward);
+        if (distanceSquared >= at.w * at.w) { continue; }
+        float distance = sqrt(distanceSquared);
+        if (!(distance > SDF_MESH_IRRADIANCE_LIGHT_BIAS)) { continue; }
+        float3 direction = toward / distance;
+        float shown = sdfProbeEmitterArea(sdfProbeLighting[row + 1], -direction);
+        if (!(shown > 0) || !probeClear(origin, direction, distance - SDF_MESH_IRRADIANCE_LIGHT_BIAS, lane, true)) { continue; }
+        float ratio = distance / at.w;
+        float window = saturate(1 - (ratio * ratio) * (ratio * ratio));
+        float3 value = sdfProbeLighting[row + 2].xyz * ((shown * (window * window)) / (pi * distanceSquared + shown));
+        [unroll] for (uint axis = 0; axis < 6; axis++) {
+            light[axis] += value * max(0, direction[axis / 2] * ((axis & 1) == 0 ? 1 : -1));
+        }
+    }
 }
 #endif

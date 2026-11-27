@@ -13,6 +13,9 @@ public sealed partial class SdfProgramBuilder {
         internal SdfSweepCurve[] Curves { get; init; } = [];
         internal SdfSampledBinding[] Samples { get; init; } = [];
         internal int First { get; init; }
+        // The builder's instance count at the emission's mark, by which an emitter face's instance
+        // (SdfScreenSurface.Instance) is relocated as the instructions are by First.
+        internal int FirstInstance { get; init; }
         internal (int InstructionIndex, int ReachPerUnit, int RawValue)? Fold { get; init; }
         // The atlas pixels the emission's glyphs sample (SdfProgram.GlyphAtlas), default when it holds no glyph.
         internal Puck.Assets.AssetContentHash GlyphAtlas { get; init; }
@@ -59,6 +62,7 @@ public sealed partial class SdfProgramBuilder {
 
         return new Emission {
             First = mark.Instructions,
+            FirstInstance = mark.Instances,
             GlyphAtlas = (glyphs ? m_glyphAtlas : default),
             GlyphStroke = (glyphs ? m_glyphStroke : float.PositiveInfinity),
             Instructions = instructions,
@@ -91,6 +95,7 @@ public sealed partial class SdfProgramBuilder {
         if (emission.GlyphAtlas != default) { SampleGlyphAtlas(atlas: emission.GlyphAtlas); }
         m_glyphStroke = MathF.Min(x: m_glyphStroke, y: emission.GlyphStroke);
         var offset = (m_instructions.Count - emission.First);
+        var instanceBase = m_instances.Count;
 
         m_instructions.AddRange(collection: emission.Instructions);
         foreach (var instance in emission.Instances) {
@@ -109,7 +114,7 @@ public sealed partial class SdfProgramBuilder {
             m_sampledBindings.Add(item: sample with { InstructionIndex = (sample.InstructionIndex + offset) });
         }
         foreach (var face in emission.EmitterFaces) {
-            m_emitterFaces.Add(item: face with { ScreenIndex = m_emitterFaces.Count });
+            m_emitterFaces.Add(item: face with { ScreenIndex = m_emitterFaces.Count, Instance = (face.Instance - emission.FirstInstance + instanceBase) });
         }
         foreach (var window in emission.Windows) {
             m_materialRecolorWindows.Add(item: (window.Op, window.Material, window.MaxDelta, (window.Scoped ? m_materialScopes[^1] : null)));

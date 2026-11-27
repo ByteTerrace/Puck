@@ -298,9 +298,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public int LiveProgramInstances { get; private set; }
     public int LiveProgramMaterials => (m_frame?.Program.MaterialCount ?? 0);
     public int LiveDynamicTransforms => (m_frame?.DynamicTransforms.Count ?? 0);
-    /// <summary>Gets the emitter faces the latest captured frame's program declares
-    /// (<see cref="SdfAppearance.EmitterFaces"/>), or 0 before the first capture.</summary>
-    public int LiveEmitterFaces => (m_frame?.Program.Appearance.EmitterFaces.Count ?? 0);
+    /// <summary>Gets the emitter faces the latest bound frame lights: each face its program declares
+    /// (<see cref="SdfAppearance.EmitterFaces"/>) outside a mesh template, and each one inside a template once for every
+    /// copy that draws it; 0 before the first bind.</summary>
+    public int LiveEmitterFaces => m_litEmitterFaces.Count;
     /// <summary>Gets the screen slots the tables hold now (<see cref="SdfWorldTables.ResidentScreens"/>), emitter faces
     /// among them (<see cref="SdfWorldTables.EmitterScreens"/>), and the screens wanted past the slots
     /// (<see cref="SdfWorldTables.DegradedScreens"/>); zeros while no tables stand.</summary>
@@ -1597,7 +1598,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             foreach (var (screen, provider) in screenDecals) { emitterBase = Math.Max(val1: emitterBase, val2: (screen + 1)); NoteDecal(screen: screen, decal: provider()); }
         }
         m_emitterBase = emitterBase;
-        for (var face = 0; (face < appearance.EmitterFaces.Count); face++) {
+        CollectEmitterFaces(appearance: appearance, emitterBase: emitterBase, frame: frame);
+        for (var face = 0; (face < m_litEmitterFaces.Count); face++) {
             if (m_wantedSeen.Add(item: (emitterBase + face))) { m_wantedScreens.Add(item: (emitterBase + face)); }
         }
         if (m_wantedScreens.Count > SdfWorldTables.MaxScreenSurfaces) { OrderByNearness(frame: frame); }
@@ -1606,7 +1608,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 Array.Resize(array: ref m_boundScreenSources, newSize: (int)Math.Min(val1: SdfProgramBuilder.MaxScreenIdentities, val2: (2L * (screen + 1))));
             }
         }
-        tables.SettleScreenSlots(emitterBase: emitterBase, wanted: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_wantedScreens));
+        tables.SettleScreenSlots(emitterBase: emitterBase, emitterFaces: m_litEmitterFaces, wanted: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_wantedScreens));
         if (m_screenSources is not { } bound) {
             return;
         }
@@ -1653,6 +1655,52 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     // The identity this frame's first emitter face takes (BindScreens), past every screen the residency binds.
     private int m_emitterBase = int.MaxValue;
+    // The emitter faces this frame lights, emitter face k under identity m_emitterBase + k (CollectEmitterFaces).
+    private readonly List<SdfScreenSurface> m_litEmitterFaces = [];
+
+    // Collects the emitter faces this frame lights. A face lights where its surface is drawn: one declared outside every
+    // mesh template (SdfFrame.MeshTemplateRanges) where it was declared, and one declared in a template's instances once
+    // for every copy that draws that template, carried by the copy's root matrix, since a template draws only through
+    // its copies. A copy disclosed to one audience brings none, as it brings no light or medium: the presentation's own
+    // copy of the row lights every view. Identities past SdfProgramBuilder.MaxScreenIdentities are left out.
+    private void CollectEmitterFaces(SdfAppearance appearance, int emitterBase, SdfFrame frame) {
+        m_litEmitterFaces.Clear();
+
+        var faces = appearance.EmitterFaces;
+
+        if (faces.Count == 0) { return; }
+
+        var ranges = frame.MeshTemplateRanges;
+        var copies = frame.MeshInstances;
+        var room = (SdfProgramBuilder.MaxScreenIdentities - (long)emitterBase);
+
+        for (var index = 0; (index < faces.Count); index++) {
+            var face = faces[index];
+
+            if (!InTemplate(instance: face.Instance, ranges: ranges)) {
+                AddLitFace(face: face, room: room);
+                continue;
+            }
+            for (var copy = 0; (copy < copies.Count); copy++) {
+                var instance = copies[copy];
+
+                if ((instance.TemplateRange is { } range) && Holds(instance: face.Instance, range: range) && (instance.Audience <= SdfMeshAudience.Own)) {
+                    AddLitFace(face: face.CarriedBy(objectToWorld: instance.Matrix), room: room);
+                }
+            }
+        }
+
+        static bool InTemplate(int instance, IReadOnlyList<SdfMeshTemplateRange> ranges) {
+            for (var index = 0; (index < ranges.Count); index++) {
+                if (Holds(instance: instance, range: ranges[index])) { return true; }
+            }
+            return false;
+        }
+        static bool Holds(int instance, SdfMeshTemplateRange range) => ((instance >= range.FirstInstance) && (instance < (range.FirstInstance + range.InstanceCount)));
+    }
+    private void AddLitFace(SdfScreenSurface face, long room) {
+        if (m_litEmitterFaces.Count < room) { m_litEmitterFaces.Add(item: face with { ScreenIndex = m_litEmitterFaces.Count }); }
+    }
     // Holds a screen's glyph grid for this frame, which makes the screen resident while it has one.
     private void NoteDecal(int screen, SdfScreenDecalFrame? decal) {
         m_screenDecalFrames.Add(item: (screen, decal));
@@ -1669,8 +1717,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         for (var index = 0; (index < count); index++) {
             var screen = m_wantedScreens[index];
             var emitter = (screen - m_emitterBase);
-            var origin = (((emitter >= 0) && (emitter < frame.Program.Appearance.EmitterFaces.Count))
-                ? frame.Program.Appearance.EmitterFaces[emitter].Origin
+            var origin = (((emitter >= 0) && (emitter < m_litEmitterFaces.Count))
+                ? m_litEmitterFaces[emitter].Origin
                 : ((m_screenSurfaceTransforms.TryGetValue(key: screen, value: out var provider) && (provider() is { } transform))
                 ? transform.Origin
                 : (frame.Program.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface) ? surface.Origin : new Vector3(value: float.PositiveInfinity))));

@@ -34,6 +34,10 @@ public sealed partial class SdfWorldTables {
     // is screen identity m_emitterBase + k (SettleScreenSlots).
     private UInt128 m_screenEmitters;
     private int m_emitterBase = int.MaxValue;
+    // The emitter faces the latest settle was given, emitter face k under identity m_emitterBase + k: the faces the frame
+    // lights where their surfaces are drawn (SdfWorldResidency's CollectEmitterFaces), held by reference until the next
+    // settle.
+    private IReadOnlyList<SdfScreenSurface> m_emitterFaces = [];
 
     /// <summary>Gets the slots resident screens hold, a bit a slot (<see cref="BitWords"/>): every per-frame walk over
     /// screens visits these members.</summary>
@@ -86,14 +90,17 @@ public sealed partial class SdfWorldTables {
     /// past the slots holds none and shades as a screen with no source (<see cref="DegradedScreens"/>): no screen is ever
     /// refused for capacity.</summary>
     /// <param name="wanted">The resident screens' identities, most wanted first, each once.</param>
-    /// <param name="emitterBase">The identity the live program's first emitter face
-    /// (<see cref="SdfAppearance.EmitterFaces"/>) takes, past every screen the residency binds: an identity from it up is
-    /// emitter face (identity - <paramref name="emitterBase"/>), whose slot lights from its material. A base that moves
-    /// releases every slot an identity past either base holds first, so no slot keeps a surface its new holder does not
-    /// declare.</param>
+    /// <param name="emitterBase">The identity the first of <paramref name="emitterFaces"/> takes, past every screen the
+    /// residency binds: an identity from it up is emitter face (identity - <paramref name="emitterBase"/>), whose slot
+    /// lights from its material. A base that moves releases every slot an identity past either base holds first, so no
+    /// slot keeps a surface its new holder does not declare.</param>
+    /// <param name="emitterFaces">The emitter faces the frame lights, in identity order from
+    /// <paramref name="emitterBase"/>, each in world space; held by reference until the next settle. Every resident
+    /// emitter slot's surface and state rows are written from it, so a face whose copy moved moves with it.</param>
     /// <exception cref="ArgumentOutOfRangeException">An identity is negative or past
     /// <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
-    public void SettleScreenSlots(ReadOnlySpan<int> wanted, int emitterBase = int.MaxValue) {
+    public void SettleScreenSlots(ReadOnlySpan<int> wanted, int emitterBase = int.MaxValue, IReadOnlyList<SdfScreenSurface>? emitterFaces = null) {
+        m_emitterFaces = (emitterFaces ?? []);
         var held = wanted[..Math.Min(val1: wanted.Length, val2: MaxScreenSurfaces)];
         var stamp = ++m_screenSettles;
         var highest = -1;
@@ -120,6 +127,8 @@ public sealed partial class SdfWorldTables {
         foreach (var screen in held) {
             if (m_slotOfScreen[screen] == 0) { ClaimScreenSlot(screen: screen); }
         }
+        // A kept emitter slot takes its face's current pose and material: the region owes only the words that differ.
+        foreach (var slot in BitWords.Members(mask: m_screenEmitters)) { WriteDeclaredSurface(slot: slot, screen: m_screenOfSlot[slot]); }
         DegradedScreens = (wanted.Length - held.Length);
         SdfCadenceWork.ProcessWork.Add(kind: SdfCadenceWork.ScreensResident, amount: held.Length);
         SdfCadenceWork.ProcessWork.Add(kind: SdfCadenceWork.ScreensDegraded, amount: DegradedScreens);
@@ -158,15 +167,15 @@ public sealed partial class SdfWorldTables {
     }
     // Writes a slot's surface row from the live program's declaration of its screen; a screen the program does not
     // declare leaves the row as it stands, and a surface transform patches it each frame it moves (SetScreenSurface). An
-    // emitter face's identity (from m_emitterBase) writes its face and the state its reduction reads.
+    // emitter face's identity (from m_emitterBase) writes the face the settle was given and the state its reduction reads.
     private void WriteDeclaredSurface(int slot, int screen) {
         if (m_liveProgram is null) {
             return;
         }
         var appearance = m_liveProgram.Appearance;
 
-        if ((screen >= m_emitterBase) && ((screen - m_emitterBase) < appearance.EmitterFaces.Count)) {
-            var face = appearance.EmitterFaces[(screen - m_emitterBase)];
+        if ((screen >= m_emitterBase) && ((screen - m_emitterBase) < m_emitterFaces.Count) && (m_emitterFaces[(screen - m_emitterBase)].EmitterMaterial < appearance.Materials.Count)) {
+            var face = m_emitterFaces[(screen - m_emitterBase)];
 
             WriteSurfaceRow(halfHeight: face.HalfHeight, halfWidth: face.HalfWidth, origin: face.Origin, right: face.Right, slot: slot, up: face.Up);
             WriteEmitterState(slot: slot, material: face.EmitterMaterial, emissive: appearance.Materials[face.EmitterMaterial].Emissive, face: SdfScreenFace.Emitter);
