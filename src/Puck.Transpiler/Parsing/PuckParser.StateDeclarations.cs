@@ -120,28 +120,6 @@ public static partial class PuckParser {
         }
         throw CreateException(context: context, message: message);
     }
-    // `table`/`slot` open a declaration only when a row name (and optional [size]) follows on the same line, so an
-    // ordinary `table: ...` or `slot: ...` property — always spelled with the colon immediately after the name, no
-    // space and no second name in between — still parses as it always has. A row declaration's name may be an
-    // interpolation (`interpolated`), which no property spells either.
-    private static bool TryMatchDeclarationKeyword(ParseContext context, string keyword, bool interpolated = false) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (
-            TryMatchKeyword(context: context, keyword: keyword) &&
-            SkipSpacesOnLine(context: context) &&
-            TryReadName(admitted: (interpolated ? (NameForms.Identifier | NameForms.Interpolated) : NameForms.Identifier), context: context, spelling: out _, text: out _)
-        ) {
-            cursor.ResetPosition(position: saved);
-
-            return TryMatchKeyword(context: context, keyword: keyword);
-        }
-
-        cursor.ResetPosition(position: saved);
-
-        return false;
-    }
     // Skips bracketed span on the current line.
     private static bool TrySkipBracketedSpanOnLine(ParseContext context) {
         var cursor = context.Scanner.Cursor;
@@ -306,24 +284,17 @@ public static partial class PuckParser {
     }
     // A table's or grid's cell body after its opening brace, through its closing one: cell entries, and the compile-time
     // `let`, `for` and `if` that produce more of them, each loop or branch body read by this same reader. A cell keyed by
-    // one of those words (`for = 1`) is still a cell, since a statement never follows its keyword with '='.
-    private static List<StatementNode> ParseCellBody(ParseContext context, DiagnosticBag? diagnostics, string keyword, IDocumentVocabulary? vocabulary, string closing) {
-        var cursor = context.Scanner.Cursor;
-        var statements = new List<StatementNode>();
-
-        SkipWhiteSpace(context: context);
-        while (!cursor.Eof && (cursor.Current != '}')) {
-            statements.Add(item: ParseCellBodyStatement(context: context, diagnostics: diagnostics, keyword: keyword, vocabulary: vocabulary));
-            ConsumeSeparator(context: context);
-            SkipWhiteSpace(context: context);
-        }
-
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: $"Expected '}}' closing {closing}");
-        }
-
-        return statements;
-    }
+    // one of those words (`for = 1`) is still a cell, since a statement never follows its keyword with '='
+    // (TryMatchStatementKeyword).
+    private static List<StatementNode> ParseCellBody(ParseContext context, DiagnosticBag? diagnostics, string keyword, IDocumentVocabulary? vocabulary, string closing) =>
+        ParseBracedBody(
+            body: (inner, bag) => ParseCellBodyStatement(context: inner, diagnostics: bag, keyword: keyword, vocabulary: vocabulary),
+            closing: closing,
+            context: context,
+            diagnostics: diagnostics,
+            schema: null,
+            vocabulary: vocabulary
+        );
     private static StatementNode ParseCellBodyStatement(ParseContext context, DiagnosticBag? diagnostics, string keyword, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
 
@@ -335,41 +306,19 @@ public static partial class PuckParser {
 
         StatementNode? Body(ParseContext inner, DiagnosticBag? bag) => ParseCellBodyStatement(context: inner, diagnostics: bag, keyword: keyword, vocabulary: vocabulary);
 
-        if (TryMatchCellBodyKeyword(context: context, keyword: "let")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "let")) {
             cursor.ResetPosition(position: before);
 
             return ParseStatement(context: context, diagnostics: diagnostics, vocabulary: vocabulary);
         }
-        if (TryMatchCellBodyKeyword(context: context, keyword: "for")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "for")) {
             return ParseForStatement(body: Body, col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
-        if (TryMatchCellBodyKeyword(context: context, keyword: "if")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "if")) {
             return ParseConditionalStatement(body: Body, col: col, context: context, diagnostics: diagnostics, line: line, schema: null, startOffset: startOffset, vocabulary: vocabulary);
         }
 
         return ParseStateCellEntry(context: context, diagnostics: diagnostics, keyword: keyword, vocabulary: vocabulary);
-    }
-    private static bool TryMatchCellBodyKeyword(ParseContext context, string keyword) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (!TryMatchStatementKeyword(context: context, keyword: keyword)) {
-            return false;
-        }
-
-        var buffer = context.Scanner.Buffer;
-        var probe = cursor.Offset;
-
-        while ((probe < buffer.Length) && (buffer[probe] is ' ' or '\t')) {
-            probe++;
-        }
-        if ((probe < buffer.Length) && (buffer[probe] == '=')) {
-            cursor.ResetPosition(position: saved);
-
-            return false;
-        }
-
-        return true;
     }
     // A family's bracket is either a bare count -- [8], today's spelling -- or a member list: comma-separated index
     // ranges ([0, 2..12], so a family may have gaps) and quoted member row names (["PileA", "PileB"]).
@@ -503,7 +452,7 @@ public static partial class PuckParser {
         return new StateSlotDeclarationNode(Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, MemberIndex: memberIndex, Modifiers: modifiers, Name: name, NameExpression: nameExpression, Offset: startOffset, Value: value) { EnumSpan = enumSpan };
     }
     // `pile` opens a declaration only when a row name and the bare keyword 'of' follow on the same line, mirroring
-    // `TryMatchDeclarationKeyword`'s own guard — an ordinary `pile: ...` property still parses as it always has.
+    // `TryMatchKeywordFollowedByName`'s guard — an ordinary `pile: ...` property still parses as it always has.
     private static bool TryMatchPileKeyword(ParseContext context) {
         var cursor = context.Scanner.Cursor;
         var saved = cursor.Position;

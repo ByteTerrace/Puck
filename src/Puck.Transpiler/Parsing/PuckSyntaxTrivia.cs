@@ -886,10 +886,12 @@ public static class PuckSyntaxTrivia {
                         Value = VisitExpression(expression: cell.Value),
                     });
                 case StateTableDeclarationNode table: {
-                        var (cells, inner, header) = Cells(
-                            cells: table.Cells,
+                        var (cells, inner, header) = Braced(
+                            headerFrom: table.Offset,
                             limit: ContentEnd(node: table),
-                            openFrom: table.Offset
+                            openFrom: table.Offset,
+                            opener: '{',
+                            statements: table.Cells
                         );
 
                         return (table with {
@@ -903,10 +905,12 @@ public static class PuckSyntaxTrivia {
                     }
                 case StateGridDeclarationNode grid: {
                         var (cells, inner, header) = (grid.HasBody
-                            ? Cells(
-                                cells: grid.Cells,
+                            ? Braced(
+                                headerFrom: grid.Offset,
                                 limit: ContentEnd(node: grid),
-                                openFrom: grid.Offset
+                                openFrom: grid.Offset,
+                                opener: '{',
+                                statements: grid.Cells
                             )
                             : (grid.Cells, ((IReadOnlyList<TriviaPiece>)[]), ((IReadOnlyList<TriviaPiece>)[])));
 
@@ -924,30 +928,6 @@ public static class PuckSyntaxTrivia {
             }
         }
 
-        private (IReadOnlyList<StatementNode> Cells, IReadOnlyList<TriviaPiece> Inner, IReadOnlyList<TriviaPiece> Header) Cells(IReadOnlyList<StatementNode> cells, int openFrom, int limit) {
-            var open = FindNext(
-                from: openFrom,
-                limit: limit,
-                target: '{'
-            );
-            var close = MatchDelimiter(open: open);
-
-            if ((open < 0) || (close < 0)) {
-                return (cells, [], []);
-            }
-
-            var (entries, inner) = List(
-                bodyEnd: close,
-                bodyStart: (open + 1),
-                items: cells,
-                visit: VisitStatement
-            );
-
-            return (entries, inner, Header(
-                from: openFrom,
-                open: open
-            ));
-        }
         private StateModifierNode VisitModifier(StateModifierNode modifier) =>
             (modifier with { Arguments = VisitArguments(arguments: modifier.Arguments, limit: ContentEnd(node: modifier), openFrom: modifier.Offset) });
         private IReadOnlyList<StateModifierNode> VisitModifiers(IReadOnlyList<StateModifierNode> modifiers) => [.. modifiers.Select(selector: VisitModifier)];

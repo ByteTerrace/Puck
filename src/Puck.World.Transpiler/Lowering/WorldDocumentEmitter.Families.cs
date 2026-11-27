@@ -312,16 +312,9 @@ public static partial class WorldDocumentEmitter {
                 memberScope = scope.WithLocals(lambdaLocals: locals);
             }
 
-            yield return (MemberDeclaration(declaration: declaration, name: registered.MemberNames[member]), memberScope);
+            yield return (DocumentLowering.NamedDeclaration(member: true, name: registered.MemberNames[member], statement: declaration), memberScope);
         }
     }
-    private static StatementNode MemberDeclaration(StatementNode declaration, string name) => (declaration switch {
-        StateTableDeclarationNode table => (table with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
-        StateSlotDeclarationNode slot => (slot with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
-        StatePileDeclarationNode pile => (pile with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
-        StateGridDeclarationNode grid => (grid with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
-        _ => declaration,
-    });
 
     // A row position a rule resolves live rather than by name: `$zones[i]`, or `<family>[i]`. The head is the whole
     // bracketed spelling and the remainder, if any, is the cell key inside the selected row.

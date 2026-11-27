@@ -1532,7 +1532,7 @@ public static partial class DocumentLowering {
             });
 
             return (((declared.Length > 0) && scope.TryLowerBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
-                ? Named(name: renamed, statement: statement)
+                ? NamedDeclaration(name: renamed, statement: statement)
                 : statement
             );
         }

@@ -797,10 +797,13 @@ public static partial class PuckParser {
             return ParseRecordDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, keyword: "pool")) {
+        // A row or pool declaration opens only when its name follows the keyword on the same line, so an ordinary
+        // `table: ...`, `slot: ...` or `pool: ...` property, its colon right after the word, still parses as a property.
+        // A row declaration's name may be an interpolation, which no property spells either.
+        if (TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "pool")) {
             return ParseStatePoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
         }
-        if (TryMatchDeclarationKeyword(context: context, keyword: "pairPool")) {
+        if (TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "pairPool")) {
             return ParseStatePairPoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
         }
 
@@ -828,11 +831,11 @@ public static partial class PuckParser {
             return ParseRuleBlock(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, interpolated: true, keyword: "table")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "table")) {
             return ParseStateTableDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, interpolated: true, keyword: "slot")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "slot")) {
             return ParseStateSlotDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
@@ -840,7 +843,7 @@ public static partial class PuckParser {
             return ParseStatePileDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
-        if (TryMatchDeclarationKeyword(context: context, interpolated: true, keyword: "grid")) {
+        if (TryMatchKeywordFollowedByName(admitted: (NameForms.Identifier | NameForms.Interpolated), context: context, keyword: "grid")) {
             return ParseStateGridDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset, vocabulary: vocabulary);
         }
 
@@ -1927,7 +1930,8 @@ public static partial class PuckParser {
         while ((probe < buffer.Length) && (buffer[probe] is ' ' or '\t')) {
             probe++;
         }
-        if ((probe < buffer.Length) && (buffer[probe] is ':' or '{' or '[')) {
+        // A keyword followed by ':', '{', '[' or a lone '=' is a member named by the word, never the statement.
+        if ((probe < buffer.Length) && ((buffer[probe] is ':' or '{' or '[') || ((buffer[probe] == '=') && (((probe + 1) >= buffer.Length) || (buffer[(probe + 1)] != '='))))) {
             cursor.ResetPosition(position: saved);
 
             return false;

@@ -34,14 +34,28 @@ public static partial class DocumentLowering {
 
         var name = ComputedText(expression: expression, scope: scope, what: "A row declaration's name");
 
-        return Named(name: name, statement: statement);
+        return NamedDeclaration(name: name, statement: statement);
     }
-    // The declaration renamed, its computed name spent.
-    private static StatementNode Named(StatementNode statement, string name) => (statement switch {
-        StateTableDeclarationNode table => (table with { Name = name, NameExpression = null }),
-        StateSlotDeclarationNode slot => (slot with { Name = name, NameExpression = null }),
-        StatePileDeclarationNode pile => (pile with { Name = name, NameExpression = null }),
-        StateGridDeclarationNode grid => (grid with { Name = name, NameExpression = null }),
+    /// <summary>Returns a row declaration under <paramref name="name"/>, its computed name spent; a family member's
+    /// declaration also drops the family bracket and index binder it was declared with, so it lowers as one row.</summary>
+    /// <param name="statement">The <c>table</c>, <c>slot</c>, <c>pile</c> or <c>grid</c> declaration; any other statement
+    /// is returned as it is.</param>
+    /// <param name="name">The row name the declaration takes.</param>
+    /// <param name="member">Whether the declaration becomes one member of the family it declares.</param>
+    /// <returns>The renamed declaration.</returns>
+    public static StatementNode NamedDeclaration(StatementNode statement, string name, bool member = false) => (statement switch {
+        StateTableDeclarationNode table => (member
+            ? (table with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name, NameExpression = null })
+            : (table with { Name = name, NameExpression = null })),
+        StateSlotDeclarationNode slot => (member
+            ? (slot with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name, NameExpression = null })
+            : (slot with { Name = name, NameExpression = null })),
+        StatePileDeclarationNode pile => (member
+            ? (pile with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name, NameExpression = null })
+            : (pile with { Name = name, NameExpression = null })),
+        StateGridDeclarationNode grid => (member
+            ? (grid with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name, NameExpression = null })
+            : (grid with { Name = name, NameExpression = null })),
         _ => statement,
     });
     /// <summary>Flattens a <c>table</c>'s or <c>grid</c>'s cell body into its cell entries, each with its key written
