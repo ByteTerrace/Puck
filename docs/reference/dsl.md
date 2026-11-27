@@ -561,7 +561,8 @@ second way.
 `name(list, item => term)` (`first(list, item => condition, otherwise)` or
 `first(list, item => condition, item => value, otherwise)`). `ListFolds` (`Lowering/ListFolds.cs`) is the one
 description of the expression each fold stands for: `sum` is `t0 + t1 + …`, `any` is `t0 or t1 or …`, `first` the
-choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values;
+choice chain ending in `otherwise`, and so on. A document value evaluates that expression over the elements' values
+one step at a time, so a fold over a list of any length gives what the expression written out gives;
 in a rule, where the body may read state, the operand binder writes it out with each element in place of the binder,
 so the lowered rule is the one an author would paste by hand and is priced the same
 ([the rule language's side](state/expressions.md#fold-over-a-compile-time-list)):
@@ -570,6 +571,10 @@ so the lowered rule is the one an author would paste by hand and is priced the s
 let total = sum(range(1, 5), k => k * k)                                        // 30, at compile time
 freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)  // four reads, in a rule
 ```
+
+Each step of a rule's chain folds what constants decide as it is written out, so a run of constants costs one literal.
+A fold whose chain still needs more instructions than one expression holds (`RuleCapacity.MaxExpressionTokens`) is refused at the fold, by name; fold
+part of the list into each of several rule locals instead.
 
 The lambda is what makes a call a list fold: `any(array)` and `sum(array)` are [the list library's](#the-list-library)
 own, `minimum(a, b)` stays the scalar, a gate's `all [...]` stays its

@@ -33,7 +33,7 @@ public static partial class WorldDocumentEmitter {
         var binder = new OperandBinder(scope: scope);
         var inlined = binder.Inline(node: syntax, operand: operand);
         var expanded = binder.Expand(node: inlined, operand: operand);
-        var folded = binder.Fold(node: expanded, operand: operand);
+        var folded = binder.RefuseOverflow(node: binder.Fold(node: expanded, operand: operand), operand: operand);
 
         return (ReferenceEquals(objA: folded, objB: syntax)
             ? operand
@@ -196,24 +196,28 @@ public static partial class WorldDocumentEmitter {
                         var condition = Fold(node: ternary.Condition, operand: operand);
                         var whenTrue = Fold(node: ternary.WhenTrue, operand: operand);
                         var whenFalse = Fold(node: ternary.WhenFalse, operand: operand);
-                        var folded = ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
-                            ? ternary
-                            : new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
 
-                        // A choice evaluates both arms, so a whole constant condition chooses its arm only when the other
-                        // arm is a number every kind holds, which can neither fault nor be absent, and the chosen arm is
-                        // not a literal, whose kind a literal beside it would decide; otherwise it folds only when all
-                        // three parts do.
-                        if ((condition is Syntax.Literal { Value: { Scale: 0 } test }) &&
-                            (((test != 0m) ? whenTrue : whenFalse) is not (Syntax.Literal or Syntax.SourceString) and var arm) &&
-                            (((test != 0m) ? whenFalse : whenTrue) is Syntax.Literal { Value: var other }) && Puck.State.NumericLiteral.TryToFixed(result: out _, value: other)) {
-                            return arm;
-                        }
-                        return ((((condition, whenTrue, whenFalse) is (Syntax.Literal, Syntax.Literal, Syntax.Literal)) && (FoldKindFree(node: folded) is { } chosen)) ? chosen : folded);
+                        return FoldChoice(condition: condition, whenFalse: whenFalse, whenTrue: whenTrue, written: ternary);
                     }
                 default:
                     return node;
             }
+        }
+        // A choice over parts already folded, reusing the written node when no part changed. A choice evaluates both
+        // arms, so a whole constant condition chooses its arm only when the other arm is a number every kind holds,
+        // which can neither fault nor be absent, and the chosen arm is not a literal, whose kind a literal beside it
+        // would decide; otherwise it folds only when all three parts do.
+        internal static Syntax.SyntaxNode FoldChoice(Syntax.SyntaxNode condition, Syntax.SyntaxNode whenTrue, Syntax.SyntaxNode whenFalse, Syntax.Ternary? written = null) {
+            var folded = (((written is not null) && ReferenceEquals(objA: condition, objB: written.Condition) && ReferenceEquals(objA: whenTrue, objB: written.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: written.WhenFalse))
+                ? written
+                : new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
+
+            if ((condition is Syntax.Literal { Value: { Scale: 0 } test }) &&
+                (((test != 0m) ? whenTrue : whenFalse) is not (Syntax.Literal or Syntax.SourceString) and var arm) &&
+                (((test != 0m) ? whenFalse : whenTrue) is Syntax.Literal { Value: var other }) && Puck.State.NumericLiteral.TryToFixed(result: out _, value: other)) {
+                return arm;
+            }
+            return ((((condition, whenTrue, whenFalse) is (Syntax.Literal, Syntax.Literal, Syntax.Literal)) && (FoldKindFree(node: folded) is { } chosen)) ? chosen : folded);
         }
 
         // The number a bare name stands for at compile time, resolved in WriteName's order: a runtime binder, a

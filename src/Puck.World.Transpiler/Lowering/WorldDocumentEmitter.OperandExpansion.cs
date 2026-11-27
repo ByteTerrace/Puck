@@ -61,22 +61,60 @@ public static partial class WorldDocumentEmitter {
                 return new Syntax.Literal(Value: 0m);
             }
             scope.Budget.Collection(count: items.Count, span: operand.Span);
-            var terms = new Syntax.SyntaxNode[items.Count];
-            var values = (first ? new Syntax.SyntaxNode[items.Count] : null);
+            var terms = new FoldTerm[items.Count];
+            var values = (first ? new FoldTerm[items.Count] : null);
 
             for (var index = 0; (index < items.Count); index++) {
-                terms[index] = Expand(node: BindName(name: term.Binder, node: term.Body, operand: operand, value: items[index]), operand: operand);
+                terms[index] = Term(written: Expand(node: BindName(name: term.Binder, node: term.Body, operand: operand, value: items[index]), operand: operand));
                 if (values is not null) {
-                    values[index] = Expand(node: ((value is null) ? ElementSyntax(operand: operand, value: items[index]) : BindName(name: value.Binder, node: value.Body, operand: operand, value: items[index])), operand: operand);
+                    values[index] = Term(written: Expand(node: ((value is null) ? ElementSyntax(operand: operand, value: items[index]) : BindName(name: value.Binder, node: value.Body, operand: operand, value: items[index])), operand: operand));
                 }
             }
-            var otherwise = (first ? Expand(node: arguments[^1].Value, operand: operand) : null);
+            var otherwise = (first ? Term(written: Expand(node: arguments[^1].Value, operand: operand)) : null);
 
-            if (ListFolds.Unroll(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: OperandFoldSpelling.Instance, terms: terms, values: values) is { } unrolled) {
-                return unrolled;
+            if (ListFolds.Fold(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: OperandFoldSpelling.Instance, terms: terms, values: values) is not { } unrolled) {
+                Refuse(message: DiagnosticText.Compose(fix: "Fold a list with at least one element", problem: refusal!), span: operand.Span);
+                return new Syntax.Literal(Value: 0m);
             }
-            Refuse(message: DiagnosticText.Compose(fix: "Fold a list with at least one element", problem: refusal!), span: operand.Span);
-            return new Syntax.Literal(Value: 0m);
+            if (unrolled.Node is { } chain) {
+                return chain;
+            }
+            // Too long for any program to hold. A placeholder stands where the chain would, and the refusal is reported
+            // only if the placeholder reaches the program (RefuseOverflow): a decided `and` or `or` drops it, as it
+            // drops the chain written out.
+            var overflow = new Syntax.SourceName(Name: "$fold");
+
+            (m_overflows ??= new(comparer: ReferenceEqualityComparer.Instance))[overflow] = DiagnosticText.Compose(
+                fix: "Fold fewer elements in one expression, such as part of the list into each of several rule locals, or fold values the compiler knows in a 'let', which a document value evaluates at any length",
+                problem: $"{call.Name} over {items.Count.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} elements writes out an expression of more than {Puck.State.RuleCapacity.MaxExpressionTokens.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} instructions, the most one rule expression carries"
+            );
+            return overflow;
+
+            // A fold's term and value fold as the whole operand later folds (Fold, bottom-up), so each step of the chain
+            // folds as it is made and a run of constants never grows the chain. A call's arguments keep their
+            // spelling, which Fold never folds.
+            FoldTerm Term(Syntax.SyntaxNode written) => new(Instructions: 1, Node: ((call.Name is "minimum" or "maximum") ? written : Fold(node: written, operand: operand)), Written: written);
+        }
+        private Dictionary<Syntax.SyntaxNode, string>? m_overflows;
+
+        // The operand's folded tree, or a refused zero when a fold too long for any program reaches it.
+        internal Syntax.SyntaxNode RefuseOverflow(Syntax.SyntaxNode node, OperandExpressionNode operand) {
+            if (m_overflows is null) {
+                return node;
+            }
+            var refused = false;
+
+            foreach (var (placeholder, message) in m_overflows) {
+                if (Reaches(node: node, placeholder: placeholder)) {
+                    Refuse(message: message, span: operand.Span);
+                    refused = true;
+                }
+            }
+            m_overflows = null;
+            return (refused ? new Syntax.Literal(Value: 0m) : node);
+
+            static bool Reaches(Syntax.SyntaxNode node, Syntax.SyntaxNode placeholder) => (ReferenceEquals(objA: node, objB: placeholder) ||
+                Syntax.SourceChildren(node: node).Any(predicate: child => Reaches(node: child, placeholder: placeholder)));
         }
         // The list a fold's first argument stands for, when the compiler knows it: a list written out, a binding holding
         // a list, a collection builtin's result (range, map, concat and the rest), or a read of a list through a
@@ -163,7 +201,7 @@ public static partial class WorldDocumentEmitter {
                 Syntax.SourceAccess or Syntax.SourceIndex when ((value is JsonObject or JsonArray) && (Root(node: current) is Syntax.SourceName { Quoted: false } root) && (root.Name == name)) =>
                     Spelled(read: ReadThrough(node: current)),
                 Syntax.SourceAtom atom when ReadsName(expression: AtomAt(index: atom.Index, operand: operand), name: name) =>
-                    ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), Bound(name: name, value: value))),
+                    ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), scope.WithLocal(name: name, value: value))),
                 Syntax.SourceLambda lambda when (lambda.Binder == name) => lambda,
                 Syntax.SourceLet let when (let.Name == name) => let with { Value = Rebind(current: let.Value) },
                 _ => Syntax.MapSourceChildren(map: Rebind, node: current),
@@ -209,13 +247,9 @@ public static partial class WorldDocumentEmitter {
             JsonNode? ReadAt(JsonNode target, ExpressionNode key) {
                 const string Held = "$held";
 
-                return DocumentLowering.LowerValue(new IndexExpressionNode(new IdentifierExpressionNode(Held), key), Bound(name: Held, value: target));
+                return DocumentLowering.LowerValue(new IndexExpressionNode(new IdentifierExpressionNode(Held), key), scope.WithLocal(name: Held, value: target));
             }
         }
-        // The scope with one more compile-time binding, as a collection builtin binds its lambda's parameter.
-        private DocumentScope Bound(string name, JsonNode? value) => scope.WithLocals(lambdaLocals: new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-            [name] = value,
-        });
         // A compile-time value as the syntax a binding holding it is written as: a number (or a truth) as its literal,
         // a name or text as an atom holding it, which WriteValue writes as WriteName writes a bound name, and a list
         // as the list of its elements, which only a fold or a compile-time index may read.
@@ -253,14 +287,45 @@ public static partial class WorldDocumentEmitter {
         private static bool ReadsName(SyntaxNode expression, string name) => ((expression is IdentifierExpressionNode identifier) && (identifier.Name == name)) ||
             expression.Children().Any(predicate: child => ReadsName(expression: child, name: name));
 
-        private sealed class OperandFoldSpelling : ListFoldSpelling<Syntax.SyntaxNode> {
+        // A part of a fold's chain: its syntax folded as Fold folds it (null once the chain outgrows every program),
+        // the fewest postfix instructions it compiles to (one per operator and per term, since each emits at least
+        // one), and for a term the syntax as written, whose shape says whether it already reads as a truth value.
+        private sealed record FoldTerm(Syntax.SyntaxNode? Node, int Instructions, Syntax.SyntaxNode? Written = null);
+        // The chain's steps, each folded as Fold folds that node once its parts are folded (FoldBinary, FoldChoice; a
+        // call is never folded), so the chain equals the written-out chain folded. A step whose chain needs more
+        // instructions than a rule expression carries (RuleCapacity.MaxExpressionTokens) ends the chain: the
+        // instructions of a part that is kept never shrink, since a decided `and` or `or` drops only its right side and a
+        // decided choice only a literal arm.
+        private sealed class OperandFoldSpelling : ListFoldSpelling<FoldTerm> {
+            private static readonly FoldTerm Overflow = new(Instructions: (Puck.State.RuleCapacity.MaxExpressionTokens + 1), Node: null);
+
             public static OperandFoldSpelling Instance { get; } = new();
 
-            public override Syntax.SyntaxNode Number(decimal value) => new Syntax.Literal(Value: value);
-            public override Syntax.SyntaxNode Binary(Syntax.SyntaxNode left, string symbol, Syntax.SyntaxNode right) => new Syntax.Binary(Left: left, Operator: symbol, Right: right);
-            public override Syntax.SyntaxNode Call(string name, Syntax.SyntaxNode left, Syntax.SyntaxNode right) => new Syntax.SourceCall(Arguments: [new Syntax.SourceArgument(Name: null, Value: left), new Syntax.SourceArgument(Name: null, Value: right)], Name: name);
-            public override Syntax.SyntaxNode Choice(Syntax.SyntaxNode condition, Syntax.SyntaxNode whenTrue, Syntax.SyntaxNode whenFalse) => new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue);
-            public override bool IsTruth(Syntax.SyntaxNode term) => BooleanSyntax(node: term);
+            public override FoldTerm Number(decimal value) => new(Instructions: 1, Node: new Syntax.Literal(Value: value));
+            public override FoldTerm Binary(FoldTerm left, string symbol, FoldTerm right) => (((left.Node is not { } leftNode) || (right.Node is not { } rightNode))
+                ? Overflow
+                : ((FoldBinary(left: leftNode, operation: symbol, right: rightNode) is { } folded)
+                    ? new(Instructions: 1, Node: folded)
+                    : Step(instructions: (1 + left.Instructions + right.Instructions), node: new Syntax.Binary(Left: leftNode, Operator: symbol, Right: rightNode))));
+            public override FoldTerm Call(string name, FoldTerm left, FoldTerm right) => (((left.Node is not { } leftNode) || (right.Node is not { } rightNode))
+                ? Overflow
+                : Step(instructions: (1 + left.Instructions + right.Instructions), node: new Syntax.SourceCall(Arguments: [new Syntax.SourceArgument(Name: null, Value: leftNode), new Syntax.SourceArgument(Name: null, Value: rightNode)], Name: name)));
+            public override FoldTerm Choice(FoldTerm condition, FoldTerm whenTrue, FoldTerm whenFalse) {
+                if ((condition.Node is not { } test) || (whenTrue.Node is not { } chosen) || (whenFalse.Node is not { } otherwise)) {
+                    return Overflow;
+                }
+                var folded = FoldChoice(condition: test, whenFalse: otherwise, whenTrue: chosen);
+
+                return folded switch {
+                    Syntax.Literal => new(Instructions: 1, Node: folded),
+                    _ when ReferenceEquals(objA: folded, objB: chosen) => whenTrue,
+                    _ when ReferenceEquals(objA: folded, objB: otherwise) => whenFalse,
+                    _ => Step(instructions: (1 + condition.Instructions + whenTrue.Instructions + whenFalse.Instructions), node: folded),
+                };
+            }
+            public override bool IsTruth(FoldTerm term) => BooleanSyntax(node: (term.Written ?? term.Node)!);
+
+            private static FoldTerm Step(int instructions, Syntax.SyntaxNode node) => ((instructions > Puck.State.RuleCapacity.MaxExpressionTokens) ? Overflow : new(Instructions: instructions, Node: node));
         }
     }
 }

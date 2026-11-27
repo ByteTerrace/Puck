@@ -3,13 +3,16 @@ using System.Collections.Frozen;
 namespace Puck.Transpiler.Lowering;
 
 /// <summary>The folds over a list known at compile time (<c>sum</c>, <c>count</c>, <c>any</c>, <c>all</c>,
-/// <c>minimum</c>, <c>maximum</c> and <c>first</c>), and the one description of the expression each unrolls to. A
-/// document value evaluates that expression over its elements' values; a rule operand writes it out over its
-/// elements' bodies, so a fold costs exactly what the expression written out by hand costs.</summary>
+/// <c>minimum</c>, <c>maximum</c> and <c>first</c>), and the one description of the expression each stands for. A rule
+/// operand writes that expression out over its elements' bodies, so a fold costs exactly what the expression written
+/// out by hand costs; a document value evaluates it step by step over its elements' values, in the order the
+/// written-out expression evaluates, so no evaluation nests deeper as the list grows.</summary>
 /// <remarks>Each fold is the left-to-right chain an author writes: <c>sum</c> is <c>t0 + t1 + …</c>, <c>count</c> the
 /// same over truth values, <c>any</c> <c>t0 or t1 or …</c>, <c>all</c> <c>t0 and t1 and …</c>, <c>minimum</c> and
 /// <c>maximum</c> the nested two-argument calls, and <c>first</c> the choice chain
-/// <c>c0 ? v0 : (c1 ? v1 : … : otherwise)</c>.</remarks>
+/// <c>c0 ? v0 : (c1 ? v1 : … : otherwise)</c>. <see cref="Fold{T}"/> hands each step of that chain to a
+/// <see cref="ListFoldSpelling{T}"/> innermost first, so a spelling that builds nodes gets the chain and one that
+/// evaluates gets its value.</remarks>
 public static class ListFolds {
     /// <summary>Gets the names a list fold is called by.</summary>
     public static FrozenSet<string> Names { get; } = new[] { "all", "any", "count", "first", "maximum", "minimum", "sum" }.ToFrozenSet(comparer: StringComparer.Ordinal);
@@ -33,19 +36,22 @@ public static class ListFolds {
     /// <returns><see langword="true"/> for a fold over truth values.</returns>
     public static bool ReadsTruth(string name) => (name is "all" or "any" or "count");
 
-    /// <summary>Builds the expression a fold unrolls to.</summary>
-    /// <typeparam name="T">The expression node type of the language building it.</typeparam>
+    /// <summary>Folds the terms through a spelling. Each step of the fold's chain is one call of
+    /// <paramref name="spelling"/>, made innermost first (left to right for the infix and call chains, the last element
+    /// first for <c>first</c>'s choice chain), so a spelling that builds nodes returns the chain written out and one
+    /// that evaluates returns the chain's value without nesting.</summary>
+    /// <typeparam name="T">What the spelling folds: the language's expression node, or an evaluated value.</typeparam>
     /// <param name="name">The fold's name, one of <see cref="Names"/>.</param>
     /// <param name="terms">One term per element in list order: the body's value, or for <c>first</c> its condition.</param>
     /// <param name="values">For <c>first</c>, one chosen value per element; <see langword="null"/> for every other fold.</param>
     /// <param name="otherwise">For <c>first</c>, the value when no condition holds; <see langword="null"/> otherwise.</param>
-    /// <param name="spelling">The language's node constructors.</param>
+    /// <param name="spelling">The language's steps: node constructors, or evaluations.</param>
     /// <param name="refusal">Why the fold has no value, or <see langword="null"/> when it has one.</param>
-    /// <returns>The unrolled expression, or <see langword="null"/> with <paramref name="refusal"/> set when
-    /// <c>minimum</c> or <c>maximum</c> folds an empty list, which has no value.</returns>
+    /// <returns>The folded chain, or <see langword="null"/> with <paramref name="refusal"/> set when <c>minimum</c> or
+    /// <c>maximum</c> folds an empty list, which has no value.</returns>
     /// <exception cref="ArgumentException"><paramref name="name"/> is not a fold, or <c>first</c> lacks its values or
     /// its otherwise.</exception>
-    public static T? Unroll<T>(string name, IReadOnlyList<T> terms, IReadOnlyList<T>? values, T? otherwise, ListFoldSpelling<T> spelling, out string? refusal) where T : class {
+    public static T? Fold<T>(string name, IReadOnlyList<T> terms, IReadOnlyList<T>? values, T? otherwise, ListFoldSpelling<T> spelling, out string? refusal) where T : class {
         ArgumentNullException.ThrowIfNull(terms);
         ArgumentNullException.ThrowIfNull(spelling);
         refusal = null;
@@ -95,9 +101,9 @@ public static class ListFolds {
     }
 }
 
-/// <summary>The node constructors a language hands <see cref="ListFolds.Unroll{T}"/> to build a fold's expression in
-/// its own tree.</summary>
-/// <typeparam name="T">The language's expression node type.</typeparam>
+/// <summary>The steps a language hands <see cref="ListFolds.Fold{T}"/>: node constructors that build a fold's
+/// expression in its own tree, or evaluations that compute each step's value as it is made.</summary>
+/// <typeparam name="T">The language's expression node type, or its evaluated value.</typeparam>
 public abstract class ListFoldSpelling<T> where T : class {
     /// <summary>Returns a number literal.</summary>
     /// <param name="value">The number.</param>

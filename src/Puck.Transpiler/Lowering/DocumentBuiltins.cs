@@ -260,22 +260,13 @@ public static partial class DocumentBuiltins {
                 PuckDiagnosticCodes.InvalidValue
             );
         }
-        var locals = new Dictionary<string, JsonNode?>(
-            dictionary: scope.Locals,
-            comparer: StringComparer.Ordinal
-        ) {
-            [lambda.Parameters[0]] = first,
-        };
-
-        if (lambda.Parameters.Count > 1) {
-            locals[lambda.Parameters[1]] = second;
-        }
-
         return DocumentLowering.Evaluate(
             expr: lambda.Body,
             fieldKey: fieldKey,
             owned: out owned,
-            scope: scope.WithLocals(lambdaLocals: locals)
+            scope: ((lambda.Parameters.Count > 1)
+                ? scope.WithLocals(first: lambda.Parameters[0], firstValue: first, second: lambda.Parameters[1], secondValue: second)
+                : scope.WithLocal(name: lambda.Parameters[0], value: first))
         );
     }
     // Appends `lowered` to `arr`: an array splices its items in, anything else is one item. The one rule concat and
@@ -863,9 +854,10 @@ public static partial class DocumentBuiltins {
 
         return arr;
     }
-    // A fold over a list evaluates each element's term once, binds the values as fresh locals and evaluates the
-    // expression ListFolds unrolls to over them, so the fold's arithmetic is the document's own `+`, `or`, `and`,
-    // `minimum`, `maximum` and choice. A fold over truth values binds each term's truth, as the rule language reads it.
+    // A fold over a list evaluates each element's term once and folds the values through the chain ListFolds
+    // describes, one step at a time (DocumentFoldSteps), so the fold's arithmetic is the document's own `+`, `or`,
+    // `and`, `minimum`, `maximum` and choice, and no evaluation nests deeper as the list grows. A fold over truth values
+    // folds each term's truth, as the rule language reads it.
     private static JsonNode? ListFold(CallExpressionNode call, DocumentScope scope, string? fieldKey) {
         var args = call.Arguments;
 
@@ -880,9 +872,8 @@ public static partial class DocumentBuiltins {
             return Refuse(call: call, message: $"{call.Name}'s lambdas take the item, or the item and its index", scope: scope);
         }
         scope.Budget.Collection(count: source.Count, span: call.Span);
-        var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal);
-        var terms = new List<ExpressionNode>(capacity: source.Count);
-        var values = (first ? new List<ExpressionNode>(capacity: source.Count) : null);
+        var terms = new List<FoldValue>(capacity: source.Count);
+        var values = (first ? new List<FoldValue>(capacity: source.Count) : null);
         var truth = (first || ListFolds.ReadsTruth(name: call.Name));
 
         for (var index = 0; (index < source.Count); index++) {
@@ -890,30 +881,56 @@ public static partial class DocumentBuiltins {
             var position = JsonValue.Create(value: ((long)index));
             var read = Apply(lambda: term, scope: scope, fieldKey: fieldKey, first: item, second: position);
 
-            terms.Add(item: Bind(name: $"$term{index}", value: (truth ? JsonValue.Create(value: (DocumentLowering.IsTruthy(node: read) ? 1L : 0L)) : read)));
-            values?.Add(item: Bind(name: $"$value{index}", value: ((value is null) ? item : Apply(lambda: value, scope: scope, fieldKey: fieldKey, first: item, second: position))));
+            terms.Add(item: new(Node: (truth ? JsonValue.Create(value: (DocumentLowering.IsTruthy(node: read) ? 1L : 0L)) : read)));
+            values?.Add(item: new(Node: ((value is null) ? item : Apply(lambda: value, scope: scope, fieldKey: fieldKey, first: item, second: position))));
         }
-        var otherwise = (first ? Bind(name: "$otherwise", value: DocumentLowering.EvaluateValue(expr: args[^1].Value, scope: scope, fieldKey: fieldKey)) : null);
+        var otherwise = (first ? new FoldValue(Node: DocumentLowering.EvaluateValue(expr: args[^1].Value, scope: scope, fieldKey: fieldKey)) : null);
 
-        if (ListFolds.Unroll(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: DocumentFoldSpelling.Instance, terms: terms, values: values) is not { } unrolled) {
+        if (ListFolds.Fold(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: new DocumentFoldSteps(call: call, fieldKey: fieldKey, scope: scope), terms: terms, values: values) is not { } folded) {
             return Refuse(call: call, message: refusal!, scope: scope);
         }
-        return DocumentLowering.EvaluateValue(expr: unrolled, scope: scope.WithLocals(lambdaLocals: locals), fieldKey: fieldKey);
-
-        IdentifierExpressionNode Bind(string name, JsonNode? value) {
-            locals[name] = value;
-            return new IdentifierExpressionNode(Name: name);
-        }
+        return folded.Node;
     }
-    private sealed class DocumentFoldSpelling : ListFoldSpelling<ExpressionNode> {
-        public static DocumentFoldSpelling Instance { get; } = new();
+    // One value of a fold: a term's or a lambda's value as it was produced (borrowed), or a step's result. A null node
+    // is a value, the null literal's.
+    private sealed record FoldValue(JsonNode? Node);
+    // A fold's steps evaluated as ListFolds makes them, each over values already evaluated: what evaluating the chain
+    // written out gives, without nesting. Each step applies the document's own operator (DocumentLowering.ApplyBinary
+    // and ShortCircuits, DocumentScalars.Apply, IsTruthy), and a refusal is placed at the fold's call.
+    private sealed class DocumentFoldSteps(CallExpressionNode call, DocumentScope scope, string? fieldKey) : ListFoldSpelling<FoldValue> {
+        private CallExpressionNode? m_pair;
 
-        public override ExpressionNode Number(decimal value) => new LiteralExpressionNode(Value: (decimal.IsInteger(value: value) ? ((object)(long)value) : (double)value));
-        public override ExpressionNode Binary(ExpressionNode left, string symbol, ExpressionNode right) => new BinaryExpressionNode(Left: left, Operator: symbol, Right: right);
-        public override ExpressionNode Call(string name, ExpressionNode left, ExpressionNode right) => new CallExpressionNode(Arguments: [new ArgumentNode(Name: null, Value: left), new ArgumentNode(Name: null, Value: right)], Name: name);
-        public override ExpressionNode Choice(ExpressionNode condition, ExpressionNode whenTrue, ExpressionNode whenFalse) => new ConditionalExpressionNode(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue);
-        // The terms of a fold over truth values are bound already reduced to 1 or 0.
-        public override bool IsTruth(ExpressionNode term) => true;
+        public override FoldValue Number(decimal value) => new(Node: DocumentLowering.EvaluateValue(
+            expr: new LiteralExpressionNode(Value: (decimal.IsInteger(value: value) ? ((object)(long)value) : (double)value)),
+            fieldKey: fieldKey,
+            scope: scope
+        ));
+        public override FoldValue Binary(FoldValue left, string symbol, FoldValue right) {
+            scope.Budget.Spend(count: 1, span: call.Span);
+            if (symbol is "and" or "or") {
+                var truth = DocumentLowering.IsTruthy(node: left.Node);
+
+                return new(Node: JsonValue.Create(value: ((DocumentLowering.ShortCircuits(left: truth, symbol: symbol) ? truth : DocumentLowering.IsTruthy(node: right.Node)) ? 1L : 0L)));
+            }
+            return new(Node: DocumentLowering.ApplyBinary(
+                bin: new BinaryExpressionNode(Column: call.Column, Left: call, Length: call.Length, Line: call.Line, Offset: call.Offset, Operator: symbol, Right: call),
+                leftNode: left.Node,
+                rightNode: right.Node,
+                scope: scope
+            ));
+        }
+        // The nested call written out passes two arguments, which a refusal counts.
+        public override FoldValue Call(string name, FoldValue left, FoldValue right) {
+            scope.Budget.Spend(count: 1, span: call.Span);
+            m_pair ??= new(Arguments: [call.Arguments[0], call.Arguments[1]], Column: call.Column, Length: call.Length, Line: call.Line, Name: name, Offset: call.Offset);
+            return new(Node: DocumentScalars.Apply(arguments: [left.Node, right.Node], call: m_pair, scope: scope));
+        }
+        public override FoldValue Choice(FoldValue condition, FoldValue whenTrue, FoldValue whenFalse) {
+            scope.Budget.Spend(count: 1, span: call.Span);
+            return (DocumentLowering.IsTruthy(node: condition.Node) ? whenTrue : whenFalse);
+        }
+        // The terms of a fold over truth values are already reduced to 1 or 0.
+        public override bool IsTruth(FoldValue term) => true;
     }
     private static bool TryReadOperand(
         CallExpressionNode call,

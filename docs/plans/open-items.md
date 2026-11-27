@@ -5459,13 +5459,6 @@ their lane order; this packet keeps the single duplicates and leads.
   `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
   `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
   form-aware child walk would fold in too.
-- The document evaluator copies its whole environment to bind one name: a lambda call
-  (`DocumentBuiltins.ApplyOwned`), a fold, a `let` expression and each `for` iteration build a new
-  `Dictionary<string, JsonNode?>` from `DocumentScope.Locals`, and `DocumentScope.Derive`, `BindArgument`,
-  `WithConstants` and `WithBasePath` copy their tables per scope. A gallery compile's allocation trace (`puck host
-  allocations` over a `dotnet-trace` gc-verbose run) puts these sites above every JSON cost left in the pipeline. A
-  persistent environment (a binding chained to its parent scope, looked up by walking a short chain) replaces the
-  copies; `Locals` is a public mutable `Dictionary` today, so its callers in `Puck.World.Transpiler` move with it.
 - `DocumentScope.TryLowerBindingAt` answers a let placed at a position as a `DeepClone` of its memo, outside the
   budget's copy door (`DocumentEvaluationBudget.Take`), so the copy is charged only by the caller's `Adopt` and drops
   the `NoteWrittenBeside` records the door carries. Answering the memo borrowed and letting `LowerValue` take it would

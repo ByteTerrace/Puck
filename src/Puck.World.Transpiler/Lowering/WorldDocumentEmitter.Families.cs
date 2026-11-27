@@ -305,11 +305,7 @@ public static partial class WorldDocumentEmitter {
             var memberScope = scope;
 
             if (family.MemberIndex is { } binder) {
-                var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-                    [binder] = JsonValue.Create(value: ((long)registered.Indices[member])),
-                };
-
-                memberScope = scope.WithLocals(lambdaLocals: locals);
+                memberScope = scope.WithLocal(name: binder, value: JsonValue.Create(value: ((long)registered.Indices[member])));
             }
 
             yield return (DocumentLowering.NamedDeclaration(member: true, name: registered.MemberNames[member], statement: declaration), memberScope);

@@ -697,7 +697,7 @@ public static partial class WorldDocumentEmitter {
 
         var root = new JsonObject();
         var annotations = CreateModuleAnnotations(expanded: root, scope: host);
-        var child = host.WithConstants(new(host.Constants, StringComparer.Ordinal), annotations).WithLocals(lambdaLocals: host.Locals);
+        var child = host.WithConstants(host.Constants.Derive(), annotations).WithLocals(lambdaLocals: host.Locals);
 
         using (host.SourceMap?.PushOrigin(moduleInstance: name))
         using (host.SourceMap?.PushIsolatedEntries()) {
@@ -798,7 +798,7 @@ public static partial class WorldDocumentEmitter {
 
             var world = target.Json;
             var rows = ((world["state"] as JsonObject)?["world"] as JsonArray);
-            var cellScope = ((bound is null) ? target.Scope : target.Scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: target.Scope.Locals)));
+            var cellScope = ((bound is null) ? target.Scope : target.Scope.WithLocals(lambdaLocals: target.Scope.Locals.With(bindings: bound)));
             var row = rows?
                 .OfType<JsonObject>()
                 .FirstOrDefault(predicate: candidate => (candidate["name"]?.GetValue<string>() == cell.Target.Name));
@@ -1018,16 +1018,6 @@ public static partial class WorldDocumentEmitter {
             }
         }
     }
-    // A scope's locals with a loop's bound names over them.
-    private static Dictionary<string, JsonNode?> Bound(Dictionary<string, JsonNode?> outer, Dictionary<string, JsonNode?> bound) {
-        var merged = new Dictionary<string, JsonNode?>(dictionary: outer, comparer: StringComparer.Ordinal);
-
-        foreach (var (name, value) in bound) {
-            merged[name] = value;
-        }
-
-        return merged;
-    }
     // The names each iteration of a test's `for` binds, over the enclosing loop's.
     private static IEnumerable<Dictionary<string, JsonNode?>> LoopBindings(string item, string? index, ExpressionNode sequence, SourceSpan span, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
         if (DocumentLowering.EvaluateValue(expr: sequence, scope: Evaluating(bound: bound, scope: scope)) is not JsonArray elements) {
@@ -1056,7 +1046,7 @@ public static partial class WorldDocumentEmitter {
     // A loop's count or sequence is read with the enclosing loops' names bound, as a step's command line is.
     private static DocumentScope Evaluating(DocumentScope scope, Dictionary<string, JsonNode?>? bound) => ((bound is null)
         ? scope
-        : scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: scope.Locals)));
+        : scope.WithLocals(lambdaLocals: scope.Locals.With(bindings: bound)));
     private static long RepeatCount(TestWhenLoopNode loop, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
         if ((DocumentLowering.EvaluateValue(expr: loop.Sequence, scope: Evaluating(bound: bound, scope: scope)) is JsonValue value) && value.TryGetValue(value: out long count) && (count >= 0L)) {
             return count;

@@ -1,0 +1,16 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot total = 9900
+    slot odd = 50
+    slot some = 1
+    slot every = 1
+    slot low = -49
+    slot high = 9801
+    slot found = 71
+    slot missing = -1
+    slot half = 1237.5
+  }
+}

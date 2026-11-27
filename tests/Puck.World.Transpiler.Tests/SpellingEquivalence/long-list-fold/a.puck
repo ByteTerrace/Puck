@@ -1,0 +1,20 @@
+// A document fold over a long list evaluates step by step, so its value is the chain written out however many
+// elements the list holds, with no limit on how deep the chain would nest.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let spots = range(0, 100)
+
+state {
+  world {
+    slot total = sum(spots, k => k * 2)
+    slot odd = count(spots, k => k % 2 == 1)
+    slot some = any(spots, k => k == 99)
+    slot every = all(spots, k => k < 100)
+    slot low = minimum(spots, k => 50 - k)
+    slot high = maximum(spots, k => k * k)
+    slot found = first(spots, k => k * k > 5000, k => k, -1)
+    slot missing = first(spots, k => k > 100, -1)
+    slot half = sum(spots, k => k / 4)
+  }
+}
