@@ -518,8 +518,8 @@ public sealed class ExpressionIrLawTests {
             expected: (2L << top)
         );
     }
-    // The value stack is leased at the program's own length, so a program at the token ceiling evaluates with its
-    // stack as deep as a program can make it, and one token more is refused by name.
+    // A program at the token ceiling, nested as deep as its tokens can make it, evaluates; one token more is refused
+    // by name.
     [Fact]
     public void AProgramAtTheTokenCeilingEvaluatesAtItsDeepestStackAndOneMoreIsRefused() {
         var reader = new Section(Slot(
@@ -740,8 +740,8 @@ public sealed class ExpressionIrLawTests {
             expected: 9L
         );
     }
-    // The evaluator allocates nothing per evaluation: the stack, the absence marks and a call frame are all
-    // stack-allocated, so a rule sampled thousands of times a tick adds no garbage.
+    // The evaluator allocates nothing per evaluation once the program's tree is built: values, absences and a call's
+    // arguments live in the nodes' frames, so a rule sampled thousands of times a tick adds no garbage.
     [Fact]
     public void EvaluationAllocatesNothing() {
         var reader = new Section(Row(
@@ -750,7 +750,7 @@ public sealed class ExpressionIrLawTests {
             2L,
             3L
         ));
-        var program = reader.Compile(text: "count(scores, s -> s > 1) + minimum(scores[0], 4)");
+        var program = new Rules.CompiledProgram(tokens: reader.Compile(text: "count(scores, s -> s > 1) + minimum(scores[0], 4)"));
 
         for (var warm = 0; (warm < 64); warm++) {
             var frame = new Rules.EvaluationFrame(reader: reader);

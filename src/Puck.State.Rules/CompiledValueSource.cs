@@ -9,7 +9,7 @@ namespace Puck.State.Rules;
 /// <param name="Expression">The compiled postfix program, or <see langword="null"/>.</param>
 /// <param name="Text">The literal text of a Text comparison, or null for the numeric and operand forms.</param>
 /// <param name="CarrierKind">The expression's arithmetic kind when it differs from the result kind.</param>
-public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledExpressionToken[]? Expression = null, string? Text = null, CellKind? CarrierKind = null) {
+public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledProgram? Expression = null, string? Text = null, CellKind? CarrierKind = null) {
     /// <summary>Gets a value indicating whether this source is a compiled expression.</summary>
     public bool IsExpression => (Expression is not null);
     /// <summary>Gets a value indicating whether this source is a literal constant.</summary>
@@ -50,7 +50,7 @@ public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOpera
             return FromOperand(operand: operand);
         }
 
-        return new(Expression: expression, CarrierKind: carrierKind);
+        return new(Expression: new CompiledProgram(tokens: expression), CarrierKind: carrierKind);
     }
     /// <summary>Creates an operand value source; a rule local bound to a compile-time constant is that constant.</summary>
     /// <param name="operand">The live operand.</param>

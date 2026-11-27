@@ -50,7 +50,7 @@ public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816
 /// <param name="X">The program of the offset's x axis, or <see langword="null"/> when the offset is the literal.</param>
 /// <param name="Y">The program of the offset's y axis, present exactly when <paramref name="X"/> is.</param>
 /// <param name="Z">The program of the offset's z axis, present exactly when <paramref name="X"/> is.</param>
-public sealed record WorldPointTarget(string? Placement, FixedVector3 Offset, CompiledExpressionToken[]? X = null, CompiledExpressionToken[]? Y = null, CompiledExpressionToken[]? Z = null) {
+public sealed record WorldPointTarget(string? Placement, FixedVector3 Offset, CompiledProgram? X = null, CompiledProgram? Y = null, CompiledProgram? Z = null) {
     /// <summary>Gets a value indicating whether the offset is three programs evaluated at firing.</summary>
     public bool IsComputed => (X is not null);
 }
@@ -171,7 +171,7 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <see langword="null"/> for a cue about no body.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     /// <param name="argument">The optional compiled integer argument.</param>
-    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe, CompiledExpressionToken[]? argument = null)
+    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe, CompiledProgram? argument = null)
         // A cue whose body is absent is not emitted and refuses nothing; the delivery admits a body cue only to a
         // recipient whose snapshot carries the body.
         : base(describe: describe, reach: WorldDisclosureReach.None) {
@@ -199,7 +199,7 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <summary>Gets the cue payload, or <see langword="null"/>.</summary>
     public string? Payload { get; }
     /// <summary>Gets the optional argument program.</summary>
-    public CompiledExpressionToken[]? Argument { get; }
+    public CompiledProgram? Argument { get; }
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
 

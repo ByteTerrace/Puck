@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
-    internal delegate bool FlockAffinityReader(CompiledExpressionToken[] program, int observer, int neighbor, out long value);
+    internal delegate bool FlockAffinityReader(CompiledProgram program, int observer, int neighbor, out long value);
 
     private readonly Dictionary<(string Kit, string Producer), CompiledWorldFlockAffinities> m_flockAffinities = [];
 
@@ -41,7 +41,7 @@ public sealed partial class WorldPopulation {
         m_flockAffinityCeiling = (definition.Population.Capacity * maximum);
     }
 
-    private FixedQ4816 ReadFlockAffinity(CompiledExpressionToken[]? expression, int observer, int neighbor, ProducerWork work) {
+    private FixedQ4816 ReadFlockAffinity(CompiledProgram? expression, int observer, int neighbor, ProducerWork work) {
         if (expression is null) { return FixedQ4816.One; }
         var success = m_flockAffinityReader!(
             expression,

@@ -199,7 +199,7 @@ the diagnostics.
 | `OUTCOME001` | An expression statement or discard assignment/declaration dropping `Outcome`, `Resolved<T>`, `Verdict` or `RuleOutcome`. Assignments retain their answers; a catch that rethrows and the host entries in `OutcomeDiscardAllowlist` are exempt. |
 | `OUTCOME002` | Dropping the bool from `TryFinite` or `TryNamed`; comparing `Verdict` or `FiringDecision` with `==`, `!=` or an `is` constant pattern to a case other than `Faulted`. Handle all cases with a switch, or explicitly handle `Faulted`. |
 | `OUTCOME003` | Calling `RuleExpressions.EvaluateDetached` outside a file named by `OutcomeDetachedAllowlist`, whose entries state their fault handling. |
-| `OUTCOME004` | An `IRuleOperand` member resolving a `CompiledCellRef`, `LiveRow` or `IRuleKey` against the reader. Operands may hold declarations to build read sets, costs and `Addresses`; they read through the interpreter's resolved keys. |
+| `OUTCOME004` | An `IRuleOperand` member resolving a `CompiledCellRef`, `LiveRow` or `IRuleKey` against the reader. Operands may hold declarations to build read sets, costs and `Addresses`; they read through the keys the evaluator resolved. |
 
 These diagnostics do not prove semantic correctness. A bool stored and never
 read, an operand's hand-written arena read under a literal key, or incorrect

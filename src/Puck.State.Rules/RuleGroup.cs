@@ -83,7 +83,7 @@ public static class RuleGroupCapacity {
 /// <param name="Locals">The locals the trigger's expression keys minted, in evaluation order. The trigger's
 /// local keys address these slots, so whoever evaluates the trigger evaluates these first.</param>
 /// <param name="Undo">The resolved retained turn plan, or <see langword="null"/>.</param>
-public sealed record CompiledRuleGroup(string Name, RuleGroupShape Shape, int[] Members, RuleGroupStepPolicy[] Policies, int[] WriteRows, CellSet WriteSet, int Passes, GateToken[] Trigger, int TerminalStep, string Describe, RuleNeeds Needs, CompiledRuleLocal[] Locals, ArenaUndoPlan? Undo = null);
+public sealed record CompiledRuleGroup(string Name, RuleGroupShape Shape, int[] Members, RuleGroupStepPolicy[] Policies, int[] WriteRows, CellSet WriteSet, int Passes, CompiledGate Trigger, int TerminalStep, string Describe, RuleNeeds Needs, CompiledRuleLocal[] Locals, ArenaUndoPlan? Undo = null);
 public static partial class RuleCompiler {
     /// <summary>Compiles every declared rule group against an already-compiled rule array, checking that each
     /// claims a unique, unreserved name, names only declared rules, and claims no rule another group claims.</summary>

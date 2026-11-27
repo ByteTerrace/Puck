@@ -1,6 +1,7 @@
 using AddressUse = Puck.State.Rules.AddressUse;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 using EvaluationFrame = Puck.State.Rules.EvaluationFrame;
 using OperandAddress = Puck.State.Rules.OperandAddress;
 using RuleExpressions = Puck.State.Rules.RuleExpressions;
@@ -153,7 +154,7 @@ public sealed class StateKernelComputedKeyOperand : RuleOperand {
         m_addresses = [new OperandAddress(
             reference: new CompiledCellRef(
                 Key: default,
-                Program: program,
+                Program: new CompiledProgram(tokens: program),
                 RowOrdinal: -1
             ),
             use: AddressUse.Key

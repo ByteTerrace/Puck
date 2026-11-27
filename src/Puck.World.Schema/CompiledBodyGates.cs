@@ -6,14 +6,14 @@ namespace Puck.World;
 
 /// <summary>One compiled trigger channel: the flattened conjunction gate, the press latch in engine ticks, and the
 /// fixed-point effects in authored order.</summary>
-public sealed record CompiledTrigger(GateToken[] Gate, ulong LatchTicks, CompiledBodyInstruction[] Effects);
+public sealed record CompiledTrigger(CompiledGate Gate, ulong LatchTicks, CompiledBodyInstruction[] Effects);
 /// <summary>One compiled fact trigger: the engine fact, the flattened additional gate, the edge/level mode, and the
 /// effects a fire applies in order.</summary>
 /// <param name="Fact">The engine fact.</param>
 /// <param name="Gate">The flattened additional conjunction, empty when none is authored.</param>
 /// <param name="Mode">Whether the trigger is level- or edge-fired (see <see cref="ActionTriggerMode"/>).</param>
 /// <param name="Effects">The compiled effects, in authored order.</param>
-public readonly record struct CompiledFactTrigger(ActionFact Fact, GateToken[] Gate, ActionTriggerMode Mode, CompiledBodyInstruction[] Effects);
+public readonly record struct CompiledFactTrigger(ActionFact Fact, CompiledGate Gate, ActionTriggerMode Mode, CompiledBodyInstruction[] Effects);
 /// <summary>A lane binding compiled once before simulation: both trigger channels plus the recency-clock table (one
 /// slot per authored <c>recently</c> instance across both gates — the per-tick clock updater walks it).</summary>
 public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigger? OnRelease, CompiledFactTrigger[] OnFact, ActionFact[] RecencyFacts, ulong[] RecencyWindows);
@@ -31,7 +31,7 @@ public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigge
 /// <see cref="Along"/> row.</param>
 /// <param name="TurnScale">The steering-authority multiplier while this row governs.</param>
 public readonly record struct FixedBodyShaping(
-    GateToken[] When,
+    CompiledGate When,
     FixedShapingAlong? Along,
     FixedShapingAcross? Across,
     FixedMotionDynamics? Dynamics,
@@ -51,8 +51,8 @@ public readonly record struct FixedMotionTuning(
     FixedBodyShaping[] Shaping,
     ActionFact[] ShapingRecencyFacts,
     ulong[] ShapingRecencyWindows,
-    GateToken[][] HoldGates,
-    GateToken[][] HoldRestoreGates,
+    CompiledGate[] HoldGates,
+    CompiledGate[] HoldRestoreGates,
     MotionMoveFrame MoveFrame,
     bool FacingSnap,
     FixedUpTurnRates UpTurn,
