@@ -14,19 +14,27 @@
 //   }
 //   chessSearch()
 //   chessJudge(settleTicks: 9, scope: "my-table")
-//   chessComputer(settleTicks: 9, scope: "my-table")
-//   chessMoveDoor(settleTicks: 9, scope: "my-table")
+//   chessComputer(settleTicks: 9)
+//   chessMoveDoor(settleTicks: 9)
 //   chessMoveDone()
+//   chessPutDown(settleTicks: 9)
+//   chessPutJudged()
+//   chessPutSettled()
+//
+// A world whose board is drawn rather than stood with pieces (a game station) passes `digital: true` to the judge and to
+// the put-down's judgement: its pieces are their cells alone, the board is always at rest, and an arrangement judged
+// illegal is put back by writing its cells (worlds/games/chess-game.puck is that document). A table of physical pieces
+// derives each piece's cell from where its body settled, keeps `chessRested` at whether its scope rests, and poses its
+// bodies back itself when a put-down is refused.
 //
 // The table declares the three vocabularies itself, each on its own lines as above: the compiler folds an enum's
 // members only from declarations the compiled source spells, so a template cannot carry them, and declaring them
 // keeps their names readable to every document built on the table.
 //
-// The table owns everything physical: the 32 piece placements `piece0` to `piece31` (piece n starting on
+// A physical table owns everything physical: the 32 piece placements `piece0` to `piece31` (piece n starting on
 // `initialPieceCodes[n]`'s square), their bodies and looks, the board placement whose `board` block names this
 // library's rows (`occupancy: "board"`, `move`, `plan`, `turn`, `verdict`, topology `chessBoard`), the replay or
-// placement scope `scope` names (whose physical rest gates the judge), when its computer moves (`aiEnabled`), and
-// posing the pieces a move door relocates. The `chessBoard` grid is cell = 8 * row + column, its rows running +Z
+// placement scope `scope` names (whose physical rest gates the judge), and posing the pieces a move door relocates. The `chessBoard` grid is cell = 8 * row + column, its rows running +Z
 // and its columns +X; a rank is a row (rank 1 on the -Z side, White's) and a file runs the other way, column =
 // 7 - file. The judge reads the arrangement once the scope has rested `settleTicks` ticks. The debug world's table
 // (worlds/debug/chess.puck) is the worked example.
@@ -42,6 +50,8 @@ let initialBoard = concat(
   map(range(0, 8), i => -1),
   map(backRankByColumn, code => -code)
 )
+// Each piece's starting cell: piece n stands on file n % 8 of rank 0, 1, 6 or 7 by its eighth, at column 7 - file.
+let initialPieceCells = map(range(0, 32), i => 8 * [0, 1, 6, 7][floor(i / 8)] + 7 - i % 8)
 let initialPieceCodes = concat(
   backRankCodes,
   map(range(0, 8), i => 1),
@@ -134,8 +144,9 @@ template chessBoardGrid(cellSize, origin, band) {
   ]
 }
 
-// The game's state rows, expanded inside a table's `state.world` block.
-template chessGameState(settleTicks) {
+// The game's state rows, expanded inside a table's `state.world` block. A drawn board's pieces start on their squares; a
+// physical table's are read off the board once it first rests.
+template chessGameState(settleTicks, digital = false) {
   table chessInput {
     from = -1
     to = -1
@@ -236,7 +247,7 @@ template chessGameState(settleTicks) {
     capacity: 32
     min: -1
     max: 63
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
+    cells: map(range(0, 32), i => { key: $"piece{i}", value: (digital ? initialPieceCells[i] : -1) })
   }
 
   table promotionPending capacity(2) bounds(-1..63) {
@@ -284,6 +295,43 @@ template chessGameState(settleTicks) {
   slot repetitionCount = 0 bounds(0..76)
 
   slot shapeLegal = 0 bounds(0..1)
+
+  // Whether the board's pieces rest (a drawn board always does), and whether the computer and the doors hold off (a
+  // table's demonstration sets it while it plays).
+  slot chessRested = 1 bounds(0..1)
+  slot chessHold = 0 bounds(0..1)
+
+  // The display door (chessPutDown): the squares a move leaves and lands on and the request a presentation of the game
+  // away from its board posts, and whether a seat plays the game there now.
+  table chessPut {
+    from = -1
+    to = -1
+    request = 0
+  }
+  slot chessSeated = 0 bounds(0..1)
+
+  // A put-down awaiting its verdict (`judging`), the arrangement being put back this tick (`revert`), and what the
+  // put-down is judged against: every piece's cell and code the tick it was made.
+  table putDown {
+    judging = 0
+    revert = 0
+  }
+  row {
+    name: "putBefore"
+    kind: "Int"
+    capacity: 32
+    min: -1
+    max: 63
+    cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
+  }
+  row {
+    name: "putBeforeCode"
+    kind: "Int"
+    capacity: 32
+    min: -6
+    max: 6
+    cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
+  }
 
   slot castleLegal = 0 bounds(0..1)
 
@@ -334,9 +382,10 @@ template chessSearch() {
   }
 }
 
-// The settled-board judge: once the scope's bodies have rested `settleTicks` ticks, the rules read the
-// arrangement off the board and judge it against the last legal position.
-template chessJudge(settleTicks, scope) {
+// The settled-board judge: once the board has rested `settleTicks` ticks, the rules read the arrangement off the board
+// and judge it against the last legal position. A physical table's board rests while its scope's bodies do, and each
+// piece's cell is read from where its body settled; a drawn board (`digital`) always rests and its cells are its pieces.
+template chessJudge(settleTicks, scope = "", digital = false) {
   pattern chessRayEmpty: Int {
     symbols {
       vacant = 0
@@ -344,33 +393,49 @@ template chessJudge(settleTicks, scope) {
     match: vacant*
   }
 
+  if digital {
+  } else {
+    rule "tabletop-rested" {
+      local rested = physics(quiescent, scope)
+      when chessRested != rested
+      mode: Level
+      chessRested = rested
+    }
+  }
+
   rule "tabletop-settle-hold-advance" {
-    when physics(quiescent, scope) == 1 and settleHold < settleTicks
+    when chessRested == 1 and settleHold < settleTicks
     mode: Level
     settleHold += 1
   }
 
   rule "tabletop-settle-hold-reset" {
-    when physics(quiescent, scope) != 1
+    when chessRested != 1
     mode: Level
     settleHold = 0
+  }
+
+  if digital {
+  } else {
+    rules "" when settleHold == settleTicks {
+      mode: "Edge"
+      rule "tabletop-derive-cell-upright" {
+        when upright(placement, $each) >= 0.5
+        forEach: pieceCode
+        pieceCell[$each] = board(cellOf, board, placement, $each)
+      }
+
+      rule "tabletop-derive-cell-tilted" {
+        when not upright(placement, $each) >= 0.5
+        forEach: pieceCode
+        pieceCell[$each] = -1
+      }
+    }
   }
 
   // Keep the established rule names while sharing the settled-board gate and edge mode.
   rules "" when settleHold == settleTicks {
     mode: "Edge"
-    rule "tabletop-derive-cell-upright" {
-      when upright(placement, $each) >= 0.5
-      forEach: pieceCode
-      pieceCell[$each] = board(cellOf, board, placement, $each)
-    }
-
-    rule "tabletop-derive-cell-tilted" {
-      when not upright(placement, $each) >= 0.5
-      forEach: pieceCode
-      pieceCell[$each] = -1
-    }
-
     rule "tabletop-board-collisions" {
       boardCollisions = count(pieceCell, atLeast: 0, atMost: 63) + setBitCount(board(mask, board, 0, 0)) - 64
     }
@@ -947,7 +1012,7 @@ template chessJudge(settleTicks, scope) {
 }
 
 // The computer opponent's evaluation and the revision that names the settled position its answer belongs to.
-template chessComputer(settleTicks, scope) {
+template chessComputer(settleTicks) {
   rule "chess-ai-evaluate" {
     when search(ply) > 0
     mode: Level
@@ -987,26 +1052,42 @@ template chessComputer(settleTicks, scope) {
       previousInCheck[1] << 28
     )
     local pieceState = pieceCell[$each] + 1 | pieceCode[$each] + 6 << 7
-    when settleHold == settleTicks and physics(quiescent, scope) == 1 and (pieceState != aiBefore[$each] or
-        metadata != ai.metadata)
+    when settleHold == settleTicks and chessRested == 1 and (pieceState != aiBefore[$each] or metadata != ai.metadata)
     mode: Level
     forEach: pieceCode
     aiBefore[$each] = pieceState
     ai.metadata = metadata
     aiRevision += 1
   }
+
+  // The computer moves once the board has rested, the last arrangement was legal (or nothing moved), it is its turn,
+  // nothing holds it off and the game has not reached a draw limit.
+  rule "chess-ai-enable" {
+    mode: Level
+    aiEnabled = (
+      (aiSide == turn) and
+      (chessHold == 0) and
+      (chessRested == 1) and
+      (settleHold == settleTicks) and
+      (gameStarted == 1) and
+      (boardCollisions == 0) and
+      ((verdict == 1) or (boardChanged == 0)) and
+      (halfmoveClock < 150) and
+      (repetitionCount < 5)
+    )
+  }
 }
 
 // The move door: a computer answer or a `chessInput` request becomes one relocation of the pieces' cells, which
 // the table then poses.
-template chessMoveDoor(settleTicks, scope) {
+template chessMoveDoor(settleTicks) {
   rule "chess-ai-request" {
     when (aiEnabled == 1 and
       aiBest.revision == aiRevision and
       aiBest.token == pieceOrdinal[$each] and
       aiBest.to >= 0 and
       aiBest.to < 64 and
-      physics(quiescent, scope) == 1)
+      chessRested == 1)
     mode: Level
     forEach: pieceCode
     // The answer names one token, so one binding at most matches it.
@@ -1026,7 +1107,7 @@ template chessMoveDoor(settleTicks, scope) {
       (pieceCode[$each] * (1 - 2 * turn)) > 0 and
       ai.pending == 0 and
       settleHold == settleTicks and
-      physics(quiescent, scope) == 1)
+      chessRested == 1)
     mode: Level
     forEach: pieceCode
     // A firing clears the request, which closes the gate for every later binding.
@@ -1072,5 +1153,72 @@ template chessMoveDone() {
     ai.pending = 0
     aiEnabled = 0
     settleHold = 0
+  }
+}
+
+// The put-down path a move takes when a player makes it rather than the computer: the display door, through which a
+// presentation of the game away from its board asks for a move (a game station's glass), and the capture of what the
+// move is judged against. A seated player's put-down at a physical table sets `ai` and `putDown.judging` itself, ahead
+// of this template. A request waits while the board settles, a move is applied or judged, or something holds the doors
+// off, and lapses once its square holds no piece of the side to move or that side is the computer's.
+template chessPutDown(settleTicks) {
+  rule "chess-put" {
+    local mover = board[chessPut.from]
+    local ready = (
+      chessHold == 0 and
+      ai.pending == 0 and
+      putDown.judging == 0 and
+      settleHold == settleTicks
+    )
+    when chessPut.request == 1
+    mode: Level
+    if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {
+      chessPut.request = 0
+    } else if ready {
+      ai.from = chessPut.from
+      ai.to = chessPut.to
+      ai.mover = mover
+      ai.pending = 1
+      putDown.judging = 1
+      chessPut.request = 0
+    }
+  }
+
+  // What the put-down is judged against, captured the tick it is made.
+  rule "chess-put-before" {
+    when putDown.judging == 1 and ai.pending == 1
+    mode: Level
+    forEach: pieceCode
+    putBefore[$each] = pieceCell[$each]
+    putBeforeCode[$each] = pieceCode[$each]
+  }
+}
+
+// The verdict on a put-down: an illegal arrangement is put back as it stood before it. Its codes are restored here; a
+// drawn board (`digital`) restores its cells too, and a physical table poses its pieces back, ahead of chessPutSettled.
+template chessPutJudged(settleTicks, digital = false) {
+  rule "chess-play-judged" {
+    when putDown.judging == 1 and ai.pending == 0 and settleHold == settleTicks
+    mode: Level
+    putDown.judging = 0
+    putDown.revert = verdict == 0
+  }
+
+  rule "chess-play-revert-codes" {
+    when putDown.revert == 1
+    mode: Level
+    forEach: pieceCode
+    pieceCode[$each] = putBeforeCode[$each]
+    if digital {
+      pieceCell[$each] = putBefore[$each]
+    }
+  }
+}
+
+template chessPutSettled() {
+  rule "chess-put-settled" {
+    when putDown.revert == 1
+    mode: Level
+    putDown.revert = 0
   }
 }

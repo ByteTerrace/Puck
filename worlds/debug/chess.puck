@@ -10,10 +10,10 @@ import "../games/chess"
 // opponent. The board room's display table (cardtable.puck) draws the same game on its glass and asks its moves through
 // the display door below, so a game played at either table is one game.
 
-// What the board room's display table (cardtable.puck) reads of this game to draw it on its glass, and the door it asks
-// a move through (`chessPut`, below).
-export read board, turn, verdict, move, inCheck, aiSide, halfmoveClock, repetitionCount, chessPut
-export action chessPut
+// What a game station's glass (../standard/game-station.puck, the gallery's board game room) reads of this game to draw
+// it, and the door it asks a move through (`chessPut`, ../games/chess.puck's chessPutDown).
+export read board, turn, verdict, move, inCheck, aiSide, halfmoveClock, repetitionCount, chessPut, chessSeated
+export action chessPut, chessSeated
 
 // The debug world reserves 18 lower slots (4 seats, 8 visitors and 6 range targets); the 32 pieces and the board cursor take the rest.
 bodies {
@@ -323,24 +323,16 @@ prototypes {
 
 chessJudge(settleTicks: chessSettleTicks, scope: "chess-demo")
 
-chessComputer(settleTicks: chessSettleTicks, scope: "chess-demo")
-
-rule "chess-ai-enable" {
+// The idle demonstration holds the computer and the doors off while it plays.
+rule "chess-demo-hold" {
+  when chessHold != chessDemo.playing
   mode: Level
-  aiEnabled = (
-    (aiSide == turn) and
-    chessDemo.playing == 0 and
-    (physics(quiescent, "chess-demo") == 1) and
-    (settleHold == chessSettleTicks) and
-    (gameStarted == 1) and
-    (boardCollisions == 0) and
-    ((verdict == 1) or (boardChanged == 0)) and
-    (halfmoveClock < 150) and
-    (repetitionCount < 5)
-  )
+  chessHold = chessDemo.playing
 }
 
-chessMoveDoor(settleTicks: chessSettleTicks, scope: "chess-demo")
+chessComputer(settleTicks: chessSettleTicks)
+
+chessMoveDoor(settleTicks: chessSettleTicks)
 
 // A captured piece stands on the table's own margin (the top is 2 m across, the board 1.6 m, so a margin is 0.2 m wide),
 // one column of 16 places 0.1 m apart per colour: White's along the -X margin (x -0.9 in the table's frame), Black's
@@ -441,7 +433,7 @@ rule "chess-play-step" {
 
 // A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.
 rule "chess-play-lift" {
-  when play.pickEdge == 1 and play.held < 0 and play.judging == 0 and pieceCell[$each] == play.cursor and (
+  when play.pickEdge == 1 and play.held < 0 and putDown.judging == 0 and pieceCell[$each] == play.cursor and (
       pieceCode[$each] * (1 - 2 * turn)
     ) > 0 and aiSide != turn and ai.pending == 0 and settleHold == chessSettleTicks
   mode: Level
@@ -470,45 +462,12 @@ rule "chess-play-put" {
   ai.mover = pieceCode[$each]
   ai.pending = 1
   play.held = -1
-  play.judging = 1
+  putDown.judging = 1
 }
 
-// The display door: a move a presentation of this game away from its table asks for, from the square `chessPut.from` to
-// `chessPut.to` (the board room's display table, cardtable.puck). It takes the put-down's path: the apply relocates and
-// poses the pieces, the board rests and is judged, and an arrangement judged illegal is put back. A request waits while
-// the board settles, a piece is held or a move is being judged, and lapses once its square holds no piece of the side to
-// move or that side is the computer's.
-rule "chess-put" {
-  local mover = board[chessPut.from]
-  local ready = (
-    chessDemo.playing == 0 and
-    ai.pending == 0 and
-    play.held < 0 and
-    play.judging == 0 and
-    settleHold == chessSettleTicks
-  )
-  when chessPut.request == 1
-  mode: Level
-  if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {
-    chessPut.request = 0
-  } else if ready {
-    ai.from = chessPut.from
-    ai.to = chessPut.to
-    ai.mover = mover
-    ai.pending = 1
-    play.judging = 1
-    chessPut.request = 0
-  }
-}
-
-// What the put-down is judged against, captured the tick it is made.
-rule "chess-play-before" {
-  when play.judging == 1 and ai.pending == 1
-  mode: Level
-  forEach: pieceCode
-  playBefore[$each] = pieceCell[$each]
-  playBeforeCode[$each] = pieceCode[$each]
-}
+// The display door and the capture of what a put-down is judged against (../games/chess.puck), which the seated
+// player's put-down above and a game station's glass share.
+chessPutDown(settleTicks: chessSettleTicks)
 
 // Putting the piece back: the cancel button, a press on the square it left, or standing up from the table.
 rule "chess-play-cancel" {
@@ -525,20 +484,8 @@ rule "chess-play-release" {
   play.lifted = 0
 }
 
-// The verdict on a put-down: an illegal arrangement is put back as it stood before it.
-rule "chess-play-judged" {
-  when play.judging == 1 and ai.pending == 0 and settleHold == chessSettleTicks
-  mode: Level
-  play.judging = 0
-  play.revert = verdict == 0
-}
-
-rule "chess-play-revert-codes" {
-  when play.revert == 1
-  mode: Level
-  forEach: pieceCode
-  pieceCode[$each] = playBeforeCode[$each]
-}
+// The verdict on a put-down: an illegal arrangement is put back as it stood before it, its pieces posed back below.
+chessPutJudged(settleTicks: chessSettleTicks)
 
 for i in range(0, 32) {
   // The held piece hovers over the cursor, out of the board's band, so the board never rests while it is up.
@@ -553,17 +500,18 @@ for i in range(0, 32) {
     poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: play.from, offset: [0, 0.3, 0])
   }
   rule $"chess-play-revert-{i}" {
-    when play.revert == 1 and playBefore[$"piece{i}"] >= 0 and pieceCell[$"piece{i}"] != playBefore[$"piece{i}"]
+    when putDown.revert == 1 and putBefore[$"piece{i}"] >= 0 and pieceCell[$"piece{i}"] != putBefore[$"piece{i}"]
     mode: Level
-    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: playBefore[$"piece{i}"], offset: [0, 0.3, 0])
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: putBefore[$"piece{i}"], offset: [0, 0.3, 0])
   }
 }
 
 rule "chess-play-settled" {
   mode: Level
   play.returning = -1
-  play.revert = 0
 }
+
+chessPutSettled()
 
 // The cursor stands on its square while the seat sits at the table, and rests inside the tabletop otherwise.
 rule "chess-play-cursor-shown" {
@@ -641,8 +589,8 @@ state {
 
     // Seat 1 at the table: the cursor's square, the piece it holds (its ordinal, -1 for none) and the square it
     // left, the last pointed square, this tick's presses (the *Edge and step keys) and last tick's buttons (*Down),
-    // whether the held piece was lifted by the press still down, whether a put-down awaits its verdict, and the piece
-    // being put back or the arrangement being restored this tick.
+    // whether the held piece was lifted by the press still down, and the piece being put back this tick. A put-down's
+    // verdict and an arrangement being restored are the library's `putDown` (../games/chess.puck).
     table play capacity(auto) {
       cursor = 11
       held = -1
@@ -666,35 +614,8 @@ state {
       rightDown = 0
       leftDown = 0
       lifted = 0
-      judging = 0
       returning = -1
-      revert = 0
     }
-    // The display door (chess-put): the squares a move leaves and lands on, the request, and `seated`, 1 while a seat
-    // plays this game at a display elsewhere, which holds the idle demonstration off as a seat at this table does.
-    table chessPut {
-      from = -1
-      to = -1
-      request = 0
-      seated = 0
-    }
-    row {
-      name: "playBefore"
-      kind: "Int"
-      capacity: 32
-      min: -1
-      max: 63
-      cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
-    }
-    row {
-      name: "playBeforeCode"
-      kind: "Int"
-      capacity: 32
-      min: -6
-      max: 6
-      cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
-    }
-
     table pieceSetColors {
       white = "#F2E9D8"
       black = "#2B2420"
@@ -718,7 +639,7 @@ replays [
     control: chessTape
     rows [
       board, lastLegal, plan, ai, aiEnabled, aiRevision, aiBest, aiBefore,
-      pieceOrdinal, pieceCode, pieceCell, play, playBefore, playBeforeCode,
+      pieceOrdinal, pieceCode, pieceCell, play, putDown, putBefore, putBeforeCode, chessRested, chessHold,
       turn, verdict, illegalCount, settleHold, gameStarted, move,
       promotionPending, enPassantTarget, inCheck, previousInCheck,
       boardHistory0, boardHistory1, boardHistory2, boardHistory3, boardHistoryRights,
@@ -822,7 +743,7 @@ for seat in range(0, 8) {
 }
 
 rule "chess-demo-engaged" {
-  when board(engaged, board, 1) == 1 or chessPut.seated == 1
+  when board(engaged, board, 1) == 1 or chessSeated == 1
   mode: Level
   chessDemo.near = 1
 }
