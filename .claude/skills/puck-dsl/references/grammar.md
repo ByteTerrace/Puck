@@ -307,6 +307,20 @@ declared document arm takes its meaning from that position: array `sort(...)`
 and a world's `sort` transform coexist. Statement-position calls likewise
 belong to their own vocabulary (a cartridge's `map` step is untouched).
 
+The list folds take a lambda too and work in a rule as well as a value:
+
+| Fold | Written out as |
+|---|---|
+| `sum(list, x => e)` | `e0 + e1 + …` (`0` when empty) |
+| `count(list, x => p)` | the truths of `p` added (a comparison as written, else `p != 0`) |
+| `any(list, x => p)` / `all(list, x => p)` | `p0 or p1 …` (`0`) / `p0 and p1 …` (`1`) |
+| `minimum(list, x => e)` / `maximum(list, x => e)` | nested two-argument calls; an empty list is refused |
+| `first(list, x => c, otherwise)` | `c0 ? x0 : (c1 ? x1 : … : otherwise)` |
+| `first(list, x => c, x => v, otherwise)` | `c0 ? v0 : (c1 ? v1 : … : otherwise)` |
+
+`let name = value in body` names a value for one expression (`let a = 1 in let b = a + 1 in a * b`); in a rule a
+state-reading value read more than once is refused unless it is a plain read (write a rule `local`).
+
 ## Comparisons are 1 or 0
 
 The rule language's conditional (`c ? a : b`, loosest and right-associative, and

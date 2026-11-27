@@ -71,7 +71,7 @@ is an object with a `channel` and its `arguments`.
 | `reduce(arrangementRank, hand)` | `$reduce:arrangementRank:hand` | An ordered pile's order as one Lehmer rank. |
 | `zone(hand, last)`, `zone(hand, first)` | `$zone:hand:last` | A dynamic key: the original key of the pile's endpoint member. |
 | `history(recent, 0)` | `$history:recent:0` | A history ring by age; 0 is the newest push. |
-| `table(moves, power)[local(move)]` | `$table:moves:power:$local:move` | A static table value. See [Tables](#tables). |
+| `table(moves, power)[move]` (`move` a local) | `$table:moves:power:$local:move` | A static table value. See [Tables](#tables). |
 | `board(neighbour, board, E)[cell]` | `$board:neighbour:board:E` | A board query. See [Topologies and boards](topologies.md). |
 | `match(line, board, E, distance)[cell]` | `$match:line:board:E:distance` | A pattern match. See [Patterns](patterns.md). |
 | `phase(turn)` | `$phase:turn` | A phase row's generation. |
@@ -251,6 +251,62 @@ time. The work sheet prices a fold as the row's capacity times its body's cost.
 
 `count(hand)` with no body is the reduction described in
 [Reductions](#reductions); `count(hand, c -> c > 2)` is a fold.
+
+## Fold over a compile-time list
+
+When a fold's first argument is a list the compiler knows (a list literal, a
+`let` or template parameter holding a list, or a builtin such as `range(0, 4)`
+or `map(...)`), the fold is written out at compile time: one term per element,
+each the body with the element in place of the binder. The body may read any
+state, so a fold over piles, seats or directions replaces the expression an
+author would otherwise paste once per element:
+
+```puck
+freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)
+shapeLegal = any([N, S, E, W], ray => match(chessRayEmpty, lastLegal, ray, cell)[move.to] == move.from)
+local near = first(range(1, seats + 1), s => seatAtSide(cells, s, 0), 0)
+```
+
+| Fold | Written out as |
+|---|---|
+| `sum(list, x => e)` | `e0 + e1 + …`, or `0` for an empty list |
+| `count(list, x => p)` | `p0 + p1 + …` over truth values: a comparison, `and`, `or` or `not` as written, anything else as `p != 0` |
+| `any(list, x => p)` | `p0 or p1 or …`, or `0` |
+| `all(list, x => p)` | `p0 and p1 and …`, or `1` |
+| `minimum(list, x => e)`, `maximum(list, x => e)` | `minimum(minimum(e0, e1), e2)` and so on; an empty list is refused |
+| `first(list, x => c, otherwise)` | `c0 ? x0 : (c1 ? x1 : … : otherwise)`, the first element whose condition holds |
+| `first(list, x => c, x => v, otherwise)` | `c0 ? v0 : (c1 ? v1 : … : otherwise)` |
+
+An element stands in the body as a binding of it is written: a number as its
+literal, a name or text as that name, so `ray` above reads the direction `N`
+and `$"freecellPile{k}Of"` names the pile. A record element is read through
+its members (`chair[c.name] * c.side`). The result is the expression written
+out, so it is folded, priced and refused exactly as that expression is: the
+lowered rule is identical to the hand-written one. The lambda is what makes a
+call a list fold; `count(hand)` and `any(row, x -> x > 0)` over a row stay the
+row folds above. The same calls evaluate in document values, where the body
+reads only compile-time values.
+
+## Name a value for one expression
+
+`let name = value in body` names a value for the expression after `in`. Lets
+chain, each reading the ones before it:
+
+```puck
+function loopGradient(keys, f) = let at = f * length(keys) in
+let from = floor(at) in
+let t = at - from in
+loopItem(keys, from) * (1 - t) + loopItem(keys, from + 1) * t
+```
+
+In a document value the value is evaluated once. In a rule the program holds
+the body with the value in place of the name. A value the compiler knows, such
+as a constant or a list, binds as a fold's element does. A value that reads
+state is written in place only where that evaluates it no more often than the
+author wrote it: where the body reads the name once, or where the value is a
+plain read such as a local, a row or `row[$each]`. A body that would evaluate
+anything more costly twice is refused, and its fix is a rule `local`, which is
+evaluated once.
 
 ## Subprograms and calls
 
@@ -588,7 +644,7 @@ A rule reads a single-value table as `table(name, key)` (`$table:<name>:<key>`)
 and a column table as `table(name, column, key)`
 (`$table:<name>:<column>:<key>`). The key is an integer literal, an indirection,
 a binding token such as `$each`, or a local written in brackets:
-`table(moves, power)[local(move)]`. A literal key the table doesn't carry is
+`table(moves, power)[move]`. A literal key the table doesn't carry is
 refused at compile time with `RuleRefusal.StateCellUndeclared`. A dynamic key
 the table doesn't carry reads as absent, so `?? fallback` or `isAbsent` handles
 it the way [Answer an absent read](#answer-an-absent-read) describes. A lookup
@@ -612,8 +668,9 @@ the document's own spelling.
 - Expressions compute in Int or Fixed. A `Bool` cell reads as Int 0 or 1, and a
   `Text` cell can't be read in an expression. Vectors reach expressions only
   through the vector functions.
-- A fold nests at most once, and there's no `.puck` spelling for a subprogram
-  call.
+- A row fold nests at most once, and there's no `.puck` spelling for a
+  subprogram call. A fold over a compile-time list has no such limit, since it
+  is written out before the program is built.
 - Board mask functions and `board(mask, …)` handle topologies of at most 64
   cells, because an expression value is one 64-bit word.
 - `primeAt` covers the first 256 primes; `factorial` stops at 20; subsets stop

@@ -70,6 +70,9 @@ public static class SyntaxScopes {
             case LambdaExpressionNode lambda:
                 bound.AddRange(collection: lambda.Parameters.Select(selector: name => new SyntaxBinder(Declaration: lambda, Kind: SyntaxBinderKind.LambdaParameter, Name: name)));
                 break;
+            case LetExpressionNode let when !ReferenceEquals(objA: child, objB: let.Value):
+                bound.Add(item: new SyntaxBinder(Declaration: let, Kind: SyntaxBinderKind.Constant, Name: let.Name));
+                break;
             // A function's defaults are evaluated where it is called, so no parameter is visible in one.
             case FunctionExpressionNode function when (child is not TemplateParameterNode):
                 AddParameters(before: null, into: bound, parameters: function.Parameters);

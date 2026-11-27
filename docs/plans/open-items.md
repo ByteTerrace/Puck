@@ -5431,6 +5431,12 @@ their lane order; this packet keeps the single duplicates and leads.
   (`PuckPrinter.Writer.TestGivenItems`, `TestWhenItems`, `TestExpectItems`), a trivia case and an expansion
   (`WorldDocumentEmitter.GivenLines`, `WhenLines`, `ExpectLines`). One generic loop node over the block's item type,
   with one parser and one expansion, replaces the three.
+- Operand source syntax has two printers: `ExpressionSpelling.PrintSyntax` (atoms printed by a callback, a nesting
+  check) and `PrintSourceNode`, the `SyntaxNode.Print` path for source nodes, so every new source node (`SourceList`,
+  `SourceLet`) is printed twice. One printer with the atom callback serves both. The other walks already ride
+  `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
+  `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
+  form-aware child walk would fold in too.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)

@@ -1841,7 +1841,7 @@ public static partial class PuckPrinter {
             BinaryExpressionNode binary => PuckParser.InfixLevel(symbol: binary.Operator),
             RangeExpressionNode => PuckParser.RangeLevel,
             ConditionalExpressionNode => PuckParser.ConditionalLevel,
-            LambdaExpressionNode => 0,
+            LambdaExpressionNode or LetExpressionNode => 0,
             _ => PuckParser.PrimaryLevel,
         });
         private static string Number(decimal value) => value.ToString(provider: CultureInfo.InvariantCulture);

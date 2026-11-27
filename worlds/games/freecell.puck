@@ -171,22 +171,8 @@ template freecellGame() {
   rule "solitaireFreecell-empties" {
     forEach: solitaireTable
     mode: Level
-    freecellEmptyCells[$each] = (
-      (count(freecellPile0Of[$each]) == 0) +
-      (count(freecellPile1Of[$each]) == 0) +
-      (count(freecellPile2Of[$each]) == 0) +
-      (count(freecellPile3Of[$each]) == 0)
-    )
-    freecellEmptyColumns[$each] = (
-      (count(freecellPile8Of[$each]) == 0) +
-      (count(freecellPile9Of[$each]) == 0) +
-      (count(freecellPile10Of[$each]) == 0) +
-      (count(freecellPile11Of[$each]) == 0) +
-      (count(freecellPile12Of[$each]) == 0) +
-      (count(freecellPile13Of[$each]) == 0) +
-      (count(freecellPile14Of[$each]) == 0) +
-      (count(freecellPile15Of[$each]) == 0)
-    )
+    freecellEmptyCells[$each] = sum(range(0, 4), k => count($"freecellPile{k}Of"[$each]) == 0)
+    freecellEmptyColumns[$each] = sum(range(8, 16), k => count($"freecellPile{k}Of"[$each]) == 0)
   }
 
   rule "solitaireFreecell-prepare-move" {
@@ -300,15 +286,6 @@ template freecellGame() {
   rule "solitaireFreecell-win" {
     forEach: solitaireTable
     when solitaireTable[$each] == 2 and freecellStatus[$each] == 1 and freecellBusy[$each] == 0
-    freecellStatus[$each] = (
-      (
-        count(freecellPile4Of[$each]) +
-        count(freecellPile5Of[$each]) +
-        count(freecellPile6Of[$each]) +
-        count(freecellPile7Of[$each])
-      ) == 52 ?
-        2 :
-      1
-    )
+    freecellStatus[$each] = (sum(range(4, 8), k => count($"freecellPile{k}Of"[$each])) == 52 ? 2 : 1)
   }
 }

@@ -24,6 +24,9 @@ public static partial class PuckParser {
     // never reaches here: the infix reader has already taken it as the coalesce operator.
     private static ExpressionNode ParseConditionalExpression(ParseContext context, int depth = 0) {
         if (depth >= ExpressionSpelling.MaxNesting) { throw CreateException(context: context, message: $"Conditionals nest at most {ExpressionSpelling.MaxNesting} levels"); }
+        if (TryParseLetExpression(context: context) is { } let) {
+            return let;
+        }
         var condition = ParseInfixExpression(
             context: context,
             minimum: 0
@@ -49,6 +52,40 @@ public static partial class PuckParser {
         var whenFalse = ParseConditionalExpression(context: context, depth: (depth + 1));
 
         return new ConditionalExpressionNode(Condition: condition, WhenTrue: whenTrue, WhenFalse: whenFalse, Offset: condition.Offset, Length: (cursor.Offset - condition.Offset), Line: condition.Line, Column: condition.Column);
+    }
+
+    // `let name = value in body`, read where `let` is followed by a name and a lone `=`; anything else rewinds, so a
+    // name `let` read elsewhere keeps its meaning. The body reaches as far right as an expression can.
+    private static LetExpressionNode? TryParseLetExpression(ParseContext context) {
+        SkipWhiteSpace(context: context);
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+        var startOffset = cursor.Offset;
+
+        if (!TryMatchKeyword(context: context, keyword: "let")) {
+            return null;
+        }
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
+            cursor.ResetPosition(position: saved);
+            return null;
+        }
+        SkipWhiteSpace(context: context);
+        if ((cursor.Current != '=') || (cursor.PeekNext() is '=' or '>')) {
+            cursor.ResetPosition(position: saved);
+            return null;
+        }
+        cursor.Advance();
+        var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+        var value = ParseExpression(context: context);
+
+        SkipWhiteSpace(context: context);
+        if (!TryMatchKeyword(context: context, keyword: "in")) {
+            throw CreateException(context: context, message: $"A let expression reads 'let {name} = value in expression'; expected 'in'");
+        }
+        var body = ParseExpression(context: context);
+
+        return new LetExpressionNode(Body: body, Column: column, Length: (cursor.Offset - startOffset), Line: line, Name: name, Offset: startOffset, Value: value);
     }
 
     /// <summary>The level a primary, and a unary operator over one, binds at: tighter than every infix

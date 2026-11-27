@@ -27,6 +27,11 @@ public abstract partial class PuckSyntaxRewriter {
                 WhenFalse = RewriteOperandSyntax(ternary.WhenFalse, DocumentValueForm.Expression),
             },
             Operand.SourceLambda lambda => lambda with { Body = RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) },
+            Operand.SourceLet let => let with {
+                Value = RewriteOperandSyntax(let.Value, DocumentValueForm.Expression),
+                Body = RewriteOperandSyntax(let.Body, DocumentValueForm.Expression),
+            },
+            Operand.SourceList list => RewriteList(list: list),
             Operand.SourceCall call => call with { Arguments = RewriteArguments(arguments: call.Arguments) },
             _ => node,
         };
@@ -34,6 +39,19 @@ public abstract partial class PuckSyntaxRewriter {
         return (Equals(objA: node, objB: rewritten) ? node : rewritten);
     }
 
+    private Operand.SourceList RewriteList(Operand.SourceList list) {
+        Operand.SyntaxNode[]? rewritten = null;
+
+        for (var index = 0; (index < list.Items.Count); index++) {
+            var item = RewriteOperandSyntax(list.Items[index], DocumentValueForm.Expression);
+
+            if (!Equals(objA: item, objB: list.Items[index])) {
+                rewritten ??= [.. list.Items];
+                rewritten[index] = item;
+            }
+        }
+        return ((rewritten is null) ? list : (list with { Items = rewritten }));
+    }
     private IReadOnlyList<Operand.SourceArgument> RewriteArguments(IReadOnlyList<Operand.SourceArgument> arguments) {
         Operand.SourceArgument[]? rewritten = null;
 

@@ -125,6 +125,23 @@ A document's `schema:` field selects its vocabulary, never the filename.
   **PUCK044**.
   `range(start, end)` stops before its end: `range(1, 4)` is 1, 2 and 3, and `range(0, n)` holds n values.
   Every `for` body binds its own `let`s (a shade program's loop excepted, whose `let`s are runtime values).
+- **A fold over a compile-time list unrolls, in a value or a rule.** `sum`, `count`, `any`, `all`, `minimum`,
+  `maximum` (`name(list, x => term)`) and `first` (`first(list, x => cond, otherwise)`,
+  `first(list, x => cond, x => value, otherwise)`) over a list literal, a `let`, a parameter or a collection builtin
+  are written out as the chain an author would paste (`ListFolds`, the one shape both languages build): a document
+  value evaluates it, and a rule operand's body may read state (`OperandBinder.Expand`, after function inlining and
+  before constant folding), so the lowered rule equals the hand-written one. The lambda marks the fold: `count(hand)`,
+  `any(row, x -> …)`, `minimum(a, b)` and a gate's `all [...]` keep their meanings. An element stands as a binding of
+  it is written (a number as a literal, a name or text as an atom), a record only through its members. Never paste a
+  term per seat, pile or direction.
+- **`let name = value in body` names a value for one expression** (a document value, a function body, a rule
+  operand). In a rule a compile-time value binds like a fold's element; a state-reading value is substituted only
+  where the body reads it once or it is a plain read, else it is refused with the fix, a rule `local`
+  (`OperandBinder.ExpandLet`). A long chain prints one binding a line.
+- **A walk over rule-operand syntax rides `ExpressionSpelling.MapSourceChildren` and `SourceChildren`** (printed
+  order, identity kept when nothing changes; `MapSourceAtoms` renumbers atoms), so a new source node
+  (`SourceList`, `SourceLet`) is taught once; only walks that change form or scope per child (the rewriter, the
+  linter, `IsCompileTime`) switch over the nodes themselves.
 - **`if cond { } else { }` in document or section position emits one branch's rows**
   (`DocumentLowering.ExpandConditionalStatements`, the one expansion every section calls); a branch may hold `let`s
   and, unlike a `for` body, field assignments, so one member of a row can be conditional. A row written or left out is
