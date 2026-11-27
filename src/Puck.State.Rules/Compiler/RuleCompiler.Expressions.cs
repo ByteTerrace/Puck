@@ -125,7 +125,7 @@ public static partial class RuleCompiler {
             result: out result,
             resultKind: resultKind,
             ruleName: ruleName,
-            shared: new Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)>(comparer: StringComparer.Ordinal),
+            shared: new Dictionary<string, (CompiledProgram Body, CellKind Result, bool[] FixedArguments)>(comparer: StringComparer.Ordinal),
             verb: verb
         );
     }
@@ -201,7 +201,7 @@ public static partial class RuleCompiler {
     // member reads as inside a fold body; `argumentKinds` are the kinds a subprogram's own operands carry;
     // `calling` is the chain of subprograms already open, which is what makes the call graph a proven DAG; and
     // `shared` holds each subprogram body compiled once per signature.
-    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)> shared, out CellKind result, bool[]? contextualArguments = null) {
+    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledProgram Body, CellKind Result, bool[] FixedArguments)> shared, out CellKind result, bool[]? contextualArguments = null) {
         if (
             (instructions is not { Count: > 0 } authored) ||
             (authored.Count > RuleCapacity.MaxExpressionTokens)
@@ -566,7 +566,7 @@ public static partial class RuleCompiler {
                 new CompiledExpressionToken(
                     Call: new CompiledSubprogram(
                         Arity: declared.Arity,
-                        Body: new CompiledProgram(tokens: body),
+                        Body: body,
                         Name: declared.Name,
                         Steps: RuleWorkBudget.Steps(tokens: body)
                     ),
@@ -603,7 +603,7 @@ public static partial class RuleCompiler {
                 ? CellKind.Fixed
                 : member;
             var outerMember = context.FoldMember;
-            (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) shape;
+            (CompiledProgram Body, CellKind Result, bool[] FixedArguments) shape;
 
             context.FoldMember = member;
             try {
@@ -637,7 +637,7 @@ public static partial class RuleCompiler {
             return Push(
                 new CompiledExpressionToken(
                     Fold: new CompiledFold(
-                        Body: new CompiledProgram(tokens: body),
+                        Body: body,
                         Cells: context.RowCapacity(rowOrdinal: folded),
                         Describe: fold.Family,
                         MemberKind: member,
@@ -815,7 +815,7 @@ public static partial class RuleCompiler {
         }
         // A subprogram body depends only on the subprogram and the kinds it is entered with, so one compiled body
         // per signature serves every call site and every fold that names it.
-        (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
+        (CompiledProgram Body, CellKind Result, bool[] FixedArguments) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
             var signature = $"{subprogram}:{kind}:{resultKind}:{memberKind}:{string.Join(
                 separator: ',',
                 values: argumentKinds
@@ -842,7 +842,7 @@ public static partial class RuleCompiler {
                     verb: verb
                 );
 
-                body = (compiled, left, requiredArguments);
+                body = (new CompiledProgram(tokens: compiled), left, requiredArguments);
                 shared[signature] = body;
             }
 

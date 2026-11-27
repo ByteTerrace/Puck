@@ -455,7 +455,7 @@ internal sealed class ReadNode(IRuleOperand operand, CellKind carrier) : Program
 internal sealed class ReadAddressedNode(IRuleOperand operand, CellKind carrier, ProgramNode[] feeds) : ProgramNode {
     [SkipLocalsInit]
     internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var feedFrame = default(FeedFrame);
+        Unsafe.SkipInit(value: out FeedFrame feedFrame);
         Span<AddressFeed> fed = feedFrame;
 
         for (var slot = 0; (slot < feeds.Length); slot++) {
@@ -1031,7 +1031,7 @@ internal sealed class BoardNode(BoardNeighbourQuery query, ExpressionStep step, 
 internal sealed class FunctionNode(ExpressionOp operation, CellKind carrier, ProgramNode[] operands) : ProgramNode {
     [SkipLocalsInit]
     internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
-        var block = default(ArgumentBlock);
+        Unsafe.SkipInit(value: out ArgumentBlock block);
         Span<long> values = block;
         var absent = false;
 
