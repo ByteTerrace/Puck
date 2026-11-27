@@ -451,13 +451,14 @@ prototypes {
         let line = treeDeckLine(b)
         let under = [0, treeDeck, 0]
         let side = ((treePadWidth / 2) - 0.06)
+        // The pad is a sharp box, so its outer edge meets the deck's first board flush: a rounded edge would dip under
+        // the board's end and leave a lip a walker steps up.
         shape Box $"pad-{i}" {
           material: treeTimber
           position: (polarPoint(((treePadFrom + treePadReach) / 2), angle, (top - (treeTreadThickness / 2))) *
             [-1, 1, -1])
           rotation: rotate([0, 1, 0], (0 - angle))
           scale [((treePadReach - treePadFrom) / 2), (treeTreadThickness / 2), (treePadWidth / 2)]
-          rounding: 0.025
         }
         shape Sweep $"bough-{i}" {
           rotation: rotate([0, 1, 0], 180)

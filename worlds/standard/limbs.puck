@@ -221,11 +221,13 @@ template spiralGuard(label, treads, start, step, rise, rim, material, height = 0
 
 // A timber deck along a limb's walking line, the quadratic Bezier `a`, `b`, `c`: `segments` boards, each a box whose
 // top lies on the chord between two points of the line, `thickness` thick and kept level across, its width tapering
-// from `width[0]` at `a` to `width[1]` at `c`. Each board but the first reaches `overlap` back past its start, under
-// the end of the board before, and none reaches past `c`, so the deck's top is the line's chords, with a crease of the
-// curve's turn between two boards and no step, and it ends square at `c` (a balcony's edge). Boxes joined by union, so
-// the deck collides as drawn.
-template deckedLimb(label, a, b, c, width, thickness, material, segments = 8, overlap = 0.05) {
+// from `width[0]` at `a` to `width[1]` at `c`. Neighbouring boards meet at the line's points, their top edges on one
+// level line there, so the deck's top is the line's chords, with a crease of the curve's turn between two boards and no
+// step, and it ends square at `c` (a balcony's edge). Each board but the first may reach `overlap` back past its start,
+// under the end of the board before; where the line bends over a crest that lifts the board's end above the one before
+// by the overlap times the change of slope, a lip a walker meets as a riser, so a walked deck keeps none. Boxes joined
+// by union, so the deck collides as drawn.
+template deckedLimb(label, a, b, c, width, thickness, material, segments = 8, overlap = 0) {
   for i in range(0, segments) {
     let p0 = quadraticPoint(a, b, c, (i / segments))
     let p1 = quadraticPoint(a, b, c, ((i + 1) / segments))
