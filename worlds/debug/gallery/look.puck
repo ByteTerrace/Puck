@@ -93,6 +93,20 @@ function lookCabinetPalette(c) = [
   { color: c.neon, roughness: 0.4, emissive: lookCabinetNeonGlow }
   { color: lookCabinetMetal, roughness: 0.28, metal: 0.9 }
 ]
+// The toybox's handheld rental kiosks (rentals.puck's `rental-counter`): the cabinets' toy plastic in the level's cobalt
+// and sunflower under a candy-pink canopy, cream number plates, each arm lit in a neon of its own (the first two
+// cabinets' cyan and magenta) with a cubby back glowing pale cyan or pale pink, and the cabinets' marquee glow for the
+// signs. The cubbies' backlight is dimmer than a marquee's panel so the handhelds read against it, not as silhouettes.
+let lookRentalKiosk = {
+  body: lookLevelToybox.tile
+  trim: lookLevelToybox.tileTone
+  plate: lookLevelToybox.grout
+  canopy: lookLevelToybox.coffer
+  neon: [lookCabinets[0].neon, lookCabinets[1].neon]
+  backlight: ["#9EDCFF", "#FFC9E8"]
+  sign: lookCabinets[0].glow
+}
+let lookRentalKioskBackGlow = 1200nit
 // The toybox's television sets (toybox.puck), by colourway: a set and its twin across the nave wear one. Each names
 // the television's case and trim, the stand's painted boards, the console's shell, the pads' shells and buttons, and
 // the lounge before it: the rug's field and border and its two beanbags. Sunflower on a cobalt stand over a cherry rug,

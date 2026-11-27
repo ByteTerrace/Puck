@@ -36,6 +36,7 @@
 // key off (`rentalKeyShown` 2), dull and passing nothing, and on again. A key goes back to its stand at the stand's
 // tray, or when its holder leaves the gallery or the world.
 
+import "../../standard/architecture"
 import "../../standard/machines"
 import "../../standard/pad-kit"
 import "../../standard/reach"
@@ -77,7 +78,9 @@ let rentalReachDepth = 1.2
 function rentalAlong(n) = (rentalFirst + (rentalPitch * n))
 // A device's place on its arm, in the stall's frame, and the yaw it faces the customer at.
 function rentalSpot(arm, n) = ((arm == 0) ? [(0 - rentalFront), (0 - rentalAlong(n))] : [rentalAlong(n), rentalFront])
-function rentalArmYaw(arm) = ((arm == 0) ? 90 : 180)
+// A device's front is its creation's author -Z, which the author frame turns to the engine's +Z, so a placement faces
+// it toward its customer at 270 on arm 0 (customers at -x) and 0 on arm 1 (customers at +z).
+function rentalArmYaw(arm) = ((arm == 0) ? 270 : 0)
 
 // The models: a brick on arm 0, an advanced brick on arm 1.
 let rentalModels = [
@@ -370,50 +373,176 @@ template rentalKey() {
   shape Cylinder "gem" { material: 1, position [0, 0.14, 0], rotation [0.7071068, 0, 0, 0.7071068], scale [0.019, 0.004, 0.019] }
 }
 
-// The counter, in its stall's frame from the L's corner: each arm a body in the toybox's sunflower with a cobalt kick
-// and a candy-pink top, and the returns tray at the corner, cut into the top.
+// The stand and the rack share a plain counter palette: the level's sunflower, cobalt and candy pink, and cream.
 let rentalCounterPalette = [
   { color: lookLevelToybox.tileTone, roughness: 0.3, specular: 0.04, coat: 0.5 }
   { color: lookLevelToybox.tile, roughness: 0.35, specular: 0.04 }
   { color: lookLevelToybox.coffer, roughness: 0.25, specular: 0.04, coat: 0.6 }
   { color: lookLevelToybox.grout, roughness: 0.4, specular: 0.04 }
 ]
-let rentalArmBoxes = [
-  { x0: (0 - rentalCounterHalfDepth), x1: rentalCounterHalfDepth, z0: (0 - rentalArmLength), z1: rentalCounterHalfDepth }
-  { x0: (0 - rentalCounterHalfDepth), x1: rentalArmLength, z0: (0 - rentalCounterHalfDepth), z1: rentalCounterHalfDepth }
+
+// The kiosk: a stall's counter, a creation whose shapes are in the author frame, turned a half turn from the plan, so a
+// point of the stall's frame (`rentalPlan`'s lx, lz) is the author point (-lx, -lz) in both stalls. Each arm is
+// built once in its own terms, `u` along the arm from the corner and `v` out toward its customers (arm 0 customers at
+// the stall's -x, arm 1's at its +z), and `rentalArmAuthor` puts a point there in the author frame (arm 0: x = v, z = u;
+// arm 1: x = -u, z = -v). The arms are mirror images across the L's diagonal, so one template builds both.
+// The slots of the palette below, by role.
+let rentalKiosk = { body: 0, trim: 1, bezel: 2, plate: 3, canopy: 4, neon: 5, back: 7, sign: 9, ink: 10 }
+let rentalKioskPalette = [
+  { color: lookRentalKiosk.body, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookRentalKiosk.trim, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookCabinetBezel, roughness: 0.12, specular: 0.05, coat: 0.6 }
+  { color: lookRentalKiosk.plate, roughness: 0.4, specular: 0.04 }
+  { color: lookRentalKiosk.canopy, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookRentalKiosk.neon[0], roughness: 0.4, emissive: lookCabinetNeonGlow }
+  { color: lookRentalKiosk.neon[1], roughness: 0.4, emissive: lookCabinetNeonGlow }
+  { color: lookRentalKiosk.backlight[0], roughness: 0.4, emissive: lookRentalKioskBackGlow }
+  { color: lookRentalKiosk.backlight[1], roughness: 0.4, emissive: lookRentalKioskBackGlow }
+  { color: lookRentalKiosk.sign, roughness: 0.4, emissive: lookCabinetGlow }
+  { color: lookCabinetInk, roughness: 0.5, specular: 0.04 }
 ]
+function rentalArmAuthor(arm, u, y, v) = ((arm == 0) ? [v, y, u] : [(0 - u), y, (0 - v)])
+function rentalArmScale(arm, hu, hy, hv) = ((arm == 0) ? [hv, hy, hu] : [hu, hy, hv])
+// The turn about author +Y that carries a text run's front (author +Z) onto the arm's customers.
+function rentalArmTurn(arm) = ((arm == 0) ? 90 : 180)
+// A line of lettering on an arm's customer side, centred on (u, y) at depth v.
+function rentalArmLetters(arm, u, y, v, text, em, width) = {
+  text: text
+  position: rentalArmAuthor(arm, u, (y - ((textCapHeight * em) / 2)), v)
+  rotation: rotate([0, 1, 0], rentalArmTurn(arm))
+  emHeight: em
+  depth: 0.004
+  mode: "emboss"
+  material: rentalKiosk.ink
+  align: "center"
+  maxWidth: width
+}
+// The corner's blade sign, turned to the diagonal the corner's customers come from (the stall's -x, +z, which is the
+// author's +x, -z), and a point `d` out of its face.
+let rentalBladeAt = [0.1, 2.95, -0.1]
+let rentalBladeTurn = 135
+function rentalBladePoint(d, y) = [(rentalBladeAt[0] + (0.70711 * d)), y, (rentalBladeAt[2] - (0.70711 * d))]
+// The cubbies' clear height over the counter: a brick is 0.133 m tall and an advanced brick 0.082 m.
+function rentalCubbyHeight(arm) = ((arm == 0) ? 0.22 : 0.15)
+
+// A box of an arm, from its centre and half-extents along (u, y, v); a fine part is detail unless it is the body a
+// player's contact reads.
+template rentalKioskBox(label, arm, material, u, y, v, hu, hy, hv, rounding = 0, detail = true) {
+  shape Box $"{label}" {
+    material: material
+    position: rentalArmAuthor(arm, u, y, v)
+    scale: rentalArmScale(arm, hu, hy, hv)
+    rounding: rounding
+    detail: detail
+  }
+}
+
+// One arm. From the floor: a dark kick plate recessed under the cabinet and its underglow, the cobalt body with a lit
+// reveal under the sunflower counter lip, and a number plate for each device on its front. On the lip a display shelf:
+// a glowing back, a frame post between devices, and a candy-pink lintel with a lit underside. Above, a header naming the
+// arm on posts and a canopy with a lit front edge. The body and kick are the solid; every other part is detail.
+template rentalKioskArm(arm) {
+  let top = rentalCounterTop
+  let h = rentalCubbyHeight(arm)
+  let neon = (rentalKiosk.neon + arm)
+  let mid = (rentalFirst + ((rentalPitch * (rentalPerModel - 1)) / 2))
+  let shelfHalf = ((rentalPitch * rentalPerModel) / 2)
+  rentalKioskBox(label: $"kick-{arm}", arm: arm, material: rentalKiosk.bezel, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.06, v: 0, hu: ((rentalArmLength + rentalCounterHalfDepth) / 2), hy: 0.06, hv: 0.2, rounding: 0.02, detail: false)
+  rentalKioskBox(label: $"underglow-{arm}", arm: arm, material: neon, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.135, v: 0.2, hu: 1.35, hy: 0.008, hv: 0.008, rounding: 0.006)
+  rentalKioskBox(label: $"body-{arm}", arm: arm, material: rentalKiosk.body, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.47, v: 0, hu: ((rentalArmLength + rentalCounterHalfDepth) / 2), hy: 0.35, hv: rentalCounterHalfDepth, rounding: 0.03, detail: false)
+  rentalKioskBox(label: $"reveal-{arm}", arm: arm, material: neon, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: 0.83, v: rentalCounterHalfDepth, hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) - 0.03), hy: 0.01, hv: 0.012, rounding: 0.008)
+  rentalKioskBox(label: $"lip-{arm}", arm: arm, material: rentalKiosk.trim, u: ((rentalArmLength - rentalCounterHalfDepth) / 2), y: (top - 0.055), v: 0, hu: (((rentalArmLength + rentalCounterHalfDepth) / 2) + 0.03), hy: 0.055, hv: (rentalCounterHalfDepth + 0.02), rounding: 0.02, detail: false)
+  rentalKioskBox(label: $"plate-returns-{arm}", arm: arm, material: rentalKiosk.plate, u: 0, y: 0.47, v: rentalCounterHalfDepth, hu: 0.21, hy: 0.04, hv: 0.004)
+  for n in range(0, rentalPerModel) {
+    rentalKioskBox(label: $"plate-{arm}-{n}", arm: arm, material: rentalKiosk.plate, u: rentalAlong(n), y: 0.47, v: rentalCounterHalfDepth, hu: 0.05, hy: 0.035, hv: 0.004)
+  }
+  // The shelf behind the devices (their backs stand 0.086 m out of the arm's centre line).
+  rentalKioskBox(label: $"back-{arm}", arm: arm, material: (rentalKiosk.back + arm), u: mid, y: (top + (h / 2)), v: 0.051, hu: (shelfHalf + 0.006), hy: (h / 2), hv: 0.021)
+  for k in range(0, rentalPerModel + 1) {
+    rentalKioskBox(label: $"post-{arm}-{k}", arm: arm, material: rentalKiosk.bezel, u: (rentalFirst - (rentalPitch / 2) + (rentalPitch * k)), y: (top + (h / 2)), v: 0.135, hu: 0.006, hy: (h / 2), hv: 0.105, rounding: 0.003)
+  }
+  rentalKioskBox(label: $"lintel-{arm}", arm: arm, material: rentalKiosk.canopy, u: mid, y: (top + h + 0.02), v: 0.135, hu: (shelfHalf + 0.03), hy: 0.02, hv: 0.115, rounding: 0.012)
+  rentalKioskBox(label: $"lintel-light-{arm}", arm: arm, material: neon, u: mid, y: (top + h - 0.004), v: 0.14, hu: shelfHalf, hy: 0.004, hv: 0.09)
+  // The header and its posts, and the canopy over them reaching out over the customers.
+  rentalKioskBox(label: $"mast-{arm}", arm: arm, material: rentalKiosk.bezel, u: 2.52, y: 1.7, v: -0.2, hu: 0.03, hy: 0.75, hv: 0.03, rounding: 0.01)
+  rentalKioskBox(label: $"header-{arm}", arm: arm, material: rentalKiosk.trim, u: 1.45, y: 2.12, v: -0.05, hu: 1.15, hy: 0.2, hv: 0.15, rounding: 0.03)
+  shape Box $"header-sign-{arm}" {
+    material: rentalKiosk.sign
+    position: rentalArmAuthor(arm, 1.45, 2.12, 0.104)
+    scale: rentalArmScale(arm, 1.08, 0.15, 0.012)
+    lightsAs: Face
+    detail: true
+  }
+  rentalKioskBox(label: $"canopy-{arm}", arm: arm, material: rentalKiosk.canopy, u: 1.05, y: 2.47, v: 0.15, hu: 1.65, hy: 0.03, hv: 0.45, rounding: 0.015)
+  rentalKioskBox(label: $"canopy-lip-{arm}", arm: arm, material: rentalKiosk.trim, u: 1.05, y: 2.43, v: 0.6, hu: 1.65, hy: 0.06, hv: 0.02, rounding: 0.012)
+  rentalKioskBox(label: $"canopy-light-{arm}", arm: arm, material: neon, u: 1.05, y: 2.43, v: 0.625, hu: 1.6, hy: 0.01, hv: 0.008, rounding: 0.006)
+}
 
 prototypes {
   prototype "rental-counter" {
     document {
       name: "rental-counter"
       schema: "puck.creation.v1"
-      palette: rentalCounterPalette
-      for (box, a) in rentalArmBoxes {
-        shape Box $"body-{a}" {
-          material: 0
-          position [((box.x0 + box.x1) / 2), ((rentalCounterTop - 0.04) / 2), ((box.z0 + box.z1) / 2)]
-          scale [((box.x1 - box.x0) / 2), ((rentalCounterTop - 0.04) / 2), ((box.z1 - box.z0) / 2)]
-          rounding: 0.03
-        }
-        shape Box $"kick-{a}" {
-          material: 1
-          position [((box.x0 + box.x1) / 2), 0.05, ((box.z0 + box.z1) / 2)]
-          scale [(((box.x1 - box.x0) / 2) - 0.03), 0.05, (((box.z1 - box.z0) / 2) - 0.03)]
-        }
-        shape Box $"top-{a}" {
-          material: 2
-          position [((box.x0 + box.x1) / 2), (rentalCounterTop - 0.02), ((box.z0 + box.z1) / 2)]
-          scale [(((box.x1 - box.x0) / 2) + 0.02), 0.02, (((box.z1 - box.z0) / 2) + 0.02)]
-          rounding: 0.015
-        }
+      palette: rentalKioskPalette
+      for arm in [0, 1] {
+        rentalKioskArm(arm)
+      }
+      // The corner: the returns tray, lit round its slot, the post both headers meet at, and the blade sign on its own
+      // post over the canopy.
+      shape Box "tray-light" {
+        material: rentalKiosk.neon
+        position [0, (rentalCounterTop + 0.002), 0]
+        scale [0.2, 0.004, 0.2]
+        rounding: 0.003
+        detail: true
       }
       shape Box "tray" {
-        material: 3
-        position [0, (rentalCounterTop + 0.01), 0]
-        scale [0.18, 0.012, 0.18]
-        rounding: 0.01
+        material: rentalKiosk.bezel
+        position [0, (rentalCounterTop + 0.008), 0]
+        scale [0.17, 0.008, 0.17]
+        rounding: 0.006
+        detail: true
       }
+      rentalKioskBox(label: "mast-corner", arm: 1, material: rentalKiosk.bezel, u: 0.2, y: 1.7, v: -0.2, hu: 0.03, hy: 0.75, hv: 0.03, rounding: 0.01)
+      rentalKioskBox(label: "blade-mast", arm: 1, material: rentalKiosk.bezel, u: 0.05, y: 2.65, v: -0.05, hu: 0.04, hy: 0.2, hv: 0.04, rounding: 0.012)
+      shape Box "blade" {
+        material: rentalKiosk.trim
+        position: rentalBladePoint(0, rentalBladeAt[1])
+        rotation: rotate([0, 1, 0], rentalBladeTurn)
+        scale [0.74, 0.17, 0.03]
+        rounding: 0.02
+        detail: true
+      }
+      shape Box "blade-sign" {
+        material: rentalKiosk.sign
+        position: rentalBladePoint(0.016, rentalBladeAt[1])
+        rotation: rotate([0, 1, 0], rentalBladeTurn)
+        scale [0.7, 0.13, 0.03]
+        lightsAs: Face
+        detail: true
+      }
+      textRuns [
+        for arm in [0, 1] {
+          rentalArmLetters(arm, 1.45, 2.12, 0.118, rentalModels[arm].title, 0.15, 2.05)
+        }
+        for arm in [0, 1] {
+          rentalArmLetters(arm, 0, 0.47, 0.256, "RETURNS", 0.045, 0.38)
+        }
+        for n in flatMap([0, 1], arm => map(range(0, rentalPerModel), n => { arm: arm, n: n })) {
+          rentalArmLetters(n.arm, rentalAlong(n.n), 0.47, 0.256, rentalNumber(n.n + 1), 0.05, 0.09)
+        }
+        {
+          text: "HANDHELD RENTALS"
+          position: rentalBladePoint(0.05, (rentalBladeAt[1] - ((textCapHeight * 0.14) / 2)))
+          rotation: rotate([0, 1, 0], rentalBladeTurn)
+          emHeight: 0.14
+          depth: 0.004
+          mode: "emboss"
+          material: rentalKiosk.ink
+          align: "center"
+          maxWidth: 1.34
+        }
+      ]
     }
   }
   // The key stand: a pedestal in the stalls' colours, its top at rentalKeyTop, the returns tray inset at its east end
@@ -553,7 +682,7 @@ placements {
       prototype: rentalPrototype(d)
       parent: "gallery"
       position [rentalDeviceAt(d)[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalDeviceAt(d)[1]]
-      yawDegrees: (rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm))
+      yawDegrees: ((rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm)) % 360)
       respond [
         { when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
       ]
