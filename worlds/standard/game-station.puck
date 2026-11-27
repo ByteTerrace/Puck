@@ -109,7 +109,8 @@ function gameStationButtonRect(button, count) = {
 let gameStationBits = { pick: 1, cancel: 2, ahead: 4, behind: 8, right: 16, left: 32, list: 64, action: 128 }
 
 // The chairs: the near one at the -Z edge (board side 0) and the far one at +Z (side 2). The local seats a chair may
-// hold are 1 to `gameStationSeats`.
+// hold are 1 to the world's local seat count (its `bodies.localSeats`), which a world passes as
+// `gameStationRules(seats: …)`; `gameStationSeats` is the count when it passes none.
 let gameStationChairs = [{ name: "near", side: 0 }, { name: "far", side: 2 }]
 let gameStationSeats = 4
 
@@ -521,32 +522,25 @@ function gameStationWord(seat) = (gameStationBits.pick * seatPastOf(seat, "confi
   gameStationBits.behind * seatPastOf(seat, "forward", -1) +
   gameStationBits.right * seatPastOf(seat, "strafe", 1) +
   gameStationBits.left * seatPastOf(seat, "strafe", -1))
-// The seat sitting in the chair on side `side` of the board `cells`, the lowest-numbered if several do, or 0.
-function gameStationSeatIn(cells, side) = (seatAtSide(cells, 1, side) ? 1 : (seatAtSide(cells, 2, side) ? 2 :
-  (seatAtSide(cells, 3, side) ? 3 : (seatAtSide(cells, 4, side) ? 4 : 0))))
-// The buttons and the pick cell of seat `seat` (1 to 4; 0 holds none and points nowhere).
-function gameStationButtonsOf(seat) = (((seat == 1) * gameStationWord(1)) |
-  ((seat == 2) * gameStationWord(2)) |
-  ((seat == 3) * gameStationWord(3)) |
-  ((seat == 4) * gameStationWord(4)))
-function gameStationPointedBy(cells, seat) = ((seat == 1) ? board(pointer, cells, 1) : ((seat == 2) ? board(
-  pointer,
-  cells,
-  2
-) : ((seat == 3) ? board(pointer, cells, 3) : ((seat == 4) ? board(pointer, cells, 4) : -1))))
+// The seat of the world's first `seats` sitting in the chair on side `side` of the board `cells`, the lowest-numbered
+// if several do, or 0.
+function gameStationSeatIn(cells, side, seats) = first(range(1, seats + 1), s => seatAtSide(cells, s, side), 0)
+// The buttons and the pick cell of seat `seat` (1 to `seats`; 0 holds none and points nowhere).
+function gameStationButtonsOf(seat, seats) = first(range(1, seats + 1), s => seat == s, s => gameStationWord(s), 0)
+function gameStationPointedBy(cells, seat, seats) = first(range(1, seats + 1), s => seat == s, s => board(pointer, cells, s), -1)
 
 // A station's rules, inside its module instance. The chairs rule reads who sits where; it reads only whether a seat is
 // at the board and where, so it runs when one sits down or stands up. A chair's presses rule reads its seat's buttons
 // and pointer and is idle while its chair stands empty; the near chair's pick on the menu turns into the menu's tap.
-template gameStationRules(station, catalog) {
+template gameStationRules(station, catalog, seats = gameStationSeats) {
   let key = station.id
   let cells = $"{key}Cells"
   let games = length(catalog)
   let pitch = gameStationButtonPitch((games + 1))
 
   rule $"game-station-{key}-chairs" {
-    local near = gameStationSeatIn(cells, 0)
-    local far = gameStationSeatIn(cells, 2)
+    local near = gameStationSeatIn(cells, 0, seats)
+    local far = gameStationSeatIn(cells, 2, seats)
     when gameStationChair.near != near or gameStationChair.far != far
     mode: Level
     gameStationChair.near = near
@@ -555,8 +549,8 @@ template gameStationRules(station, catalog) {
 
   rule $"game-station-{key}-near" {
     local seat = gameStationChair.near
-    local pointed = gameStationPointedBy(cells, seat)
-    local now = gameStationButtonsOf(seat)
+    local pointed = gameStationPointedBy(cells, seat, seats)
+    local now = gameStationButtonsOf(seat, seats)
     local rose = now & ~(gameStationDown.near)
     local x = gameStationCellX(pointed)
     local z = gameStationCellZ(pointed)
@@ -581,8 +575,8 @@ template gameStationRules(station, catalog) {
 
   rule $"game-station-{key}-far" {
     local seat = gameStationChair.far
-    local pointed = gameStationPointedBy(cells, seat)
-    local now = gameStationButtonsOf(seat)
+    local pointed = gameStationPointedBy(cells, seat, seats)
+    local now = gameStationButtonsOf(seat, seats)
     local edges = now & ~(gameStationDown.far)
     when (seat or gameStationDown.far or gameStationPointer.far != -1) and (gameStationDown.far != now or
         gameStationEdges.far != edges or

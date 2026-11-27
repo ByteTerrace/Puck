@@ -2275,6 +2275,11 @@ public static partial class ExpressionSpelling {
         private SyntaxNode ParseTernary() {
             Descend();
 
+            if (sourceSyntax && TryParseSourceLet() is { } let) {
+                m_depth--;
+
+                return let;
+            }
             var condition = ParseBinary(minimumLevel: (TernaryLevel + 1));
 
             if (!Accept(punctuation: "?")) {

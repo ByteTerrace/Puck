@@ -371,6 +371,18 @@ public static partial class DocumentLowering {
                     return result;
                 }
 
+            // The value is evaluated once and bound as the lambda parameters of a collection builtin are, so the body
+            // reads the lowered value rather than lowering the expression again at each reading.
+            case LetExpressionNode let:
+                return Evaluate(
+                    expr: let.Body,
+                    fieldKey: fieldKey,
+                    owned: out owned,
+                    scope: scope.WithLocals(lambdaLocals: new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
+                        [let.Name] = EvaluateValue(expr: let.Value, scope: scope, fieldKey: fieldKey),
+                    })
+                );
+
             case CallExpressionNode call when (FunctionNamed(name: call.Name, scope: scope) is { } function): {
                     owned = false;
 

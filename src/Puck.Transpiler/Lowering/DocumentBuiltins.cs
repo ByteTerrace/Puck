@@ -729,6 +729,58 @@ public static class DocumentBuiltins {
 
         return arr;
     }
+    // A fold over a list evaluates each element's term once, binds the values as fresh locals and evaluates the
+    // expression ListFolds unrolls to over them, so the fold's arithmetic is the document's own `+`, `or`, `and`,
+    // `minimum`, `maximum` and choice. A fold over truth values binds each term's truth, as the rule language reads it.
+    private static JsonNode? ListFold(CallExpressionNode call, DocumentScope scope, string? fieldKey) {
+        var args = call.Arguments;
+
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
+            return Refuse(call: call, message: $"{call.Name}'s first argument is a list", scope: scope);
+        }
+        var first = (call.Name == "first");
+        var term = (LambdaExpressionNode)args[1].Value;
+        var value = ((first && (args.Count == 4)) ? (args[2].Value as LambdaExpressionNode) : null);
+
+        if ((term.Parameters.Count > 2) || (value?.Parameters.Count is > 2) || (first && (args.Count == 4) && (value is null))) {
+            return Refuse(call: call, message: $"{call.Name}'s lambdas take the item, or the item and its index", scope: scope);
+        }
+        scope.Budget.Collection(count: source.Count, span: call.Span);
+        var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal);
+        var terms = new List<ExpressionNode>(capacity: source.Count);
+        var values = (first ? new List<ExpressionNode>(capacity: source.Count) : null);
+        var truth = (first || ListFolds.ReadsTruth(name: call.Name));
+
+        for (var index = 0; (index < source.Count); index++) {
+            var item = source[index];
+            var position = JsonValue.Create(value: ((long)index));
+            var read = Apply(lambda: term, scope: scope, fieldKey: fieldKey, first: item, second: position);
+
+            terms.Add(item: Bind(name: $"$term{index}", value: (truth ? JsonValue.Create(value: (DocumentLowering.IsTruthy(node: read) ? 1L : 0L)) : read)));
+            values?.Add(item: Bind(name: $"$value{index}", value: ((value is null) ? item : Apply(lambda: value, scope: scope, fieldKey: fieldKey, first: item, second: position))));
+        }
+        var otherwise = (first ? Bind(name: "$otherwise", value: DocumentLowering.EvaluateValue(expr: args[^1].Value, scope: scope, fieldKey: fieldKey)) : null);
+
+        if (ListFolds.Unroll(name: call.Name, otherwise: otherwise, refusal: out var refusal, spelling: DocumentFoldSpelling.Instance, terms: terms, values: values) is not { } unrolled) {
+            return Refuse(call: call, message: refusal!, scope: scope);
+        }
+        return DocumentLowering.EvaluateValue(expr: unrolled, scope: scope.WithLocals(lambdaLocals: locals), fieldKey: fieldKey);
+
+        IdentifierExpressionNode Bind(string name, JsonNode? value) {
+            locals[name] = value;
+            return new IdentifierExpressionNode(Name: name);
+        }
+    }
+    private sealed class DocumentFoldSpelling : ListFoldSpelling<ExpressionNode> {
+        public static DocumentFoldSpelling Instance { get; } = new();
+
+        public override ExpressionNode Number(decimal value) => new LiteralExpressionNode(Value: (decimal.IsInteger(value: value) ? ((object)(long)value) : (double)value));
+        public override ExpressionNode Binary(ExpressionNode left, string symbol, ExpressionNode right) => new BinaryExpressionNode(Left: left, Operator: symbol, Right: right);
+        public override ExpressionNode Call(string name, ExpressionNode left, ExpressionNode right) => new CallExpressionNode(Arguments: [new ArgumentNode(Name: null, Value: left), new ArgumentNode(Name: null, Value: right)], Name: name);
+        public override ExpressionNode Choice(ExpressionNode condition, ExpressionNode whenTrue, ExpressionNode whenFalse) => new ConditionalExpressionNode(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue);
+        // The terms of a fold over truth values are bound already reduced to 1 or 0.
+        public override bool IsTruth(ExpressionNode term) => true;
+    }
     private static bool TryReadOperand(
         CallExpressionNode call,
         IReadOnlyList<ArgumentNode> args,
@@ -804,6 +856,12 @@ public static class DocumentBuiltins {
 
         result = null;
 
+        // A fold is told by its lambda, so a construct or a scalar of the same name (a gate's `all`, `minimum(a, b)`)
+        // keeps its own meaning.
+        if (ListFolds.Shaped(arguments: call.Arguments.Count, name: call.Name, secondIsLambda: ((call.Arguments.Count > 1) && (call.Arguments[1].Value is LambdaExpressionNode)))) {
+            result = ListFold(call: call, fieldKey: fieldKey, scope: scope);
+            return true;
+        }
         if (!Names.Contains(item: call.Name)) {
             return false;
         }

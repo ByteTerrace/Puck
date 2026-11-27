@@ -418,15 +418,6 @@ template klondikeGame() {
   rule "solitaireKlondike-win" {
     forEach: solitaireTable
     when solitaireTable[$each] == 1 and klondikeStatus[$each] == 1 and klondikeBusy[$each] == 0
-    klondikeStatus[$each] = (
-      (
-        count(klondikePile10Of[$each]) +
-        count(klondikePile11Of[$each]) +
-        count(klondikePile12Of[$each]) +
-        count(klondikePile13Of[$each])
-      ) == 52 ?
-        2 :
-      1
-    )
+    klondikeStatus[$each] = (sum(kdFoundations, z => count($"klondikePile{z}Of"[$each])) == 52 ? 2 : 1)
   }
 }

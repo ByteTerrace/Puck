@@ -22,22 +22,25 @@ public static partial class WorldDocumentEmitter {
     // operand's root is a row, a runtime name or a binding holding a name, all of which address state instead.
     private static JsonNode? CompileTimeRead(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTimeRead(operand: operand);
-    // The operand with its value functions inlined (OperandBinder.Inline) and what its compile-time constants decide
-    // folded (OperandBinder.Fold), or itself when neither changes it.
+    // The operand with its value functions inlined (OperandBinder.Inline), its folds over compile-time lists and its
+    // lets written out (OperandBinder.Expand) and what its compile-time constants decide folded (OperandBinder.Fold),
+    // or itself when none changes it. The result names nothing but the scope's own bindings, so binding it again with
+    // a fresh binder reads it the same.
     private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) {
         if ((operand.Form != DocumentValueForm.Expression) || (operand.Syntax is not { } syntax)) {
             return operand;
         }
         var binder = new OperandBinder(scope: scope);
         var inlined = binder.Inline(node: syntax, operand: operand);
-        var folded = binder.Fold(node: inlined, operand: operand);
+        var expanded = binder.Expand(node: inlined, operand: operand);
+        var folded = binder.Fold(node: expanded, operand: operand);
 
         return (ReferenceEquals(objA: folded, objB: syntax)
             ? operand
             : PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value), .. binder.InlinedAtoms], original: operand, syntax: folded));
     }
 
-    private sealed class OperandBinder(DocumentScope scope) {
+    private sealed partial class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
         private readonly List<InterpolatedStringNode> m_inlinedAtoms = [];
 
@@ -60,6 +63,8 @@ public static partial class WorldDocumentEmitter {
                 Syntax.Unary unary => unary with { Operand = Splice(current: unary.Operand) },
                 Syntax.Binary binary => binary with { Left = Splice(current: binary.Left), Right = Splice(current: binary.Right) },
                 Syntax.Ternary ternary => new Syntax.Ternary(Condition: Splice(current: ternary.Condition), WhenTrue: Splice(current: ternary.WhenTrue), WhenFalse: Splice(current: ternary.WhenFalse)),
+                Syntax.SourceList list => list with { Items = [.. list.Items.Select(selector: Splice)] },
+                Syntax.SourceLet let => let with { Value = Splice(current: let.Value), Body = Splice(current: let.Body) },
                 _ => current,
             };
             Syntax.SyntaxNode Expand(Syntax.SourceCall call, FunctionExpressionNode function) {
@@ -107,6 +112,8 @@ public static partial class WorldDocumentEmitter {
             Syntax.Unary unary => CallsFunction(node: unary.Operand),
             Syntax.Binary binary => (CallsFunction(node: binary.Left) || CallsFunction(node: binary.Right)),
             Syntax.Ternary ternary => (CallsFunction(node: ternary.Condition) || CallsFunction(node: ternary.WhenTrue) || CallsFunction(node: ternary.WhenFalse)),
+            Syntax.SourceList list => list.Items.Any(predicate: CallsFunction),
+            Syntax.SourceLet let => (CallsFunction(node: let.Value) || CallsFunction(node: let.Body)),
             _ => false,
         };
         // A parameter's every bare reading becomes its argument, grouped unless the argument is a primary, so an
@@ -122,6 +129,8 @@ public static partial class WorldDocumentEmitter {
             Syntax.Unary unary => unary with { Operand = Substitute(arguments: arguments, node: unary.Operand) },
             Syntax.Binary binary => binary with { Left = Substitute(arguments: arguments, node: binary.Left), Right = Substitute(arguments: arguments, node: binary.Right) },
             Syntax.Ternary ternary => new Syntax.Ternary(Condition: Substitute(arguments: arguments, node: ternary.Condition), WhenTrue: Substitute(arguments: arguments, node: ternary.WhenTrue), WhenFalse: Substitute(arguments: arguments, node: ternary.WhenFalse)),
+            Syntax.SourceList list => list with { Items = [.. list.Items.Select(selector: item => Substitute(arguments: arguments, node: item))] },
+            Syntax.SourceLet let => let with { Value = Substitute(arguments: arguments, node: let.Value), Body = Substitute(arguments: (arguments.ContainsKey(key: let.Name) ? arguments.Where(predicate: pair => (pair.Key != let.Name)).ToDictionary(comparer: StringComparer.Ordinal) : arguments), node: let.Body) },
             _ => node,
         };
         private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : node switch {
@@ -134,6 +143,8 @@ public static partial class WorldDocumentEmitter {
             Syntax.Unary unary => unary with { Operand = Renumber(node: unary.Operand, offset: offset) },
             Syntax.Binary binary => binary with { Left = Renumber(node: binary.Left, offset: offset), Right = Renumber(node: binary.Right, offset: offset) },
             Syntax.Ternary ternary => new Syntax.Ternary(Condition: Renumber(node: ternary.Condition, offset: offset), WhenTrue: Renumber(node: ternary.WhenTrue, offset: offset), WhenFalse: Renumber(node: ternary.WhenFalse, offset: offset)),
+            Syntax.SourceList list => list with { Items = [.. list.Items.Select(selector: item => Renumber(node: item, offset: offset))] },
+            Syntax.SourceLet let => let with { Value = Renumber(node: let.Value, offset: offset), Body = Renumber(node: let.Body, offset: offset) },
             _ => node,
         });
 
@@ -382,6 +393,14 @@ public static partial class WorldDocumentEmitter {
                     m_text.Append(value: lambda.Binder).Append(value: " -> ");
                     Write(lambda.Body, DocumentValueForm.Expression, operand);
                     m_binder = previous;
+                    break;
+                // Expand leaves a list only where nothing folds it, and no rule value holds one.
+                case Syntax.SourceList or Syntax.SourceLet:
+                    Refuse(message: DiagnosticText.Compose(
+                        fix: "Fold the list with sum, count, any, all, minimum, maximum or first, or read one element with a compile-time index",
+                        problem: "A list is known only at compile time, and a rule value is one number, name or text"
+                    ), span: operand.Span);
+                    m_text.Append(value: '0');
                     break;
                 default:
                     throw new InvalidOperationException(message: $"Unexpected operand syntax {node.GetType().Name}.");
@@ -641,7 +660,7 @@ public static partial class WorldDocumentEmitter {
             Syntax.SourceName { Quoted: true } name => new LiteralExpressionNode(name.Name),
             Syntax.SourceName name => new IdentifierExpressionNode(name.Name, Offset: operand.Offset, Length: operand.Length, Line: operand.Line, Column: operand.Column),
             Syntax.SourceString text => new LiteralExpressionNode(text.Value),
-            Syntax.SourceAtom atom => operand.Atoms[atom.Index].Value,
+            Syntax.SourceAtom atom => AtomAt(index: atom.Index, operand: operand),
             Syntax.SourceAccess access when ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out _)) => new IdentifierExpressionNode(qualified),
             Syntax.SourceAccess access when (InstanceName(node: access) is { } instanceName) => new LiteralExpressionNode(instanceName),
             Syntax.SourceAccess access => new IndexExpressionNode(ToCompileTime(node: access.Target, operand: operand), new LiteralExpressionNode(access.Member)),
@@ -650,6 +669,9 @@ public static partial class WorldDocumentEmitter {
             Syntax.Binary binary => new BinaryExpressionNode(ToCompileTime(node: binary.Left, operand: operand), binary.Operator, ToCompileTime(node: binary.Right, operand: operand)),
             Syntax.Ternary ternary => new ConditionalExpressionNode(ToCompileTime(node: ternary.Condition, operand: operand), ToCompileTime(node: ternary.WhenTrue, operand: operand), ToCompileTime(node: ternary.WhenFalse, operand: operand)),
             Syntax.SourceCall call => new CallExpressionNode(call.Name, [.. call.Arguments.Select(selector: argument => new ArgumentNode(argument.Name, ToCompileTime(node: argument.Value, operand: operand)))]),
+            Syntax.SourceList list => new ArrayExpressionNode([.. list.Items.Select(selector: item => ToCompileTime(node: item, operand: operand))]),
+            Syntax.SourceLambda lambda => new LambdaExpressionNode([lambda.Binder], ToCompileTime(node: lambda.Body, operand: operand)),
+            Syntax.SourceLet let => new LetExpressionNode(let.Name, ToCompileTime(node: let.Value, operand: operand), ToCompileTime(node: let.Body, operand: operand)),
             _ => RefuseCompileTime(operand: operand),
         };
         private LiteralExpressionNode RefuseCompileTime(OperandExpressionNode operand) {

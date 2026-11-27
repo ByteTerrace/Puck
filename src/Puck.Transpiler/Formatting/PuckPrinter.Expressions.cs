@@ -429,6 +429,31 @@ public static partial class PuckPrinter {
 
                         break;
                     }
+                // A let that does not fit on its line breaks after `in`, its body on the next line at the same indent,
+                // so a chain of lets reads as a column of bindings above the expression they serve.
+                case LetExpressionNode let: {
+                        m_builder.Append(value: "let ").Append(value: let.Name).Append(value: " = ");
+                        Operand(
+                            level: level,
+                            operand: let.Value,
+                            parenthesize: (let.Value is LetExpressionNode)
+                        );
+                        m_builder.Append(value: " in");
+                        if (FitsOnOneLine(print: () => {
+                            m_builder.Append(value: ' ');
+                            Expression(expression: let.Body, level: level);
+                        })) {
+                            m_builder.Append(value: ' ');
+                        } else {
+                            Break(level: level);
+                        }
+                        Expression(
+                            expression: let.Body,
+                            level: level
+                        );
+
+                        break;
+                    }
                 case LambdaExpressionNode lambda: {
                         if (lambda.Parameters.Count == 1) {
                             m_builder.Append(value: lambda.Parameters[0]);

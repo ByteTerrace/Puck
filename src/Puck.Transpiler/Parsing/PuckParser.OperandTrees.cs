@@ -68,6 +68,14 @@ public static partial class PuckParser {
                     return new Syntax.SourceCall(call.Name, [.. call.Arguments.Select(selector: argument => new Syntax.SourceArgument(Name: argument.Name, Value: Convert(node: argument.Value)))]);
                 case LambdaExpressionNode { Parameters.Count: 1 } lambda:
                     return new Syntax.SourceLambda(Binder: lambda.Parameters[0], Body: Convert(node: lambda.Body));
+                case ArrayExpressionNode list:
+                    return new Syntax.SourceList(Items: [.. list.Elements.Select(selector: Convert)]);
+                case LetExpressionNode let: {
+                        // Atoms are numbered in printed order, and the value prints before the body.
+                        var value = Convert(node: let.Value);
+
+                        return new Syntax.SourceLet(Body: Convert(node: let.Body), Name: let.Name, Value: value);
+                    }
                 case OperandExpressionNode { Syntax: { } tree } operand:
                     var offset = atoms.Count;
                     atoms.AddRange(collection: operand.Atoms.Select(selector: static atom => atom.Value));
@@ -116,6 +124,8 @@ public static partial class PuckParser {
         Syntax.Ternary ternary => ternary with { Condition = MapAtoms(ternary.Condition, map), WhenTrue = MapAtoms(ternary.WhenTrue, map), WhenFalse = MapAtoms(ternary.WhenFalse, map) },
         Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = MapAtoms(argument.Value, map) })] },
         Syntax.SourceLambda lambda => lambda with { Body = MapAtoms(lambda.Body, map) },
+        Syntax.SourceList list => list with { Items = [.. list.Items.Select(selector: item => MapAtoms(item, map))] },
+        Syntax.SourceLet let => let with { Value = MapAtoms(let.Value, map), Body = MapAtoms(let.Body, map) },
         _ => node,
     };
 }

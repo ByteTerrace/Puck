@@ -695,20 +695,10 @@ template chessJudge(settleTicks, scope = "", digital = false) {
         shapeLegal = (maximum(dx, absolute(dy)) == 1) and (move.kind != MoveKind.Castle) or castleLegal
       } else {
         if piece == PieceKind.Rook or piece == PieceKind.Queen {
-          shapeLegal = (
-            match(chessRayEmpty, lastLegal, N, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, S, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, E, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, W, cell)[move.to] == move.from
-          )
+          shapeLegal = any([N, S, E, W], ray => match(chessRayEmpty, lastLegal, ray, cell)[move.to] == move.from)
         }
         if piece == PieceKind.Bishop or piece == PieceKind.Queen {
-          shapeLegal |= (
-            match(chessRayEmpty, lastLegal, NE, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, SE, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, SW, cell)[move.to] == move.from or
-            match(chessRayEmpty, lastLegal, NW, cell)[move.to] == move.from
-          )
+          shapeLegal |= any([NE, SE, SW, NW], ray => match(chessRayEmpty, lastLegal, ray, cell)[move.to] == move.from)
         }
       }
     }

@@ -41,6 +41,19 @@ public static partial class ExpressionSpelling {
     /// <param name="Binder">The member name bound inside the body.</param>
     /// <param name="Body">The fold body.</param>
     public sealed record SourceLambda(string Binder, SyntaxNode Body) : SourceNode;
+    /// <summary>A list written out, <c>[a, b, c]</c>: a compile-time value the source language folds away (a fold over
+    /// a compile-time list unrolls into one term per element), never a runtime value.</summary>
+    /// <param name="Items">The elements in written order.</param>
+    public sealed record SourceList(IReadOnlyList<SyntaxNode> Items) : SourceNode;
+    /// <summary>A name bound for one expression, <c>let name = value in body</c>: the source language resolves it
+    /// before the program is emitted, so the program holds the body with the value in place of the name.</summary>
+    /// <param name="Name">The name the body reads.</param>
+    /// <param name="Value">The bound value.</param>
+    /// <param name="Body">The expression the whole stands for.</param>
+    public sealed record SourceLet(string Name, SyntaxNode Value, SyntaxNode Body) : SourceNode {
+        // The body reaches as far right as it can, so inside an operator the whole is grouped.
+        internal override int Level => 0;
+    }
     /// <summary>Syntax requiring vocabulary resolution before it can emit runtime instructions.</summary>
     public abstract record SourceNode : SyntaxNode {
         internal override int Level => PrimaryLevel;
@@ -130,6 +143,20 @@ public static partial class ExpressionSpelling {
                 into.Append(value: lambda.Binder).Append(value: " -> ");
                 lambda.Body.Print(into: into, parentLevel: 0, rightOperand: false);
                 break;
+            case SourceList list:
+                into.Append(value: '[');
+                for (var i = 0; (i < list.Items.Count); i++) {
+                    if (i > 0) { into.Append(value: ", "); }
+                    list.Items[i].Print(into: into, parentLevel: 0, rightOperand: false);
+                }
+                into.Append(value: ']');
+                break;
+            case SourceLet let:
+                into.Append(value: "let ").Append(value: let.Name).Append(value: " = ");
+                let.Value.Print(into: into, parentLevel: 0, rightOperand: false);
+                into.Append(value: " in ");
+                let.Body.Print(into: into, parentLevel: 0, rightOperand: false);
+                break;
             default:
                 throw new InvalidOperationException(message: "An atom must be resolved by its source language before printing.");
         }
@@ -193,6 +220,20 @@ public static partial class ExpressionSpelling {
                     node = new SourceGroup(Value: ParseExpression());
                     Expect(punctuation: ")");
                     break;
+                case Lexeme.Punctuation when (m_value == "["):
+                    Advance();
+                    Descend();
+                    var items = new List<SyntaxNode>();
+
+                    if (!Accept(punctuation: "]")) {
+                        do {
+                            items.Add(item: ParseExpression());
+                        } while (Accept(punctuation: ","));
+                        Expect(punctuation: "]");
+                    }
+                    m_depth--;
+                    node = new SourceList(Items: items);
+                    break;
                 default:
                     throw Fail(message: $"expected a value but found '{m_value}'");
             }
@@ -218,6 +259,34 @@ public static partial class ExpressionSpelling {
                     return node;
                 }
             }
+        }
+        // `let name = value in body`, read only where `let` is followed by a binder name and a lone `=`, so a row
+        // named `let` still reads as a row everywhere else.
+        private SourceLet? TryParseSourceLet() {
+            Prime();
+            if ((m_kind != Lexeme.Name) || m_quoted || (m_value != "let")) { return null; }
+            var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed, m_sourceAtomIndex);
+
+            Advance();
+            var name = m_value;
+            var equals = m_position;
+
+            while ((equals < text.Length) && char.IsWhiteSpace(c: text[equals])) { equals++; }
+            if ((m_kind != Lexeme.Name) || m_quoted || !IsBinderName(name: name) || (equals >= text.Length) || (text[equals] != '=') ||
+                (((equals + 1) < text.Length) && (text[(equals + 1)] is '=' or '>'))) {
+                (m_position, m_kind, m_value, m_quoted, m_start, m_primed, m_sourceAtomIndex) = saved;
+                return null;
+            }
+            m_position = (equals + 1);
+            Advance();
+            var value = ParseExpression();
+
+            Prime();
+            if ((m_kind != Lexeme.Name) || m_quoted || (m_value != "in")) {
+                throw Fail(message: $"a let reads 'let {name} = value in expression'; expected 'in'{Found()}");
+            }
+            Advance();
+            return new SourceLet(Body: ParseExpression(), Name: name, Value: value);
         }
         private SyntaxNode ParseSourceCall(string name) {
             var arguments = new List<SourceArgument>();

@@ -65,6 +65,19 @@ public static partial class ExpressionSpelling {
                     into.Append(value: ')'); break;
                 case SourceLambda lambda:
                     into.Append(value: lambda.Binder).Append(value: " -> "); Write(lambda.Body, (depth + 1)); break;
+                case SourceList list:
+                    into.Append(value: '[');
+                    for (var index = 0; (index < list.Items.Count); index++) {
+                        if (index > 0) { into.Append(value: ", "); }
+                        Write(list.Items[index], (depth + 1));
+                    }
+                    into.Append(value: ']'); break;
+                case SourceLet let:
+                    if (parentLevel > 0) { into.Append(value: '('); }
+                    into.Append(value: "let ").Append(value: let.Name).Append(value: " = "); Write(let.Value, (depth + 1));
+                    into.Append(value: " in "); Write(let.Body, (depth + 1));
+                    if (parentLevel > 0) { into.Append(value: ')'); }
+                    break;
                 default: throw new ArgumentException(message: "Only source syntax can be printed as an operand.", paramName: nameof(syntax));
             }
         }
