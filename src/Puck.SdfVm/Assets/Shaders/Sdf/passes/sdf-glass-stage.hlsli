@@ -33,12 +33,14 @@
 // through its share of the glass, then on parallel to the pixel's ray, reaches the opaque hit's depth, projected back to
 // the render grid, and read at the pixel's own sample where that lands on a nearer surface; frost spreads the read over
 // a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind, turned by a
-// per-pixel pattern that never moves between frames. The interfaces compose front to back: each adds what it shows
-// under the light every nearer interface passes, so what an interface transmits is the shading of every interface
-// behind it and, last, the light behind them all.
-// The glass pixel's coverage is the light behind's, darkened by each interface's luminous transmittance, so the sky the
-// composite puts behind it shows through a clear pane at the pixel's own direction, unrefracted and untinted but
-// darkened; a revealed surface covers it. In a temporal view the pixel's reactivity is raised to one where the refracted
+// per-pixel pattern that never moves between frames, each tap left out where it lands on a surface nearer than the
+// glass. Each interface's emission is under the surface's local adaptation, as an opaque surface's is. The interfaces
+// compose front to back: each adds what it shows under the light every nearer interface passes, so what an interface
+// transmits is the shading of every interface behind it and, last, the light behind them all.
+// The glass pixel's coverage is the light behind's, darkened by the luminance of the RGB share the interfaces pass, and
+// that share goes to the composite in the sky filter (frame/sdf-glass-sky-filter.hlsli), so the sky the composite puts
+// behind the glass shows through it at the pixel's own direction, unrefracted and unfrosted but tinted and darkened as
+// the light behind is; a revealed surface covers it. In a temporal view the pixel's reactivity is raised to one where the refracted
 // read comes from a pixel away or more, since the resolve's history follows the opaque hit the record names, not what the
 // glass shows; a flat pane bending nothing keeps its history and its edges resolve like any other. A debug view's lit
 // image passes through. The pass counts each interface it shades as a work step.
@@ -58,6 +60,7 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-lights.hlsli"
 #include "../frame/sdf-glass.hlsli"
+#include "../frame/sdf-glass-sky-filter.hlsli"
 #include "../shade/sdf-sky-reflection.hlsli"
 #include "../shade/sdf-light.hlsli"
 #include "../shade/shade-flow.hlsli"
@@ -89,6 +92,14 @@ float2 sdfGlassProject(ViewportData view, float3 at, uint2 extent, out float for
     float2 ndc = float2((x / (view.right.w * view.up.w)), (y / view.right.w));
 
     return (float2(((ndc.x * 0.5) + 0.5), (0.5 - (ndc.y * 0.5))) * float2(extent));
+}
+// Whether the lit image at a continuous render-grid position shows what lies behind a glass face at ray distance `nearT`:
+// false where the position lands on a surface nearer than the glass, which a read there would show in front of it.
+bool sdfGlassReadsBehind(float2 at, uint2 extent, float nearT) {
+    uint2 atPixel = (uint2)clamp(at, float2(0.0, 0.0), (float2(extent) - 1.0));
+    SdfVisibility atVisibility = sdfLoadVisibility(sdfVisibilityRecord(atPixel, 0u, extent));
+
+    return !(sdfVisibilityHit(atVisibility) && (atVisibility.t < nearT));
 }
 // The lit image at a continuous render-grid position, bilinearly, clamped to the grid, its light in nits
 // (sdfStoredLightScale divided out).
@@ -288,6 +299,10 @@ void sdfGlassPixel(uint2 pixel) {
         color = float4(sdfShadeDiagnostic(sdfMeshMaterial(nearHit), passGroup.debugMode), 1.0);
     }
     float reactive = 0.0;
+    // The share of the pixel the composite puts the sky behind the glass in, and the RGB share of that sky the glass
+    // passes (frame/sdf-glass-sky-filter.hlsli); the coverage below carries the filter's luminance.
+    float skyBehind = (1.0 - color.a);
+    float3 skyFilter = float3(1.0, 1.0, 1.0);
     // The glass probe history: whether this render keeps it, reads the preceding render's, and whether this pixel, its
     // cell's first, still owes the cell's entry.
     bool keepsProbes = sdfProbeHistoryKeeps(sdfGlassProbeHistoryRW, 0u);
@@ -334,11 +349,10 @@ void sdfGlassPixel(uint2 pixel) {
         // The glass and optical depth the nearer interfaces left.
         float remaining = thickness;
         float3 depthLeft = depth;
-        // The composition front to back: the light the interfaces so far show toward the eye, the share of the light
-        // behind them they pass (RGB) and their luminous share passed.
+        // The composition front to back: the light the interfaces so far show toward the eye and the share of the light
+        // behind them they pass (RGB).
         float3 shownSoFar = float3(0.0, 0.0, 0.0);
         float3 passedSoFar = float3(1.0, 1.0, 1.0);
-        float luminousSoFar = 1.0;
         // The read's displacement from the opaque hit straight down the pixel's ray, and the frost's spread there.
         float3 offset = float3(0.0, 0.0, 0.0);
         float spread = 0.0;
@@ -447,8 +461,9 @@ void sdfGlassPixel(uint2 pixel) {
 
             received *= localGain;
 
-            // Its own emission joins what it shows, untouched by the occluders' attenuation as an opaque surface's is.
-            float3 emitted = (material.albedo * material.emissive);
+            // Its own emission joins what it shows, untouched by the occluders' attenuation and under the surface's local
+            // adaptation, as an opaque surface's is.
+            float3 emitted = ((material.albedo * material.emissive) * localGain);
             float3 shown = ((((((environment * fresnel) + highlights + rim) * localGain) + (((1.0 - fresnel) * medium) * received)) * attenuation) + emitted) * air;
             float3 passed = ((1.0 - fresnel) * transmittance);
             float3 revealedAlbedo = max((material.albedo - baseAlbedo * (1.0 - revealed)) / max(revealed, 1.0e-6), 0.0);
@@ -458,13 +473,11 @@ void sdfGlassPixel(uint2 pixel) {
 
             shown = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance, rim, highlights, attenuation,
                 indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12), linework) * air;
-            float luminous = ((1.0 - fresnel) * dot(transmittance, PuckRec709Luminance));
 
             // Under the light the nearer interfaces pass: its revealed surface covers it over its revealed share, and the
             // rest shows its surface and passes the light behind.
             shownSoFar += (passedSoFar * lerp(shown, cover, revealed));
             passedSoFar *= ((1.0 - revealed) * passed);
-            luminousSoFar *= ((1.0 - revealed) * luminous);
             shaded++;
             if (!hasNext) {
                 break;
@@ -482,42 +495,42 @@ void sdfGlassPixel(uint2 pixel) {
         float2 at = sdfGlassProject(view, samplePoint, extent, forward);
         float2 own = (float2(pixel) + 0.5);
 
-        if (forward <= 0.0) {
+        // A read that lands on a surface nearer than the glass would show what stands in front of it.
+        if ((forward <= 0.0) || !sdfGlassReadsBehind(at, extent, nearT)) {
             at = own;
-        } else {
-            // A read that lands on a surface nearer than the glass would show what stands in front of it.
-            uint2 atPixel = (uint2)clamp(at, float2(0.0, 0.0), (float2(extent) - 1.0));
-            SdfVisibility atVisibility = sdfLoadVisibility(sdfVisibilityRecord(atPixel, 0u, extent));
-
-            if (sdfVisibilityHit(atVisibility) && (atVisibility.t < nearT)) {
-                at = own;
-            }
         }
 
         // The frost: a disc of taps whose radius is the interfaces' roughness's share of the spread over the distance
-        // behind each, in render pixels at the opaque hit's depth.
+        // behind each, in render pixels at the opaque hit's depth. A tap that lands on a surface nearer than the glass
+        // (its frame, the came between its panes, an arch before it) is left out as the centre read is, so the frost
+        // spreads only what lies behind the glass; where every tap lands on one, the centre read stands alone.
         float radius = min(((GlassFrostSpread * spread) / max((footprint * opaque), 1.0e-4)), GlassFrostMaxPixels);
-        float4 through;
+        float4 through = float4(0.0, 0.0, 0.0, 0.0);
+        uint taken = 0u;
 
-        if (radius < 0.5) {
-            through = sdfGlassLitAt(at, extent);
-        } else {
+        if (radius >= 0.5) {
             // A rotation fixed per pixel (interleaved gradient noise), so a frosted pane never changes between frames.
             float rotation = (frac(52.9829189 * frac(dot(float2(pixel), float2(0.06711056, 0.00583715)))) * 6.2831853);
 
-            through = float4(0.0, 0.0, 0.0, 0.0);
             [unroll]
             for (uint tap = 0u; (tap < GlassFrostTaps); tap++) {
                 float reach = (sqrt((float(tap) + 0.5) / float(GlassFrostTaps)) * radius);
                 float angle = ((float(tap) * PuckGoldenAngle) + rotation);
+                float2 tapAt = (at + (float2(cos(angle), sin(angle)) * reach));
 
-                through += sdfGlassLitAt((at + (float2(cos(angle), sin(angle)) * reach)), extent);
+                if (sdfGlassReadsBehind(tapAt, extent, nearT)) {
+                    through += sdfGlassLitAt(tapAt, extent);
+                    taken++;
+                }
             }
-            through /= float(GlassFrostTaps);
         }
+        through = ((taken > 0u) ? (through / float(taken)) : sdfGlassLitAt(at, extent));
 
-        // The interfaces over the light behind them all.
-        color = float4((shownSoFar + (passedSoFar * through.rgb)), (1.0 - ((1.0 - through.a) * luminousSoFar)));
+        // The interfaces over the light behind them all. The sky the composite puts behind the glass shows through the
+        // share of the pixel the light behind leaves uncovered, at the RGB share the interfaces pass (skyFilter).
+        skyBehind = (1.0 - through.a);
+        skyFilter = passedSoFar;
+        color = float4((shownSoFar + (passedSoFar * through.rgb)), (1.0 - (skyBehind * dot(skyFilter, PuckRec709Luminance))));
         reactive = saturate(length(at - own));
     }
 
@@ -537,9 +550,13 @@ void sdfGlassPixel(uint2 pixel) {
             added = scattered * received * sdfLocalAdaptationGain(incoming);
         }
         color.rgb = added + transmitted * color.rgb;
-        color.a = 1.0 - (1.0 - color.a) * dot(transmitted, PuckRec709Luminance);
+        skyFilter *= transmitted;
+        color.a = (1.0 - (skyBehind * dot(skyFilter, PuckRec709Luminance)));
         reactive = 1.0;
         sdfWorkSteps++;
+    }
+    if (glass || (insideDistance > 0.0)) {
+        sdfGlassSkyFilterRW[(pixel.y * extent.x) + pixel.x] = sdfGlassSkyFilterPack(skyFilter);
     }
 
     // A cell whose first pixel shows no glass face keeps no gather.
