@@ -33,7 +33,7 @@
 import "pad-kit"
 
 // The parts every lock-on in a world shares: its rows, channels, bindings and rules. `targets` are the body indices the
-// world starts targetable; `seats` the bodies players hold that may lock (their cells exist from boot); `reach` and
+// world starts targetable; bodies 0 to `seats` - 1 may lock, each with a cell of `lockOn` the rules sweep; `reach` and
 // `halfAngle` the query's reach and cone, `keep` how far a lock holds once taken, `share` how far toward the target the
 // camera aims, `aimHeight` how high above each root it aims; `distance`, `pitch`, `pivotOffset` and `fieldOfView` the lock
 // framing's boom and lens. `lockSources` and `cycleSources` are the keys bound to `lock` and `lockCycle` on the play
@@ -96,7 +96,7 @@ template lockOn(targets = [], seats = 4, capacity = 16, reach = 14, halfAngle = 
     local picked = target(each, lockable, reach, halfAngle)
     when channel(each, lock) >= 1
     mode: Edge
-    forEach: $players
+    forEach: lockOn
     if (lockOn[$each] ?? 0) == 0 {
       if picked >= 0 {
         lockTarget[$each] = picked
@@ -115,7 +115,7 @@ template lockOn(targets = [], seats = 4, capacity = 16, reach = 14, halfAngle = 
     rule "lock-release" {
       when lockOn[$each] == 1 and channel(each, lock) == 0
       mode: Level
-      forEach: $players
+      forEach: lockOn
       lockOn[$each] = 0
       lockTarget[$each] = -1
       setBodyState(key: $each, state: "faceAt", expression: 0)
@@ -127,7 +127,7 @@ template lockOn(targets = [], seats = 4, capacity = 16, reach = 14, halfAngle = 
     local next = target(each, lockable, reach, halfAngle, cell, lockTarget, $each)
     when channel(each, lockCycle) >= 1 and lockOn[$each] == 1
     mode: Edge
-    forEach: $players
+    forEach: lockOn
     if next >= 0 {
       lockTarget[$each] = next
     }
@@ -145,7 +145,7 @@ template lockOn(targets = [], seats = 4, capacity = 16, reach = 14, halfAngle = 
     local far = distance(each, cell, lockTarget, $each)
     when lockOn[$each] == 1
     mode: Level
-    forEach: $players
+    forEach: lockOn
     if far > keep {
       lockOn[$each] = 0
       lockTarget[$each] = -1

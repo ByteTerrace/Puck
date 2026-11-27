@@ -15,5 +15,5 @@ exports {
   reads [lockTarget, pingOn, pingGroup, pingUntil, pingX, pingY, pingZ]
 }
 
-lockOn(targets: range(0, (seatPopulation + visitorPopulation)), seats: seatPopulation)
-playerMarks(place: "debug", seats: seatPopulation)
+lockOn(targets: range(0, (seatPopulation + visitorPopulation)), seats: (seatPopulation + visitorPopulation), capacity: (seatPopulation + visitorPopulation))
+playerMarks(place: "debug", seats: seatPopulation, capacity: seatPopulation, slots: 4)

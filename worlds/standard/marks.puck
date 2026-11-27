@@ -105,7 +105,7 @@ template playerMarks(place, seats = 4, members = null, audience = "group", capac
     local pz = bodyPosition(each, z) + bodyForward(each, z) * reach
     when channel(each, ping) >= 1
     mode: Edge
-    forEach: $players
+    forEach: pingOn
     pingOn[$each] = 1
     pingX[$each] = px
     pingY[$each] = py
@@ -128,7 +128,7 @@ template playerMarks(place, seats = 4, members = null, audience = "group", capac
     local pz = bodyPosition(each, z) + bodyForward(each, z) * reach
     when channel(each, mark) >= 1
     mode: Edge
-    forEach: $players
+    forEach: pingOn
     claimIdentityRecord(
       key: $each,
       pool: "marks",

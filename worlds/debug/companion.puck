@@ -45,7 +45,7 @@ companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1])
 companionSight(owner: 0)
 // It flies to whatever she locks onto, and to her group's pings (targeting.puck).
 companionLock(owner: 0)
-companionMarks(owner: 0)
+companionMarks(owner: 0, capacity: seatPopulation)
 
 state {
   world [
