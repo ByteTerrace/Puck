@@ -329,8 +329,9 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
   primitives stay bounded approximations in the analytic provider (an
   exponent-2 collider measures its exact distance through
   `FixedEllipsoidProjection`, and a spheroid is the field's own surface); a
-  triaxial ellipsoid's gauge field dilates past its collider's true margined
-  surface along its long axes (the field side's fix is the true distance
+  triaxial ellipsoid's gauge field, and a capsule scaled apart in X and Z (that
+  gauge elongated, `FixedStaticCollider.Elongation`), dilates past its
+  collider's true margined surface along its long axes (the field side's fix is the true distance
   under a non-uniform scale); tilted box-in-cylinder edges are conservative.
 - Packets: [certified field contact](../../../docs/plans/open-items.md#certified-field-contact),
   [collision versus drawn mesh](../../../docs/plans/open-items.md#collision-versus-drawn-mesh),

@@ -15,11 +15,13 @@ public static partial class CliReferenceAssemblyRecovery {
     /// <summary>Runs a build, retaining its first failure before removing any diagnosed reference directories.</summary>
     /// <param name="tree">The tree that owns the build's intermediate outputs.</param>
     /// <param name="log">The first failure's transcript, written before recovery.</param>
-    /// <param name="timeout">The combined attempts' deadline.</param>
+    /// <param name="timeout">The combined attempts' deadline; <see cref="Timeout.InfiniteTimeSpan"/> for none, which each
+    /// attempt is handed as its own.</param>
     /// <param name="build">Runs one build attempt within the remaining budget.</param>
     /// <returns>The first result, or the one retry's result with both transcripts retained.</returns>
     public static CliProcessResult Run(string tree, string log, TimeSpan timeout, Func<TimeSpan, CliProcessResult> build) {
         var elapsed = Stopwatch.StartNew();
+        var unbounded = (timeout == Timeout.InfiniteTimeSpan);
         var first = build(timeout);
 
         if (first.TimedOut || (first.ExitCode == 0)) { return first; }
@@ -65,15 +67,15 @@ public static partial class CliReferenceAssemblyRecovery {
                 }
                 directories.Add(item: directory);
             }
-            if (elapsed.Elapsed >= timeout) { return first; }
+            if (!unbounded && (elapsed.Elapsed >= timeout)) { return first; }
             foreach (var directory in directories) { ConfinedDirectory.RemoveTree(path: directory); }
             Console.Error.WriteLine(value: $"build: removed corrupt reference outputs; retrying once. First failure: {CliPaths.ToDisplay(fullPath: log)}");
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             return first with { Stderr = (first.Stderr + $"\nreference recovery refused: {exception.Message}") };
         }
-        var remaining = (timeout - elapsed.Elapsed);
+        var remaining = (unbounded ? timeout : (timeout - elapsed.Elapsed));
 
-        if (remaining <= TimeSpan.Zero) { return first; }
+        if (!unbounded && (remaining <= TimeSpan.Zero)) { return first; }
         var retry = build(remaining);
 
         return retry with {

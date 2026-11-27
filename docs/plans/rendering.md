@@ -210,9 +210,9 @@ it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)).
   authored surface
   ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)).
   What reads a bound today, which `puck creation shape` reports as a gain: a
-  capsule, cone or torus scaled apart in X and Z, a round cone scaled apart at
-  all, and an ellipsoid or sphere scaled apart, which is the exponent-2
-  superellipsoid gauge. A `Path` profile and a sweep certify no gain, and are
+  cone or torus scaled apart in X and Z, a round cone scaled apart at all, and
+  an ellipsoid or sphere scaled apart, which is the exponent-2 superellipsoid
+  gauge, elongated along its segment for a capsule scaled apart in X and Z. A `Path` profile and a sweep certify no gain, and are
   not part of this item. The solve, its proof, its exhibits and its build
   order are [designed below](#a-true-distance-under-a-non-uniform-scale); its
   first two steps need no new solver and unblock the lake's bowl.
@@ -321,10 +321,12 @@ distance, where it stops, the build order with a check for each step, and
 where each of the review's findings is closed.
 
 **What the gap is.** `SdfSolidGeometry.AppendScaledPrimitive` spells a scale
-into a primitive's own dimensions wherever a closed form exists. A capsule,
-cone or torus whose X and Z scales differ, and a round cone under any uneven
-scale, have none and fall to its last arm, a `Scale` instruction over the unit
-shape. That instruction evaluates `f(p / s) * min(s)`
+into a primitive's own dimensions wherever a closed form exists. A cone or
+torus whose X and Z scales differ, and a round cone under any uneven scale,
+have none and fall to its last arm, a `Scale` instruction over the unit
+shape. A capsule whose X and Z scales differ elongates the exponent-2 gauge of
+`SdfSolidGeometry.CapsuleRadii` along its segment
+([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)). That instruction evaluates `f(p / s) * min(s)`
 (`SdfProgramBuilder.Scale`): zero on the authored surface, and between
 `min(s) / max(s)` and one times the distance everywhere else
 (`SdfProgram.InstanceDistanceGain`). The fixed-point evaluator refuses it for
@@ -494,31 +496,16 @@ for it; nothing is moved toward zero to reach one.
 revolved at offset zero, which is the root with two terms.
 
 *The capsule.* The scaled capsule is the segment from the origin to
-`(0, h, 0)`, `h = sy / 2`, swept by the ellipsoid of radii `s`. Its surface
-is the lower half of that ellipsoid, an elliptic cylinder between the planes
-`y = 0` and `y = h`, and the upper half of the ellipsoid about `(0, h, 0)`.
-
-- `p.y <= 0`: the ellipsoid about the origin, on both sides. `p.y >= h`: the
-  ellipsoid about `(0, h, 0)`.
-- Between the planes and outside: the ellipse `(sx, sz)` at `(p.x, p.z)`.
-- Between the planes and inside: the least of the ellipse's depth and, only
-  when `sy` is under both `sx` and `sz`, the far foot on each cap: the
-  nearest point of a cap from a point on the other side of its equator. With
-  `y'` the height over that cap's centre and `v = -(t + sy^2)`, the cap's
-  feet are the roots of
-  `F(v) = (sy * y' / v)^2 + (sx * p.x / (sx^2 - sy^2 - v))^2 + (sz * p.z / (sz^2 - sy^2 - v))^2 - 1`
-  over `0 < v < V`, `V = min(sx, sz)^2 - sy^2`. `F` is convex there and
-  unbounded at `v = 0`. At `V` it is unbounded when the coordinate of that
-  pole's axis is not zero, and finite otherwise.
-  - A finite value below zero at `V`: one root, bracketed directly, which
-    is the far foot. On the axis this is the cap's pole, at `y' + sy`.
-  - Otherwise two roots or none. The search halves on the sign of `F'`
-    until it meets a `v` where `F` is negative, then halves on `F` between
-    zero and that `v`. The root nearer zero is the far foot.
-  - A search that ends without a negative `F` and without excluding one
-    adds the cap as a candidate that lowers `lower` only: its distance is
-    bounded below by the distance from `p` to the box of feet over the
-    bracket it ended on.
+`(0, 2h, 0)`, `h = sy / 4`, swept by the ellipsoid of radii
+`(sx, sqrt(sx * sz), sz)` (`SdfSolidGeometry.CapsuleRadii`), and it already
+lowers to that: the ellipsoid read at `p` less its nearest segment point (an
+`Elongate`). With an exact ellipsoid that reading is exact on both sides. The
+ellipsoid is symmetric about its equator, so outside the solid the nearest
+copy along the segment is the clamped one. Inside, the Y radius is never the
+least of the three, so an inside point's foot on its end's ellipsoid lies on
+the point's side of the equator, on the capsule's own surface, and between the
+planes the foot lies in the section. The capsule therefore needs no solve of
+its own: it takes the ellipsoid's.
 
 *The cone.* The scaled cone has its apex at `(0, sy, 0)` and its base, the
 ellipse `(sx, sz)`, in the plane `y = -sy`. With `Y = p.y - sy` and
@@ -760,9 +747,10 @@ no gain); at scales past the admitted ratios; and at a C# caller that writes
    past 2. Check: `shape-sphere-xyz` and `shape-ellipsoid-xyz` read
    `distance=exact`, and the two interpreters agree over a lattice within
    the law's error.
-5. The capsule. Check: `shape-capsule-xz` reads `distance=exact` and
-   `contact=admitted`, and the law covers capsules with `sy` under `sx`
-   and `sz`, on and off their axis.
+5. The capsule follows step 4 through its elongation (built: it lowers to the
+   elongated gauge, `contact=admitted`). Check: `shape-capsule-xz` reads
+   `distance=exact` once step 4 lands, and the law reads its interior near each
+   end's equator.
 6. The cone, then the torus, each with the same law and the same two reads.
    The cone's law covers points under the base, at the apex's height and
    on its planes. The torus's covers `sy` above `sx` or `sz`, `p.y` at

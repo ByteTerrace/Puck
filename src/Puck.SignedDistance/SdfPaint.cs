@@ -67,6 +67,20 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
         }
 
         var builder = new SdfProgramBuilder();
+        var radii = SdfSolidGeometry.CapsuleRadii(scale: scale);
+
+        if ((type == SdfSolidPrimitive.Capsule) && (radii.X != radii.Z)) {
+            // A paint carries one shape under a scale and a turn, so it takes a capsule scaled unlike in X and Z as the
+            // unit-radius capsule under its radii, its segment divided by the Y radius: the same solid the elongated
+            // ellipsoid AppendScaledPrimitive emits encloses, section and ends alike.
+            _ = builder.Scale(scale: radii).Capsule(
+                endpoint: new Vector3(x: 0f, y: ((2f * SdfSolidGeometry.CapsuleHalfSegment(scaleY: scale.Y)) / radii.Y), z: 0f),
+                material: 0,
+                radius: 1f
+            );
+
+            return builder.CapturePaintShape(bound: BoundOf(curve: curve, lift: lift, scale: scale, type: type));
+        }
 
         _ = SdfSolidGeometry.AppendScaledPrimitive(
             chain: builder,
@@ -85,27 +99,19 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
         return builder.CapturePaintShape(bound: BoundOf(curve: curve, lift: lift, scale: scale, type: type));
     }
 
-    // The primitive's local box: a sweep's control points widened by its thickest reach, a revolved prism's reach on
-    // every axis, and otherwise the canonical bounds at the scale.
+    // The primitive's local box: a sweep's control points widened by its thickest reach, and otherwise the box its support
+    // spans at the scale (SdfSolidGeometry.LocalBox), which knows a capsule's segment and radii and a revolve's offset.
     private static SdfSolidBounds BoundOf(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, SdfSweepParameters? curve) {
-        var magnitude = SdfSolidGeometry.EffectiveScale(scale: scale);
-
         if ((type == SdfSolidPrimitive.Sweep) && (curve is { } sweep)) {
+            var magnitude = SdfSolidGeometry.EffectiveScale(scale: scale);
             var low = Vector3.Min(value1: sweep.A, value2: Vector3.Min(value1: sweep.B, value2: sweep.C));
             var high = Vector3.Max(value1: sweep.A, value2: Vector3.Max(value1: sweep.B, value2: sweep.C));
             var thickness = new Vector3(value: ((MathF.Max(x: sweep.RadiusStart, y: sweep.RadiusEnd) + MathF.Abs(x: sweep.Bulge)) + sweep.StrandOffset));
 
             return new SdfSolidBounds(Center: (((low + high) * 0.5f) * magnitude.X), HalfExtents: ((((high - low) * 0.5f) + thickness) * magnitude.X));
         }
-        if ((type == SdfSolidPrimitive.Prism) && (lift == SdfLift.Revolve)) {
-            return new SdfSolidBounds(Center: Vector3.Zero, HalfExtents: new Vector3(value: SdfSolidGeometry.Reach(lift: lift, scale: scale, type: type)));
-        }
 
-        var canonical = SdfSolidGeometry.GetLocalBounds(type: type);
-
-        return (canonical.IsUnbounded
-            ? canonical
-            : new SdfSolidBounds(Center: (canonical.Center * magnitude), HalfExtents: (canonical.HalfExtents * magnitude)));
+        return SdfSolidGeometry.LocalBox(lift: lift, scale: scale, type: type);
     }
 }
 /// <summary>A paint: a <see cref="SdfPaintShape"/> placed in a frame, whose inside gives the surface of its material

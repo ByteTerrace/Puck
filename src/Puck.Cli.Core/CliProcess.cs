@@ -125,7 +125,8 @@ public static class CliProcess {
     }
     public static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", Task? continuationGate = null, TimeProvider? clock = null, CancellationToken cancellationToken = default, string? workingDirectory = null,
-        IReadOnlyDictionary<string, string?>? environment = null, Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null) {
+        IReadOnlyDictionary<string, string?>? environment = null, Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null,
+        TimeSpan? quiet = null) {
         clock ??= TimeProvider.System;
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -154,9 +155,12 @@ public static class CliProcess {
             writer: process.StandardInput
         );
 
-        // A caller's cancellation takes the timeout's path: the whole tree is killed and both streams drained.
+        // A caller's cancellation takes the timeout's path: the whole tree is killed and both streams drained. So does a
+        // silence of `quiet`, armed as the child starts and again at each line it writes.
+        using var silence = ((quiet is { } wait) ? new CancellationTokenSource(delay: wait, timeProvider: clock) : null);
+        using var watched = ((silence is null) ? null : CancellationTokenSource.CreateLinkedTokenSource(token1: cancellationToken, token2: silence.Token));
         using var cancellation = new OperationDeadline(
-            caller: cancellationToken,
+            caller: (watched?.Token ?? cancellationToken),
             timeProvider: clock,
             timeout: timeout
         );
@@ -170,9 +174,13 @@ public static class CliProcess {
         var exited = process.WaitForExitAsync(cancellationToken: cancellation.Token);
         // Both pumps invoke this under eventGate, preserving observation order for stateful predicates.
         void Observe(CliProcessOutputLine line) {
+            if ((silence is not null) && !silence.IsCancellationRequested) {
+                try { silence.CancelAfter(delay: quiet!.Value); } catch (ObjectDisposedException) { }
+            }
             onOutput?.Invoke(line);
             if (continueWhen?.Invoke(line) == true) { continuation.TrySetResult(); }
         }
+        var observer = (((continueWhen is null) && (onOutput is null) && (silence is null)) ? null : (Action<CliProcessOutputLine>)Observe);
         var stdout = PumpAsync(
             reader: output,
             stream: CliProcessOutputStream.Stdout,
@@ -180,7 +188,7 @@ public static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe),
+            onOutput: observer,
             retainOutput: retainOutput
         );
         var stderr = PumpAsync(
@@ -190,7 +198,7 @@ public static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe),
+            onOutput: observer,
             retainOutput: retainOutput
         );
         var inputPump = WriteInputAsync(
@@ -316,11 +324,14 @@ public static class CliProcess {
     // With retainOutput false, observations still drive callbacks and continuation, but no transcript or event history
     // is retained; the caller can stream each line to disk without a second copy growing with the child's output. started
     // sees the process the moment it starts, before any input; if it throws, the child's tree is killed and the run throws.
+    // With quiet set, a child that writes no line on either stream for that long from its start or its last line is
+    // stopped as a timeout stops it (TimedOut), so a long run that keeps reporting progress needs no wall budget.
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", TimeProvider? clock = null, Task? continuationGate = null,
         CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null,
-        Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null) =>
+        Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null, TimeSpan? quiet = null) =>
         RunCapturedAsync(
+            quiet: quiet,
             arguments: arguments,
             cancellationToken: cancellationToken,
             clock: (clock ?? TimeProvider.System),

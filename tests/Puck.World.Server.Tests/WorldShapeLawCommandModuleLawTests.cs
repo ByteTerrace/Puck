@@ -10,9 +10,10 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>
 /// THE LAW: <c>creation.shape</c> reads each shape's law off its own lowering. A primitive whose non-uniform scale has
-/// no native spelling (a capsule, cone or torus scaled apart in X and Z) rides the generic <see cref="SdfOp.Scale"/> and
+/// no native spelling (a cone or torus scaled apart in X and Z) rides the generic <see cref="SdfOp.Scale"/> and
 /// reads as a bound whose gain is its smallest scale over its largest, which the fixed-point evaluator and contact
-/// refuse; an ellipsoid is the exponent-2 gauge, a bound contact admits; the native lowerings (an elliptic cylinder, a
+/// refuse; an ellipsoid is the exponent-2 gauge, a bound contact admits, and a capsule scaled apart in X and Z is that
+/// gauge elongated along its segment, the same bound; the native lowerings (an elliptic cylinder, a
 /// torus scaled alike in X and Z) read exact; a warp reads uncertified with its step clamp and the instructions contact
 /// drops; a path, a revolve and an unbounded fold are refused for contact by name, and a sweep and a detail shape are
 /// omitted. Unknown prototypes and shapes are refused by name.
@@ -106,17 +107,19 @@ public sealed class WorldShapeLawCommandModuleLawTests {
         Assert.StartsWith(
             actualString: result.Output,
             comparisonType: StringComparison.Ordinal,
-            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=0 contact-refused=5 unlowered=0]"
+            expectedStartString: $"[creation.shape: {PrototypeId} shapes=14/14 exact=7 bound=4 uncertified=3 cpu-refused=0 contact-refused=4 unlowered=0]"
         );
 
         var output = result.Output;
 
         Assert.Contains(expectedSubstring: "lowered=Box distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "box"), comparisonType: StringComparison.Ordinal);
-        // The generic scale's gain is its smallest component over its largest.
-        Assert.Contains(expectedSubstring: "lowered=Scale(0.2,0.5,0.4)·Capsule distance=bound gain=0.4 ", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
-        // The render reading takes the scale as the renderer's minimum-axis bound; only contact refuses it.
-        Assert.Contains(expectedSubstring: "cpu=interprets contact=refused (SdfFieldEvaluator cannot interpret non-uniform Scale", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
+        // The capsule's gauge gain is its least radius over its greatest, 0.2 over 0.4, short only of the gauge's margin.
+        Assert.Matches(expectedRegexPattern: @"lowered=Elongate·Superellipsoid\(e=2\) distance=bound gain=0\.(5|499) ", actualString: Line(output: output, shape: "capsule-xz"));
+        Assert.Contains(expectedSubstring: "cpu=interprets contact=admitted", actualString: Line(output: output, shape: "capsule-xz"), comparisonType: StringComparison.Ordinal);
+        // The generic scale's gain is its smallest component over its largest; the render reading takes the scale as the
+        // renderer's minimum-axis bound, and only contact refuses it.
         Assert.Contains(expectedSubstring: "lowered=Scale(0.6,0.6,0.15)·Trapezoid distance=bound gain=0.25 ", actualString: Line(output: output, shape: "cone-xz"), comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "cpu=interprets contact=refused (SdfFieldEvaluator cannot interpret non-uniform Scale", actualString: Line(output: output, shape: "cone-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Scale(1,0.5,0.5)·Torus distance=bound gain=0.5 ", actualString: Line(output: output, shape: "torus-xz"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Ellipse distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "torus-alike"), comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "lowered=Rotate·Ellipse distance=exact cpu=interprets contact=admitted", actualString: Line(output: output, shape: "cylinder-xz"), comparisonType: StringComparison.Ordinal);

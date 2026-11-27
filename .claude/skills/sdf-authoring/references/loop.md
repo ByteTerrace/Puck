@@ -160,8 +160,9 @@ alone), `distance=exact | bound gain=<g> | uncertified`, `step=` when a warp
 clamps the march, `cpu=` (whether the fixed-point evaluator reads the render lowering as the renderer draws it, the reading `mesh audit` measures a bake against) and `contact=`
 (admitted with `contact-omits=`, omitted, or refused and why). A `bound` is a
 field that underestimates: `|grad d|` lies in `[g, 1]`, from a non-uniform
-`Scale` the primitive has no native spelling for (a capsule, cone or torus
-scaled apart in X and Z) or the superellipsoid gauge an ellipsoid lowers to.
+`Scale` the primitive has no native spelling for (a cone or torus scaled apart
+in X and Z) or the superellipsoid gauge an ellipsoid lowers to, elongated along
+its segment for a capsule scaled apart in X and Z.
 A bound keeps the authored zero set and its gradient's direction, so the bake
 contours the right surface; contact refuses the residual `Scale` and admits the
 gauge. To see a field rather than read it,

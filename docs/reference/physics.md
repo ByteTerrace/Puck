@@ -250,6 +250,14 @@ revolved ellipse its field emits) is therefore the field's own surface and an
 exact piece of a carved creation's partition. A higher exponent uses its Lp
 support map with fixed-point powers. The chair seat and back are exponent-4
 superellipsoids; they therefore never go through the oriented-bound fallback.
+A Capsule placement scaled alike in X and Z compiles to the rounded box about
+its segment. One scaled apart compiles to the same exponent-2 superellipsoid
+over `SdfSolidGeometry.CapsuleRadii`, elongated along its segment
+(`FixedStaticCollider.Elongation`): its measure and support read the point less
+its nearest segment point, so outside the solid the distance is exact, and
+inside it is the depth in the ellipsoid about that point. Its field, the
+elongated gauge, has the same zero set; under a margin the gauge dilates past
+the collider along the ellipsoid's long axes, as a triaxial ellipsoid's does.
 Both convex kinds use Q32 intermediates for small simplex predicates and Q16
 witnesses, with deterministic iteration limits and tie order.
 Box does not admit a separate authored `rounding` on this vocabulary; that
