@@ -15,7 +15,7 @@ namespace Puck.Transpiler.Lowering;
 /// arrays to fold, so they exist in one language only. The SCALAR ones are not restated here at all: they come from
 /// <see cref="ExpressionVocabulary"/>, the table the rule language is built from, so the two cannot drift over a
 /// spelling. <see cref="DocumentScalars"/> folds them.</para></remarks>
-public static class DocumentBuiltins {
+public static partial class DocumentBuiltins {
     /// <summary>The collection builtins — the document language's own, with no rule-language counterpart — by name:
     /// each one's spelling and meaning, as the language server shows them, beside the evaluation a call runs.</summary>
     public static IReadOnlyDictionary<string, DocumentCollectionBuiltin> Collections { get; } = new Dictionary<string, DocumentCollectionBuiltin>(comparer: StringComparer.Ordinal) {
@@ -74,6 +74,84 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, fieldKey) => GroupBy(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
             signature: "groupBy(array, (item, index) => key)"
         ),
+        ["any"] = new(
+            description: "Returns 1 when some element's condition is truthy, else 0; with no lambda, when some element is truthy. It stops at the first match.",
+            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "any(array, (item, index) => condition)"
+        ),
+        ["all"] = new(
+            description: "Returns 1 when every element's condition is truthy, else 0 (1 for an empty array); with no lambda, when every element is truthy. It stops at the first miss.",
+            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "all(array, (item, index) => condition)"
+        ),
+        ["count"] = new(
+            description: "Returns how many elements' conditions are truthy; with no lambda, how many elements are.",
+            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "count(array, (item, index) => condition)"
+        ),
+        ["sum"] = new(
+            description: "Adds the elements, or the lambda's value for each element, as + does: numbers add exactly and numeric arrays add element by element. An empty array sums to 0.",
+            evaluate: static (call, scope, fieldKey) => Sum(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "sum(array, (item, index) => value)"
+        ),
+        ["scan"] = new(
+            description: "Returns the running totals in one pass: one more value than the array, starting at 0 and ending at the total, so scan([3, 4, 5]) is [0, 3, 7, 12] and element i is the sum of the first i elements. The lambda is optional, as sum's.",
+            evaluate: static (call, scope, fieldKey) => Scan(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "scan(array, (item, index) => value)"
+        ),
+        ["dot"] = new(
+            description: "Returns the dot product of two arrays of numbers of one length.",
+            evaluate: static (call, scope, fieldKey) => Dot(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "dot(a, b)"
+        ),
+        ["contains"] = new(
+            description: "Returns 1 when an element equals the value, as == compares, else 0.",
+            evaluate: static (call, scope, fieldKey) => Contains(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "contains(array, value)"
+        ),
+        ["indexOf"] = new(
+            description: "Returns the position of the first element equal to the value, or of the first whose lambda condition is truthy; -1 when none is.",
+            evaluate: static (call, scope, fieldKey) => Find(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "indexOf(array, value) or indexOf(array, (item, index) => condition)"
+        ),
+        ["find"] = new(
+            description: "Returns the first element whose condition is truthy, or null when none is.",
+            evaluate: static (call, scope, fieldKey) => Find(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "find(array, (item, index) => condition)"
+        ),
+        ["zip"] = new(
+            description: "Pairs the arrays' elements by position: zip([1, 2], [3, 4]) is [[1, 3], [2, 4]]. The arrays share one length.",
+            evaluate: static (call, scope, fieldKey) => Zip(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "zip(a, b, ...)"
+        ),
+        ["reverse"] = new(
+            description: "Returns the array's elements in the opposite order.",
+            evaluate: static (call, scope, fieldKey) => Reverse(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "reverse(array)"
+        ),
+        ["slice"] = new(
+            description: "Returns the elements from start up to, but not including, end (the array's end when omitted). A negative bound counts from the end, and a bound beyond either end stops there.",
+            evaluate: static (call, scope, fieldKey) => Slice(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "slice(array, start, end)"
+        ),
+        ["join"] = new(
+            description: "Joins the strings and numbers of an array into one string, the separator (empty when omitted) between them.",
+            evaluate: static (call, scope, fieldKey) => Join(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            positionalOnly: true,
+            signature: "join(array, separator)"
+        ),
         ["fraction"] = new(
             description: "Returns the part of a number above its floor, x - floor(x), in [0, 1).",
             evaluate: static (call, scope, fieldKey) => DocumentVectors.Fraction(call: call, fieldKey: fieldKey, scope: scope),
@@ -110,6 +188,9 @@ public static class DocumentBuiltins {
             signature: "polarPoint(radius, degrees, y)"
         ),
     };
+    /// <summary>The names of the builtins that take a lambda argument, in declaration order: the collection builtins
+    /// whose signature spells one.</summary>
+    public static IReadOnlyList<string> LambdaTakers { get; } = [.. Collections.Where(predicate: static entry => entry.Value.Signature.Contains(value: "=>", comparisonType: StringComparison.Ordinal)).Select(selector: static entry => entry.Key)];
     /// <summary>The named numeric constants every value position reads at compile time, by name: <c>pi</c> is the
     /// ratio of a circle's circumference to its diameter, in double precision. A <c>let</c>, a parameter or a loop
     /// variable of the same name hides one.</summary>
@@ -811,6 +892,14 @@ public static class DocumentBuiltins {
             call = (call with { Name = canonical });
         }
 
+        if (
+            Collections.TryGetValue(key: call.Name, value: out var named) &&
+            named.PositionalOnly &&
+            call.Arguments.Any(predicate: static argument => (argument.Name is not null))
+        ) {
+            return false;
+        }
+
         result = (Collections.TryGetValue(key: call.Name, value: out var collection)
             ? collection.Evaluate(arg1: call, arg2: scope, arg3: fieldKey)
             : DocumentScalars.Evaluate(
@@ -828,11 +917,15 @@ public static class DocumentBuiltins {
 /// <param name="description">What the call produces, in one or two sentences.</param>
 /// <param name="evaluate">The evaluation of a call: the call as written, the lowering scope and the enclosing JSON
 /// key, returning the produced node or <see langword="null"/> after reporting a refusal into the scope.</param>
-public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate) {
+/// <param name="positionalOnly">Whether a call that names any argument is not this builtin: a vocabulary arm of the same
+/// name (<c>all(predicates: [...])</c>) reads its named arguments, so a call written that way is the arm's.</param>
+public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate, bool positionalOnly = false) {
     /// <summary>Gets the call as an author writes it.</summary>
     public string Signature { get; } = signature;
     /// <summary>Gets what the call produces.</summary>
     public string Description { get; } = description;
+    /// <summary>Gets whether a call naming any argument belongs to a vocabulary arm instead of this builtin.</summary>
+    public bool PositionalOnly { get; } = positionalOnly;
 
     internal Func<CallExpressionNode, DocumentScope, string?, JsonNode?> Evaluate { get; } = evaluate;
 }

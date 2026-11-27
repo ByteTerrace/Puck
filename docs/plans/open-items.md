@@ -5425,6 +5425,12 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
+  (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
+  (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer
+  (`PuckPrinter.Writer.TestGivenItems`, `TestWhenItems`, `TestExpectItems`), a trivia case and an expansion
+  (`WorldDocumentEmitter.GivenLines`, `WhenLines`, `ExpectLines`). One generic loop node over the block's item type,
+  with one parser and one expansion, replaces the three.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)

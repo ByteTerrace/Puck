@@ -445,11 +445,13 @@ or otherwise non-foldable addition to the shared table, not a currently reachabl
 
 ## Collection builtins and lambdas
 
-`range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort` and `groupBy` are the document language's
-OWN vocabulary—a rule has no arrays to fold, so these exist in one language only, and are evaluated WHILE
-LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
+`range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy` and the list library
+below (`any`, `all`, `count`, `sum`, `scan`, `dot`, `contains`, `indexOf`, `find`, `zip`, `reverse`, `slice`, `join`) are the
+document language's OWN vocabulary—a rule has no arrays to fold, so these exist in one language only, and are evaluated
+WHILE LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
 `(item, index) => expression` (`reduce`'s is `(running, item) => expression`), and is an argument to one of these
-builtins and nothing else—there are no first-class functions.
+builtins and nothing else—there are no first-class functions. A function that takes values only (`sine`) is refused
+with PUCK042 when it is handed a lambda.
 
 A cartridge's `arrays` section (`worlds/debug/cartridges/shared/tetromino.puck` is the working form; a world
 document has no `arrays` member) shows the builtins at work:
@@ -493,6 +495,30 @@ order, each value the array of items that produced it.
 `map` and `filter` pass the item and, optionally, its index; `reduce` takes the running value and the item.
 A lambda parameter shadows a constant of the same name for the length of one application.
 
+### The list library
+
+Folds, searches and reshapes over a compile-time array. A name a rule also spells (`any`, `all`, `count`, `sum`) is
+the document builtin in a value position and the rule's fold in a rule body; a call that names an argument
+(`all(predicates: [...])`) is a vocabulary arm's, never the builtin. Arithmetic folds through the operators' own
+evaluation, so numbers add exactly and numeric arrays add element by element.
+
+| Builtin | Yields |
+|---|---|
+| `any(array, lambda)` | 1 when some item's lambda is truthy, else 0, stopping at the first. Without a lambda, tests the items themselves |
+| `all(array, lambda)` | 1 when every item's lambda is truthy (1 for an empty array), stopping at the first miss |
+| `count(array, lambda)` | how many items' lambdas are truthy |
+| `sum(array)` / `sum(array, lambda)` | the items, or the lambda's values, added (0 for an empty array) |
+| `scan(array)` / `scan(array, lambda)` | the running totals in one pass: one more value than the array, starting at 0 and ending at the total, so `scan([3, 4, 5])` is `[0, 3, 7, 12]` and element `i` is the sum of the first `i` items. `scan(lengths)[i]` is where item `i` of a list of lengths starts |
+| `dot(a, b)` | the dot product of two numeric arrays of one length |
+| `contains(array, value)` | 1 when an item equals the value, as `==` compares, else 0 |
+| `indexOf(array, value)` / `indexOf(array, lambda)` | the position of the first item equal to the value, or whose lambda is truthy; -1 when none |
+| `find(array, lambda)` | the first item whose lambda is truthy, or `null` |
+| `zip(a, b, ...)` | the items paired by position, `zip([1, 2], [3, 4])` is `[[1, 3], [2, 4]]`; the arrays share one length |
+| `reverse(array)` | the items in the opposite order |
+| `slice(array, start, end)` | the items from `start` up to, not including, `end` (the array's end when omitted); a negative bound counts from the end and a bound past either end stops there |
+| `join(array, separator)` | the strings and numbers joined into one string, the separator (empty when omitted) between them |
+| `minimum(array)`, `maximum(array)` | the smallest or largest number of a non-empty array (with two arguments, the scalar functions) |
+
 ### Rotations, points and element-wise arithmetic
 
 A rotation is a quaternion array `[x, y, z, w]`, the spelling a shape's `rotation` holds; a point or axis is
@@ -505,7 +531,7 @@ written `angle * 1rad`.
 | `compose(outer, inner, ...)` | the product of rotations: the last argument turns a point first, the first argument last |
 | `rotatePoint(rotation, point)` | the point turned about the origin |
 | `polarPoint(radius, degrees, y)` | `[radius * cos, y, radius * sin]`, measured from +X toward +Z; `y` defaults to 0 |
-| `fraction(x)` | `x - floor(x)` |
+| `fraction(x)` | `x - floor(x)`, exact for a decimal; a shade program reads `fraction`, `clamp` and `pi` as well, lowering them to the ops that make them (`x - floor(x)`, `min(max(x, lo), hi)`) |
 | `overlaps(a, b)` | 1 when the spans `[low, high]` share a point (spans that only touch at an end do not), else 0 |
 | `within(x, span)` | 1 when `low <= x <= high`, else 0 |
 

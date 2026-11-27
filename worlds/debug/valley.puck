@@ -138,9 +138,10 @@ placements {
 }
 
 // The relief masks of the sector named `name`: one over every bowl and cut it carves, or none when it carves nothing.
-function sectorCarveMasks(name) = length(filter(valleyBasins, b => b.sector == name)) +
-  length(filter(valleyCuts, c => c.sector == name)) >
-  0 ? [terrainCarveMask(filter(valleyBasins, b => b.sector == name), filter(valleyCuts, c => c.sector == name))] : []
+function sectorCarveMasks(name) = (any(valleyBasins, b => b.sector == name) or any(valleyCuts, c => c.sector == name)) ? [
+    terrainCarveMask(filter(valleyBasins, b => b.sector == name), filter(valleyCuts, c => c.sector == name))
+  ] :
+  []
 
 prototypes {
   for sector in valleySectors {

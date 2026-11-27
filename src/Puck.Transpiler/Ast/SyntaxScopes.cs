@@ -101,6 +101,9 @@ public static class SyntaxScopes {
             case TestWhenLoopNode loop when !ReferenceEquals(objA: child, objB: loop.Sequence):
                 AddLoop(index: loop.Index, into: bound, item: loop.Item, loop: loop);
                 break;
+            case TestExpectForNode loop when !ReferenceEquals(objA: child, objB: loop.Sequence):
+                AddLoop(index: loop.Index, into: bound, item: loop.Item, loop: loop);
+                break;
             case RepeatStatementNode repeat when !ReferenceEquals(objA: child, objB: repeat.Count):
                 AddLoop(index: repeat.Index, into: bound, item: null, loop: repeat);
                 break;

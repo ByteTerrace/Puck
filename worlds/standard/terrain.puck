@@ -174,7 +174,7 @@ shade template terrain(color0, color1, color2, color3, amount, roughness, specul
   surface {
     let p = world ? surface.position : surface.layerPosition
     let n = world ? surface.normal : toLayer(surface.normal)
-    let slope = acos(shadeClamp(radial ? dot(n, normalize(p)) : n.y, -1, 1)) * 57.29578
+    let slope = acos(clamp(radial ? dot(n, normalize(p)) : n.y, -1, 1)) * 57.29578
     let height = radial ? length(p) - radius : p.y
     let q = p * scale
     let rate = surface.footprint * scale

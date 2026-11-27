@@ -280,13 +280,21 @@ else; a lambda anywhere else is **PUCK042**, an unevaluable call is **PUCK041**.
 | `distinct(array)` | an array | — |
 | `sort(array[, lambda])` | an array | item, projecting the sort key |
 | `groupBy(array, lambda)` | an array | item, or item+index, projecting the group key |
+| `any` / `all` / `count(array[, lambda])` | an array | item, or item+index; truthy tests (`any`, `all` stop at the answer), `count` how many |
+| `sum(array[, lambda])` | an array | optional projection; added as `+` adds, so numeric arrays add element-wise; 0 when empty |
+| `scan(array[, lambda])` | an array | optional projection; the running totals, one more than the array: `scan([3, 4, 5])` is `[0, 3, 7, 12]` |
+| `dot(a, b)` | two numeric arrays of one length | — |
+| `contains(array, value)`, `indexOf(array, value or lambda)`, `find(array, lambda)` | an array | 1 or 0; the position or -1; the item or `null` |
+| `zip(a, b, ...)`, `reverse(array)`, `slice(array, start, end)`, `join(array, separator)` | arrays | — ; `slice` clamps and counts a negative bound from the end |
+| `minimum(array)`, `maximum(array)` | an array of numbers | — (two arguments are the scalar functions) |
 
 `distinct` compares by value (structural hashing), keeping the first
 occurrence. `sort` is stable and total over a mixed array: numbers order
 before strings before booleans before everything else. `groupBy` yields an
 object keyed by the lambda's result, in first-seen key order. A lambda
 parameter shadows a same-named `let` for the length of one application. The
-builtin names apply in compile-time value positions. A call constructing a
+builtin names apply in compile-time value positions; a call that names an argument
+(`all(predicates: [...])`) is a vocabulary arm's, never a list builtin. A call constructing a
 declared document arm takes its meaning from that position: array `sort(...)`
 and a world's `sort` transform coexist. Statement-position calls likewise
 belong to their own vocabulary (a cartridge's `map` step is untouched).
