@@ -21,6 +21,61 @@ function shadeLane(index) = index == 0 ? lanes.slot0 : index == 1 ? lanes.slot1 
   index == 7 ? lanes.world3 :
   1
 
+// The pattern library: the building blocks a material's look composes, each one formula, with the ergonomic forms
+// lowering to the same program as a hand-unrolled one. Points are in pattern units: one lattice or cell per unit.
+//
+// Fractal noise: `octaves` (a whole number fixed when the document compiles) of the lattice, each at `lacunarity` times
+// the frequency and `gain` times the amplitude of the one before, normalised to about [-1, 1].
+function shadeFbm(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+  range(0, octaves),
+  0,
+  (sum, i) => sum + pow(gain, i) * lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))
+) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
+// Ridged noise in [0, 1]: sharp crests where the lattice crosses zero, the look of veins, ridges and creases.
+function shadeRidged(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+  range(0, octaves),
+  0,
+  (sum, i) => sum + pow(gain, i) * pow(1 - abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i))), 2)
+) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
+// Turbulence in [0, 1]: the summed magnitude of the octaves, billowing like smoke or marble's swirl.
+function shadeTurbulence(q, seed, octaves = 4, gain = 0.5, lacunarity = 2) = reduce(
+  range(0, octaves),
+  0,
+  (sum, i) => sum + pow(gain, i) * abs(lattice(q * pow(lacunarity, i) + 17 * i, seed + uint(i)))
+) / reduce(range(0, octaves), 0, (sum, i) => sum + pow(gain, i))
+// Domain warp: `q` pushed by `amount` along three decorrelated lattices, so any pattern read at the result flows and
+// swirls (feed it to fBm, cells or a ramp).
+function shadeWarp(q, seed, amount) = q + amount * [
+  lattice(q, seed),
+  lattice(q + [5.2, 1.3, 2.8], seed + uint(1)),
+  lattice(q + [1.7, 9.2, 3.4], seed + uint(2))
+]
+// Cellular pattern pieces over `cells(q, seed)`, which returns [F1, F2 - F1, id]: the distance to the nearest
+// feature, the gap to the second nearest (0 on the borders between cells), and the cell's id in [0, 1).
+// A border line `width` units wide between cells, 1 on the line: cracks, grout, scales' rims, leaf veins.
+function shadeCellBorder(q, seed, width) = 1 - shadeStep(cells(q, seed).y, width, width * 0.5)
+// A per-cell value in [0, 1), constant over each cell: tile, cobble and scale colours.
+function shadeCellId(q, seed) = cells(q, seed).z
+// A colour ramp: `stops` is a list of { at, color } in rising `at`, and `t` picks the colour between the two stops
+// around it, held at the ends.
+function shadeRamp(t, stops) = reduce(
+  range(1, length(stops)),
+  stops[0].color,
+  (color, i) => mix(color, stops[i].color, saturate((t - stops[i - 1].at) / max(stops[i].at - stops[i - 1].at, 0.000001)))
+)
+// Running-bond bricks on the plane of `p`'s x and y: `size` is a brick [width, height] and `mortar` the joint width,
+// all in the same units as `p`. Returns [mortar coverage (1 in a joint), brick value in [0, 1)], the value the same
+// everywhere on one brick; every other course is offset by half a brick.
+function shadeBrick(p, size, mortar, seed) = shadeBrickAt(
+  [p.x / size[0] + 0.5 * (floor(p.y / size[1]) - 2 * floor(floor(p.y / size[1]) * 0.5)), p.y / size[1]],
+  [mortar / size[0], mortar / size[1]],
+  seed
+)
+function shadeBrickAt(q, joint, seed) = [
+  1 - shadeStep(min(min(shadeFrac(q.x), 1 - shadeFrac(q.x)) / joint[0], min(shadeFrac(q.y), 1 - shadeFrac(q.y)) / joint[1]), 0.5, 0.5),
+  0.5 + 0.5 * lattice([floor(q.x) + 0.5, floor(q.y) + 0.5, 0.5], seed)
+]
+
 shade template plain() {
   surface {
     albedo: material.albedo
