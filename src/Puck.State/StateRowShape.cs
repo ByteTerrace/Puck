@@ -83,19 +83,8 @@ public abstract record StateRowShape(
             return false;
         }
 
-        var boardLower = ((board.Kind == CellKind.Bool) ? 0L : (board.Min ?? long.MinValue));
-        var boardUpper = ((board.Kind == CellKind.Bool) ? 1L : (board.Max ?? long.MaxValue));
-        var codeLower = (codes.Min ?? long.MinValue);
-        var codeUpper = (codes.Max ?? long.MaxValue);
-
-        if (boardSymbols is { } boardEnum) {
-            boardLower = Math.Max(val1: boardLower, val2: 0L);
-            boardUpper = Math.Min(val1: boardUpper, val2: (boardEnum.Count - 1L));
-        }
-        if (codeSymbols is { } codeEnum) {
-            codeLower = Math.Max(val1: codeLower, val2: 0L);
-            codeUpper = Math.Min(val1: codeUpper, val2: (codeEnum.Count - 1L));
-        }
+        var (boardLower, boardUpper) = board.AdmittedRange(symbols: boardSymbols);
+        var (codeLower, codeUpper) = codes.AdmittedRange(symbols: codeSymbols);
 
         if ((boardLower > boardUpper) || (codeLower > codeUpper)) {
             reason = $"derived board '{board.Name.Value}' or inverse codes '{codes.Name.Value}' has an empty admitted value domain";
@@ -117,6 +106,23 @@ public abstract record StateRowShape(
         return true;
     }
 
+    /// <summary>Returns the inclusive range of raw values a write to an integer or boolean row of this shape can
+    /// store: zero and one for a boolean row, the declared <see cref="Min"/> and <see cref="Max"/> (each side
+    /// unbounded when absent) for an integer row, narrowed to the enum's ordinals when the row names one. The range is
+    /// empty, its lower bound above its upper, when the declarations admit no value.</summary>
+    /// <param name="symbols">The enum this row names, or <see langword="null"/>.</param>
+    /// <returns>The inclusive range.</returns>
+    public (long Lower, long Upper) AdmittedRange(StateEnum? symbols) {
+        var lower = ((Kind == CellKind.Bool) ? 0L : (Min ?? long.MinValue));
+        var upper = ((Kind == CellKind.Bool) ? 1L : (Max ?? long.MaxValue));
+
+        if (symbols is not null) {
+            lower = Math.Max(val1: lower, val2: 0L);
+            upper = Math.Min(val1: upper, val2: (symbols.Count - 1L));
+        }
+
+        return (lower, upper);
+    }
     private static bool TryAdmitDerivedValue(StateRowShape row, StateEnum? symbols, long value, out string reason) {
         if (
             (row.ClampToEnvelope(value: value) != value) ||

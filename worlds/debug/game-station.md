@@ -151,7 +151,7 @@ another pile plays the run there.
 | Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
 | Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
 | Deal or move in patience | `klondike.deal <i> 1`, `klondike.draw <i>`, `klondike.move <i> <from> <to> <card>`, `freecell.deal <i>`, `freecell.move <i> <from> <to> <card>` (each takes the station's number, 0 for the first) |
-| Read a station's Klondike | `world.state klondikeRequest`, `klondikeStatus`, `klondikeDeals` (one cell a station), `world.state klondikePile2Of<i>`, `klondikeDown2Of<i>` (a column's face-down part) |
+| Read a station's Klondike | `world.state klondikeRequest`, `klondikeStatus`, `klondikeDeals` (one cell a station), `world.state klondikePile2Of<i>`, `klondikeDown2Of<i>` (a column's face-down part), `klondikeFaceDownOf<i>` (a card's face: 1 down) |
 | Read a station's FreeCell | `world.state freecellRequest`, `freecellStatus`, `freecellDeals` (one cell a station), `world.state freecellPile8Of<i>` |
 | Read where each card lies | `world.state patienceSlotOf<i>` (a card's slot), `patienceCardAtOf<i>` (a slot's card), `patienceSeatZone` and the other `patienceSeat…` rows (one cell a station) |
 

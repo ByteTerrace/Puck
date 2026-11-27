@@ -194,6 +194,49 @@ public sealed class ArenaWordLawTests {
         Assert.False(ArenaBoards.TryQuery(arena, board, attacks, 0, default, out _, out _));
     }
     [Fact]
+    public void ABoardsValuePlanesAnswerWhatItsCellsHoldThroughWritesRewindsAndCommits() {
+        var section = TopologyArenaFixture.Section();
+        var rows = section.Rows!.ToArray();
+        var board = TopologyArenaFixture.Board;
+        rows[board] = rows[board] with { Min = -2L, Max = 5L };
+        var (_, arena) = TopologyArenaFixture.Build(section with { Rows = rows });
+        var topology = arena.Layout[board].Topology!;
+        var scratch = new long[TopologyArenaFixture.BoardCells];
+
+        void Agree(string stage) {
+            Assert.True(arena.TryReadBoard(board, scratch));
+            for (var lower = -4L; lower <= 7L; lower++) {
+                for (var upper = (lower - 1L); upper <= 7L; upper++) {
+                    Assert.True(arena.TryReadBoardPlanes(board, lower, upper, out var planes), stage);
+                    var expected = BoardQueries.Evaluate(new BoardMaskQuery(topology, lower, upper), scratch, arena.Layout[board].Empty, 0);
+                    Assert.True(expected == (long)planes, $"{stage}: {lower}..{upper} planes {planes:X} cells {expected:X}");
+                }
+            }
+        }
+        void Write(int cell, long value) {
+            Assert.True(arena.TryWriteBoardCell(board, cell, value, StateWriteKind.Set, out var reason), reason);
+        }
+
+        Agree(stage: "empty");
+        for (var cell = 0; cell < TopologyArenaFixture.BoardCells; cell++) {
+            Write(cell, (cell % 8) - 2);
+        }
+        Agree(stage: "written");
+
+        var mark = arena.BeginScope();
+        Write(3, 5);
+        Write(4, -2);
+        Write(3, 0);
+        Agree(stage: "in scope");
+        arena.Rewind(mark);
+        Agree(stage: "rewound");
+
+        mark = arena.BeginScope();
+        Write(7, 4);
+        arena.Commit(mark);
+        Agree(stage: "committed");
+    }
+    [Fact]
     public void ABoardQueryOverAnArenaRowAnswersWhatTheSpanKernelAnswers() {
         var arena = Seeded();
         var topology = arena.Layout[TopologyArenaFixture.Board].Topology!;

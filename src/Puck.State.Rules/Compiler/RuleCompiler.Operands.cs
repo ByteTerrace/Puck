@@ -400,6 +400,7 @@ public static partial class RuleCompiler {
             "sum" => StateReduceOp.Sum,
             "count" => StateReduceOp.Count,
             "arrangementRank" => StateReduceOp.ArrangementRank,
+            "position" => StateReduceOp.Position,
             _ => StateReduceOp.None,
         });
 
@@ -614,7 +615,102 @@ public static partial class RuleCompiler {
             ))
         );
     }
+    // $reduce:position:<row>[key] — the key's zero-based position among the row's cells in their order: the one
+    // reduction that reads a key, so it is the one that takes one. A key the row does not hold reads -1.
+    private static ResolvedOperand ResolvePositionOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, string keyFieldLabel, RuleCompileContext context, string describe) {
+        RuleException Invalid(string detail) => new(
+            detail: detail,
+            refusal: RuleRefusal.ReduceChannelMalformed,
+            ruleName: ruleName
+        );
+
+        if ((call.Count != 2) || string.IsNullOrEmpty(value: call.Text(index: 1))) {
+            throw Invalid(detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}position:<row>' with the key whose position it reads");
+        }
+        if (key is null) {
+            throw Invalid(detail: $"'{name}' reads the position of a key — name it with '{keyFieldLabel}'");
+        }
+
+        var rowName = call.Text(index: 1);
+        var rowOrdinal = -1;
+
+        if (TryResolveLiveRow(
+            context: context,
+            name: rowName,
+            row: out var live,
+            ruleName: ruleName,
+            where: $"'{name}' row"
+        )) {
+            live!.CollectFacts(into: context.Needs);
+        } else {
+            _ = ResolveRequiredRow(
+                channel: name,
+                context: context,
+                malformed: RuleRefusal.ReduceChannelMalformed,
+                name: rowName,
+                requireKeyed: true,
+                ruleName: ruleName
+            );
+            rowOrdinal = ResolveRowOrdinal(
+                context: context,
+                name: rowName
+            );
+        }
+
+        CompiledCellRef? keyFrom = null;
+        var literal = default(CellKey);
+
+        if (TryResolveDynamicKey(
+            cell: out var dynamicKey,
+            context: context,
+            keyFieldLabel: keyFieldLabel,
+            reference: key,
+            ruleName: ruleName,
+            verb: "reduce"
+        )) {
+            keyFrom = dynamicKey;
+        } else {
+            if (!CellName.TryParse(
+                candidate: key.Spelling,
+                name: out _,
+                reason: out var reason
+            )) {
+                throw Invalid(detail: $"'{name}' {keyFieldLabel} '{key}' {reason}");
+            }
+
+            literal = InternKey(
+                context: context,
+                name: key.Spelling
+            );
+        }
+
+        return new ResolvedOperand(
+            describe: describe,
+            operand: new PositionOperand(
+                key: literal,
+                keyFrom: keyFrom,
+                rowFrom: live,
+                rowOrdinal: rowOrdinal
+            )
+        );
+    }
     private static ResolvedOperand ResolveReduceOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, string keyFieldLabel, RuleCompileContext context, string describe) {
+        if (
+            (call.Count >= 1) &&
+            TryParseReduceOp(op: out var first, text: call.Text(index: 0)) &&
+            (first == StateReduceOp.Position)
+        ) {
+            return ResolvePositionOperand(
+                call: call,
+                context: context,
+                describe: describe,
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName
+            );
+        }
+
         RefuseKeyOnReservedChannel(
             key: key,
             keyFieldLabel: keyFieldLabel,
@@ -633,7 +729,7 @@ public static partial class RuleCompiler {
             string.IsNullOrEmpty(value: call.Text(index: 1))
         ) {
             throw new RuleException(
-                detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count|arrangementRank>:<row>'",
+                detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count|arrangementRank|position>:<row>'",
                 refusal: RuleRefusal.ReduceChannelMalformed,
                 ruleName: ruleName
             );

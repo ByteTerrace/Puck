@@ -49,7 +49,7 @@ public sealed class AuthoredBindingAuthorityLawTests {
         Assert.Equal(expected: CommandBindability.Unbindable, actual: protectedMetadata.Bindability);
         Assert.True(condition: registry.TryGetMetadata(name: AllowedCommand, metadata: out var allowedMetadata));
         Assert.Equal(expected: CommandBindability.Bindable, actual: allowedMetadata.Bindability);
-        WorldAffordances.Install(registry: registry);
+        using var vocabulary = WorldAffordances.Install(registry: registry);
 
         using var fixture = Fixtures.FreshServer();
         // This host-stamped addon begins with no standing. Give it only the one mutation kind on bindings, with

@@ -21,14 +21,11 @@ public sealed class ZoneEndKey : RuleKeyFact {
     public override void CollectReads(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (m_rowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new CellAccess(
-                Key: default,
-                RowOrdinal: m_rowOrdinal
-            ));
-        }
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: m_rowFrom,
+            rowOrdinal: m_rowOrdinal
+        );
     }
 
     /// <summary>Gets the program the live row's index resolves through, or <see langword="null"/>.</summary>
