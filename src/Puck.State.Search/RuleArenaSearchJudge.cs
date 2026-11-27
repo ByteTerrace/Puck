@@ -6,14 +6,15 @@ namespace Puck.State;
 /// job's judge rules over the scoped arena through an <see cref="IEffectHost"/>, and its score is a compiled
 /// expression read over the same host.</summary>
 /// <remarks>
-/// <para>The latch is cleared before each run, so a candidate's verdict depends on the position it reached and
-/// never on the candidate judged before it.</para>
+/// <para>The latch is <see cref="RuleLatch.Fresh"/>: it keeps no edge bit, so a candidate's verdict depends on the
+/// position it reached and never on the candidate judged before it, and a closed gate writes nothing into the
+/// candidate's scope.</para>
 /// </remarks>
 public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     private readonly RuleEvaluator m_evaluator;
     private readonly ArenaSearchEffectHost m_host;
     private readonly int[] m_keyRows;
-    private readonly RuleLatch m_latch = new();
+    private readonly RuleLatch m_latch = new(fresh: true);
     private readonly CompiledRule[] m_rules;
     private readonly CompiledExpressionToken[]? m_score;
     private readonly bool m_readsTick;
@@ -25,11 +26,21 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <see langword="null"/> for a job that compares no plies.</param>
     /// <exception cref="ArgumentNullException"><paramref name="host"/> or <paramref name="rules"/> is
     /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Two of <paramref name="rules"/> share a name, so they would share latch
+    /// state and one could read the other's crossing within a candidate.</exception>
     public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledExpressionToken[]? score = null) {
         ArgumentNullException.ThrowIfNull(argument: host);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
-        // Each candidate resets the latch and runs once. There is no prior evaluation to memoize.
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var rule in rules) {
+            if (!names.Add(item: rule.Name)) {
+                throw new ArgumentException(message: $"judge rule '{rule.Name}' is named twice", paramName: nameof(rules));
+            }
+        }
+
+        // Each candidate runs once over a fresh latch. There is no prior evaluation to memoize.
         m_evaluator = new RuleEvaluator(host: host) { SchedulingEnabled = false };
         m_host = host;
         m_rules = rules;
@@ -62,7 +73,6 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
             engineTick: view.EngineTick,
             tick: view.Tick
         );
-        m_latch.Reset(journal: m_host.Arena.Journal);
 
         // Whatever the candidate queued is dropped however the evaluation ends, so nothing it queued is counted
         // against the next candidate.
