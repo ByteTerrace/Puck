@@ -19,6 +19,14 @@ public static partial class SdfWorldPackage {
     /// face's ray parameter, its draw plus one (zero where no glass face lies before the opaque hit) and its triangle,
     /// in the mesh target's format.</summary>
     public const string GlassVisibility = "glassVisibility";
+    /// <summary>The glass's sky filter as the composite reads it: one word a render pixel, the RGB share of the sky
+    /// behind it each glass pixel passes, which the composite tints the sky share by, since the lit image's coverage
+    /// carries only its luminance. The glass shading pass writes it through <see cref="GlassSkyFilterWritten"/>; a zero
+    /// word (the glass clear's) passes the sky as it is. <c>frame/sdf-glass-sky-filter.hlsli</c> owns the packing, and
+    /// the composite binds it only in a frame whose glass passes ran (<c>SdfSkyRecorder</c>).</summary>
+    public const string GlassSkyFilter = "sdfGlassSkyFilter";
+    /// <summary>The glass's sky filter as the glass shading pass writes it (<see cref="GlassSkyFilter"/>).</summary>
+    public const string GlassSkyFilterWritten = "sdfGlassSkyFilterRW";
     /// <summary>The words one render-extent pixel holds in the glass sums: the sums, the layer list's
     /// <see cref="GlassLayers"/> 64-bit entries, the material key and the nearest exit. Even, so every pixel's layer list
     /// lies on 64-bit words. <c>SdfIsaHlsl</c> generates it as <c>SDF_GLASS_SUM_WORDS</c>.</summary>
@@ -60,6 +68,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: GlassProbeHistory),
             Written(element: ShaderValueType.Uint, name: GlassProbeHistoryWritten),
+            Written(element: ShaderValueType.Uint, name: GlassSkyFilterWritten),
             ShaderWorkCounters.BufferMember,
             .. Tables,
         ];
@@ -67,13 +76,14 @@ public static partial class SdfWorldPackage {
 
     /// <summary>Returns a fragment with the glass contract added after its views pass, for a view of a program that
     /// holds a glass shape (<c>SdfProgram.HasGlass</c>); a view of any other program runs the fragment as it stands and
-    /// pays nothing. Three passes follow views: <see cref="Parts.GlassClear"/> zeroes the glass sums; <see cref="Parts.Glass"/>
+    /// pays nothing. Three passes follow views: <see cref="Parts.GlassClear"/> zeroes the glass sums and the sky filter; <see cref="Parts.Glass"/>
     /// rasterizes the glass draws, every face accumulating its signed ray distance into the sums where it lies before
     /// the opaque hit and the nearest front face winning the glass target through a depth of its own; and
     /// <see cref="Parts.GlassShade"/> writes the lit image over again with each glass pixel shaded: the opaque image
     /// sampled along the refracted ray and absorbed over the distance through the glass, the sky reflected by Fresnel,
     /// the lights' highlights, frosted by the material's roughness. Every pass after views reads that image in the lit
-    /// image's place, and a temporal view's resolve reads the reactivity the glass pass raised. The sums' version the
+    /// image's place, a temporal view's resolve reads the reactivity the glass pass raised, and the composite tints the
+    /// sky behind the glass by the sky filter it wrote (<see cref="GlassSkyFilter"/>). The sums' version the
     /// raster writes declares its cleared predecessor preserved: the clear and the raster record on one signature
     /// (the geometry's), so a standing raster never accumulates onto a clear it did not see.</summary>
     /// <param name="fragment">The fragment, any of the package's, with or without its cascades.</param>
@@ -100,6 +110,7 @@ public static partial class SdfWorldPackage {
         var meshDepth = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.MeshDepth));
         var visibility = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.Visibility));
         var sumCount = visibility.Count!.Select(selector: static term => term with { Elements = GlassSumWords }).ToArray();
+        var filterCount = visibility.Count!.Select(selector: static term => term with { Elements = 1 }).ToArray();
         // The glass pass runs on the render grid, the probe history's basis in every fragment.
         var probeHistory = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.ProbeHistory));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 3));
@@ -114,8 +125,8 @@ public static partial class SdfWorldPackage {
                     InputAccesses: [],
                     Inputs: [],
                     Name: Parts.GlassClear,
-                    OutputAccesses: [RenderGraphPortAccess.TransferWrite],
-                    Outputs: [new ResourceReference(Name: Parts.GlassSumsCleared)]
+                    OutputAccesses: [RenderGraphPortAccess.TransferWrite, RenderGraphPortAccess.TransferWrite],
+                    Outputs: [new ResourceReference(Name: Parts.GlassSumsCleared), new ResourceReference(Name: Parts.GlassSkyFilterCleared)]
                 ));
                 passes.Add(item: new RenderGraphFragmentPass(
                     CountsKernelWork: true,
@@ -131,23 +142,32 @@ public static partial class SdfWorldPackage {
                     outputs: (temporal ? [Parts.GlassLit, Parts.GlassReactivity] : [Parts.GlassLit])
                 );
 
-                // The glass pass reuses the preceding render's gathers at its nearest faces and keeps this render's.
+                // The glass pass reuses the preceding render's gathers at its nearest faces and keeps this render's, and
+                // writes the sky filter the composite tints the sky behind the glass by.
                 passes.Add(item: shade with {
                     InputAccesses = [.. shade.InputAccesses, RenderGraphPortAccess.ComputeRead],
                     Inputs = [.. shade.Inputs, new ResourceReference(Name: Parts.GlassProbeHistory, PreviousFrame: true)],
                     Members = GlassMembers,
-                    OutputAccesses = [.. shade.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
-                    Outputs = [.. shade.Outputs, new ResourceReference(Name: Parts.GlassProbeHistory)],
+                    OutputAccesses = [.. shade.OutputAccesses, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+                    Outputs = [.. shade.Outputs, new ResourceReference(Name: Parts.GlassProbeHistory), new ResourceReference(Name: Parts.GlassSkyFilter)],
                 });
                 continue;
             }
-            passes.Add(item: (!after
+
+            var renamed = (!after
                 ? pass
                 : pass with {
                     Inputs = [.. pass.Inputs.Select(selector: input => ((input.Name == lit)
                         ? input with { Name = Parts.GlassLit }
                         : ((input.Name == Parts.Reactivity) ? input with { Name = Parts.GlassReactivity } : input)))],
-                }));
+                });
+
+            passes.Add(item: ((renamed.Name == Parts.Composite)
+                ? renamed with {
+                    InputAccesses = [.. renamed.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                    Inputs = [.. renamed.Inputs, new ResourceReference(Name: Parts.GlassSkyFilter)],
+                }
+                : renamed));
         }
 
         return fragment with {
@@ -164,6 +184,15 @@ public static partial class SdfWorldPackage {
                     From: Parts.GlassSumsCleared,
                     Kind: ShaderPipelineResourceKind.Buffer,
                     Name: Parts.GlassSums,
+                    PreservesPredecessor: true,
+                    StrideBytes: sizeof(uint)
+                ),
+                visibility with { Name = Parts.GlassSkyFilterCleared, StrideBytes = sizeof(uint), Count = filterCount },
+                new ShaderPipelineResource(
+                    Count: filterCount,
+                    From: Parts.GlassSkyFilterCleared,
+                    Kind: ShaderPipelineResourceKind.Buffer,
+                    Name: Parts.GlassSkyFilter,
                     PreservesPredecessor: true,
                     StrideBytes: sizeof(uint)
                 ),
@@ -210,5 +239,10 @@ public static partial class SdfWorldPackage {
         public const string GlassReactivity = "glassReactivity";
         /// <summary>The glass pass's history of probe gathers at its nearest faces (<see cref="GlassProbeHistory"/>).</summary>
         public const string GlassProbeHistory = "glassProbeHistory";
+        /// <summary>The glass's sky filter as the clear leaves it: zero in every word, which passes the sky as it is.</summary>
+        public const string GlassSkyFilterCleared = "glassSkyFilterCleared";
+        /// <summary>The glass's sky filter as the glass shading pass leaves it, which the composite reads
+        /// (<see cref="SdfWorldPackage.GlassSkyFilter"/>).</summary>
+        public const string GlassSkyFilter = "glassSkyFilter";
     }
 }

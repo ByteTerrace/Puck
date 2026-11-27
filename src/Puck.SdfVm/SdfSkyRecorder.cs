@@ -35,7 +35,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
     private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten, SdfWorldPackage.FieldColors];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten, SdfWorldPackage.FieldColors, SdfWorldPackage.GlassSkyFilter];
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -51,6 +51,11 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private readonly SdfWorldTables?[] m_portTables;
     // Per frame slot, the lit image view the slot's pass set binds.
     private readonly nint[] m_portLit;
+    // Per frame slot, whether the slot's pass set binds the glass's sky filter: only in a frame whose glass passes ran
+    // (SdfWorldPasses.GlassSeen), since a frame that skips them leaves the filter as an earlier frame's glass wrote it;
+    // the dummy the set binds otherwise holds no word for any pixel, so the composite passes the sky as it is.
+    private readonly bool[] m_portGlass;
+    private readonly bool m_readsGlass;
     // Per slot, the infinity-view image each array element of the slot's set binds now, and the tables whose filler a
     // zero there stands for; a filler that already sits in an element is not written again, while a leased image always
     // is, since its handle may name a new image once the old one is released.
@@ -89,6 +94,8 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portLit = new nint[context.InFlightFrames];
+        m_portGlass = new bool[context.InFlightFrames];
+        m_readsGlass = m_fragmentPass.Inputs.Any(predicate: static input => (input.Name == SdfWorldPackage.Parts.GlassSkyFilter));
         m_skyViewTables = new SdfWorldTables?[context.InFlightFrames];
         m_skyViewImages = new nint[context.InFlightFrames][];
         for (var slot = 0; (slot < m_skyViewImages.Length); slot++) { m_skyViewImages[slot] = new nint[SdfWorldPackage.SkyViewCount]; }
@@ -253,11 +260,13 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
         var lit = LitOf(recording: in recording);
+        var glass = (m_readsGlass && m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: recording.Context));
 
-        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portLit[slot] == lit)) {
+        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portLit[slot] == lit) && (m_portGlass[slot] == glass)) {
             return;
         }
         m_portLit[slot] = lit;
+        m_portGlass[slot] = glass;
 
         var bindings = m_context.Services.Bindings;
         var layout = SdfWorldInterfaces.SkyParameters.Layout;
@@ -278,6 +287,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
             // These shared environment buffers order composition after its source reductions; the sky interface
             // samples authored screen images and has no pass-group member for their reduced lighting records.
             if (m_fragmentPass.Inputs[port].Name is SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput or SdfSkyEnvironmentGraph.ScreensInput) { continue; }
+            if (!glass && (m_fragmentPass.Inputs[port].Name == SdfWorldPackage.Parts.GlassSkyFilter)) { continue; }
             var member = ReadMemberOf(version: m_fragmentPass.Inputs[port].Name);
             var bound = recording.Inputs[port];
 
@@ -377,6 +387,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
         SdfWorldPackage.Parts.FieldColors => SdfWorldPackage.FieldColors,
+        SdfWorldPackage.Parts.GlassSkyFilter => SdfWorldPackage.GlassSkyFilter,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,
         SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperImages[Array.IndexOf(array: ReadParts, value: version)],
         _ => throw new InvalidOperationException(message: $"The sky interface reads no version '{version}'."),
