@@ -10,26 +10,17 @@ namespace Puck.Transpiler.Lowering;
 // in DocumentBuiltins.cs. Every arithmetic fold goes through DocumentLowering.ApplyBinary, the fold the operators use, so
 // `sum`, `scan` and `dot` add and multiply numbers, exact decimals and numeric arrays exactly as `+` and `*` do.
 public static partial class DocumentBuiltins {
-    private static JsonNode? Any(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadList(args: args, call: call, fieldKey: fieldKey, maximum: 2, list: out var list, scope: scope, usage: $"{call.Name}(array, item => condition)")) {
-            return null;
-        }
-
-        var lambda = ((args.Count == 2) ? ReadItemLambda(arg: args[1], call: call, scope: scope) : null);
-
-        if ((args.Count == 2) && (lambda is null)) {
+    // `any(array)`, `all(array)` and `count(array)` over the elements' own truth. The lambda forms of this and the other
+    // folds (`sum`, `minimum`, `maximum`, `first`) are ListFolds', which TryFold hands a call before it reaches here.
+    private static JsonNode? Any(CallExpressionNode call, DocumentScope scope, string? fieldKey) {
+        if (!TryReadPlainList(call: call, fieldKey: fieldKey, list: out var list, scope: scope)) {
             return null;
         }
 
         var matched = 0L;
 
         for (var index = 0; (index < list.Count); ++index) {
-            var holds = DocumentLowering.IsTruthy(node: ((lambda is null)
-                ? list[index]
-                : Apply(first: list[index], fieldKey: fieldKey, lambda: lambda, scope: scope, second: JsonValue.Create(value: ((long)index)))
-            ));
-
-            if (holds) {
+            if (DocumentLowering.IsTruthy(node: list[index])) {
                 ++matched;
 
                 // A yes needs one match and a no needs one miss, so these two stop at the answer; a count reads every item.
@@ -306,8 +297,9 @@ public static partial class DocumentBuiltins {
 
         return slice;
     }
-    private static JsonNode? Sum(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadFold(args: args, call: call, fieldKey: fieldKey, lambda: out var lambda, list: out var list, scope: scope, usage: "sum(array) or sum(array, item => value)")) {
+    // `sum(array)`; `sum(array, item => value)` is ListFolds'.
+    private static JsonNode? Sum(CallExpressionNode call, DocumentScope scope, string? fieldKey) {
+        if (!TryReadPlainList(call: call, fieldKey: fieldKey, list: out var list, scope: scope)) {
             return null;
         }
 
@@ -316,10 +308,8 @@ public static partial class DocumentBuiltins {
         JsonNode? total = JsonValue.Create(value: 0L);
 
         for (var index = 0; (index < list.Count); ++index) {
-            var item = ProjectItem(index: index, lambda: lambda, list: list, scope: scope, fieldKey: fieldKey);
-
             // The first item starts the sum, so an array item needs no zero array to start from.
-            total = ((index == 0) ? item : Combine(call: call, left: total, op: "+", right: item, scope: scope));
+            total = ((index == 0) ? list[index] : Combine(call: call, left: total, op: "+", right: list[index], scope: scope));
 
             if (total is null) {
                 return null;
@@ -405,6 +395,18 @@ public static partial class DocumentBuiltins {
         }
 
         return true;
+    }
+    // The array of a fold written without a lambda. A fold written with one is a ListFolds shape, so a second argument
+    // that reaches here is not a lambda.
+    private static bool TryReadPlainList(CallExpressionNode call, string? fieldKey, out JsonArray list, DocumentScope scope) {
+        if (call.Arguments.Count == 2) {
+            list = [];
+            Refuse(call: call, message: $"{call.Name}'s second argument is a lambda", scope: scope);
+
+            return false;
+        }
+
+        return TryReadList(args: call.Arguments, call: call, fieldKey: fieldKey, maximum: 1, list: out list, scope: scope, usage: $"{call.Name}(array) or {call.Name}(array, item => term)");
     }
     // The array a list builtin reads, first in its arguments, refusing a call with none or more than `maximum`.
     private static bool TryReadList(IReadOnlyList<ArgumentNode> args, CallExpressionNode call, string? fieldKey, int maximum, out JsonArray list, DocumentScope scope, string usage) {

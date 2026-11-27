@@ -75,26 +75,26 @@ public static partial class DocumentBuiltins {
             signature: "groupBy(array, (item, index) => key)"
         ),
         ["any"] = new(
-            description: "Returns 1 when some element's condition is truthy, else 0; with no lambda, when some element is truthy. It stops at the first match.",
-            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            description: "Returns 1 when some element's condition is truthy, else 0; with no lambda, when some element is truthy, stopping at the first. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
             positionalOnly: true,
             signature: "any(array, (item, index) => condition)"
         ),
         ["all"] = new(
-            description: "Returns 1 when every element's condition is truthy, else 0 (1 for an empty array); with no lambda, when every element is truthy. It stops at the first miss.",
-            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            description: "Returns 1 when every element's condition is truthy, else 0 (1 for an empty array); with no lambda, when every element is truthy, stopping at the first miss. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
             positionalOnly: true,
             signature: "all(array, (item, index) => condition)"
         ),
         ["count"] = new(
-            description: "Returns how many elements' conditions are truthy; with no lambda, how many elements are.",
-            evaluate: static (call, scope, fieldKey) => Any(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            description: "Returns how many elements' conditions are truthy; with no lambda, how many elements are. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Any(call: call, fieldKey: fieldKey, scope: scope),
             positionalOnly: true,
             signature: "count(array, (item, index) => condition)"
         ),
         ["sum"] = new(
-            description: "Adds the elements, or the lambda's value for each element, as + does: numbers add exactly and numeric arrays add element by element. An empty array sums to 0.",
-            evaluate: static (call, scope, fieldKey) => Sum(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            description: "Adds the elements, or the lambda's value for each element, as + does: numbers add exactly and numeric arrays add element by element. An empty array sums to 0. A lambda makes it a list fold (ListFolds).",
+            evaluate: static (call, scope, fieldKey) => Sum(call: call, fieldKey: fieldKey, scope: scope),
             positionalOnly: true,
             signature: "sum(array, (item, index) => value)"
         ),
