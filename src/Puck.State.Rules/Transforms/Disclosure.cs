@@ -83,6 +83,8 @@ public static partial class ArenaTransforms {
                     Set(set: value.LeftSet?.Set); Set(set: value.RightSet?.Set); break;
                 case ArenaTransform.ClearEnclosed value:
                     Write(row: value.RowOrdinal, read: true); break;
+                case ArenaTransform.CopyRow value:
+                    Write(row: value.RowOrdinal); Read(row: value.FromRowOrdinal); break;
                 case ArenaTransform.Mean value:
                     Write(row: value.IntoRowOrdinal); Read(row: value.FromRowOrdinal); Read(row: value.WhereRowOrdinal); break;
                 case ArenaTransform.Copy value:

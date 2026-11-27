@@ -1210,6 +1210,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -1638,6 +1640,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -2066,6 +2070,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -3178,6 +3184,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `rules[].effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `rules[].effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `rules[].effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `rules[].effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `rules[].effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `rules[].effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `rules[].effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -3624,6 +3632,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `rules[].decision.options[].effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `rules[].decision.options[].effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `rules[].decision.options[].effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `rules[].decision.options[].effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `rules[].decision.options[].effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -4093,6 +4103,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `rules[].decision.onNoChoice[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `rules[].decision.onNoChoice[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `rules[].decision.onNoChoice[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `rules[].decision.onNoChoice[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `rules[].decision.onNoChoice[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |
@@ -4504,6 +4516,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][transformState].transform[arrange].row` | Zone | Names | Action | `StateTransform.Arrange.Row` |
 | `interactions.interactions[].effects[][transformState].transform[arrange].from` | State | Names | Read | `StateTransform.Arrange.From` |
 | `interactions.interactions[].effects[][transformState].transform[arrange].fromKey` | State | Key | Read | `StateTransform.Arrange.FromKey` |
+| `interactions.interactions[].effects[][transformState].transform[copyRow].row` | State | Names | Action | `StateTransform.CopyRow.Row` |
+| `interactions.interactions[].effects[][transformState].transform[copyRow].from` | State | Names | Read | `StateTransform.CopyRow.From` |
 | `interactions.interactions[].effects[][transformState].transform[clearEnclosed].row` | State | Names | Action | `StateTransform.ClearEnclosed.Row` |
 | `interactions.interactions[].effects[][transformState].transform[clearEnclosed].from` | State | Key | Read | `StateTransform.ClearEnclosed.From` |
 | `interactions.interactions[].effects[][transformState].transform[observe].row` | State | Names | Action | `StateTransform.Observe.Row` |

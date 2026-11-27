@@ -111,8 +111,8 @@ analysis, scheduling, and work budgets](analysis.md) explains the budget.
 
 ## The scalar transforms
 
-There are ten authored scalar transforms. `sort` resolves to one of two
-kernels, so the arena applies eleven. Appending to a history ring is not a
+There are eleven authored scalar transforms. `sort` resolves to one of two
+kernels, so the arena applies twelve. Appending to a history ring is not a
 transform: it's the `pushState` effect, spelled `push row = value` (see
 [Rules and firing](rules.md)).
 
@@ -122,6 +122,7 @@ transform: it's the `pushState` effect, spelled `push row = value` (see
 | `shuffle` | `shuffle row with site` | Reorder a keyed row or ordered pile randomly, from a stream draw. |
 | `sort` | `transform sort(row:, by:)` | Reorder stably by numeric keys. |
 | `arrange` | `transform arrange(row:, from:, fromKey:)` | Reorder a pile into the arrangement a rank names. |
+| `copyRow` | `transform copyRow(row:, from:)` | Write every cell of a keyed numeric row into the same key of another row of its kind, in one firing: a snapshot or restore of a whole row (chess keeps every piece's square before a move this way) without a binding per cell. |
 | `writeSet` | `transform writeSet(…)` | Write one value into the board cells a 64-bit mask or a declared set selects. |
 | `boardCombine` | `transform boardCombine(…)` | Rewrite a board from set operations over boards and declared sets. |
 | `setRay` | `transform setRay(…)` | Write over the longest run a pattern accepts along a ray. |
@@ -480,6 +481,7 @@ Each group of kernel refusals belongs to one transform:
 | `writeSet` | `WriteSetBoard`, `WriteSetSource`, `WriteSetValueInadmissible` |
 | `boardCombine` | `BoardCombineBoard`, `BoardCombineOperands` |
 | `arrange` | `ArrangeShape`, `ArrangeRankSource`, `ArrangeRankRange` |
+| `copyRow` | `CopyRowShape` |
 | `pushRay` | `PushRayBlocked`, `PushRayAddressing` |
 | `clearEnclosed` | `ClearEnclosedBoard`, `ClearEnclosedOrigin`, `ClearEnclosedRange` |
 | `observe` | `ObserveBoard`, `ObserveSources` |

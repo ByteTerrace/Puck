@@ -108,6 +108,12 @@ public static partial class ArenaTransforms {
             shuffle: shuffle,
             binding: in binding
         ),
+            ArenaTransform.CopyRow copyRow => TryCopyRow(
+            context: in context,
+            copy: copyRow,
+            moved: out moved,
+            refusal: out refusal
+        ),
             ArenaTransform.SortKeyed sortKeyed => TrySortKeyed(
             context: in context,
             moved: out moved,

@@ -5285,7 +5285,7 @@ export type StateSpace = {
 /**
  * The closed set of atomic state transforms. Each folds one candidate document and journals once.
  */
-export type StateTransform = StateTransformTransfer | StateTransformSetRay | StateTransformPushRay | StateTransformShuffle | StateTransformSort | StateTransformWriteSet | StateTransformBoardCombine | StateTransformArrange | StateTransformClearEnclosed | StateTransformObserve | StateTransformMix | StateTransformMean | StateTransformNearest | StateTransformRemember | null;
+export type StateTransform = StateTransformTransfer | StateTransformSetRay | StateTransformPushRay | StateTransformShuffle | StateTransformSort | StateTransformWriteSet | StateTransformBoardCombine | StateTransformArrange | StateTransformCopyRow | StateTransformClearEnclosed | StateTransformObserve | StateTransformMix | StateTransformMean | StateTransformNearest | StateTransformRemember | null;
 
 /**
  * Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an integer cell — the inverse of $reduce:arrangementRank: rank 0 is the token domain's own order, and a rank at or past k! refuses.
@@ -5370,6 +5370,21 @@ export type StateTransformClearEnclosed = {
    * The liberty range's inclusive high end. Defaults to the board's empty value.
    */
   boundaryUpper?: number | null;
+};
+
+/**
+ * Writes every cell of a keyed numeric row into the cell of another under the same key, in one firing: a whole row's snapshot or restore (each piece's square kept before a move, a game set back to its start) without a binding per cell. Cells of Row whose key From does not hold keep their value.
+ */
+export type StateTransformCopyRow = {
+  $type?: "copyRow";
+  /**
+   * The keyed row written.
+   */
+  row: StateChannelRefNonNullable;
+  /**
+   * The keyed row read, of the same kind.
+   */
+  from: StateChannelRefNonNullable;
 };
 
 /**

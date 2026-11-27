@@ -222,7 +222,7 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case StateTransform.Observe or StateTransform.Transfer or StateTransform.SetRay or StateTransform.Shuffle or
-                 StateTransform.Sort or StateTransform.Arrange or StateTransform.ClearEnclosed or StateTransform.Mix or
+                 StateTransform.Sort or StateTransform.Arrange or StateTransform.CopyRow or StateTransform.ClearEnclosed or StateTransform.Mix or
                  StateTransform.Mean or StateTransform.Nearest or StateTransform.Remember:
                 foreach (var subject in transform.Subjects()) { names.Add(item: subject.Name); }
                 break;

@@ -55,6 +55,7 @@ public enum BoardCombineOp : byte {
 [JsonDerivedType(typeof(StateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(StateTransform.BoardCombine), "boardCombine")]
 [JsonDerivedType(typeof(StateTransform.Arrange), "arrange")]
+[JsonDerivedType(typeof(StateTransform.CopyRow), "copyRow")]
 [JsonDerivedType(typeof(StateTransform.ClearEnclosed), "clearEnclosed")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
 [JsonDerivedType(typeof(StateTransform.Mix), "mix")]
@@ -278,6 +279,22 @@ public abstract record StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [.. Named(name: Left?.Spelling), .. Named(name: Right?.Spelling)],
+            writes: [Row.Spelling]
+        );
+    }
+    /// <summary>Writes every cell of a keyed numeric row into the cell of another under the same key, in one firing:
+    /// a whole row's snapshot or restore (each piece's square kept before a move, a game set back to its start)
+    /// without a binding per cell. Cells of <see cref="Row"/> whose key <see cref="From"/> does not hold keep their
+    /// value.</summary>
+    /// <param name="Row">The keyed row written.</param>
+    /// <param name="From">The keyed row read, of the same kind.</param>
+    public sealed record CopyRow(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef From
+    ) : StateTransform {
+        /// <inheritdoc/>
+        public override IReadOnlyList<StateSubject> Subjects() => Addressing(
+            reads: [From.Spelling],
             writes: [Row.Spelling]
         );
     }

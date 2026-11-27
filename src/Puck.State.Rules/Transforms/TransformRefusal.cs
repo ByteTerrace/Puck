@@ -74,6 +74,10 @@ public enum TransformRefusal : byte {
     [Refusal(door: "state.transform", condition: "a sortKeyed addresses no keyed or ordered numeric row", kind: RefusalKind.Verdict)]
     SortKeyedShape,
 
+    /// <summary>A copyRow addresses no pair of keyed numeric rows of one kind, or a destination refuses a copied value.</summary>
+    [Refusal(door: "state.transform", condition: "a copyRow addresses no pair of keyed numeric rows of one kind, or a destination refuses a copied value", kind: RefusalKind.Verdict)]
+    CopyRowShape,
+
     /// <summary>A writeSet addresses no board row, or reads a mask onto a board of more than
     /// <see cref="BoardMask.MaxCells"/> cells.</summary>
     [Refusal(door: "state.transform", condition: "a writeSet addresses no board row, or reads a mask onto a board of more than 64 cells", kind: RefusalKind.Verdict)]

@@ -18883,6 +18883,28 @@
       "additionalProperties": false,
       "title": "StateTransformArrange"
     },
+    "StateTransformCopyRow": {
+      "description": "Writes every cell of a keyed numeric row into the cell of another under the same key, in one firing: a whole row\u0027s snapshot or restore (each piece\u0027s square kept before a move, a game set back to its start) without a binding per cell. Cells of Row whose key From does not hold keep their value.",
+      "properties": {
+        "$type": {
+          "const": "copyRow"
+        },
+        "row": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The keyed row written."
+        },
+        "from": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The keyed row read, of the same kind."
+        }
+      },
+      "required": [
+        "row",
+        "from"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformCopyRow"
+    },
     "StateTransformClearEnclosed": {
       "description": "Clears every group of cells valued Lower..Upper beside the cell From names that has no liberty in the boundary range, writing the board\u0027s empty value over its members. The write-path twin of $board:enclosedAt, applied after the value lands.",
       "properties": {
@@ -19140,6 +19162,9 @@
         },
         {
           "$ref": "#/$defs/StateTransformArrange"
+        },
+        {
+          "$ref": "#/$defs/StateTransformCopyRow"
         },
         {
           "$ref": "#/$defs/StateTransformClearEnclosed"

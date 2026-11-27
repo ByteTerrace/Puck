@@ -1232,13 +1232,13 @@ template chessPutDown(settleTicks) {
     }
   }
 
-  // What the put-down is judged against, captured the tick it is made.
+  // What the put-down is judged against, captured the tick it is made: every piece's square and code, each row copied
+  // whole in one firing.
   rule "chess-put-before" {
     when putDown.judging == 1 and ai.pending == 1
     mode: Level
-    forEach: pieceCode
-    putBefore[$each] = pieceCell[$each]
-    putBeforeCode[$each] = pieceCode[$each]
+    transform copyRow(row: putBefore, from: pieceCell)
+    transform copyRow(row: putBeforeCode, from: pieceCode)
   }
 }
 
@@ -1252,13 +1252,18 @@ template chessPutJudged(settleTicks, digital = false) {
     putDown.revert = verdict == 0
   }
 
-  rule "chess-play-revert-codes" {
-    when putDown.revert == 1
-    mode: Level
-    forEach: pieceCode
-    pieceCode[$each] = putBeforeCode[$each]
-    if digital {
-      pieceCell[$each] = putBefore[$each]
+  if digital {
+    rule "chess-play-revert-codes" {
+      when putDown.revert == 1
+      mode: Level
+      transform copyRow(row: pieceCode, from: putBeforeCode)
+      transform copyRow(row: pieceCell, from: putBefore)
+    }
+  } else {
+    rule "chess-play-revert-codes" {
+      when putDown.revert == 1
+      mode: Level
+      transform copyRow(row: pieceCode, from: putBeforeCode)
     }
   }
 }
@@ -1280,9 +1285,8 @@ template chessFreshGame() {
   rule "chess-fresh-pieces" {
     when search(ply) == 0 and chessFresh.request == 1
     mode: Level
-    forEach: pieceCode
-    pieceCode[$each] = pieceStartCode[$each]
-    pieceCell[$each] = pieceStartCell[$each]
+    transform copyRow(row: pieceCode, from: pieceStartCode)
+    transform copyRow(row: pieceCell, from: pieceStartCell)
   }
 
   rule "chess-fresh" {

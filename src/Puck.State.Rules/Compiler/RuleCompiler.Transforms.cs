@@ -739,6 +739,24 @@ public static partial class RuleCompiler {
 
                     break;
                 }
+            case StateTransform.CopyRow copy: {
+                    var copyRow = Row(name: copy.Row.Spelling);
+                    var copyFrom = Row(name: copy.From.Spelling);
+
+                    if (!copyRow.IsKeyed || !copyFrom.IsKeyed || (copyRow.Kind != copyFrom.Kind) ||
+                        (copyRow.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool))) {
+                        throw Invalid(message: "copyRow requires two keyed numeric rows of one kind");
+                    }
+
+                    reads.Add(item: Ordinal(name: copy.From.Spelling));
+                    writes.Add(item: Ordinal(name: copy.Row.Spelling));
+                    resolved = new ArenaTransform.CopyRow(
+                        FromRowOrdinal: Ordinal(name: copy.From.Spelling),
+                        RowOrdinal: Ordinal(name: copy.Row.Spelling)
+                    );
+
+                    break;
+                }
             case StateTransform.Arrange arrange: {
                     var arrangeRow = arrange.Row.Spelling;
                     var arrangeFrom = arrange.From.Spelling;
@@ -1021,6 +1039,11 @@ public static partial class RuleCompiler {
                 context: context,
                 enclosed: enclosed
             ),
+            // A read of every cell the source can hold, and a live store of each into the destination.
+            ArenaTransform.CopyRow copy => (context.RowCapacity(rowOrdinal: copy.FromRowOrdinal) * (door + TransformWork.LiveWrite(
+                context: context,
+                rowOrdinal: copy.RowOrdinal
+            ))),
             // The rank read, five leases, the domain lookup of every token, the relative order and the unranking (each
             // quadratic in at most twenty tokens), and the reorder.
             ArenaTransform.Arrange arrange => ArrangeWork(

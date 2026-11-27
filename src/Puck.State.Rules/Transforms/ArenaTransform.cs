@@ -117,6 +117,10 @@ public abstract record ArenaTransform {
     /// <param name="RowOrdinal">The keyed or ordered numeric row's catalog ordinal.</param>
     /// <param name="Descending">Whether the greatest value comes first.</param>
     public sealed record SortKeyed(int RowOrdinal, bool Descending) : ArenaTransform;
+    /// <summary>Writes every cell of a keyed numeric row into the same key of another row of its kind.</summary>
+    /// <param name="RowOrdinal">The written row's catalog ordinal.</param>
+    /// <param name="FromRowOrdinal">The read row's catalog ordinal.</param>
+    public sealed record CopyRow(int RowOrdinal, int FromRowOrdinal) : ArenaTransform;
     /// <summary>Reorders an ordered zone by attribute rows over its token domain, stably.</summary>
     /// <param name="RowOrdinal">The ordered zone's catalog ordinal.</param>
     /// <param name="By">The attribute keys, in precedence order.</param>
