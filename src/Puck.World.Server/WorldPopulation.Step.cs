@@ -726,9 +726,6 @@ public sealed partial class WorldPopulation {
     // none does. It writes only this body's own entry, so a partition may stage it. Answers whether a producer ran, so
     // the producer runs a population counts are runs, never the inert intent staged for a body that names none.
     private bool StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
-        // A kit partition's steer fork is measured whole (RunKitPartitions), not body by body.
-        using var measure = (work.Partitioned ? default : Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers));
-
         body.SetFlockMovementDomain(domain: null);
         var kitIndex = ResolveKitIndex(index: index);
 
@@ -936,38 +933,20 @@ public sealed partial class WorldPopulation {
                     engageEdges[slot] = false;
                     continue;
                 }
-
-                _ = StageProducer(
-                    body: body,
-                    entry: entry,
-                    index: slot,
-                    stepTicks: stepTicks,
-                    work: m_serialWork
-                );
+                using (Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers)) {
+                    _ = StageProducer(body: body, entry: entry, index: slot, stepTicks: stepTicks, work: m_serialWork);
+                }
+                using (Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission)) {
+                    body.AdmitProducerObservation(entityIndex: slot, tick: tick);
+                }
 
                 var probe = ((!engageProbeOrdinals.IsEmpty && (engageProbeOrdinals[slot] >= 0))
                     ? engageProbeOrdinals[slot]
                     : (int?)null
                 );
 
-                var targets = ReadEffectTargets(
-                    selfIndex: slot,
-                    entry: entry,
-                    self: body.FixedPosition
-                );
-
-                using (HoldPasses(index: slot)) {
-                    engageEdges[slot] = body.Advance(
-                        effectTargets: targets,
-                        engageProbeOrdinal: probe,
-                        entityIndex: slot,
-                        outputs: m_outputs,
-                        scratch: m_stepScratch,
-                        stepTicks: stepTicks,
-                        tick: tick
-                    );
-                }
-                RecordFlockMotion(body: body, work: m_serialWork);
+                // A seat never sleeps: it passes no idle floor.
+                engageEdges[slot] = MoveBody(body: body, contactFieldVersion: 0UL, engageProbeOrdinal: probe, index: slot, partition: SerialKit, sleepAfterTicks: 0UL, stepTicks: stepTicks, tick: tick);
             }
         }
     }
@@ -1107,10 +1086,10 @@ public sealed partial class WorldPopulation {
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
     /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
-    /// still between tape segments yet its tapes still play. The bodies whose step is local advance first, in kit
-    /// partitions forked across <paramref name="jobs"/>, and every other body then advances serially in index order;
-    /// the result is the same at any worker count. The local seats are advanced separately by
-    /// <see cref="AdvanceSeats"/>.</summary>
+    /// still between tape segments yet its tapes still play. Every body's producer runs, then every moving body's
+    /// observation is admitted, then the bodies move: those whose step is local in kit partitions forked across
+    /// <paramref name="jobs"/>, every other body on the calling thread in index order. The result is the same at any
+    /// worker count. The local seats are advanced separately by <see cref="AdvanceSeats"/>.</summary>
     /// <remarks>Runs first, before any body (peer or seat) advances this tick, so an attached solid placement's
     /// colliders (<see cref="WorldColliderSet.RefreshAttached"/>) are refreshed exactly once and every body's push
     /// this tick resolves against the same snapshot. Both contact providers sample size; attached body poses are
@@ -1160,81 +1139,20 @@ public sealed partial class WorldPopulation {
         // A kit's far cadence measures against where humans stood as the tick began: a seat advances after the
         // simulated bodies, and a peer's body moves among them.
         if (HasFarCadence()) { ReadOccupied(); }
-        // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
-        // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
+        // The kit advance split (WorldPopulation.Partitions.cs): every body takes the tick through the same phases, the
+        // bodies whose step is local in partitions forked over the frozen image and every other body on this thread, in
+        // index order.
         PlanKitStep(contactFieldVersion: contactFieldVersion, jobs: jobs, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
         RunKitPartitions(contactFieldVersion: contactFieldVersion, jobs: jobs, tick: tick);
-        foreach (var index in m_serialKitBodies) {
-            AdvanceSerialBody(contactFieldVersion: contactFieldVersion, index: index, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
-        }
-    }
-    // One body's whole step inside the kit transaction: its cadence, its producer and its advance, as a body whose step
-    // may write state, reach other bodies or emit outputs takes it.
-    private void AdvanceSerialBody(int index, ulong tick, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion) {
-        var entry = m_entries[index];
-
-        // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
-        // transport/possession supplies intents). An inactive entry has no body.
-        if (
-            !entry.Active ||
-            (entry.Kind == PopulationKind.LocalSeat) ||
-            (entry.Body is not { } player) ||
-            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, work: m_serialWork)
-        ) {
-            return;
-        }
-
-        if (step.SteeringDue) {
-            var ran = StageProducer(
-                body: player,
-                entry: entry,
-                index: index,
-                stepTicks: step.SteeringTicks,
-                work: m_serialWork
-            );
-
-            SeedSteering(entry: entry, motionPeriod: step.MotionPeriod, player: player, steeringPeriod: step.SteeringPeriod, work: m_serialWork);
-            if (ran) { BodySteers++; }
-        }
-        if (!step.Moves) {
-            return;
-        }
-        if (
-            !step.SteeringDue &&
-            entry.AutonomyState.SteeringSeeded
-        ) {
-            player.StageProducerIntent(intent: in entry.AutonomyState.SteeringIntent);
-        }
-        var targets = ReadEffectTargets(
-            selfIndex: index,
-            entry: entry,
-            self: player.FixedPosition
-        );
-
-        using (HoldPasses(index: index)) {
-            player.Advance(
-                tick: tick,
-                stepTicks: step.MotionTicks,
-                entityIndex: index,
-                effectTargets: targets,
-                outputs: m_outputs,
-                scratch: m_stepScratch,
-                sleepAfterTicks: m_sleepAfterTicks,
-                contactFieldVersion: contactFieldVersion
-            );
-        }
-        BodyAdvances++;
-        WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
-        RecordFlockMotion(body: player, work: m_serialWork);
     }
     // What a non-seat body does this tick under its autonomy cadence: whether its producer runs and over how many
     // engine ticks, and whether it moves and over how many.
     private readonly record struct AutonomyStep(bool SteeringDue, ulong SteeringTicks, ulong SteeringPeriod, ulong MotionPeriod, bool Moves, ulong MotionTicks);
 
-    // Settles a non-seat body's sleep, field inputs and cadence for the tick, the same for a serial body and a kit
-    // partition's: false for a sleeper that nothing wakes. A body whose motion is not due is marked deferred, and one
-    // whose ordinary advance is not admitted restarts its motion cadence and does not move. It writes the body, its
-    // entry and the caller's work alone, so a partition's plan may call it for its own bodies.
+    // Settles a non-seat body's sleep, field inputs and cadence for the tick: false for a sleeper that nothing wakes. A
+    // body whose motion is not due is marked deferred, and one whose ordinary advance is not admitted restarts its
+    // motion cadence and does not move. It writes the body, its entry and the caller's work alone, so a partition's
+    // plan calls it for every body of its run, network peers and inhabitants alike.
     private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, ProducerWork work, out AutonomyStep step) {
         step = default;
         // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no cadence
