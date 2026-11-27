@@ -6,10 +6,8 @@
 // Talking to a steward is the standard's conversation (standard/contexts/conversation.puck): walk up to its slate,
 // press the context button (E, the pad's RB), and it greets you and lists what you can ask, the first marked. W and S
 // (the pad's d-pad) move the mark, Space or Enter (the pad's South) asks it, and E or Backspace (RB or B) steps away.
-// Asking "Help me back to my normal size" posts the steward's restore action to the asking body's mailbox, and the rule
-// below gives that body its full size: its `size` register back to one, and the size fields' released hold
-// (standard/size-hold.puck) so that a body asking on a size field's ground keeps its size until it walks off the field.
-// What a steward says is shown on its slate, to everyone near.
+// Asking "Help me back to my normal size" gives the asking body its full size (`stewardScript` below says how). What a
+// steward says is shown on its slate, to everyone near.
 //
 // The gallery module imports this, so the gallery booted alone and the debug world both stand the stewards.
 import "../../standard/architecture"
@@ -22,10 +20,50 @@ import "layout"
 // with round ear discs) and a build: `bulk` widens the torso, shoulders and arms, `bob` gives a bob of hair under the
 // hood and `beard` a beard. The names are what each slate is headed with.
 let stewardCrew = [
-  { id: "vector", name: "VECTOR", plate: "#2E7D78", trim: "#E9DCC0", skin: "#E3B48C", hair: "#17161B", bulk: 1, bob: false, beard: false }
-  { id: "skylark", name: "SKYLARK", plate: "#C4442C", trim: "#EBDDBF", skin: "#EEC4A0", hair: "#9B3B22", bulk: 0.95, bob: true, beard: false }
-  { id: "bulwark", name: "BULWARK", plate: "#D79A2A", trim: "#3A3B42", skin: "#8C5B3B", hair: "#231A15", bulk: 1.3, bob: false, beard: false }
-  { id: "forge", name: "FORGE", plate: "#B5442E", trim: "#E7D5B2", skin: "#E7B48E", hair: "#C1622B", bulk: 1.2, bob: false, beard: true }
+  {
+    id: "vector"
+    name: "VECTOR"
+    plate: "#2E7D78"
+    trim: "#E9DCC0"
+    skin: "#E3B48C"
+    hair: "#17161B"
+    bulk: 1
+    bob: false
+    beard: false
+  }
+  {
+    id: "skylark"
+    name: "SKYLARK"
+    plate: "#C4442C"
+    trim: "#EBDDBF"
+    skin: "#EEC4A0"
+    hair: "#9B3B22"
+    bulk: 0.95
+    bob: true
+    beard: false
+  }
+  {
+    id: "bulwark"
+    name: "BULWARK"
+    plate: "#D79A2A"
+    trim: "#3A3B42"
+    skin: "#8C5B3B"
+    hair: "#231A15"
+    bulk: 1.3
+    bob: false
+    beard: false
+  }
+  {
+    id: "forge"
+    name: "FORGE"
+    plate: "#B5442E"
+    trim: "#E7D5B2"
+    skin: "#E7B48E"
+    hair: "#C1622B"
+    bulk: 1.2
+    bob: false
+    beard: true
+  }
 ]
 function stewardMember(id) = filter(stewardCrew, c => (c.id == id))[0]
 
@@ -271,7 +309,8 @@ let stewardChalk = "#F2EAD8"
 let stewardChalkDim = "#B9C9C4"
 // A point on the slate's face, `across` to a reader's right and `up` from its middle, in the world.
 function stewardSlateFace(s, across, up) = (let p = (stewardSlate(s) +
-  rotatePoint(rotate([0, 1, 0], s.yaw), [(0 - across), (stewardSlateMiddle + up), (0 - stewardSlateDepth)])) in galleryWorld(
+  rotatePoint(rotate([0, 1, 0], s.yaw), [(0 - across), (stewardSlateMiddle + up), (0 - stewardSlateDepth)])) in
+galleryWorld(
   p[0],
   p[1],
   p[2]
@@ -371,15 +410,17 @@ placements {
   }
 }
 
-// What every steward says, and its one action: give the asking body its size back.
-let stewardRestore = 1
+// What every steward says. Asking for your size back sets the size fields' released hold (standard/size-hold.puck's
+// `sizeHold`, 1): every size field then gives the body its full size, at once where it stands outside every zone, and
+// on a field's own ground until it walks off it (standard/size-field.puck). A debug noclip, which holds the body at 2,
+// takes its hold back the next tick.
 let stewardScript = {
   idle ["Feeling small?", "Come and ask me."]
   greeting ["Hello! What can I do for you?", ""]
   choices [
     {
       say: "Help me back to my normal size"
-      action: stewardRestore
+      sets [{ register: "sizeHold", value: 1 }]
       reply ["There you are, your own size again.", "Mind the toybox: its floor makes you small."]
     }
     { say: "Nothing, thanks", leaves: true }
@@ -393,17 +434,3 @@ conversationPlay(
   seats: seatPopulation,
   capacity: (seatPopulation + visitorPopulation)
 )
-
-// A steward's restore: the asking body's size register back to one, and, unless something holds it already (a debug
-// noclip), the size fields' released hold, so a body asking on a size field's ground keeps its size there until it
-// walks off the field (standard/size-field.puck).
-rule "steward-restore" {
-  forEach: $players
-  when (conversationAction[$each] ?? 0) == stewardRestore
-  mode: Level
-  setBodyState(key: $each, state: "size", expression: 1.0)
-  if bodyState(each, sizeHold) == 0 {
-    setBodyState(key: $each, state: "sizeHold", expression: 1.0)
-  }
-  conversationAction[$each] = 0
-}

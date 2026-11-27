@@ -85,7 +85,11 @@ prototypes {
         }
         shape Box $"wall-front-{side}" {
           material: mouseHouseWalls
-          position [(side * ((mouseHouseHalfX + mouseDoorSide) / 2)), (mouseHouseHeight / 2), (mouseHouseFront - (mouseHouseWall / 2))]
+          position [
+            (side * ((mouseHouseHalfX + mouseDoorSide) / 2)),
+            (mouseHouseHeight / 2),
+            (mouseHouseFront - (mouseHouseWall / 2))
+          ]
           scale [((mouseHouseHalfX - mouseDoorSide) / 2), (mouseHouseHeight / 2), (mouseHouseWall / 2)]
         }
         shape Box $"window-{side}" {

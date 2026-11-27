@@ -77,6 +77,8 @@ inputModes {
     // Its typed console offers the console key there, and the typed line, Enter and Backspace while it is open.
     terminalConsoleFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, talking])
     // A steward's conversation takes the step keys, the pick button and the step back while she talks (gallery/stewards.puck).
-    conversationFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, { family: "terminal", states ["engaged"] }])
+    conversationFamily(
+      suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, { family: "terminal", states ["engaged"] }]
+    )
   ]
 }
