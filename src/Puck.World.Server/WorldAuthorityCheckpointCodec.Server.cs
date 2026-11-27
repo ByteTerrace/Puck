@@ -176,6 +176,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteBoolean(value: receipt.Accepted);
         writer.WriteString(value: receipt.Reason);
+        writer.WriteByte(value: ((byte)receipt.Durability));
     }
     private static WorldDocumentSubmissionReceipt ReadDocumentReceipt(ref WireReader reader) {
         var submission = ReadDocumentSubmission(reader: ref reader);
@@ -184,9 +185,15 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "document receipt reason",
             maxBytes: MaxStringBytes
         );
+        var durability = reader.ReadByte();
+
+        if (!Enum.IsDefined(value: ((WorldWriteDurability)durability))) {
+            throw new InvalidDataException(message: $"document receipt carries an unknown durability {durability}");
+        }
 
         return new WorldDocumentSubmissionReceipt(
             Accepted: accepted,
+            Durability: ((WorldWriteDurability)durability),
             Reason: reasonText,
             Submission: submission
         );

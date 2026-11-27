@@ -1,3 +1,4 @@
+using static Puck.World.Testing.CrossingIdentityFixtures;
 using Puck.Abstractions.Counting;
 using Puck.Commands;
 using Puck.Maths;

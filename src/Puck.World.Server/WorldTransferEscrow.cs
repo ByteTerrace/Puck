@@ -1576,12 +1576,22 @@ public sealed partial class WorldTransferEscrow {
         return detached.TryAdopt(carried: carried, reason: out reason);
     }
 
-    // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
-    // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
-    // Home adoption waits until every landing succeeds and the arrival is durable.
+    // The identity traveler `index` lands as. A local seat crossing between rows of this host (an arrival that is not a
+    // peer admission or a companion) carries an identity of the one account every row here shares, so it lands bound to
+    // that owned identity itself: what this world writes is the document the next world reads, with no adoption. Any
+    // other traveler lands as the projection its commit carried, or its reservation's when the commit carries none,
+    // rebuilt against this world's player defaults, and nothing of the owned document behind it ever arrives; its home
+    // adoption waits until every landing succeeds and the arrival is durable.
     private WorldIdentity? ArrivingProfile(WorldCrossingArrival arrival, int index) {
         if ((arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity) is not { } projection) {
             return null;
+        }
+        if (
+            !arrival.Request.PeerAdmission &&
+            (arrival.Request.Members[index].Companion is null) &&
+            (m_server.Account.FindById(id: projection.Id) is { Document: not null } owned)
+        ) {
+            return owned;
         }
 
         return WorldIdentity.FromProjection(

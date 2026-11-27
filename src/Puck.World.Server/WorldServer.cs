@@ -470,6 +470,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     public WorldPopulation Population { get { ThrowIfTickPending(); return m_population; } }
     /// <summary>Gets the profile catalog (the routed store persists through it).</summary>
     public WorldOwnedWorlds Profiles { get { ThrowIfOutsideWindow(); return m_profiles; } }
+    // The account itself, for the host that hands the boot row's account to every row it starts: the catalog object is
+    // shared, never its contents, so naming it needs no authority window.
+    internal WorldOwnedWorlds Account => m_profiles;
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
     /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
     public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }

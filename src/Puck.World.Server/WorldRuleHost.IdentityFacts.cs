@@ -1,3 +1,4 @@
+using Puck.World.Protocol;
 using System.Runtime.InteropServices;
 
 namespace Puck.World.Server;
@@ -213,13 +214,15 @@ public sealed partial class WorldRuleHost {
     );
     private void PersistIdentityFact(WorldIdentity identity, CellName key, long value) {
         if (
-            !Host.Profiles.TrySetFact(
-            changed: out _,
-            identity: identity,
-            key: key,
-            reason: out var reason,
-            value: value
-        ) &&
+            (!Host.Profiles.TrySetFact(
+                changed: out _,
+                durability: out var durability,
+                identity: identity,
+                key: key,
+                reason: out var reason,
+                value: value,
+                writer: IdentityWriter
+            ) || (durability == WorldWriteDurability.Uncertain)) &&
             Host.Output.HasNarrationSink
         ) {
             Host.Output.Narrate(
@@ -228,4 +231,23 @@ public sealed partial class WorldRuleHost {
             );
         }
     }
+    // The writer every identity write this world's rules make writes as: the executing document's package, which the
+    // identity store's door holds each write to. A document with no namespace compiles no identity effect, so it writes
+    // as a writer no namespace admits.
+    private WorldIdentityWriter IdentityWriter {
+        get {
+            var definition = Host.Definition;
+
+            if (!ReferenceEquals(objA: m_identityWriterSource, objB: definition)) {
+                m_identityWriterSource = definition;
+                m_identityWriter = ((WorldPackageManifest.IdentityNamespaceOf(definition: definition) is { } head)
+                    ? WorldIdentityWriter.Package(@namespace: head)
+                    : WorldIdentityWriter.Nobody);
+            }
+            return m_identityWriter;
+        }
+    }
+
+    private WorldDefinition? m_identityWriterSource;
+    private WorldIdentityWriter m_identityWriter;
 }

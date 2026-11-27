@@ -58,11 +58,8 @@ namespace Puck.World;
 /// own tape/wait-gate/socket bookkeeping requires (see <see cref="ShouldStepBoot"/>): the master pump's own cadence
 /// is already derived from boot's own rate, so boot's own crossing is trivial — a pause/rate-0 gate, never a second
 /// accumulator.</para>
-/// <para><b>The name is a path segment.</b> An instance's owned worlds live in a directory named by its console name,
-/// so admitting a name is admitting a filesystem location: <see cref="TryStart"/> refuses any name that is not one
-/// safe segment, and independently refuses any name whose resolved store does not sit under the instances root. The
-/// second rule is not redundant with the first — it is what makes the placement true whatever the platform's path
-/// grammar turns out to do with a name.</para>
+/// <para><b>One account.</b> Every row this host runs reads and writes identities through the boot row's catalog,
+/// which <see cref="AdmitBoot"/> takes and each started row is handed, so no row opens a second store.</para>
 /// <para>Stepping folds into the same <c>IFixedStepSimulation.Step</c> call both boot shapes already drive — never a
 /// second pump, a second host loop, or a second <c>IFixedStepSimulation</c> registration. One thread owns the host:
 /// the fixed-step thread is the only caller, and the verbs that mutate the registry route <c>Simulation</c> so they
@@ -96,6 +93,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // Every instance shares the host's own persisted id — it identifies the MACHINE/PROCESS, not a world, so minting
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
+    // The one account every row this host runs reads and writes identities through: the boot row's, handed to each
+    // row it starts, so a character's facts written in one world are the document another reads.
+    private WorldOwnedWorlds? m_account;
     // The screen-machine host builder, supplied by the composition root: Puck.World.Server carries no reference to
     // Puck.World.Machines or the engines it hosts, so it cannot construct that project's
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
@@ -374,9 +374,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return verdict.IsAllowed;
     }
-    // The directory every non-boot instance's store hangs under, separator-terminated so a prefix test is a containment
-    // test rather than a sibling-name test ("…/instances-other" must not read as inside "…/instances").
-    private string InstancesRoot() => (m_stateRoot.PathOf(name: "instances").TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
     // The ONE local-roster departure transaction. PlayerRoster routes both explicit leaves and device-orphan
     // dissolves here after its ordinary slot/occupancy guard. The authoritative body leaves the CURRENT routed
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
@@ -525,24 +522,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_seats.PresentSeatLook(endpoint: null);
         m_seats.ClearAnalog();
     }
-    /// <summary>The directory an instance's owned worlds live under — derived from its name so two instances never
-    /// share a store, and reported by <c>world.instance.status</c> so the placement is read back rather than
-    /// inferred. Normalized, so the answer is where files actually land rather than the spelling that got there;
-    /// <see cref="TryStart"/> refuses any name whose answer escapes the instances root.</summary>
-    /// <param name="name">The instance name.</param>
-    /// <returns>The absolute owned-worlds directory for that instance.</returns>
-    public string OwnedWorldsDirectory(string name) =>
-        Path.GetFullPath(path: (string.Equals(
-            a: name,
-            b: BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )
-            ? m_stateRoot.PathOf(name: "owned-worlds")
-            : Path.Combine(
-                path1: InstancesRoot(),
-                path2: name,
-                path3: "owned-worlds"
-            )));
+    /// <summary>Gets the directory of the one account every row this host runs shares — the boot row's catalog, which
+    /// <c>world.instance.status</c> reports so the placement is read back rather than inferred — or
+    /// <see langword="null"/> before a boot row is admitted.</summary>
+    public string? AccountDirectory => ((m_account is { } account) ? Path.GetFullPath(path: account.FilePath) : null);
     /// <summary>Consumes the seats' tick-local look samples, then submits the seats currently claimed by the boot
     /// authority when that authority will consume a tick. This is the one boot-input lifecycle used by both the
     /// presented and headless executable shapes: camera-relative movement is simulation input, so a renderer may
@@ -1100,12 +1083,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         return true;
     }
     /// <summary>Starts a new instance from a world document and admits it under <paramref name="name"/>. Constructs a
-    /// fresh <see cref="WorldPopulation"/>, <see cref="WorldRenderEnvelope"/>, <see cref="WorldOwnedWorlds"/> (its own
-    /// directory, never shared) and an empty <see cref="IWorldMachineHost"/> (via <c>m_machineHostFactory</c>) —
-    /// nothing shared with any other instance.</summary>
-    /// <param name="name">The console-facing name, which is also the directory segment this instance's owned worlds
-    /// live in; refused if empty, reserved, not a single safe path segment, already running, or resolving its store
-    /// outside the instances root.</param>
+    /// fresh <see cref="WorldPopulation"/>, <see cref="WorldRenderEnvelope"/> and an empty <see cref="IWorldMachineHost"/>
+    /// (via <c>m_machineHostFactory</c>), and hands it the host's one account (<see cref="WorldOwnedWorlds"/>), the only
+    /// thing it shares with another instance.</summary>
+    /// <param name="name">The console-facing name; refused if empty, reserved, not a safe name or already running.</param>
     /// <param name="path">The world document path, resolved like <c>--world</c>: rooted, or relative to the current
     /// directory.</param>
     /// <param name="instance">The started instance, when this returns <see langword="true"/>.</param>
@@ -1154,16 +1135,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        // The name is a directory segment, not just a label — it is the one component of this instance's
-        // owned-worlds path. A name carrying a separator, a drive, or a traversal step would choose where the
-        // instance's documents are written, so SafeName refuses those by construction (empty, a reserved
-        // character, or a bare '.'/'..'); there is no separate segment-safety re-check downstream.
+        // An instance name is spelled into narration, keys and the names the resolver mints, so it holds to the one
+        // safe-name rule (no separator, reserved character or bare '.'/'..').
         if (!SafeName.TryParse(
             candidate: name,
             name: out _,
             reason: out var nameReason
         )) {
-            reason = $"'{name}' is not a single safe path segment — the name IS the directory this instance's owned worlds live in, and {nameReason}";
+            reason = $"'{name}' is not a safe instance name: {nameReason}";
 
             return false;
         }
@@ -1184,25 +1163,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        // Whatever the name resolves to under the platform's path grammar, the directory this host is about
-        // to create must sit under the instances root, or nothing is created.
-        string instancesRoot;
-        string ownedWorlds;
-
-        try {
-            instancesRoot = InstancesRoot();
-            ownedWorlds = OwnedWorldsDirectory(name: name);
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)) {
-            reason = $"'{name}' does not form a path this platform can express — {exception.Message}";
-
-            return false;
-        }
-
-        if (!ownedWorlds.StartsWith(
-            comparisonType: PuckPaths.Comparison,
-            value: instancesRoot
-        )) {
-            reason = $"'{name}' resolves its owned worlds to {ownedWorlds}, outside the instances root {instancesRoot}";
+        if (m_account is not { } account) {
+            reason = "this host has admitted no boot row, so it holds no account for an instance's identities";
 
             return false;
         }
@@ -1278,27 +1240,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         IWorldAddonHost? addons = null;
         WorldAdjacencyFields? adjacencies = null;
 
-        // Construction touches the file system (the owned-world store creates its directory and seeds documents into
-        // it). This runs on the FIXED-STEP THREAD — world.instance.start routes Simulation — where an escaping
-        // exception kills the pump and takes every world in the process down with it, the boot world included. An IO
-        // failure here is a refusal like any other; nothing about it is worth the whole session.
+        // Construction can touch the file system. This runs on the FIXED-STEP THREAD — world.instance.start routes
+        // Simulation — where an escaping exception kills the pump and takes every world in the process down with it, the
+        // boot world included. An IO failure here is a refusal like any other; nothing about it is worth the whole
+        // session.
         try {
             var server = new WorldServer(
                 definition: definition!,
                 population: new WorldPopulation(definition: definition!),
-                profiles: new WorldOwnedWorlds(
-                    template: definition!,
-                    directory: ownedWorlds,
-                    machineId: m_machineId,
-                    neighbours: new WorldFileNeighbourResolver(
-                        baseDirectory: () => ownedWorlds,
-                        catalog: m_machineCatalog,
-                        catalogFingerprint: m_catalogFingerprint
-                    ),
-                    narrationHub: m_narration,
-                    machineCatalog: m_machineCatalog,
-                    catalogFingerprint: m_catalogFingerprint
-                ),
+                profiles: account,
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,
                 instanceIdentity: name,
@@ -1355,7 +1305,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             addons?.Dispose();
             adjacencies?.Dispose();
             machines.Dispose();
-            reason = $"'{name}' could not open its owned-world store at {ownedWorlds} — {exception.Message}";
+            reason = $"'{name}' could not start — {exception.Message}";
 
             return false;
         }
@@ -1530,7 +1480,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="resolver">The transport-neutral local session resolver <see cref="ResolveAndEnqueueCoalescedTransfers"/>
     /// consumes.</param>
     /// <param name="machineId">This host's own persisted id, stamped into every mint this host performs.</param>
-    /// <param name="stateRoot">The root every non-boot instance's owned-world store resolves its own directory under.</param>
+    /// <param name="stateRoot">The host's state root.</param>
     /// <param name="applicationStopping">Cancelled on host shutdown — closes every persistent federation lane before a
     /// companion authority observes an ordinary shutdown as a live-path outage.</param>
     /// <param name="machineHostFactory">Builds a fresh <see cref="IWorldMachineHost"/> over a spawned instance's own
@@ -1654,6 +1604,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         Admit(row: row);
+        m_account = row.Server.Account;
         var bootEndpoint = EndpointFor(instance: row);
         // A world declaring fewer local seats than the host's seat ceiling (m_seats.SeatCount) has no entity-table
         // row for the seats it did not declare — Population.Capacity is the entity table's real size.

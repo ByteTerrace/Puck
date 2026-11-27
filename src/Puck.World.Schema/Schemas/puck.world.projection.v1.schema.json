@@ -1829,6 +1829,13 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldSeatCameraFeel"
+        },
+        "identityTemplate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
@@ -20337,6 +20344,193 @@
       "additionalProperties": false,
       "title": "WorldEffectSetIdentityFact"
     },
+    "WorldIdentityRecordValue": {
+      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "field": {
+          "description": "The record field.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The numeric literal.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The integer expression.",
+          "default": null
+        },
+        "text": {
+          "description": "The text literal.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "title": "WorldIdentityRecordValue"
+    },
+    "WorldEffectClaimIdentityRecord": {
+      "description": "Claims the lowest free slot of a record pool on the identity a world-addressed body drives under, and writes its fields after the record\u0027s defaults: a note, a mark, an item, a quest\u0027s progress. The claim lands with the firing and is rewound with it; once the firing commits, an owned identity saves it and a visitor carries it on its travelling records. The writing world\u0027s package must be admitted for the pool (another package\u0027s pool and a home-scoped one refuse).",
+      "properties": {
+        "$type": {
+          "const": "claimIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectClaimIdentityRecord"
+    },
+    "WorldEffectClaimIdentityPair": {
+      "description": "Claims a pair joining two live instances of an identity\u0027s pools (a link between two notes, a tag on a note) and writes its fields, as ClaimIdentityRecord claims an instance.",
+      "properties": {
+        "$type": {
+          "const": "claimIdentityPair"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pair pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The left endpoint\u0027s slot, an integer expression evaluated when the effect fires."
+        },
+        "right": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The right endpoint\u0027s slot, an integer expression evaluated when the effect fires."
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "left",
+        "right"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectClaimIdentityPair"
+    },
+    "WorldEffectSetIdentityRecord": {
+      "description": "Writes fields of the live instance in one slot of an identity\u0027s record pool, each under the field\u0027s own kind and bounds. With a Generation, a slot whose lifetime has moved on refuses rather than writing the instance that replaced it.",
+      "properties": {
+        "$type": {
+          "const": "setIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The slot, an integer expression evaluated when the effect fires."
+        },
+        "fields": {
+          "description": "The fields to write, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldIdentityRecordValue"
+          }
+        },
+        "generation": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The lifetime the write names, or null for whichever is live.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "slot",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectSetIdentityRecord"
+    },
+    "WorldEffectReleaseIdentityRecord": {
+      "description": "Releases the live instance in one slot of an identity\u0027s record pool, and every pair it is an endpoint of; the slot\u0027s generation advances, so a reference to the released lifetime reads absent.",
+      "properties": {
+        "$type": {
+          "const": "releaseIdentityRecord"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "pool": {
+          "description": "The pool on the identity\u0027s own document.",
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The slot, an integer expression evaluated when the effect fires."
+        },
+        "generation": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The lifetime the release names, or null for whichever is live.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "pool",
+        "slot"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectReleaseIdentityRecord"
+    },
     "WorldEffectSetBodyState": {
       "description": "Writes one state.body counter of a world-addressed body: the register a kit\u0027s own setState writes, in the arena\u0027s participant lane, settled through the register\u0027s envelope. The register is the body\u0027s, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.",
       "properties": {
@@ -20511,6 +20705,18 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSetIdentityFact"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectClaimIdentityRecord"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectClaimIdentityPair"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSetIdentityRecord"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectReleaseIdentityRecord"
         },
         {
           "$ref": "#/$defs/WorldEffectSetBodyState"

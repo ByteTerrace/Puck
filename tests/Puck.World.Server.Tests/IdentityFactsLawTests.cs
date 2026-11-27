@@ -15,6 +15,9 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     private const string IdentityName = "amber";
     private const string OtherIdentityName = "beryl";
     private const string Fact = "dived";
+    // The namespace this world's rules write an identity's facts under: an in-memory document in no package is its own
+    // namespace, named by its document id.
+    private const string Namespace = "facts-world";
     private const int LaneCapacity = 16;
 
     private static readonly Principal Seat = Principal.Seat(slot: 0);
@@ -235,6 +238,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         foreach (var (lane, trait) in lanes) {
             foreach (var rule in new[] { WriteRule(), ReadRule() }) {
                 var definition = Fixtures.BuildDocument() with {
+                    DocumentId = Namespace,
                     StateRaw = new WorldStateSection(World: [lane, IntSlot(name: "seen")]),
                     Rules = [rule],
                 };
@@ -428,14 +432,15 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         output.WriteLine(message: $"unchanged fact: median {steadySamples.Median:N0} bytes/tick, widest {steadySamples.Widest:N0}; unchanged ordinary cell: median {steadyControlSamples.Median:N0}; changing fact: median {movingSamples.Median:N0} bytes/tick, widest {movingSamples.Widest:N0}; changing ordinary cell: median {controlSamples.Median:N0} bytes/tick, widest {controlSamples.Widest:N0}; persisted identity document {documentBytes:N0} bytes; a changing fact's cost beyond an ordinary changing write {beyond:N0} bytes ({(((double)beyond) / documentBytes):0.0} documents)");
 
         // An unchanged fact queues no lane write and persists nothing: the tick costs what an unchanged ordinary
-        // cell write costs. A changing fact pays the identity's own save (the catalog reads the file back, serializes
-        // the document, and writes it) on top of the ordinary fold, bounded here as a multiple of the document.
+        // cell write costs. A changing fact pays the identity's own durable save (the catalog reads the file back,
+        // serializes the document, and publishes it through a flushed, renamed staging file) on top of the ordinary
+        // fold, bounded here as a multiple of the document.
         Assert.Equal(
             actual: steadySamples.Median,
             expected: steadyControlSamples.Median
         );
         Assert.True(
-            condition: (beyond <= (32L * documentBytes)),
+            condition: (beyond <= (64L * documentBytes)),
             userMessage: $"a changing fact allocated {beyond:N0} bytes beyond an ordinary changing write, against a {documentBytes:N0}-byte persisted document"
         );
         Assert.Equal(
@@ -550,6 +555,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         );
     }
     private static WorldDefinition Document(IReadOnlyList<WorldRule> rules, bool lane = true) => Fixtures.BuildDocument() with {
+        DocumentId = Namespace,
         StateRaw = new WorldStateSection(World: (lane
         ? [LaneRow(), IntSlot(name: "seen")]
         : [IntSlot(name: "seen")])),
@@ -641,7 +647,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             cells: LaneCells(fixture: fixture),
             key: CellName.Parse(candidate: WorldIdentityFactLane.Key(
                 bodyIndex: body,
-                fact: fact
+                fact: Qualified(fact: fact)
             ))
         );
 
@@ -667,7 +673,9 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
 
         return Assert.IsType<StateCell>(@object: StateRows.FindCell(
             cells: row.Cells,
-            key: CellName.Parse(candidate: fact)
+            key: CellName.Parse(candidate: Qualified(fact: fact))
         )).Value.AsInt;
     }
+    // The key a fact this world's rules write is stored under.
+    private static string Qualified(string fact) => GeneratedName.Qualify(head: Namespace, name: fact);
 }

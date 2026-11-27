@@ -196,7 +196,9 @@ public sealed record WorldAuthorityHostRowCheckpoint(
 /// A full simulation-state image of one <see cref="WorldServer"/> and the subsystems it owns, plus this row's slice
 /// of the host engine — see <see cref="WorldServer.TryCaptureCheckpoint"/> for the capture point, the arm gate, and
 /// what each section excludes and why. <see cref="WorldAuthorityCheckpoint.Fields"/> is present exactly when the
-/// captured definition declares a field lattice.
+/// captured definition declares a field lattice. An image never holds an owned identity: the account is an identity's
+/// only truth, so restoring a world, seeking its history or replaying it never writes or rolls back a character, and a
+/// seat's identity rides the population as the projection its body carries.
 /// </summary>
 public sealed record WorldAuthorityCheckpoint(
     WorldServerCheckpoint Server,
@@ -205,7 +207,6 @@ public sealed record WorldAuthorityCheckpoint(
     WorldTransferEscrowCheckpoint Escrow,
     WorldInputHoldCheckpoint InputHold,
     WorldEventFeedCheckpoint EventFeed,
-    WorldOwnedWorldsCheckpoint OwnedWorlds,
     WorldAuthorityHostRowCheckpoint HostRow,
     IReadOnlyList<WorldFieldRegionCheckpoint>? Fields = null,
     ArenaSearchCheckpoint? Search = null,

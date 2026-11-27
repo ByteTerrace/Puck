@@ -1176,7 +1176,13 @@ public static partial class WorldFactsVocabulary {
                         tokens: tokens
                     ),
                     capacity: world.Definition.Population.Capacity,
-                    fact: tokens[width],
+                    fact: WorldFactsCompiler.QualifyIdentityFact(
+                        context: world,
+                        fact: tokens[width],
+                        ruleName: ruleName,
+                        where: $"'{name}'",
+                        write: false
+                    ).Value,
                     laneOrdinal: WorldFactsCompiler.ResolveIdentityLane(
                         context: world,
                         ruleName: ruleName,

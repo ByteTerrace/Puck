@@ -142,6 +142,10 @@ public enum WorldRuleRefusal : byte {
     IdentityLaneUndeclared,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document whose 'identity' lane row declares an advance, dynamics or cycle trait on the row or a cell", kind: RefusalKind.Verdict)]
     IdentityLaneTraited,
+    [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect names a fact qualified with another package's namespace, or the executing document belongs to no package and names no document id to stand for one", kind: RefusalKind.Verdict)]
+    IdentityFactForeign,
+    [Refusal(door: "world.rule.compile", condition: "an identity record effect ('claimIdentityRecord', 'claimIdentityPair', 'setIdentityRecord', 'releaseIdentityRecord') names a pool or field that is not a cell name, or a write authors no field", kind: RefusalKind.Verdict)]
+    IdentityRecordMalformed,
     [Refusal(door: "world.rule.compile", condition: "a '$channel:' channel does not spell '$channel:<seat>:<channelName>' with seat in 1..population.localSeats and channelName naming a declared 'channels[]' row", kind: RefusalKind.Verdict)]
     ChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "an 'upsertHudPanel'/'removeHudPanel' effect carries no panel id", kind: RefusalKind.Verdict)]
@@ -199,6 +203,9 @@ public enum WorldRuleEffectRefusal : byte {
 
     [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect finds no 'identity' lane row in the installed document, or the lane or the identity's own facts row refuses the write", kind: RefusalKind.Verdict)]
     IdentityFactUnwritable,
+
+    [Refusal(door: "world.rule.effect", condition: "an identity record effect addresses a body whose identity holds no record store, names a pool or field the store does not hold, a slot holding no live instance, or a pool its package may not write (another package's or home-scoped), or the store's own bounds refuse the write", kind: RefusalKind.Verdict)]
+    IdentityRecordUnwritable,
 
     [Refusal(door: "world.rule.effect", condition: "an 'applyRigidImpulse' effect's struck body carries no 'rigid' kit facet", kind: RefusalKind.Verdict)]
     RigidBodyRequired,

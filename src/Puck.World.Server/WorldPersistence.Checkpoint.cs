@@ -144,14 +144,14 @@ public sealed partial class WorldPersistence {
     /// acquiring a host-construction-only pending wake afterward.</param>
     /// <param name="documentDirectory">The directory the captured document's relative paths resolve against, or
     /// <see langword="null"/> for a document that names none.</param>
-    /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A replay tape's start
+    /// <param name="bindHomeSeats">Whether to bind each local home seat the image holds to the identity the account owns. A replay tape's start
     /// checkpoint carries no owned documents, so its re-drive keeps every seat on the projection the tape pinned.</param>
     /// <param name="authorityIdentity">The namespace the restored authority mints entity addresses under, or
     /// <see langword="null"/> for <paramref name="instanceIdentity"/> (see the <see cref="WorldServer"/>
     /// constructor).</param>
     /// <param name="drawKeys">Sampler opened from the authority root, or an explicit replay sampler.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool bindHomeSeats = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -177,7 +177,7 @@ public sealed partial class WorldPersistence {
 
         server.Adjacencies = adjacencies;
 
-        server.Persistence.RestoreCheckpointCore(keys: keys, admission: admission, authorityIdentity: authorityIdentity, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+        server.Persistence.RestoreCheckpointCore(keys: keys, admission: admission, authorityIdentity: authorityIdentity, checkpoint: checkpoint, bindHomeSeats: bindHomeSeats);
 
         return (server, population);
     }
@@ -278,16 +278,6 @@ public sealed partial class WorldPersistence {
                 return false;
             }
 
-            if (!Host.Profiles.TryCapture(
-                checkpoint: out var ownedWorlds,
-                reason: out var ownedReason
-            )) {
-                checkpoint = null;
-                reason = ownedReason;
-
-                return false;
-            }
-
             WorldMachineHostCheckpoint? machines = null;
             byte[]? addons = null;
 
@@ -379,7 +369,6 @@ public sealed partial class WorldPersistence {
                 Escrow: Host.TransferEscrow.Capture(),
                 InputHold: Host.InputHold.Capture(),
                 EventFeed: Host.Events.Capture(),
-                OwnedWorlds: ownedWorlds!,
                 HostRow: hostRow,
                 Fields: Host.Population.CaptureFieldRegions(),
                 Search: Host.Search.Capture(),
@@ -397,10 +386,10 @@ public sealed partial class WorldPersistence {
     /// checkpoint at a settled tick boundary. The definition this restore installs is the checkpoint's own, never
     /// re-composed by replaying the journal. Retired live session epochs remain retired.</summary>
     /// <param name="checkpoint">The captured image to restore.</param>
-    /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A live replay's
+    /// <param name="bindHomeSeats">Whether to bind each local home seat the image holds to the identity the account owns. A live replay's
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
     [Replaces(root: typeof(StateArena))]
-    public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
+    public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool bindHomeSeats = true) {
         using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             ArgumentNullException.ThrowIfNull(argument: checkpoint);
@@ -409,7 +398,7 @@ public sealed partial class WorldPersistence {
                 drawKeys: keys, positions: checkpoint.Server.DrawPositions,
                 documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
-            RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+            RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, bindHomeSeats: bindHomeSeats);
             keys.AdvanceGeneration();
         }
     }
@@ -497,7 +486,6 @@ public sealed partial class WorldPersistence {
         var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
-        Host.Profiles.ValidateCheckpoint(checkpoint: checkpoint.OwnedWorlds);
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition
@@ -550,7 +538,7 @@ public sealed partial class WorldPersistence {
             Host.TransferEscrow.EndOutside(group: group);
         }
     }
-    private void RestoreCheckpointCore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
+    private void RestoreCheckpointCore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool bindHomeSeats = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
         var server = checkpoint.Server;
         var restoredDefinition = admission.Definition;
         var (restoredArena, restoredBase, restoredOrigin, restoredSource) = (validated ?? ValidateCheckpointRestore(
@@ -676,14 +664,11 @@ public sealed partial class WorldPersistence {
 
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
-        if (restoreOwnedIdentities) {
-            Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
-        }
-        // Projection leaves never carry owned documents. Reconnect a local home seat to this restored catalog;
-        // a visitor with a colliding id keeps its projection, including on a silo move or a history restore.
+        // An image never carries an owned document. Reconnect a local home seat to the identity the account owns as it
+        // stands now; a visitor with a colliding id keeps its projection, including on a silo move or a history restore.
         foreach (var entry in checkpoint.Population.Entries) {
             if (
-                !restoreOwnedIdentities ||
+                !bindHomeSeats ||
                 entry.Admission.IsRemoteHuman ||
                 (entry.Tail.Profile is not { } projection) ||
                 (Host.HomeSeatIdentity(

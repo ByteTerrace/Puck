@@ -4010,8 +4010,6 @@ images (H7), battery saves (H8) and minimal identities:
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
   a read against a working tree.
-- [medium] `WorldOwnedWorlds.IdentityBase` copies the whole host world into
-  every identity.
 
 State and server:
 

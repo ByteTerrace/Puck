@@ -302,10 +302,10 @@ generation and step count with a running core's image (`WorldMachineHostCheckpoi
 each running runtime's `IMachineCheckpointRuntime.CaptureCheckpoint`, taken after its
 accepted steps drain; a refused machine's row carries no image, and a restore refuses a
 row whose kind differs from the live lease's before it changes anything). The re-drive restores it (`WorldServer.FromCheckpoint` with
-`restoreOwnedIdentities: false`) instead of booting the definition and joining the
+`bindHomeSeats: false`) instead of booting the definition and joining the
 seats, so its seats keep the projections the population checkpoint carries; the
 restored sessions have no observer and end where the tape ends them. Encode
-and `Read` both refuse a start checkpoint that holds an owned document or describes
+and `Read` both refuse a start checkpoint that describes
 another document than the tape embeds; `ReplayStartPrivacyLawTests` searches a
 mid-run tape's bytes for an owned document's markers. Input the history's capture
 already held for the open tick at the arm reached the server before the checkpoint,

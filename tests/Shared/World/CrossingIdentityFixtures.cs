@@ -31,7 +31,7 @@ internal static class CrossingIdentityFixtures {
                 Color: "#3366cc",
                 MoveSpeedState: Name(value: "move"),
                 TurnSpeedState: Name(value: "turn"),
-                Records: [Name(value: "stats")]
+                Travel: [new WorldIdentityPool(Pool: Name(value: "stats"), Class: WorldIdentityTravel.Crossing)]
             ),
             HudRaw = new WorldHudSection(
                 Defaults: new WorldHudDefaults(Enabled: true),
@@ -65,4 +65,20 @@ internal static class CrossingIdentityFixtures {
     internal const string PrivateRow = "private-secret-row";
 
     internal static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
+
+    // A fact the identity's own owner writes, as the console does (WorldIdentityWriter.Home).
+    internal static bool TrySetFact(this WorldIdentity identity, CellName key, long value, out bool changed, out string reason) =>
+        identity.TrySetFact(changed: out changed, key: key, reason: out reason, value: value, writer: WorldIdentityWriter.Home);
+    // A fact the identity's own owner writes through the account's door.
+    internal static bool TrySetFact(this Puck.World.Server.WorldOwnedWorlds catalog, WorldIdentity identity, CellName key, long value, out bool changed, out string reason) =>
+        catalog.TrySetFact(changed: out changed, durability: out _, identity: identity, key: key, reason: out reason, value: value, writer: WorldIdentityWriter.Home);
+    // One field of the instance in slot zero of a pool, written by the owner through a stage and installed.
+    internal static bool TryWriteRecord(this WorldIdentity identity, CellName record, CellName field, CellValue value, out string reason) {
+        if (!identity.TryOpenStage(reason: out reason, stage: out var stage) ||
+            !stage.TryWrite(field: field, generation: null, pool: record, reason: out reason, slot: 0, value: value, writer: WorldIdentityWriter.Home)) {
+            return false;
+        }
+
+        return identity.Apply(reason: out reason, stage: stage);
+    }
 }

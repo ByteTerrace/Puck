@@ -463,7 +463,7 @@ reference can never pick up a replacement instance.
 ## Pools in Puck.World
 
 Puck.World builds on pools to attach instances to bodies (`properties.carriers`
-and attachments), to carry owned identity records (`identity.records`), and to
+and attachments), to hold an owned identity's record store (`identity.travel`), and to
 match pools in interactions. [State in Puck.World](worlds.md) covers those.
 
 ## Limitations

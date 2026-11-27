@@ -16,6 +16,17 @@ public static class WorldIdentityRows {
     /// <summary>Gets the bounded row <c>chat.inbox</c> declares for the messages an identity received,
     /// <c>chat$inbox</c>.</summary>
     public static CellName ChatInbox { get; } = CellName.Parse(candidate: GeneratedName.Join("chat", "inbox"));
+    /// <summary>Gets the bounded, evicting row holding the awards an identity has credited, <c>identity$awards</c>: one
+    /// cell per award id, written in the same save as the write the award credits, so a resubmitted award is answered
+    /// from it rather than credited twice.</summary>
+    public static CellName Awards { get; } = CellName.Parse(candidate: GeneratedName.Join("identity", "awards"));
+    /// <summary>The number of award ids <see cref="Awards"/> keeps before it evicts the oldest.</summary>
+    public const int AwardCapacity = 512;
+
+    /// <summary>Returns the key an award is recorded under in <see cref="Awards"/>, <c>award-&lt;digest&gt;</c>.</summary>
+    /// <param name="digest">The digest of what the award credits, a function of the run that earned it.</param>
+    /// <returns>The award id.</returns>
+    public static CellName Award(ulong digest) => CellName.Parse(candidate: string.Create(provider: CultureInfo.InvariantCulture, handler: $"award-{digest:x16}"));
 
     /// <summary>Returns the row remembering which machine a controller last drove, <c>controller$&lt;key&gt;$machine</c>.</summary>
     /// <param name="device">The controller's persisted device identity.</param>

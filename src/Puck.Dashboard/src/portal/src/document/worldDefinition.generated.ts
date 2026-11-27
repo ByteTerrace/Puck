@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -7875,6 +7875,52 @@ export type WorldEffectApplyRigidImpulse = {
 };
 
 /**
+ * Claims a pair joining two live instances of an identity's pools (a link between two notes, a tag on a note) and writes its fields, as ClaimIdentityRecord claims an instance.
+ */
+export type WorldEffectClaimIdentityPair = {
+  $type?: "claimIdentityPair";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pair pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The left endpoint's slot, an integer expression evaluated when the effect fires.
+   */
+  left: ExpressionProgramNonNullable2;
+  /**
+   * The right endpoint's slot, an integer expression evaluated when the effect fires.
+   */
+  right: ExpressionProgramNonNullable2;
+  /**
+   * The fields to write, in order.
+   */
+  fields?: (WorldIdentityRecordValue | null)[] | null;
+};
+
+/**
+ * Claims the lowest free slot of a record pool on the identity a world-addressed body drives under, and writes its fields after the record's defaults: a note, a mark, an item, a quest's progress. The claim lands with the firing and is rewound with it; once the firing commits, an owned identity saves it and a visitor carries it on its travelling records. The writing world's package must be admitted for the pool (another package's pool and a home-scoped one refuse).
+ */
+export type WorldEffectClaimIdentityRecord = {
+  $type?: "claimIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The fields to write, in order.
+   */
+  fields?: (WorldIdentityRecordValue | null)[] | null;
+};
+
+/**
  * Consumes the named matched event range only when the enclosing rule commits.
  */
 export type WorldEffectConsumeInput = {
@@ -8061,6 +8107,29 @@ export type WorldEffectPoseCell = {
 };
 
 /**
+ * Releases the live instance in one slot of an identity's record pool, and every pair it is an endpoint of; the slot's generation advances, so a reference to the released lifetime reads absent.
+ */
+export type WorldEffectReleaseIdentityRecord = {
+  $type?: "releaseIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The slot, an integer expression evaluated when the effect fires.
+   */
+  slot: ExpressionProgramNonNullable2;
+  /**
+   * The lifetime the release names, or null for whichever is live.
+   */
+  generation?: ExpressionProgramNonNullable2;
+};
+
+/**
  * Releases a world-addressed body's producer from a HoldProducer hold; releasing a body that is not held does nothing.
  */
 export type WorldEffectReleaseProducer = {
@@ -8157,6 +8226,33 @@ export type WorldEffectSetIdentityFact = {
    * A bounded integer expression evaluated at fire time.
    */
   expression?: ExpressionProgramNonNullable2;
+};
+
+/**
+ * Writes fields of the live instance in one slot of an identity's record pool, each under the field's own kind and bounds. With a Generation, a slot whose lifetime has moved on refuses rather than writing the instance that replaced it.
+ */
+export type WorldEffectSetIdentityRecord = {
+  $type?: "setIdentityRecord";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The pool on the identity's own document.
+   */
+  pool: string;
+  /**
+   * The slot, an integer expression evaluated when the effect fires.
+   */
+  slot: ExpressionProgramNonNullable2;
+  /**
+   * The fields to write, in order.
+   */
+  fields: (WorldIdentityRecordValue | null)[];
+  /**
+   * The lifetime the write names, or null for whichever is live.
+   */
+  generation?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -9603,9 +9699,13 @@ export type WorldIdentityDefinition = {
    */
   facts?: WorldIdentityFacts | null;
   /**
-   * Gets the immutable selection of identity-owned record pools.
+   * Gets the immutable travel classes of the identity's crossing pools.
    */
-  records?: CellName[] | null;
+  travel?: (WorldIdentityPool | null)[] | null;
+  /**
+   * Gets the immutable list of home-scoped facts and pools.
+   */
+  homeScoped?: CellName[] | null;
 };
 
 export type WorldIdentityFacts = {
@@ -9617,6 +9717,39 @@ export type WorldIdentityFacts = {
    * How many distinct facts the row holds; a write past it refuses by name.
    */
   capacity: number;
+};
+
+export type WorldIdentityPool = {
+  /**
+   * The pool's name on the identity's document.
+   */
+  pool: CellName;
+  /**
+   * Its travel class.
+   */
+  class: WorldIdentityTravel;
+};
+
+/**
+ * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.
+ */
+export type WorldIdentityRecordValue = {
+  /**
+   * The record field.
+   */
+  field: string;
+  /**
+   * The numeric literal.
+   */
+  value?: number | null;
+  /**
+   * The integer expression.
+   */
+  expression?: ExpressionProgramNonNullable2;
+  /**
+   * The text literal.
+   */
+  text?: string | null;
 };
 
 export type WorldIdentitySeed = {
@@ -9633,6 +9766,8 @@ export type WorldIdentitySeed = {
    */
   color: string;
 };
+
+export type WorldIdentityTravel = "Home" | "Crossing";
 
 export type WorldImport = {
   /**
@@ -11516,6 +11651,7 @@ export type WorldPlayerDefaults = {
   pickerNeutralColor?: string | null;
   pickerNeutralBlend?: number;
   seatCameraFeel?: WorldSeatCameraFeel | null;
+  identityTemplate?: string | null;
 };
 
 /**

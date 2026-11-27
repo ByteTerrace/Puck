@@ -12,7 +12,7 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
         if ((definition.StateRaw is not { Records.Count: > 0 } and not { Pools.Count: > 0 } and not { PairPools.Count: > 0 }) &&
-            (definition.Identity?.Records is not { Count: > 0 }) && (definition.Properties?.Carriers is not { Count: > 0 })) {
+            (definition.Identity?.Travel is not { Count: > 0 }) && (definition.Properties?.Carriers is not { Count: > 0 })) {
             reason = string.Empty;
             return true;
         }
@@ -20,12 +20,23 @@ public static partial class WorldDefinitionValidator {
             _ = definition.StateCatalog;
             _ = definition.State;
             _ = WorldIdentityRecords.Select(document: definition);
+            ValidateHomeScoped(definition: definition);
             ValidatePoolCarriers(definition: definition);
             reason = string.Empty;
             return true;
         } catch (InvalidOperationException exception) {
             reason = exception.Message;
             return false;
+        }
+    }
+    // A home-scoped name is a fact key or one of the identity's own pools; a name twice is an authoring slip.
+    private static void ValidateHomeScoped(WorldDefinition definition) {
+        var seen = new HashSet<CellName>();
+
+        foreach (var name in (definition.Identity?.HomeScoped ?? [])) {
+            if (!seen.Add(item: name)) {
+                throw new InvalidOperationException(message: $"identity.homeScoped names '{name}' twice");
+            }
         }
     }
     private static void ValidatePoolCarriers(WorldDefinition definition) {
