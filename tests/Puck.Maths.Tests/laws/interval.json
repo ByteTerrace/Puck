@@ -74,6 +74,10 @@
       {
         "Type": "Puck.Maths.FixedInterval",
         "Name": "Upper"
+      },
+      {
+        "Type": "Puck.Maths.FixedDirectedRounding",
+        "Name": "CeilingShift"
       }
     ],
     "Legs": [

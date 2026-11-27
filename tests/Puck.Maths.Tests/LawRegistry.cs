@@ -810,6 +810,7 @@ internal static partial class LawRegistry {
         .. MixedScaleCases(),
         .. DirectedRoundingCases(),
         .. FixedIntervalCases(),
+        .. FixedAffineFormCases(),
         .. FixedSaturateCases(),
         .. CarrierHelperCases(),
         .. MassPropertiesCases(),
