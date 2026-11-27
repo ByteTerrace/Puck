@@ -1921,9 +1921,13 @@ public static partial class ExpressionSpelling {
                             builder: builder,
                             into: instructions
                         );
+                        // The tail is carried as text, so it cannot read a fold's member, which only the fold binds.
+                        if (!TryPrint(program: new ExpressionProgram(Instructions: instructions) { Subprograms = builder.Subprograms }, text: out var tail)) {
+                            throw Fail(message: $"'{name}' reads its last argument as an expression of its own, which cannot read the fold member '{m_binder}'");
+                        }
                         arguments.Add(item: ChannelSpelling.Argument(
                             expression: true,
-                            text: Print(program: new ExpressionProgram(Instructions: instructions) { Subprograms = builder.Subprograms })
+                            text: tail
                         ));
                     } else {
                         arguments.Add(item: ChannelSpelling.Argument(text: ParseArgumentText()));

@@ -16,6 +16,7 @@ import "../standard/terrain"
 import "valley-form"
 import "water-site"
 import "glacier-site"
+import "../standard/place"
 
 let valleyRock = 0
 let valleyDeck = 1
@@ -251,13 +252,26 @@ prototypes {
 }
 
 // Forty metres under the floor a body is out of the world, whichever way it got there (a wall's outer face, a
-// seam): the rule stands it back up on the floor below the sector it fell from.
+// seam): the rule stands it back up on the floor below the sector it fell from. The depths under the world are a
+// place, so the rule sweeps only the bodies standing in it (a few at once, none at rest), never every body.
 let recoveryFloor = -40
+let recoveryDepth = 5000
+let recoveryReach = 4000
+
+placements {
+  placement "fall-recovery" {
+    prototype: "place"
+    position [0, (recoveryFloor - recoveryDepth), 0]
+    region {
+      halfExtents [recoveryReach, recoveryDepth, recoveryReach]
+      capacity: 4
+    }
+  }
+}
 
 rule "fall-recovery" {
-  when bodyPosition(each, y) < recoveryFloor
   mode: Level
-  forEach: $bodies
+  forEach: region("fall-recovery")
   for wedge in valleyWedges {
     if ((bodyPosition(each, x) * wedge.c1) - (bodyPosition(each, z) * wedge.s1)) >= 0 and (
         (bodyPosition(each, x) * wedge.c2) - (bodyPosition(each, z) * wedge.s2)
