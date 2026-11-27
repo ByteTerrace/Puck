@@ -1,14 +1,14 @@
 import "layout"
 import "../game-stations"
 // The gallery's game floor on level 3 (layout.puck's galleryGameStations plans twelve stations, six on each gallery).
-// It stands the plan's first, south3, the debug world set's station (../game-stations.puck) in its shared-chess form:
-// its Klondike and FreeCell are its own, and its chess is the world's (the debug world's chess table, or
-// ../../games/chess-game.puck's drawn board in gallery-root), so a move at the glass moves the table's pieces too. The
-// rest of the plan waits on the rule work sheet: each station holding its own chess adds about 0.26 million work units a
-// tick, so twelve beside the rest of the debug world exceed the tick's 4.2 million (../game-station.md, "Cost"). The
-// gallery imports this file, so the
-// station stands in the debug world and gallery-root alike, and each root imports its card bodies from
-// ../game-station-deck.puck where its body order wants them. ../game-station.md says how to play and drive it.
+// It stands the plan's first, south3, the debug world set's station (../game-stations.puck) holding its own games: chess,
+// whose pieces its holodeck stands on the glass as bodies while chess is shown, and Klondike and FreeCell. The rest of
+// the plan waits on the rule work sheet beside the rest of the debug world (../game-station.md, "Cost"); the board
+// games lab's stress mode stands twelve. The gallery imports this file, so the station stands in the debug world and
+// gallery-root alike, and each root imports its card bodies from ../game-station-deck.puck where its body order wants
+// them: the debug world numbers its bodies below the deck from it, so its cards stand always (`holodeck: false`) rather
+// than as a pool, and its chess pieces take the free slots the population keeps for them (../shapes.puck's
+// galleryPopulation). ../game-station.md says how to play and drive it.
 
 let stations = [galleryGameStations[0]]
 
@@ -53,13 +53,14 @@ state {
 
   gameStationSetGrids(stations: stations)
   world {
-    gameStationSetState(stations: stations)
+    gameStationSetState(stations: stations, holodeck: false)
   }
 }
 
 commands: gameStationSetCommands(stations)
 
-gameStationSetRules()
+gameStationSetRules(holodeck: false)
+chessStationSet(stations: stations)
 
 // One instance a station, aliased by the station's id.
-use gameStationSharedChess as south3(station: stations[0], index: 0)
+use gameStationGames as south3(station: stations[0], index: 0)

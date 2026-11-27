@@ -4458,7 +4458,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate [--budget <lines>]] [--measure] [--strict] [--update-assets]
 puck decompile <source.json> [--output <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed lock <path> [--check] [--provider <installed-type>] [--settings <json-file>] [--batch-size <n>]
 puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <installed-type>] [--settings <json-file>]
@@ -4487,7 +4487,10 @@ has no committed document beside it. With source paths, it
 may report elapsed time, peak process working set, managed allocation and live
 managed bytes with `--measure`, then the five sources that charged the most evaluation work units (the
 `DocumentEvaluationBudget` count that PUCK047 refuses past its 16 million limit), each with its share of that limit;
-these measurements are observations, not gates. It
+these measurements are observations, not gates. With `--validate --budget <lines>` it prints each composed world's
+rule price sheet, the one `world.budget.rules` reads in a running World: the tick's work units against
+`RuleCapacity.MaxWorkUnitsPerTick`, each module instance's summed lines, and the costliest `<lines>` lines with
+their check and firing units and how each is priced. A world its work alone refuses is priced too. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier

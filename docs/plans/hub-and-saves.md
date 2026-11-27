@@ -554,8 +554,8 @@ elsewhere a tap opens the pause menu."
 Two authored rows still move off the reserved sources:
 - the standard's `start` channel row (`worlds/standard/controls.puck`, today
   Enter and `gamepad.start`) keeps Enter and drops Menu;
-- the board's cancel row (`worlds/debug/chess.puck`, today including
-  `keyboard.escape`) drops Escape and keeps its other sources.
+- the tabletop's cancel row (`worlds/standard/contexts/tabletop.puck`, today
+  including `keyboard.escape`) drops Escape and keeps its other sources.
 
 The engagement family that lets `select` reach a machine
 (`worlds/debug/input-modes.puck`) is the debug world's today; engagement is

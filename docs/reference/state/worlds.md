@@ -430,10 +430,9 @@ with the same tick.
 
 ### The chess opponent
 
-The debug world's chess table ([`worlds/debug/chess-table.puck`](../../../worlds/debug/chess-table.puck), over the rules library
+A game station's holodeck chess ([`worlds/games/chess-station.puck`](../../../worlds/games/chess-station.puck), over the rules library
 [`worlds/games/chess.puck`](../../../worlds/games/chess.puck),
-[notes](../../../worlds/debug/chess.md)) plays Black against a person by
-default. Its `aiSide` slot chooses the computer's side from the console:
+[notes](../../../worlds/debug/game-station.md)) plays the side whose chair stands empty, Black against a person in the near chair. Its `aiSide` slot chooses the computer's side from the console:
 
 ```text
 world.state.cell.set aiSide $value 0
@@ -543,7 +542,7 @@ arms, literal body keys and compiled placement domains. Shared or unbounded live
 body targets in a selected continuation are refused. A standalone level rule
 carries no edge latch. A rule group must own its complete write set. Decision
 continuations and undo groups require a wider boundary and are refused.
-The scope's rules must use local facts: `physics(quiescent, "chess-demo")` restricts
+The scope's rules must use local facts: `physics(quiescent, "<scope>")` restricts
 the resting census to that scope's bodies. The population-wide predicate cannot
 prove that one table reproduced independently of another.
 The derived tape is checkpointed and hashed with the authority. No expected
@@ -560,8 +559,8 @@ next-tick control. Its Int control row has `request`, `status`, `cursor`, and
 holds its start) and -2 holding no start (a capture request returns it to 0).
 The first mismatch names its relative tick and both hashes, without replacing
 the original expectation. Idle detection and loop timing remain ordinary world
-rules. [The debug chess demonstration](../../../worlds/debug/chess.md) is the
-authored example. Field, vector, timed and pool rows require a wider continuation
+rules. The debug world holds no authored example since its chess table, whose idle demonstration was one, was
+retired for the game station's holodeck chess. Field, vector, timed and pool rows require a wider continuation
 boundary and are refused by this initial scope implementation.
 
 `world.state.hash` reads one of four scopes:

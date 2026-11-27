@@ -1,33 +1,28 @@
-// The board games lab: the debug world's board games on one small floor under a clear day, booted alone so a change to a
-// board game, its pieces or its seats bakes and settles in a fraction of the debug world's time. Boot it with
-// `--world worlds/debug/labs/board-games.puck`; the seat starts at the game station's near chair (`hero`), a second
-// seat at its far chair (`rival`), and the context button sits a seat down at a table.
+// The board games lab: the debug world set's game station on one small floor under a clear day, booted alone so a change
+// to a board game, its pieces, its cards, its seats or the station's holodeck bakes and settles in a fraction of the debug
+// world's time. Boot it with `--world worlds/debug/labs/board-games.puck`; the seat starts at the station's near chair
+// (`hero`), a second seat at its far chair (`rival`), and the context button sits a seat down at the glass.
 //
 // What it holds, and nothing else:
 //
-//   - the physical chess table (../chess-table.puck, the module the debug world stands once and the stress lab twelve
-//     times), 6 m west of the station, its rows under their plain names, as the debug world stands it but for the idle
-//     demonstration (chess.puck's) and the gallery's coordinates. Its computer plays White's opponent; `chess.md` says
-//     how to move a piece, read the game and set the opponent;
-//   - one game station (../game-stations.puck over ../../standard/game-station.puck) at the origin, the lab's centrepiece,
-//     showing chess, Klondike and FreeCell from its menu. Its chess is its own game (`gameStationGames`, as
-//     ../game-station-root.puck stands it), played on the glass in the digital mode, so the physical table beside it is the
-//     reference its chess is compared against: the same moves give the same games at both. Klondike and FreeCell deal from
-//     the station's own seeded stream once shown;
+//   - one game station (../game-stations.puck over ../../standard/game-station.puck) at the origin, showing chess,
+//     Klondike and FreeCell from its menu. Its board is a holodeck: chess stands its 32 pieces on the glass as rigid
+//     bodies a seated player lifts and sets down (or anyone knocks over), and the settled board is judged; Klondike and
+//     FreeCell stand their 52 cards and deal from the station's own seeded stream once shown. Switching games releases
+//     one game's bodies and stands the other's. game-station.md says how to play and drive it;
 //   - a floor, a sun and the Moth to walk it.
 //
 // The Go and Reversi tables are not here. ../go.puck and ../reversi.puck are whole documents of the gallery's board game
 // room, not modules: each imports the gallery's whole shape catalog (../shapes.puck), derives its body slots from
 // the gallery's population and the other tables' counts (`galleryPopulation`, `boardRoomBodies`, `alchemyBodies`),
 // grants the seat Drive over bodies by those absolute indices, and stands at the gallery's level-2 coordinates. Standing
-// either here would stand the gallery beside it until they take a table position and a body base the way
-// `physicalChessTable` does.
+// either here would stand the gallery beside it until they become stations' games.
 //
 // The portal hook is the id `board-games`. The gallery's lab wing connects it with one painting row named `board-games`
 // whose destination is the reference `board-games` (this document), and a crossing arrives at the spawn point
-// `board-games`, between the chess table and the station, facing the station.
+// `board-games`, beside the station and facing it.
 //
-// `board-games-stress.puck` beside this file is the same chess table twelve times, each playing itself.
+// `board-games-stress.puck` beside this file is twelve stations, each playing chess against itself.
 
 schema: "puck.world.definition.v1"
 basis: "../avatars/moth"
@@ -36,31 +31,22 @@ documentId: "board-games"
 import "../set-controls"
 import "../../standard/skies"
 import "../../standard/inputs"
-import "../chess-table"
 import "../game-stations"
 
 metadata {
   title: "Board games lab"
-  description: "The physical chess table and a game station showing chess, Klondike and FreeCell, on a small floor."
+  description: "A game station showing chess, Klondike and FreeCell as holodeck bodies, on a small floor."
 }
 
-// The table's placement, its creation's floor 0.5 m under its origin on the floor, and the ticks the physics must stay at
-// rest before an arrangement is judged (the debug world's).
-let chessTable = [-6, -0.5, 0]
-let chessSettleTicks = 9
+gameStationRoom(stations: [rootStation])
 
-// The chess table's 33 bodies (32 pieces and its board cursor) stand above the station's deck and the seats' slots.
-gameStationRoom(stations: [rootStation], extraBodies: 33)
-
-// The hook's arrival, and the chess table's White edge: 1.6 m from the board's centre and facing it, inside the engage
-// radius, so the context button sits the seat down.
+// The hook's arrival, beside the station's near chair and facing the glass.
 spawnPoints [
-  { id: "board-games", position [-3, 0, -5], yawDegrees: 180 }
-  { id: "chess", position [chessTable[0], 0, (chessTable[2] - 1.6)], yawDegrees: 180 }
+  { id: "board-games", position [-2, 0, -3], yawDegrees: 180 }
 ]
 
 state {
-  // The chess game's vocabularies (../chess-table.puck's header).
+  // The chess game's vocabularies (../game-stations.puck's header).
   enum PieceKind {
     None
     Pawn
@@ -84,10 +70,6 @@ state {
     Black
   }
 }
-
-physicalChessSet()
-
-use physicalChessTable(at: chessTable, settleTicks: chessSettleTicks)
 
 use gameStationGames as station(station: rootStation, index: 0)
 

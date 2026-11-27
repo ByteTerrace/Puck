@@ -1,20 +1,20 @@
-// The board games lab's stress mode: twelve physical chess tables playing at once, the stress scenario for the board games
-// under real use (board-games.puck beside it is the lab itself). Each table is the
-// debug world's own table (../chess-table.puck's module, the one ../chess.puck stands once), instanced here under its own
-// alias, so every table has its own rows, rules, placements, topology and search job, and a move at one table never
-// restarts another's search (a search job restarts when a row its judge's rules read changes, and no table's rules read
-// another's rows). Every table's computer plays both sides from its own opening, so all twelve move pieces, settle and
-// judge continuously; a game that stops passing turns (a draw limit, a mate, a knocked piece judged illegal) is set up
-// afresh by posing every piece back over its square, all 32 dropping onto the board at once. The tables open in four
-// groups of three, eight ticks apart, so the worst tick sees three tables changing together.
+// The board games lab's stress mode: twelve game stations playing holodeck chess at once, the stress scenario for the
+// board games under real use (board-games.puck beside it is the lab itself). Each station is the debug world set's
+// station (../game-stations.puck), instanced under its own alias, so every station has its own rows, rules, piece
+// bodies, topology and search job, and a move at one station never restarts another's search (a search job restarts when
+// a row its judge's rules read changes, and no station's rules read another's rows). Every station's computer plays both
+// sides from its own opening (chess-station.puck's `autoplay`), so all twelve lift pieces, settle and judge continuously,
+// 384 rigid piece bodies in all; a game that stops passing turns (a draw limit, a mate) is set up afresh, every body
+// standing on its starting square again. The stations open in four groups of three, eight ticks apart, so the worst tick
+// sees three stations changing together.
 //
-// Boot it with `--world worlds/debug/labs/board-games-stress.puck`; the seat starts in front of the grid. What to read while it
-// plays: `world.budget.rules --spent` (the sheet's total against the tick's ceiling and the top rules), `world.counters
-// physics` (contacts, bodies awake, solver work), `world.search` (each table's job: restarts, lastRestart, spent and
-// peak tick), `host.frames` (the tick's parts: rules, motion, contact) and `world.status` (bodies against capacity).
-// `world.state t0$selfPlies` reads one table's turns played and `t0$selfGames` its games set up afresh;
-// `stress.chess t3 11 27` plays e2-e4 at table t3 through its move door. `puck test worlds/debug/labs/board-games-stress.puck
-// --reproduce` plays every table's first turns twice and compares the runs.
+// Boot it with `--world worlds/debug/labs/board-games-stress.puck`; the seat starts at the first station's near chair.
+// What to read while it plays: `world.budget.rules --spent` (the sheet's total against the tick's ceiling and the top
+// rules), `world.counters physics` (contacts, bodies awake, solver work), `world.search` (each station's job: restarts,
+// lastRestart, spent and peak tick), `host.frames` (the tick's parts: rules, motion, contact) and `world.status` (bodies
+// against capacity). `world.state s0$chessStationPlies` reads one station's turns played and `s0$chessStationGames` its
+// games set up afresh; `station.chess s3 11 27` plays e2-e4 at station s3 through its move door. `puck test
+// worlds/debug/labs/board-games-stress.puck --reproduce` plays every station's first turns twice and compares the runs.
 
 schema: "puck.world.definition.v1"
 basis: "../avatars/moth"
@@ -23,31 +23,34 @@ documentId: "board-games-stress"
 import "../set-controls"
 import "../../standard/skies"
 import "../../standard/inputs"
-import "../chess-table"
+import "../game-stations"
 
 metadata {
   title: "Board games stress lab"
-  description: "Twelve physical chess tables, each playing itself, for measuring the board games under load."
+  description: "Twelve game stations, each playing holodeck chess against itself, for measuring the board games under load."
 }
 
-// The tables stand in a grid of four columns and three rows, 4 m apart, each placement 0.5 m under the floor so its
-// creation's floor stands on it. Each table keeps the debug table's settle hold, the module's default.
+// The stations stand in a grid of four columns and three rows, 4 m apart, each placement 0.5 m under the floor so its
+// creation's floor stands on it.
 let stressColumns = 4
 let stressRows = 3
 let stressSpacing = 4
-function stressTableAt(index) = [
-  (index % stressColumns - (stressColumns - 1) / 2) * stressSpacing,
-  -0.5,
-  (floor(index / stressColumns) - (stressRows - 1) / 2) * stressSpacing
-]
-// Table `index` opens once the board has first rested and its group's start has passed: four groups (the column), 8
-// ticks apart. A table that passes no turn for 150 ticks (5 s at 30 Hz) starts afresh.
+let stressStations = map(range(0, 12), index => {
+  id: $"s{index}"
+  at [
+    (index % stressColumns - (stressColumns - 1) / 2) * stressSpacing,
+    -0.5,
+    (floor(index / stressColumns) - (stressRows - 1) / 2) * stressSpacing
+  ]
+})
+// Station `index` opens once its board has first rested and its group's start has passed: four groups (the column), 8
+// ticks apart. A station that passes no turn for 150 ticks (5 s at 30 Hz) starts afresh.
 function stressAutoplay(index) = {
   start: 60 + 8 * (index % stressColumns)
   stall: 150
   opening: stressOpenings[index]
 }
-// Twelve White openings, one a table, as [from, to] cells (8 * rank + 7 - file from a1), so the games differ: e4, d4,
+// Twelve White openings, one a station, as [from, to] cells (8 * rank + 7 - file from a1), so the games differ: e4, d4,
 // c4, Nf3, Nc3, g3, b3, f4, e3, d3, a4 and h4.
 let stressOpenings = [
   [11, 27],
@@ -63,38 +66,11 @@ let stressOpenings = [
   [15, 31],
   [8, 24]
 ]
-let stressTables = ["t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11"]
 
-// Four local seats and eight visitors take the twelve lower slots; each table's 33 bodies (32 pieces and its board
-// cursor) take the rest.
-bodies {
-  capacity: (12 + (33 * length(stressTables)))
-  localSeats: 4
-  networkPlayers: 8
-  seatSpawns [hero]
-}
-
-spawnPoints [
-  { id: "hero", position [0, 0, -7], yawDegrees: 180 }
-]
-
-physicalChessSet()
-
-use physicalChessTable as t0(at: stressTableAt(0), search: "chessAI-t0", autoplay: stressAutoplay(0))
-use physicalChessTable as t1(at: stressTableAt(1), search: "chessAI-t1", autoplay: stressAutoplay(1))
-use physicalChessTable as t2(at: stressTableAt(2), search: "chessAI-t2", autoplay: stressAutoplay(2))
-use physicalChessTable as t3(at: stressTableAt(3), search: "chessAI-t3", autoplay: stressAutoplay(3))
-use physicalChessTable as t4(at: stressTableAt(4), search: "chessAI-t4", autoplay: stressAutoplay(4))
-use physicalChessTable as t5(at: stressTableAt(5), search: "chessAI-t5", autoplay: stressAutoplay(5))
-use physicalChessTable as t6(at: stressTableAt(6), search: "chessAI-t6", autoplay: stressAutoplay(6))
-use physicalChessTable as t7(at: stressTableAt(7), search: "chessAI-t7", autoplay: stressAutoplay(7))
-use physicalChessTable as t8(at: stressTableAt(8), search: "chessAI-t8", autoplay: stressAutoplay(8))
-use physicalChessTable as t9(at: stressTableAt(9), search: "chessAI-t9", autoplay: stressAutoplay(9))
-use physicalChessTable as t10(at: stressTableAt(10), search: "chessAI-t10", autoplay: stressAutoplay(10))
-use physicalChessTable as t11(at: stressTableAt(11), search: "chessAI-t11", autoplay: stressAutoplay(11))
+gameStationRoom(stations: stressStations)
 
 state {
-  // The chess game's vocabularies (../chess-table.puck's header).
+  // The chess game's vocabularies (../game-stations.puck's header).
   enum PieceKind {
     None
     Pawn
@@ -119,45 +95,18 @@ state {
   }
 }
 
-placements {
-  placement "floor" {
-    prototype: "floor"
-    position [0, 0, 0]
-    solid
-  }
-}
-
-prototypes {
-  prototype "floor" {
-    document {
-      name: "floor"
-      schema: "puck.creation.v2"
-      palette [{ color: "#B9AE9C", roughness: 0.8, specular: 0.03 }]
-      shape Box "floor" {
-        material: 0
-        position [0, -0.2, 0]
-        scale [12, 0.2, 12]
-      }
-    }
-  }
-}
-
-commands [
-  {
-    name: "stress.chess"
-    help: "Requests a chess move at one stress table through its move door: the table, then the cells from and to, counting 8 * rank + 7 - file from a1."
-    parameters [
-      { name: "table", kind: Choice, values: stressTables }
-      { name: "from", kind: Integer }
-      { name: "to", kind: Integer }
-    ]
-    lines [
-      "world.state.cell.set {table}$chessInput from {from}"
-      "world.state.cell.set {table}$chessInput to {to}"
-      "world.state.cell.set {table}$chessInput request 1"
-    ]
-  }
-]
+use gameStationGames as s0(station: stressStations[0], index: 0, autoplay: stressAutoplay(0))
+use gameStationGames as s1(station: stressStations[1], index: 1, autoplay: stressAutoplay(1))
+use gameStationGames as s2(station: stressStations[2], index: 2, autoplay: stressAutoplay(2))
+use gameStationGames as s3(station: stressStations[3], index: 3, autoplay: stressAutoplay(3))
+use gameStationGames as s4(station: stressStations[4], index: 4, autoplay: stressAutoplay(4))
+use gameStationGames as s5(station: stressStations[5], index: 5, autoplay: stressAutoplay(5))
+use gameStationGames as s6(station: stressStations[6], index: 6, autoplay: stressAutoplay(6))
+use gameStationGames as s7(station: stressStations[7], index: 7, autoplay: stressAutoplay(7))
+use gameStationGames as s8(station: stressStations[8], index: 8, autoplay: stressAutoplay(8))
+use gameStationGames as s9(station: stressStations[9], index: 9, autoplay: stressAutoplay(9))
+use gameStationGames as s10(station: stressStations[10], index: 10, autoplay: stressAutoplay(10))
+use gameStationGames as s11(station: stressStations[11], index: 11, autoplay: stressAutoplay(11))
 
 render {
   farDistance: 200
@@ -174,24 +123,24 @@ render {
   }
 }
 
-// Determinism at scale: every table opens and plays its turns, and two runs agree tick for tick under `--reproduce`.
-// A table's turns are counted across the games it sets up afresh, so the claim holds whether a game ends early or not.
-test "twelve tables each play their turns, and two runs agree" {
+// Determinism at scale: every station opens and plays its turns, and two runs agree tick for tick under `--reproduce`.
+// A station's turns are counted across the games it sets up afresh, so the claim holds whether a game ends early or not.
+test "twelve stations each play their turns, and two runs agree" {
   when {
     ticks 1800
   }
   expect {
-    t0.selfPlies >= 16
-    t1.selfPlies >= 16
-    t2.selfPlies >= 16
-    t3.selfPlies >= 16
-    t4.selfPlies >= 16
-    t5.selfPlies >= 16
-    t6.selfPlies >= 16
-    t7.selfPlies >= 16
-    t8.selfPlies >= 16
-    t9.selfPlies >= 16
-    t10.selfPlies >= 16
-    t11.selfPlies >= 16
+    s0.chessStationPlies >= 16
+    s1.chessStationPlies >= 16
+    s2.chessStationPlies >= 16
+    s3.chessStationPlies >= 16
+    s4.chessStationPlies >= 16
+    s5.chessStationPlies >= 16
+    s6.chessStationPlies >= 16
+    s7.chessStationPlies >= 16
+    s8.chessStationPlies >= 16
+    s9.chessStationPlies >= 16
+    s10.chessStationPlies >= 16
+    s11.chessStationPlies >= 16
   }
 }

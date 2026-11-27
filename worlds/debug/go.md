@@ -1,6 +1,6 @@
 # Debug world Go table
 
-The gallery's board room holds a 19×19 Go table east of [chess](chess.md),
+The gallery's board room holds a 19×19 Go table,
 its board's centre at (44, 9.905, 10.3) over the table's placement (`goTable`
 in go.puck). The 3.50 m by 1.84 m table keeps its original height;
 the flat 1.60 m board has 0.08 m pitch, 19 lines each way and nine star points.

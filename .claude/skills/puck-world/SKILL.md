@@ -124,13 +124,27 @@ active recording, with ordered, scoped inputs. Hot scope observers enumerate
 `ScopedReplaySpan`; an inactive scope must allocate zero bytes per steady tick,
 and a warmed active scope hash must allocate zero bytes. Keep closure-bearing
 rebinding in the slow method after the compiled-array identity check.
-Scope rules must read local facts: `physics(quiescent, "chess-demo")` restricts
+Scope rules must read local facts: `physics(quiescent, "<scope>")` restricts
 the existing census to that scope's bodies. The second argument can also name a
-keyed placement roster; its cell values do not filter membership. A state row
-and replay scope sharing that name are ambiguous and refused. Both selections
-require rigid bodies to rest uncarried, while the global `physics(quiescent)`
-couples a table to unrelated rigid bodies. The debug world's idle example
-and its game-score citation are in [chess.md](../../../worlds/debug/chess.md).
+keyed placement roster (a game station's holodeck chess reads its pieces' rest
+as `physics(quiescent, "pieceCode")`); its cell values do not filter
+membership. A state row and replay scope sharing that name are ambiguous and
+refused. Both selections require rigid bodies to rest uncarried, while the
+global `physics(quiescent)` couples a table to unrelated rigid bodies. The
+debug world's scoped-replay exhibit went with its chess table; the open item
+"A scoped replay exhibit" names its replacement.
+
+**A board's tokens can be a holodeck.** `worlds/standard/holodeck.puck` is a
+pool of bodies a game materializes while it is shown and releases when it is
+not: each body an inhabited placement whose count is a cell over a one-sample
+disc (`WorldPlacementInhabit.StandsOneBody`, so `placement:<id>` names it for a
+pose or a read, or no body while released), asked for and released through
+one door (`holodeckSet`) and posed once it exists (`holodeckStands`). A
+materialized body takes the population's highest free slot, so a pool never
+renumbers a fixed-count inhabitant; a world that numbers bodies below a deck
+from it keeps that deck at a fixed count (`patienceStationCards(holodeck:
+false)`). A game station's chess pieces and cards are the worked pools
+([game-station.md](../../../worlds/debug/game-station.md)).
 See [replay](references/replay.md#scoped-live-replays) for the control cells.
 
 A debug-based table fixture keeps `documentId: "debug"` when it expects the
@@ -1163,10 +1177,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   may show an animated creation, which the stamp pool draws while it shows; a row
   that can show one carries no distribution or mirror. Each of the gallery's
   display stations can show every exhibit of the catalog, motion ones included,
-  this way (`displayPlacements` in `worlds/debug/shapes.puck`), and a display
-  station's board shows each cell's piece this way (`gameStationTokens` in
-  `worlds/standard/game-station.puck`; `worlds/games/chess-station.puck` stands
-  the chess game's pieces on a station's squares with it).
+  this way (`displayPlacements` in `worlds/debug/shapes.puck`). A game station's
+  tokens are bodies instead (`worlds/standard/holodeck.puck`), since a player
+  lifts and knocks them.
 - A placement turns about its own up axis with a `turn` facet
   (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
   numeric state binding, give `phase + rate × clock` turns on top of its yaw.

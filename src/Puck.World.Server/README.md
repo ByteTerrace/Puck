@@ -549,7 +549,6 @@ What survives an arena install is decided in one place,
   re-declares a scope row drops the scope's image and tape, sets its control
   row's `status` to -2 (`WorldScopedReplayRuntime.NoStartStatus`) and names the
   refusal on stderr; the next capture request records afresh and returns it to 0.
-  The chess demo's `chess-demo-lost-start` rule reads -2 to clear its `ready` flag.
 - **Reload** (`world.reload`): an edit's continuity, above. The candidate is the
   source's change between the revision the authority holds and the next one,
   merged over the live document (`WorldReloadDelta.TryMergeOver`), so it holds

@@ -27,7 +27,8 @@ public static partial class CompileCommand {
         bool strict,
         bool validate,
         bool updateAssets = false,
-        IDictionary<string, string>? written = null
+        IDictionary<string, string>? written = null,
+        int budgetLines = 0
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -59,7 +60,8 @@ public static partial class CompileCommand {
             strict: strict,
             updateAssets: updateAssets,
             validate: validate,
-            written: written
+            written: written,
+            budgetLines: budgetLines
         );
     }
 
@@ -69,7 +71,8 @@ public static partial class CompileCommand {
         bool strict,
         bool validate,
         bool updateAssets = false,
-        IDictionary<string, string>? written = null
+        IDictionary<string, string>? written = null,
+        int budgetLines = 0
     ) {
         var diagnostics = new DiagnosticBag();
         string sourceText;
@@ -92,7 +95,7 @@ public static partial class CompileCommand {
         var imports = ImportHandling.Validate;
 
         if (!isCartridge) {
-            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
+            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written, budgetLines: budgetLines);
         }
         if (updateAssets) {
             return CliExit.Refuse(verb: "compile", what: "--update-assets", why: "applies to world asset references; cartridge sources do not use a world asset lock.");
@@ -285,6 +288,7 @@ public static partial class CompileCommand {
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
         var measureOption = new Option<bool>(name: "--measure") { Description = "Report elapsed time, process peak working set and managed allocation for this invocation." };
+        var budgetOption = new Option<int>(name: "--budget") { Description = "With --validate, print each validated world's rule price sheet as world.budget.rules reads it in a running World: the tick's total against the ceiling, each module instance's share, and this many of the costliest lines." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
         var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory outside it. With no source paths, select every world .puck source (one whose schema: is the world vocabulary's, or absent) and every .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, every other file of the tree (a package manifest, fonts, tunes, cartridges and their sources, pipeline sources) is copied to the same place, and every other *.world.json, *.puckb and stored package under --output is removed, so the output is the tree as a bootable package." };
         var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world or stored package --output holds that the run does not write. Writes nothing under --output." };
@@ -299,6 +303,7 @@ public static partial class CompileCommand {
             strictOption,
             validateOption,
             measureOption,
+            budgetOption,
             assetsOption,
             treeOption,
             writtenOption,
@@ -317,6 +322,8 @@ public static partial class CompileCommand {
                 result.AddError(errorMessage: "--check compares a --tree run with its --output and requires --tree.");
             } else if (result.GetValue(option: writtenOption) is not null) {
                 result.AddError(errorMessage: "--written reports a --tree run and requires --tree.");
+            } else if ((result.GetValue(option: budgetOption) != 0) && !result.GetValue(option: validateOption)) {
+                result.AddError(errorMessage: "--budget prices a validated world and requires --validate.");
             } else if ((result.GetValue(argument: pathArgument)?.Length ?? 0) == 0) {
                 result.AddError(errorMessage: "At least one source path is required unless --tree is supplied.");
             } else if ((result.GetValue(argument: pathArgument)?.Length > 1) && (result.GetValue(option: outputOption) is not null)) {
@@ -360,7 +367,8 @@ public static partial class CompileCommand {
                     path: path,
                     strict: parseResult.GetValue(option: strictOption),
                     validate: parseResult.GetValue(option: validateOption),
-                    updateAssets: parseResult.GetValue(option: assetsOption)
+                    updateAssets: parseResult.GetValue(option: assetsOption),
+                    budgetLines: parseResult.GetValue(option: budgetOption)
                 );
 
                 if (exitCode != 0) { return exitCode; }

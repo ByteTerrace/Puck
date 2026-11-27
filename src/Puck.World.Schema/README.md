@@ -437,8 +437,8 @@ context row can give it the table's controls. The game stays rules: they read
 the seat's channels and the three `$board:` seat operands above
 (`engaged`, `pointer`, `side`), the pointer meeting the plane `surface` metres
 above the topology origin, all in fixed point from the document, the seat's
-application set, its body and its ray (`WorldTabletopFrame`). The debug world's
-chess table is the worked game ([`chess.md`](../../worlds/debug/chess.md)). The shipped
+application set, its body and its ray (`WorldTabletopFrame`). A game station's
+holodeck chess is the worked game ([`game-station.md`](../../worlds/debug/game-station.md)). The shipped
 `body.carry` facet (`WorldCarry`) is a
 separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built
@@ -468,10 +468,11 @@ without relying on drop height. Wake a piece along its own up axis where
 the kit's rigid friction is high—a horizontal wake couples into spin under
 Coulomb/rolling friction and can drift the piece across a cell boundary
 before the census re-quiesces. `physics(quiescent)` is population-wide.
-`physics(quiescent, "chess-demo")` restricts the same census to the bodies of
-that authored replay scope: active, uncarried rigid bodies must be resting;
-other bodies contribute nothing. The chess table uses this local fact, so a
-settling body at another table cannot delay its judge or contaminate its replay.
+`physics(quiescent, "<scope>")` restricts the same census to the bodies of
+that authored replay scope or keyed placement roster: active, uncarried rigid
+bodies must be resting; other bodies contribute nothing. A game station's
+holodeck chess reads its pieces' roster this way (`physics(quiescent,
+"pieceCode")`), so a settling body at another station cannot delay its judge.
 
 The shipped chess module uses `$board:mask` to locate a candidate's source and
 destination. Four lossless bit planes encode the cell alphabet; their before/after

@@ -25,7 +25,7 @@ and spelling-equivalence pair land.
 | `for` could not produce list elements where `map` did | `worlds/standard/water.puck` (`waterViews` wrote `lattices: map(views, ...)`) | Array literals now admit `for item in seq { ... }` and `for (item, index) in seq { ... }` (with optional local `let`s), lowering to the same array as `map`/`flatMap`. |
 | Repeated `exports { ... }` blocks overwrote earlier ones instead of merging | `worlds/standard/camera.puck` (`chaseCamera` had to repeat `` `camera-boom` `` after calling `cameraResponse()`) | Root `exports { ... }` blocks merge facet lists through the same path as `export` statements; `cameraResponse()` and `chaseCamera()` use `export binding` directly. |
 | Rule `local` key read priced one unit above the inline expression (`local k = a + 1; cards[k]` vs `cards[a + 1]`) | `world.budget.rules --why` (`rule-faults-2` audit) | `ExpressionSpelling.TryParse` lowers a bare local read in brackets to `$local:<name>` (`LocalKeyFact`) and `RuleCompiler.CompileKeyExpression` collapses single-local `$expr:` keys to `LocalKeyFact`; stale implicit-local prose in [rules.md](../reference/state/rules.md#resolve-a-cell-key) removed. |
-| Record-like fixed tables had to count their own cells by hand (`table play capacity(25)`) | `worlds/debug/chess-table.puck` (`table play`) | `capacity(auto)` on `table` and `pile` lowers to the authored entries' count (refusing zero authored entries). |
+| Record-like fixed tables had to count their own cells by hand (`table play capacity(25)`) | the retired debug chess table (`table play`) | `capacity(auto)` on `table` and `pile` lowers to the authored entries' count (refusing zero authored entries). |
 | `schedule row in <parameter>` refused (PUCK001) because the statement form read only a literal number with a unit | `worlds/standard/typing.puck` (the typing play wrote `scheduleState(..., delaySeconds: param)` instead) | `schedule row in <delay>` reads its delay with the member grammar and lowers it against `delaySeconds` as the call form does, so a parameter, arithmetic, a unit or a bare number of seconds all work; pair `schedule-delay`. PUCK010 is retired. |
 | `push`, `draw`, `deal`, `shuffle`, `claim` and `for each` read their row or pool as a bare word, so a template parameter, an interpolated name, a module instance's row and a `$zones[…]` selector never resolved (unknown row `pile`, or a refusal at validation), and `deal` took only a literal count | `worlds/games/freecell.puck` and `klondike.puck` (the gather and deal templates wrote `transform transfer(from: pile, …, selector: First)`) | The four whole-row effects read their row as an assignment reads its target and lower it through the same resolver; `claim` and `for each` take a binding that holds the pool's name; `deal` reads its count as a value; the printer and the decompiler spell a name the bare form cannot carry backquoted; pair `effect-row-parameter`. |
 | A library imported under an alias changed values: a function's parameter, a list `for`'s variable or a body `let` named like a library constant read the constant (`m.scaled(10)` gave 6 for `size * 3`), and two unaliased routes to one library under one alias refused with `Duplicate constant` | Any aliased library (`ModuleResolver`) | The import rewriter takes scope from the one binder description hover and go-to-definition read (`SyntaxScopes`), and an import without an alias adds nothing to the namespace a library is loaded once under; pairs `aliased-import-binders` and `aliased-import-diamond`. |
@@ -50,6 +50,15 @@ and spelling-equivalence pair land.
 
 Tracked in [Language and authoring](../plans/open-items.md#language-and-authoring)
 and the [`sdf-authoring` evals](../../.claude/skills/sdf-authoring/SKILL.md):
+
+- **A rule template's argument naming a rule local lowers as text**: a call
+  `holodeckSet(live: want)` inside a rule declaring `local want = …` wrote the
+  text `want` into an Int row (`StateCellUnaddressable`, "'setState' 'text'
+  writes a kind=Text row"), and so did `holodeckPlaced(cell: square)`. The
+  holodeck's door reads the caller's `want` local by name instead
+  (`worlds/standard/holodeck.puck`, `holodeckSet`), a convention the language
+  should not need: an argument that names a local in scope should bind that
+  local, as a bracket key does.
 
 - **Cross-representation cost corpus**: pairs whose two spellings cannot share
   one JSON document (static placements vs one creation, `wall - opening` vs box

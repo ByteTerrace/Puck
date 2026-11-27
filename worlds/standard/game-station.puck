@@ -11,9 +11,9 @@
 //
 // The glass carries, along the near edge, the menu (GAMES, a button a game and NEW GAME) and above it the status line;
 // along the far edge the same status line reads for the far chair; between them lies the board area, the whole width
-// of the glass, which each game's own presentation draws centred on it (a game module's tokens and the paints the world
-// passes in). Everything on the glass is a paint over one of the glass's panels or a token placement, so the glass
-// follows the games' state without a bake, and a paint changes only when the cell it reads does.
+// of the glass, which each game's own presentation draws centred on it (the paints the world passes in, and the bodies a
+// game's holodeck stands on it, ../standard/holodeck.puck). Everything on the glass is a paint over one of the glass's
+// panels, so the glass follows the games' state without a bake, and a paint changes only when the cell it reads does.
 //
 // The station's state is split by who reads it. What its paints and the console read is the world's, one row for every
 // station keyed by its id (`gameStationState`): a paint names its cell, and a creation's paints read the world's rows.
@@ -617,7 +617,8 @@ template gameStationRules(station, catalog, seats = gameStationSeats) {
   }
 }
 
-// A token a board shows on no cell: a millimetre box under its origin, inside the table's cap.
+// A creation that shows nothing: a millimetre box under its origin, inside the table's cap, for a placement a game needs
+// (a board's anchor) but draws none.
 template gameStationTokenBlank(id) {
   prototype id {
     document {
@@ -629,36 +630,6 @@ template gameStationTokenBlank(id) {
         position [0, -0.03, 0]
         scale [0.001, 0.001, 0.001]
       }
-    }
-  }
-}
-
-// A board of tokens on a station's glass: one placement a cell, `<prefix><i>` at `centres[i]` (a point of the
-// station's frame, [x, z], on its glass), showing the prototype one of `codes` names ({ value, prototype }) while the
-// cell `keys[i]` of the state row `row` holds that value, and `blank` while it holds none of them or while the station
-// shows another game than `game`, each at `scale`. A token is a creation the cell's value picks, as a display's turntable
-// shows the exhibit its selection picks, so a move swaps only the tokens of the cells it changed.
-template gameStationTokens(prefix, station, game, row, keys, centres, codes, blank, scale = 1) {
-  for (centre, i) in centres {
-    placement $"{prefix}{i}" {
-      prototype: blank
-      position [(station.at[0] + centre[0]), (station.at[1] + gameStationSurface), (station.at[2] + centre[1])]
-      scale: scale
-      respond: concat(
-        [
-          {
-            when: state(state: gameStationGame, key: station.id, comparison: NotEqual, value: game)
-            prototypeId: blank
-          }
-        ],
-        map(
-          codes,
-          code => {
-            when: state(state: row, key: keys[i], comparison: Equal, value: code.value)
-            prototypeId: code.prototype
-          }
-        )
-      )
     }
   }
 }
