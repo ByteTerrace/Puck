@@ -285,7 +285,13 @@ public static partial class WorldDocumentEmitter {
         out JsonObject? companionRow
     ) {
         companionRow = null;
-        table = table with { Kind = ((table.Enum is null) ? InferTableKind(scope: scope, table: table) : "Int") };
+
+        var written = DocumentLowering.ExpandCellBody(body: table.Cells, scope: scope).ToList();
+        var initial = ((table.Initializer is { } initializer)
+            ? InitializerCells(initializer: initializer, rowName: table.Name, scope: scope)
+            : []);
+
+        table = table with { Kind = ((table.Enum is null) ? InferTableKind(initial: initial, scope: scope, table: table, written: written) : "Int") };
         ValidateStateRowName(
             kind: "table",
             name: table.Name,
@@ -324,8 +330,12 @@ public static partial class WorldDocumentEmitter {
 
         var cellsArr = new JsonArray();
         var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var outer = scope;
 
-        foreach (var cell in table.Cells) {
+        foreach (var (cell, cellScope) in written) {
+            // Each cell's value and modifiers lower in the scope its body's loops and lets left it; the row's own
+            // modifiers below lower in the declaration's.
+            scope = cellScope;
             if (!seenKeys.Add(item: cell.Key)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.StateDeclarationDuplicateName,
@@ -435,17 +445,19 @@ public static partial class WorldDocumentEmitter {
             cellsArr.AppendNode(item: cellObj);
         }
 
-        if (table.Initializer is not null) {
-            var initVal = DocumentLowering.LowerValue(expr: table.Initializer, scope: scope);
-
-            if (initVal is JsonArray initArr) {
-                for (var i = 0; (i < initArr.Count); i++) {
-                    cellsArr.AppendNode(item: new JsonObject {
-                        ["key"] = i.ToString(),
-                        ["value"] = initArr[i]?.DeepClone(),
-                    });
-                }
+        scope = outer;
+        foreach (var (key, value) in initial) {
+            if (key.StartsWith(value: '$')) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationReservedKey,
+                    message: $"table '{table.Name}' cell key '{key}' carries the reserved '$' prefix — reserved keys are engine-minted",
+                    span: table.Span
+                );
             }
+            cellsArr.AppendNode(item: new JsonObject {
+                ["key"] = key,
+                ["value"] = value?.DeepClone(),
+            });
         }
 
         if (cellsArr.Count > 0) {
@@ -493,11 +505,46 @@ public static partial class WorldDocumentEmitter {
             var embedsMod = table.Modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "embeds", comparisonType: StringComparison.OrdinalIgnoreCase));
 
             if (embedsMod is not null) {
-                companionRow = CreateEmbedsCompanionRow(embedsMod: embedsMod, rootObj: rootObj, scope: scope, textRowObj: rowObj, textTable: table, totalVectorBytes: ref totalVectorBytes);
+                companionRow = CreateEmbedsCompanionRow(embedsMod: embedsMod, rootObj: rootObj, scope: scope, textRowObj: rowObj, textCells: written, totalVectorBytes: ref totalVectorBytes);
             }
         }
 
         return rowObj;
+    }
+    // A table's `= value`: an array keys its elements 0, 1, ... in order, and an object keys each member by its name, so
+    // a computed object (a `let`, a `with`, a builtin's result) writes its keys as they stand. Any other value is
+    // refused where it is written, never dropped.
+    private static List<(string Key, JsonNode? Value)> InitializerCells(ExpressionNode initializer, string rowName, DocumentScope scope) {
+        var cells = new List<(string Key, JsonNode? Value)>();
+
+        switch (DocumentLowering.LowerValue(expr: initializer, scope: scope)) {
+            case JsonArray elements:
+                for (var index = 0; (index < elements.Count); index++) {
+                    cells.Add(item: (index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), elements[index]));
+                }
+
+                break;
+            case JsonObject members:
+                foreach (var (key, value) in members) {
+                    cells.Add(item: (key, value));
+                }
+
+                break;
+            case var refused when !DocumentLowering.IsRefusedRead(value: refused):
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                    message: DiagnosticText.Compose(
+                        example: "'table scores = [0, 0, 0]' or 'table prices = { apple: 2, pear: 3 }'",
+                        fix: "Write an array, keyed 0, 1, ... in order, or an object, keyed by its members",
+                        problem: $"table '{rowName}' is initialized with a value that is neither an array nor an object"
+                    ),
+                    span: initializer.Span
+                );
+
+                break;
+        }
+
+        return cells;
     }
     private static JsonObject LowerStateSlotDeclaration(
         StateSlotDeclarationNode slot,
@@ -627,6 +674,17 @@ public static partial class WorldDocumentEmitter {
         if (pile.Initializer is not null) {
             var initVal = DocumentLowering.LowerValue(expr: pile.Initializer, scope: scope);
 
+            if ((initVal is not JsonArray) && !DocumentLowering.IsRefusedRead(value: initVal)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                    message: DiagnosticText.Compose(
+                        example: "'pile deck of cards = map(range(0, 52), k => $\"{k}\")'",
+                        fix: "Write an array of the token keys the pile starts with, first at the bottom",
+                        problem: $"pile '{pile.Name}' is initialized with a value that is not an array"
+                    ),
+                    span: pile.Initializer.Span
+                );
+            }
             if (initVal is JsonArray initArr) {
                 foreach (var item in initArr) {
                     var key = (item?.ToString() ?? string.Empty);
@@ -714,7 +772,9 @@ public static partial class WorldDocumentEmitter {
     private static readonly HashSet<string> GridWrapNames = new(comparer: StringComparer.Ordinal) { "None", "X", "Y", "Both" };
 
     private static JsonObject LowerStateGridDeclaration(StateGridDeclarationNode grid, DocumentScope scope, JsonObject stateObj, List<PendingStateReference> pending) {
-        grid = grid with { Kind = ((grid.Enum is null) ? InferGridKind(grid: grid, scope: scope) : "Int") };
+        var written = DocumentLowering.ExpandCellBody(body: grid.Cells, scope: scope).ToList();
+
+        grid = grid with { Kind = ((grid.Enum is null) ? InferGridKind(grid: grid, scope: scope, written: written) : "Int") };
         ValidateStateRowName(
             kind: "grid",
             name: grid.Name,
@@ -1142,7 +1202,7 @@ public static partial class WorldDocumentEmitter {
             ? (width * depth)
             : long.MaxValue);
 
-        foreach (var cell in grid.Cells) {
+        foreach (var (cell, cellScope) in written) {
             if (!seenKeys.Add(item: cell.Key)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.StateDeclarationDuplicateToken,
@@ -1184,7 +1244,7 @@ public static partial class WorldDocumentEmitter {
                     context: $"grid '{grid.Name}' cell '{cell.Key}'",
                     expr: cell.Value,
                     kind: grid.Kind,
-                    scope: scope
+                    scope: cellScope
                 ),
             });
         }

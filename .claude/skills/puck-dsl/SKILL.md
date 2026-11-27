@@ -85,10 +85,21 @@ A document's `schema:` field selects its vocabulary, never the filename.
   as its function is in an expression. An import's export surface is explicit,
   never transitive across nested imports. `table` and `pile` admit
   `capacity(auto)` to lower to their authored entries' count.
-- **A template body's block or rule name is a parameter reference only when
-  bare.** `shape Box base { }` takes the value bound to `base`; `shape Box "base" { }`
-  is the literal name, whatever the template's parameters are called. Only a
-  statement directly in the template body is renamed (`DocumentLowering.Rename`).
+- **A template body's block, rule or row-declaration name is a parameter
+  reference only when bare.** `shape Box base { }` takes the value bound to `base`;
+  `shape Box "base" { }` is the literal name, whatever the template's parameters
+  are called. Only a statement directly in the template body is renamed
+  (`DocumentLowering.Rename`); a `table`/`slot`/`pile`/`grid` renames only to a
+  text binding.
+- **A row declaration's name may be computed, and its body may loop.**
+  `table`/`slot`/`pile`/`grid` take an interpolated name (`pile $"down{z}Of"[n] of
+  cards capacity(z - 1)` in a `for`), a family bracket takes `as i` binding each
+  member's index (`table markOf[n] as s { $"{ids[s]}-held" = 1 }`), and a cell body
+  takes `let`/`for`/`if` and computed keys (`$"…" = v`, `[expr] = v`). A table's
+  `= value` is an array or an object (keys in order); another value is PUCK053.
+  So a hand-built `row { name: $"…" kind: … cells: map(…) }` or a raw `families [ ]`
+  list is a defect in waiting: write the declaration
+  ([dsl reference](../../../docs/reference/dsl.md#row-declarations-tableslotpilegrid)).
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
   module library (a source emitting no document) hands over its `let`s and

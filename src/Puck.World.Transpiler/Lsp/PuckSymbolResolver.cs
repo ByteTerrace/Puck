@@ -344,8 +344,8 @@ internal static class PuckSymbolResolver {
                     );
                 case StateTableDeclarationNode table when (table.Name == rowName):
                     return new AstStateRow(
-                        Keys: [.. table.Cells.Select(selector: static cell => cell.Key)],
-                        Kind: (string.IsNullOrEmpty(value: table.Kind) ? InferKind(value: table.Cells.FirstOrDefault()?.Value) : table.Kind)
+                        Keys: [.. table.Cells.OfType<StateCellEntryNode>().Where(predicate: static cell => (cell.KeyExpression is null)).Select(selector: static cell => cell.Key)],
+                        Kind: (string.IsNullOrEmpty(value: table.Kind) ? InferKind(value: table.Cells.OfType<StateCellEntryNode>().FirstOrDefault()?.Value) : table.Kind)
                     );
                 case StateSlotDeclarationNode slot when (slot.Name == rowName):
                     return new AstStateRow(
@@ -359,8 +359,8 @@ internal static class PuckSymbolResolver {
                     );
                 case StateGridDeclarationNode grid when (grid.Name == rowName):
                     return new AstStateRow(
-                        Keys: [.. grid.Cells.Select(selector: static cell => cell.Key)],
-                        Kind: (string.IsNullOrEmpty(value: grid.Kind) ? InferKind(value: grid.Cells.FirstOrDefault()?.Value) : grid.Kind)
+                        Keys: [.. grid.Cells.OfType<StateCellEntryNode>().Where(predicate: static cell => (cell.KeyExpression is null)).Select(selector: static cell => cell.Key)],
+                        Kind: (string.IsNullOrEmpty(value: grid.Kind) ? InferKind(value: grid.Cells.OfType<StateCellEntryNode>().FirstOrDefault()?.Value) : grid.Kind)
                     );
                 case BlockNode { Identifier: "row" } rowBlock: {
                         if (TryExtractRowObject(properties: rowBlock.Statements.OfType<PropertyNode>(), rowName: rowName) is { } extracted) {

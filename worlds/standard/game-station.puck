@@ -440,12 +440,11 @@ template gameStationGrid(station) {
 }
 
 // One cell a station, keyed by its id.
-template gameStationCells(name, stations, value, kind = "Int") {
-  row {
-    name: name
-    kind: kind
-    capacity: length(stations)
-    cells: map(stations, station => { key: station.id, value: value })
+template gameStationCells(name, stations, value) {
+  table name capacity(length(stations)) {
+    for station in stations {
+      [station.id] = value
+    }
   }
 }
 
@@ -460,36 +459,26 @@ template gameStationState(stations, catalog, look = gameStationLook) {
     }
   }
   gameStationCells(name: "gameStationGame", stations: stations, value: 0)
-  row {
-    name: "gameStationPick"
-    kind: Int
-    capacity: (length(stations) * length(catalog))
-    cells: flatMap(stations, station => map(catalog, game => { key: $"{station.id}-{game.id}", value: 0 }))
+  table gameStationPick capacity(length(stations) * length(catalog)) {
+    for station in stations {
+      for game in catalog {
+        $"{station.id}-{game.id}" = 0
+      }
+    }
   }
-  gameStationCells(name: "gameStationStatus", stations: stations, value: catalog[0].title, kind: "Text")
-  row {
-    name: "gameStationRowInk"
-    kind: Text
-    capacity: (length(stations) * length(catalog))
-    cells: flatMap(
-      stations,
-      station => map(
-        catalog,
-        (game, row) => { key: $"{station.id}-{row}", value: ((row == 0) ? look.rowLit : look.rowDim) }
-      )
-    )
+  gameStationCells(name: "gameStationStatus", stations: stations, value: catalog[0].title)
+  table gameStationRowInk capacity(length(stations) * length(catalog)) {
+    for station in stations {
+      for row in range(0, length(catalog)) {
+        $"{station.id}-{row}" = (row == 0) ? look.rowLit : look.rowDim
+      }
+    }
   }
-  row {
-    name: "gameStationInks"
-    kind: Text
-    cells [{ key: "lit", value: look.rowLit }, { key: "dim", value: look.rowDim }]
+  table gameStationInks {
+    lit = look.rowLit
+    dim = look.rowDim
   }
-  row {
-    name: "gameStationTitles"
-    kind: Text
-    capacity: length(catalog)
-    cells: map(catalog, (game, row) => { key: $"{row}", value: game.title })
-  }
+  table gameStationTitles capacity(auto) = map(catalog, game => game.title)
 }
 
 // A station's own state, inside its module instance's `state.world` block: what its rules alone read.

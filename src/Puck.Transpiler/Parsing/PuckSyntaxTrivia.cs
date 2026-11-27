@@ -886,11 +886,19 @@ public static class PuckSyntaxTrivia {
 
                         return (declaration with { Fields = fields, Trivia = (declaration.Trivia with { Inner = inner, Opening = m_opening }) });
                     }
+                case StateCellEntryNode cell:
+                    return (cell with {
+                        KeyExpression = VisitOptional(expression: cell.KeyExpression),
+                        Modifiers = VisitModifiers(modifiers: cell.Modifiers),
+                        Value = VisitExpression(expression: cell.Value),
+                    });
                 case StateTableDeclarationNode table: {
-                        var (cells, inner, header) = Cells(
-                            cells: table.Cells,
+                        var (cells, inner, header) = Braced(
+                            headerFrom: table.Offset,
                             limit: ContentEnd(node: table),
-                            openFrom: table.Offset
+                            openFrom: table.Offset,
+                            opener: '{',
+                            statements: table.Cells
                         );
 
                         return (table with {
@@ -898,22 +906,26 @@ public static class PuckSyntaxTrivia {
                             FamilySize = VisitOptional(expression: table.FamilySize),
                             Initializer = VisitOptional(expression: table.Initializer),
                             Modifiers = VisitModifiers(modifiers: table.Modifiers),
+                            NameExpression = VisitOptional(expression: table.NameExpression),
                             Trivia = (table.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
                 case StateGridDeclarationNode grid: {
                         var (cells, inner, header) = (grid.HasBody
-                            ? Cells(
-                                cells: grid.Cells,
+                            ? Braced(
+                                headerFrom: grid.Offset,
                                 limit: ContentEnd(node: grid),
-                                openFrom: grid.Offset
+                                openFrom: grid.Offset,
+                                opener: '{',
+                                statements: grid.Cells
                             )
-                            : (((IReadOnlyList<StateCellEntryNode>)grid.Cells), ((IReadOnlyList<TriviaPiece>)[]), ((IReadOnlyList<TriviaPiece>)[])));
+                            : (grid.Cells, ((IReadOnlyList<TriviaPiece>)[]), ((IReadOnlyList<TriviaPiece>)[])));
 
                         return (grid with {
                             Cells = cells,
                             FamilySize = VisitOptional(expression: grid.FamilySize),
                             Modifiers = VisitModifiers(modifiers: grid.Modifiers),
+                            NameExpression = VisitOptional(expression: grid.NameExpression),
                             Trivia = (grid.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
@@ -923,33 +935,6 @@ public static class PuckSyntaxTrivia {
             }
         }
 
-        private (IReadOnlyList<StateCellEntryNode> Cells, IReadOnlyList<TriviaPiece> Inner, IReadOnlyList<TriviaPiece> Header) Cells(IReadOnlyList<StateCellEntryNode> cells, int openFrom, int limit) {
-            var open = FindNext(
-                from: openFrom,
-                limit: limit,
-                target: '{'
-            );
-            var close = MatchDelimiter(open: open);
-
-            if ((open < 0) || (close < 0)) {
-                return (cells, [], []);
-            }
-
-            var (entries, inner) = List(
-                bodyEnd: close,
-                bodyStart: (open + 1),
-                items: cells,
-                visit: cell => (cell with {
-                    Modifiers = VisitModifiers(modifiers: cell.Modifiers),
-                    Value = VisitExpression(expression: cell.Value),
-                })
-            );
-
-            return (entries, inner, Header(
-                from: openFrom,
-                open: open
-            ));
-        }
         private StateModifierNode VisitModifier(StateModifierNode modifier) =>
             (modifier with { Arguments = VisitArguments(arguments: modifier.Arguments, limit: ContentEnd(node: modifier), openFrom: modifier.Offset) });
         private IReadOnlyList<StateModifierNode> VisitModifiers(IReadOnlyList<StateModifierNode> modifiers) => [.. modifiers.Select(selector: VisitModifier)];

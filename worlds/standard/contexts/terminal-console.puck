@@ -186,11 +186,10 @@ template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep =
         "terminalConsoleOpen", "terminalConsolePosed", "terminalLength", "terminalEntered", "terminalRan",
         "terminalAction", "terminalValue"
       ] {
-        row {
-          name: name
-          kind: Int
-          capacity: count
-          cells: map(numbers, number => { key: number, value: 0 })
+        table $"{name}" capacity(count) {
+          for number in numbers {
+            [number] = 0
+          }
         }
       }
       // Each terminal's own number, so a rule sweeping the terminals can do arithmetic with the one it is on.
@@ -201,11 +200,10 @@ template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep =
         cells: map(range(1, count + 1), number => { key: $"{number}", value: number })
       }
       for name in ["terminalLine", "terminalLast", "terminalReply"] {
-        row {
-          name: name
-          kind: Text
-          capacity: count
-          cells: map(numbers, number => { key: number, value: "" })
+        table $"{name}" capacity(count) {
+          for number in numbers {
+            [number] = ""
+          }
         }
       }
       // The command table: each line's number, and each number's action, value and whether every terminal offers it.

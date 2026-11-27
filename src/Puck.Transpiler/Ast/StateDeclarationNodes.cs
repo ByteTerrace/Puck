@@ -52,9 +52,11 @@ public sealed partial record StateModifierNode(
     Line,
     Column
 );
-/// <summary>One cell entry inside a <c>table</c> declaration's body: <c>key = value [modifier]*</c> — e.g.
-/// <c>mana = 50 advance(perSecond: 5)</c>.</summary>
-/// <param name="Key">The cell's key (an identifier or a quoted string).</param>
+/// <summary>One cell entry inside a <c>table</c> or <c>grid</c> declaration's body: <c>key = value [modifier]*</c> — e.g.
+/// <c>mana = 50 advance(perSecond: 5)</c>. It is a statement so a body's compile-time <c>for</c> and <c>if</c> can
+/// hold it, as a section's loop holds its rows.</summary>
+/// <param name="Key">The cell's key (an identifier or a quoted string), or an empty string when
+/// <see cref="KeyExpression"/> computes it.</param>
 /// <param name="Value">The cell's initial value expression.</param>
 /// <param name="Modifiers">The cell's own modifier calls, in written order (only <c>advance</c> and <c>behavior</c>
 /// are legal on a cell entry — the owning vocabulary refuses the rest by name).</param>
@@ -62,6 +64,8 @@ public sealed partial record StateModifierNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="KeyExpression">A computed key, written <c>$"…" = value</c> or <c>[expression] = value</c>, or
+/// <see langword="null"/> for a key written out; only a lowering scope can resolve it.</param>
 public sealed partial record StateCellEntryNode(
     string Key,
     ExpressionNode Value,
@@ -69,8 +73,9 @@ public sealed partial record StateCellEntryNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
-) : SyntaxNode(
+    int Column = 1,
+    ExpressionNode? KeyExpression = null
+) : StatementNode(
     Offset,
     Length,
     Line,
@@ -82,7 +87,8 @@ public sealed partial record StateCellEntryNode(
 /// <param name="Name">The declared row's name.</param>
 /// <param name="Kind">The inferred cell kind, or an empty string before the owning vocabulary lowers the declaration.</param>
 /// <param name="Modifiers">The row-level modifier calls, in written order.</param>
-/// <param name="Cells">The declared cell entries, in written order.</param>
+/// <param name="Cells">The body as written: cell entries (<see cref="StateCellEntryNode"/>), and the compile-time
+/// <c>let</c>, <c>for</c> and <c>if</c> statements that produce more of them, in written order.</param>
 /// <param name="FamilySize">The optional compile-time family count expression (e.g. [8]), or null for a single row.</param>
 /// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
 /// bare count, or null.</param>
@@ -93,11 +99,16 @@ public sealed partial record StateCellEntryNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, written <c>$"…"</c> where the name stands, or
+/// <see langword="null"/> for a name written out; only a lowering scope can resolve it, so the name is empty until
+/// then.</param>
+/// <param name="MemberIndex">The name a family declaration binds to each member's family index, written
+/// <c>[count] as i</c>, or <see langword="null"/>; the member's modifiers, cells and value read it.</param>
 public sealed partial record StateTableDeclarationNode(
     string Name,
     string Kind,
     IReadOnlyList<StateModifierNode> Modifiers,
-    IReadOnlyList<StateCellEntryNode> Cells,
+    IReadOnlyList<StatementNode> Cells,
     ExpressionNode? FamilySize = null,
     IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
     ExpressionNode? Initializer = null,
@@ -105,7 +116,9 @@ public sealed partial record StateTableDeclarationNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null,
+    string? MemberIndex = null
 ) : StatementNode(
     Offset,
     Length,
@@ -132,6 +145,11 @@ public sealed partial record StateTableDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, written <c>$"…"</c> where the name stands, or
+/// <see langword="null"/> for a name written out; only a lowering scope can resolve it, so the name is empty until
+/// then.</param>
+/// <param name="MemberIndex">The name a family declaration binds to each member's family index, written
+/// <c>[count] as i</c>, or <see langword="null"/>; the member's modifiers, cells and value read it.</param>
 public sealed partial record StateSlotDeclarationNode(
     string Name,
     string Kind,
@@ -143,7 +161,9 @@ public sealed partial record StateSlotDeclarationNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null,
+    string? MemberIndex = null
 ) : StatementNode(
     Offset,
     Length,
@@ -191,6 +211,11 @@ public sealed partial record StatePileTokenNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, written <c>$"…"</c> where the name stands, or
+/// <see langword="null"/> for a name written out; only a lowering scope can resolve it, so the name is empty until
+/// then.</param>
+/// <param name="MemberIndex">The name a family declaration binds to each member's family index, written
+/// <c>[count] as i</c>, or <see langword="null"/>; the member's modifiers, cells and value read it.</param>
 public sealed partial record StatePileDeclarationNode(
     string Name,
     string TokenRow,
@@ -202,7 +227,9 @@ public sealed partial record StatePileDeclarationNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null,
+    string? MemberIndex = null
 ) : StatementNode(
     Offset,
     Length,
@@ -217,8 +244,8 @@ public sealed partial record StatePileDeclarationNode(
 /// <param name="Kind">The inferred cell kind, or an empty string before the owning vocabulary lowers the declaration
 /// (a board admits only <c>Int</c>/<c>Bool</c> — the owning vocabulary's own refusal, not a parse error).</param>
 /// <param name="Modifiers">The row- and topology-level modifier calls, in written order.</param>
-/// <param name="Cells">The declared initial cell entries, in written order — empty for a derived (<c>inverse</c>)
-/// board, which authors no cells of its own.</param>
+/// <param name="Cells">The declared initial cell entries and the compile-time statements that produce them, in written
+/// order — empty for a derived (<c>inverse</c>) board, which authors no cells of its own.</param>
 /// <param name="HasBody">Whether a <c>{ }</c> body was written at all, distinct from an empty one — a table's own
 /// convention (see <see cref="StateTableDeclarationNode"/>) does not apply here because a grid's body is optional.</param>
 /// <param name="FamilySize">The optional compile-time family count expression, or null for a single row.</param>
@@ -230,11 +257,16 @@ public sealed partial record StatePileDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, written <c>$"…"</c> where the name stands, or
+/// <see langword="null"/> for a name written out; only a lowering scope can resolve it, so the name is empty until
+/// then.</param>
+/// <param name="MemberIndex">The name a family declaration binds to each member's family index, written
+/// <c>[count] as i</c>, or <see langword="null"/>; the member's modifiers, cells and value read it.</param>
 public sealed partial record StateGridDeclarationNode(
     string Name,
     string Kind,
     IReadOnlyList<StateModifierNode> Modifiers,
-    IReadOnlyList<StateCellEntryNode> Cells,
+    IReadOnlyList<StatementNode> Cells,
     bool HasBody,
     ExpressionNode? FamilySize = null,
     IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
@@ -242,7 +274,9 @@ public sealed partial record StateGridDeclarationNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null,
+    string? MemberIndex = null
 ) : StatementNode(
     Offset,
     Length,

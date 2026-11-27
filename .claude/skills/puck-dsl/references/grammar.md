@@ -73,11 +73,19 @@ grammar, expression spelling, pattern/cell-set/state spellings):
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```
-table name [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name [: Enum] [= value] [modifier(...)]*
-pile name of tokenRow [modifier(...)]* { token ... }
-grid name [: Enum] [modifier(...)]* [{ key = value ... }]
+table name [family] [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
+table name [family] [: Enum] [modifier(...)]* = array-or-object
+slot name [family] [: Enum] [= value] [modifier(...)]*
+pile name [family] of tokenRow [modifier(...)]* { token ... }
+grid name [family] [: Enum] [modifier(...)]* [{ key = value ... }]
 ```
+
+`name` is an identifier or an interpolation (`$"pile{z}Of"`, the node's `NameExpression`); `[family]` is a family
+bracket with an optional `as i` (the node's `MemberIndex`), which binds each member's family index for its modifiers,
+cells and value. A cell body (`table`/`grid`) holds `key = value` entries (`StateCellEntryNode`, a statement), computed
+keys (`$"…" = v`, `[expr] = v`, its `KeyExpression`), and `let`/`for`/`if` producing more, parsed by
+`PuckParser.ParseCellBody`; `DocumentLowering.ExpandCellBody` flattens it and `DocumentLowering.ResolveDeclarationName`
+settles a computed name.
 
 A schema-agnostic grammar shape (`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`): a name,
 an optional `: Enum` (the node's `Enum`; a cell-kind word there is PUCK107, since the kind is inferred), an optional

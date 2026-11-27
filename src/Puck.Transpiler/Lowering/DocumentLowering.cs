@@ -1530,9 +1530,28 @@ public static partial class DocumentLowering {
             value: UnitConversion.Scale(crossesAngleUnits: (read.Exact is null), factor: read.Factor, value: numVal)
         );
     }
-    // A block whose bare NAME is a template parameter takes the bound value as its name, so one template can declare a
-    // differently named row per invocation. A quoted name is a literal and is never looked up.
+    // A block or row declaration whose bare NAME is a template parameter takes the bound value as its name, so one
+    // template can declare a differently named row per invocation. A quoted name is a literal and is never looked up,
+    // and a row declaration's interpolated name is computed here, under the invocation's arguments, so the template's
+    // index of what it declares reads the name the row takes. A row declaration renames only to a text binding.
     private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
+        statement = ResolveDeclarationName(scope: scope, statement: statement);
+
+        if (statement is StateTableDeclarationNode or StateSlotDeclarationNode or StatePileDeclarationNode or StateGridDeclarationNode) {
+            var declared = (statement switch {
+                StateTableDeclarationNode table => table.Name,
+                StateSlotDeclarationNode slot => slot.Name,
+                StatePileDeclarationNode pile => pile.Name,
+                StateGridDeclarationNode grid => grid.Name,
+                _ => string.Empty,
+            });
+
+            return (((declared.Length > 0) && scope.TryLowerBinding(declared, out var boundName) && (boundName is JsonValue text) && text.TryGetValue<string>(value: out var renamed) && (renamed.Length > 0))
+                ? NamedDeclaration(name: renamed, statement: statement)
+                : statement
+            );
+        }
+
         var written = (statement switch {
             BlockNode { NameQuoted: false } block => block.Name,
             RuleBlockNode { NameQuoted: false } rule => rule.Name,
@@ -2144,9 +2163,20 @@ public static partial class DocumentLowering {
         using var templateSourceGuard = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
 
         invocationScope.IndexDeclarations(statements: template.Body.Statements);
-        initializeInvocation?.Invoke(invocationScope, template.Body.Statements);
+
+        // The body renamed before the vocabulary indexes it, so a row a parameter names registers under the name it takes.
+        var body = new List<StatementNode>(capacity: template.Body.Statements.Count);
 
         foreach (var stmt in template.Body.Statements) {
+            try {
+                body.Add(item: Rename(scope: invocationScope, statement: stmt));
+            } catch (DocumentEvaluationException error) when (!error.SourceAttributed && (template.DefinitionPath is not null)) {
+                throw error.WithSource(related: useSite, sourcePath: template.DefinitionPath);
+            }
+        }
+        initializeInvocation?.Invoke(invocationScope, body);
+
+        foreach (var stmt in body) {
             scope.Budget.Spend(
                 count: 1,
                 span: stmt.Span
@@ -2154,7 +2184,7 @@ public static partial class DocumentLowering {
 
             try {
                 sink(
-                    Rename(scope: invocationScope, statement: stmt),
+                    stmt,
                     target,
                     invocationScope
                 );

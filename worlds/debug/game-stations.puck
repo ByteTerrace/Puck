@@ -121,7 +121,6 @@ template gameStationSetGrids(stations) {
     gameStationGrid(station: station)
   }
   patienceSlotsGraph()
-  patienceDisplayFamilies(count: length(stations))
 }
 
 // What the stations' paints, the console and every station's rules read, inside the world's `state.world` block.

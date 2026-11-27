@@ -1,0 +1,16 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  families [{ name: "marks", size: 2 }]
+  world {
+    table marks0 capacity(2) {
+      "north-cursor" = 0
+      "north-held" = 1
+    }
+    table marks1 capacity(2) {
+      "south-cursor" = 0
+      "south-held" = 2
+    }
+  }
+}
