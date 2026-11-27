@@ -534,6 +534,15 @@ own value lies in 0..63. The document spells it
 - `reduce(arrangementRank, hand)` ranks an ordered pile's order relative to its
   token domain, over k! for k tokens. It takes no filters, and reads -1 when the
   pile holds more than 20 tokens or a token its domain doesn't declare.
+- `reduce(position, pile)[key]` reads one key's zero-based position among the
+  row's cells in their order, or -1 when the row doesn't hold the key. It is the
+  one reduction that takes a key, and the key is any row key (`[$each]`, a cell
+  read as a key). A card's depth in a pile is its position, so a rule never
+  matches a pattern from the card to the pile's end to count what stands before
+  it. The document spells it `$reduce:position:<row>` with the key beside it.
+  The arena derives a row's position view once per generation of the row, so
+  every read after the first is one lookup; the work sheet prices a read at one
+  work unit.
 
 At run time, an unfiltered `count` reads the row's cell count directly, and
 every other reduction visits the row's held cells once. The work sheet prices a
