@@ -93,7 +93,9 @@ public sealed partial class WorldTick : IFieldLatticeHost {
     /// <summary>Reads each field region's travel resistance once and has the population sample what its bodies read
     /// of the regions before body integration (<see cref="WorldPopulation.SampleFieldInputs"/>).</summary>
     /// <param name="tick">The simulation tick being stepped.</param>
-    public void SampleFieldInputs(ulong tick) {
+    public void SampleFieldInputs(ulong tick) => Host.Population.SampleFieldInputs(regionResistance: RegionResistance(tick: tick));
+    // Each field region's travel resistance this tick, read once per region, by region index.
+    private ReadOnlySpan<FixedQ4816> RegionResistance(ulong tick) {
         var regions = Host.Population.FieldRegions;
 
         if (m_regionResistance.Length != regions.Count) { m_regionResistance = new FixedQ4816[regions.Count]; }
@@ -102,7 +104,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
                 ? ((scalar.Row is { } row) ? ReadScalarSlot(row: row, tick: tick) : FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)))
                 : FixedQ4816.Zero);
         }
-        Host.Population.SampleFieldInputs(regionResistance: m_regionResistance);
+        return m_regionResistance;
     }
 
     FixedVector3? IFieldLatticeHost.BodyPosition(int body) => Host.Body(index: body)?.FixedPosition;

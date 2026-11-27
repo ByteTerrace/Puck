@@ -378,32 +378,18 @@ public sealed partial class WorldTick {
         // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
         // integration and contact in the same tick its carrier disappeared rather than skipping one.
         Host.Engagement.ResolveMounts();
-        Host.Population.PrepareCarriedBodies();
-        // Sample what the bodies read of the field regions BEFORE either half of the tick advances them, so a medium
-        // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
-        // surface, never last tick's.
-        SampleFieldInputs(tick: tick);
-        Host.Population.AdvanceSimulated(
+        // The bodies sample what they read of the field regions before either half of the tick advances them, so a
+        // medium hold's phase-4 law reads this tick's surface, never last tick's.
+        Host.Population.StepBodies(
             definition: Host.Document.Definition,
             tick: tick,
             stepTicks: context.StepTicks,
             stepStartEngineTick: stepStartEngineTick,
+            regionResistance: RegionResistance(tick: tick),
+            engageProbeOrdinals: engageProbeOrdinals,
+            engageEdges: engageEdges,
             jobs: Host.Jobs
         );
-        Host.Population.AdvanceSeats(
-            tick: tick,
-            stepTicks: context.StepTicks,
-            stepStartEngineTick: stepStartEngineTick,
-            engageProbeOrdinals: engageProbeOrdinals,
-            engageEdges: engageEdges
-        );
-        Host.Population.ResolveTethers();
-        Host.Population.UpdateCarriedBodies();
-        using (HostFrameWork.Measure(HostFrameWorkPart.TickContact)) { Host.Population.ResolveDynamicContacts(); }
-        // The solve may move a rigid carrier. Reconcile its held pose after the contact step as well.
-        Host.Population.UpdateCarriedBodies();
-        Host.Population.FollowMounts();
-        Host.Population.CompleteStep(tick: tick);
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules
         // can observe a released action and accidentally use it to enter the old mode again.
         if (!Host.Input.TrySynchronize(activation: 0, reason: out var inputModeReason)) { throw new InvalidOperationException(message: inputModeReason); }
