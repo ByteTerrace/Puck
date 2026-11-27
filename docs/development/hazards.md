@@ -375,3 +375,13 @@ run. **Closed by** a bound or an owner whose lifetime ends the entry.
 **Detected by** review; the long-run memory measurements in the
 [job-system packet](../plans/open-items.md#memory-ownership) show where it
 costs.
+
+A product shared across owners by a content key retains the same way when its
+input holds something of one owner that the key does not name. A creation's
+canonical bytes name a state-bound palette colour by its reference, so a rig
+shared by that hash would carry the first world's bound holders, whose clock
+reaches that world's server, into every later world that shares it. **Closed
+by** sharing only products whose key's bytes hold every value they carry
+(`WorldPrototype.Rig` gives a document holding a state reference a rig of its
+own). **Detected by** review, and by a heap trace's retention paths
+(`puck host heap --path`) when ended owners pile up.
