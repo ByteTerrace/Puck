@@ -56,6 +56,7 @@ bodies {
   capacity: (seatPopulation + visitorPopulation)
   localSeats: seatPopulation
   networkPlayers: visitorPopulation
+  seatSpawns [hero]
 }
 
 // What a seat may press: the Moth's movement and forms, the context button that engages the console and the tap that
