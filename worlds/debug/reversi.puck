@@ -763,10 +763,10 @@ search {
 }
 
 // ---- Playing at the table ----------------------------------------------------------------------------------------
-// Seat 1 sits down with the context button (the board's engage block) and plays with the board page chess.puck
-// declares: the cursor follows the pointer, the movement keys, the d-pad or the stick, one cell a press, up the board
-// being away from the side the seat sits on. The pick button puts a disc of the side to move on the cursor's cell, on the
-// seat's own turn, once the table has rested and matches the position. A side with no move passes by itself.
+// Seat 1 sits down with the context button (the board's engage block) and plays with the board page the standard's
+// tabletop context declares (../standard/contexts/tabletop.puck): the cursor follows the pointer, the movement
+// keys, the d-pad or the stick, one cell a press, up the board being away from the side the seat sits on. The pick
+// button puts a disc of the side to move on the cursor's cell, on the seat's own turn, once the table has rested and matches the position. A side with no move passes by itself.
 
 // The seated seat's presses this tick: each button's edge is 1 on the tick it goes past half way, and its *Down
 // cell remembers whether it was held.

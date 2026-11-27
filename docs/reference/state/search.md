@@ -387,7 +387,7 @@ an answer only when it still fits the position.
   completed answer. Increase the revision whenever you accept a new position,
   and apply an answer only while `best.revision` equals the current revision.
 
-The debug world's chess table (`worlds/debug/chess.puck`) applies its answer this way: `chess-ai-request` fires only when
+The debug world's chess table (`worlds/debug/chess-table.puck`) applies its answer this way: `chess-ai-request` fires only when
 `aiEnabled` is 1, `aiBest[revision] == aiRevision`, and the physics has settled.
 
 ### Finish compound moves with `$search:ply`

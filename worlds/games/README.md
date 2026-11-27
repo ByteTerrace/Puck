@@ -8,7 +8,8 @@ looks, seats and presentation stay in the world that stands it.
 settled-board judge (captures, promotion, castling, en passant, check, the
 75-move rule and repetition), the `chessInput` move door and a one-ply computer
 opponent. Its header lists what a table expands and what it owns. The debug
-world's table ([`../debug/chess.puck`](../debug/chess.puck), notes in
+world's table ([`../debug/chess-table.puck`](../debug/chess-table.puck), a module the
+debug world stands once and the stress world twelve times, notes in
 [`chess.md`](../debug/chess.md)) is the worked example.
 
 [`chess-game.puck`](chess-game.puck) is chess as a document for a drawn board:

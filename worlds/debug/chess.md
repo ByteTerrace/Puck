@@ -3,12 +3,17 @@
 The debug world stands a chess table in the gallery hall's board game room on
 level 2 ([`shapes.md`](shapes.md#the-board-game-room)), beside the Go and
 Reversi tables ([`go.md`](go.md), [`reversi.md`](reversi.md)). The board's
-centre is at (37, 9.85, 10.3), over the table's placement (`chessTable` in
-[`chess.puck`](chess.puck)); the table is 2 m square, its top 0.8 m over the
-floor. White's back rank is on the table's -Z side and Black's on the +Z side.
-`chess.puck` holds it and `debug.puck` imports it whole (`import "chess"`); the
-rules it plays by are the shared [`../games/chess.puck`](../games/chess.puck)
-library, whose templates the table expands. The gallery's first game station
+centre is at (37, 9.85, 10.3), over the table's placement (`chessTable`, its
+position the `chessTable` constant in [`chess.puck`](chess.puck)); the table is 2 m square, its top
+0.8 m over the floor. White's back rank is on the table's -Z side and Black's on
+the +Z side. The table itself is a module, `physicalChessTable` in
+[`chess-table.puck`](chess-table.puck): its placements, pieces, judge, computer
+and seated play. `chess.puck` stands it once without an alias, so its rows keep
+their plain names, and adds what only the debug world's table has (its body
+grants, the idle demonstration, its screens and the `chess.move` command);
+`debug.puck` imports `chess.puck` whole (`import "chess"`). The rules every table
+plays by are the shared [`../games/chess.puck`](../games/chess.puck) library,
+whose templates the module expands. The gallery's first game station
 ([`game-station.md`](game-station.md)) draws this same game on its glass and plays it
 through the display door below, so a move made at either table moves the
 pieces here; while a seated player here holds a piece up (`chessGrip`), the
@@ -203,3 +208,23 @@ multi-step, a pawn capture, a queen's slide, castling on either wing, through
 and clear of attack, en passant, a move left in check and threefold
 repetition), one opponent move and a stale opponent answer. Run them with
 `puck test worlds/debug/chess-tests.puck --reproduce --jobs 1`.
+
+## Twelve tables at once
+
+[`chess-stress.puck`](chess-stress.puck) stands twelve of these tables in a
+grid on a floor of their own, each `use physicalChessTable as t<n>(…)`, so every
+table's rows, rules, placements, board topology and search job are its own
+(`t3$turn`, `t3$piece4`) and a move at one table never restarts another's
+search. Each table's computer plays both sides (`autoplay`): it opens with its
+own White move through the move door (the twelve openings differ, so the games
+do), then `aiSide` follows `turn`. A game that passes no turn for five seconds
+(a draw limit, a mate, or a knocked piece judged illegal) is set up afresh: all
+32 pieces are posed over their starting squares and drop onto the board at once.
+The tables open in four groups of three, eight ticks apart, so the worst tick
+sees three tables moving, settling and judging together. It is the scenario for
+measuring the board games under load, and its header names what to read
+(`world.budget.rules --spent`, `world.counters physics`, `world.search`,
+`host.frames`, `world.status`). `world.state t0$selfPlies` and `t0$selfGames`
+read a table's turns and fresh games, `stress.chess <table> <from> <to>` plays a
+move at one table, and `puck test worlds/debug/chess-stress.puck --reproduce`
+plays every table's first turns twice and compares the runs.

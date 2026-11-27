@@ -59,7 +59,7 @@ RB): the Moth sits down in the table's one chair, at the south (`-Z`) edge, and
 the camera frames the workbench and lectern from it. `debug.go alchemy` stands her
 at that edge of the table,
 facing the cauldron and lectern and close enough to sit. While she sits, the
-controls switch to the shared tabletop board page (`chess.puck`).
+controls switch to the shared tabletop board page (`../standard/contexts/tabletop.puck`).
 
 | Device | Move the cursor | Pick an element into a hand | Clear a partial hand | Stand up |
 |---|---|---|---|---|
