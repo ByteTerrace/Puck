@@ -3365,6 +3365,13 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
+- [high] FreeCell on the game station grows without bound: freecell-tests' World on the RTX 2060 reached 6.1 GB
+  private after 5.5 minutes, still climbing about 100 MB every 4 s, and the memory guard killed it. klondike-tests
+  peaked at 4.4 GB. Find what accumulates (the solver's search, a journal, or a per-tick allocation) and bound it.
+- [med] A station's console opened during a cold bake still shows bare glass for a while: the stand-in
+  (`SdfMeshPathBake.StandIns`) holds the interface picture, then releases before the terminal's painted product
+  draws. Once the bake settles, the terminal reads correctly (teal field, lettering). Find which product the
+  release accepts that carries no paints.
 - [high] The chess opponent's search is unbounded: on the RTX 2060 partner's machine, chess-tests'
   World peaked at 8.7 GB working set and 10.4 GB private over 28 minutes, never moved, and kept the turn
   (verdict 0, turn White at tick 601). The one-ply opponent's search needs a hard node and memory bound
