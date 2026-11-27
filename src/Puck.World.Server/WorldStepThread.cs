@@ -64,14 +64,10 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
     private bool m_reportedLate;
     // The execution context the wave was handed over from, which each tick runs in on whichever thread runs it.
     private ExecutionContext? m_context;
-    // The fork's body for a parallel wave, made with the first one.
-    private WavePartitions? m_partitions;
-
-    // Runs one slice per partition. A tick may replace its authority's arena, which the lane unit that forks declares
-    // (IJobLaneUnit.Run); the fork contract stays unmarked, so the partition reaches the slice through a delegate.
-    private sealed class WavePartitions(Action<int> run) : IJobPartitions {
-        public void Run(int partition) => run(partition);
-    }
+    // The fork's body for a parallel wave, made with the first one: one slice per partition. A tick may replace its
+    // authority's arena, which the lane unit that forks declares (IJobLaneUnit.Run); the fork contract stays unmarked,
+    // so the partition reaches the slice through a delegate.
+    private DelegatedPartitions? m_partitions;
 
     private sealed class Slot {
         public readonly HostFrameWork Work = new();
@@ -296,7 +292,7 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
 
         try {
             if (m_slots[0].Parallel) {
-                jobs!.Fork(body: (m_partitions ??= new WavePartitions(run: partition => RunSlot(slot: m_slots[partition]))), jobClass: JobClass.Tick, partitions: m_count);
+                jobs!.Fork(body: (m_partitions ??= new DelegatedPartitions(body: partition => RunSlot(slot: m_slots[partition]))), jobClass: JobClass.Tick, partitions: m_count);
             } else {
                 for (var index = 0; (index < m_count); index++) {
                     RunSlot(slot: m_slots[index]);

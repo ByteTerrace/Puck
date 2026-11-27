@@ -47,12 +47,7 @@ public static class PoolFork {
     /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
     public static void Run(int partitions, Action<int> body, int helpers = -1) {
         ArgumentNullException.ThrowIfNull(argument: body);
-        Run(body: new Delegated(body: body), helpers: helpers, partitions: partitions);
-    }
-
-    // A delegate's partitions.
-    private sealed class Delegated(Action<int> body) : IJobPartitions {
-        public void Run(int partition) => body(obj: partition);
+        Run(body: new DelegatedPartitions(body: body), helpers: helpers, partitions: partitions);
     }
 
     // One fork's partitions: the next unclaimed one, how many have finished, the event the last to finish sets, and the
