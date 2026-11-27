@@ -103,6 +103,11 @@
         "resolved": "0.11.6",
         "contentHash": "f33RkDtZO8VlGXCtmQIviOtxgnUdym9xx/b1p9h91CRGOsJFxCFOFK1FDbVt1OCf1aWwYejUFa2MOQyFWTFjbA=="
       },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "2.5.1",
+        "contentHash": "85yu455mmWgH6p/5LZhKDFqCC41+1fACeS3r2ruTO1AmsjrxEnZ9A9ly6NBlX8eRONQSGyjCB3XlWSD1mbYgRw=="
+      },
       "System.CommandLine": {
         "type": "Transitive",
         "resolved": "3.0.0",
@@ -205,6 +210,21 @@
       "ByteTerrace.Puck.Confinement": {
         "type": "Project"
       },
+      "ByteTerrace.Puck.GamingBricks.Forge": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.HumbleGamingDeck": {
         "type": "Project",
         "dependencies": {
@@ -219,6 +239,8 @@
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingDeck": "[0.1.0-alpha, )"
         }
       },
@@ -242,6 +264,22 @@
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
+      },
+      "ByteTerrace.Puck.State": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[2.*, )"
+        }
       },
       "puck.machines.post": {
         "type": "Project",

@@ -11920,7 +11920,7 @@ export type WorldPrototypeOcclusion = {
    */
   softness?: number | null;
   /**
-   * Which solid is fitted: a sphere, a capsule along the long axis, the box itself, or by default the one the box's proportions suggest.
+   * Which solid is fitted to the rest box: a sphere, a capsule along the long axis, the box itself, or by default the one the box's proportions suggest. A body whose kit's collider stands for it casts that collider's solid whatever this says.
    */
   shape?: SdfOccluderFit | null;
 };

@@ -97,7 +97,7 @@ half of these rules on every command, with no exemptions.
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
-| [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on the machine of each target (`cgb`, `dmg`, `agb`), the evidence the cartridge cost model's weights come from. |
+| [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on the machine of each target (`cgb`, `dmg`, `agb`, `hgd`), the evidence the cartridge cost model's weights come from. |
 | [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
 | [`puck channel`](#automation-commands) | `push` signs a `puck publish` tree's release with a channel host's root key and writes the tree through that host, objects before the manifest. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
@@ -278,7 +278,7 @@ puck cartridge-cost
 puck cartridge-cost --target cgb
 ```
 
-The verb boots `CartridgeCostMeasurement`'s probe cartridges on the Color, monochrome and Advanced machines (`--target` names one of `cgb`, `dmg`, `agb`). For each shape it
+The verb boots `CartridgeCostMeasurement`'s probe cartridges on the Color, monochrome and Advanced machines and the Deck (`--target` names one of `cgb`, `dmg`, `agb`, `hgd`). For each shape it
 bisects the largest per-frame iteration count the machine sustains at full frame rate, and prints one row per shape:
 the count and the cost model's units for the largest sustained probe. A `CLIPPED` row reached the search's ceiling
 rather than the machine's. Cost per iteration is inversely proportional to that capacity, so the rows are what
@@ -291,10 +291,12 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 puck cartridges deck --output .claude/scratch/deck
 ```
 
-`deck` writes one `.nes` image per Humble Gaming Deck test cartridge, each assembled by `DeckProgram` in
-`Puck.HumbleGamingDeck.Forge` (see the [Deck's hosting page](../emulation/hgd/hosting.md#test-cartridges)), and
-reports its SHA-256 hash. Worlds use authored `.deck` selections; native images are derived
-on demand and cached by the generator code and selection, never committed or compared by a gate.
+`deck` writes one `.nes` image per Humble Gaming Deck cartridge and reports its SHA-256 hash: each test cartridge
+assembled by `DeckProgram` in `Puck.HumbleGamingDeck.Forge` (see the [Deck's hosting page](../emulation/hgd/hosting.md#test-cartridges)),
+and each authored `*.hgd.puck` cartridge in `--source` (the checkout's `worlds/debug/cartridges/deck` when omitted),
+compiled by the [Deck's cartridge compiler](../emulation/hgd/README.md#compiled-cartridges). Worlds commit authored
+sources and selections; native images are derived on demand and cached by the generator code and input, never
+committed or compared by a gate.
 
 ## Automation commands
 

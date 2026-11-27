@@ -1,0 +1,148 @@
+// Ways back to normal size for a visitor the toybox made small (gallery.md, "Ways back to normal size"), played as a
+// player plays them: seat 1's own controls, worked by the standard's `walker` program (`route.play`), walk the body and
+// press the context button (`interact`) and the pick button (`confirm`) where a route step presses them.
+//
+//   a steward       made small on level 1's floor and stood in the lobby on level 0, outside every size zone so it
+//                   stays small, the body walks up to the lobby steward's slate, talks with it, asks the first choice
+//                   ("Help me back to my normal size") and is its full size again; the control talks and asks nothing
+//                   and stays small
+//   the mouse door  made small, the body walks through the little house's door on level 1, presses the context button
+//                   at the cake's table and walks back out, holding the full-size pass and at its full size
+//
+// Every point is derived from the gallery's plan (gallery/layout.puck's `stewardPlan`, `stewardSlate`, `mouseHouse` and
+// `mouseHousePoint`), so the scenarios follow the stewards and the house when they move. `puck test
+// worlds/debug/shrunk-ways-tests.puck`, and `--reproduce` to show two runs agree.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
+documentId: "debug"
+import "stopped-machines"
+import "gallery/layout"
+
+// The lobby's steward, its number among the speakers (its place in stewardPlan from 1), the way it faces and the way
+// across its front, and where a visitor stands to talk with it: a metre before its slate, inside its reach. The approach
+// starts 2.5 m back along its front from there, outside the reach, and faces along `askAcross` toward it.
+let askIndex = indexOf(map(stewardPlan, s => s.id), "lobby")
+let asked = stewardPlan[askIndex]
+let askNumber = (askIndex + 1)
+let askFacing = stewardFacing(asked)
+let askAcross = [(0 - askFacing[2]), 0, askFacing[0]]
+let askTalk = (stewardSlate(asked) + askFacing)
+let askStart = (askTalk - (askAcross * 2.5))
+function plan(p) = galleryWorld(p[0], p[1], p[2])
+// The heading (0 faces -z, 90 -x, 180 +z, 270 +x) along `askAcross`, which lies along a plan axis.
+let askStartYaw = ((askAcross[2] > 0.5) ? 180 : ((askAcross[2] < -0.5) ? 0 : ((askAcross[0] > 0.5) ? 270 : 90)))
+
+// The house's door is at its front, toward -z, so the approach faces +z (a heading of 180), and the table's floor is
+// 0.2 m before the cake.
+let cakeStand = [0, 0, (mouseHouseCake[2] - 0.2)]
+// The size the toybox gives a body without a pass (gallery/look.puck's lookWonderSize, rounded to the register's step).
+let smallAtMost = 0.16
+// How far before the door, in the world's z, a body stands once it has walked back out.
+let outsideZ = (mouseHousePoint(mouseHouseDoorway)[2] - 0.3)
+
+spawnPoints [
+  { id: "steward-approach", position: plan(askStart), yawDegrees: askStartYaw }
+  { id: "mouse-house-approach", position: mouseHousePoint(mouseHouseBefore), yawDegrees: 180 }
+]
+
+routes [
+  {
+    name: "steward-ask"
+    program: "walker"
+    chapters [
+      {
+        name: "up to the lobby's steward, and ask"
+        steps [
+          { $type: "go", point: plan(askTalk), pace: "walk", direct: true, within: 0.25 }
+          { $type: "press", action: "interact", seconds: 1 }
+          { $type: "press", action: "confirm", seconds: 1 }
+          { $type: "rest", seconds: 1 }
+        ]
+      }
+    ]
+  }
+  {
+    name: "steward-talk"
+    program: "walker"
+    chapters [
+      {
+        name: "up to the lobby's steward, and only talk"
+        steps [
+          { $type: "go", point: plan(askTalk), pace: "walk", direct: true, within: 0.25 }
+          { $type: "press", action: "interact", seconds: 1 }
+          { $type: "rest", seconds: 2 }
+        ]
+      }
+    ]
+  }
+  {
+    name: "mouse-house"
+    program: "walker"
+    chapters [
+      {
+        name: "through the little house's door to the cake, and back out"
+        steps [
+          { $type: "go", point: mouseHousePoint(mouseHouseDoorway), pace: "walk", direct: true, within: 0.05 }
+          { $type: "go", point: mouseHousePoint(mouseHouseInside), pace: "walk", direct: true, within: 0.08 }
+          { $type: "go", point: mouseHousePoint(cakeStand), pace: "walk", direct: true, within: 0.08 }
+          { $type: "press", action: "interact", seconds: 1 }
+          { $type: "go", point: mouseHousePoint(mouseHouseInside), pace: "walk", direct: true, within: 0.08 }
+          { $type: "go", point: mouseHousePoint(mouseHouseDoorway), pace: "walk", direct: true, within: 0.05 }
+          { $type: "go", point: mouseHousePoint(mouseHouseBefore), pace: "walk", direct: true, within: 0.2 }
+          { $type: "rest", seconds: 2 }
+        ]
+      }
+    ]
+  }
+]
+
+test "a small visitor asks a steward and is its full size again" {
+  when {
+    seat1: body.pose spawn:toybox 0
+    ticks 10
+    seat1: body.pose spawn:steward-approach 0
+    ticks 10
+    seat1: route.play steward-ask
+    ticks 900
+  }
+  expect {
+    bodyState(body, 0, size) == 1
+    bodyState(body, 0, sizeHold) == 0
+    conversationWith["0"] == askNumber
+    conversationShow[$"{askNumber}"] == 3
+  }
+}
+
+test "a small visitor who talks with a steward and asks nothing stays small" {
+  when {
+    seat1: body.pose spawn:toybox 0
+    ticks 10
+    seat1: body.pose spawn:steward-approach 0
+    ticks 10
+    seat1: route.play steward-talk
+    ticks 900
+  }
+  expect {
+    bodyState(body, 0, size) <= smallAtMost
+    conversationWith["0"] == askNumber
+    conversationShow[$"{askNumber}"] == 1
+  }
+}
+
+test "a small visitor walks through the mouse door, eats the cake and comes out at full size" {
+  when {
+    seat1: body.pose spawn:toybox 0
+    ticks 10
+    seat1: body.pose spawn:mouse-house-approach 0
+    ticks 10
+    seat1: route.play mouse-house
+    ticks 2400
+  }
+  expect {
+    bodyState(body, 0, wonderPass) == 1
+    bodyState(body, 0, size) == 1
+    bodyPosition(body, 0, z) < outsideZ
+  }
+}

@@ -238,6 +238,24 @@ public readonly struct FixedWorldCollider : IEquatable<FixedWorldCollider> {
     /// <summary>Gets the body-local primitive volumes, empty for a default collider.</summary>
     public ReadOnlySpan<FixedBodyColliderVolume> Volumes => m_volumes;
 
+    /// <summary>Compiles every kit's collider, one entry a kit row.</summary>
+    /// <param name="kits">The kit rows.</param>
+    /// <param name="creations">The creation rows a <see cref="WorldCollider.FromCreation"/> collider names.</param>
+    /// <returns>Each kit's compiled collider by kit row, <see langword="null"/> for a kit that authors none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="kits"/> or <paramref name="creations"/> is
+    /// <see langword="null"/>.</exception>
+    public static FixedWorldCollider?[] CompileEach(IReadOnlyList<WorldKit> kits, IReadOnlyList<WorldPrototype> creations) {
+        ArgumentNullException.ThrowIfNull(argument: kits);
+        ArgumentNullException.ThrowIfNull(argument: creations);
+
+        var colliders = new FixedWorldCollider?[kits.Count];
+
+        for (var index = 0; (index < colliders.Length); index++) {
+            colliders[index] = Compile(collider: kits[index].Collider, creations: creations);
+        }
+
+        return colliders;
+    }
     /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
     public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) {
         if (collider is null) {

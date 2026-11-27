@@ -281,6 +281,7 @@
     { "name": "world.nets", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.nudge", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.observe", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.occluders", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.ownership.accept", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.ownership.offer", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.ownership.reclaim", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

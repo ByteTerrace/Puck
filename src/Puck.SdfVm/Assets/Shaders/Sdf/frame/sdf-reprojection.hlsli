@@ -40,7 +40,7 @@ float3 sdfMeshPreviousPoseRow(uint word) {
 SdfMeshPose sdfMeshPreviousPoseOf(uint record) {
     uint word = sdfMeshPreviousPoseWord(record);
     int slot = asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD));
-    if (slot >= 0) {
+    if (slot != SDF_TRANSFORM_SLOT_NONE) {
         uint shown = sdfViewPoseSlot((uint)slot);
         return sdfMeshPoseOfRow(sdfPreviousDynamicTransforms[3u * shown], sdfPreviousDynamicTransforms[3u * shown + 1u],
             asfloat(sdfPreviousMeshTransforms[word + SDF_MESH_SCALE_WORD]));

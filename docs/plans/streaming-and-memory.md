@@ -1837,10 +1837,18 @@ Built with it:
   disposing the old cache first (`GpuFittedBuffer.Refit`; its job is
   exclusive), and the feedback table retires the old table and allocates the
   new one only once the retirement released it
-  (`SdfWorldTables.RetireBackgroundResource`'s `released`). The published table
-  is still replaced while its views read the old one, the transient that
-  remains. Check: `host.memory`'s `probe-trace hit-cache` and `probe-feedback`
-  families, whose `peak` stays at one table's bytes.
+  (`SdfWorldTables.RetireBackgroundResource`'s `released`). The views bind that
+  feedback table itself, so the volume stands once on the device, and a bound
+  table is unbound at the next preparation before it retires. Check:
+  `host.memory`'s `sdf.lighting` families (`probe-trace hit-cache`,
+  `probe-feedback`), whose `peak` stays at one table's bytes.
+- **The lighting reserves before it lights** (`SdfLightingHold`): the table and
+  caches of the tier's layout and the trace words of the meshes the static
+  draws name are reserved as the volume first stages, so the elastic budget
+  the bake is held to does not fall once the lighting allocates. Check:
+  `world.residency`'s selector `fixed=` and `elastic-budget=` read alike mid-bake
+  and after the lighting settles, and `host.memory families`' `reservation`
+  row for `sdf.lighting` shows `promised` falling as `held` rises.
 - **Each device authors its cascades' texels** (`WorldQualityPreset.ShadowTexels`,
   carried as `SdfFrame.ShadowTexels`), the engine keeping 2048. The 2060's table
   sets 1024 (`worlds/standard/quality.puck`), a quarter of each entry's layers.
@@ -1848,7 +1856,7 @@ Built with it:
 **Next steps, each with its check.**
 
 1. **The lighting overlay.** A residency whose static scene key and lighting
-   inputs equal another's binds that residency's published table and
+   inputs equal another's binds that residency's irradiance table and
    parameters instead of staging a volume of its own; the camera samples its
    exposure reads stay its own. Check: the follower's
    `trace-hits-device-bytes=0` beside the same irradiance revision, and its

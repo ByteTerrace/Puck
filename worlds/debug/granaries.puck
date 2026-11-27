@@ -22,8 +22,8 @@ import "gametable"
 // the board's rims whose coverage grows in three stages; the coverage rows hold, per account, how many providers cover
 // its piece.
 //
-// A seated player moves the cursor over the grid (pointer, keys, pad: the shared board page of chess.puck) and the
-// lectern's screen reads the piece under it: name, region, kind and SKU.
+// A seated player moves the cursor over the grid (pointer, keys, pad: the shared board page of
+// ../standard/contexts/tabletop.puck) and the lectern's screen reads the piece under it: name, region, kind and SKU.
 
 let granaryTable = [65, 8.55, 10.3]
 let granarySize = 4
@@ -652,7 +652,7 @@ rule "granary-inspect-sku-empty" {
 
 // ---- Seated play at the table -----------------------------------------------------------------------------------------
 // Seat 1 sits down with the context button (the board's engage block) and moves the cursor with the shared tabletop page
-// (chess.puck): the pointer, the movement keys, the d-pad or the stick, one cell a press.
+// (../standard/contexts/tabletop.puck): the pointer, the movement keys, the d-pad or the stick, one cell a press.
 
 rule "granary-seat-presses" {
   mode: Level

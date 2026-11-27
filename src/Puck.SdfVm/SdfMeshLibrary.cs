@@ -627,7 +627,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         foreach (var variant in held.Variants) { variant.Mesh.Release(cached: true); }
         _ = m_reads.TryRemove(key: key, value: out _);
-        if (!m_losing && (held.Variants.Count > 0)) {
+        // Only a mesh whose native storage its claims own can be known to live (SdfMesh.OwnsNativeStorage): a managed mesh
+        // has no claims to count, so remembering it would hold it alive for good and the budget would free nothing.
+        if (!m_losing && (held.Variants.Count > 0) && held.Variants[0].Mesh.OwnsNativeStorage) {
             m_let[key] = held;
             // The meshes nothing holds any more leave the table once it has grown well past what the cache holds.
             if (m_let.Count > ((4 * m_held.Count) + 4096)) {

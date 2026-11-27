@@ -327,7 +327,11 @@ public sealed class SdfMeshIrradianceSceneLawTests {
     }
     [Fact]
     public void ASceneBuiltFromAnotherBuildsOnlyTheGeometryNewToIt() {
-        var sheet = Sheet(materials: 3, quads: 96);
+        // The sheet is published by a host library, whose variant for other material ids names it as its geometry's source
+        // (SdfMesh.GeometrySource): a geometry is one by its source mesh, so the variant takes the sheet's.
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator());
+        var named = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0003ul);
+        var sheet = library.Store(geometry: named, materials: [0, 1, 2], mesh: Sheet(materials: 3, quads: 96));
         var cube = Cube();
         var draws = Draws(cube: cube, sheet: sheet);
         var first = SdfMeshIrradianceScene.Build(draws: draws)!;
@@ -340,8 +344,9 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.Equal(expected: (1, (long)other.TriangleCount, 1, (long)cube.TriangleCount), actual: (swapped.GeometriesBuilt, swapped.TrianglesBuilt, swapped.GeometriesReused, swapped.TrianglesRetained));
         AnswersAsTheSearch(draws: replaced, scene: swapped);
 
-        // A move and a renumbered mesh (the same buffers, other triangle materials) build nothing.
-        var renumbered = new SdfMesh(indices: sheet.Indices, positions: sheet.Positions, triangleMaterials: sheet.TriangleMaterials.ToArray().Select(selector: static material => (material + 5u)).ToArray());
+        // A move and a renumbered mesh (the library's variant of the sheet for other triangle materials) build nothing.
+        Assert.True(condition: library.TryTake(geometry: named, materials: [5, 6, 7], mesh: out var renumbered));
+        Assert.Same(expected: sheet, actual: renumbered.GeometrySource);
         var moved = replaced.Select(selector: (draw, index) => (index == 0) ? draw.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: -0.25f, zPosition: 0f)) with { Mesh = renumbered } : draw).ToArray();
         var shifted = SdfMeshIrradianceScene.Build(draws: moved, previous: swapped)!;
 
@@ -353,5 +358,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
 
         Assert.Equal(expected: (0, 2, (long)other.TriangleCount), actual: (back.GeometriesBuilt, back.GeometriesReused, back.TrianglesRetained));
         AnswersAsTheSearch(draws: draws, scene: back);
+        renumbered.Release();
+        sheet.Release();
     }
 }

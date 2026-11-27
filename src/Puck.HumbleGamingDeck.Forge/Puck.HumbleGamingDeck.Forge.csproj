@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Humble Gaming Deck cartridge tooling and extension: a small 6502 assembler that packs NROM, MMC1 and MMC3 images, the original test cartridges built with it, and the extension that registers the humble-gaming-deck machine engine.</Description>
+        <Description>Humble Gaming Deck cartridge tooling and extension: the native compiler for puck.cartridge.v1 documents of target hgd, the 6502 assembler that packs NROM, MMC1 and MMC3 images, the original test cartridges built with it, and the extension that registers the humble-gaming-deck machine engine.</Description>
         <EnableDynamicLoading>true</EnableDynamicLoading>
+        <!-- The shared cartridge forge it compiles documents from is not AOT compatible. -->
+        <IsAotCompatible>false</IsAotCompatible>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingDeck.Forge</PackageId>
         <PackageTags>authoring;determinism;homebrew;nes;rom;6502</PackageTags>
@@ -12,6 +14,8 @@
     <ItemGroup>
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.GamingBricks.Forge/Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="../Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
     </ItemGroup>
 </Project>
