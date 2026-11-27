@@ -91,8 +91,48 @@
       "default": null,
       "title": "WorldIdentityFacts"
     },
-    "records": {
-      "description": "Gets the immutable selection of identity-owned record pools.",
+    "travel": {
+      "description": "Gets the immutable travel classes of the identity\u0027s crossing pools.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "The travel class of one identity record pool.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "pool": {
+            "description": "The pool\u0027s name on the identity\u0027s document.",
+            "title": "CellName",
+            "type": "string"
+          },
+          "class": {
+            "description": "Its travel class.",
+            "enum": [
+              "Home",
+              "Crossing"
+            ],
+            "title": "WorldIdentityTravel",
+            "x-enumDescriptions": {
+              "Home": "The pool stays with the account: the player\u0027s own notes, tags and arrangement. A world on this account\u0027s host reads and writes it through the bound owned identity; a projection never carries it.",
+              "Crossing": "The pool crosses with the identity: discovered facts, marks, quest progress. A projection carries it to every world the identity enters, and its owner adopts what a colocated traveller carried home."
+            }
+          }
+        },
+        "required": [
+          "pool",
+          "class"
+        ],
+        "additionalProperties": false,
+        "title": "WorldIdentityPool"
+      },
+      "default": null
+    },
+    "homeScoped": {
+      "description": "Gets the immutable list of home-scoped facts and pools.",
       "type": [
         "array",
         "null"

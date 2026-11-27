@@ -1179,6 +1179,8 @@
         {"vocabulary": "expression", "operation": "Any", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["family.size"], "kernel": "state.expression.fold"},
         {"vocabulary": "expression", "operation": "Count", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["family.size"], "kernel": "state.expression.fold"},
         {"vocabulary": "expression", "operation": "Sum", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["family.size"], "kernel": "state.expression.fold"},
+        {"vocabulary": "expression", "operation": "ArgMinimum", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["family.size"], "kernel": "state.expression.fold"},
+        {"vocabulary": "expression", "operation": "ArgMaximum", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["family.size"], "kernel": "state.expression.fold"},
         {"vocabulary": "expression", "operation": "Call", "numericKinds": ["Int", "Fixed"], "shapeParameters": ["subprogram.tokens"], "kernel": "state.expression.program"},
         {"vocabulary": "expression", "operation": "Argument", "numericKinds": ["Int", "Fixed"], "shapeParameters": [], "kernel": "state.expression.program"},
         {"vocabulary": "expression", "operation": "Member", "numericKinds": ["Int", "Fixed"], "shapeParameters": [], "kernel": "state.expression.program"},

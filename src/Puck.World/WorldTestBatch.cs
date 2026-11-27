@@ -45,6 +45,9 @@ internal sealed class WorldTestBatch {
 
     private Timer? m_legDeadline;
     private string? m_legFailure;
+    // Each failed leg's directory and reason, repeated on the worker's own stderr when it exits: every leg's streams go
+    // to that leg's transcripts, so without these lines a failed worker exits 1 with nothing on its stderr.
+    private readonly List<string> m_failures = [];
     private WorldDisclosureRun? m_disclosure;
     private CrossingLog m_crossings = null!;
 
@@ -97,6 +100,10 @@ internal sealed class WorldTestBatch {
             ], null);
                 batch.ReleaseHost();
                 if ((exit != 0) || batch.m_aborted || (batch.m_index == startingIndex)) { break; }
+            }
+            foreach (var failure in batch.m_failures) { previousError.WriteLine(value: $"[test.batch: {failure}]"); }
+            if ((exit != 0) && (batch.m_index < legs.Length)) {
+                previousError.WriteLine(value: $"[test.batch: the host of leg {legs[batch.m_index].Directory} exited {exit}]");
             }
 
             return (((exit == 0) && !batch.m_failed && (batch.m_index == legs.Length)) ? 0 : 1);
@@ -223,7 +230,10 @@ internal sealed class WorldTestBatch {
         try { return CompleteLeg(); } catch (Exception exception) {
             m_failed = true;
             m_aborted = true;
-            try { Console.Error.WriteLine(value: $"[test.batch: {exception}]"); } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
+            try {
+                Console.Error.WriteLine(value: $"[test.batch: {exception}]");
+                RecordFailure(leg: m_legs[m_index], reason: $"the worker could not report the leg: {exception.Message}");
+            } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
             return true;
         }
     }
@@ -288,12 +298,21 @@ internal sealed class WorldTestBatch {
         } catch (Exception exception) {
             Console.Error.WriteLine(value: $"[test.batch: {exception}]");
             try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "1"); } catch { }
+            RecordFailure(leg: leg, reason: exception.Message);
             m_failed = true;
         }
         m_output.Flush(); m_error.Flush();
         m_index++;
         Get<IHostApplicationLifetime>().StopApplication();
         return true;
+    }
+    // Names a failed leg's reason in its directory (`failure`, one line, which the CLI reports beside the leg's exit
+    // code) and keeps it for the worker's own stderr.
+    private void RecordFailure(Leg leg, string reason) {
+        var line = reason.ReplaceLineEndings(replacementText: " ");
+
+        m_failures.Add(item: $"leg {leg.Directory} failed: {line}");
+        try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "failure"), line); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private void ArchiveStateFiles(string directory) {
         var root = Get<WorldStateRoot>().FullPath;

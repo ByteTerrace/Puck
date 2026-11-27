@@ -11,7 +11,7 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 |---|---|---|---|
 | Watchdog | [watchdog.puck](watchdog.puck) | [addons/watchdog.wat](addons/watchdog.wat) | Checks invariants every tick and records each violation with its tick |
 | Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the display the Moth stands at on a HUD panel |
-| Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 52, that follows the Moth |
+| Companion | [companion.puck](companion.puck) | [standard/addons/companion.wat](../standard/addons/companion.wat) | The standard companion for seat 0, body 52, mounted as `companion0` |
 | Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 54; off by default |
 | Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 53 through authored waypoints and marks misses/falls; off by default |
 | Machine debugger | [machine-debugger.puck](machine-debugger.puck) | [addons/machine-debugger.wat](addons/machine-debugger.wat) | Generic input, probes and machine health checks; off by default |
@@ -243,11 +243,23 @@ Mount refusals, receipt differences and replay failures still report normally.
 
 ## The companion
 
+The Moth's companion is the standard companion
+([standard/companion.puck](../standard/companion.puck)) expanded for seat 0:
+`companionDesign` once, with the gallery's exhibits, screens, light and portals
+as its interests, then `companion(owner: 0, …)`. Its rows carry the owner's seat
+in their names (`companionSense0`, `companionGlow0`, `companionGuide0`,
+`companionGuiding0`), and its driver mounts as `companion0`. The module's header
+names its three layers (data, rules, driver) and the guide input.
+
 The companion is a 24 cm faerie: an amber seed held at both tips of an open ivory
 eye, with a lavender cuff. Its warm emissive core lights its shell through the
 world's existing irradiance and exposure. Four connected sweeps share one motion
 owner, so banking keeps every attachment intact. The separate neutral `standIn`
 creation still draws the fuzzer and traversal walkers.
+
+Its body holds the standard's `companion` role and follows seat 0, so it crosses
+a portal with the Moth under the destination's role declaration
+([companions](../../docs/decisions/companions.md#the-standard-companion)).
 
 Body 52 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
 existing colliding free-flight Lift hold and the ordinary forward, strafe and
@@ -262,26 +274,40 @@ Seeded PCG choices alternate pauses, drifts, loops, a visit near the Moth's face
 and brief inspections of nearby exhibits, lights, screens and portals. Choices
 last 2.2–8.2 seconds and vary their destinations and loop periods. Movement and
 height changes make it attend to a run, jump or stop; the Moth's quaternion keeps
-face inspections aligned when she turns. Nearby bodies supply avoidance and
-approaching-body threats. The world's `companionSense` projection also supplies
+face inspections aligned when she turns. The interest it inspects is the nearest
+of the world's interests within 4 m of her head, which one `argmin` fold over the
+interest rows finds each tick. Nearby bodies supply avoidance and
+approaching-body threats. The sense row `companionSense0` also supplies
 the nearest active body's root within 1.5 m, selected by one `nearest` population
 scan per tick; the avoidance point stays 0.8 m above that root. Selection uses
 root distance rather than distance to the raised point, keeping proximity
-independent of that target offset. The projection supplies
-the guide's speech arrival and the lift's door edges as positioned cues. A
+independent of that target offset. The guide's speech arrival and the lift's
+door edges reach it as positioned sounds (`companionSound`). A
 tick-driven glow pulse speeds up and brightens with the guest's flight, and the
 connected shell banks with its acceleration.
 
+A guide outranks all of that but the evasions: `companion.guide 0 <x> <y> <z>
+<mode>` marks a point (mode 1 hovers over it, 2 hovers and pulses, 3 leads the
+Moth toward it), `companion.guide.body 0 <body> <mode>` marks a body,
+`companion.ping 0 <x> <y> <z>` marks a point for six seconds, and
+`companion.guide.clear 0` returns it to her. `world.state companionSense0`
+reads what the guest is told.
+
+The garden's obelisk teaches it sight: a seat playing under an identity that
+stands within 3 m of the obelisk carries `companionSight` on that identity, and
+back in the gallery its curiosity reaches 8 m (`world.state companionReach0`).
+An anonymous seat has nowhere to keep the fact, so the grant refuses for it.
+
 `companion.threat <x> <y> <z> <vx> <vy> <vz>` supplies one generic world-space
-threat: point in metres and velocity in metres/second. It arms `motionThreat`
+threat: point in metres and velocity in metres/second. It arms `companionThreat`
 for 0.6 seconds. The guest predicts closest approach over the next 0.35 seconds,
 flits clear with a seeded lateral choice, pauses startled, then comes back.
-`host.log category addon.log` reports `companion: evade` on each actual dodge.
+`host.log category addon.log` reports `companion0: evade` on each actual dodge.
 A future tracked hand supplies this same authoritative input; camera pixels or
 wall-clock probe values never enter the guest's decisions directly.
 
 The guest retains Drive only over body 52 and Observe over the two poses. One
-additional Observe grant discloses the sensory row (21 reads/tick, budget 24).
+additional Observe grant discloses the sensory row (24 reads/tick, budget 28).
 It has no Edit, Mutate, pose or teleport grant. All choices and movement are
 integer simulation work; replay reconstructs its seeded guest memory under the
 existing pinned-module receipt. Captured frames are evidence of presentation,

@@ -1,194 +1,73 @@
-// The faerie: a 24 cm seed of warm light in a continuous ivory eye. Its character lives in these world sources
-// and companion.wat. The engine supplies ordinary colliding free flight, Drive and Observe.
-// Imported before gallery/gallery.puck: body (galleryPopulation - 1) remains the companion and the lift keeps its own population slot.
+// The Moth's companion: the standard companion (standard/companion.puck) for seat 0, with the gallery's exhibits,
+// lights, screens and portals as its interests and the gallery's own cues as the sounds it turns toward.
+// Imported before gallery/gallery.puck: body (galleryPopulation - 1) is the companion's, and the lift keeps its own
+// population slot.
 import "../standard/inputs"
-import "../standard/kits"
-import "../standard/rig"
+import "../standard/companion"
 import "shapes"
-import "companion-senses"
 
 let companionBody = (galleryPopulation - 1)
-let mothBody = 0
 
 exports {
-  reads [companion]
+  reads [companionGlow0]
 }
 
-prototypes {
-  prototype "companion" {
-    document {
-      name: "lantern seed"
-      schema: "puck.creation.v2"
-      palette [
-        { color: "#F2C49A", roughness: 0.4, specular: 0.2 }
-        { color: "#FF9F38", roughness: 0.3, emissive: 900, emissiveLane: 0 }
-        { color: "#744080", roughness: 0.5, specular: 0.15 }
-      ]
-      // Both curved sides meet the seed at both tips. All pieces ride one root: banking opens no attachment.
-      shape Sweep "husk-left" {
-        position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
-        group: 1
-        material: 0
-        curve {
-          a [-0.025, 0.025, 0]
-          b [0.185, 0.125, 0]
-          c [0.025, 0.235, 0]
-          radiusStart: 0.016
-          radiusEnd: 0.012
-          bulge: 0.005
-        }
-        swings [
-          swing("bank", [0, 0, -1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
-          swing("pitch", [-1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
-        ]
-      }
-      shape Sweep "husk-right" {
-        position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
-        group: 1
-        material: 0
-        parent: "husk-left"
-        curve {
-          a [-0.025, 0.025, 0]
-          b [-0.135, 0.135, -0.005]
-          c [0.025, 0.235, 0]
-          radiusStart: 0.016
-          radiusEnd: 0.012
-        }
-      }
-      shape Sweep "seed" {
-        position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
-        group: 1
-        material: 1
-        parent: "husk-left"
-        curve {
-          a [-0.025, 0.027, 0]
-          b [-0.005, 0.12, 0.012]
-          c [0.025, 0.233, 0]
-          radiusStart: 0.009
-          radiusEnd: 0.009
-          bulge: 0.018
-        }
-      }
-      shape Sweep "lavender-cuff" {
-        position [0, 0, 0]
-        rotation: rotate([0, 1, 0], 180)
-        group: 1
-        material: 2
-        parent: "husk-left"
-        curve {
-          a [-0.025, 0.025, -0.003]
-          b [0.021, 0.05, -0.003]
-          c [0.039, 0.071, -0.003]
-          radiusStart: 0.018
-          radiusEnd: 0.019
-        }
-      }
-      drivers [
-        { name: "bank", signal: "lateralAcceleration", cadence: 1, when ["always"] }
-        { name: "pitch", signal: "forwardAcceleration", cadence: 1, when ["always"] }
-      ]
-    }
-  }
-}
+// Each display's exhibit, the middle of the one its turntable shows, comes from the gallery layout, shared with its
+// plinth and guide region. Kind 1 is an exhibit, 2 a screen, 3 a light and 4 a portal.
+let companionAttractions = concat(
+  map(galleryDisplays, display => {
+    x: gallerySite[0] + display.x
+    y: displayFloor(display) + displayExhibitDrop + (1.2 * displayExhibitScale)
+    z: gallerySite[2] + display.z
+    kind: 1
+  }),
+  [
+    { x: brickPlayAt[0], y: 0.17, z: brickPlayAt[2], kind: 2 }
+    { x: advancedPlayAt[0], y: 0.96, z: advancedPlayAt[2], kind: 2 }
+    { x: deckPlayAt[0], y: 1.15, z: deckPlayAt[2], kind: 2 }
+    { x: 11.2 + galleryWestShift, y: 1.35, z: 23.7, kind: 2 }
+    { x: 11, y: 2.5, z: 35, kind: 3 }
+    { x: 52.2, y: 1.65, z: 34.5, kind: 4 }
+    { x: 68.5, y: 1.65, z: 34.5, kind: 4 }
+    { x: 57, y: 1.65, z: 38.5, kind: 4 }
+    { x: 64, y: 1.65, z: 38.5, kind: 4 }
+  ]
+)
 
-kits [
-  {
-    name: "companion-flight"
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    collider: sphere(radius: 0.125)
-    mass: 0
-    motion {
-      facingSnap: false
-      holds [
-        {
-          name: "takeoff"
-          bond: Surface
-          hold: Gravity
-          cone [0, 60]
-          reach: 0.3
-          forward: Heading
-          gravity: standardGravity
-          envelope: standardSink
-          thrust: 1
-        }
-        {
-          name: "hover"
-          bond: Free
-          hold: Lift
-          forward: Heading
-          lift: 1
-          speed: 11
-          gravity: standardGravity
-          thrust: 1
-        }
-      ]
-      moveFrame: World
-      shaping [{ along { engage: 32, release: 42 }, turnScale: 1 }]
-      speed { value: 11 }
-      stepHeight: 0
-      turn { falloff: 1, maxPitch: 1.2, pitchRate: 0, rate: 5 }
-    }
-  }
-]
+companionDesign(
+  population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
+  interests: companionAttractions
+)
+companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1])
+// The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
+companionSight(owner: 0)
 
-looks [
-  {
-    name: "companion"
-    scale: 1
-    source: creation(prototypeId: companion)
-    motion {
-      cues []
-      gaitAmplitude: 0
-      replayFrames: false
-      secondsPerFrame: 0
-      lanes [companionGlow.level]
-    }
-  }
-]
-
-placements {
-  placement "companion" {
-    prototype: "companion"
-    position [-1.2, 1.52, 1]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "companion-flight"
-      look: "companion"
-      source: "Idle"
-    }
-  }
-}
-
-addon "companion" {
-  modulePath: "addons/companion.wat"
-  hash: auto
-  fuel: 0
-  enabled: true
-  requests [
-    { capability: Drive, subject: $"body:{companionBody}" }
-    { capability: Observe, subject: $"body:{companionBody}" }
-    { capability: Observe, subject: $"body:{mothBody}" }
-    { capability: Observe, subject: "state:companionSense" }
+state {
+  world [
+    // The cue edges the gallery's sounds are heard at: the guide's spoken arrival and the lift's door.
+    { name: "companionCue", kind: "Int", cells: [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
   ]
 }
 
-// Drive remains confined to its body, with Observe over the two poses and the world's sensory projection.
-// The guest has no pose, edit, teleport or document mutation authority.
-grants [
-  { grantee: "addon:companion", capability: Drive, subject: $"body:{companionBody}", budget: 4 }
-  { grantee: "addon:companion", capability: Observe, subject: $"body:{companionBody}", budget: 1 }
-  { grantee: "addon:companion", capability: Observe, subject: $"body:{mothBody}", budget: 1 }
-  { grantee: "addon:companion", capability: Observe, subject: "state:companionSense", budget: 24 }
-]
+// The guide's spoken arrival and the lift's moving door are authored cue edges. Their points use the same sensory
+// input as a future in-world sound source, never an unrecorded hardware audio callback.
+rule "companion-hears-guide" {
+  when guideAt != companionCue.guide
+  mode: Level
+  companionCue.guide = guideAt
+  companionSound.x = bodyPosition(body, 0, x)
+  companionSound.y = bodyPosition(body, 0, y) + 1.7
+  companionSound.z = bodyPosition(body, 0, z)
+  companionSound.level = 1
+  schedule companionSoundUntil in 0.4s
+}
+rule "companion-hears-door" {
+  when liftDoors.car != companionCue.door
+  mode: Level
+  companionCue.door = liftDoors.car
+  companionSound.x = 16
+  companionSound.y = bodyPosition(body, 41, y) + 1.5
+  companionSound.z = 36.4
+  companionSound.level = 0.8
+  schedule companionSoundUntil in 0.4s
+}

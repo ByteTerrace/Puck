@@ -621,12 +621,12 @@ public static class WorldAdjacencyPolicy {
     private delegate bool ProofDerivation(WorldDefinition definition, out FixedQ4816 value, out string reason);
     private sealed record Proof(bool Proven, FixedQ4816 Value, string Reason);
     private sealed class Proofs(ProofDerivation derivation) {
-        private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Proof> m_table = new();
+        private readonly WorldDocumentDerivedTable<Proof> m_table = new();
         private readonly Func<WorldDefinition, Proof> m_derive = candidate => new Proof(
             Proven: derivation(candidate, out var value, out var reason), Value: value, Reason: reason);
 
         public bool Answer(WorldDefinition definition, out FixedQ4816 value, out string reason) {
-            var proof = m_table.GetValue(key: definition, derive: m_derive);
+            var proof = m_table.GetValue(definition: definition, derive: m_derive);
 
             value = proof.Value;
             reason = proof.Reason;

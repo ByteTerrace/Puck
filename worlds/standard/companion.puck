@@ -1,0 +1,499 @@
+// The companion: a small flying character that belongs to a player, follows them everywhere, and marks what matters
+// in the world, as a guiding fairy does (docs/decisions/play.md, "The companion is a diegetic marker"). A module
+// library: it hands its importers templates and emits no document.
+//
+// A companion has three layers, and an author works in the first two without touching the third:
+//
+//   data      what the world offers the companion: its interests (points worth a look, `companionInterests`) and the
+//             world events it senses (a swing at it, `companionThreat`; a sound, `companionSound`).
+//   rules     its authored behaviour (`companion`): what it notices, where a guide sends it, how it glows. They
+//             project everything into the owner's sense row, `companionSense<owner>`, every tick.
+//   driver    the pinned addon (addons/companion.wat) that flies the body: following its owner along their route,
+//             idling, evading, and flying to the guide point when one is set. It reads only the sense row and the two
+//             poses its grants name, so the same driver serves every world and every owner.
+//
+// The guide is the companion's priority input: a point, a body or a place (a place is its point), with a mode.
+// Quests, lock-on and a player's marks write it, and it outranks curiosity:
+//
+//   companionGuide<owner>     Fixed: x, y, z, the point guided to when no body is.
+//   companionGuiding<owner>   Int: mode (0 none, 1 hover over it, 2 hover and pulse, 3 lead the owner toward it), body
+//                             (the body guided to, or -1 for the point), ping (1 while the guide is a short-lived mark)
+//                             and until (the tick a ping lapses at).
+//
+// The console writes it with `companion.guide`, `companion.guide.body`, `companion.ping` and `companion.guide.clear`;
+// a world's rule writes the same cells.
+//
+// One companion serves each owner, keyed by the owner's local seat: seat n drives body n, so `owner` is both. Its body
+// holds the standard's `companion` role (companions.puck) and follows that seat, so it crosses into another world when
+// its owner does, under the destination's role declaration (docs/decisions/companions.md). What a companion has
+// learned or been given lives on its owner's identity, not on the companion (`companionUnlocks`), so it persists and
+// every world the owner visits reads it.
+
+
+import "kits"
+import "rig"
+
+// The sense row's cells, in the order the driver reads them (addons/companion.wat's key table).
+let companionSenseKeys = [
+  "active", "x", "y", "z", "vx", "vy", "vz", "ix", "iy", "iz", "kind", "nx", "ny", "nz", "near", "guide", "sx", "sy",
+  "sz", "sound", "mode", "gx", "gy", "gz"
+]
+
+// The parts every companion in a world shares: its creation, its flight, the world events it senses, the world's
+// interests and the console's guide commands. `population` is the world's body capacity, every slot of which may be a
+// neighbour the companion keeps clear of. `interests` are the points worth a look, each `{ x, y, z, kind }` (kind is
+// the world's own label, 1 or more). `threatSeconds` is how long a swing stays a threat.
+template companionDesign(population, interests = [], threatSeconds = 0.6s) {
+  prototypes {
+    // A 24 cm seed of warm light in a continuous ivory eye. Four connected sweeps ride one root, so banking opens no
+    // attachment.
+    prototype "companion" {
+      document {
+        name: "lantern seed"
+        schema: "puck.creation.v2"
+        palette [
+          { color: "#F2C49A", roughness: 0.4, specular: 0.2 }
+          { color: "#FF9F38", roughness: 0.3, emissive: 900, emissiveLane: 0 }
+          { color: "#744080", roughness: 0.5, specular: 0.15 }
+        ]
+        shape Sweep "husk-left" {
+          position [0, 0, 0]
+          rotation: rotate([0, 1, 0], 180)
+          group: 1
+          material: 0
+          curve {
+            a [-0.025, 0.025, 0]
+            b [0.185, 0.125, 0]
+            c [0.025, 0.235, 0]
+            radiusStart: 0.016
+            radiusEnd: 0.012
+            bulge: 0.005
+          }
+          swings [
+            swing("bank", [0, 0, -1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
+            swing("pitch", [-1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
+          ]
+        }
+        shape Sweep "husk-right" {
+          position [0, 0, 0]
+          rotation: rotate([0, 1, 0], 180)
+          group: 1
+          material: 0
+          parent: "husk-left"
+          curve {
+            a [-0.025, 0.025, 0]
+            b [-0.135, 0.135, -0.005]
+            c [0.025, 0.235, 0]
+            radiusStart: 0.016
+            radiusEnd: 0.012
+          }
+        }
+        shape Sweep "seed" {
+          position [0, 0, 0]
+          rotation: rotate([0, 1, 0], 180)
+          group: 1
+          material: 1
+          parent: "husk-left"
+          curve {
+            a [-0.025, 0.027, 0]
+            b [-0.005, 0.12, 0.012]
+            c [0.025, 0.233, 0]
+            radiusStart: 0.009
+            radiusEnd: 0.009
+            bulge: 0.018
+          }
+        }
+        shape Sweep "lavender-cuff" {
+          position [0, 0, 0]
+          rotation: rotate([0, 1, 0], 180)
+          group: 1
+          material: 2
+          parent: "husk-left"
+          curve {
+            a [-0.025, 0.025, -0.003]
+            b [0.021, 0.05, -0.003]
+            c [0.039, 0.071, -0.003]
+            radiusStart: 0.018
+            radiusEnd: 0.019
+          }
+        }
+        drivers [
+          { name: "bank", signal: "lateralAcceleration", cadence: 1, when ["always"] }
+          { name: "pitch", signal: "forwardAcceleration", cadence: 1, when ["always"] }
+        ]
+      }
+    }
+  }
+
+  // Ordinary colliding free flight: a surface takeoff hold and a lift hold, driven through forward, strafe and rise.
+  kits [
+    {
+      name: "companion-flight"
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: sphere(radius: 0.125)
+      mass: 0
+      motion {
+        facingSnap: false
+        holds [
+          {
+            name: "takeoff"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 0.3
+            forward: Heading
+            gravity: standardGravity
+            envelope: standardSink
+            thrust: 1
+          }
+          {
+            name: "hover"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: 11
+            gravity: standardGravity
+            thrust: 1
+          }
+        ]
+        moveFrame: World
+        shaping [{ along { engage: 32, release: 42 }, turnScale: 1 }]
+        speed { value: 11 }
+        stepHeight: 0
+        turn { falloff: 1, maxPitch: 1.2, pitchRate: 0, rate: 5 }
+      }
+    }
+  ]
+
+  state {
+    world [
+      // A swing at the companion: a world point and velocity, in metres and metres a second, armed for
+      // `threatSeconds`. A tracked hand writes the same cells the console's `companion.threat` does.
+      { name: "companionThreat", kind: "Fixed", cells: map(["active", "x", "y", "z", "vx", "vy", "vz"], k => { key: k, value: 0 }) }
+      { name: "companionThreatUntil", kind: "Int", value: 0 }
+      // A sound a companion turns toward: a world point and a loudness, 0 to 1. A world's rule writes it at a cue's
+      // edge and `companionSoundUntil` ends it.
+      { name: "companionSound", kind: "Fixed", cells: map(["x", "y", "z", "level"], k => { key: k, value: 0 }) }
+      { name: "companionSoundUntil", kind: "Int", value: 0 }
+      // The world's interests, one entry per index: `companionInterests` holds each index, and the four rows beside
+      // it are keyed alike, so one fold over the indices reads every entry (the senses' `argmin`).
+      { name: "companionInterests", kind: "Int", capacity: maximum(1, length(interests)), cells: map(range(0, length(interests)), i => { key: $"{i}", value: i }) }
+      { name: "companionInterestX", kind: "Fixed", capacity: maximum(1, length(interests)), cells: map(range(0, length(interests)), i => { key: $"{i}", value: interests[i].x }) }
+      { name: "companionInterestY", kind: "Fixed", capacity: maximum(1, length(interests)), cells: map(range(0, length(interests)), i => { key: $"{i}", value: interests[i].y }) }
+      { name: "companionInterestZ", kind: "Fixed", capacity: maximum(1, length(interests)), cells: map(range(0, length(interests)), i => { key: $"{i}", value: interests[i].z }) }
+      { name: "companionInterestKind", kind: "Int", capacity: maximum(1, length(interests)), cells: map(range(0, length(interests)), i => { key: $"{i}", value: interests[i].kind }) }
+      // Every population slot a neighbour may hold; `nearest` skips inactive bodies and the asking body itself.
+      { name: "companionBodies", kind: "Int", cells: map(range(0, population), i => { key: $"{i}", value: 1 }) }
+    ]
+  }
+
+  rule "companion-threat-arm" {
+    when companionThreat.active == 1
+    mode: Edge
+    schedule companionThreatUntil in threatSeconds
+  }
+  rule "companion-threat-expire" {
+    when companionThreat.active == 1 and $tick >= companionThreatUntil
+    mode: Level
+    companionThreat.active = 0
+  }
+  rule "companion-sound-end" {
+    when companionSound.level > 0 and $tick >= companionSoundUntil
+    mode: Level
+    companionSound.level = 0
+  }
+
+  commands [
+    {
+      name: "companion.threat"
+      help: "Swing a world-space point and velocity at the companions (metres and metres/second)."
+      parameters [
+        { name: "x", kind: Number }, { name: "y", kind: Number }, { name: "z", kind: Number }
+        { name: "vx", kind: Number }, { name: "vy", kind: Number }, { name: "vz", kind: Number }
+      ]
+      lines [
+        "world.state.cell.set companionThreat x {x}", "world.state.cell.set companionThreat y {y}"
+        "world.state.cell.set companionThreat z {z}", "world.state.cell.set companionThreat vx {vx}"
+        "world.state.cell.set companionThreat vy {vy}", "world.state.cell.set companionThreat vz {vz}"
+        "world.state.cell.set companionThreat active 0", "world.state.cell.set companionThreat active 1"
+      ]
+    }
+    {
+      name: "companion.guide"
+      help: "Mark a world point for an owner's companion: mode 1 hovers over it, 2 hovers and pulses, 3 leads toward it."
+      parameters [
+        { name: "owner", kind: Number }, { name: "x", kind: Number }, { name: "y", kind: Number }
+        { name: "z", kind: Number }, { name: "mode", kind: Number }
+      ]
+      lines [
+        "world.state.cell.set companionGuide{owner} x {x}", "world.state.cell.set companionGuide{owner} y {y}"
+        "world.state.cell.set companionGuide{owner} z {z}", "world.state.cell.set companionGuiding{owner} body -1"
+        "world.state.cell.set companionGuiding{owner} ping 0", "world.state.cell.set companionGuiding{owner} mode {mode}"
+      ]
+    }
+    {
+      name: "companion.guide.body"
+      help: "Mark a body for an owner's companion to guide to, in the modes companion.guide takes."
+      parameters [{ name: "owner", kind: Number }, { name: "body", kind: Number }, { name: "mode", kind: Number }]
+      lines [
+        "world.state.cell.set companionGuiding{owner} body {body}", "world.state.cell.set companionGuiding{owner} ping 0"
+        "world.state.cell.set companionGuiding{owner} mode {mode}"
+      ]
+    }
+    {
+      name: "companion.ping"
+      help: "Mark a world point briefly: the owner's companion hovers and pulses over it until the ping lapses."
+      parameters [{ name: "owner", kind: Number }, { name: "x", kind: Number }, { name: "y", kind: Number }, { name: "z", kind: Number }]
+      lines [
+        "world.state.cell.set companionGuide{owner} x {x}", "world.state.cell.set companionGuide{owner} y {y}"
+        "world.state.cell.set companionGuide{owner} z {z}", "world.state.cell.set companionGuiding{owner} body -1"
+        "world.state.cell.set companionGuiding{owner} mode 2", "world.state.cell.set companionGuiding{owner} ping 0"
+        "world.state.cell.set companionGuiding{owner} ping 1"
+      ]
+    }
+    {
+      name: "companion.guide.clear"
+      help: "Clear an owner's companion guide, returning it to its owner and its curiosity."
+      parameters [{ name: "owner", kind: Number }]
+      lines ["world.state.cell.set companionGuiding{owner} ping 0", "world.state.cell.set companionGuiding{owner} mode 0"]
+    }
+  ]
+}
+
+// One owner's companion. `owner` is the local seat it belongs to (and so the body it follows); `slot` is the population
+// slot its placement inhabits, which only its driver's grants name; `position` is where it waits at boot. `attention`
+// is how far, in metres, its curiosity reaches from its owner's head; `lead` how far ahead of its owner it flies while
+// leading; `ping` how long a short-lived mark lasts. A world expands `companionDesign` once before any `companion`.
+template companion(owner, slot, position, attention = 4, lead = 3, ping = 6s) {
+  looks [
+    {
+      name: $"companion{owner}"
+      scale: 1
+      source: creation(prototypeId: companion)
+      motion {
+        cues []
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+        lanes [$"companionGlow{owner}"["level"]]
+      }
+    }
+  ]
+
+  placements {
+    placement $"companion{owner}" {
+      prototype: "companion"
+      position: position
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "companion-flight"
+        look: $"companion{owner}"
+        source: "Idle"
+        role: "companion"
+        follows: owner
+      }
+    }
+  }
+
+  state {
+    world [
+      { name: $"companionSense{owner}", kind: "Fixed", cells: map(companionSenseKeys, k => { key: k, value: ((k == "near") ? -1 : 0) }) }
+      { name: $"companionGlow{owner}", kind: "Fixed", cells: [
+        { key: "level", value: 0.7 }, { key: "phase", value: 0 }, { key: "speed", value: 0 }
+        { key: "x", value: position[0] }, { key: "y", value: position[1] }, { key: "z", value: position[2] }
+      ] }
+      { name: $"companionNeighbour{owner}", kind: "Int", cells: [{ key: "body", value: -1 }] }
+      // How far, in metres, its curiosity reaches from its owner's head: `attention` until a rule (an unlock such as
+      // `companionSight`) writes another reach.
+      { name: $"companionReach{owner}", kind: "Fixed", value: attention }
+      { name: $"companionGuide{owner}", kind: "Fixed", cells: [{ key: "x", value: 0 }, { key: "y", value: 0 }, { key: "z", value: 0 }] }
+      { name: $"companionGuiding{owner}", kind: "Int", cells: [
+        { key: "mode", value: 0 }, { key: "body", value: -1 }, { key: "ping", value: 0 }, { key: "until", value: 0 }
+      ] }
+    ]
+  }
+
+  // What the companion senses this tick: the world's threat and sound, the nearest interest within its attention (its
+  // owner's face when none is), and the guide. One fold over the world's interests finds the nearest.
+  rule $"companion{owner}-senses" {
+    local ox = bodyPosition(body, owner, x)
+    local oy = bodyPosition(body, owner, y) + 1.5
+    local oz = bodyPosition(body, owner, z)
+    local interest = argmin(companionInterests, i -> (companionInterestX[i] - ox) * (companionInterestX[i] - ox) + (companionInterestY[i] - oy) * (companionInterestY[i] - oy) + (companionInterestZ[i] - oz) * (companionInterestZ[i] - oz)) ?? -1
+    local dx = companionInterestX[interest] - ox
+    local dy = companionInterestY[interest] - oy
+    local dz = companionInterestZ[interest] - oz
+    local noticed = (interest >= 0) and ((dx * dx + dy * dy + dz * dz) < ($"companionReach{owner}" * $"companionReach{owner}"))
+    when 1
+    mode: Level
+    $"companionSense{owner}"["active"] = companionThreat.active
+    $"companionSense{owner}"["x"] = companionThreat.x
+    $"companionSense{owner}"["y"] = companionThreat.y
+    $"companionSense{owner}"["z"] = companionThreat.z
+    $"companionSense{owner}"["vx"] = companionThreat.vx
+    $"companionSense{owner}"["vy"] = companionThreat.vy
+    $"companionSense{owner}"["vz"] = companionThreat.vz
+    $"companionSense{owner}"["sx"] = companionSound.x
+    $"companionSense{owner}"["sy"] = companionSound.y
+    $"companionSense{owner}"["sz"] = companionSound.z
+    $"companionSense{owner}"["sound"] = companionSound.level
+    if noticed {
+      $"companionSense{owner}"["ix"] = companionInterestX[interest]
+      $"companionSense{owner}"["iy"] = companionInterestY[interest]
+      $"companionSense{owner}"["iz"] = companionInterestZ[interest]
+      $"companionSense{owner}"["kind"] = companionInterestKind[interest]
+    } else {
+      $"companionSense{owner}"["ix"] = ox
+      $"companionSense{owner}"["iy"] = oy + 0.15
+      $"companionSense{owner}"["iz"] = oz
+      $"companionSense{owner}"["kind"] = 0
+    }
+  }
+
+  // The nearest other body, kept clear of: one population scan a tick, then the point 0.8 m above its root when it is
+  // within 1.5 m.
+  rule $"companion{owner}-neighbour" {
+    when 1
+    mode: Level
+    $"companionNeighbour{owner}"["body"] = nearest(placement, $"companion{owner}", companionBodies)
+  }
+  rule $"companion{owner}-neighbours" {
+    local px = bodyPosition(cell, $"companionNeighbour{owner}", body, x)
+    local py = bodyPosition(cell, $"companionNeighbour{owner}", body, y)
+    local pz = bodyPosition(cell, $"companionNeighbour{owner}", body, z)
+    local dx = px - bodyPosition(placement, $"companion{owner}", x)
+    local dy = py - bodyPosition(placement, $"companion{owner}", y)
+    local dz = pz - bodyPosition(placement, $"companion{owner}", z)
+    local close = ($"companionNeighbour{owner}"["body"] >= 0) and ((dx * dx + dy * dy + dz * dz) < 2.25)
+    when 1
+    mode: Level
+    if close {
+      $"companionSense{owner}"["near"] = 1
+      $"companionSense{owner}"["nx"] = px
+      $"companionSense{owner}"["ny"] = py + 0.8
+      $"companionSense{owner}"["nz"] = pz
+    } else {
+      $"companionSense{owner}"["near"] = -1
+    }
+  }
+
+  // The guide, placed for the driver: hovering a hand's breadth over a point or above a body's head, or, leading,
+  // `lead` metres from its owner toward the target at head height. A guide outranks curiosity in the driver.
+  rule $"companion{owner}-guide" {
+    local guiding = $"companionGuiding{owner}"["mode"]
+    local onBody = $"companionGuiding{owner}"["body"] >= 0
+    local tx = onBody ? bodyPosition(cell, $"companionGuiding{owner}", body, x) : $"companionGuide{owner}"["x"]
+    local ty = onBody ? (bodyPosition(cell, $"companionGuiding{owner}", body, y) + 2.1) : ($"companionGuide{owner}"["y"] + 0.45)
+    local tz = onBody ? bodyPosition(cell, $"companionGuiding{owner}", body, z) : $"companionGuide{owner}"["z"]
+    local ox = bodyPosition(body, owner, x)
+    local oz = bodyPosition(body, owner, z)
+    local reach = squareRoot((tx - ox) * (tx - ox) + (tz - oz) * (tz - oz))
+    local share = minimum(1, lead / maximum(reach, 0.01))
+    when 1
+    mode: Level
+    $"companionSense{owner}"["guide"] = (guiding > 0) ? 1 : 0
+    $"companionSense{owner}"["mode"] = guiding
+    if guiding == 3 {
+      $"companionSense{owner}"["gx"] = ox + (tx - ox) * share
+      $"companionSense{owner}"["gy"] = bodyPosition(body, owner, y) + 1.6
+      $"companionSense{owner}"["gz"] = oz + (tz - oz) * share
+    } else {
+      $"companionSense{owner}"["gx"] = tx
+      $"companionSense{owner}"["gy"] = ty
+      $"companionSense{owner}"["gz"] = tz
+    }
+  }
+  // A ping is a short-lived mark: it lapses `ping` after it is set.
+  rule $"companion{owner}-ping" {
+    when $"companionGuiding{owner}"["ping"] == 1
+    mode: Edge
+    schedule $"companionGuiding{owner}"["until"] in ping
+  }
+  rule $"companion{owner}-ping-lapse" {
+    when $"companionGuiding{owner}"["ping"] == 1 and $tick >= $"companionGuiding{owner}"["until"]
+    mode: Level
+    $"companionGuiding{owner}"["ping"] = 0
+    $"companionGuiding{owner}"["mode"] = 0
+  }
+
+  // A tick-driven glow pulse, quickening and brightening with flight, and pulsing wide while it marks (guide mode 2).
+  rule $"companion{owner}-glow" {
+    local cx = bodyPosition(placement, $"companion{owner}", x)
+    local cy = bodyPosition(placement, $"companion{owner}", y)
+    local cz = bodyPosition(placement, $"companion{owner}", z)
+    local dx = cx - $"companionGlow{owner}"["x"]
+    local dy = cy - $"companionGlow{owner}"["y"]
+    local dz = cz - $"companionGlow{owner}"["z"]
+    local pace = clamp((dx * dx + dy * dy + dz * dz) * 300, 0, 1)
+    local marking = ($"companionGuiding{owner}"["mode"] == 2) ? 1 : 0
+    when 1
+    mode: Level
+    $"companionGlow{owner}"["phase"] += 0.013 + pace * 0.023 + marking * 0.02
+    if $"companionGlow{owner}"["phase"] >= 1 {
+      $"companionGlow{owner}"["phase"] -= 1
+    }
+    $"companionGlow{owner}"["level"] = 0.5 + pace * 0.2 + $"companionGlow{owner}"["phase"] * (1 - $"companionGlow{owner}"["phase"]) * (1 + marking * 3)
+    $"companionGlow{owner}"["speed"] = pace
+    $"companionGlow{owner}"["x"] = cx
+    $"companionGlow{owner}"["y"] = cy
+    $"companionGlow{owner}"["z"] = cz
+  }
+
+  // The driver: one pinned module for every companion, mounted once per owner so each has its own memory. Drive
+  // stays confined to its body, with Observe over its own pose, its owner's and its sense row. It has no pose, edit,
+  // teleport or document mutation authority.
+  addon $"companion{owner}" {
+    modulePath: "addons/companion.wat"
+    hash: auto
+    fuel: 0
+    enabled: true
+    requests [
+      { capability: Drive, subject: $"body:{slot}" }
+      { capability: Observe, subject: $"body:{slot}" }
+      { capability: Observe, subject: $"body:{owner}" }
+      { capability: Observe, subject: $"state:companionSense{owner}" }
+    ]
+  }
+
+  grants [
+    { grantee: $"addon:companion{owner}", capability: Drive, subject: $"body:{slot}", budget: 4 }
+    { grantee: $"addon:companion{owner}", capability: Observe, subject: $"body:{slot}", budget: 1 }
+    { grantee: $"addon:companion{owner}", capability: Observe, subject: $"body:{owner}", budget: 1 }
+    { grantee: $"addon:companion{owner}", capability: Observe, subject: $"state:companionSense{owner}", budget: 28 }
+  ]
+}
+
+// What a companion has been given or has learned belongs to its owner, so it lives on the owner's identity as a fact:
+// an identity travels with its player into every world it enters, and a world that declares the `identity` lane (a
+// keyed Int row of that name in `state.world`) loads its facts there, so a fact one world writes is read by the next.
+// A world grants one by splicing `companionUnlock` into its own rule, naming the owner's seat; any world reads one with
+// `identity(body, <owner>, <fact>)`. `companionSight` is the standard's own unlock built this way. A seat playing under
+// no identity has nowhere to keep a fact, so the grant refuses for it by name and it keeps the companion's defaults.
+//
+// The facts sit on the identity's own facts row (WorldIdentityFacts), which no package namespace scopes yet, so the
+// standard's facts carry the `companion` prefix. When identity records gain package namespaces, an unlock becomes a
+// record field in the standard package's namespace, and only these templates change.
+rule template companionUnlock(fact, owner, value = 1) {
+  setIdentityFact(key: owner, fact: fact, expression: value)
+}
+
+// Sight: while its owner carries `fact`, the companion's curiosity reaches `reach` metres from its owner's head instead
+// of `attention`, so it notices and visits interests twice as far away.
+template companionSight(owner, attention = 4, reach = 8, fact = "companionSight") {
+  rule $"companion{owner}-sight" {
+    local seen = (identity(body, owner, fact) > 0) ? reach : attention
+    when $"companionReach{owner}" != seen
+    mode: Level
+    $"companionReach{owner}" = seen
+  }
+}

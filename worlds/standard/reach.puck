@@ -4,6 +4,11 @@
 // A module library: it hands its importers a template and functions and emits no document; an importer composes
 // place.puck for the carrier.
 //
+// A press rule over a reach writes rows (keyed by `$each` where it is the body's), never a body effect such as
+// `setBodyState`: a region binds whatever body stands in it, so a body effect there could reach any body, and a scoped
+// replay refuses to isolate it. A body register changes through a mailbox row that a rule sweeping `$players` carries
+// to the body.
+//
 //   placements {
 //     reach(id: "lamp-reach", box: { x0: 1, x1: 2, y0: -0.5, y1: 1, z0: 3, z1: 4 })
 //   }

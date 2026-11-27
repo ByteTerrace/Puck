@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -16,7 +15,7 @@ public static class WorldNavigationDomains {
         public IReadOnlyList<WorldNavigationDomain> Domains { get; init; } = [];
     }
 
-    private static readonly CodeDerivedTable<WorldDefinition, Held> Cache = new();
+    private static readonly WorldDocumentDerivedTable<Held> Cache = new();
 
     /// <summary>Returns a document's navigation domains in authored order, each region-bound one resolved. A domain whose
     /// region cannot be resolved (an unknown or moving placement, a sphere, a turned box) keeps its authored form with
@@ -28,7 +27,7 @@ public static class WorldNavigationDomains {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return Cache.GetValue(
-            key: definition,
+            definition: definition,
             derive: static candidate => new Held { Domains = Resolve(definition: candidate) }
         ).Domains;
     }

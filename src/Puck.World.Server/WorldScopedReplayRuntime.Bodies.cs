@@ -45,6 +45,9 @@ public sealed partial class WorldScopedReplayRuntime {
                 case WorldIdentityFactEffect identity:
                     CollectBodyWrite(key: identity.Key, keyFrom: identity.KeyFrom, into: into, players: players);
                     break;
+                case WorldIdentityRecordEffect record:
+                    CollectBodyWrite(key: record.Key, keyFrom: record.KeyFrom, into: into, players: players);
+                    break;
             }
             foreach (var arm in effect.Arms) { CollectBodyWrites(effects: arm, into: into, players: players); }
         }

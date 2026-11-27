@@ -109,6 +109,16 @@ export and play always validate.
   switch and executes STOP, which parks a monochrome processor until a key is
   pressed, and it writes palette memory and video bank one, which the DMG does
   not have. Port the source to `target: "dmg"` instead.
+- **Text over a moving world is the panel's own map.** A map step with
+  `surface: "panel"` writes the declared window's map, not the background's;
+  long text lives in an array past 256 elements, read through a wide slot
+  (`text[cursor]`, `cursor += 1`), since a byte index reaches only the first
+  256 (`CartridgeExpressions.ReadsWide`). Shared content such as the learning
+  games' questions and glyphs is a `worlds/standard/learning/` library a
+  cartridge imports by relative path; value functions and compile-time record
+  members read in operands (`CartridgeOperand.FromOperand`), but an operand
+  cannot index a record member directly (`drill.left[0]` is a parse error),
+  so write a function (`lowest(drill.left)`).
 - **Map writes land a frame late on both targets:** they queue and drain in the
   next vertical blank. Validation bounds a frame's map writes to the queue's 24
   entries.

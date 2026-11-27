@@ -248,8 +248,8 @@ public static class CartridgeDocumentEmitter {
             return null;
         }
 
-        var value = CartridgeOperand.FromText(
-            text: operand.Expression.Text,
+        var value = CartridgeOperand.FromOperand(
+            operand: operand.Expression,
             scope: scope,
             reason: out var valueReason
         );
@@ -435,13 +435,13 @@ public static class CartridgeDocumentEmitter {
                         return null;
                     }
 
-                    var left = CartridgeOperand.FromText(
-                        text: comparison.Left.Text,
+                    var left = CartridgeOperand.FromOperand(
+                        operand: comparison.Left,
                         scope: scope,
                         reason: out var leftReason
                     );
-                    var right = CartridgeOperand.FromText(
-                        text: comparison.Right.Text,
+                    var right = CartridgeOperand.FromOperand(
+                        operand: comparison.Right,
                         scope: scope,
                         reason: out var rightReason
                     );
@@ -522,7 +522,8 @@ public static class CartridgeDocumentEmitter {
             }
         }
 
-        var result = new JsonObject { ["name"] = rule.Name };
+        // An interpolated header (rule $"wander{i}" in a compile-time for) names each rule it generates.
+        var result = new JsonObject { ["name"] = (DocumentLowering.ResolveRuleName(rule: rule, scope: scope) ?? rule.Name) };
 
         // A rule with no gate carries no gate member; the absent one is what "every frame" is spelled as.
         if (conditions is not null) {
@@ -752,9 +753,66 @@ public static class CartridgeDocumentEmitter {
             }
         }
 
+        SpellExpressionFields(
+            root: root,
+            scope: scope
+        );
+
         return new CompilationResult<JsonObject>(
             ((JsonObject)DocumentLowering.Canonicalize(node: root)!),
             diagnostics
         ) { EvaluationWork = scope.Budget.Work };
+    }
+    // The document's expression fields (CartridgeVocabulary.IsExpressionField) stand on the root, as the scrolls do, or
+    // on an object one level down: a sprite, a layer, a raster row, the panel, the turning background, the surface.
+    // A value lowered at compile time (a number, or an expression spelled as text) becomes its canonical infix text
+    // here; one that reads machine state already is (CartridgeVocabulary.TryLowerValue).
+    private static void SpellExpressionFields(JsonObject root, DocumentScope scope) {
+        Spell(holder: root);
+        foreach (var (_, member) in root) {
+            switch (member) {
+                case JsonObject section:
+                    Spell(holder: section);
+                    break;
+                case JsonArray rows:
+                    foreach (var row in rows) {
+                        if (row is JsonObject holder) { Spell(holder: holder); }
+                    }
+                    break;
+            }
+        }
+
+        void Spell(JsonObject holder) {
+            foreach (var key in holder.Select(selector: static pair => pair.Key).Where(predicate: CartridgeVocabulary.IsExpressionField).ToArray()) {
+                if (holder[key] is not JsonValue value) {
+                    continue;
+                }
+
+                JsonNode? spelled;
+                string? reason;
+
+                try {
+                    spelled = CartridgeOperand.FromLoweredValue(
+                        node: value,
+                        reason: out reason,
+                        scope: scope
+                    );
+                } catch (DocumentEvaluationException error) {
+                    scope.Diagnostics.Report(diagnostic: error.ToDiagnostic());
+                    continue;
+                }
+
+                if (spelled is null) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.SemanticValidation,
+                        message: $"'{key}': {reason}",
+                        span: default
+                    );
+                    continue;
+                }
+
+                holder[key] = spelled;
+            }
+        }
     }
 }

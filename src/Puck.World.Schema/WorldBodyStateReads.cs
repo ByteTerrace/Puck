@@ -39,7 +39,7 @@ public static class WorldBodyStateReads {
             str1: slot
         );
     }
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, BodyRegisterPlan> Plans = new();
+    private static readonly WorldDocumentDerivedTable<BodyRegisterPlan> Plans = new();
 
     /// <summary>Gets the registers a document's body population, kit assignment and look assignment name, resolved once
     /// per document: the one resolution every per-tick consumer reads instead of scanning the register file by name.</summary>
@@ -55,7 +55,7 @@ public static class WorldBodyStateReads {
                 LookSelect: CounterSlot(definition: document, name: document.LookAssignment.Select?.BodyState),
                 Scale: CounterSlot(definition: document, name: document.Population.Scale)
             ),
-            key: definition
+            definition: definition
         );
     }
     private static int CounterSlot(WorldDefinition definition, string? name) => (((name is not null) &&

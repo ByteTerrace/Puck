@@ -1,0 +1,98 @@
+// The places the learning games are set in, and the record a player's progress travels in between them. Each place is
+// a part of the valley world one device shows (`device`: `deck`, `brick` or `advanced`, the Humble Gaming Deck, the
+// Humble Gaming Brick and the Advanced Gaming Brick); `floor` is the lowest question level asked there, `spots` the
+// landmarks a clue can name (clues.puck), `critters` the creatures that wander it (finds.puck) and `treasure` what its
+// chest holds. Places run in order: finishing one opens the next, on whichever device shows it.
+
+let places = [
+  {
+    id: "valley-floor"
+    name: "VALLEY FLOOR"
+    device: "brick"
+    floor: 1
+    spots ["post", "fir", "boulder", "reeds", "flowers", "stump", "sign"]
+    critters ["swallow", "dragonfly", "pup"]
+    treasure: "cone"
+  }
+  {
+    id: "pond-plot"
+    name: "POND PLOT"
+    device: "brick"
+    floor: 2
+    spots ["reeds", "boulder", "flowers", "stump", "post"]
+    critters ["swallow", "dragonfly", "pup"]
+    treasure: "shell"
+  }
+  {
+    id: "gallery-hall"
+    name: "GALLERY HALL"
+    device: "deck"
+    floor: 1
+    spots ["lamp", "sign", "flowers"]
+    critters ["swallow", "pup"]
+    treasure: "globe"
+  }
+  {
+    id: "game-room"
+    name: "GAME ROOM"
+    device: "deck"
+    floor: 2
+    spots ["lamp", "sign"]
+    critters ["pup", "dragonfly"]
+    treasure: "knight"
+  }
+  {
+    id: "glacier-rim"
+    name: "GLACIER RIM"
+    device: "brick"
+    floor: 3
+    spots ["ice", "boulder", "fir", "sign"]
+    critters ["swallow", "pup"]
+    treasure: "typebar"
+  }
+  {
+    id: "great-tree"
+    name: "GREAT TREE"
+    device: "advanced"
+    floor: 2
+    spots ["fir", "lamp", "flowers", "post"]
+    critters ["swallow", "dragonfly"]
+    treasure: "top"
+  }
+  {
+    id: "light-moon"
+    name: "LIGHT MOON"
+    device: "advanced"
+    floor: 3
+    spots ["crater", "ice", "lamp"]
+    critters ["dragonfly"]
+    treasure: "moonrock"
+  }
+  {
+    id: "dark-moon"
+    name: "DARK MOON"
+    device: "advanced"
+    floor: 3
+    spots ["crater", "ice"]
+    critters ["dragonfly", "pup"]
+    treasure: "stone"
+  }
+]
+
+// The notes record: everything a player's progress is, the same fields on every device. A device keeps it in its own
+// battery save, and passes it on by link cable where both machines have one, or as a code the player copies where
+// they do not (the design section names the code's layout). `place` counts finished places; `findsLow` and `findsHigh`
+// hold one bit per treasure, in `treasures` order (finds.puck); each skill is that subject's level skill
+// (questions.puck). Every field is one byte.
+let notesRecord = [
+  { name: "place", initial: 0 }
+  { name: "findsLow", initial: 0 }
+  { name: "findsHigh", initial: 0 }
+  { name: "readingSkill", initial: 0 }
+  { name: "mathsSkill", initial: 0 }
+  { name: "logicSkill", initial: 0 }
+]
+
+function placeOf(id) = find(places, p => (p.id == id))
+// The places one device shows, in play order.
+function placesOn(device) = filter(places, p => (p.device == device))

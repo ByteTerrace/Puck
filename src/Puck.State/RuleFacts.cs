@@ -23,6 +23,10 @@ public static class RuleFacts {
     /// compiles to an implicit rule local evaluated before the gate and read back as the cell key; the text after
     /// the prefix is the expression's canonical infix spelling.</summary>
     public const string ExpressionKeyPrefix = "$expr:";
+    /// <summary>The key a fold's body spells by writing the fold's binder in brackets (<c>x[i]</c> inside
+    /// <c>argmin(indices, i -&gt; …)</c>): the member the fold is visiting, read as an integer key, so one fold over a
+    /// row of indices reads every table keyed alike. Admitted only inside the body of a fold over an Int row.</summary>
+    public const string FoldMemberKey = "$fold";
     /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
     /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
     public const string ForEachZones = "$zones";

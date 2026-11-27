@@ -1,0 +1,25 @@
+// The creatures that carry questions and the treasures a player returns to the gallery. A creature asks questions of
+// one subject (questions.puck); its motion is described the way every device can read it: `pace` 1 (slow) to 3
+// (quick) in the device's own steps, `turn` the frames at sixty a second between changes of heading, and `rest` the
+// frames it may stay still. A treasure is one of the gallery's exhibits gone astray, and `home` names the place it
+// belongs to.
+
+let critters = [
+  { id: "swallow", name: "swallow", subject: "reading", pace: 2, turn: 28, rest: 20 }
+  { id: "dragonfly", name: "dragonfly", subject: "maths", pace: 3, turn: 14, rest: 8 }
+  { id: "pup", name: "hound pup", subject: "logic", pace: 1, turn: 40, rest: 48 }
+]
+
+let treasures = [
+  { id: "globe", name: "BRASS GLOBE", home: "gallery" }
+  { id: "knight", name: "CHESS KNIGHT", home: "gallery" }
+  { id: "stone", name: "GO STONE", home: "gallery" }
+  { id: "typebar", name: "PRESS TYPEBAR", home: "gallery" }
+  { id: "cone", name: "FIR CONE", home: "valley" }
+  { id: "shell", name: "POND SHELL", home: "valley" }
+  { id: "top", name: "TOY TOP", home: "toybox" }
+  { id: "moonrock", name: "MOON ROCK", home: "moons" }
+]
+
+function critterOf(id) = find(critters, c => (c.id == id))
+function treasureOf(id) = find(treasures, t => (t.id == id))

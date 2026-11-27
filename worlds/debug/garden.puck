@@ -26,6 +26,20 @@ import "../standard/visitors"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
 import "garden-pond"
 import "../standard/stars"
+import "../standard/companion"
+
+// The obelisk teaches a companion sight. A seat's body that stands within 3 m of it carries `companionSight` home on
+// its identity, and that seat's companion notices interests twice as far away in every world after
+// (standard/companion.puck, `companionSight`). The identity lane (standard/character.puck) is where each seat's facts load and are written.
+for seat in range(0, 4) {
+  rule $"obelisk-sight-{seat}" {
+    local dx = bodyPosition(body, seat, x) - 9
+    local dz = bodyPosition(body, seat, z) + 30
+    when ((dx * dx + dz * dz) < 9) and (identity(body, seat, companionSight) == 0)
+    mode: Edge
+    companionUnlock(fact: "companionSight", owner: seat)
+  }
+}
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.
 hud {

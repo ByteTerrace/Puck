@@ -1582,6 +1582,26 @@ public static class ExpressionOperators {
         Define(
             arity: 0,
             cost: 1L,
+            function: true,
+            name: "argmin",
+            operation: ExpressionOp.ArgMinimum,
+            payload: PayloadShape.Fold,
+            signature: ExpressionSignature.Fold,
+            symbol: null
+        ),
+        Define(
+            arity: 0,
+            cost: 1L,
+            function: true,
+            name: "argmax",
+            operation: ExpressionOp.ArgMaximum,
+            payload: PayloadShape.Fold,
+            signature: ExpressionSignature.Fold,
+            symbol: null
+        ),
+        Define(
+            arity: 0,
+            cost: 1L,
             function: false,
             name: null,
             operation: ExpressionOp.Call,

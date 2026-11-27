@@ -379,7 +379,7 @@ public sealed partial class WorldReplayTape {
             if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
             m_liveServer.Extensions.EnterReplay();
             try {
-                m_liveServer.Persistence.RestoreReplayStart(checkpoint!, restoreOwnedIdentities: false,
+                m_liveServer.Persistence.RestoreReplayStart(checkpoint!, bindHomeSeats: false,
                     documentDirectory: (definition.DocumentDirectory ?? ((documentPath is null) ? null : Path.GetDirectoryName(path: documentPath))));
             } catch {
                 m_liveServer.Extensions.CompleteReplay();

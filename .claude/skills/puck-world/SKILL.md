@@ -550,7 +550,14 @@ Within a full install each compiled product (population, solid field, envelope
 fit, addon and machine hosts) rebuilds only when a part of the document its build
 read changed (`WorldDocument.PlanProducts` over the reads `WorldDocumentReads`
 records); no list of mutation kinds decides it, and a new document member needs
-a property that notes its part (`WorldDocumentInputs.cs`).
+a property that notes its part (`WorldDocumentInputs.cs`). A value memoized per
+definition (an input catalog, a register plan, navigation domains) is held in a
+`WorldDocumentDerivedTable`, which notes its derivation's parts on every lookup:
+a raw `CodeDerivedTable` keyed by a definition fails the build (CACHE002) unless
+it carries `[SideTable(reason)]`, since it hides them from a build that finds
+the value held, so what a product read, and the rebuilds an install plans, would
+depend on which caller derived first, and a replay whose restore built from a
+fresh document plans different rebuilds than the live run.
 Document values never change once built; binding, resolving and flattening copy
 only the paths to the references they replace (`WorldStateDocumentValues`). Rule
 effects write the tick's `StateArena` and publish once at the end of the tick.
