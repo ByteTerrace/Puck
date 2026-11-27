@@ -408,6 +408,7 @@ are the exact spellings the parser accepts.
 | Logarithms | `logarithm(value, base)` | Fixed |
 | Modular powers and inverses | `modularPower(base, exponent, modulus)`, `modularInverse(value, modulus)` | Int |
 | Sets and primes | `smallestMissing(mask)`, `isPrime(n)`, `primeAt(i)` | Int |
+| Hashing | `hash(a, b, …)`, two or more arguments | Int |
 | Combinations | `binomialCoefficient(n, k)`, `factorial(n)`, `subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` | Int |
 | Permutations | `arrangementRank(n, packed)`, `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` | Int |
 | Layer sequences | `layer`, `layerOffset`, `layerStart`, `layerSize`, each `(indexOrLayer, start, step, seed)` | Int |
@@ -470,6 +471,12 @@ These notes cover the details that affect results:
   clear. `isPrime` is exact over the whole non-negative 64-bit range.
   `primeAt(i)` reads the first 256 primes, derived once. A next-prime or
   arbitrary n-th prime search belongs in a generator.
+- `hash(a, b, …)` is a 64-bit hash of its arguments in order, the same on every
+  machine: `hash(a, b)` folds both words into an FNV-1a digest (`Fnv1aHash`)
+  and finishes it with SplitMix64's mixer (`InvertibleBitMix.Mix64`), and a
+  longer call is the chain `hash(hash(a, b), c, …)`, one instruction per word
+  after the first. Distinct tuples can share a hash, so use it as a key where a
+  rare collision is acceptable, such as a [tally](data-model.md#tally) key.
 - `factorial` accepts n up to 20. Subsets are bitmasks with n up to 64, ranked
   in colexicographic order, which compares subsets by their largest differing
   member; a five-card hand is one rank below `binomialCoefficient(52, 5)`.
