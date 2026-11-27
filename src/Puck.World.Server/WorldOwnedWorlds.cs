@@ -38,7 +38,15 @@ public sealed class WorldOwnedWorlds {
     private readonly IMachineValidationCatalog? m_machineCatalog;
     private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
-    private readonly WorldDefinition m_template;
+    // The document every character this account mints is seeded from: the hosting world's authored identity template,
+    // or a document holding nothing (WorldPlayerDefaults.IdentityTemplate). The hosting world itself is never in scope
+    // here, so no world's own sections can enter a character.
+    private readonly WorldDefinition? m_template;
+    private readonly string m_templateRefusal = string.Empty;
+    // The hosting world's vector spaces, which an identity sharing a space name must agree with.
+    private readonly IReadOnlyList<StateSpace>? m_hostSpaces;
+    // The OS lock that makes this the account's one writer across processes, or null for a catalog that took none.
+    private readonly FileStream? m_accountLock;
     private readonly bool m_persist = true;
     // The hosting world's document directory: the root a seeded owned document's assets resolve under.
     private readonly string? m_worldDirectory;
@@ -57,6 +65,8 @@ public sealed class WorldOwnedWorlds {
         m_machineCatalog = source.m_machineCatalog;
         m_narrationHub = source.m_narrationHub;
         m_template = source.m_template;
+        m_templateRefusal = source.m_templateRefusal;
+        m_hostSpaces = source.m_hostSpaces;
         m_identities = [];
         m_persist = false;
         m_worldDirectory = source.m_worldDirectory;
@@ -82,30 +92,47 @@ public sealed class WorldOwnedWorlds {
     // A tape reading this catalog entered or left recording.
     internal void NoteRecording(bool recording) => m_recordingTapes += (recording ? 1 : -1);
 
-    /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
-    /// <param name="template">The document every seeded identity derives from.</param>
+    /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty and minting the
+    /// identity template's own first character when no seed is authored either.</summary>
+    /// <param name="template">The hosting world: the player defaults, the identity template it names
+    /// (<see cref="WorldPlayerDefaults.IdentityTemplate"/>) and the vector spaces an identity must agree with. None of
+    /// its other sections enter a character.</param>
     /// <param name="directory">The catalog's own directory.</param>
     /// <param name="machineId">The persisted id of the machine or process running this catalog.</param>
     /// <param name="neighbours">Resolves a document reference relative to this catalog's own directory.</param>
     /// <param name="narrationHub">The hub this catalog's narration is delivered through, or <see langword="null"/>
     /// to leave it undelivered — this catalog carries no single owning server of its own.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
     /// <param name="machineCatalog">The host-selected provider metadata for owned-world loads and saves.</param>
     /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
-    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null, IMachineValidationCatalog? machineCatalog = null, string catalogFingerprint = "") {
+    /// <param name="exclusive">Whether this catalog is the account's one writer: it takes an OS lock on the directory,
+    /// and when another process already holds it, opens the account read-only, writes nothing and says so.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
+    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null, IMachineValidationCatalog? machineCatalog = null, string catalogFingerprint = "", bool exclusive = false) {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         m_narrationHub = narrationHub;
         m_machineCatalog = machineCatalog;
         m_catalogFingerprint = catalogFingerprint;
-        m_template = IdentityBase(fallback: template);
         m_directory = directory;
         m_worldDirectory = template.DocumentDirectory;
+        m_hostSpaces = template.Spaces;
         MachineId = machineId;
         Defaults = template.PlayerDefaults;
         Directory.CreateDirectory(path: directory);
         m_identities = [];
+        m_template = LoadTemplate(host: template, reason: out m_templateRefusal);
+        if (m_templateRefusal.Length > 0) {
+            Narrate(text: $"[identity] no character can be minted: {m_templateRefusal}");
+        }
+        if (exclusive) {
+            m_accountLock = TryLockAccount(directory: directory, reason: out var lockReason);
+            if (m_accountLock is null) {
+                m_persist = false;
+                ReadOnly = true;
+                Narrate(text: $"[identity] the account is open read-only: {lockReason}, so this process saves no character");
+            }
+        }
 
         // Ordinal file order, so which member of a colliding set is admitted is a property of the names rather than of
         // the directory enumeration's whim.
@@ -164,7 +191,7 @@ public sealed class WorldOwnedWorlds {
                 continue;
             }
 
-            if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out var spaceMismatchReason)) {
+            if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_hostSpaces, out var spaceMismatchReason)) {
                 RefuseInPlace(
                     fileName: fileName,
                     reason: spaceMismatchReason
@@ -183,7 +210,7 @@ public sealed class WorldOwnedWorlds {
         DisposeUnloadable(candidates: unloadable);
 
         if (m_identities.Count == 0) {
-            foreach (var seed in Defaults.Identities) {
+            foreach (var seed in FirstCharacters()) {
                 // A seed never writes over an entry that is still there — whatever put it there. Trying to save over
                 // one would either destroy bytes a refusal promised to keep or turn a recoverable obstruction (a
                 // directory at the deterministic catalog path) into a startup exception. The probe is the
@@ -207,10 +234,14 @@ public sealed class WorldOwnedWorlds {
                     continue;
                 }
 
+                if (m_template is not { } seedTemplate) {
+                    continue;
+                }
+
                 var identity = new WorldIdentity(
                     document: Seed(
                         seed: seed,
-                        template: m_template
+                        template: seedTemplate
                     ),
                     defaults: Defaults
                 );
@@ -218,6 +249,71 @@ public sealed class WorldOwnedWorlds {
                 m_identities.Add(item: identity);
                 Persist(identity: identity);
             }
+        }
+    }
+
+    /// <summary>Gets a value indicating whether another process holds this account, so this catalog saves nothing.</summary>
+    public bool ReadOnly { get; }
+
+    // The characters an empty account starts with: the world's authored seeds, or else the template's own identity
+    // section, the release's default first character.
+    private IReadOnlyList<WorldIdentitySeed> FirstCharacters() => ((Defaults.Identities.Count > 0)
+        ? Defaults.Identities
+        : ((m_template?.Identity is { } first)
+            ? [new WorldIdentitySeed(Id: first.Id, Name: first.Name, Color: first.Color)]
+            : []));
+    // The identity template a hosting world names, loaded through the admission door every owned document crosses, or
+    // a document holding nothing when the world names none. A template that does not load mints nothing, and says why.
+    private WorldDefinition? LoadTemplate(WorldDefinition host, out string reason) {
+        if (host.PlayerDefaults.IdentityTemplate is not { } authored) {
+            reason = string.Empty;
+            return new WorldDefinition();
+        }
+        if (!WorldDocumentPaths.TryResolve(documentDirectory: host.DocumentDirectory, path: authored, resolved: out var path, reason: out reason)) {
+            reason = $"seatDefaults.identityTemplate {reason}";
+            return null;
+        }
+        if (!TryLoadOwned(
+            catalog: m_machineCatalog,
+            catalogFingerprint: m_catalogFingerprint,
+            document: out var document,
+            id: "identity-template",
+            neighbours: null,
+            path: path,
+            reason: out reason
+        )) {
+            reason = $"seatDefaults.identityTemplate '{authored}' does not load: {reason}";
+            return null;
+        }
+        reason = string.Empty;
+        return document;
+    }
+    // Takes the account's cross-process lock: a file in the account directory opened for exclusive use and held for this
+    // catalog's lifetime, which the OS releases when the process ends however it ends.
+    private static FileStream? TryLockAccount(string directory, out string reason) {
+        try {
+            reason = string.Empty;
+            return new FileStream(
+                access: FileAccess.ReadWrite,
+                mode: FileMode.OpenOrCreate,
+                path: Path.Combine(path1: directory, path2: AccountLockName),
+                share: FileShare.None
+            );
+        } catch (IOException exception) {
+            reason = $"another process holds it ({WorldDocumentLabel.Failure(exception: exception)})";
+            return null;
+        } catch (UnauthorizedAccessException exception) {
+            reason = $"its lock cannot be taken ({WorldDocumentLabel.Failure(exception: exception)})";
+            return null;
+        }
+    }
+    /// <summary>The file in the account directory whose exclusive hold makes a process the account's one writer — a name
+    /// outside the catalog's <c>*.world.json</c> glob.</summary>
+    public const string AccountLockName = "account.lock";
+
+    private void Narrate(string text) {
+        if (m_narrationHub is { HasNarrationSink: true } hub) {
+            hub.Narrate(channel: "identity", text: text);
         }
     }
 
@@ -351,6 +447,9 @@ public sealed class WorldOwnedWorlds {
                 reason: $"unknown slot '{submission.Slot}' — {subject.Describe()} must be declared in the recipient's OWN document before an external document can write into it; there is no spooled delivery for an undeclared row"
             );
         }
+        if (AlreadyCredited(owner: owner, receipt: out var credited, submission: submission)) {
+            return credited;
+        }
 
         // TEXT branch — a SEPARATE arm off the SAME door, never a sibling door: the submitter varies (sim-driven
         // numeric outputs below vs. a player-initiated text delivery here), but the admission predicate above
@@ -416,12 +515,7 @@ public sealed class WorldOwnedWorlds {
                 );
             }
 
-            Persist(identity: owner);
-            return new WorldDocumentSubmissionReceipt(
-                Accepted: true,
-                Reason: "owner accepted the granted operation",
-                Submission: submission
-            );
+            return Credit(owner: owner, submission: submission);
         }
 
         // THE ROW'S OWN DECLARED ENVELOPE, decided through TryAdmitWrite — never this door's guess at one.
@@ -487,10 +581,50 @@ public sealed class WorldOwnedWorlds {
             )],
         });
 
-        Persist(identity: owner);
+        return Credit(owner: owner, submission: submission);
+    }
+    // The award id of one submission: a function of what it asks and when, so a world that re-runs the tick that sent it
+    // (an image restored behind the account) sends the same id again.
+    private static CellName AwardOf(WorldDocumentSubmission submission) {
+        var hash = Puck.Maths.Fnv1aHash.Create();
+
+        hash.Add(value: submission.SourceDocumentId);
+        hash.Add(value: submission.OwnerDocumentId);
+        hash.Add(value: submission.Tick);
+        hash.Add(value: submission.Slot);
+        hash.Add(value: ((byte)submission.Kind));
+        hash.Add(value: submission.Value);
+        hash.Add(value: submission.Text);
+        return CellName.Parse(candidate: $"award-{hash.Value:x16}");
+    }
+    // A submission already credited is answered from the owner's award ledger without applying again.
+    private bool AlreadyCredited(WorldIdentity owner, WorldDocumentSubmission submission, out WorldDocumentSubmissionReceipt receipt) {
+        if (!owner.HoldsAward(award: AwardOf(submission: submission))) {
+            receipt = default;
+            return false;
+        }
+        receipt = new WorldDocumentSubmissionReceipt(
+            Accepted: true,
+            Durability: (m_persist ? WorldWriteDurability.Durable : WorldWriteDurability.Applied),
+            Reason: "owner had already credited this award",
+            Submission: submission
+        );
+        return true;
+    }
+    // Records the submission's award id beside the write it credits, then saves both in one durable write; the receipt
+    // says how far that save reached rather than answering accepted whatever happened to it.
+    private WorldDocumentSubmissionReceipt Credit(WorldIdentity owner, WorldDocumentSubmission submission) {
+        if (!owner.TryRecordAward(award: AwardOf(submission: submission), reason: out var awardReason)) {
+            Narrate(text: $"[identity] {awardReason}");
+        }
+        var durability = Persist(identity: owner);
+
         return new WorldDocumentSubmissionReceipt(
             Accepted: true,
-            Reason: "owner accepted the granted operation",
+            Durability: durability,
+            Reason: ((durability == WorldWriteDurability.Uncertain)
+                ? "owner applied the granted operation, but its save failed: a crash before the next save loses it"
+                : "owner accepted the granted operation"),
             Submission: submission
         );
     }
@@ -615,10 +749,6 @@ public sealed class WorldOwnedWorlds {
         return loaded;
     }
 
-    // Every shipped world is a full arena, so the booted world's own template is the only base and this always
-    // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
-    // minimal template has one door to return through.
-    private static WorldDefinition IdentityBase(WorldDefinition fallback) => fallback;
     // The one predicate that decides whether a refusal is a verdict on the file's BYTES or on the moment it was read
     // in — the loader's own reason classes, matched on the wording WorldDefinitionLoader.TryLoadFileForAdmission documents.
     // Quarantine is irreversible from the catalog's side (the name it frees is re-seeded), so only the byte verdict
@@ -690,30 +820,32 @@ public sealed class WorldOwnedWorlds {
             );
         }
     }
-    // A fresh identity claims NO locomotion rates: the two rate slots are named but their rows are absent, so the
-    // kit's own authored rate drives the seat until identity.motion mints an override row deliberately.
-    private static WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
+    // A character is the identity template under the seed's id, name and color, stored in this catalog's directory. The
+    // template's identity section carries its facts row, travel classes, home-scoped names and voice; a fresh identity
+    // claims NO locomotion rates: the two rate slots are named but their rows are absent, so the kit's own authored
+    // rate drives the seat until identity.motion mints an override row deliberately.
+    private WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
         DocumentId = seed.Id,
-        Identity = new WorldIdentityDefinition(
-        Id: seed.Id,
-        Name: seed.Name,
-        Color: seed.Color,
-        MoveSpeedState: MoveSpeedState,
-        TurnSpeedState: TurnSpeedState
-    ),
+        DocumentDirectory = m_directory,
+        Identity = ((template.Identity is { } authored)
+            ? (authored with {
+                Id = seed.Id,
+                Name = seed.Name,
+                Color = seed.Color,
+                MoveSpeedState = MoveSpeedState,
+                TurnSpeedState = TurnSpeedState,
+                Controllers = null,
+            })
+            : new WorldIdentityDefinition(
+                Id: seed.Id,
+                Name: seed.Name,
+                Color: seed.Color,
+                MoveSpeedState: MoveSpeedState,
+                TurnSpeedState: TurnSpeedState
+            )),
         StateRaw = ((template.StateRaw ?? new WorldStateSection()) with {
-            // The rate slots FOLD OVER the template's authored world rows rather than replacing the list — the
-            // template's views/camera programs may reference its own state rows (e.g. a seatRig yaw reading a
-            // state.<row>.<key> cell), and a seeded document that drops them refuses validation on its next load.
             World = SeedWorldState(templateRows: template.StateRaw?.World),
         }),
-        BindingOverlaysRaw = [],
-        // The template's own hud policy (enabled/cursor) survives; only its authored panels are stripped — an owned
-        // world starts panel-clean but keeps the document-authored cursor, never an engine value.
-        HudRaw = new WorldHudSection(
-        Defaults: template.Hud.Defaults,
-        Panels: []
-    ),
         Adjacencies = null,
     };
     // The seeded world-state rows: the template's authored rows MINUS any same-named rate rows, so a template can
@@ -903,9 +1035,13 @@ public sealed class WorldOwnedWorlds {
             reason = $"the catalog path '{Path.GetFileName(path: occupied)}' is already occupied by an entry this boot did not admit — saving there would write over it; repair or remove it (identity.list's refused=/discarded= columns and the boot's stderr lines name it)";
             return null;
         }
+        if (m_template is not { } template) {
+            reason = $"no character can be minted: {m_templateRefusal}";
+            return null;
+        }
         var identity = new WorldIdentity(
             document: Seed(
-                template: m_template,
+                template: template,
                 seed: new WorldIdentitySeed(
                     Color: colorHex,
                     Id: name,
@@ -1039,7 +1175,7 @@ public sealed class WorldOwnedWorlds {
             reason = "document has no identity section";
             return false;
         }
-        if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out reason)) {
+        if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_hostSpaces, out reason)) {
             return false;
         }
         string id = document.Identity.Id;
@@ -1208,21 +1344,19 @@ public sealed class WorldOwnedWorlds {
         return true;
     }
 
-    // Saves an identity for a caller that has no refusal to return. Any refusal, a file this process cannot write
-    // included, is narrated rather than dropped, so a write that never reached disk is never silent.
-    private void Persist(WorldIdentity identity) {
-        if (
-            !TrySave(
-                identity: identity,
-                reason: out var reason
-            ) &&
-            (m_narrationHub is { HasNarrationSink: true })
-        ) {
-            m_narrationHub.Narrate(
-                channel: "identity",
-                text: $"[identity] {reason}"
-            );
+    // Saves an identity for a caller that has no refusal to return, and answers how far the save reached. Any refusal, a
+    // file this process cannot write included, is narrated rather than dropped, so a write that never reached disk is
+    // never silent, and the answer is Uncertain rather than a success.
+    private WorldWriteDurability Persist(WorldIdentity identity) {
+        if (!TrySave(
+            identity: identity,
+            reason: out var reason
+        )) {
+            Narrate(text: $"[identity] {reason}");
+            return WorldWriteDurability.Uncertain;
         }
+
+        return (m_persist ? WorldWriteDurability.Durable : WorldWriteDurability.Applied);
     }
 
     /// <summary>Persists every owned world.</summary>
@@ -1307,17 +1441,24 @@ public sealed class WorldOwnedWorlds {
     /// which its next crossing carries on and its own authority adopts when it comes home; nothing is saved here. An
     /// identity carrying an owned document this catalog does not own is refused by name and left unchanged.</summary>
     /// <param name="identity">The identity to write.</param>
-    /// <param name="key">The fact key.</param>
+    /// <param name="key">The fact's full stored key.</param>
     /// <param name="value">The fact's integer value.</param>
+    /// <param name="writer">Who writes it: <see cref="WorldIdentityWriter.Home"/> for the identity's own console doors,
+    /// or the executing world's package for a rule, which writes only its own namespace and never a home-scoped
+    /// fact.</param>
     /// <param name="changed">Whether the identity's row changed.</param>
-    /// <param name="reason">Why the write was refused, or empty on success.</param>
-    /// <returns><see langword="true"/> when the fact is in place.</returns>
+    /// <param name="durability">How far the write reached: <see cref="WorldWriteDurability.Durable"/> once an owned
+    /// identity's save landed, <see cref="WorldWriteDurability.Applied"/> for a visitor's travelling row or a catalog
+    /// that saves nothing, <see cref="WorldWriteDurability.Uncertain"/> when the save failed.</param>
+    /// <param name="reason">Why the write was refused or its save failed, or empty.</param>
+    /// <returns><see langword="true"/> when the fact is in place in memory.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="identity"/> is <see langword="null"/>.</exception>
-    public bool TrySetFact(WorldIdentity identity, CellName key, long value, out bool changed, out string reason) {
+    public bool TrySetFact(WorldIdentity identity, CellName key, long value, WorldIdentityWriter writer, out bool changed, out WorldWriteDurability durability, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: identity);
 
         var owned = Owns(identity: identity);
 
+        durability = WorldWriteDurability.Refused;
         if (
             !owned &&
             (identity.Document is not null)
@@ -1331,18 +1472,58 @@ public sealed class WorldOwnedWorlds {
             changed: out changed,
             key: key,
             reason: out reason,
-            value: value
+            value: value,
+            writer: writer
         )) {
             return false;
         }
 
-        return (
-            !changed ||
-            !owned ||
-            TrySave(
-            identity: identity,
-            reason: out reason
-        ));
+        durability = ((owned && changed) ? Persist(identity: identity) : (owned ? (m_persist ? WorldWriteDurability.Durable : WorldWriteDurability.Applied) : WorldWriteDurability.Applied));
+        reason = ((durability == WorldWriteDurability.Uncertain) ? $"fact '{key}' on identity '{identity.Id}' is applied but its save failed" : string.Empty);
+        return true;
+    }
+    /// <summary>Installs a record-store stage into its identity, the one door a rule's claim, release and field write
+    /// reach an identity through: an owned identity saves the store and the award id that credits it in one durable
+    /// write; a visitor keeps the store on its travelling records, which its owner adopts when it comes home. An award
+    /// this identity has already credited is answered from its ledger and installs nothing, so a resubmission (a world
+    /// re-running ticks from an image) never credits twice.</summary>
+    /// <param name="stage">The stage, every write of which its writer was admitted for.</param>
+    /// <param name="award">The award id the stage credits, or <see langword="null"/> for a write no resubmission can
+    /// repeat.</param>
+    /// <param name="durability">How far the stage reached.</param>
+    /// <param name="reason">Why it was refused or its save failed, or empty.</param>
+    /// <returns><see langword="true"/> when the store holds the stage's writes in memory, or already credited the
+    /// award.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stage"/> is <see langword="null"/>.</exception>
+    public bool TryCommit(WorldIdentityStage stage, CellName? award, out WorldWriteDurability durability, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: stage);
+
+        var identity = stage.Identity;
+        var owned = Owns(identity: identity);
+
+        durability = WorldWriteDurability.Refused;
+        if (!owned && (identity.Document is not null)) {
+            reason = NotOwned(identity: identity);
+            return false;
+        }
+        if (owned && (award is { } credited) && identity.HoldsAward(award: credited)) {
+            durability = (m_persist ? WorldWriteDurability.Durable : WorldWriteDurability.Applied);
+            reason = $"award '{credited}' is already credited";
+            return true;
+        }
+        if (!identity.Apply(stage: stage, reason: out reason)) {
+            return false;
+        }
+        if (!owned) {
+            durability = WorldWriteDurability.Applied;
+            return true;
+        }
+        if ((award is { } id) && !identity.TryRecordAward(award: id, reason: out reason)) {
+            Narrate(text: $"[identity] {reason}");
+        }
+        durability = Persist(identity: identity);
+        reason = ((durability == WorldWriteDurability.Uncertain) ? $"identity '{identity.Id}' record store is applied but its save failed" : string.Empty);
+        return true;
     }
     /// <summary>Adopts into an identity this catalog owns what its own traveler carried home — the facts and records
     /// (<see cref="WorldIdentity.TryAdopt"/>) and nothing else — and saves it.</summary>

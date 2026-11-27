@@ -190,6 +190,13 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldSeatCameraFeel"
+    },
+    "identityTemplate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     }
   },
   "additionalProperties": false,

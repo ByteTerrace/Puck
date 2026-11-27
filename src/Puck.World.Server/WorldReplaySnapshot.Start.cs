@@ -7,29 +7,22 @@ public sealed partial class WorldReplaySnapshot {
     /// from its definition's boot image with its seats joined. A recording armed after the world's first step, and a
     /// history branch saved as a tape, start from the live state itself: the re-drive restores this checkpoint into
     /// its shadow server instead of booting the definition, so its first tick continues exactly where the recording
-    /// began. The checkpoint never carries the owned-world catalog (<see cref="ForTape"/>): seats hold their identities
-    /// as projections, the way <see cref="Seats"/> pins them, and the re-drive keeps them detached.</summary>
+    /// began. A checkpoint never carries an owned identity: seats hold their identities as projections, the way
+    /// <see cref="Seats"/> pins them, and the re-drive keeps them detached.</summary>
     public WorldAuthorityCheckpoint? StartCheckpoint { get; init; }
     /// <summary>Gets the tick the recording's start checkpoint was taken after, or <see langword="null"/> for a tape that
     /// starts from its boot image.</summary>
     public ulong? StartTick => StartCheckpoint?.Server.LastCompletedTick;
 
-    /// <summary>Returns the part of a live checkpoint a tape may carry: everything but the owned-world catalog, whose
-    /// documents a tape never holds (the identities its seats carry ride the population as projections), and with no
-    /// host-row residue, which a tape's single authority does not own.</summary>
+    /// <summary>Returns the part of a live checkpoint a tape may carry: everything but host-row residue, which a tape's
+    /// single authority does not own.</summary>
     /// <param name="checkpoint">A checkpoint captured from the live server.</param>
     /// <returns>The checkpoint to start a tape from.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="checkpoint"/> is <see langword="null"/>.</exception>
     public static WorldAuthorityCheckpoint ForTape(WorldAuthorityCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
-        return (checkpoint with {
-            HostRow = WorldAuthorityHostRowCheckpoint.Empty,
-            OwnedWorlds = new WorldOwnedWorldsCheckpoint(
-                Documents: [],
-                Revision: 0L
-            ),
-        });
+        return (checkpoint with { HostRow = WorldAuthorityHostRowCheckpoint.Empty });
     }
 
     /// <summary>Returns the local seats a checkpoint holds, each with the identity projection its body carries, in slot
@@ -77,20 +70,16 @@ public sealed partial class WorldReplaySnapshot {
         Ticks = Ticks,
     };
 
-    // The write side's guard: a start checkpoint describes the embedded definition and carries no owned document. A
-    // recording that broke either would be the host's own defect, never tape data.
+    // The write side's guard: a start checkpoint describes the embedded definition. A recording that broke it would be
+    // the host's own defect, never tape data.
     private static byte[] EncodeStartCheckpoint(WorldAuthorityCheckpoint checkpoint, byte[] definitionJson) {
-        if (checkpoint!.OwnedWorlds.Documents.Count != 0) {
-            throw new WorldReplayCodecException(message: "A recording start checkpoint contains owned identity documents.");
-        }
-
         if (!checkpoint.Server.DefinitionJson.AsSpan().SequenceEqual(other: definitionJson)) {
             throw new WorldReplayCodecException(message: "a .puckreplay recording's start checkpoint describes another document than the one the tape embeds — a host bug, not tape data.");
         }
 
         return WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
     }
-    // The read side's twin: the bytes decode to a checkpoint of the embedded document, holding no owned document.
+    // The read side's twin: the bytes decode to a checkpoint of the embedded document.
     private static WorldAuthorityCheckpoint? ReadStartCheckpoint(byte[]? bytes, byte[] definitionJson, string? documentDirectory) {
         if (bytes is null) {
             return null;
@@ -105,11 +94,7 @@ public sealed partial class WorldReplaySnapshot {
             throw new InvalidDataException(message: $"Corrupt .puckreplay recording: its start checkpoint does not decode ({reason}).");
         }
 
-        if (checkpoint!.OwnedWorlds.Documents.Count != 0) {
-            throw new InvalidDataException(message: "Corrupt .puckreplay recording: its start checkpoint contains owned identity documents.");
-        }
-
-        if (!checkpoint.Server.DefinitionJson.AsSpan().SequenceEqual(other: definitionJson)) {
+        if (!checkpoint!.Server.DefinitionJson.AsSpan().SequenceEqual(other: definitionJson)) {
             throw new InvalidDataException(message: "Corrupt .puckreplay recording: its start checkpoint describes another document than the one the tape embeds.");
         }
 
@@ -132,7 +117,7 @@ public sealed partial class WorldReplaySnapshot {
                 instanceIdentity: Instance,
                 machines: machines,
                 profiles: replayProfiles,
-                restoreOwnedIdentities: false
+                bindHomeSeats: false
             );
         } else {
             population = new WorldPopulation(definition: definition);

@@ -226,10 +226,66 @@ public static class WorldEffect {
     /// <param name="Expression">A bounded integer expression evaluated at fire time.</param>
     public sealed record SetIdentityFact(
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
-        [property: DocumentText("a fact key on the identity's own row, outside every world namespace")] string Fact,
+        [property: DocumentText("a fact key on the identity's own row, which the writing world's package qualifies")] string Fact,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
+    ) : ActionEffect;
+    /// <summary>Claims the lowest free slot of a record pool on the identity a world-addressed body drives under, and
+    /// writes its fields after the record's defaults: a note, a mark, an item, a quest's progress. The claim lands with
+    /// the firing and is rewound with it; once the firing commits, an owned identity saves it and a visitor carries it on
+    /// its travelling records. The writing world's package must be admitted for the pool (another package's pool and a
+    /// home-scoped one refuse).</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Pool">The pool on the identity's own document.</param>
+    /// <param name="Fields">The fields to write, in order.</param>
+    public sealed record ClaimIdentityRecord(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a record pool on the identity's own document")] string Pool,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIdentityRecordValue>? Fields = null
+    ) : ActionEffect;
+    /// <summary>Claims a pair joining two live instances of an identity's pools (a link between two notes, a tag on a
+    /// note) and writes its fields, as <see cref="ClaimIdentityRecord"/> claims an instance.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Pool">The pair pool on the identity's own document.</param>
+    /// <param name="Left">The left endpoint's slot, an integer expression evaluated when the effect fires.</param>
+    /// <param name="Right">The right endpoint's slot, an integer expression evaluated when the effect fires.</param>
+    /// <param name="Fields">The fields to write, in order.</param>
+    public sealed record ClaimIdentityPair(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a pair pool on the identity's own document")] string Pool,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Left,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Right,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIdentityRecordValue>? Fields = null
+    ) : ActionEffect;
+    /// <summary>Writes fields of the live instance in one slot of an identity's record pool, each under the field's own
+    /// kind and bounds. With a <paramref name="Generation"/>, a slot whose lifetime has moved on refuses rather than
+    /// writing the instance that replaced it.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Pool">The pool on the identity's own document.</param>
+    /// <param name="Slot">The slot, an integer expression evaluated when the effect fires.</param>
+    /// <param name="Fields">The fields to write, in order.</param>
+    /// <param name="Generation">The lifetime the write names, or <see langword="null"/> for whichever is live.</param>
+    public sealed record SetIdentityRecord(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a record pool on the identity's own document")] string Pool,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Slot,
+        IReadOnlyList<WorldIdentityRecordValue> Fields,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Generation = null
+    ) : ActionEffect;
+    /// <summary>Releases the live instance in one slot of an identity's record pool, and every pair it is an endpoint
+    /// of; the slot's generation advances, so a reference to the released lifetime reads absent.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Pool">The pool on the identity's own document.</param>
+    /// <param name="Slot">The slot, an integer expression evaluated when the effect fires.</param>
+    /// <param name="Generation">The lifetime the release names, or <see langword="null"/> for whichever is live.</param>
+    public sealed record ReleaseIdentityRecord(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a record pool on the identity's own document")] string Pool,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Slot,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Generation = null
     ) : ActionEffect;
     /// <summary>Writes one <c>state.body</c> counter of a world-addressed body: the register a kit's own
     /// <c>setState</c> writes, in the arena's participant lane, settled through the register's envelope. The register
@@ -302,6 +358,22 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
     ) : ActionEffect;
 }
+/// <summary>One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own
+/// kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires,
+/// or a text literal.</summary>
+/// <param name="Field">The record field.</param>
+/// <param name="Value">The numeric literal.</param>
+/// <param name="Expression">The integer expression.</param>
+/// <param name="Text">The text literal.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldIdentityRecordValue(
+    [property: DocumentText("a record field of an identity pool")] string Field,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null,
+    [property: DocumentText("a text value")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
+);
 /// <summary>How a rule-triggered body designation chooses its target.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldBodyDesignationKind>))]
 public enum WorldBodyDesignationKind : byte {

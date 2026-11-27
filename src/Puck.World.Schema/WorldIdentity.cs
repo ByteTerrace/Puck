@@ -466,6 +466,48 @@ public sealed partial class WorldIdentity {
 
         return true;
     }
+    /// <summary>Returns whether this identity's owned document has credited an award.</summary>
+    /// <param name="award">The award id.</param>
+    /// <returns><see langword="true"/> when <see cref="WorldIdentityRows.Awards"/> holds it.</returns>
+    public bool HoldsAward(CellName award) => (
+        TryReadState(name: WorldIdentityRows.Awards, row: out var row) &&
+        (StateRows.FindCell(cells: row.Cells, key: award) is not null)
+    );
+    /// <summary>Records an award id on this identity's owned document, in the row its next save writes with the credit
+    /// itself, evicting the oldest id past <see cref="WorldIdentityRows.AwardCapacity"/>. An identity with no owned
+    /// document (a traveller) records nothing: what it carries is credited when its owner adopts it.</summary>
+    /// <param name="award">The award id.</param>
+    /// <param name="reason">Why it was not recorded, or empty on success.</param>
+    /// <returns><see langword="true"/> when the id is recorded.</returns>
+    public bool TryRecordAward(CellName award, out string reason) {
+        if (Document is null) {
+            reason = $"identity '{Id}' carries no owned document to credit an award on";
+            return false;
+        }
+        if (HoldsAward(award: award)) {
+            reason = string.Empty;
+            return true;
+        }
+        if (!TryReadState(name: WorldIdentityRows.Awards, row: out _)) {
+            WriteState(row: new WorldStateRow(
+                Name: WorldIdentityRows.Awards,
+                Kind: CellKind.Int,
+                Capacity: WorldIdentityRows.AwardCapacity,
+                Evicts: true,
+                Cells: []
+            ));
+        }
+        if (
+            !StateArena.TryCreate(arena: out var arena, catalog: Document!.StateCatalog, options: null, reason: out reason, section: Document.StateRaw, time: ArenaTime.Origin) ||
+            !arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: WorldIdentityRows.Awards.Value) ||
+            !arena.TryMintEvicting(evicted: out _, key: out _, name: award, reason: out reason, rowOrdinal: handle.Ordinal, value: CellValue.Int(value: 1L))
+        ) {
+            reason = $"identity '{Id}' cannot record award '{award}': {reason}";
+            return false;
+        }
+        WriteState(row: ((WorldStateRow)StateRows.FindStateRow(rows: arena.ToRows(), name: WorldIdentityRows.Awards.Value)!));
+        return true;
+    }
     /// <summary>Reads a durable value from the owned world's state section.</summary>
     /// <remarks>The row FIND is the shared <see cref="WorldDefinitionRows.FindStateRow"/>. The VALUE read stays here
     /// rather than routing through <see cref="WorldStateReader"/>: an identity document is a durable store with no
@@ -486,14 +528,20 @@ public sealed partial class WorldIdentity {
     }
     /// <summary>Writes one fact on this identity's facts row — its owned document's row, or a traveler's travelling row
     /// — minting the row on the first write, and reports whether the row changed. A write of the value the row already
-    /// holds changes nothing.</summary>
-    /// <param name="key">The fact key.</param>
+    /// holds changes nothing. The writer must be admitted for the key (<see cref="WorldIdentityWriter.Admits"/>): a
+    /// package writes only its own namespace and never a home-scoped fact.</summary>
+    /// <param name="key">The fact's full stored key.</param>
     /// <param name="value">The fact's integer value.</param>
+    /// <param name="writer">Who writes it.</param>
     /// <param name="changed">Whether the row changed.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
-    public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
+    public bool TrySetFact(CellName key, long value, WorldIdentityWriter writer, out bool changed, out string reason) {
         changed = false;
+
+        if (!writer.Admits(fact: true, identity: Document?.Identity, name: key, reason: out reason)) {
+            return false;
+        }
 
         var definition = FactsDefinition;
         var row = Facts;

@@ -8,26 +8,21 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 /// <summary>
-/// A checkpoint is durable and crosses machines, so it names an owned world's asset directory only relative to a root
-/// the restoring host supplies — the owned-world catalog or the hosting world's directory — and never as a
-/// machine-local path. A checkpoint written under one directory restores under another, and one whose directory does
-/// not resolve where it is restored refuses by name before anything is restored.
+/// A checkpoint is durable and crosses machines, so it names a journal base, and a catalog copy names an owned world's
+/// asset directory, only relative to a root the restoring host supplies and never as a machine-local path. One written
+/// under one directory restores under another, and one whose directory does not resolve where it is restored refuses by
+/// name before anything is restored.
 /// </summary>
 public sealed class CheckpointAssetAnchorLawTests {
     private static WorldDefinition WorldAt(string? directory) => (Fixtures.BuildDocument() with { DocumentDirectory = directory });
-    private static (byte[] Bytes, WorldAuthorityCheckpoint Checkpoint) CaptureWithOwnedWorld(WorldFixture fixture) {
-        Assert.NotNull(@object: fixture.Server.Profiles.Create(
-            colorHex: "#336699",
-            name: SafeName.Parse(candidate: "traveler"),
-            reason: out var created
-        ));
+    private static (byte[] Bytes, WorldAuthorityCheckpoint Checkpoint) Capture(WorldFixture fixture) {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
                 hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
-            userMessage: $"{created} {reason}"
+            userMessage: reason
         );
 
         return (WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!), checkpoint!);
@@ -67,32 +62,6 @@ public sealed class CheckpointAssetAnchorLawTests {
         }
     }
 
-    // A seeded owned world resolves its assets beside the hosting world. Captured under one world directory and
-    // restored under another, it resolves beside the second, and the bytes between name neither.
-    [Fact]
-    public void AnOwnedWorldAnchoredToItsHostingWorldRestoresUnderAnotherDirectory() {
-        using var first = new TemporaryDirectory(prefix: "puck-anchor-world-a-");
-        using var second = new TemporaryDirectory(prefix: "puck-anchor-world-b-");
-        using var catalog = new TemporaryDirectory(prefix: "puck-anchor-catalog-b-");
-        using var fixture = Fixtures.FreshServer(definition: WorldAt(directory: first.RootPath));
-
-        var (bytes, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
-        Assert.All(
-            collection: checkpoint.OwnedWorlds.Documents,
-            action: static document => Assert.Equal(expected: (WorldOwnedDocumentAnchor.World, string.Empty), actual: (document.Anchor, document.RelativeDirectory))
-        );
-        AssertNamesNoPath(bytes: bytes, directory: first.RootPath);
-        AssertNamesNoPath(bytes: bytes, directory: fixture.Server.Profiles.FilePath);
-
-        var (server, machines) = Restore(bytes: bytes, catalog: catalog.RootPath, template: WorldAt(directory: second.RootPath));
-
-        using (machines) {
-            Assert.Equal(
-                expected: PuckPaths.Normalize(path: second.RootPath),
-                actual: PuckPaths.Normalize(path: server.Profiles.All.Single(predicate: static identity => (identity.Id == "traveler")).Document!.DocumentDirectory!)
-            );
-        }
-    }
     // A loaded owned world resolves its assets beside the catalog that holds it; restored into another catalog, it
     // resolves beside that one.
     [Fact]
@@ -123,26 +92,6 @@ public sealed class CheckpointAssetAnchorLawTests {
             actual: PuckPaths.Normalize(path: restored.All.Single(predicate: static identity => (identity.Id == "keeper")).Document!.DocumentDirectory!)
         );
     }
-    // A checkpoint whose owned world resolves beside a hosting world that has no directory, or one that does not
-    // exist where it is restored, refuses by name, and the refusal comes before any of the checkpoint is restored.
-    [Fact]
-    public void AnOwnedWorldWhoseDirectoryDoesNotResolveRefusesByName() {
-        using var world = new TemporaryDirectory(prefix: "puck-anchor-world-");
-        using var catalog = new TemporaryDirectory(prefix: "puck-anchor-catalog-");
-        using var fixture = Fixtures.FreshServer(definition: WorldAt(directory: world.RootPath));
-
-        var (bytes, _) = CaptureWithOwnedWorld(fixture: fixture);
-
-        var withoutDirectory = Assert.Throws<InvalidOperationException>(testCode: () => Restore(bytes: bytes, catalog: catalog.RootPath, template: WorldAt(directory: null)));
-
-        Assert.Contains(expectedSubstring: "owned world #0 cannot be restored", actualString: withoutDirectory.Message);
-        Assert.Contains(expectedSubstring: "the restoring world has none", actualString: withoutDirectory.Message);
-
-        var missing = Path.Join(path1: world.RootPath, path2: "absent");
-        var absent = Assert.Throws<InvalidOperationException>(testCode: () => Restore(bytes: bytes, catalog: catalog.RootPath, template: WorldAt(directory: missing)));
-
-        Assert.Contains(expectedSubstring: "does not exist here", actualString: absent.Message);
-    }
     // A journal base loaded from a file names that file relative to the world's document directory — the loaded
     // file's own — so the bytes name neither where it was loaded from nor the catalog. A restore under another
     // directory names the file there, and one under a world with no directory refuses by name.
@@ -157,7 +106,7 @@ public sealed class CheckpointAssetAnchorLawTests {
 
         LoadFile(fixture: fixture, path: path);
 
-        var (bytes, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
+        var (bytes, checkpoint) = Capture(fixture: fixture);
 
         Assert.Equal(expected: LoadedFrom(path: "world.json"), actual: checkpoint.Server.BaseOrigin);
         AssertNamesNoPath(bytes: bytes, directory: loaded.RootPath);
@@ -191,7 +140,7 @@ public sealed class CheckpointAssetAnchorLawTests {
 
             LoadFile(fixture: fixture, path: relative);
 
-            var (bytes, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
+            var (bytes, checkpoint) = Capture(fixture: fixture);
 
             Assert.Equal(expected: LoadedFrom(path: "world.json"), actual: checkpoint.Server.BaseOrigin);
             AssertNamesNoPath(bytes: bytes, directory: Path.GetFullPath(path: relativeDirectory));
@@ -221,7 +170,7 @@ public sealed class CheckpointAssetAnchorLawTests {
         );
         fixture.Step();
 
-        var (bytes, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
+        var (bytes, checkpoint) = Capture(fixture: fixture);
         var expected = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Reload, Source: store);
 
         Assert.Equal(expected: expected, actual: checkpoint.Server.BaseOrigin);
@@ -243,7 +192,7 @@ public sealed class CheckpointAssetAnchorLawTests {
         using var fixture = Fixtures.FreshServer(definition: WorldAt(directory: world.RootPath));
         var origin = BaseOriginCase(@case: @case);
 
-        var (_, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
+        var (_, checkpoint) = Capture(fixture: fixture);
 
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
             bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: (checkpoint with { Server = (checkpoint.Server with { BaseOrigin = origin }) })),
@@ -288,7 +237,7 @@ public sealed class CheckpointAssetAnchorLawTests {
         using var world = new TemporaryDirectory(prefix: "puck-anchor-world-");
         using var fixture = Fixtures.FreshServer(definition: WorldAt(directory: world.RootPath));
 
-        var (_, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
+        var (_, checkpoint) = Capture(fixture: fixture);
         var tampered = (checkpoint with { Server = (checkpoint.Server with { BaseOrigin = LoadedFrom(path: relative) }) });
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
@@ -311,30 +260,5 @@ public sealed class CheckpointAssetAnchorLawTests {
             request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, Origin: new WorldRebuildOrigin.File(Path: path), Force: true)
         );
         fixture.Step();
-    }
-
-    // The wire refuses a directory that climbs out of its root or names one absolutely, whatever wrote it.
-    [Theory]
-    [InlineData("../escape")]
-    [InlineData("C:/rooted")]
-    [InlineData("/rooted")]
-    [InlineData("nested/../escape")]
-    public void TheWireRefusesADirectoryOutsideItsRoot(string relative) {
-        using var world = new TemporaryDirectory(prefix: "puck-anchor-world-");
-        using var fixture = Fixtures.FreshServer(definition: WorldAt(directory: world.RootPath));
-
-        var (_, checkpoint) = CaptureWithOwnedWorld(fixture: fixture);
-        var tampered = (checkpoint with {
-            OwnedWorlds = (checkpoint.OwnedWorlds with {
-                Documents = [.. checkpoint.OwnedWorlds.Documents.Select(selector: document => (document with { RelativeDirectory = relative }))],
-            }),
-        });
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: tampered),
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(actualString: reason, expectedSubstring: "owned world asset directory");
     }
 }

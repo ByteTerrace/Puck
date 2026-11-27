@@ -1,0 +1,85 @@
+// The standard identity template: the document every character an account mints starts as (seatDefaults'
+// identityTemplate, which character.puck names). It holds the identity section's defaults and the character's record
+// store, and nothing of any world: no placements, views, rules or screens, so a character is as small as what it holds.
+//
+// The identity section is also the release's default first character: an account holding no character mints one
+// under this id, name and colour. A release that wants another template names its own; a world refines nothing here.
+//
+// The store is a set of record pools a world's rules claim, write and release on the character (claimIdentityRecord,
+// claimIdentityPair, setIdentityRecord, releaseIdentityRecord). An instance is named by its pool, slot and generation,
+// so an entry the player made keeps its identity while it lives and reads absent once released. Each pool has a travel
+// class:
+//
+//   home      stays with the account: the journal's notes, the player's own tags and links between notes, where they
+//             are laid out. A world on the account's host writes them through the character it binds; no projection
+//             carries them to another host.
+//   crossing  travels with the character into every world it enters: marks it leaves, items it carries, quests it
+//             follows. A visited world writes them on the travelling copy, and the account adopts them on return.
+//
+// Facts are integers under each writing package's namespace (`<package>$<fact>`), so a world writes only its own; its
+// rules spell the fact bare. A template may also list under identity.homeScoped the facts and pools only the player's
+// own doors write, never a world's rule; the standard keeps none from the worlds it imports.
+
+identity {
+  id: "player"
+  name: "Player"
+  color: "#C9A46A"
+  moveSpeedState: moveSpeed
+  turnSpeedState: turnSpeed
+  facts {
+    state: facts
+    capacity: 1024
+  }
+  travel [
+    { pool: marks, class: Crossing }
+    { pool: items, class: Crossing }
+    { pool: quests, class: Crossing }
+  ]
+}
+
+state {
+  // A journal entry the player writes: free text, where it sits in the player's own arrangement, and whether it is
+  // pinned to the top of the journal.
+  record Note {
+    text: Text = ""
+    x: Int bounds(-4096..4096) = 0
+    y: Int bounds(-4096..4096) = 0
+    pinned: Bool = false
+  }
+  // A tag the player names, and the colour it shows in.
+  record Tag {
+    name: Text = ""
+    color: Int bounds(0..15) = 0
+  }
+  // A tag on a note, and a link from one note to another, carry nothing but the pair itself.
+  record Join {
+    weight: Int bounds(0..100) = 0
+  }
+  // A mark the character left: what kind, in which world, and where in it.
+  record Mark {
+    kind: Int bounds(0..255) = 0
+    world: Text = ""
+    x: Fixed = 0
+    y: Fixed = 0
+    z: Fixed = 0
+  }
+  // An item the character carries, by its catalog id, and how many.
+  record Item {
+    item: Text = ""
+    count: Int bounds(0..9999) = 1
+  }
+  // A quest the character follows: which, the step it has reached, and whether it is active, done or set aside.
+  record Quest {
+    quest: Text = ""
+    step: Int bounds(0..255) = 0
+    status: Int bounds(0..3) = 0
+  }
+
+  pool notes of Note capacity(512)
+  pool tags of Tag capacity(64)
+  pairPool noteTags record Join left notes right tags maxLive 1024
+  pairPool noteLinks record Join left notes right notes maxLive 1024
+  pool marks of Mark capacity(256)
+  pool items of Item capacity(128)
+  pool quests of Quest capacity(64)
+}

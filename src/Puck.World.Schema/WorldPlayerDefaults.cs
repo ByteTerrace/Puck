@@ -7,7 +7,12 @@ namespace Puck.World;
 /// <summary>The authored seed identities and player presentation tuning. Every field is optional; the resolved
 /// (non-"Raw") property of each field's own name states its ABSENT semantics. <see cref="SeatLook"/> is read per
 /// seat from whichever document owns it: the world's for an unclaimed seat, the joined identity's own for a claimed
-/// one, which is how a player's feel travels with their profile (see <see cref="WorldSeatCameraFeel"/>).</summary>
+/// one, which is how a player's feel travels with their profile (see <see cref="WorldSeatCameraFeel"/>).
+/// <para><see cref="IdentityTemplate"/> names the document every character this world's account mints is seeded from: a
+/// path resolved beside the document that authors it, like every document path (<see cref="WorldDocumentPaths"/>). The
+/// template's own <c>identity</c> section is the account's first character when the account holds none and the world
+/// authors no <see cref="Identities"/>; its <c>state</c> is what every character starts with. A world naming no template
+/// seeds characters holding nothing but their identity section, so no host world's sections ever enter a character.</para></summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlayerDefaults(
     // ABSENT semantics below hold for every raw field: the document declares only what it wants to state; a raw
@@ -24,7 +29,9 @@ public sealed record WorldPlayerDefaults(
     [property: DocumentText("a color literal")]
     [property: JsonPropertyName("pickerNeutralColor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PickerNeutralColorRaw = null,
     float PickerNeutralBlend = 0f,
-    [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatCameraFeel? SeatLookRaw = null
+    [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatCameraFeel? SeatLookRaw = null,
+    [property: DocumentText("a document path")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdentityTemplate = null
 ) {
     /// <summary>The neutral gray used for every color field an absent document leaves unauthored.</summary>
     private const string InertColor = "#8C8C8C";
@@ -72,7 +79,11 @@ public sealed record WorldIdentitySeed(
 /// <see cref="WorldVoiceProfile"/>).</param>
 /// <param name="Facts">The facts row this identity carries and its capacity, or <see langword="null"/> for
 /// <see cref="WorldIdentityFacts.Default"/>.</param>
-/// <param name="Records">The capacity-one pools owned by this identity and carried across authority boundaries.</param>
+/// <param name="Travel">The travel class of each record pool this identity's document declares that crosses an
+/// authority seam (<see cref="WorldIdentityPool"/>). A declared pool this list does not name is
+/// <see cref="WorldIdentityTravel.Home"/>: it stays with the account and never enters a projection.</param>
+/// <param name="HomeScoped">The facts (by their full, namespaced key) and pools that only the identity's own owner
+/// writes, through the console's home doors: no world's rule writes one, whatever its package.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldIdentityDefinition(
     SafeName Id,
@@ -83,17 +94,57 @@ public sealed record WorldIdentityDefinition(
     IReadOnlyList<WorldControllerStateSlots>? Controllers = null,
     WorldVoiceProfile? Voice = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityFacts? Facts = null,
-    IReadOnlyList<CellName>? Records = null
+    IReadOnlyList<WorldIdentityPool>? Travel = null,
+    IReadOnlyList<CellName>? HomeScoped = null
 ) {
-    /// <summary>Gets the immutable selection of identity-owned record pools.</summary>
-    [DocumentName(WorldNameKind.Pool, WorldNameRole.Names)]
+    /// <summary>Gets the immutable travel classes of the identity's crossing pools.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<CellName>? Records { get => field; init => field = value?.ToImmutableArray(); } = Records?.ToImmutableArray();
+    public IReadOnlyList<WorldIdentityPool>? Travel { get => field; init => field = value?.ToImmutableArray(); } = Travel?.ToImmutableArray();
+    /// <summary>Gets the immutable list of home-scoped facts and pools.</summary>
+    [DocumentText("a fact key or pool name on the identity's own document")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CellName>? HomeScoped { get => field; init => field = value?.ToImmutableArray(); } = HomeScoped?.ToImmutableArray();
     /// <summary>Gets the facts row and capacity — <see cref="Facts"/>, or <see cref="WorldIdentityFacts.Default"/>
     /// when the section authors none.</summary>
     [JsonIgnore]
     public WorldIdentityFacts FactsOrDefault => (Facts ?? WorldIdentityFacts.Default);
+    /// <summary>Returns the travel class of one of the identity's pools.</summary>
+    /// <param name="pool">The pool's name on the identity's document.</param>
+    /// <returns><see cref="WorldIdentityTravel.Crossing"/> when <see cref="Travel"/> names the pool crossing, else
+    /// <see cref="WorldIdentityTravel.Home"/>.</returns>
+    public WorldIdentityTravel TravelOf(CellName pool) {
+        foreach (var entry in (Travel ?? [])) {
+            if (entry.Pool == pool) {
+                return entry.Class;
+            }
+        }
+
+        return WorldIdentityTravel.Home;
+    }
+    /// <summary>Returns whether only the identity's own owner writes a fact or pool.</summary>
+    /// <param name="name">The fact's full key, or the pool's name.</param>
+    /// <returns><see langword="true"/> when <see cref="HomeScoped"/> names it.</returns>
+    public bool IsHomeScoped(CellName name) => (HomeScoped?.Contains(value: name) == true);
 }
+/// <summary>Where one of an identity's record pools may go: whether a projection carries it across an authority
+/// seam.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldIdentityTravel>))]
+public enum WorldIdentityTravel : byte {
+    /// <summary>The pool stays with the account: the player's own notes, tags and arrangement. A world on this account's
+    /// host reads and writes it through the bound owned identity; a projection never carries it.</summary>
+    Home,
+    /// <summary>The pool crosses with the identity: discovered facts, marks, quest progress. A projection carries it to
+    /// every world the identity enters, and its owner adopts what a colocated traveller carried home.</summary>
+    Crossing,
+}
+/// <summary>The travel class of one identity record pool.</summary>
+/// <param name="Pool">The pool's name on the identity's document.</param>
+/// <param name="Class">Its travel class.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldIdentityPool(
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] CellName Pool,
+    WorldIdentityTravel Class
+);
 /// <summary>Two text state rows that identify one reconnect-stable controller.</summary>
 /// <param name="MachineState">The row containing the machine id.</param>
 /// <param name="DeviceState">The row containing the device id.</param>

@@ -1,3 +1,4 @@
+using static Puck.World.Testing.CrossingIdentityFixtures;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;

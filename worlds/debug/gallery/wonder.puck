@@ -20,8 +20,8 @@
 //     throughout
 //
 // A body holding a pass takes its full size in every zone. A pass is a body register, so it belongs to the body and
-// crosses with it, and does not persist with the player: an identity fact would, but `setIdentityFact` refuses a seat
-// driving under no identity, which a pass every visitor can earn cannot depend on.
+// crosses with it, and does not persist with the player: a pass is earned for one visit, where an identity fact
+// (`setIdentityFact`) would keep it on the character.
 //
 // The lower flight's zone reaches a little above level 1's floor, so a body standing on level 1 at the stair's foot or
 // in the lift's car, its foot a skin above the floor's top, takes Alice's size exactly rather than the upper flight's

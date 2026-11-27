@@ -8,7 +8,7 @@ public static partial class WorldStateHashComposition {
     /// <summary>Folds explicit identity ownership and logical-to-physical attachment declarations.</summary>
     public static void AppendPoolBindings(ref Fnv1aHash hash, WorldDefinition definition) {
         var carriers = (definition.Properties?.Carriers ?? []);
-        var records = (definition.Identity?.Records ?? []);
+        var records = (definition.Identity?.Travel ?? []);
 
         if ((carriers.Count == 0) && (records.Count == 0)) {
             return;
@@ -27,7 +27,8 @@ public static partial class WorldStateHashComposition {
         }
         hash.Add(value: records.Count);
         foreach (var record in records) {
-            AppendString(hash: ref hash, value: record.Value);
+            AppendString(hash: ref hash, value: record.Pool.Value);
+            hash.Add(value: ((byte)record.Class));
         }
     }
     /// <summary>Folds an identity's owned records, caching the immutable snapshot's digest between writes.</summary>

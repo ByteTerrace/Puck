@@ -1495,6 +1495,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1925,6 +2082,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2355,6 +2669,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -3469,6 +3940,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `rules[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `rules[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `rules[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `rules[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -3917,6 +4545,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `rules[].decision.options[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `rules[].decision.options[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4388,6 +5173,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `rules[].decision.onNoChoice[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4427,7 +5369,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].locals[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].zones` | Zone | Names | Read | `Rule.Zones` |
 | `rules[].poolForEach.pool` | Pool | Names | Read | `RulePoolIteration.Pool` |
-| `identity.records` | Pool | Names | Read | `WorldIdentityDefinition.Records` |
+| `identity.travel[].pool` | Pool | Names | Read | `WorldIdentityPool.Pool` |
 | `properties.carriers[].pool` | Pool | Names | Read | `WorldPoolBodyCarrier.Pool` |
 | `properties.carriers[].bindings[].placement` | Placement | Names | Read | `WorldPoolBodyBinding.Placement` |
 | `interactions.interactions[].left` | Any | Names | Read | `WorldInteraction.Left` |
@@ -4801,6 +5743,163 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].key` | State | Key | Read | `WorldEffect.ClaimIdentityRecord.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Right` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression` | State | Expression | Read | `WorldIdentityRecordValue.Expression` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].key` | State | Key | Read | `WorldEffect.ReleaseIdentityRecord.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Slot` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation` | State | Expression | Read | `WorldEffect.ReleaseIdentityRecord.Generation` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setBodyState].key` | State | Key | Read | `WorldEffect.SetBodyState.Key` |
 | `interactions.interactions[].effects[][setBodyState].expression` | State | Expression | Read | `WorldEffect.SetBodyState.Expression` |
 | `interactions.interactions[].effects[][setBodyState].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5108,6 +6207,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `seatDefaults.neutralColor` | `WorldPlayerDefaults.NeutralColorRaw` | a color literal |
 | `seatDefaults.colorSequence.name` | `WorldSequence.Name` | a sequence name |
 | `seatDefaults.pickerNeutralColor` | `WorldPlayerDefaults.PickerNeutralColorRaw` | a color literal |
+| `seatDefaults.identityTemplate` | `WorldPlayerDefaults.IdentityTemplate` | a document path |
 | `channels[].name` | `WorldChannel.Name` | an input channel name |
 | `channels[].relative.unit` | `WorldRelativeChannel.Unit` | a relative channel unit |
 | `inputModes.global` | `WorldInputModes.Global` | logical input channels |
@@ -5514,7 +6614,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -5531,6 +6631,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -5807,7 +7061,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -5824,6 +7078,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -6100,7 +7508,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -6117,6 +7525,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -6711,7 +8273,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `rules[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -6728,6 +8290,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `rules[].effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -7021,7 +8737,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7038,6 +8754,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.options[].effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.options[].effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].decision.options[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].decision.options[].effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.options[].effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -7349,7 +9219,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7366,6 +9236,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.onNoChoice[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.onNoChoice[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].decision.onNoChoice[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.onNoChoice[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -7411,6 +9435,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `identity.voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `identity.voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `identity.facts.state` | `WorldIdentityFacts.State` | an identity-lane row name |
+| `identity.homeScoped` | `WorldIdentityDefinition.HomeScoped` | a fact key or pool name on the identity's own document |
 | `groups.kinds[].name` | `WorldGroupKind.Name` | a group kind name |
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
 | `groups.groups[].kindName` | `WorldGroup.KindName` | a group kind |
@@ -7649,7 +9674,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
+| `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, which the writing world's package qualifies |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7666,6 +9691,160 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `interactions.interactions[].effects[][setIdentityFact].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityRecord].pool` | `WorldEffect.ClaimIdentityRecord.Pool` | a record pool on the identity's own document |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `interactions.interactions[].effects[][claimIdentityPair].pool` | `WorldEffect.ClaimIdentityPair.Pool` | a pair pool on the identity's own document |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `interactions.interactions[].effects[][setIdentityRecord].pool` | `WorldEffect.SetIdentityRecord.Pool` | a record pool on the identity's own document |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].field` | `WorldIdentityRecordValue.Field` | a record field of an identity pool |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].text` | `WorldIdentityRecordValue.Text` | a text value |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][setIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].pool` | `WorldEffect.ReleaseIdentityRecord.Pool` | a record pool on the identity's own document |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].slot{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][releaseIdentityRecord].generation{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `interactions.interactions[].effects[][setBodyState].state` | `WorldEffect.SetBodyState.State` | a per-body slot name |
 | `interactions.interactions[].effects[][setBodyState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `interactions.interactions[].effects[][setBodyState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |

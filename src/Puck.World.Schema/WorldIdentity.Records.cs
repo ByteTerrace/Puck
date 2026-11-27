@@ -4,12 +4,13 @@ public sealed partial class WorldIdentity {
     private WorldStateSection? m_travelRecords;
     private WorldDefinition? m_recordSource;
     private WorldStateSection? m_selectedRecords;
-    private WorldStateSection? m_recordArenaSource;
-    private StateArena? m_recordArena;
+    private WorldStateSection? m_storeSource;
+    private WorldStateSection? m_store;
+    private WorldStateSection? m_storeArenaSource;
+    private StateArena? m_storeArena;
 
-    private readonly StateInstanceHandle[] m_recordHandles = new StateInstanceHandle[1];
-
-    /// <summary>Gets the explicitly owned typed record state, excluding private document state.</summary>
+    /// <summary>Gets the record pools this identity's projection carries across a seam: its document's crossing pools
+    /// (<see cref="WorldIdentityTravel.Crossing"/>), or a traveller's travelling records.</summary>
     public WorldStateSection? RecordState {
         get {
             if (Document is not { } document) {
@@ -22,128 +23,193 @@ public sealed partial class WorldIdentity {
             return m_selectedRecords;
         }
     }
+    /// <summary>Gets the whole record store this identity holds: every pool its owned document declares, home and
+    /// crossing, or a traveller's travelling records.</summary>
+    public WorldStateSection? RecordStore {
+        get {
+            if (Document is not { } document) {
+                return m_travelRecords;
+            }
+            if (!ReferenceEquals(objA: m_storeSource, objB: document.StateRaw)) {
+                m_store = WorldIdentityRecords.Store(document: document);
+                m_storeSource = document.StateRaw;
+            }
+            return m_store;
+        }
+    }
 
-    private bool TryRecordArena(out StateArena arena, out string reason) {
-        var section = RecordState;
-
-        if (section is null) {
+    // A read-only arena over the store as it stands, rebuilt when the store's section moves. Reads only: every write
+    // goes through a stage, which owns its own arena.
+    private bool TryStoreArena(out StateArena arena) {
+        if (RecordStore is not { } section) {
             arena = null!;
-            reason = $"identity '{Id}' carries no records";
             return false;
         }
-        if (ReferenceEquals(objA: section, objB: m_recordArenaSource) && (m_recordArena is not null)) {
-            arena = m_recordArena;
-            reason = string.Empty;
+        if (ReferenceEquals(objA: section, objB: m_storeArenaSource) && (m_storeArena is { } held)) {
+            arena = held;
             return true;
         }
         var time = ArenaTime.Origin;
 
-        if (!StateArena.TryCreate(catalog: StateCatalog.Compile(section: section), section: section, options: null,
-            time: in time, arena: out var created, reason: out reason)) {
+        if (!StateArena.TryCreate(catalog: StateCatalog.Compile(section: section), section: section, options: null, time: in time, arena: out var created, reason: out _)) {
             arena = null!;
             return false;
         }
+        m_storeArenaSource = section;
+        m_storeArena = created;
         arena = created;
-        m_recordArenaSource = section;
-        m_recordArena = arena;
         return true;
     }
 
-    /// <summary>Reads a typed field from an explicitly owned record pool, including a traveler's records.</summary>
-    public bool TryReadRecord(CellName record, CellName field, out CellValue value) {
+    /// <summary>Reads one field of the live instance in a pool slot, a traveller's records included.</summary>
+    /// <param name="pool">The pool's name on the identity.</param>
+    /// <param name="slot">The 0-based slot.</param>
+    /// <param name="field">The record field.</param>
+    /// <param name="value">The field's value, on success.</param>
+    /// <returns><see langword="true"/> when the slot holds a live instance with that field.</returns>
+    public bool TryReadRecord(CellName pool, int slot, CellName field, out CellValue value) {
         value = default;
-        if (!TryRecordArena(arena: out var arena, reason: out _) || !arena.Catalog.TryGetPool(name: record, pool: out var pool) || (pool is null)) {
-            return false;
-        }
-        if (arena.CopyPoolSnapshot(poolOrdinal: pool.Ordinal, destination: m_recordHandles) != 1) {
-            return false;
-        }
-        for (var index = 0; (index < pool.Fields.Count); index++) {
-            if (pool.Fields[index].Name == field) {
-                return arena.TryRead(m_recordHandles[0], pool.Fields[index].Ordinal, out value);
-            }
-        }
-        return false;
+
+        return (TryStoreArena(arena: out var arena) && WorldIdentityStage.TryReadField(arena: arena, field: field, pool: pool, slot: slot, value: out value));
     }
-    /// <summary>Writes one owned record field after validating its kind and bounds. The updated document is
-    /// available through <see cref="Document"/> for the owning persistence service to save.</summary>
-    public bool TryWriteRecord(CellName record, CellName field, CellValue value, out string reason) {
-        var section = RecordState;
+    /// <summary>Returns the live instances in a pool and the generation of one slot.</summary>
+    /// <param name="pool">The pool's name on the identity.</param>
+    /// <returns>The number of live instances, or 0 when the identity holds no such pool.</returns>
+    public int CountRecords(CellName pool) => ((TryStoreArena(arena: out var arena) && arena.Catalog.TryGetPool(name: pool, pool: out var descriptor))
+        ? arena.CellCount(rowOrdinal: descriptor.DomainRowOrdinal)
+        : 0);
+    /// <summary>Returns the generation of the live instance in a pool slot.</summary>
+    /// <param name="pool">The pool's name on the identity.</param>
+    /// <param name="slot">The 0-based slot.</param>
+    /// <param name="generation">The live instance's generation, on success.</param>
+    /// <returns><see langword="true"/> when the slot holds a live instance.</returns>
+    public bool TryRecordGeneration(CellName pool, int slot, out long generation) {
+        generation = 0L;
+        if (!TryStoreArena(arena: out var arena) || !arena.Catalog.TryGetPool(name: pool, pool: out var descriptor) || !arena.TryResolvePoolSlot(handle: out var handle, poolOrdinal: descriptor.Ordinal, slot: slot)) {
+            return false;
+        }
+        generation = handle.Generation;
+        return true;
+    }
+    /// <summary>Opens a stage over this identity's record store: a private copy every claim, release and field write
+    /// lands in, admitted by the writer that asks, until <see cref="Apply"/> installs it whole or the stage is
+    /// dropped.</summary>
+    /// <param name="stage">The stage, on success.</param>
+    /// <param name="reason">Why no stage opened, or empty on success.</param>
+    /// <returns><see langword="true"/> when the identity holds a record store.</returns>
+    public bool TryOpenStage(out WorldIdentityStage stage, out string reason) {
+        stage = null!;
+        if (RecordStore is not { } section) {
+            reason = $"identity '{Id}' holds no record store";
+            return false;
+        }
+        var time = ArenaTime.Origin;
 
-        if (section is null) {
-            reason = $"identity '{Id}' carries no record '{record}'";
+        if (!StateArena.TryCreate(catalog: StateCatalog.Compile(section: section), section: section, options: null, time: in time, arena: out var arena, reason: out reason)) {
+            reason = $"identity '{Id}' record store does not load: {reason}";
             return false;
         }
-        if (!TryRecordArena(arena: out var arena, reason: out reason)) {
-            return false;
-        }
-        if (!arena.Catalog.TryGetPool(name: record, pool: out var pool) || (pool is null)) {
-            reason = $"identity '{Id}' cannot resolve record '{record}'";
-            return false;
-        }
-        var member = pool.Fields.FirstOrDefault(predicate: candidate => (candidate.Name == field));
-
-        if ((member.Name != field) || (arena.CopyPoolSnapshot(poolOrdinal: pool.Ordinal, destination: m_recordHandles) != 1)) {
-            reason = $"identity record '{record}' has no live field '{field}'";
-            return false;
-        }
-        if (!arena.TryWrite(handle: m_recordHandles[0], fieldOrdinal: member.Ordinal, value: value, reason: out reason)) {
-            return false;
-        }
-        var updated = section with { Pools = arena.ToPools() };
-
-        if (Document is { } document) {
-            var replacements = updated.Pools!.ToDictionary(keySelector: pool => pool.Name);
-
-            Document = document with {
-                StateRaw = document.StateRaw! with {
-                    Pools = document.StateRaw!.Pools!.Select(selector: pool => replacements.GetValueOrDefault(pool.Name, pool)).ToArray(),
-                },
-            };
-        } else {
-            m_travelRecords = updated;
-        }
-        m_factsRevision++;
+        stage = new WorldIdentityStage(identity: this, source: section, arena: arena);
         reason = string.Empty;
         return true;
     }
-    /// <summary>Adopts what this identity's own traveler carried home: every fact on the traveler's travelling row and
-    /// every field of the record pools this identity owns. Nothing else of <paramref name="carried"/> is read, so this
-    /// identity keeps its own name, color, rates, panel, bindings and seat look. Each value passes the write door a
-    /// local write passes, so a value this identity's own declarations refuse is skipped and named. An identity with an
-    /// owned document adopts into it; one rebuilt from a projection (a replay's detached copy of an owned identity)
-    /// adopts into its travelling rows.</summary>
-    /// <param name="carried">The identity the traveler arrived as, rebuilt from its projection.</param>
+    /// <summary>Installs a stage's store whole: its pools and pair pools replace the ones the identity holds, in its
+    /// owned document or its travelling records. A stage opened over an earlier store than the one the identity now
+    /// holds is refused, so two stages can never interleave.</summary>
+    /// <param name="stage">The stage this identity opened.</param>
+    /// <param name="reason">Why the stage was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the stage was installed or held no write.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stage"/> is <see langword="null"/>.</exception>
+    public bool Apply(WorldIdentityStage stage, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: stage);
+        if (!ReferenceEquals(objA: stage.Identity, objB: this)) {
+            reason = $"the stage belongs to identity '{stage.Identity.Id}', not '{Id}'";
+            return false;
+        }
+        if (!stage.Dirty) {
+            reason = string.Empty;
+            return true;
+        }
+        if (!ReferenceEquals(objA: stage.Source, objB: RecordStore) && !SameStore(left: stage.Source, right: RecordStore)) {
+            reason = $"identity '{Id}' record store moved after the stage opened";
+            return false;
+        }
+        var pools = stage.Arena.ToPools();
+        var pairs = stage.Arena.ToPairPools();
+
+        if (Document is { } document) {
+            var poolsByName = pools.ToDictionary(keySelector: static pool => pool.Name);
+            var pairsByName = pairs.ToDictionary(keySelector: static pool => pool.Name);
+            var state = document.StateRaw!;
+
+            Document = document with {
+                StateRaw = state with {
+                    Pools = (state.Pools ?? []).Select(selector: pool => poolsByName.GetValueOrDefault(pool.Name, pool)).ToArray(),
+                    PairPools = ((state.PairPools is { } declared) ? declared.Select(selector: pool => pairsByName.GetValueOrDefault(pool.Name, pool)).ToArray() : null),
+                },
+            };
+        } else {
+            m_travelRecords = stage.Source with { Pools = pools, PairPools = ((pairs.Count > 0) ? pairs : null) };
+        }
+        m_factsRevision++;
+        stage.MarkApplied();
+        reason = string.Empty;
+        return true;
+    }
+
+    // A document replaced by an edit that kept every pool (a fact write, a rate) holds a new store section with the same
+    // pools; the stage still describes it.
+    private static bool SameStore(WorldStateSection? left, WorldStateSection? right) => (
+        (left is not null) &&
+        (right is not null) &&
+        (left.Pools ?? []).SequenceEqual(second: (right.Pools ?? [])) &&
+        (left.PairPools ?? []).SequenceEqual(second: (right.PairPools ?? []))
+    );
+
+    /// <summary>Adopts what this identity's own traveller carried home: every fact on the traveller's travelling row and
+    /// every crossing pool it carried, through the doors a local write passes. A fact or pool this identity marks
+    /// home-scoped is never adopted, since no world writes one. Nothing else of <paramref name="carried"/> is read, so
+    /// this identity keeps its own name, color, rates, panel, bindings, seat look and home pools.</summary>
+    /// <param name="carried">The identity the traveller arrived as, rebuilt from its projection.</param>
     /// <param name="reason">The first value refused, or empty when every value was adopted.</param>
     /// <returns><see langword="true"/> when every carried value was adopted.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="carried"/> names another identity.</exception>
+    /// <remarks>The carried values are unsigned, so which package wrote each is not known here: the home-scoped classes
+    /// are what a carried projection cannot reach. Binding a carried write to the package that wrote it is the signed
+    /// write-back of remote home adoption.</remarks>
     public bool TryAdopt(WorldIdentity carried, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: carried);
         if (!string.Equals(a: carried.Id, b: Id, comparisonType: StringComparison.Ordinal)) {
             throw new InvalidOperationException(message: $"identity '{Id}' cannot adopt what '{carried.Id}' carried");
         }
+        if (ReferenceEquals(objA: carried, objB: this)) {
+            reason = string.Empty;
+            return true;
+        }
 
+        var definition = Document?.Identity;
         var refused = string.Empty;
 
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
-            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
+            if (definition?.IsHomeScoped(name: cell.Key) == true) {
+                continue;
+            }
+            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, writer: WorldIdentityWriter.Home, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
                 refused = $"fact '{cell.Key}': {factReason}";
             }
         }
-        if (RecordState is { } owned) {
-            foreach (var pool in (owned.Pools ?? [])) {
-                var record = (owned.Records ?? []).FirstOrDefault(predicate: candidate => (candidate.Name == pool.Record));
-
-                foreach (var field in (record?.Fields ?? [])) {
-                    if (
-                        carried.TryReadRecord(record: pool.Name, field: field.Name, value: out var value) &&
-                        !TryWriteRecord(record: pool.Name, field: field.Name, value: value, reason: out var recordReason) &&
-                        (refused.Length == 0)
-                    ) {
-                        refused = $"record '{pool.Name}.{field.Name}': {recordReason}";
-                    }
+        if ((carried.RecordState is { Pools: { Count: > 0 } carriedPools } carriedSection) && TryOpenStage(stage: out var stage, reason: out _)) {
+            foreach (var pool in carriedPools) {
+                if ((definition?.IsHomeScoped(name: pool.Name) == true) || (definition is not null && (definition.TravelOf(pool: pool.Name) != WorldIdentityTravel.Crossing))) {
+                    continue;
                 }
+                if (!stage.TryReplacePool(carried: carriedSection, pool: pool.Name, reason: out var poolReason) && (refused.Length == 0)) {
+                    refused = $"pool '{pool.Name}': {poolReason}";
+                }
+            }
+            if (!Apply(stage: stage, reason: out var applyReason) && (refused.Length == 0)) {
+                refused = applyReason;
             }
         }
 

@@ -20,6 +20,38 @@ public sealed record WorldPackageManifest(string Id, string Name, string Entry) 
     public const string SchemaId = "puck.asset-package.v1";
 
     private static readonly string[] Members = ["schema", "id", "name", "entry"];
+    // The package id a document directory lies in, read once per directory per process: a package's identity is its
+    // manifest's, and a manifest is not edited under a running world.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> EnclosingIds = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
+
+    /// <summary>Returns the namespace a world's rules write an identity's facts and pools under: the id of the package
+    /// whose folder holds the document (the nearest <see cref="FileName"/> at or above its directory), or the document's
+    /// own id for a document in no package. Every world of one package shares one namespace, so an overworld reads what
+    /// its levels wrote.</summary>
+    /// <param name="definition">The executing world.</param>
+    /// <returns>The namespace, or <see langword="null"/> when the document lies in no package and names no id, or the id
+    /// it would use carries a generated-name joiner.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static string? IdentityNamespaceOf(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var id = ((definition.DocumentDirectory is { } directory) ? EnclosingIds.GetOrAdd(key: directory, valueFactory: static start => EnclosingId(directory: start)) : null) ?? definition.DocumentId;
+
+        return ((!string.IsNullOrEmpty(value: id) && !id.Contains(value: GeneratedName.Joiner) && !id.Contains(value: GeneratedName.FileJoiner) && CellName.TryParse(candidate: id, name: out _, reason: out _))
+            ? id
+            : null);
+    }
+
+    // Walks up from a directory to the nearest readable manifest and answers its id.
+    private static string? EnclosingId(string directory) {
+        for (var current = new DirectoryInfo(path: directory); (current is not null); current = current.Parent) {
+            if (TryRead(manifest: out var manifest, path: Path.Combine(path1: current.FullName, path2: FileName), reason: out _)) {
+                return manifest.Id;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Returns whether <paramref name="path"/> names a package: a folder, or a package manifest file.</summary>
     /// <param name="path">A full path.</param>
