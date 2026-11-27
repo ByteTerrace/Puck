@@ -324,7 +324,7 @@ A lambda is written where no collection function takes one.
 
 Example: `thickness: x => x * 2`.
 
-Fix: pass the lambda as an argument of `map`, `filter`, `reduce`, `flatMap`, `groupBy`, `sort` and the like.
+Fix: pass the lambda as an argument of one of the builtins that takes one (`map`, `filter`, `reduce`, `flatMap`, `groupBy`, `sort`, `any`, `all`, `count`, `sum`, `scan`, `indexOf`, `find`); the message lists them. A function that reads values only, such as `sine`, takes none.
 
 ### PUCK043
 
@@ -543,12 +543,14 @@ Fix: rename it.
 
 ### PUCK053
 
-A default or `bounds` argument does not fit the row's kind.
+A default or `bounds` argument does not fit the row's kind, or a declaration's `= value` is not the shape its row takes.
 
-Example: `slot ready = 3` for a Bool row, or `initial: a > b` where the comparison is not a constant.
+Example: `slot ready = 3` for a Bool row, `initial: a > b` where the comparison is not a constant, `table scores = 5`,
+or `pile deck of cards = 3`.
 
 Fix: write a literal of the row's kind: whole number for Int, decimal for Fixed, `true` or `false` for Bool, quoted text
-for Text. The message names the kind and what was written.
+for Text. The message names the kind and what was written. A table's `= value` is an array, keyed `0`, `1`, ... in
+order, or an object, keyed by its members; a pile's is an array of its starting token keys.
 
 ### PUCK054
 

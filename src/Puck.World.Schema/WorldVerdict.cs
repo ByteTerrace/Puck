@@ -62,7 +62,7 @@ public static class WorldVerdict {
     /// <param name="value">The typed cell value the gate read.</param>
     /// <returns>The spelling.</returns>
     public static string DescribeSeen(string key, CellValue value) => value.Kind switch {
-        CellKind.Text => $"{key}={System.Text.Json.JsonSerializer.Serialize(value.AsText)}",
+        CellKind.Text => $"{key}={System.Text.Json.JsonSerializer.Serialize(value: value.AsText, jsonTypeInfo: WorldJsonContext.Default.For<string>())}",
         CellKind.Bool => $"{key}={(value.AsBool ? "true" : "false")}",
         CellKind.Fixed => string.Create(
             provider: System.Globalization.CultureInfo.InvariantCulture,

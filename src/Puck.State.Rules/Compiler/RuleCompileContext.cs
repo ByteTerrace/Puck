@@ -358,8 +358,19 @@ public class RuleCompileContext : IRuleCostContext {
     /// <param name="key">The literal key, or invalid when the key is indirect.</param>
     /// <param name="keyFrom">The key indirection, or null for a literal key.</param>
     /// <returns>The typed read operand.</returns>
-    public virtual IRuleOperand CreateCellRead(StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
-        new StateCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind);
+    public virtual IRuleOperand CreateCellRead(StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        // A stored lattice's catalog interns every topology cell's spelling and a ring's every slot index's, so an
+        // integer key names exactly the cell at that position (StateCatalog's seed and index keys).
+        return new StateCellOperand(
+            key: key,
+            keyFrom: keyFrom,
+            positional: (!row.HostOwned && (row.EffectiveDomain is StateDomain.CellsOf or StateDomain.Ring)),
+            rowOrdinal: rowOrdinal,
+            valueKind: row.Kind
+        );
+    }
     /// <summary>Returns the most cells a row can hold, read from declarations only: see <see cref="RowCapacity(int)"/>.
     /// An undeclared name answers the section-wide ceiling.</summary>
     /// <param name="name">The row name.</param>

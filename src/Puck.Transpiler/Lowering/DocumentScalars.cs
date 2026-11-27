@@ -81,12 +81,17 @@ public static class DocumentScalars {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
 
-        if (call.Name is "dot" or "similarity" or "identical") {
+        if (call.Name is "similarity" or "identical") {
             return Refuse(
                 call: call,
                 message: $"the rule language evaluates '{call.Name}'; the document language does not fold it",
                 scope: scope
             );
+        }
+
+        // One argument reads a list: the smallest or largest of its numbers.
+        if ((call.Name is "minimum" or "maximum") && (call.Arguments.Count == 1)) {
+            return DocumentBuiltins.Extreme(call: call, fieldKey: fieldKey, scope: scope);
         }
 
         var function = ExpressionVocabulary.Functions[call.Name];

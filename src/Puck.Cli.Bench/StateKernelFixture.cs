@@ -1,6 +1,7 @@
 using AddressUse = Puck.State.Rules.AddressUse;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using EvaluationFrame = Puck.State.Rules.EvaluationFrame;
 using OperandAddress = Puck.State.Rules.OperandAddress;
 using RuleExpressions = Puck.State.Rules.RuleExpressions;
 using RuleOperand = Puck.State.Rules.RuleOperand;
@@ -101,11 +102,11 @@ public sealed class StateKernelDirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 1L;
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
         kind: CellKind.Int,
         value: ((long)RuleReads.ReadFixed(
             key: m_key,
-            reader: reader,
+            reader: frame.Reader,
             rowOrdinal: m_row
         ).Value)
     );
@@ -125,7 +126,8 @@ public sealed class StateKernelIndirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 2L;
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var reader = frame.Reader;
         var selected = ((long)RuleReads.ReadFixed(
             key: m_selector,
             reader: reader,
@@ -162,11 +164,11 @@ public sealed class StateKernelComputedKeyOperand : RuleOperand {
     public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
 
     public override RuleWork Cost(IRuleCostContext context) => 1L;
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
         kind: CellKind.Int,
         value: ((long)RuleReads.ReadFixed(
             key: keys[0].Key,
-            reader: reader,
+            reader: frame.Reader,
             rowOrdinal: m_row
         ).Value)
     );

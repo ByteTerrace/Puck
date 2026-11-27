@@ -464,22 +464,80 @@ internal class SdfFormula {
     // affine overload, and the box walk takes its interval rule there.
     private sealed class AffineUncovered(SdfFormulaOp op) : Exception($"Field formula operation {op} has no affine lowering.");
 
-    // The affine overloads of the formulas that have one, and which they are.
-    internal static string EmitAllFixedAffine(out HashSet<SdfFormula> covered, params SdfFormula[] formulas) {
+    // The affine overloads of the formulas that have one, and which they are: once over the instruction's raws (covered),
+    // and once over its parameter enclosures (enclosed), the overloads both share emitted once.
+    //
+    // THE ENCLOSED READING. Under the render reading a lane's float may lie between two raws (the evaluator's
+    // CompiledInstruction.Bounds0X and the rest), and a bound over the raws alone does not hold the field the kernels
+    // draw. The enclosed overloads take every lane a formula reads as an affine form of its enclosure (fresh noise, a raw
+    // wide at most) beside the walk state, so the affine library's own guarantee carries the parameters too: a form holds
+    // every value of its enclosure, and every operation holds its answer at every value its operands hold. A formula that
+    // reads a lane no form can hold (a rotation, a side table) or a node the library holds only over a constant (a varying
+    // exponent, a ratio's radii, a smoothstep's edges) has no enclosed overload, and the box walk takes its interval rule.
+    internal static string EmitAllFixedAffine(out HashSet<SdfFormula> covered, out HashSet<SdfFormula> enclosed, params SdfFormula[] formulas) {
         var written = new HashSet<string>();
         var output = new StringBuilder();
 
         covered = [];
+        enclosed = [];
         foreach (var formula in formulas) {
             if (formula.Result == SdfFormulaType.Condition) { continue; }
             var mask = formula.Parameters(shader: false).Select(static parameter => parameter.Bound && DualStates.Contains(parameter.Fixed)).ToArray();
-            if (!mask.Any(static active => active)) { continue; }
-            try {
-                formula.EmitAffine(mask: mask, output: output, written: written);
-                _ = covered.Add(formula);
-            } catch (AffineUncovered) { }
+            if (mask.Any(static active => active)) {
+                try {
+                    formula.EmitAffine(mask: mask, output: output, written: written);
+                    _ = covered.Add(formula);
+                } catch (AffineUncovered) { }
+            }
+            if (formula.EnclosedMask() is { } enclosedMask && enclosedMask.Any(static active => active)) {
+                try {
+                    formula.EmitAffine(mask: enclosedMask, output: output, written: written);
+                    _ = enclosed.Add(formula);
+                } catch (AffineUncovered) { }
+            }
         }
         return output.ToString().TrimEnd() + "\n";
+    }
+
+    // The walk state an enclosed overload's caller passes as forms.
+    private static readonly string[] EnclosedStates = ["p", "current", "candidate", "distance", "smoothRadius", "operand"];
+
+    // A lane's enclosure as the form an enclosed dispatch passes for it, or null for an argument that reads no lane.
+    private static string? EnclosureOf(string argument) {
+        const string Lane = "instruction.Data";
+
+        return argument switch {
+            "Vector(instruction)" => "Lift(box: instruction.BoundsVector)",
+            "Vector1(instruction)" => "Lift(box: instruction.BoundsVector1)",
+            _ when argument.StartsWith(Lane, StringComparison.Ordinal) && (argument.Length == (Lane.Length + 2)) =>
+                "FixedAffineForm.FromInterval(interval: instruction.Bounds" + argument.Substring(Lane.Length) + ")",
+            _ => null,
+        };
+    }
+
+    // Which parameters an enclosed overload takes as forms: the walk state and every lane, or null where a parameter reads
+    // the instruction in a way no form holds (a rotation, a side table), which leaves the formula no enclosed overload. A
+    // literal and the integer shape and blend lanes are exact, so they stay plain.
+    private bool[]? EnclosedMask() {
+        var parameters = Parameters(shader: false).ToArray();
+        var mask = new bool[parameters.Length];
+
+        for (var index = 0; index < parameters.Length; index++) {
+            var parameter = parameters[index];
+            var argument = parameter.Fixed!;
+
+            if (!parameter.Bound) { continue; }
+            mask[index] = Differentiable(parameter.Type) && (EnclosedStates.Contains(argument) || (EnclosureOf(argument) is not null));
+            if (!mask[index] && argument.Contains("instruction") && (argument is not ("instruction.Shape" or "instruction.Blend"))) { return null; }
+        }
+        return mask;
+    }
+
+    // The call an enclosed dispatch makes: each lane's enclosure in its raw's place, the walk state by its own name.
+    internal string DispatchEnclosed() {
+        var arguments = Parameters(shader: false).Select(static parameter => (parameter.Bound ? EnclosureOf(parameter.Fixed!) : null) ?? parameter.Fixed!);
+        if (UsesPower) { arguments = arguments.Concat(["ref powerWork"]); }
+        return Call(NameIn(shader: false), arguments);
     }
 
     private static string AffineTypeName(SdfFormulaType type) => type switch {
@@ -611,7 +669,7 @@ internal class SdfFormula {
             SdfFormulaOp.Vector3 => Function("Vec3", Lifted(0), Lifted(1), Lifted(2)),
             SdfFormulaOp.Clamp => (ActiveAt(1) || ActiveAt(2)) ? Function("Clamp", Lifted(0), Lifted(1), Lifted(2)) : Function("Clamp", Lifted(0), Value(1), Value(2)),
             SdfFormulaOp.Lerp => Function("Lerp", Lifted(0), Lifted(1), Lifted(2)),
-            SdfFormulaOp.SegmentParameter => Covered(!ActiveAt(1), () => Function("SegmentParameter", Lifted(0), Value(1))),
+            SdfFormulaOp.SegmentParameter => ActiveAt(1) ? Function("SegmentParameter", Lifted(0), Lifted(1)) : Function("SegmentParameter", Lifted(0), Value(1)),
             SdfFormulaOp.MinLength => Function("MinLength", Lifted(0), Lifted(1)),
             // |p| · min(r) / r rounded once, as the fixed carrier's SuperellipsoidScaledRatio does.
             SdfFormulaOp.ScaledRatio => Covered(!ActiveAt(1) && !ActiveAt(2), () => Function("MultiplyDivide", Lifted(0), Value(1), Value(2))),

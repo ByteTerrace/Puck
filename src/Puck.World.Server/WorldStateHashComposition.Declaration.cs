@@ -196,6 +196,7 @@ public static partial class WorldStateHashComposition {
             StateDomain.KeysOf => 2,
             StateDomain.CellsOf => 3,
             StateDomain.Ring => 4,
+            StateDomain.Tally => 5,
             _ => throw new InvalidOperationException(message: $"unknown state domain '{domain.GetType().Name}'"),
         })));
         switch (domain) {
@@ -220,6 +221,10 @@ public static partial class WorldStateHashComposition {
             case StateDomain.Ring ring:
                 hash.Add(value: ring.Capacity);
                 hash.Add(value: ring.Empty);
+
+                break;
+            case StateDomain.Tally tally:
+                hash.Add(value: tally.Capacity);
 
                 break;
             default:

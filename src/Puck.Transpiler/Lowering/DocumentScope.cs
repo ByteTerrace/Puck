@@ -354,6 +354,18 @@ public sealed partial class DocumentScope {
         defaultValue: this,
         key: name
     );
+    /// <summary>Reads a lexical binding's value as the binding holds it, without copying it: for a check or a read
+    /// (its kind, its text, its key), never for output. <see cref="TryLowerBinding"/> answers a copy to place.</summary>
+    /// <param name="name">The binding's name.</param>
+    /// <param name="value">The borrowed value, which may be null; the binding keeps it, so it is never changed or
+    /// placed in a container.</param>
+    /// <param name="fieldKey">The destination field used to validate unit suffixes.</param>
+    /// <returns>True when a local, template argument or constant bears the name.</returns>
+    public bool TryReadBinding(string name, out JsonNode? value, string? fieldKey = null) => TryEvaluateBinding(
+        fieldKey: fieldKey,
+        name: name,
+        value: out value
+    );
     // Evaluator-only borrowed values: never mutate or attach these nodes to an output container.
     internal bool TryEvaluateBinding(string name, string? fieldKey, out JsonNode? value) {
         if (Locals.TryGetValue(
@@ -585,16 +597,17 @@ public sealed partial class DocumentScope {
             switch (statement) {
                 case StatePoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
                 case StatePairPoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
-                case StateTableDeclarationNode row:
+                // A computed name is known only once a lowering scope evaluates it, so the catalog holds written names.
+                case StateTableDeclarationNode { NameExpression: null } row:
                     rows.Add(item: row.Name);
-                    if ((row.Kind == "Bool") || ((row.Cells.Count > 0) && row.Cells.All(predicate: static cell => IsBoolean(value: cell.Value)))) { gates.Add(item: row.Name); }
+                    if ((row.Kind == "Bool") || ((row.Cells.Count > 0) && row.Cells.All(predicate: static cell => (cell is StateCellEntryNode entry) && IsBoolean(value: entry.Value)))) { gates.Add(item: row.Name); }
                     break;
-                case StateSlotDeclarationNode row:
+                case StateSlotDeclarationNode { NameExpression: null } row:
                     rows.Add(item: row.Name);
                     if ((row.Kind == "Bool") || IsBoolean(value: row.Value)) { gates.Add(item: row.Name); }
                     break;
-                case StatePileDeclarationNode row: rows.Add(item: row.Name); break;
-                case StateGridDeclarationNode row: rows.Add(item: row.Name); break;
+                case StatePileDeclarationNode { NameExpression: null } row: rows.Add(item: row.Name); break;
+                case StateGridDeclarationNode { NameExpression: null } row: rows.Add(item: row.Name); break;
                 case BlockNode block: IndexStructuralNames(block.Statements, rows, pools, gates); break;
                 case ForStatementNode loop: IndexStructuralNames(loop.Body, rows, pools, gates); break;
                 case ConditionalStatementNode branch:

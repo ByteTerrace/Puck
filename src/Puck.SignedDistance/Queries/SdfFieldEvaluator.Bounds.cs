@@ -20,7 +20,9 @@ namespace Puck.SignedDistance.Queries;
 // under the render reading a bound also holds the field whose parameters are the packed floats the kernels evaluate:
 // each rule encloses its exact expression over every parameter its enclosures hold, which includes both the raw the point
 // walk reads and the float. A rule that tests a parameter's value (an identity turn, a unit scale, a branch on a lane)
-// tests its enclosure, and the affine reading carries a lane off the grid as noise or takes the interval rule's answer.
+// tests its enclosure. The affine reading reads an instruction off the grid through the formulas' enclosed overloads
+// (SdfFormula's THE ENCLOSED READING), every lane a form of its enclosure, so it keeps the box's symbols there too; a turn
+// adds its enclosed entries' widths (RotateAffine), and a formula with no enclosed overload takes the interval rule's answer.
 public sealed partial class SdfFieldEvaluator {
     private static readonly FixedQ4816 SuperellipsoidSphereExponent = FixedQ4816.FromInteger(value: 2L);
     // The sweep's parameter runs over the whole curve: every closest parameter the point search can pick lies in it.
@@ -438,7 +440,7 @@ public sealed partial class SdfFieldEvaluator {
                             Y: (local.Y - translation.Y),
                             Z: (local.Z - translation.Z)
                         );
-                        if (affine) { affineLocal = Meet(box: ref local, point: (instruction.ExactData0 ? MapPoint(instruction: in instruction, p: affineLocal) : FixedAffineForms.Subtract(a: affineLocal, b: Lift(box: translation)))); }
+                        if (affine) { affineLocal = Meet(box: ref local, point: AffineMapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Rotate: {
@@ -467,20 +469,12 @@ public sealed partial class SdfFieldEvaluator {
                             Z: (local.Z / scale.Z)
                         );
                         distanceScale *= instruction.Bounds0W;
-                        // Off the grid, each axis is the point times its reciprocal's interval: the symbols carry at its
-                        // centre, and its half-width times the axis's reach is noise.
-                        if (affine) {
-                            var one = Point(value: FixedQ4816.One);
-
-                            affineLocal = Meet(box: ref local, point: (instruction.ExactData0
-                                ? MapPoint(instruction: in instruction, p: affineLocal)
-                                : FixedAffineForms.MultiplyComponents(a: affineLocal, b: Lift(box: new IntervalVector3(X: (one / scale.X), Y: (one / scale.Y), Z: (one / scale.Z))))));
-                        }
+                        if (affine) { affineLocal = Meet(box: ref local, point: AffineMapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Fold: {
                         local = FoldBounds(instruction: in instruction, local: local);
-                        if (affine) { affineLocal = (instruction.Exact ? Meet(box: ref local, point: MapPoint(instruction: in instruction, p: affineLocal)) : Lift(box: local)); }
+                        if (affine) { affineLocal = Meet(box: ref local, point: AffineMapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Warp: {
@@ -501,7 +495,11 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfIntervalAction.EditField: {
                         var edited = EditFieldBounds(instruction: in instruction, local: local, result: result);
 
-                        if (affine) { affineResult = (instruction.Exact ? Meet(form: EditField(distance: affineResult, instruction: in instruction, p: affineLocal), interval: ref edited) : FixedAffineForm.FromInterval(interval: edited)); }
+                        if (affine) {
+                            affineResult = Meet(form: (instruction.Exact
+                                ? EditField(distance: affineResult, instruction: in instruction, p: affineLocal)
+                                : EditFieldEnclosed(distance: affineResult, instruction: in instruction, p: affineLocal)), interval: ref edited);
+                        }
                         result = edited;
                         inert = false;
                         break;
@@ -537,12 +535,12 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfIntervalAction.PopField: {
                         var popped = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
 
-                        if (affine && instruction.Exact) {
-                            var scoped = ((instruction.ScopeScale > 0L) ? ScaleScope(candidate: affineResult, scale: instruction.ScopeScale) : affineResult);
+                        if (affine) {
+                            var scoped = ScaleCandidate(candidate: affineResult, instruction: in instruction);
 
-                            affineResult = Meet(form: BlendShape(blend: instruction.Blend, candidate: scoped, current: affineScopes[scopeDepth], operand: PopOperand(instruction: in instruction), smoothRadius: instruction.Data1X), interval: ref popped);
-                        } else if (affine) {
-                            affineResult = FixedAffineForm.FromInterval(interval: popped);
+                            affineResult = Meet(form: (instruction.Exact
+                                ? BlendShape(blend: instruction.Blend, candidate: scoped, current: affineScopes[scopeDepth], operand: PopOperand(instruction: in instruction), smoothRadius: instruction.Data1X)
+                                : BlendShapeEnclosed(blend: instruction.Blend, candidate: scoped, current: affineScopes[scopeDepth], operand: PopOperandEnclosed(instruction: in instruction), smoothRadius: FixedAffineForm.FromInterval(interval: instruction.Bounds1X))), interval: ref popped);
                         }
                         result = popped;
                         chain = -1;
@@ -565,13 +563,13 @@ public sealed partial class SdfFieldEvaluator {
                         var shape = ShapeBounds(instruction: instruction, p: local);
                         var affineCandidate = FixedAffineForm.Entire;
 
-                        // A shape whose lanes, side table or scope scale lie off the grid takes its interval rule's candidate.
-                        if (affine && instruction.Exact) {
-                            var affineShape = Meet(form: EvaluateShape(instruction: in instruction, p: affineLocal, powerWork: ref affinePower), interval: ref shape);
+                        if (affine) {
+                            var affineShape = Meet(form: (instruction.Exact
+                                ? EvaluateShape(instruction: in instruction, p: affineLocal, powerWork: ref affinePower)
+                                : EvaluateShapeEnclosed(instruction: in instruction, p: affineLocal, powerWork: ref affinePower)), interval: ref shape);
 
                             // The point walk's (shape · distanceScale) + erosion, then the scope's fraction.
-                            affineCandidate = FixedAffineForms.Add(a: Multiply(form: affineShape, scale: distanceScale), b: FixedAffineForm.FromInterval(interval: erosion));
-                            if (instruction.ScopeScale > 0L) { affineCandidate = ScaleScope(candidate: affineCandidate, scale: instruction.ScopeScale); }
+                            affineCandidate = ScaleCandidate(candidate: FixedAffineForms.Add(a: Multiply(form: affineShape, scale: distanceScale), b: FixedAffineForm.FromInterval(interval: erosion)), instruction: in instruction);
                         }
 
                         var candidate = ScaleCandidateBounds(candidate: ((shape * distanceScale) + erosion), instruction: in instruction);
@@ -620,16 +618,18 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         var blended = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Bounds1X);
+                        var unblended = affineResult;
 
                         if (affine) {
-                            affineResult = (instruction.ExactData1X
-                                ? Meet(form: BlendShape(blend: instruction.Blend, candidate: affineCandidate, current: affineResult, operand: FixedQ4816.Zero, smoothRadius: instruction.Data1X), interval: ref blended)
-                                : FixedAffineForm.FromInterval(interval: blended));
+                            affineResult = Meet(form: (instruction.ExactData1X
+                                ? BlendShape(blend: instruction.Blend, candidate: affineCandidate, current: affineResult, operand: FixedQ4816.Zero, smoothRadius: instruction.Data1X)
+                                : BlendShapeEnclosed(blend: instruction.Blend, candidate: affineCandidate, current: affineResult, operand: FixedAffineForm.FromPoint(value: FixedQ4816.Zero), smoothRadius: FixedAffineForm.FromInterval(interval: instruction.Bounds1X))), interval: ref blended);
                         }
-                        // A LaneErode whose lanes lie off the grid may skip the shape: the accumulator either way.
+                        // A LaneErode whose fraction straddles its skip may skip the shape (LaneErodeBounds): the
+                        // accumulator either way, and the join of both forms holds both.
                         if (maySkip) {
                             blended = FixedInterval.Union(first: result, second: blended);
-                            if (affine) { affineResult = FixedAffineForm.FromInterval(interval: blended); }
+                            if (affine) { affineResult = Meet(form: FixedAffineForms.Join(a: unblended, b: affineResult), interval: ref blended); }
                         }
                         result = blended;
                         break;
@@ -808,9 +808,14 @@ public sealed partial class SdfFieldEvaluator {
         (((left.X * right.X) + (left.Y * right.Y)) + (left.Z * right.Z));
     // x − clamp(x, −e, e) is x − e above e, x + e below −e and zero between: monotone in x, and for each x monotone in e
     // (falling for x above zero, rising below it), so its extremes over the box of x and e lie at its corners, each exact.
+    // The builder admits no negative extent (Elongate), so an enclosure reaching below zero folds at zero there, the
+    // clamp's bounds never crossing.
     private static FixedInterval ElongateBounds(FixedInterval value, FixedInterval extent) {
-        static FixedQ4816 Fold(FixedQ4816 x, FixedQ4816 e) =>
-            (x - FixedQ4816.Clamp(maximum: e, minimum: -e, value: x));
+        static FixedQ4816 Fold(FixedQ4816 x, FixedQ4816 e) {
+            var reach = FixedQ4816.Max(x: e, y: FixedQ4816.Zero);
+
+            return (x - FixedQ4816.Clamp(maximum: reach, minimum: -reach, value: x));
+        }
 
         return ((value.IsUnbounded || extent.IsUnbounded)
             ? FixedInterval.Entire
@@ -1697,6 +1702,24 @@ public sealed partial class SdfFieldEvaluator {
     // A candidate scaled by a scope's 2⁻³² fraction (ScaleScope): the rounded quotient of its product with the scale.
     private static FixedAffineForm ScaleScope(FixedAffineForm candidate, long scale) =>
         FixedAffineForms.MultiplyDivide(divisor: FixedQ4816.FromRawBits(value: (1L << ScopeScaleBits)), multiplier: FixedQ4816.FromRawBits(value: scale), value: candidate);
+    // A shape's or a pop's candidate times its scope scale's enclosure (ScopeScaleLow, ScopeScaleHigh), as
+    // ScaleCandidateBounds takes it over intervals. At every point the product, and its rounding, is monotone in the scale,
+    // so it lies between the two ends' products, and the join of their forms holds every value between them.
+    private static FixedAffineForm ScaleCandidate(FixedAffineForm candidate, in CompiledInstruction instruction) {
+        if (instruction.ScopeScale <= 0L) {
+            return candidate;
+        }
+
+        var (low, high) = (instruction.ScopeScaleLow, instruction.ScopeScaleHigh);
+
+        return ((low > high)
+            ? FixedAffineForm.Entire
+            : ((low == high) ? ScaleScope(candidate: candidate, scale: low) : FixedAffineForms.Join(a: ScaleScope(candidate: candidate, scale: low), b: ScaleScope(candidate: candidate, scale: high))));
+    }
+    // A point op's map over the box: over the raws where every lane is its float, else over the lanes' enclosures
+    // (SdfFormula's THE ENCLOSED READING), so a fold or a map whose floats lie off the grid keeps the box's symbols.
+    private static FixedAffineForm3 AffineMapPoint(in CompiledInstruction instruction, FixedAffineForm3 p) =>
+        (instruction.Exact ? MapPoint(instruction: in instruction, p: p) : MapPointEnclosed(instruction: in instruction, p: p));
 
     // The point a box walk carries and its root frame restores: the box's interval and its affine forms together.
     private readonly record struct BoxPoint(IntervalVector3 Box, FixedAffineForm3 Affine);

@@ -229,7 +229,10 @@ are a lowering of the field formulas (`SdfFormula`'s affine reader), not rules
 of their own. Each step meets its form with its interval, so the affine reading
 is certified as the interval one is and never wider. A step without an affine
 rule (a shape without a formula, a render-only warp, a noise) takes its interval
-as fresh noise. It costs more an instruction, and a regional evaluator answers
+as fresh noise. Under the render reading an instruction whose floats lie off the
+raw grid reads its formula's enclosed overload, which takes every lane as a form
+of its enclosure, so the box's symbols survive the parameters the kernels read
+as floats. It costs more an instruction, and a regional evaluator answers
 its interval reading whichever is asked.
 
 No step of an evaluation leaves the carrier unseen. An interval whose exact

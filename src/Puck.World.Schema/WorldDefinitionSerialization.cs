@@ -267,6 +267,7 @@ namespace Puck.World;
 // Disambiguates the generated type-info property name from LatticeTopology.Ring, an unrelated type
 // sharing the simple name "Ring" (see SYSLIB1031).
 [JsonSerializable(typeof(StateDomain.Ring), TypeInfoPropertyName = "WorldStateDomainRing")]
+[JsonSerializable(typeof(StateDomain.Tally), TypeInfoPropertyName = "WorldStateDomainTally")]
 [JsonSerializable(typeof(StateTransform))]
 [JsonSerializable(typeof(WorldObservedRow[]))]
 [JsonSerializable(typeof(StatePhase))]

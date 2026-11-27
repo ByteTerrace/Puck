@@ -1,0 +1,14 @@
+// A family whose members differ by index, its index bound with 'as', is its members written out beside the family.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let seats = ["north", "south"]
+
+state {
+  world {
+    table marks[2] as s capacity(2) {
+      $"{seats[s]}-cursor" = 0
+      $"{seats[s]}-held" = s + 1
+    }
+  }
+}

@@ -294,7 +294,7 @@ public sealed class CellKeyTable {
     /// <param name="name">The name on success; otherwise the default.</param>
     /// <returns><see langword="true"/> when the key addresses this table.</returns>
     public bool TryGetName(CellKey key, out CellName name) {
-        if (key.IsValid && (key.Ordinal < m_initialCount) && key.BelongsTo(tableIdentity: m_identity)) {
+        if (IsSeed(key: key)) {
             name = m_names[key.Ordinal];
             return true;
         }
@@ -355,10 +355,13 @@ public sealed class CellKeyTable {
         hash.Add(value: ((ulong)m_names.Count));
         hash.Add(value: m_ledger.Value);
     }
+    // Whether a key is one the table was seeded with: a declared name, whose ordinal no rewind releases or reuses.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool IsSeed(CellKey key) => ((((uint)key.Ordinal) < ((uint)m_initialCount)) && key.BelongsTo(tableIdentity: m_identity));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetAddress(CellKey key, out CellName name, out int ordinal) {
         ordinal = key.Ordinal;
-        if ((((uint)ordinal) < ((uint)m_initialCount)) && key.BelongsTo(tableIdentity: m_identity)) {
+        if (IsSeed(key: key)) {
             name = m_names[ordinal];
             return true;
         }

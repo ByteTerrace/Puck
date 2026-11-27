@@ -68,7 +68,7 @@ test "a board engagement cancels autorun without moving its cursor" {
   }
   when {
     ticks 30
-    seat1: body.pose 56.5 9.25 21.1 0 0 0 0
+    seat1: body.pose spawn:chess 0
     ticks 150
     seat1: player.signal keyboard.z press
     ticks 2
@@ -92,7 +92,7 @@ test "leaving a board releases its held direction before locomotion resumes" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 56.5 9.25 21.1 0 0 0 0
+    seat1: body.pose spawn:chess 0
     ticks 150
     seat1: body.press interact
     ticks 5

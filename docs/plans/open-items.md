@@ -5038,6 +5038,13 @@ private-install activation measurement.
   the client was given.
 - Time the front's swap to a newly activated build from a private install root
   (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`).
+- [medium] One malformed client line still ends the operator session and stops
+  every World it owns: `BoundedMcpInput` fails the session on a line over
+  64 KiB, more than 128 unconsumed messages or invalid UTF-8. A line it cannot
+  admit should be dropped and named, not end the session.
+- [medium] A front that ends says why only on standard error, which Claude Code
+  records only while the server connects. Write the reason where an operator
+  can read it after the session is gone.
 - [low] Investigate the reported operator attachment loss on `world.reset`:
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint.
@@ -5418,6 +5425,34 @@ their lane order; this packet keeps the single duplicates and leads.
   and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
   belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
   form.
+- A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
+  (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
+  (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer
+  (`PuckPrinter.Writer.TestGivenItems`, `TestWhenItems`, `TestExpectItems`), a trivia case and an expansion
+  (`WorldDocumentEmitter.GivenLines`, `WhenLines`, `ExpectLines`). One generic loop node over the block's item type,
+  with one parser and one expansion, replaces the three.
+- Operand source syntax has two printers: `ExpressionSpelling.PrintSyntax` (atoms printed by a callback, a nesting
+  check) and `PrintSourceNode`, the `SyntaxNode.Print` path for source nodes, so every new source node (`SourceList`,
+  `SourceLet`) is printed twice. One printer with the atom callback serves both. The other walks already ride
+  `MapSourceChildren`/`SourceChildren`; `PuckSyntaxRewriter.RewriteOperandSyntax` and
+  `PuckLinter.CollectOperandReferences` still switch over every node because each child's form differs, which a
+  form-aware child walk would fold in too.
+- The document evaluator copies its whole environment to bind one name: a lambda call
+  (`DocumentBuiltins.ApplyOwned`), a fold, a `let` expression and each `for` iteration build a new
+  `Dictionary<string, JsonNode?>` from `DocumentScope.Locals`, and `DocumentScope.Derive`, `BindArgument`,
+  `WithConstants` and `WithBasePath` copy their tables per scope. A gallery compile's allocation trace (`puck host
+  allocations` over a `dotnet-trace` gc-verbose run) puts these sites above every JSON cost left in the pipeline. A
+  persistent environment (a binding chained to its parent scope, looked up by walking a short chain) replaces the
+  copies; `Locals` is a public mutable `Dictionary` today, so its callers in `Puck.World.Transpiler` move with it.
+- `DocumentScope.TryLowerBindingAt` answers a let placed at a position as a `DeepClone` of its memo, outside the
+  budget's copy door (`DocumentEvaluationBudget.Take`), so the copy is charged only by the caller's `Adopt` and drops
+  the `NoteWrittenBeside` records the door carries. Answering the memo borrowed and letting `LowerValue` take it would
+  route it through the door; whether a carried record changes a document is the question that change answers.
+- Two reflection-based serializer calls are left in the document pipeline: `WorldDocumentOrigins.Capture`
+  (`JsonSerializer.SerializeToElement` of a `JsonNode`, once per scalar while origins are tracked) and
+  `DocumentReferences` in `Puck.World.Authoring` (a string serialized to JSON and parsed back to build a reference
+  value). Each moves to a `JsonTypeInfo` from the context that already holds the graph, or to the value built
+  directly.
 - The addon wire decodes a placement by hand (`WorldAddonMutationDecoder`: `DecodeSolid`, `DecodeMirror`,
   `DecodeSequence`, `DecodeEmission`, `DecodeDistribution` and their siblings), a second reader of the shapes the
   document's own deserializer and `WorldModelShape` already describe, so every new facet member (a solid's `passes`)
@@ -5788,7 +5823,7 @@ then Spider.
   station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
   job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
   `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
+  position key in the tally row `positionCounts`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,

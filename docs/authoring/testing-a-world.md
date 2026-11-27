@@ -38,7 +38,10 @@ repeat its steps: `for item in <array> { … }` substitutes each element for
 `{item}` in the lines it holds, and `repeat <count> { … }` runs them a whole number of times,
 its count read with any enclosing `for`'s name bound, so a controller program
 holds a stick for a different number of ticks on each pass
-(`worlds/debug/walkthrough-tests.puck`). Run it:
+(`worlds/debug/walkthrough-tests.puck`). A `given` or an `expect` block takes a `for` too: `for i in
+range(0, 12) { lakeAt[i] > 0.399 }` is twelve expectations, each verdict naming the element it ran for.
+A `test` may also stand inside a `template`, which a document calls once its module is imported, so
+two worlds that run one scenario share one set of claims (`worlds/debug/water-arc-claims.puck`). Run it:
 
 ```bash
 puck test worlds/debug/addons-tests.puck

@@ -41,6 +41,20 @@ public static partial class PuckLinter {
                 }
                 break;
             case Syntax.SourceLambda lambda: hazard |= CollectOperandReferences(lambda.Body, DocumentValueForm.Expression, references, lambda.Binder, conditionalArm); break;
+            case Syntax.SourceList list:
+                foreach (var item in list.Items) {
+                    hazard |= CollectOperandReferences(item, DocumentValueForm.Expression, references, binder, conditionalArm);
+                }
+                break;
+            case Syntax.SourceLet let: {
+                    hazard |= CollectOperandReferences(let.Value, DocumentValueForm.Expression, references, binder, conditionalArm);
+                    var body = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                    hazard |= CollectOperandReferences(let.Body, DocumentValueForm.Expression, body, binder, conditionalArm);
+                    body.Remove(item: let.Name);
+                    references.UnionWith(other: body);
+                    break;
+                }
         }
         return hazard;
     }

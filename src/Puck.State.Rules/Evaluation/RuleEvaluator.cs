@@ -968,7 +968,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             trace.GateOpen = open;
         }
 
-        var changed = (!existed || (wasOpen != open));
+        // Whether the edge bit moves. A fresh latch keeps no bit (every binding reads as never judged, so every crossing
+        // is a first one), so a closed gate over it writes nothing and opens no scope, and an open one fires its
+        // effects without the bookkeeping.
+        var changed = (!latch.Fresh && (!existed || (wasOpen != open)));
 
         if (!changed && !fires) {
             EndTrace(entry: trace);
@@ -1268,7 +1271,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (!evaluated.TryFinite(raw: out value)) {
             ReportRefusal(
                 detail: RuleEvaluation.DescribeOutcome(outcome: evaluated),
-                effect: $"binding '{bound.Name}'",
+                effect: bound.Describe,
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: ruleName,
                 tick: tick

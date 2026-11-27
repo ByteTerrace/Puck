@@ -339,6 +339,8 @@ internal sealed class WorldShadeLowering {
                     if (!m_resolving.Add(item: declared!)) { throw new SdfShadeException(code: "PUCK128", message: DiagnosticText.Compose(fix: "Define the binding from other values, or rename the earlier one it reads", problem: $"The shade binding '{id.Name}' reads itself before it is defined")); }
                     try { return Expression(expected: expected, expression: declared!, scope: lexical); } finally { m_resolving.Remove(item: declared!); }
                 }
+                // The language's named constants (`pi`) are the numbers a document reads them as; a binding of the name hides one.
+                if (DocumentBuiltins.NamedConstants.TryGetValue(key: id.Name, value: out var named)) { return Literal(expected: expected, node: JsonValue.Create(value: named)); }
                 return Read(name: id.Name);
             case MemberAccessExpressionNode member:
                 if ((Qualified(node: member) is { } qualified) && SdfShadeOps.Inputs.Any(predicate: i => (i.Name == qualified))) { return Read(name: qualified); }
@@ -386,6 +388,13 @@ internal sealed class WorldShadeLowering {
                 }
                 return DocumentLowering.ExpandFunction(call.Name, call.Span, scope,
                     () => Expression(function.Body, scope.WithConstants(bindings), expected), Literal(JsonValue.Create(0)));
+            // The document language's `fraction` and `clamp`, which the table has no op for, lower to the ops that make them
+            // (`x - floor(x)`, `min(max(x, lo), hi)`), so a function an author wrote by hand and the name are one program.
+            case CallExpressionNode fraction when ((DocumentBuiltins.Canonical(name: fraction.Name) == "fraction") && (fraction.Arguments.Count == 1)):
+                var fractionOf = Expression(fraction.Arguments[0].Value, scope);
+                return new("-", [fractionOf, new("floor", [fractionOf])]);
+            case CallExpressionNode { Name: "clamp", Arguments.Count: 3 } clamp:
+                return new("min", [new("max", [Expression(clamp.Arguments[0].Value, scope), Expression(clamp.Arguments[1].Value, scope)]), Expression(clamp.Arguments[2].Value, scope)]);
             case CallExpressionNode { Name: "gradient" } gradient when (gradient.Arguments.Count == 2):
                 return Gradient(point: gradient.Arguments[0].Value, height: gradient.Arguments[1].Value, scope: scope);
             case Variable:

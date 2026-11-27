@@ -44,9 +44,12 @@ public sealed record WorldClockAnchor(
     [property: DocumentText("exact rational coefficients")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Curve = null
 ) {
-    /// <summary>The most coefficients a curve carries: a nested clock's degree is the product of its chain's, so a
-    /// curve past it is refused as malformed.</summary>
-    public const int MaxCurveCoefficients = 64;
+    /// <summary>The most coefficients a curve carries, the bound the state side composes under
+    /// (<see cref="StateAdvance.MaxCurveCoefficients"/>): a curve past it is refused as malformed.</summary>
+    public const int MaxCurveCoefficients = StateAdvance.MaxCurveCoefficients;
+    /// <summary>The most bits the reduced numerator or denominator of a curve's coefficient may take
+    /// (<see cref="StateAdvance.MaxCurveCoefficientBits"/>): a curve past it is refused as malformed.</summary>
+    public const int MaxCurveCoefficientBits = StateAdvance.MaxCurveCoefficientBits;
 
     // 2^-64: one phase unit as a share of a turn.
     private const double TurnPerUnit = (1d / 18446744073709551616d);
@@ -58,7 +61,8 @@ public sealed record WorldClockAnchor(
     private sealed record ParsedCurve(IReadOnlyList<string>? Source, RationalPolynomial? Polynomial, RationalPolynomial Slope);
 
     /// <summary>Gets whether the anchor is well formed: no curve, or a curve of exact rational coefficients, at most
-    /// <see cref="MaxCurveCoefficients"/>, whose value at the anchor's tick is the anchor's phase.</summary>
+    /// <see cref="MaxCurveCoefficients"/>, each of at most <see cref="MaxCurveCoefficientBits"/> bits a part, whose value
+    /// at the anchor's tick is the anchor's phase.</summary>
     [JsonIgnore]
     public bool IsWellFormed => ((Curve is null) || ((Parsed() is { } curve) && (PhaseOf(kind: CellKind.Fixed, raw: Truncated(curve: curve, elapsed: Rational.Zero)) == Phase)));
 
@@ -194,12 +198,16 @@ public sealed record WorldClockAnchor(
             var coefficients = new Rational[curve.Count];
 
             for (var power = 0; (power < curve.Count); power++) {
-                if ((curve[power] is not { } text) || !Rational.TryParse(text: text, value: out coefficients[power])) {
+                if ((curve[power] is not { } text) || !Rational.TryParseBounded(text: text, maxBits: MaxCurveCoefficientBits, value: out coefficients[power])) {
                     return null;
                 }
             }
 
-            return new RationalPolynomial(coefficients: coefficients);
+            var polynomial = new RationalPolynomial(coefficients: coefficients);
+
+            return (polynomial.Fits(maxBits: MaxCurveCoefficientBits, maxDegree: StateAdvance.MaxCurveDegree)
+                ? polynomial
+                : null);
         }
     }
 }

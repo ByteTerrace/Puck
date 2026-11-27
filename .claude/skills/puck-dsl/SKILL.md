@@ -20,6 +20,7 @@ file is corrected in the same change.
 |---|---|
 | Parser, printer, lowering, diagnostics | `src/Puck.Transpiler` (`Parsing/PuckParser*.cs`, `Formatting/PuckPrinter*.cs`, `Lowering/DocumentLowering*.cs` and `DocumentBuiltins.cs`, `Diagnostics/PuckDiagnosticCodes.cs`) |
 | The syntax tree and everything that walks it | `src/Puck.Transpiler/Ast`: a node record's node-typed properties are its children, and `SyntaxNode.Children` and `MapChildren` are generated from them (`SyntaxChildrenGenerator` in `Puck.Analyzers`), so a new property reaches every walk, the rewriter and the trivia pass when it compiles; `SyntaxScopes.Binds` is the one description of what a node binds for its children (the import rewriter, hover, go-to-definition); `Parsing/SourceLexemes.End` is the one string, backquote and comment scanner |
+| Evaluated values and their ownership | `DocumentLowering.Evaluate` says whether a value is owned (built by this evaluation, every node beneath it included) or borrowed (a binding's, a cache's, a vocabulary's); it enters a container only through `DocumentEvaluationBudget.Take`, which moves an owned value and copies a borrowed one, charging the same either way. A builtin moves the elements of an owned list (`DocumentBuiltins.Lent`); `DocumentScope.TryReadBinding` reads a binding without a copy, `TryLowerBinding` answers a copy to place |
 | World vocabulary, its linter and language server | `src/Puck.World.Transpiler` (`Vocabulary/` describes every construct once; `Validation/PuckLinter*.cs`; `Lsp/`) |
 | World compile contract | `src/Puck.World.Transpiler/WorldCompileSession.cs`, the one door every host compiles, composes, loads and diagnoses through (it holds library parses by content in `Puck.Transpiler.Modules.PuckSourceTable`, held compiles, and each editor buffer's latest compile), over the internal stage order in `WorldCompiler.cs`; `WorldDocumentMembers.cs` walks the emitted document along `WorldModelShape`: it refuses unconsumed members (naming the nearest declared members through `DocumentNearestNames`), lowers authored pins to canonical document identities, and writes each typed value's canonical form (float spelling, rotation sign, convex profile start, zero-is-absent shape members, a write's `value`/`fromState`, model member order) |
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
@@ -85,10 +86,21 @@ A document's `schema:` field selects its vocabulary, never the filename.
   as its function is in an expression. An import's export surface is explicit,
   never transitive across nested imports. `table` and `pile` admit
   `capacity(auto)` to lower to their authored entries' count.
-- **A template body's block or rule name is a parameter reference only when
-  bare.** `shape Box base { }` takes the value bound to `base`; `shape Box "base" { }`
-  is the literal name, whatever the template's parameters are called. Only a
-  statement directly in the template body is renamed (`DocumentLowering.Rename`).
+- **A template body's block, rule or row-declaration name is a parameter
+  reference only when bare.** `shape Box base { }` takes the value bound to `base`;
+  `shape Box "base" { }` is the literal name, whatever the template's parameters
+  are called. Only a statement directly in the template body is renamed
+  (`DocumentLowering.Rename`); a `table`/`slot`/`pile`/`grid` renames only to a
+  text binding.
+- **A row declaration's name may be computed, and its body may loop.**
+  `table`/`slot`/`pile`/`grid` take an interpolated name (`pile $"down{z}Of"[n] of
+  cards capacity(z - 1)` in a `for`), a family bracket takes `as i` binding each
+  member's index (`table markOf[n] as s { $"{ids[s]}-held" = 1 }`), and a cell body
+  takes `let`/`for`/`if` and computed keys (`$"…" = v`, `[expr] = v`). A table's
+  `= value` is an array or an object (keys in order); another value is PUCK053.
+  So a hand-built `row { name: $"…" kind: … cells: map(…) }` or a raw `families [ ]`
+  list is a defect in waiting: write the declaration
+  ([dsl reference](../../../docs/reference/dsl.md#row-declarations-tableslotpilegrid)).
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
   module library (a source emitting no document) hands over its `let`s and
@@ -96,6 +108,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   own `let`s stay its own. A library importing a document is refused (PUCK017).
   A source of imports alone hands over nothing of its own, so it is a document
   fragment that composes what it imports, not a library (`worlds/standard/standard.puck`).
+- **A compile-time list library exists**: `any`, `all`, `count`, `sum`, `scan` (running totals, one more than the list),
+  `dot`, `contains`, `indexOf`, `find`, `zip`, `reverse`, `slice`, `join`, and `minimum(list)`/`maximum(list)`
+  (`DocumentBuiltins.Lists.cs`; `DocumentBuiltins.Collections` lists each with its signature). Reach for them before a
+  `length(filter(…))` or a `reduce` prefix sum. `scan(lengths)[i]` is where item `i` starts. A shade program reads `fraction`,
+  `clamp` and `pi` too (`WorldShadeLowering`), so none is written by hand. Of `any`, `all`, `count`, `sum`, `minimum` and
+  `maximum`, the library holds only the lambda-free forms (`sum(array)`); written with a lambda each is a `ListFolds` fold
+  (below), never evaluated a second way.
 - **Compile-time `for` generates rows and list elements; builtins transform values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time — both in statement/section position (emitting rows) and directly
@@ -109,6 +128,23 @@ A document's `schema:` field selects its vocabulary, never the filename.
   **PUCK044**.
   `range(start, end)` stops before its end: `range(1, 4)` is 1, 2 and 3, and `range(0, n)` holds n values.
   Every `for` body binds its own `let`s (a shade program's loop excepted, whose `let`s are runtime values).
+- **A fold over a compile-time list unrolls, in a value or a rule.** `sum`, `count`, `any`, `all`, `minimum`,
+  `maximum` (`name(list, x => term)`) and `first` (`first(list, x => cond, otherwise)`,
+  `first(list, x => cond, x => value, otherwise)`) over a list literal, a `let`, a parameter or a collection builtin
+  are written out as the chain an author would paste (`ListFolds`, the one shape both languages build): a document
+  value evaluates it, and a rule operand's body may read state (`OperandBinder.Expand`, after function inlining and
+  before constant folding), so the lowered rule equals the hand-written one. The lambda marks the fold: `count(hand)`,
+  `any(row, x -> …)`, `minimum(a, b)` and a gate's `all [...]` keep their meanings. An element stands as a binding of
+  it is written (a number as a literal, a name or text as an atom), a record only through its members. Never paste a
+  term per seat, pile or direction.
+- **`let name = value in body` names a value for one expression** (a document value, a function body, a rule
+  operand). In a rule a compile-time value binds like a fold's element; a state-reading value is substituted only
+  where the body reads it once or it is a plain read, else it is refused with the fix, a rule `local`
+  (`OperandBinder.ExpandLet`). A long chain prints one binding a line.
+- **A walk over rule-operand syntax rides `ExpressionSpelling.MapSourceChildren` and `SourceChildren`** (printed
+  order, identity kept when nothing changes; `MapSourceAtoms` renumbers atoms), so a new source node
+  (`SourceList`, `SourceLet`) is taught once; only walks that change form or scope per child (the rewriter, the
+  linter, `IsCompileTime`) switch over the nodes themselves.
 - **`if cond { } else { }` in document or section position emits one branch's rows**
   (`DocumentLowering.ExpandConditionalStatements`, the one expansion every section calls); a branch may hold `let`s
   and, unlike a `for` body, field assignments, so one member of a row can be conditional. A row written or left out is
@@ -232,7 +268,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
-  A block naming a document no reference of the world reaches is `PUCK105` in
+  `given`, `when` and `expect` each take a compile-time `for` (`for i in range(0, 12) { lakeAt[i] > 0.399 }` is twelve
+  expectations), and a `test` stands inside a `template` a document calls, so worlds running one scenario share one set of
+  claims (`worlds/debug/water-arc-claims.puck`). A block naming a document no reference of the world reaches is `PUCK105` in
   every compile (`puck compile`, `puck lint`, the language server), checked by
   the reference walk `puck test` stages with (`WorldCompileSession.ReachDocuments`).
   `puck lint <dir>` reports a library `let` or template no linted source reads.

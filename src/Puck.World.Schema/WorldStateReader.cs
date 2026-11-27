@@ -9,17 +9,29 @@ public static class WorldStateReader {
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, StateArena> Seeds = new();
     // The key every definition that authors no state section shares: they all compile the one empty catalog.
     private static readonly WorldStateSection AbsentSection = new();
+    // A binding names the arena a server owns and never owns it: a bound definition outlives its server wherever a
+    // cache, a checkpoint or another host's container still holds it, and an owning entry kept that arena, and through
+    // it the server, reachable after its host was disposed. The server holds its arena while it runs, so a live
+    // server's reads resolve exactly as an owning entry's did.
     [SideTable(reason: "binds a runtime projection to the arena its host owns; the arena is state, not derived from the definition")]
-    private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Live = new();
+    private static readonly ConditionalWeakTable<WorldDefinition, WeakReference<StateArena>> Live = new();
     private static readonly Puck.Abstractions.CodeDerivedTable<StateRow, WorldStateRow> RowMetadata = new();
 
     private static WorldStateRow WorldRow(StateRow row) => row as WorldStateRow ??
         RowMetadata.GetValue(row, static declaration => new WorldStateRow(declaration, false, null));
 
     /// <summary>Binds a runtime projection to its sole gameplay store.</summary>
-    public static void Bind(WorldDefinition definition, StateArena arena) => Live.AddOrUpdate(definition, arena);
-    /// <summary>Finds the arena already bound to a runtime projection.</summary>
-    public static bool TryBoundArena(WorldDefinition definition, [NotNullWhen(true)] out StateArena? arena) => Live.TryGetValue(definition, out arena);
+    public static void Bind(WorldDefinition definition, StateArena arena) {
+        if (!TryBoundArena(definition: definition, arena: out var bound) || !ReferenceEquals(objA: bound, objB: arena)) {
+            Live.AddOrUpdate(definition, new WeakReference<StateArena>(target: arena));
+        }
+    }
+    /// <summary>Finds the arena already bound to a runtime projection, while the server that owns it still holds it.</summary>
+    public static bool TryBoundArena(WorldDefinition definition, [NotNullWhen(true)] out StateArena? arena) {
+        arena = null;
+
+        return (Live.TryGetValue(definition, out var bound) && bound.TryGetTarget(target: out arena));
+    }
     /// <summary>Resolves the sole arena of a runtime projection, or materializes declaration seeds.</summary>
     public static StateArena Arena(WorldDefinition definition) => ReadArena(definition);
 
@@ -31,7 +43,7 @@ public static class WorldStateReader {
             pairPools: arena.Catalog.Pools.Any(static pool => pool.IsPair) ? arena.ToPairPools() : null);
     }
 
-    private static StateArena ReadArena(WorldDefinition definition) => Live.TryGetValue(definition, out var arena) ? arena : Seed(definition);
+    private static StateArena ReadArena(WorldDefinition definition) => (TryBoundArena(definition: definition, arena: out var arena) ? arena : Seed(definition));
 
     /// <summary>Gets the read-only view of a document's declaration seeds an admission or edit boundary reads.</summary>
     /// <remarks>The view is a function of the state section alone (its rows and the catalog compiled from them), so

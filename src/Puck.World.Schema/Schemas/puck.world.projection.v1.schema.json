@@ -7835,6 +7835,23 @@
                 ],
                 "additionalProperties": false,
                 "title": "StateDomainRing"
+              },
+              {
+                "description": "A keyed count: any 64-bit integer is a key, and the row counts each key it has met since its last reset, holding at most Capacity distinct keys. A rule increments a count with row[key] \u002B= n, reads it with row[key] (zero for a key the row has not met), and empties the row with row = 0. The engine owns the storage, the probing and the reset (StateTally); a key past the capacity is refused by name, never dropped.",
+                "properties": {
+                  "$type": {
+                    "const": "tally"
+                  },
+                  "capacity": {
+                    "description": "The most distinct keys the row holds between resets, from 1 to MaxCapacity.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "capacity"
+                ],
+                "additionalProperties": false,
+                "title": "StateDomainTally"
               }
             ],
             "title": "StateDomain"
@@ -14796,7 +14813,8 @@
         "Member",
         "And",
         "Or",
-        "Not"
+        "Not",
+        "Hash"
       ]
     },
     "ShapeNonNullable10": {

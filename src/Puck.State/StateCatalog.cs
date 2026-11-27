@@ -106,7 +106,7 @@ public sealed class StateCatalog {
     private readonly bool[] m_poolRows;
     private readonly bool[] m_poolFieldRows;
     private readonly CellKey[] m_poolKeys;
-    private readonly CellKey[] m_ringKeys;
+    private readonly CellKey[] m_indexKeys;
     private readonly int[] m_poolSlotsByKeyOrdinal;
     private readonly int[][] m_containingZones;
     private readonly int[][] m_dependentRows;
@@ -134,14 +134,15 @@ public sealed class StateCatalog {
         m_identity = identity;
         m_keys = keys;
         m_keys.SealSeed();
-        // Ring addresses are compiler symbols, not retained runtime names. Prebind them after sealing the
-        // declaration seed so iteration neither mints keys nor changes the arena's resource ledger.
-        var ringCapacity = rows.Where(predicate: static row => (!row.HostOwned && (row.EffectiveDomain is StateDomain.Ring)))
+        // Ring slots and tally cells are addressed by index, and those addresses are compiler symbols, not retained
+        // runtime names. Prebind them after sealing the declaration seed so iteration neither mints keys nor changes
+        // the arena's resource ledger.
+        var indexSpan = rows.Where(predicate: static row => (!row.HostOwned && (row.EffectiveDomain is StateDomain.Ring or StateDomain.Tally)))
             .Select(selector: static row => row.CellCeiling).DefaultIfEmpty().Max();
 
-        m_ringKeys = new CellKey[ringCapacity];
-        for (var position = 0; (position < ringCapacity); position++) {
-            m_ringKeys[position] = m_keys.Intern(name: CellName.Parse(candidate: IndexKeyCache.Get(index: position)));
+        m_indexKeys = new CellKey[indexSpan];
+        for (var position = 0; (position < indexSpan); position++) {
+            m_indexKeys[position] = m_keys.Intern(name: CellName.Parse(candidate: IndexKeyCache.Get(index: position)));
         }
         m_lanes = lanes;
         m_readOnlyDescriptors = Array.AsReadOnly(array: descriptors);
@@ -311,7 +312,8 @@ public sealed class StateCatalog {
 
     internal object Identity => m_identity;
 
-    internal CellKey RingKey(int position) => m_ringKeys[position];
+    // The key of index `position` in a ring or a tally, below the widest such row's cell ceiling.
+    internal CellKey IndexKey(int position) => m_indexKeys[position];
     internal bool TryGetPoolKey(int slot, out CellKey key) {
         if (((uint)slot) < ((uint)m_poolKeys.Length)) {
             key = m_poolKeys[slot];
@@ -994,6 +996,9 @@ public sealed class StateCatalog {
                 (shape is not (RowShape.Slot or RowShape.Lattice))
             ) {
                 throw new InvalidOperationException(message: $"State row '{row.Name.Value}' is host-owned but {shape}-shaped; only Slot and Lattice rows can be served by a host.");
+            }
+            if ((row.EffectiveDomain is StateDomain.Tally) && !StateTally.TryValidate(row: row, reason: out var tallyRefusal)) {
+                throw new InvalidOperationException(message: $"State row '{row.Name.Value}': {tallyRefusal}.");
             }
 
             rowEnums[index] = ResolveRowEnum(

@@ -1,6 +1,4 @@
 // Presentation programs. The measurement lever selects these beside the earlier layers.
-function shadeFrac(x) = x - floor(x)
-function shadeClamp(x, lo, hi) = min(max(x, lo), hi)
 function shadeFade(rate) = 1 - smoothstep(0.35, 0.9, rate)
 // The whole cycles a motion `seconds` long makes in the shading clock's period (4096 seconds, SdfFlow.ClockPeriodSeconds),
 // at least one: `clock * clockCycles(s)` turns once about every `s` seconds and joins without a seam where the clock wraps.
@@ -78,7 +76,7 @@ function shadeRamp(t, stops) = reduce(
 // everywhere on one brick; every other course is offset by half a brick. The brick's edge ramps into the joint over
 // `bevel` times the mortar width (0.5 by default), at least the pixel floor above.
 function shadeBrick(p, size, mortar, seed, bevel = 0.5, pixel = surface.footprint) = shadeBrickAt(
-  [p.x / size.x + shadeFrac(floor(p.y / size.y) * 0.5), p.y / size.y],
+  [p.x / size.x + fraction(floor(p.y / size.y) * 0.5), p.y / size.y],
   [mortar / size.x, mortar / size.y],
   seed,
   shadeBevel(bevel, pixel / max(mortar, 0.000001))
@@ -86,7 +84,7 @@ function shadeBrick(p, size, mortar, seed, bevel = 0.5, pixel = surface.footprin
 // The bricks in brick units: `joint` is the mortar's width in each axis's units and `ramp` the edge's width as a share
 // of the mortar's.
 function shadeBrickAt(q, joint, seed, ramp = 0.5) = [
-  1 - shadeStep(min(min(shadeFrac(q.x), 1 - shadeFrac(q.x)) / joint.x, min(shadeFrac(q.y), 1 - shadeFrac(q.y)) / joint.y), 0.5, ramp),
+  1 - shadeStep(min(min(fraction(q.x), 1 - fraction(q.x)) / joint.x, min(fraction(q.y), 1 - fraction(q.y)) / joint.y), 0.5, ramp),
   0.5 + 0.5 * lattice([floor(q.x) + 0.5, floor(q.y) + 0.5, 0.5], seed)
 ]
 
@@ -213,8 +211,8 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
     let along = tangent / max(speed, 0.000001)
     let squeeze = 1 - 1 / max(stretch, 1)
     let offset = 0.5 + 0.5 * lattice(point * (0.125 * scale), xor(seed, uint(1759714724)))
-    let c0 = shadeFrac(clock * cycles + offset)
-    let c1 = shadeFrac(c0 + 0.5)
+    let c0 = fraction(clock * cycles + offset)
+    let c1 = fraction(c0 + 0.5)
     let w0 = 1 - abs(2 * c0 - 1)
     let w1 = 1 - w0
     let travel = tangent * (4096 / cycles)
@@ -227,7 +225,7 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
     let soft = max(softness, 0.001)
     let revealed = mix(
       cover,
-      smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * shadeClamp(value, -1, 1)),
+      smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * clamp(value, -1, 1)),
       fade
     )
     let revealed = cover > 0 ? revealed : 0
@@ -304,7 +302,7 @@ shade template brushed(amount, scale, lean, seed) {
     let rate = surface.footprint / scale
     let broad = lattice(p, seed) * shadeFade(rate)
     let stroke = lattice(p * [3.7, 1.3, 3.7] + 17, xor(seed, uint(2654435769))) * shadeFade(rate * 3.7)
-    let drift = shadeClamp((broad + 0.6 * stroke) / 1.166, -1, 1)
+    let drift = clamp((broad + 0.6 * stroke) / 1.166, -1, 1)
     albedo: mix(material.albedo, lean, saturate(drift) * amount) * (1 + amount * drift)
   }
 }
@@ -320,7 +318,7 @@ shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeA
     let coarse = lattice(q, seed) * shadeFade(rate)
     let fine = lattice(q * octaveRatio + 17, xor(seed, uint(2654435769))) * shadeFade(rate * octaveRatio)
     let noise = octaves > 1 ? 0.5 +
-      0.5 * shadeClamp((coarse + octaveGain * fine) / sqrt(1 + octaveGain * octaveGain), -1, 1) : 0.5 + 0.5 * coarse
+      0.5 * clamp((coarse + octaveGain * fine) / sqrt(1 + octaveGain * octaveGain), -1, 1) : 0.5 + 0.5 * coarse
     let edge = saturate(max(surface.curvature, 0) * reach) * noise
     let n = grain > 0 ? inverseRotate(toLayer(surface.normal), frame) : toLayer(surface.normal)
     let weights = pow(abs(n), 4)
@@ -355,7 +353,7 @@ shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeA
 // behind, tinted by the glass as every layer before it is.
 shade template magicFilm(low, swing, rate, offset, cycles, rings, centre, swirl, scale, rim, power, shimmer, twinkles, seed, phase = 0) {
   compose {
-    let turn = 6.283185307179586
+    let turn = 2 * pi
     let facing = saturate(0 - dot(surface.normal, surface.rayDirection))
     let edge = pow(1 - facing, power)
     let wobble = lattice(surface.objectPosition * scale, seed)

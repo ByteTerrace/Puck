@@ -20,7 +20,7 @@ public sealed class WorldDocumentOrigins {
     // through staging; serialize a scalar only when a diagnostic or world.save actually asks for it.
     internal sealed record Origin(string DocumentPath, string Pointer, JsonElement Scalar) {
         private string? m_json;
-        internal WorldDocumentValueOrigin Value => new(DocumentPath, Pointer, m_json ??= JsonSerializer.Serialize(Scalar));
+        internal WorldDocumentValueOrigin Value => new(DocumentPath, Pointer, m_json ??= JsonSerializer.Serialize(value: Scalar, jsonTypeInfo: WorldJsonContext.Default.For<JsonElement>()));
     }
     [SideTable(reason: "records the source origin the reader noted for each node")]
     private readonly ConditionalWeakTable<JsonNode, Origin> m_values = new();

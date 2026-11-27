@@ -160,8 +160,7 @@ public static class WorldClockAnchors {
                 tick: (tick + 1UL)
             ) ||
             (next is not { } nextRaw) ||
-            ((baseValue + accumulation.Evaluate(x: new Rational(Numerator: step, Denominator: BigInteger.One)).Truncate()) != nextRaw) ||
-            (accumulation.Coefficients.Length > WorldClockAnchor.MaxCurveCoefficients)
+            ((baseValue + accumulation.Evaluate(x: new Rational(Numerator: step, Denominator: BigInteger.One)).Truncate()) != nextRaw)
         ) {
             return (0L, null);
         }

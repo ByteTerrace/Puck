@@ -41,50 +41,35 @@ let kdFields = [
   { name: "MoveReady", value: 0 }
 ]
 
-// The tableau columns' piles, and the zone a column's face-down pile takes.
+// The tableau columns' piles, the foundations, and the zone a column's face-down pile takes.
 let kdColumns = [2, 3, 4, 5, 6, 7, 8]
+let kdFoundations = [10, 11, 12, 13]
 let kdDown = 14
 
 // The deal: card k of the tableau's 28 goes face down to column kdDealTo[k], a row at a time across the columns that
 // still want one (column z takes z - 1).
 let kdDealTo = flatMap(range(0, 7), row => range(row + 2, 9))
 
-// Every pile a rule chooses by number, the zone table each rule below reads.
-let kdZones = [
-  "klondikeStockOf"
-  "klondikeWasteOf"
-  "klondikePile2Of"
-  "klondikePile3Of"
-  "klondikePile4Of"
-  "klondikePile5Of"
-  "klondikePile6Of"
-  "klondikePile7Of"
-  "klondikePile8Of"
-  ""
-  "klondikePile10Of"
-  "klondikePile11Of"
-  "klondikePile12Of"
-  "klondikePile13Of"
-  ""
-  ""
-  "klondikeDown2Of"
-  "klondikeDown3Of"
-  "klondikeDown4Of"
-  "klondikeDown5Of"
-  "klondikeDown6Of"
-  "klondikeDown7Of"
-  "klondikeDown8Of"
-]
+// Every pile a rule chooses by number, the zone table each rule below reads: "" at a number no pile takes.
+let kdZones = concat(
+  "klondikeStockOf",
+  "klondikeWasteOf",
+  map(kdColumns, z => $"klondikePile{z}Of"),
+  "",
+  map(kdFoundations, z => $"klondikePile{z}Of"),
+  "",
+  "",
+  map(kdColumns, z => $"klondikeDown{z}Of")
+)
 
 // The piles a deal gathers from, in the order it empties them, the foundations, and the columns' face-down piles.
 let kdGather = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22]
 let kdGatherLast = (length(kdGather) - 1)
-let kdFoundations = [10, 11, 12, 13]
 let kdDowns = map(kdColumns, z => z + kdDown)
 
 // The zone table of the piles in `keep` alone: a transfer or a match between piles a table picks live is priced by the
 // dearest pile the table holds, so each rule names only the piles it can choose.
-function kdZonesOf(keep) = map(range(0, length(kdZones)), z => (length(filter(keep, k => k == z)) > 0) ? kdZones[z] : "")
+function kdZonesOf(keep) = map(range(0, length(kdZones)), z => contains(keep, z) ? kdZones[z] : "")
 
 function klondikeIdle() = (solitaireTable[$each] == 1 and
   klondikeRequest[$each] != klondikeApplied[$each] and
@@ -96,12 +81,7 @@ function klondikeAsked(kind) = klondikeIdle() and klondikeStatus[$each] == 1 and
 // Klondike's state for `count` tables, inside the world's `state.world` block beside solitaireState(count): each
 // table's mailbox as one row a field, and each table's piles as pile families.
 template klondikeState(count) {
-  row {
-    name: "solitaireKlondikeDealTo"
-    kind: "Int"
-    capacity: 28
-    cells: map(range(0, 28), k => { key: $"{k}", value: kdDealTo[k] })
-  }
+  table solitaireKlondikeDealTo capacity(28) = kdDealTo
 
   for field in kdFields {
     solitaireCells(name: $"klondike{field.name}", count: count, value: field.value)
@@ -109,24 +89,13 @@ template klondikeState(count) {
 
   pile klondikeStockOf[count] of solitaireCards capacity(52) = map(range(0, 52), k => $"{k}")
   pile klondikeWasteOf[count] of solitaireCards capacity(24)
-  pile klondikePile2Of[count] of solitaireCards capacity(13)
-  pile klondikePile3Of[count] of solitaireCards capacity(13)
-  pile klondikePile4Of[count] of solitaireCards capacity(13)
-  pile klondikePile5Of[count] of solitaireCards capacity(13)
-  pile klondikePile6Of[count] of solitaireCards capacity(13)
-  pile klondikePile7Of[count] of solitaireCards capacity(13)
-  pile klondikePile8Of[count] of solitaireCards capacity(13)
-  pile klondikePile10Of[count] of solitaireCards capacity(13)
-  pile klondikePile11Of[count] of solitaireCards capacity(13)
-  pile klondikePile12Of[count] of solitaireCards capacity(13)
-  pile klondikePile13Of[count] of solitaireCards capacity(13)
-  pile klondikeDown2Of[count] of solitaireCards capacity(1)
-  pile klondikeDown3Of[count] of solitaireCards capacity(2)
-  pile klondikeDown4Of[count] of solitaireCards capacity(3)
-  pile klondikeDown5Of[count] of solitaireCards capacity(4)
-  pile klondikeDown6Of[count] of solitaireCards capacity(5)
-  pile klondikeDown7Of[count] of solitaireCards capacity(6)
-  pile klondikeDown8Of[count] of solitaireCards capacity(7)
+  for z in concat(kdColumns, kdFoundations) {
+    pile $"klondikePile{z}Of"[count] of solitaireCards capacity(13)
+  }
+  // Column z's face-down part holds the z - 1 cards the deal leaves it.
+  for z in kdColumns {
+    pile $"klondikeDown{z}Of"[count] of solitaireCards capacity(z - 1)
+  }
 
   // Whether each card lies face down (1), a cell a card in each table's member: the stock and the face-down piles hold
   // theirs face down and every other pile face up. The rules that turn a card over write it, as they move the card: a
@@ -418,15 +387,6 @@ template klondikeGame() {
   rule "solitaireKlondike-win" {
     forEach: solitaireTable
     when solitaireTable[$each] == 1 and klondikeStatus[$each] == 1 and klondikeBusy[$each] == 0
-    klondikeStatus[$each] = (
-      (
-        count(klondikePile10Of[$each]) +
-        count(klondikePile11Of[$each]) +
-        count(klondikePile12Of[$each]) +
-        count(klondikePile13Of[$each])
-      ) == 52 ?
-        2 :
-      1
-    )
+    klondikeStatus[$each] = (sum(kdFoundations, z => count($"klondikePile{z}Of"[$each])) == 52 ? 2 : 1)
   }
 }

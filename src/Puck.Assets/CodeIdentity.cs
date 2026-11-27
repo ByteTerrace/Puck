@@ -102,9 +102,13 @@ public sealed class CodeIdentity {
         return closure.Hash;
     }
 
-    // What the walk is asked: the roots and the stop types, in order, each delimited by its length.
+    // What the walk is asked: the build directory, the roots and the stop types, in order, each delimited by its
+    // length. The directory keeps builds apart: the store is shared by every build on the machine, and two builds
+    // asked the same roots would otherwise take turns overwriting one entry, each walking again on every process.
     private ContentPin InputPin() {
         var text = new StringBuilder();
+
+        _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"d{m_directory.Length}:{m_directory}");
 
         foreach (var (assembly, type, method) in m_roots) {
             _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"r{assembly.Length}:{assembly}{type.Length}:{type}{(method?.Length ?? -1)}:{method}");
