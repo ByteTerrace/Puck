@@ -499,6 +499,14 @@ casts nothing. The standard package's `bodyOcclusion` and `propOcclusion`
 (`worlds/standard/occlusion.puck`) are the values its walker, its citizens and
 the debug world's characters and props cast with.
 
+`world.occluders` reads what the presentation's residency last packed: the
+count, and for each occluder who cast it (`SdfOccluders.SourceOf`: the body, the
+placement and the creation it shows, or the authored row), its solid, centre,
+radius or half axes, reach, strengths, softness, the slots of the body it
+skips, and whether the first view's mask keeps it. One body casts one record;
+two records of one body stack their shares, so a count above what stands in the
+scene is the first thing to look for when a shade reads too dark.
+
 ## Every light answers through one interface
 
 The views pass lights a surface by walking one list of lights: the lights

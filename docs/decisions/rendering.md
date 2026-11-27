@@ -964,7 +964,10 @@ takes most of the sky from the floor and furniture a metre and more about her.
 
 **What enforces it, and where that stops.** `sdfOccludersAmbient` and
 `sdfOccludersShadow` are the only readers of an occluder, and each multiplies by
-`sdfOccluderWindow`, so a culled occluder changes no pixel. A body's own
+`sdfOccluderWindow`, so a culled occluder changes no pixel. Records multiply, so
+each body and placement casts one record a frame (`WorldCreationOccluders.AppendTo`
+rebuilds its candidates from empty), and `world.occluders` lists what was packed
+and who cast it. A body's own
 surfaces skip its occluder by the frame slots its record names, which only a
 body's stamp provides; a static creation's sphere or capsule darkens the faces of
 its own it holds. One solid stands for a whole creation at rest: a creation

@@ -174,6 +174,8 @@ public sealed class SdfOccluders {
     public const int MaxOccluders = 128;
 
     private readonly SdfOccluder[] m_occluders = new SdfOccluder[MaxOccluders];
+    // Who cast each record, for a read-back; never packed.
+    private readonly string?[] m_sources = new string?[MaxOccluders];
 
     private int m_count;
 
@@ -189,15 +191,28 @@ public sealed class SdfOccluders {
     /// <param name="index">The occluder's index, below <see cref="Count"/>.</param>
     /// <returns>The occluder.</returns>
     public SdfOccluder this[int index] => Records[index];
+    /// <summary>Gets who cast one occluder, as its producer named it: presentation metadata a read-back prints, never
+    /// part of the packed record.</summary>
+    /// <param name="index">The occluder's index, below <see cref="Count"/>.</param>
+    /// <returns>The source's name, or <see langword="null"/> where the producer named none.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or not below
+    /// <see cref="Count"/>.</exception>
+    public string? SourceOf(int index) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: m_count);
+
+        return m_sources[index];
+    }
 
     /// <summary>Empties the table.</summary>
     public void Clear() => m_count = 0;
     /// <summary>Appends an occluder whose strengths, reach and softness are each finite and nonnegative, its strengths
     /// clamped to one.</summary>
     /// <param name="occluder">The occluder.</param>
+    /// <param name="source">Who cast it (<see cref="SourceOf"/>), or <see langword="null"/>.</param>
     /// <returns><see langword="false"/> when the table is full or the occluder can add nothing (no strength, or no
     /// reach), and was not appended.</returns>
-    public bool TryAdd(in SdfOccluder occluder) {
+    public bool TryAdd(in SdfOccluder occluder, string? source = null) {
         if ((m_count >= MaxOccluders) || !float.IsFinite(f: occluder.Reach) || !(occluder.Reach > 0f) || !float.IsFinite(f: occluder.Softness)) {
             return false;
         }
@@ -209,6 +224,7 @@ public sealed class SdfOccluders {
             return false;
         }
 
+        m_sources[m_count] = source;
         m_occluders[m_count++] = (occluder with { Shadow = shadow, Softness = MathF.Max(x: occluder.Softness, y: 0f), Strength = strength });
 
         return true;
@@ -220,6 +236,7 @@ public sealed class SdfOccluders {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         source.Records.CopyTo(destination: m_occluders);
+        source.m_sources.AsSpan(start: 0, length: source.m_count).CopyTo(destination: m_sources);
         m_count = source.m_count;
     }
     /// <summary>Packs the occluders into the table the kernels read, every record past <see cref="Count"/> zero.</summary>

@@ -26,11 +26,13 @@ public sealed class WorldCreationOccluders {
     // The definition the placements were gathered from, the placements carrying an occluding creation (each with the
     // anchor it rides and its solid at the row's scale), and whether any creation the definition holds occludes at all.
     private WorldDefinition? m_definition;
-    private readonly List<(WorldAnchor Anchor, SdfOccluder Occluder)> m_placed = [];
+    private readonly List<(WorldAnchor Anchor, SdfOccluder Occluder, string Source)> m_placed = [];
     private bool m_anyOccludes;
     private readonly List<int> m_bodies = [];
-    // The occluders gathered this frame before the table's capacity trims them.
-    private readonly List<SdfOccluder> m_candidates = [];
+    // Each body index's source name (SdfOccluders.SourceOf), made once an index.
+    private string?[] m_bodySources = [];
+    // The occluders gathered this frame, each with who cast it, before the table's capacity trims them.
+    private readonly List<(SdfOccluder Occluder, string? Source)> m_candidates = [];
 
     /// <summary>Gets how many occluders the latest <see cref="AppendTo"/> gathered before the table's capacity, the
     /// authored ones it was handed included.</summary>
@@ -161,13 +163,17 @@ public sealed class WorldCreationOccluders {
         }
 
         m_candidates.Clear();
-        foreach (var authored in occluders.Records) { m_candidates.Add(item: authored); }
-        foreach (var (anchor, local) in m_placed) {
+        for (var index = 0; (index < occluders.Count); index++) {
+            m_candidates.Add(item: (occluders[index], occluders.SourceOf(index: index)));
+        }
+        foreach (var (anchor, local, source) in m_placed) {
             if (WorldAnchorPoses.TryResolve(anchor: anchor, pose: out var pose, scope: in scope)) {
-                m_candidates.Add(item: local.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f));
+                m_candidates.Add(item: (local.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f), source));
             }
         }
 
+        // CopyActiveBodies appends, so a body would cast once more every frame the list was not emptied first.
+        m_bodies.Clear();
         scope.Source.CopyActiveBodies(bodies: m_bodies);
         foreach (var body in m_bodies) {
             if (!WorldBodyStampCensus.TryResolveCreation(creation: out var creation, definition: definition, index: body, scale: out var scale, source: scope.Source)
@@ -182,23 +188,31 @@ public sealed class WorldCreationOccluders {
                 occluder = (occluder with { OwnSlot = slot, OwnSlots = (uint)Math.Max(val1: count, val2: 0) });
             }
 
-            m_candidates.Add(item: occluder);
+            m_candidates.Add(item: (occluder, BodySource(body: body)));
         }
 
         Gathered = m_candidates.Count;
         // Past the table's capacity, the occluders whose spheres of reach come nearest the eye.
         if (m_candidates.Count > SdfOccluders.MaxOccluders) {
-            m_candidates.Sort(comparison: (left, right) => (Vector3.Distance(value1: eye, value2: left.Center) - left.Reach).CompareTo(value: (Vector3.Distance(value1: eye, value2: right.Center) - right.Reach)));
+            m_candidates.Sort(comparison: (left, right) => (Vector3.Distance(value1: eye, value2: left.Occluder.Center) - left.Occluder.Reach).CompareTo(value: (Vector3.Distance(value1: eye, value2: right.Occluder.Center) - right.Occluder.Reach)));
         }
 
         occluders.Clear();
-        foreach (var occluder in m_candidates) {
+        foreach (var (occluder, source) in m_candidates) {
             if (occluders.Count >= SdfOccluders.MaxOccluders) {
                 break;
             }
 
-            _ = occluders.TryAdd(occluder: in occluder);
+            _ = occluders.TryAdd(occluder: in occluder, source: source);
         }
+    }
+    // A body's source name, "body <index>", made the first time the index casts.
+    private string BodySource(int body) {
+        if (body >= m_bodySources.Length) {
+            Array.Resize(array: ref m_bodySources, newSize: Math.Max(val1: (body + 1), val2: (2 * m_bodySources.Length)));
+        }
+
+        return (m_bodySources[body] ??= string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"body {body}"));
     }
     // The placements carrying an occluding creation: each one frame a creation's light could ride (WorldCreationLights.Carries)
     // that no body inhabits (an inhabitant's occluder is its body's), for each creation it can show.
@@ -227,7 +241,7 @@ public sealed class WorldCreationOccluders {
 
             foreach (var prototypeId in WorldPlacementResponse.Showable(placement: placement).Distinct(comparer: StringComparer.Ordinal)) {
                 if ((WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId) is { } creation) && (LocalOf(prototype: creation) is { } local)) {
-                    m_placed.Add(item: (new WorldAnchor.Placement(PlacementId: id, ShapeId: null, Showing: prototypeId), local.Placed(orientation: Quaternion.Identity, position: Vector3.Zero, scale: scale)));
+                    m_placed.Add(item: (new WorldAnchor.Placement(PlacementId: id, ShapeId: null, Showing: prototypeId), local.Placed(orientation: Quaternion.Identity, position: Vector3.Zero, scale: scale), $"placement {id} showing {prototypeId}"));
                 }
             }
         }
