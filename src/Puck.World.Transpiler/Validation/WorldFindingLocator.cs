@@ -28,8 +28,11 @@ internal sealed record WorldFindingProvenance(JsonObject Composed, WorldDocument
 /// reports without a location.</param>
 /// <param name="sourcePath">The compiled source's own file, or <see langword="null"/> for a buffer.</param>
 internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? source, SourceMap? sourceMap, Func<WorldFindingProvenance?>? provenance, string? sourcePath) {
-    private static readonly Lock Gate = new();
-    private static readonly Dictionary<string, Authored> AuthoredSources = new(comparer: PuckPaths.Comparer);
+    // The most other documents' compiles held; a process that places findings against more of them drops the least
+    // recently used, which compile again when next asked for.
+    private const int MaxHeldSources = 512;
+    // Held by the document's path key (PuckPaths.Key).
+    private static readonly CodeDerivedCache<string, Authored> AuthoredSources = new(capacity: MaxHeldSources);
 
     private bool m_traced;
     private WorldFindingProvenance? m_provenance;
@@ -103,10 +106,8 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
             }
             digest = current;
 
-            lock (Gate) {
-                if (AuthoredSources.TryGetValue(key: path, value: out var held) && string.Equals(a: held.Digest, b: digest, comparisonType: StringComparison.Ordinal)) {
-                    return held;
-                }
+            if (AuthoredSources.TryGetValue(key: PuckPaths.Key(path: path), value: out var held) && string.Equals(a: held.Digest, b: digest, comparisonType: StringComparison.Ordinal)) {
+                return held;
             }
             if (content is null) {
                 content = CompileInputs.ReadAllBytes(path: path);
@@ -124,9 +125,7 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
 
         var authored = new Authored(Acknowledgements: compilation.Acknowledgements, Digest: digest, Map: compilation.SourceMap);
 
-        lock (Gate) {
-            AuthoredSources[path] = authored;
-        }
+        AuthoredSources.Set(key: PuckPaths.Key(path: path), value: authored);
 
         return authored;
     }
