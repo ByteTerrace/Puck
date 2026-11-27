@@ -643,8 +643,9 @@ let consolePointer = {
 }
 // A display's screen in terminal mode: the hidden console its terminal opens (../standard/contexts/terminal-console.puck,
 // gallery/gallery.puck's galleryConsole), which the screen placement responds with while the display's
-// `terminalConsoleOpen` cell holds 1. It is the same dark glass in the console's own palette: faint scanlines across the
-// field, an ochre rule over and under the text, the display's group and terminal number small in the top corner, the
+// `terminalConsoleOpen` cell holds 1. It is the same glass in the console's own palette under a deep-teal field lit as the
+// interface's controls are (consoleLook.terminal), with scanlines across it, an ochre rule over and under the text, the
+// display's group and terminal number small in the top corner, the
 // last line run in teal over its reply in cream, and the line being typed in amber behind its prompt. Its type is about
 // half again the list's, so someone standing a step or two behind the one typing reads along.
 let terminalScreenText = { x0: -0.7, x1: 0.7, y0: -0.105, y1: 0.143 }
@@ -655,6 +656,7 @@ let terminalScreenPromptEm = 0.03
 let terminalScanHalf = 0.0009
 let terminalScanPitch = 0.006
 function terminalScreenPaints(display, number) = [
+  consoleFill(display, { x0: (0 - plinthGlassHalf[0]), x1: plinthGlassHalf[0], y0: (0 - plinthGlassHalf[1]), y1: plinthGlassHalf[1] }, consoleLook.terminal)
   {
     type: "Box"
     position: displayWorld(display, plinthOnFace(0, 0, displayGlassFront))
@@ -664,12 +666,12 @@ function terminalScreenPaints(display, number) = [
   }
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: 0.15, y1: 0.156 }, consoleLook.frame, 0.003)
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: -0.117, y1: -0.111 }, consoleLook.frame, 0.003)
-  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.quiet, 0.012, "right")
+  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.teal, 0.012, "right")
   consoleText(
     display,
     terminalScreenText,
-    terminalConsoleScreen(number, echo: consoleLook.quiet),
-    consoleLook.dim,
+    terminalConsoleScreen(number, echo: consoleLook.teal),
+    consoleLook.cream,
     terminalScreenEm,
     "left",
     markup: true,
