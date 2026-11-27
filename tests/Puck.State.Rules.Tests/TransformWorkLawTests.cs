@@ -186,13 +186,25 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
 
         return observed;
     }
-    private void Holds(string what, StateTransform transform, long least) {
+    // A bounded selection is priced at its whole attempt budget (TransformWork.Draws charges
+    // GeneratorCapacity.MaxBoundedAttempts raw words for each), the worst case a seed can force, while one firing
+    // rarely rejects at all. That reserve is work the observed firing cannot show, so the ceiling adds it.
+    private static long DrawReserve(RuleCompileContext context, long selections) {
+        if (selections == 0L) {
+            return 0L;
+        }
+        var coin = Enumerable.Range(count: context.Catalog.Count, start: 0).Single(predicate: ordinal => (context.Catalog.Descriptors[ordinal].Name == "coin"));
+
+        return (TransformWork.Draws(context: context, rowOrdinal: coin, samples: selections) - TransformWork.Draws(context: context, rowOrdinal: coin, samples: 0L));
+    }
+    private void Holds(string what, StateTransform transform, long least, long selections = 0L) {
         var section = Section();
         var context = Context(section: section);
         var effect = Compile(
             context: context,
             transform: transform
         );
+        var reserve = DrawReserve(context: context, selections: selections);
         var host = new ArenaEffectHost(
             arena: new StateArena(
                 catalog: context.Catalog,
@@ -212,7 +224,7 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
         // The operand really is the costly one, so the inequality below is not held by a firing that did nothing.
         Assert.True(condition: (observed >= least), userMessage: $"{what} observed {observed}, under the {least} its operand forces");
         Assert.True(condition: (effect.Price.Units >= observed), userMessage: $"{what} admitted {effect.Price.Units}, under the {observed} one firing did");
-        Assert.True(condition: (effect.Price.Units <= (TransformWork.Call + (Slack * observed))), userMessage: $"{what} admitted {effect.Price.Units}, past the door and {Slack} times the {observed} one firing did");
+        Assert.True(condition: (effect.Price.Units <= ((TransformWork.Call + reserve) + (Slack * observed))), userMessage: $"{what} admitted {effect.Price.Units}, past the door, the {reserve} draw reserve and {Slack} times the {observed} one firing did");
     }
 
     [Fact]
@@ -272,6 +284,7 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
     [Fact]
     public void AShuffleIsAdmittedAtLeastItsSwapsAndItsSamples() => Holds(
         least: Members,
+        selections: (Members - 1),
         transform: new StateTransform.Shuffle(Draw: "coin", Row: "deck"),
         what: "shuffle"
     );
@@ -302,6 +315,7 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
     [Fact]
     public void ARandomTransferOfAWholePileIsAdmittedAtLeastEveryShiftAndSample() => Holds(
         least: (2L * Members),
+        selections: Members,
         transform: new StateTransform.Transfer(From: "deck", To: "hand", Selector: ZoneSelector.Random, Draw: "coin", Count: Members),
         what: "transfer random"
     );

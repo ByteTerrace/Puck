@@ -703,7 +703,7 @@ public static partial class ExpressionSpelling {
     /// the terms this lexer's own names obey: a name by <see cref="IdentifierSpelling.ScanName"/>, continued by
     /// identifier characters and the <c>.</c> of a dotted path (a dotted segment may open with the
     /// <see cref="IdentifierSpelling.Sigil"/>), and — once the name opens with the sigil — <c>:segment</c>
-    /// continuations (a segment may itself open with the sigil), signed <c>:-N</c> offsets, and a
+    /// continuations (a segment may open with or carry the sigil), signed <c>:-N</c> offsets, and a
     /// <see cref="RuleFacts.LiveZonePrefix"/> group folded whole into the name. This is the one implementation of that
     /// walk: the lexer and <see cref="IsBareName"/> scan with it, and callers outside this assembly (the <c>.puck</c>
     /// parser and formatter) scan with it rather than carrying a copy.</summary>
@@ -722,18 +722,21 @@ public static partial class ExpressionSpelling {
             return 0;
         }
         var reserved = (text[start] == IdentifierSpelling.Sigil);
+        // Whether the scan has passed a reserved name's first colon, into the segments that are its arguments.
+        var segmented = false;
         var index = (start + head);
 
         while (index < text.Length) {
             var character = text[index];
 
             // A segment may open with the sigil: a reserved name's ":$each", and a dotted "row.$each" that stays one
-            // name so its reader refuses it by name. Inside a reserved name a segment may also carry a generated name's
-            // joiner (a module instance's `alias$name`, GeneratedName.Joiner, the sigil's own character), which no
-            // author name holds, so the reserved spelling stays one bare name.
+            // name so its reader refuses it by name. A reserved name's argument segment may also carry a generated
+            // name's joiner (a module instance's `alias$name`, GeneratedName.Joiner, the sigil's own character), so
+            // the reserved spelling stays one bare name. The channel's own name before the first colon is an
+            // identifier and carries no joiner: `$a$b` is not one bare name.
             if (
                 IsNamePart(character: character) ||
-                ((character == IdentifierSpelling.Sigil) && (reserved || (text[(index - 1)] == '.')))
+                ((character == IdentifierSpelling.Sigil) && (segmented || (text[(index - 1)] == '.')))
             ) {
                 index++;
                 continue;
@@ -747,6 +750,7 @@ public static partial class ExpressionSpelling {
                 text: text
             ))
             ) {
+                segmented = true;
                 index++;
                 continue;
             }
