@@ -15,7 +15,9 @@
 // (WorldPopulation.ReconcileInhabitCounts), so a game shown or put away is one write however many bodies its pool holds,
 // and `placement:<id>` names the body, or no body while it is released (WorldPlacementInhabit.StandsOneBody). A
 // materialized body takes the population's highest free slot, so a pool never renumbers a body the world authored at a
-// fixed count; a world sizes its population for every pool that may stand at once.
+// fixed count. A count pass retires every released body before it admits any asked for, and a body the full table
+// cannot admit yet is admitted at the next pass that has room, so a board swapping one game's tokens for another's needs
+// room for the larger game only.
 //
 //   import "../standard/holodeck"
 //   placements { holodeckPool(bodies: pool, kit: "piece", pool: "pieces") }
@@ -31,6 +33,7 @@
 //     when holodeckStands(pool: "pieces") and holodeckAt[$each] != posed
 //     forEach: cell
 //     mode: Level
+//     // A topology a board facet anchors is read in that placement's frame; any other topology needs `frame:`.
 //     poseCell(key: `placement:$each`, topology: board, expression: cell[$each], offset [0, 0.05, 0])
 //     holodeckAt[$each] = posed
 //   }

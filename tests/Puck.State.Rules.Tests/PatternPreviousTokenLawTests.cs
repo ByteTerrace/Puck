@@ -39,7 +39,7 @@ public sealed class PatternPreviousTokenLawTests {
 
         Span<long> word = stackalloc long[4];
         var spelled = RuleExpressions.FoldWord(
-            body: program!,
+            body: new CompiledProgram(tokens: program!),
             kind: CellKind.Int,
             reader: host,
             rowOrdinal: TransformFixture.Ordinal(

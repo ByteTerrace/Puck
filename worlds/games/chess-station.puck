@@ -235,7 +235,8 @@ template chessStationBoard(station) {
   )
 }
 
-// The board's grid, inside the instance's `state` block: 15 cm squares on the glass, in the board placement's frame. A
+// The board's grid, inside the instance's `state` block: 15 cm squares on the glass, in the board placement's frame,
+// which its board facet anchors, so a pose and a settled read both land in it with no `frame:` of their own. A
 // piece counts as standing on a square while its foot is within 12 cm over the glass.
 template chessStationGrid() {
   chessBoardGrid(
@@ -566,7 +567,12 @@ template chessStationHolodeck(station, game) {
       )
     forEach: pieceCode
     mode: Level
-    poseCell(key: `placement:$each`, topology: chessBoard, expression: square, offset: [0, chessStationDrop, 0])
+    poseCell(
+      key: `placement:$each`,
+      topology: chessBoard,
+      expression: square,
+      offset: [0, chessStationDrop, 0]
+    )
     holodeckAt[$each] = posed
   }
 }

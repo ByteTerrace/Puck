@@ -12,7 +12,7 @@ namespace Puck.State.Search.Tests;
 public sealed class ArenaSearchFreshLatchLawTests {
     // The judge path the fresh latch stands for: a latch reset before every candidate, whose every binding then writes
     // its edge bit through a scope of its own.
-    private sealed class ResetLatchJudge(ArenaSearchEffectHost host, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score) : IArenaSearchJudge {
+    private sealed class ResetLatchJudge(ArenaSearchEffectHost host, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledProgram? score) : IArenaSearchJudge {
         private readonly Puck.State.Rules.RuleEvaluator m_evaluator = new(host: host) { SchedulingEnabled = false };
         private readonly Puck.State.Rules.RuleLatch m_latch = new();
         private readonly RuleArenaSearchJudge m_shape = new(host: host, rules: rules, score: score);
@@ -94,7 +94,7 @@ public sealed class ArenaSearchFreshLatchLawTests {
     private static (RuleArenaSearchJudge Fresh, ResetLatchJudge Reset) Judges(Position position, bool faults = true) {
         var host = new ArenaSearchEffectHost(arena: position.Arena);
         var rules = CompileRulesJudge(position: position, rules: Rules(faults: faults));
-        var score = CompileRules(context: position.RulesContext, text: ScoreText);
+        var score = (Puck.State.Rules.CompiledProgram?)CompileRules(context: position.RulesContext, text: ScoreText);
 
         return (new RuleArenaSearchJudge(host: host, rules: rules, score: score), new ResetLatchJudge(host: host, rules: rules, score: score));
     }

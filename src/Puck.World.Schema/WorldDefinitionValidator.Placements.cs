@@ -1030,6 +1030,13 @@ public static partial class WorldDefinitionValidator {
 
             if ((countRowDeclaration is not { Kind: CellKind.Int }) || (countRowDeclaration.IsKeyed != (count.Key is not null))) {
                 errors.Add(item: $"{path}.count must name a declared Int row with a matching key shape.");
+            } else if (
+                (count.Key is { } countKey) &&
+                (countRowDeclaration.EffectiveDomain is StateDomain.Keys) &&
+                !(countRowDeclaration.Cells ?? []).Any(predicate: cell => string.Equals(a: cell.Key.Value, b: countKey, comparisonType: StringComparison.Ordinal))
+            ) {
+                // An undeclared cell reads 0 for ever, so its placement would never stand a body.
+                errors.Add(item: $"{path}.count names cell '{countKey}' of row '{countRow}', which the row does not declare.");
             }
         } else if (
             (count.Literal is not { } literal) ||

@@ -1441,6 +1441,13 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
+  A `Parallel.For` run from a bake worker waits for helper tasks the runtime's
+  pool has not started, so a pool saturated by other work holds the stage
+  behind it (the collapse's speculation did until it moved to `PoolFork`, whose
+  caller drains the partitions itself): `SdfSampledLattice.PrimeSigns`,
+  `SdfMeshChunks.Bake` and `SdfMeshIrradianceScene`'s builds still fork that way.
+  `PoolFork` lives in `Puck.Hosting`, which `Puck.SignedDistance` does not
+  reference, so `PrimeSigns` needs it (and `IJobPartitions`) a project lower.
 - [medium · unconfirmed] A tick-cadence screen source asked for at the tick's
   own rate (a 30 Hz floor under a 30 Hz tick) has a new image only on a
   step's frame, so its floor releases it there and no lead can move it
@@ -1548,6 +1555,21 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   frozen pose image; this transaction is what the state-writing kits wait on.
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
+- [medium] Rule programs and gates evaluate as closure trees
+  (`ProgramClosures`); what that change left: common-subexpression elimination
+  of pure reads within one rule, which needs a structural identity for an
+  operand (two spellings of one read compile to two `IRuleOperand`s); one
+  version snapshot per sweep rather than per binding (`RuleEvaluator.VersionsMatch`),
+  valid until a binding's firing commits; order-free folds (`all`, `any`,
+  `count`) over a row's cells in vector lanes, `sum` staying scalar for its
+  overflow fault; and gates a dataflow proof shows binding-invariant decided
+  once per sweep. The rule work price (`RuleCapacity.MaxWorkUnitsPerTick`'s
+  1.6 ns a unit) is recalibrated against a measured board sweep once the lead's
+  quiet window has read the closures. A tree deeper than
+  `ProgramClosures.MaxDepth` (only an expression nested to its token ceiling
+  inside calls nested to theirs) answers `Domain` where the interpreter it
+  replaced answered a value; the cause fix is a lowering that evaluates such a
+  subtree without recursing, if an author ever needs one.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most lies in the serial tail or the subscribers'
   `DeliverSnapshot`: profile it before T3 or R1 assumes otherwise. The
@@ -4025,7 +4047,7 @@ State and server:
   (`WorldAddonRuntime.ResolveBodyPoses` and the development queries that
   charge `ChargeHostFuel`) return without a reply when host fuel is exhausted;
   `ValidateStateTransaction` validates the unmaterialized definition for the
-  authority; `RuleExpressions.Run` swallows an absent value
+  authority; the evaluator (`ProgramClosures`' `BodyTruthNode`, `ShortCircuitNode`) swallows an absent value
   inside `not`, `and` and `or`; `StateSeedReader` builds a state section
   without lattices, spaces, enums or pools; `ArenaSnapshot` and `ArenaUndo`
   index rows by non-document lane ordinals and keep change-window state across
@@ -5461,6 +5483,10 @@ their lane order; this packet keeps the single duplicates and leads.
   `WorldShadeLowering` binds parameters as constants and lowers the body under them. Each shares
   `DocumentLowering.BindFunctionArguments` and `ExpandFunction`; one inliner over the document tree, which the
   operand path converts to and from (`PuckParser.CreateOperand`), would serve all three.
+- `SdfSampledLattice.FineValue` and `FineGradient` are one interpolation written twice (a coarse sample's, a measured
+  one's, else the stride corners' of those, else the coarse cell's), apart only in what a measured sample reads
+  (`MeasuredValue` against `TryFineGradient`); one generic interpolation over a sample reader serves both, and is where
+  a cheaper unmeasured-sample path (the crossings stage's largest share, `StrideCorners`) lands once.
 - A test block's `for` is written three times, once each for `given`, `when` and `expect`: a loop node
   (`TestGivenForNode`, `TestWhenLoopNode`, `TestExpectForNode`), a parser head and body
   (`PuckParser.ParseTestGivenItems`, `ParseTestWhenItems`, `ParseTestExpectItems`), a printer

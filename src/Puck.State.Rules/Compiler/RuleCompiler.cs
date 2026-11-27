@@ -44,7 +44,7 @@ public static partial class RuleCompiler {
                 rule: rule,
                 reads: localReads
             );
-            GateToken[] gate;
+            CompiledGate gate;
             var gateReads = new HashSet<int>();
 
             // Each phase locates its own refusals, so a caller that knows the rule's index can name the authored
@@ -534,7 +534,7 @@ public static partial class RuleCompiler {
 
         compiled.Add(item: new CompiledRuleLocal(
             CarrierKind: kind,
-            Expression: expression,
+            Expression: new CompiledProgram(tokens: expression),
             Kind: result,
             Name: name
         ));

@@ -469,7 +469,7 @@ public sealed class HistoryOperand : RuleOperand {
     /// <param name="ageProgram">The int program the age is computed by per evaluation, or
     /// <see langword="null"/> for a constant age. It is lowered into the enclosing program, and the age arrives as
     /// this operand's one address.</param>
-    public HistoryOperand(int rowOrdinal, long age, StateDomain.Ring ring, CellKind valueKind, CompiledExpressionToken[]? ageProgram = null) : base(valueKind: valueKind) {
+    public HistoryOperand(int rowOrdinal, long age, StateDomain.Ring ring, CellKind valueKind, CompiledProgram? ageProgram = null) : base(valueKind: valueKind) {
         ArgumentNullException.ThrowIfNull(argument: ring);
 
         Age = age;

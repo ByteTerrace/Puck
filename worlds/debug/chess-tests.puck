@@ -4,7 +4,9 @@
 // (White's), sits down with the context button and plays with the pointer straight down onto the glass: a square's
 // centre stands at x = -0.6 + 0.15 * (column + 0.5), z = -0.56 + 0.15 * (row + 0.5), the glass at y = 0.95, and its cell
 // is 8 * row + column, column = 7 - file (e2 is cell 11 at x -0.075, z -0.335; e4 cell 27 at z -0.035; g1 cell 1 at
-// x -0.375, z -0.485; g3 cell 17 at z -0.185). With the near chair taken, the computer plays Black.
+// x -0.375, z -0.485; g3 cell 17 at z -0.185). With the near chair taken, the computer plays Black. The claims read the
+// board the settled pieces were read into, by cell (`station.board[<cell>]`, a piece's code: 1 a white pawn, 2 a white
+// knight, -1 a black pawn), since the pieces' own rows are keyed by the station's qualified placement names.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -52,8 +54,8 @@ test "the station materializes its 32 pieces and reads the starting position off
     sum(station.holodeckLive) == 32
     station.gameStarted == 1
     station.boardCollisions == 0
-    station.pieceCell.piece12 == 11
-    station.pieceCell.piece28 == 59
+    station.board[11] == 1
+    station.board[51] == -1
     station.illegalCount == 0
   }
 }
@@ -76,7 +78,8 @@ test "a seated player lifts e2 and sets it on e4, and the computer's reply lands
     ticks 450
   }
   expect {
-    station.pieceCell.piece12 == 27
+    station.board[27] == 1
+    station.board[11] == 0
     station.chessStationPlies == 2
     station.turn == White
     station.verdict == 1
@@ -103,7 +106,8 @@ test "an illegal physical move is refused and the knight stands on g1 again" {
     ticks 300
   }
   expect {
-    station.pieceCell.piece6 == 1
+    station.board[1] == 2
+    station.board[17] == 0
     station.illegalCount == 1
     station.turn == White
     station.chessStationPlies == 0
@@ -122,7 +126,7 @@ test "a game switch releases the pieces and stands the cards" {
   expect {
     station.holodeckShown.pieces == 0
     station.chessHold == 1
-    station.pieceCell.piece12 == 11
+    station.board[11] == 1
     holodeckShown["0"] == 1
   }
 }
