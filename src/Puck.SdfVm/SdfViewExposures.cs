@@ -161,7 +161,7 @@ public sealed class SdfViewExposures {
             var first = m_views.Length;
             ArrayCapacity.EnsureLength(ref m_views, count);
             m_views.AsSpan(first).Fill(new ViewState {
-                Ev100 = float.NaN, HeldEv = float.NaN, MeterEv = float.NaN, Multiplier = 1f, AirLight = 1f,
+                Ev100 = float.NaN, HeldEv = float.NaN, MeterEv = float.NaN, Multiplier = 1f,
             });
         }
         for (var index = count; (index < m_count); index++) {
@@ -197,11 +197,11 @@ public sealed class SdfViewExposures {
         var seconds = (float.IsFinite(f: m_views[index].Ev100) ? ((float)(m_clock - m_views[index].StagedAt)) : 0f);
 
         m_views[index].StagedAt = m_clock;
-        // Another view in the slot is a cut: a new generation, whose camera sample and meter the slot owes afresh.
+        // Another view in the slot is a cut: a new generation, whose camera sample and meter the slot owes afresh. The last
+        // sample's light holds, as the exposure does, until the cut's own sample arrives (SampleCamera).
         if (view.Cut != m_views[index].Cut) {
             m_views[index].Cut = view.Cut;
             m_views[index].Generation++;
-            m_views[index].Sampled = false;
             m_views[index].SampleOwed = true;
             m_views[index].MeterOwed = true;
         }
@@ -239,7 +239,10 @@ public sealed class SdfViewExposures {
             if (m_views[index].MeterEv == m_views[index].HeldEv) { m_views[index].Adapting = false; }
         }
     }
-    // Samples the volume at the view's camera; a failed sample holds the last one (none before the first).
+    // Samples the volume at the view's camera. A failed sample holds the last one's light (none before the first), and
+    // its open sky only within the shot it was taken in: until a sample of the view's current shot arrives (before the
+    // first, and after a cut while SampleOwed) no sky is known open about the camera, so the air takes none. The air never
+    // assumes the open sky: in a closed room the sky's in-scatter outweighs every surface the room lights.
     private void SampleCamera(int index, SdfMeshIrradiance irradiance, SdfViewSnapshot view) {
         Span<Vector3> light = stackalloc Vector3[6];
 
@@ -250,9 +253,8 @@ public sealed class SdfViewExposures {
             m_views[index].Sampled = true;
             m_views[index].AirLight = airLight;
             for (var axis = 0; (axis < 6); axis++) { m_views[index].Light[axis] = new Vector4(value: light[axis], w: 1f); }
-        } else if (!m_views[index].Sampled) {
-            m_views[index].AirLight = 1f;
-            m_views[index].Light = default;
+        } else if (m_views[index].SampleOwed || !m_views[index].Sampled) {
+            m_views[index].AirLight = 0f;
         }
         m_views[index].SampleSource = (source switch {
             SdfCameraSampleSource.Probes => "probes",
@@ -313,11 +315,12 @@ public sealed class SdfViewExposures {
     }
     /// <summary>Returns the share of the sky the air about a view's camera sees open, which scales the sky's in-scatter
     /// into the view's atmosphere, staging the view on its first read in the frame: one in the open, held at its last
-    /// sample while the volume cannot answer.</summary>
+    /// sample while the volume cannot answer within the same shot, and zero until a camera sample of the view's current
+    /// shot arrives (before its first, and after a cut), since no sky is then known open about the camera.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
-    /// <returns>The share, in [0, 1]; one for a view the frame does not hold.</returns>
+    /// <returns>The share, in [0, 1]; zero for a view the frame does not hold.</returns>
     public float AirLightOf(int view) {
-        if ((view < 0) || (view >= m_count)) { return 1f; }
+        if ((view < 0) || (view >= m_count)) { return 0f; }
         StageView(index: view);
         return m_views[view].AirLight;
     }
@@ -335,7 +338,8 @@ public sealed class SdfViewExposures {
     }
     /// <summary>Writes the light a view's camera sample receives along each of its six axes (+X, -X, +Y, -Y, +Z, -Z), RGB
     /// in nits with W one, staging the view on its first read in the frame; held at its last sample while the volume
-    /// cannot answer. A surface no published probe answers reads it as one probe at the camera.</summary>
+    /// cannot answer, across a cut too, as the exposure holds. A surface no published probe answers reads it as one probe
+    /// at the camera.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <param name="rows">The six rows to fill; zero, W included, for a view the frame does not hold or whose camera
     /// sample never read.</param>

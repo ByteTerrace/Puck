@@ -674,7 +674,9 @@ read again is refilled and republished whole.
   At a camera cut the sample reads `fresh`: a sample is reused only from the very
   position, so the sample after a teleport depends on where the camera stands,
   not where it stood. `SdfViewExposures` keeps a cut owed until a sample
-  arrives. The runtime samples on the GPU
+  arrives; meanwhile the last sample's light holds (as the exposure holds its EV)
+  and the view's `airLight` is zero, since no sky is known open about the new
+  shot (`SdfViewExposures.SampleCamera`). The runtime samples on the GPU
   asynchronously (`ScheduleGpuCameraSamples`, at most every `LightingInterval`, at once
   after a cut): each view reads its own latest row wherever its camera now
   stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
@@ -684,13 +686,18 @@ read again is refilled and republished whole.
   landing (the debug world's scene is hundreds of megabytes), so it answers seconds
   into a boot. Until the device first answers, `TrySampleCamera` takes the CPU trace
   above on the built scene (`TryTraceCamera`), so a view's open sky is known from the
-  build on. Before any sample a view reads the open sky (`airLight` one): a closed
-  room then lights as daylight, the image meter settles near EV 13 instead of 7, and
-  a 150-nit display reads black beside the walls. A screen that reads black only
-  early in a boot is this, never its source: check `world.exposure`'s `camera=`.
+  build on. A view's air never assumes the open sky: while no sample of its current
+  shot is known, `airLight` is zero and the fog and haze in-scatter no sky. In a
+  closed hall the noon sky's in-scatter over a few tens of metres of thin haze
+  outweighs every surface the hall lights, so an assumed open sky would wash the
+  whole view out. Surfaces no probe
+  answers read the open sky only before a view's first sample ever: a closed room then
+  lights as daylight, the image meter settles near EV 13 instead of 7, and a 150-nit
+  display reads black beside the walls. A screen that reads black only early in a boot
+  is this, never its source: check `world.exposure`'s `camera=`.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
-  the previous sample's light and sky visibility. `world.exposure` names the sample's source as
+  the previous sample's light, and its sky visibility within the same shot. `world.exposure` names the sample's source as
   `camera=probes`, `camera-trace`, `held` or `none`, and for `held` or `none` what it
   waits for (`wait=`, `SdfMeshIrradiance.CameraSampleWait`: `scene-build`, `scene`,
   `scene-upload`, `unpublished`, `camera-sample`, `unasked`, `cut`).
@@ -717,7 +724,7 @@ read again is refilled and republished whole.
   `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
   that level, its bound and the relit and needed rates. A re-traced probe keeps drawing its previous
   measurement until its trace lands. Clear the CPU cache and staging volume
-  only when the layout changes. On a window move, publish its new coordinates and copy each completed slot. A wrong cell contributes no weight. The gather tries coarser measured corners for the missing share. A camera cut clears the previous view’s sample so its authored sky can light the first frame until a destination sample arrives. The volume
+  only when the layout changes. On a window move, publish its new coordinates and copy each completed slot. A wrong cell contributes no weight. The gather tries coarser measured corners for the missing share. A camera cut holds the previous sample's light and zeroes its open sky until a destination sample arrives. The volume
   measures at every tier: Off measures the Medium layout and applies none of its
   light (`SdfFrameBlock`'s `indirectApply` intensity zero, which also brings in
   the authored fill), while its probes keep occluding the traced lights, the
@@ -734,8 +741,9 @@ read again is refilled and republished whole.
   and the mean luminance of its six axes (grey) over the rest; its traced
   lights go unoccluded. No diffuse reader multiplies a share by the sky's SH, so a cold room reads as the
   sample measured it, never white and blue-washed under the unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
-  which reproduces the unpublished state on a warm boot. Before the sample's first reading `meterLight` reads W zero
-  and `airLight` one, so the first frames of a boot still read the open sky.
+  which reproduces the unpublished state on a warm boot. Before the sample's first reading `meterLight` reads W zero,
+  so the first frames of a boot light unanswered surfaces by the open sky, diffuse and reflection alike
+  (`sdfMeshReflectionUnanswered`), while `airLight` reads zero and the air takes no sky.
   Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.
