@@ -168,7 +168,6 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             m_loadsDone++;
             group.Done = true;
-            Finish();
             return true;
         }
     }

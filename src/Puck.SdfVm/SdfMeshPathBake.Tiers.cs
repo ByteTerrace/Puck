@@ -328,7 +328,8 @@ public sealed partial class SdfMeshPathBake {
     // their demand asks (spare) are then planned again at the demanded one, the largest saving first, until the draws
     // are expected two replacements under the budget. When it has pressed for SdfMeshTier.HoldFrames frames with no
     // spare group left, landing or waiting its hold, in this residency or any other, the demand itself is past the
-    // budget and the selector coarsens every demand half a rung (SdfResidencySelector, read into m_bias), which makes
+    // budget and the selector coarsens every demand half a rung (SdfResidencySelector, read into m_bias) while a half rung
+    // still moves some residency's demand (SdfDetailReport.Floored), which makes
     // the groups farthest past their rung spare. It takes the bias back half a rung once the bytes every residency's
     // draws would name with every demand half a rung finer and every spare group coarsened have stayed under that same
     // mark, with nothing owed or in flight, for the quiet wait. With room to spare a coarser tier
@@ -587,6 +588,9 @@ public sealed partial class SdfMeshPathBake {
         // A mesh the region refuses presses whatever the bytes say: the arena's free runs, not the sum, decide a place.
         var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))) || (m_regionRefused > 0));
         var anySpare = false;
+        // Whether another half rung of bias would move none of this bake's demanded tiers, which the selector reads as
+        // this residency's part in whether a rise could relieve any budget. The walk stops at the first group a rise moves.
+        var floored = ((bias >= SdfMeshTier.MaxBias) || (((m_detail is not null) || over) && !BiasCoarsens(bias: bias)));
 
         if (over) {
             var expected = (named - freed);
@@ -611,7 +615,7 @@ public sealed partial class SdfMeshPathBake {
             // The budget presses only on what it can still coarsen: spare tiers, or a demand another half rung of bias
             // would coarsen. Once every group stands at its floor the bias moves no tier, and the detail rests over its
             // budget rather than waiting on steps that change nothing.
-            pressing = (anySpare || (spare.Count > 0) || (coarsening > 0) || ((bias < SdfMeshTier.MaxBias) && BiasCoarsens(bias: bias)));
+            pressing = (anySpare || (spare.Count > 0) || (coarsening > 0) || !floored);
         } else {
             // A tier no demand has asked for SdfMeshTier.SpareKeptFrames is given back though the budget has room: a
             // viewer who comes back within that time finds it, and past it the detail is unobserved storage, which the
@@ -639,6 +643,7 @@ public sealed partial class SdfMeshPathBake {
                 // always owes some tier, can still give the bias back; an arrival's first details are unknown bytes and wait.
                 CanLower: (!over && (firstsInFlight == 0) && (firstsOwed == 0) && ((bias == 0) || (FinerBytes(bias: bias).AddSaturating(right: (filled - named)) <= target))),
                 Elapsed: elapsed,
+                Floored: floored,
                 Over: over
             )));
         }
