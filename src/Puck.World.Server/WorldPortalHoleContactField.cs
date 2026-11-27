@@ -243,6 +243,8 @@ public sealed class WorldPortalHoleContactField : IContactField {
         origin: in origin
     );
     /// <inheritdoc/>
+    public bool TryHoldableStamp(out ContactHoldableStamp stamp) => m_inner.TryHoldableStamp(stamp: out stamp);
+    /// <inheritdoc/>
     public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => m_inner.TryNearestSurfaceAlongDirection(
         assistHalfAngle: assistHalfAngle,
         candidate: out candidate,

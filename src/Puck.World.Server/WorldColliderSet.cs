@@ -212,6 +212,9 @@ public sealed partial class WorldColliderSet : IContactField {
     // The holdable subset of m_attachedColliders, published with its bounds beside m_attachedSet.
     private readonly List<FixedStaticCollider> m_movingHoldable = [];
     private readonly FixedStaticColliderSet m_movingHoldableSet = new();
+    // Advances wherever m_movingHoldableSet can change content: a refresh whose fold moved, and every restore. The static
+    // holdable set never changes, and what a probe leaves out is the stamp's mask (TryHoldableStamp).
+    private ulong m_holdableRevision;
     private readonly List<bool> m_movingGripOverrides = [];
 
     internal bool MovingHoldable(int row, out bool grantedByOverride) {
@@ -1163,6 +1166,7 @@ public sealed partial class WorldColliderSet : IContactField {
         if (m_refreshHash.Value != m_attachedHash) {
             m_attachedHash = m_refreshHash.Value;
             AttachedRevision++;
+            m_holdableRevision++;
         }
     }
 
@@ -1309,6 +1313,13 @@ public sealed partial class WorldColliderSet : IContactField {
             ? m_holdableGrantedByOverride[candidate.ColliderIndex] : (m_excluding ? m_excludedGripOverrides : m_movingGripOverrides)[candidate.ColliderIndex]);
 
         return true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>Declines during a ride sweep, whose left-out support no stamp names.</remarks>
+    public bool TryHoldableStamp(out ContactHoldableStamp stamp) {
+        stamp = new ContactHoldableStamp(Mask: m_heldPasses, Revision: m_holdableRevision);
+
+        return (m_rideExcludedRow < 0);
     }
     /// <inheritdoc/>
     public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => FixedSurfaceQuery.TryNearestDirected(
