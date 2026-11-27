@@ -94,7 +94,13 @@ public static partial class TestCommand {
         var exit = Path.Combine(path1: legDirectory, path2: "exit-code");
 
         if (!File.Exists(path: exit) || (File.ReadAllText(path: exit) != "0")) {
-            error.WriteLine(value: $"ERROR: the leg for {world} did not finish successfully; transcripts under {legDirectory}.");
+            // The worker names a leg's reason in `failure` (WorldTestBatch.RecordFailure); a leg without one never
+            // reached its verdict (its host exited or the worker stopped advancing).
+            var failure = Path.Combine(path1: legDirectory, path2: "failure");
+
+            error.WriteLine(value: (File.Exists(path: failure)
+                ? $"ERROR: the leg for {world} failed: {File.ReadAllText(path: failure)}; transcripts under {legDirectory}."
+                : $"ERROR: the leg for {world} did not finish; transcripts under {legDirectory}."));
             var stderr = Path.Combine(path1: legDirectory, path2: "stderr.log");
 
             if (File.Exists(path: stderr)) {

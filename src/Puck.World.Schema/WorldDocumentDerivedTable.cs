@@ -48,10 +48,12 @@ public sealed class WorldDocumentDerivedTable<TValue> where TValue : class? {
         } finally {
             inputs = recording.End();
         }
-        var entry = m_entries.GetValue(key: definition, derive: _ => new Entry(inputs: inputs, value: value));
+        var derived = new Entry(inputs: inputs, value: value);
+        // Static delegates: a capturing lambda here would allocate its closure on every call, the held path's included.
+        var entry = m_entries.GetValue(definition, derived, static (_, candidate) => candidate, static (_, _, _) => true);
 
         // A racing caller's value won: its derivation read the same document, and its parts are the ones it holds.
-        if (!ReferenceEquals(objA: entry.Value, objB: value)) { WorldDocumentReads.Note(inputs: entry.Inputs); }
+        if (!ReferenceEquals(objA: entry, objB: derived)) { WorldDocumentReads.Note(inputs: entry.Inputs); }
         return entry.Value;
     }
     /// <summary>Reads the value held for <paramref name="definition"/> under the running code, noting the parts of the
