@@ -54,7 +54,9 @@ public static class RuleFacts {
     /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <c>CellKind</c>, <c>count</c> is always
     /// integer (the number of cells present, regardless of what they hold), and <c>arrangementRank</c> is an ordered
-    /// zone's order as one integer (the Lehmer rank relative to its token domain's order, k ≤ 20). The reserved-channel exemption from
+    /// zone's order as one integer (the Lehmer rank relative to its token domain's order, k ≤ 20). <c>position</c> is
+    /// the one op that reads a key: the operand's key names a cell, and the answer is its zero-based position among
+    /// the row's cells in their order (-1 when the row does not hold it). The reserved-channel exemption from
     /// the compiler's ordinary (row, key) pair rule: a reduction addresses the whole row rather
     /// than one cell, so it is the one place a keyed row is read with no key at all — admitted deliberately, not a
     /// hole in the pair rule (the compiler's reduce branch). The optional suffix

@@ -286,14 +286,11 @@ public sealed class ReductionOperand : RuleOperand {
     public override void CollectReads(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (RowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new CellAccess(
-                Key: default,
-                RowOrdinal: RowOrdinal
-            ));
-        }
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: RowFrom,
+            rowOrdinal: RowOrdinal
+        );
         if (FilterOrdinal >= 0) {
             into.Add(item: new CellAccess(
                 Key: default,
@@ -345,6 +342,96 @@ public sealed class ReductionOperand : RuleOperand {
                 reader: reader,
                 rowOrdinal: ordinal
             )
+        );
+    }
+}
+/// <summary>A key's zero-based position among a row's cells in their order (<see cref="StateReduceOp.Position"/>), read
+/// from the arena's position view (<see cref="StateArena.TryPositionOf"/>): one lookup per read, the view itself
+/// derived once per row generation. A key the row does not hold reads <c>-1</c>; an address that names no cell reads
+/// absent, and one whose computation faulted reads faulted.</summary>
+public sealed class PositionOperand : RuleOperand, IStateAddressedOperand {
+    private readonly OperandAddress[] m_addresses;
+
+    /// <summary>Initializes the operand.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> when <paramref name="rowFrom"/> applies.</param>
+    /// <param name="key">The literal key whose position is read, or the invalid default when
+    /// <paramref name="keyFrom"/> applies.</param>
+    /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal key.</param>
+    /// <param name="rowFrom">The live row, or <see langword="null"/> for a fixed row.</param>
+    public PositionOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, LiveRow? rowFrom = null) : base(valueKind: CellKind.Int) {
+        Key = key;
+        KeyFrom = keyFrom;
+        RowFrom = rowFrom;
+        RowOrdinal = rowOrdinal;
+        m_addresses = OperandAddress.List(
+            first: rowFrom?.Index,
+            second: keyFrom,
+            secondUse: AddressUse.Key,
+            use: AddressUse.Index
+        );
+    }
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
+    /// <summary>Gets the literal key, or the invalid default when <see cref="KeyFrom"/> applies.</summary>
+    public CellKey Key { get; }
+    /// <inheritdoc/>
+    public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the live row, or <see langword="null"/> for a fixed row.</summary>
+    public LiveRow? RowFrom { get; }
+    /// <inheritdoc/>
+    public int RowOrdinal { get; }
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        // A position moves when any cell of the row is added, removed or reordered, so the read spans the row.
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: RowFrom,
+            rowOrdinal: RowOrdinal
+        );
+
+        CompiledCellRef.CollectReference(
+            into: into,
+            reference: KeyFrom
+        );
+    }
+    /// <inheritdoc/>
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
+    /// <inheritdoc/>
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        var next = 0;
+        var ordinal = RowOrdinal;
+
+        if (RowFrom is { } live) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
+                return Fact.Absent(kind: ValueKind);
+            }
+        }
+
+        var resolved = ((KeyFrom is null)
+            ? RuleReads.Literal(literal: Key)
+            : RuleReads.Named(key: in keys[next]));
+
+        if (!resolved.TryNamed(value: out var key)) {
+            return ((resolved.Case == FaultCase.Faulted)
+                ? Fact.Faulted(kind: ValueKind)
+                : Fact.Absent(kind: ValueKind));
+        }
+
+        return Fact.Finite(
+            kind: ValueKind,
+            value: (((ordinal >= 0) && key.IsValid && reader.Arena.TryPositionOf(
+                key: key,
+                position: out var position,
+                rowOrdinal: ordinal
+            ))
+                ? position
+                : -1L)
         );
     }
 }
