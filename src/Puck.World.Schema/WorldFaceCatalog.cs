@@ -43,7 +43,7 @@ public readonly record struct WorldFaceRow(
 /// <param name="Row">The placement's 0-based index in <see cref="WorldDefinition.Placements"/>.</param>
 /// <param name="Face">The placement's face row.</param>
 /// <param name="Portal">The face row's portal.</param>
-/// <param name="Aperture">The region the face opens at the document's crossing floor.</param>
+/// <param name="Aperture">The region the face opens at the document's slab floor.</param>
 public readonly record struct WorldPortalDoor(int Row, WorldPlacementFace Face, WorldPlacementPortal Portal, WorldFaceAperture Aperture);
 
 /// <summary>
@@ -107,11 +107,11 @@ public sealed class WorldFaceCatalog {
     }
 
     private readonly Dictionary<int, int> m_screens;
-    // Each row's opening at the crossing floor, built on first ask. The floor reads kits, motion and collision, never a
-    // state row, so it holds for every definition CarryAcrossState shares this catalog with.
+    // Each row's opening at the slab floor, built on first ask. The floor reads collision, never a state row, so it holds
+    // for every definition CarryAcrossState shares this catalog with.
     private readonly WorldFaceAperture?[] m_apertures;
 
-    private StrongBox<FixedQ4816>? m_crossingFloor;
+    private StrongBox<FixedQ4816>? m_slabFloor;
     // Every definition sharing this catalog (CarryAcrossState, CarryAcrossHolding) keeps the placements' order and face
     // rows, so the doors hold for each of them.
     private IReadOnlyList<WorldPortalDoor>? m_portalDoors;
@@ -530,22 +530,22 @@ public sealed class WorldFaceCatalog {
 
         return false;
     }
-    /// <summary>Gets a document's crossing floor (<see cref="WorldFacePortalPolicy.CrossingFloor"/>), computed once for
-    /// the catalog.</summary>
+    /// <summary>Gets a document's slab floor (<see cref="WorldFacePortalPolicy.SlabFloor"/>), computed once for the
+    /// catalog.</summary>
     /// <param name="definition">A definition this catalog was derived for.</param>
-    /// <returns>The crossing floor in world units.</returns>
+    /// <returns>The slab floor in world units.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public FixedQ4816 CrossingFloor(WorldDefinition definition) {
+    public FixedQ4816 SlabFloor(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (m_crossingFloor is not { } floor) {
-            floor = new StrongBox<FixedQ4816>(value: WorldFacePortalPolicy.CrossingFloor(definition: definition));
-            m_crossingFloor = floor;
+        if (m_slabFloor is not { } floor) {
+            floor = new StrongBox<FixedQ4816>(value: WorldFacePortalPolicy.SlabFloor(definition: definition));
+            m_slabFloor = floor;
         }
 
         return floor.Value;
     }
-    /// <summary>Finds one derived face's opening at its document's crossing floor
+    /// <summary>Finds one derived face's opening at its document's slab floor
     /// (<see cref="WorldFacePortalPolicy.TryAperture"/>), built once for the catalog.</summary>
     /// <param name="definition">A definition this catalog was derived for.</param>
     /// <param name="placementId">The owning placement's id.</param>
@@ -569,7 +569,7 @@ public sealed class WorldFaceCatalog {
         }
         if (!WorldFacePortalPolicy.TryAperture(
             aperture: out aperture,
-            crossingFloor: CrossingFloor(definition: definition),
+            slabFloor: SlabFloor(definition: definition),
             row: Rows[index]
         )) {
             return false;
@@ -580,7 +580,7 @@ public sealed class WorldFaceCatalog {
         return true;
     }
     /// <summary>Gets every portal door of a document: each placement face row that names a portal and whose face opens a
-    /// region at the crossing floor, in document order (placements outer, each placement's face rows inner), built once
+    /// region at the slab floor, in document order (placements outer, each placement's face rows inner), built once
     /// for the catalog. Whether a door stands open is state, read by its consumer.</summary>
     /// <param name="definition">A definition this catalog was derived for.</param>
     /// <returns>The doors.</returns>

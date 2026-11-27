@@ -6,7 +6,8 @@ namespace Puck.World;
 
 /// <summary>How one solid primitive's face opens into the region a swept body is tested against.</summary>
 /// <param name="Primitive">The solid primitive this recipe is keyed by.</param>
-/// <param name="Open">Builds the region from the face's derived frame and the document's crossing floor.</param>
+/// <param name="Open">Builds the region from the face's derived frame and the document's slab floor
+/// (<see cref="WorldFacePortalPolicy.SlabFloor"/>).</param>
 public sealed record WorldFaceApertureRecipe(SdfSolidPrimitive Primitive, Func<WorldFaceFrame, FixedQ4816, WorldFaceAperture> Open);
 /// <summary>
 /// The one declaration of which solid primitives open a walkable aperture and how — keyed by the face's named shape
@@ -24,13 +25,13 @@ public sealed record WorldFaceApertureRecipe(SdfSolidPrimitive Primitive, Func<W
 public static class WorldFaceApertures {
     private static readonly FrozenDictionary<SdfSolidPrimitive, WorldFaceApertureRecipe> ByPrimitive =
         new Dictionary<SdfSolidPrimitive, WorldFaceApertureRecipe> {
-            // The one-sided slab: the drawn face's own frame extruded along its normal, never thinner than one step
-            // of the fastest declared travel (the crossing floor).
+            // The one-sided slab: the drawn face's own frame extruded along its normal, never thinner than the slab
+            // floor (the contact skin).
             [SdfSolidPrimitive.Box] = new WorldFaceApertureRecipe(
-        Open: static (frame, crossingFloor) => new WorldFaceAperture.Box(
+        Open: static (frame, slabFloor) => new WorldFaceAperture.Box(
             Depth: FixedQ4816.Max(
                 x: frame.HalfDepth,
-                y: crossingFloor
+                y: slabFloor
             ),
             Frame: frame
         ),
