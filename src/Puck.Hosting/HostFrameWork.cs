@@ -49,6 +49,29 @@ public enum HostFrameWorkPart {
     TickDelivery,
     /// <summary>Hashes and compares the scoped replays.</summary>
     TickReplay,
+    /// <summary>Snapshots the tick's input commands and applies them to the command registry.</summary>
+    TickCommandSnapshot,
+    /// <summary>Polls the document's source files and the hot reload.</summary>
+    TickSourceWatch,
+    /// <summary>Replays what the authorities delivered off the pump: each remote authority's observation stream and
+    /// route updates, and each local authority's outbox.</summary>
+    TickObservation,
+    /// <summary>Delivers seat route changes, follows remote joins and drains pending transfers.</summary>
+    TickRoutes,
+    /// <summary>Advances the seat views and submits the seats' intents to the authorities they route to.</summary>
+    TickSeatIntents,
+    /// <summary>Scans the boot world's portal triggers and settles its screen sessions, or drains it while it does
+    /// not step.</summary>
+    TickBootSettle,
+    /// <summary>Steps the other instances: their schedules, scans and settles, with the waits for their ticks.</summary>
+    TickInstances,
+    /// <summary>Publishes a completed tick to console waits, scheduled captures, scripted lines and tick hooks.</summary>
+    TickPublish,
+    /// <summary>Runs the shell's post-step: roster profiles, the composition's post-step, seat look presentation and
+    /// extensions.</summary>
+    TickHostPost,
+    /// <summary>Copies what the frame reads of the authorities into the values the presentation publishes.</summary>
+    TickPresentation,
     /// <summary>The number of named parts.</summary>
     Count
 }

@@ -51,6 +51,14 @@ internal static class BenchmarkSummary {
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n## {run["leg"] ?? run["route"]} · {run["backend"]} · {adapter}\n\n");
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Device profile {profile?["profile"] ?? "none"} (table {profile?["table"] ?? "none"}); window {(window is null ? "none" : $"{window["width"]}x{window["height"]} {window["presentation"]}")}{((conditions["frameBar"] is { } bar) ? $", sized by --frame-bar {bar}" : string.Empty)}; budget {Number(node: run["budgetMilliseconds"]):0.00} ms ({run["budgetSource"]}).\n");
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Topology {topology?["kind"] ?? "none"}{((topology?["endpoint"] is { } endpoint) ? $" ({endpoint})" : string.Empty)}{((conditions["seats"] is { } seats) ? $", {seats} seat(s)" : string.Empty)}; start {run["start"]}; {run["iterations"]} iteration(s){((Number(node: run["iterationsDropped"]) > 0) ? $", {run["iterationsDropped"]} DROPPED past the recording" : string.Empty)}.\n");
+        if (run["authority"] is JsonObject authority) {
+            var tick = (authority["tickMs"] as JsonObject ?? []);
+            var parts = (authority["partsMeanMs"] as JsonObject ?? []).Select(selector: part => (Name: part.Key, Ms: Number(node: part.Value))).Where(predicate: static part => (part.Ms >= 0.005)).OrderByDescending(keySelector: static part => part.Ms).ToArray();
+
+            _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Remote authority: {authority["ticks"]} ticks in {Number(node: authority["seconds"]):0.0} s ({Number(node: authority["ticksPerSecond"]):0.0} a second), {authority["shed"]} shed; a tick costs mean {Ms(node: tick["mean"])}, p99 {Ms(node: tick["p99"])}, max {Ms(node: tick["max"])} ms")
+                .Append(value: string.Concat(values: parts.Select(selector: static part => string.Create(provider: CultureInfo.InvariantCulture, handler: $", {part.Name} {part.Ms:0.00}"))))
+                .Append(value: " (mean ms a tick by part).\n");
+        }
         _ = text.Append(value: ((reasons.Count > 0)
             ? $"- Machine: DISTURBED, its timings are not a verdict: {string.Join(separator: "; ", values: reasons)}.\n"
             : ((run["machine"]?["verdict"]?.GetValue<string>() == BenchmarkConditions.Unwatched)
@@ -146,7 +154,7 @@ internal static class BenchmarkSummary {
 
     private static double? Change(JsonObject readings, string name) => ((readings[name]?["change"] is JsonValue value) && value.TryGetValue<double>(value: out var change)) ? change : null;
 
-    private static double Number(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<double>(value: out var number)) ? number : 0.0);
+    internal static double Number(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<double>(value: out var number)) ? number : 0.0);
 
     private static string Ms(JsonNode? node) => ((node is JsonValue value) && value.TryGetValue<double>(value: out var number)) ? number.ToString(format: "0.00", provider: CultureInfo.InvariantCulture) : "-";
 }

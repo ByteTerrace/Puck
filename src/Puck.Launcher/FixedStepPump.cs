@@ -487,9 +487,11 @@ public sealed class FixedStepPump {
             if (!StepPending) {
                 var stepElapsedTicks = m_elapsedTicks + stepTicks;
                 var windowEndTick = CaptureOriginTicks + stepElapsedTicks;
-                m_pendingCommands = m_inputRouter.SnapshotForTick(tick: m_completedStepCount, windowEndTick: windowEndTick,
-                    windowStartTick: windowEndTick - stepTicks);
-                m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
+                using (HostFrameWork.Measure(HostFrameWorkPart.TickCommandSnapshot)) {
+                    m_pendingCommands = m_inputRouter.SnapshotForTick(tick: m_completedStepCount, windowEndTick: windowEndTick,
+                        windowStartTick: windowEndTick - stepTicks);
+                    m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
+                }
                 m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
                 m_pendingOwesFrame = m_simulation.NextStepOwesFrame;
             }
