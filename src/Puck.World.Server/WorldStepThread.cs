@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Waiting;

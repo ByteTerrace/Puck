@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using Puck.Hosting.Jobs;
 using Puck.Abstractions.Waiting;
 
