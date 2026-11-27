@@ -84,4 +84,15 @@ public sealed class ClockChainBoundLawTests {
         Assert.False(condition: huge.IsWellFormed);
         Assert.True(condition: widest.IsWellFormed);
     }
+    [Fact]
+    public void AnAnchorCoefficientOfAMegabyte_IsRefusedByLengthWithoutParsing() {
+        // All zeros: parsed it is the value zero, which fits any bound, so the anchor is malformed only because the text is
+        // measured before it is read. Its prediction holds the anchor's own phase, as a malformed curve does.
+        var zeros = new string(c: '0', count: (1 << 20));
+        var anchor = new WorldClockAnchor(Curve: [zeros, "1"], Phase: 0UL, Tick: 0UL);
+
+        Assert.False(condition: Rational.TryParseBounded(text: zeros, maxBits: WorldClockAnchor.MaxCurveCoefficientBits, value: out _));
+        Assert.False(condition: anchor.IsWellFormed);
+        Assert.Equal(expected: 0UL, actual: anchor.Predict(engineTick: 100UL));
+    }
 }

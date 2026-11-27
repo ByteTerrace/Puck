@@ -238,6 +238,46 @@ public readonly record struct Rational : IComparable<Rational> {
             value: text
         );
     }
+    /// <summary>Returns the longest text <see cref="TryParseBounded"/> reads for a bit bound: a numerator and a denominator
+    /// each of at most <paramref name="maxBits"/> bits spell at most <c>ceil(maxBits * log10(2))</c> decimal digits, so a
+    /// quotient (or a decimal's whole and fraction digits) takes two such runs, the sign and the slash or point. The
+    /// digits per bit are rounded up in integers (<c>30103 / 100000</c> over <c>log10(2) = 0.30102999...</c>), so the bound
+    /// is never below the true one and is the same on every machine.</summary>
+    /// <param name="maxBits">The most bits either part may take.</param>
+    /// <returns>The most characters, never negative.</returns>
+    public static int MaxTextLength(int maxBits) {
+        var digits = ((((long)Math.Max(val1: maxBits, val2: 0)) * 30103L) + 99999L) / 100000L;
+
+        return ((int)Math.Min(val1: ((2L * digits) + 2L), val2: int.MaxValue));
+    }
+    /// <summary>Parses an exact rational from its text only when the text is short enough for its parts to fit, then checks
+    /// they do (<see cref="FitsBits"/>): the text is measured before anything reads it, so an arbitrarily long string
+    /// is refused without parsing and the work is bounded by <paramref name="maxBits"/>.</summary>
+    /// <param name="text">The text.</param>
+    /// <param name="maxBits">The most bits the reduced numerator or denominator may take.</param>
+    /// <param name="value">The value, reduced; zero when none is returned.</param>
+    /// <returns><see langword="true"/> when the text spells a rational (<see cref="TryParse"/>) whose reduced parts each
+    /// fit <paramref name="maxBits"/>.</returns>
+    public static bool TryParseBounded(ReadOnlySpan<char> text, int maxBits, out Rational value) {
+        value = Zero;
+
+        if ((text.Length > MaxTextLength(maxBits: maxBits)) || !TryParse(text: text, value: out var parsed) || !parsed.FitsBits(maxBits: maxBits)) {
+            return false;
+        }
+
+        value = parsed;
+
+        return true;
+    }
+    /// <summary>Describes a text for an error message without echoing all of it: its length and its first characters.</summary>
+    /// <param name="text">The text.</param>
+    /// <param name="prefixLength">The most characters to show.</param>
+    /// <returns>For example <c>'12345678...' (1048576 characters)</c>; the whole text in quotes when it is short.</returns>
+    public static string Excerpt(ReadOnlySpan<char> text, int prefixLength = 24) =>
+        ((text.Length <= prefixLength)
+            ? $"'{text}'"
+            : $"'{text[..prefixLength]}...' ({text.Length} characters)"
+        );
     /// <summary>Parses an exact rational from its text (<see cref="TryParse"/>).</summary>
     /// <param name="text">The text.</param>
     /// <returns>The value, reduced.</returns>
