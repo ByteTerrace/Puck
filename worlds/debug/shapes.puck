@@ -2,8 +2,7 @@
 // stations. A display is a large display plinth whose turntable shows one exhibit at a time, at first one of its own
 // group (primitives, stretched, extruded, revolved, and so on); its console is one interactive screen listing every
 // exhibit in the catalog, and a tap on one shows it on the turntable, with its name and what it shows beside the list.
-// The debug world expands `galleryPrototypes()` inside its `prototypes` block,
-// `galleryPlacements()` inside its `placements` block and `galleryState()` (the displays' selections and screens and
+// The debug world expands `galleryPrototypes()` inside its `prototypes` block and `galleryState()` (the displays' selections and screens and
 // the motion exhibits' console controls) inside its `state.world` block. The displays stand inside the gallery
 // (gallery/gallery.puck), where its plan puts them (gallery/layout.puck, gallery.md):
 //
@@ -16,8 +15,7 @@
 //            board game room fills its south gallery (gallery.md)
 //   level 3  open: its galleries hold no displays yet
 //
-// A sign hangs beside each display naming its group, a map board in the lobby by the entrance lists the levels and
-// groups, and a board over the lift door names each level. Each display has a spawn point before its console, named
+// A board over the lift door names each level. Each display has a spawn point before its console, named
 // after its turntable's placement, and each exhibit one at the same place named after it (gallerySpawns says how she
 // stands there so the chase camera frames the exhibit); the gallery.* commands (galleryCommands) walk to, show, frame,
 // inspect and flag exhibits through them. shapes.md beside this file holds the displays, the coverage table and the
@@ -45,7 +43,6 @@ let cardBodies = 54
 let boardRoomBodies = (granaryBodies + alchemyBodies + goBodies + reversiBodies)
 // The launch field's ship (launch.puck) takes the population's highest slot, and debug.puck's capacity is one more.
 let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1)
-let galleryMapDirections = "stairs and lift beside the entrance: press CALL, or gallery.lift <level>"
 
 let uniformRow = [
   "shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone",
@@ -654,184 +651,6 @@ template displayScreen(display) {
   }
 }
 
-// A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a display's
-// sign, and the board game room's over its doorway (gallery/gallery.puck). Its placement's yaw turns the text's face.
-template sectionSign(name, title, what) {
-  prototype name {
-    document {
-      name: name
-      schema: "puck.creation.v1"
-      palette: galleryPalette
-      for x in [-0.75, 0.75] {
-        shape Box $"hanger-{x}" {
-          material: 1
-          position [x, 3.66, 0]
-          scale [0.025, 0.54, 0.025]
-        }
-      }
-      shape Box "board" {
-        material: 2
-        position [0, 2.9, 0]
-        scale [1.05, 0.3, 0.04]
-      }
-      textRuns [
-        {
-          text: title
-          position [0, 2.99, 0.04]
-          rotation [0, 0, 0, 1]
-          emHeight: 0.14
-          depth: 0.004
-          mode: "emboss"
-          material: 1
-          align: "center"
-          maxWidth: 2
-        }
-        {
-          text: what
-          position [0, 2.75, 0.04]
-          rotation [0, 0, 0, 1]
-          emHeight: 0.065
-          depth: 0.003
-          mode: "emboss"
-          material: 1
-          align: "center"
-          maxWidth: 2
-        }
-      ]
-    }
-  }
-}
-
-// The gallery's boards: the map in the lobby. A display names its group on its own screen.
-template signPrototypes() {
-  // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
-  prototype "gallery-map" {
-    document {
-      name: "gallery-map"
-      schema: "puck.creation.v1"
-      palette: galleryPalette
-      for x in [-0.6, 0.6] {
-        shape Box $"hanger-{x}" {
-          material: 1
-          position [x, 3.5, 0]
-          scale [0.03, 0.7, 0.03]
-        }
-      }
-      shape Box "board" {
-        material: 2
-        position [0, 2.24, 0]
-        scale [0.72, 0.66, 0.015]
-      }
-      textRuns: map(
-        concat(
-          [
-            {
-              text: "SHAPE GALLERY"
-              position [0, 2.08, 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.07
-              depth: 0.004
-              mode: "emboss"
-              material: 1
-              align: "center"
-            }
-          ],
-          [
-            {
-              text: galleryMapDirections
-              position [0, 1.98, 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.026
-              depth: 0.003
-              mode: "emboss"
-              material: 1
-              align: "center"
-              maxWidth: 1.36
-            }
-          ],
-          map(
-            galleryLevels,
-            (level, index) => {
-              text: level.title
-              position [0, (1.84 - (0.19 * index)), 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.05
-              depth: 0.003
-              mode: "emboss"
-              material: 1
-              align: "center"
-            }
-          ),
-          map(
-            galleryLevels,
-            (level, index) => {
-              text: reduce(
-                filter(galleryDisplays, display => (display.level == level.level)),
-                "",
-                (text, display) => ((text == "") ? display.title : $"{text}, {display.title}")
-              )
-              position [0, (1.775 - (0.19 * index)), 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.03
-              depth: 0.003
-              mode: "emboss"
-              material: 1
-              align: "center"
-              maxWidth: 1.36
-            }
-          ),
-          [
-            {
-              text: "Tap a display's console to show any shape   gallery.go <exhibit>   gallery.next"
-              position [0, 1.08, 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.026
-              depth: 0.003
-              mode: "emboss"
-              material: 1
-              align: "center"
-              maxWidth: 1.36
-            }
-          ],
-          [
-            {
-              text: "PAINTINGS east of the door   BOARD GAMES level 2   WONDERLAND west wall"
-              position [0, 0.95, 0.015]
-              rotation [0, 0, 0, 1]
-              emHeight: 0.026
-              depth: 0.003
-              mode: "emboss"
-              material: 1
-              align: "center"
-              maxWidth: 1.36
-            }
-          ]
-        ),
-        run => {
-          text: run.text
-          position [run.position[0], (run.position[1] + 0.7), run.position[2]]
-          rotation: run.rotation
-          emHeight: run.emHeight
-          depth: run.depth
-          mode: run.mode
-          material: run.material
-          align: run.align
-          maxWidth: 1.36
-        }
-      )
-    }
-  }
-}
-
-// The map hangs in the lobby facing the entrance.
-template gallerySignPlacements() {
-  placement "gallery-map" {
-    prototype: "gallery-map"
-    parent: "gallery"
-    position [((entranceWest + entranceEast) / 2), galleryFloor[0], 6.8]
-  }
-}
-
 // The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit and
 // show it on its display, isolate an exhibit's shape, flag one that looks wrong (world.flag writes the record and its
 // capture into the package's git-ignored flags folder), cycle the debug views, and slice the exhibit at hand's field
@@ -915,12 +734,6 @@ let galleryCommands = [
     ]
   }
 ]
-
-// The exhibits' signs and the lobby's map, which a world places beside the gallery module (debug.puck,
-// gallery-root.puck); the displays themselves are the module's (displayPlacements).
-template galleryPlacements() {
-  gallerySignPlacements()
-}
 
 // Each display, which gallery/gallery.puck places beside the rules that work it: its plinth, solid, and its screen over
 // the console's glass, both at `displayScale`, the screen carrying the console's pointer surface (consolePointer); and
@@ -4065,7 +3878,6 @@ template galleryPrototypes() {
   motionPrototypes()
   motionPrototypesB()
   warpPrototypes()
-  signPrototypes()
 }
 
 // Warps II: the ISA ops no earlier row reaches. A domain warp and a sine relief, an elongation, the two lattices with
