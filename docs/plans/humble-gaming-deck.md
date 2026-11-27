@@ -380,6 +380,14 @@ package above is not started. One item belongs to no package:
      a 512-entry palette needs a wider index.
   Each must leave every state `QuietTickEquivalenceLawTests` and the battery
   compare unchanged.
+- The hgd cartridge target's gaps (`DeckCartridgeEmitter`). Raster rows and a
+  panel are refused: on MMC3 the board's scanline IRQ can carry raster rows, and
+  a sprite-zero split can carry a status panel on every board. Code must fit the
+  16 KiB fixed at $C000 and the data the frame reads must fit page 0; an image
+  that outgrows either is refused, so a large adventure needs banked code
+  (trampolines through the fixed bank) and per-stream banks for sound. A map
+  write costs the most of any primitive (`CartridgeCostProfile.Deck.MapWrite`),
+  most of it the attribute update.
 
 ---
 

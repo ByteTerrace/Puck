@@ -57,7 +57,7 @@ public static class CartridgeDocuments {
         );
     }
     /// <summary>Creates an empty, editable cartridge whose defaults are explicit source data.</summary>
-    /// <param name="target">cgb, dmg or agb.</param>
+    /// <param name="target">cgb, dmg, agb or hgd.</param>
     /// <param name="title">The player's title.</param>
     /// <returns>A blank document with one empty tile and no game rules.</returns>
     public static CartridgeDocument Create(string target, string title) {
@@ -65,9 +65,8 @@ public static class CartridgeDocuments {
             ? 16
             : 4)];
 
-        palette[0] = 0x7FFF;
-        palette[1] = 0x56B5;
-        palette[2] = 0x294A;
+        // White, light grey, dark grey and black: RGB555 everywhere but hgd, which indexes its master palette.
+        ((ReadOnlySpan<int>)((target == "hgd") ? [0x30, 0x10, 0x00, 0x0F] : [0x7FFF, 0x56B5, 0x294A, 0])).CopyTo(destination: palette);
         var palettes = new CartridgePalettes(
             Background: [palette],
             Object: [palette]
@@ -106,7 +105,7 @@ public static class CartridgeDocuments {
     public static (CostBound Frame, long Reservation) Estimate(CartridgeDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var profile = ((document.Target is "agb" or "cgb" or "dmg")
+        var profile = ((document.Target is "agb" or "cgb" or "dmg" or "hgd")
             ? CartridgeCostProfile.For(target: document.Target)
             : CartridgeCostProfile.Humble
         );

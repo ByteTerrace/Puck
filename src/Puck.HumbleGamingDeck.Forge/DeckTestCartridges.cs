@@ -1,3 +1,5 @@
+using static Puck.HumbleGamingDeck.Forge.DeckOpcodes;
+
 namespace Puck.HumbleGamingDeck.Forge;
 
 /// <summary>
@@ -19,49 +21,6 @@ public static class DeckTestCartridges {
     private const byte BallRight = 240;
     private const byte BallBottom = 190;
     private const byte BallTop = 8;
-    // Opcodes, by mnemonic and addressing mode.
-    private const byte AdcImmediate = 0x69;
-    private const byte AndImmediate = 0x29;
-    private const byte Bcc = 0x90;
-    private const byte Bcs = 0xB0;
-    private const byte Beq = 0xF0;
-    private const byte BitAbsolute = 0x2C;
-    private const byte Bne = 0xD0;
-    private const byte Bpl = 0x10;
-    private const byte Clc = 0x18;
-    private const byte Cld = 0xD8;
-    private const byte CmpImmediate = 0xC9;
-    private const byte CmpZeroPage = 0xC5;
-    private const byte CpxImmediate = 0xE0;
-    private const byte CpyImmediate = 0xC0;
-    private const byte DecZeroPage = 0xC6;
-    private const byte Dex = 0xCA;
-    private const byte IncZeroPage = 0xE6;
-    private const byte Inx = 0xE8;
-    private const byte Iny = 0xC8;
-    private const byte Jmp = 0x4C;
-    private const byte Jsr = 0x20;
-    private const byte LdaAbsolute = 0xAD;
-    private const byte LdaAbsoluteX = 0xBD;
-    private const byte LdaAbsoluteY = 0xB9;
-    private const byte LdaImmediate = 0xA9;
-    private const byte LdaZeroPage = 0xA5;
-    private const byte LdxImmediate = 0xA2;
-    private const byte LdyImmediate = 0xA0;
-    private const byte LsrAccumulator = 0x4A;
-    private const byte OraImmediate = 0x09;
-    private const byte Pha = 0x48;
-    private const byte Pla = 0x68;
-    private const byte RolZeroPage = 0x26;
-    private const byte Rti = 0x40;
-    private const byte Rts = 0x60;
-    private const byte Sei = 0x78;
-    private const byte StaAbsolute = 0x8D;
-    private const byte StaAbsoluteX = 0x9D;
-    private const byte StaZeroPage = 0x85;
-    private const byte Tay = 0xA8;
-    private const byte Txa = 0x8A;
-    private const byte Txs = 0x9A;
 
     /// <summary>Gets the shipped cartridges in file-name order: each file name, with its <c>.nes</c> extension, and the
     /// function that builds its image.</summary>

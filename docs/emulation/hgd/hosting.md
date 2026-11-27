@@ -57,7 +57,9 @@ shared derived cache keys the generator code and selection and counts misses and
 | `moving-sprite.deck` | A 16 by 16 orange ball bouncing round a navy sky above a green striped ground. | The control pad steers the ball. |
 
 The battery's `shipped-cartridges` stage runs both and reads their pictures from
-the PPU's pixel codes.
+the PPU's pixel codes. Authored `*.hgd.puck` cartridges in the same folder
+compile through the [Deck's cartridge compiler](README.md#compiled-cartridges)
+and export with them.
 
 ## The host and the core
 
