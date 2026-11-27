@@ -161,12 +161,9 @@ function lookTelevisionPalette(t) = [
 let lookTree = {
   bark: "#8A6B4F"
   barkUnder: "#3F2F24"
-  // The walkway (the gallery tree pack's honey timber, cream and sage): its decks and treads, the handrails and posts,
-  // the rope strung between them, the clear panes that hold a body, the lanterns' glow and their brass, and the woven
-  // wicker of the nests, with the teal of an egg in one.
+  // The walkway (the gallery tree pack's honey timber): its decks and treads, the lanterns' glow and their brass, the
+  // woven wicker of the nests, and the teal of an egg in one. Its rails are the tree's own bark.
   deck: "#C8904F"
-  rail: "#9A6233"
-  rope: "#A9B98A"
   lantern: "#FFD9A8"
   lanternGlow: 2200
   brass: "#C8902E"

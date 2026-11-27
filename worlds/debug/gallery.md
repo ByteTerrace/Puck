@@ -299,20 +299,22 @@ on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
   brackets (shelf fungus under every fifth tread) with burls between the
   turns, and six branches, each a bark limb carrying a timber deck from a
   level pad on the spiral out to its balcony, forking and carrying knots, with
-  nests in two of the forks. Guards run along every edge a body could fall
-  from: a clear pane that holds a body under a drawn timber handrail and sage
-  rope. Lanterns hang on brass arms over the treads and on tall posts at the
-  pads' corners. Everything a body stands on or will climb is built from
+  nests in two of the forks. A low rail of living branch runs along every
+  edge a body could fall from, about the Moth's hip, rising from a stub here
+  and there; it collides exactly as drawn, so a body can stand on it or jump
+  over it, and what keeps a walker on the walkway is its width. Lanterns hang
+  on brass arms over the treads and from a crook of branch at each pad.
+  Everything a body stands on or will climb is built from
   shapes contact admits, the standard's [limbs.puck](../standard/limbs.puck):
   a root or a branch's limb is a chain of flattened superellipsoids along a
   curve (`limb`), a deck is boards on the chords of its walking line
   (`deckedLimb`), the treads are boards round the trunk (`spiralTreads`), the
-  guards are panes (`guardRun`, `spiralGuard`, `limbGuard`), and the trunk is
+  rails are capsules (`guardRun`, `spiralGuard`, `limbGuard`), and the trunk is
   a stack of drums blended into one taper (`trunkCore`). The creation sets
   `contact: Shapes`, so those shapes collide as analytic primitives under the
   smooth blends that draw them as one grown surface, and a body walking the
   tree runs no field solve; the strands, boughs, forks, knots, burls,
-  brackets, posts, rails, ropes, lanterns and nests are drawn only. Its bark
+  brackets, the rails' stubs, the lanterns and nests are drawn only. Its bark
   carries no creation relief, which would collide as drawn; its texture is a
   grain that runs along each limb's own axis (foliage.puck's
   `landscapeSurface` with `grain`), and twists as the trunk climbs.
@@ -339,8 +341,10 @@ last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
 (`treeRim`), its risers radial, so its top spans its whole step at every
 radius, and a body walks the spiral 3.05 m from the axis (`treeWalkRadius`).
 The way in is the floor between the first riser and a root that flanks it.
-`debug.go` has no stop yet; in the gallery root, `body.pose spawn:tree 0`
-stands her at the foot.
+The tree's lab, [labs/tree.puck](labs/tree.puck) (document id `lab-tree`),
+holds the tree with just the floor and the balcony landings its branches
+reach; boot it to build, walk and judge the tree, and `body.pose spawn:tree 0`
+stands her at the foot there and in the gallery root.
 
 **The branches.** Two reach each of levels 1 to 3, one to each balcony edge
 (`treeLimbs`, `treeLanding`), each landing at its own bay. Each leaves the
@@ -678,8 +682,10 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **Level 1's floor**: the two aisles and the bridge, never the nave's void.
-  Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
+- **Level 1's floor**: the two aisles to their arcades' plane and the bridge,
+  never the nave's void, and never the balcony strip outside the arcade where
+  a tree branch lands before its barrier. Alice's size throughout (`small`,
+  look.puck's `lookWonderSize`, 0.15).
 
 Outside these zones a body keeps the size it last took (the owner's design):
 the stairs and the lift are the routes that size a body, and a body with no

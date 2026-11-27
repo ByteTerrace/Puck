@@ -452,7 +452,9 @@ let treeDoorWidth = 2
 let treeDoorPost = 0.22
 let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)
 let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
-let treeOverhang = 0.7
+// Level 1's walk ends on the balcony strip between the edge and the branch's magic barrier in the arcade's plane
+// (shell.puck), which holds a body without a pass; levels 2 and 3 walk on through their doorways into the aisle.
+let treeOverhang = 0.2
 let treeDoorOverhang = 1.5
 function treeOverhangOf(b) = ((b.level >= 2) ? treeDoorOverhang : treeOverhang)
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, the plan point on its middle
@@ -466,6 +468,7 @@ function treeTreadWalk(k) = treeTreadPlan(k, (treeWalkRadius - treeBarkAt(k)))
 // Where a branch's walking line starts (on its pad's outer edge, level with its tread) and ends (on its balcony's edge,
 // level with the floor), and where the walk across its landing ends, in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, (treePadReach - treeBarkAt(b.tread)))
+function treePadCentre(b) = treeTreadPlan(b.tread, (((treePadFrom + treePadReach) / 2) - treeBarkAt(b.tread)))
 function treeBranchTo(b) = [b.x, galleryFloor[b.level], ((b.side == "south") ? naveSouth : naveNorth)]
 function treeBranchLanding(b) = (treeBranchTo(b) +
   [0, 0, ((b.side == "south") ? (0 - treeOverhangOf(b)) : treeOverhangOf(b))])

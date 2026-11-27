@@ -1,8 +1,9 @@
 // The gallery tree's walkway walked end to end (gallery/tree.puck): from the nave floor to the trunk's foot, up the
 // spiral of treads round the trunk, out along each branch to its landing on a balcony and back to the trunk, and on up
 // to the last branch, which ends the walk on level 3. A module library: it hands its importers the walk's waypoints and
-// emits no document. The benchmark route `tree-walk` (benchmark-route.puck) plays them as a player does, through seat
-// 1's own controls, and tree-walk-tests.puck plays that route headless and gates every waypoint.
+// emits no document. Its route, `tree-walk` (treeWalkRoute), plays them as a player does, through seat 1's own controls;
+// the debug world's benchmark routes (benchmark-route.puck) and the tree's lab (labs/tree.puck) both carry it, and
+// tree-walk-tests.puck plays it headless in the lab and gates every waypoint.
 //
 // Every point is derived from the tree's own plan (gallery/layout.puck's `treeTreadWalk`, `treeBranchAt`,
 // `treeBranchLanding`, `treeLimbs`, `galleryFloor`), in the building's frame and stood where the world stands the
@@ -42,6 +43,15 @@ function treeWalkTread(k) = treeWalkPoint(
   ((length(filter(treeLimbs, b => (b.tread == k))) > 0) ? "junction" : "tread"),
   treeTreadWalk(k),
   treeWalkTreadWithin
+)
+// The middle of a branch's pad, which the walk crosses straight out from its junction along the tread's bearing, between
+// the tread's two risers, before it turns onto the branch's deck, and again on its way back.
+function treeWalkPad(b) = treeWalkPoint(
+  $"level {b.level} {b.side} pad",
+  "pad",
+  treePadCentre(b),
+  treeWalkBranchWithin,
+  b.level
 )
 // A branch's waypoints out from its junction to its landing on its balcony, and back.
 function treeWalkOutAlong(b) = map(
@@ -104,10 +114,14 @@ let treeWalkSections = concat(
     }
     {
       name: $"the level {treeLimbs[i].level} {treeLimbs[i].side} branch"
-      points: ((treeLimbs[i].tread == treeWalkLast.tread) ? treeWalkOutAlong(treeLimbs[i]) : concat(
+      points: ((treeLimbs[i].tread == treeWalkLast.tread) ? concat(
+        [treeWalkPad(treeLimbs[i])],
+        treeWalkOutAlong(treeLimbs[i])
+      ) : concat(
+        [treeWalkPad(treeLimbs[i])],
         treeWalkOutAlong(treeLimbs[i]),
         treeWalkBackAlong(treeLimbs[i]),
-        [treeWalkTread(treeLimbs[i].tread)]
+        [treeWalkPad(treeLimbs[i]), treeWalkTread(treeLimbs[i].tread)]
       ))
     }
   ])
@@ -123,3 +137,26 @@ let treeWalk = map(
         treeWalkSlowest))
   })
 )
+
+// The route row: the trunk's foot, the spiral, and every branch out to its landing and back, a chapter a stretch,
+// every step direct at the next waypoint so the body walks the tree's own treads and limbs rather than a navigation
+// path, played by the standard's `walker` seat program (standard/benchmark.puck). The walker is a plain visitor with
+// no pass: a level-1 branch's walk ends on the balcony strip outside its barrier, which changes no size
+// (gallery/wonder.puck).
+let treeWalkRoute = {
+  name: "tree-walk"
+  program: "walker"
+  chapters: map(range(0, length(treeWalkSections)), i => {
+    name: treeWalkSections[i].name
+    steps: concat(
+      ((i == 0) ? [
+        { $type: "pose", point: treeWalkStart, yawDegrees: treeWalkStartYaw }
+        { $type: "rest", seconds: 1 }
+      ] : []),
+      map(
+        treeWalkSections[i].points,
+        w => { $type: "go", point: w.point, pace: treeWalkPace, direct: true, within: w.within }
+      )
+    )
+  })
+}

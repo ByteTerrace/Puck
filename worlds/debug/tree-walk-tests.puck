@@ -1,6 +1,7 @@
-// The gallery tree's walkway, walked as a player walks it: seat 1 plays the `tree-walk` route (benchmark-route.puck,
-// its waypoints from tree-walk.puck) with the standard's `walker` program, which works the seat's own stick and camera
-// toward each waypoint in turn, so every step the body takes is the step a player's pad would ask for. Rules in this
+// The gallery tree's walkway, walked as a player walks it, in the tree's lab (labs/tree.puck): seat 1 plays the
+// `tree-walk` route (tree-walk.puck's treeWalkRoute) with the standard's `walker` program, which works the seat's own
+// stick and camera toward each waypoint in turn, so every step the body takes is the step a player's pad would ask for,
+// as a plain visitor holding no pass. Rules in this
 // test world latch the walk as it goes: which waypoint the body last reached, and the waypoint after which each kind of
 // failure first showed (`kinematics(body, 0, <witness>)`, what the body's own contact phase decided each step). The
 // expectations at the export tick then read where the walk got to and why it stopped, if it did:
@@ -18,10 +19,9 @@
 // foot), so a failing line names the segment. Play the same route live with `world.benchmark run tree-walk`.
 
 schema: "puck.world.definition.v1"
-basis: "debug"
-// The debug world's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
-documentId: "debug"
-import "stopped-machines"
+basis: "labs/tree"
+// The lab's own id (docs/authoring/testing-a-world.md#crossing-into-another-document).
+documentId: "lab-tree"
 import "gallery/layout"
 import "tree-walk"
 

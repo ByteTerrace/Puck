@@ -6,11 +6,13 @@
 //
 // It is two creations on one spot and the foliage placed about them. `gallery-tree` is the wood and the walkway, solid:
 // the trunk and its buttress roots, the treads round it on their bark brackets, the level pads where the branches leave
-// the spiral, each branch's bark limb and the timber deck along its top, and the guards (clear panes under a drawn
-// handrail and rope) along every edge a body could fall from. It sets `contact: Shapes`, so a body collides with the
-// hard union of what it stands on and climbs (the trunk's stacked drums, the boards, the panes, the limbs and roots):
-// analytic primitives, inside the solid the smooth blends draw, with no field solve. The trunk's braided strands, the
-// boughs under the pads, the forks, knots, burls, brackets, lanterns and nests are drawn only. `gallery-tree-canopy` is
+// the spiral, each branch's bark limb and the timber deck along its top, and a low rail of living branch along every
+// edge a body could fall from, rising from a stub here and there. A rail collides exactly as it is drawn: a body can
+// stand on it or jump over it, and what keeps a walker on the walkway is the walkway's width, not the rail. It sets
+// `contact: Shapes`, so a body collides with the hard union of what it stands on and climbs (the trunk's stacked drums,
+// the boards, the rails, the limbs and roots): analytic primitives, inside the solid the smooth blends draw, with no
+// field solve. The trunk's braided strands, the boughs under the pads, the rails' stubs, the forks, knots, burls,
+// brackets, lanterns and nests are drawn only. `gallery-tree-canopy` is
 // what a body never touches, with no collision: the boughs that carry the foliage under the skylights and the dark mass
 // that closes the crown over the trunk's top. The foliage itself is leafy clumps (foliage.puck's leafyClump), one
 // creation a colour family, placed once for every clump of the crown, of the tiers under it and of each branch's fork
@@ -78,14 +80,15 @@ let treeStems = { count: 5, segments: 4, turn: 160, out [1.5, 0.72], radius [0.7
 // golden-angle bearings.
 let treeFungusEvery = 5
 let treeBurlCount = 7
-// The guard along every edge a body could fall from: a handrail `treeGuardHeight` over the walking surface. The spiral's
-// rim takes one from its third tread, leaving its foot open, to its last, except across each pad's opening.
-let treeGuardHeight = 1.05
+// The guard along every edge a body could fall from: one low rail of living branch `treeGuardHeight` over the walking
+// surface, about the Moth's hip, so the tree's silhouette reads before its rails. The spiral's rim takes one from its
+// third tread, leaving its foot open, to its last, except across each pad's opening.
+let treeGuardHeight = 0.75
 let treeGuardFrom = 2
 let treeGuarded = filter(range(treeGuardFrom, treeTreadCount), k => all(treeLimbs, b => (absolute((k - b.tread)) > 1)))
 // The lanterns: one on a brass arm out of the bark over every `treeLanternEvery`-th tread from `treeLanternFrom`,
-// `treeLanternLift` metres over its tread (over a walker's head), and one on a tall post at each outer corner of every
-// pad, `treeLampHeight` over the pad.
+// `treeLanternLift` metres over its tread (over a walker's head), and one hung from a crook of branch that grows from
+// the forward outer corner of every pad, `treeLampHeight` over the pad.
 let treeLanternEvery = 4
 let treeLanternFrom = 2
 let treeLanternLift = 2.35
@@ -183,14 +186,11 @@ function treeBoughLevel(at) = first(
 let treeBark = 0
 let treeTimber = 1
 let treeFungus = 2
-let treeRail = 3
-let treeRope = 4
-let treeGlass = 5
-let treeGlow = 6
-let treeBrass = 7
-let treeWicker = 8
-let treeEgg = 9
-function treeBranchBark(i) = (10 + i)
+let treeGlow = 3
+let treeBrass = 4
+let treeWicker = 5
+let treeEgg = 6
+function treeBranchBark(i) = (7 + i)
 let treeLeaf = 0
 let treeTwig = 1
 // The families of leafy clump (look.puck's lookTree.foliage) and the creation each is.
@@ -295,9 +295,6 @@ prototypes {
             { color: lookTree.deck, roughness: 0.62, specular: 0.04, shade: brushed(0.08, 1.6, [1, 0.86, 0.62], 6114) }
           )
           galleryCel(canopySurface(lookTree.fungus, 6118))
-          galleryCel({ color: lookTree.rail, roughness: 0.5, specular: 0.05 })
-          galleryCel({ color: lookTree.rope, roughness: 0.9, specular: 0.02 })
-          { color: lookGlass, roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
           { color: lookTree.lantern, roughness: 0.5, emissive: lookTree.lanternGlow }
           { color: lookTree.brass, roughness: 0.3, metal: 1 }
           galleryCel({ color: lookTree.wicker, roughness: 0.85, specular: 0.03 })
@@ -401,9 +398,7 @@ prototypes {
         step: treeTreadStep,
         rise: treeTreadRise,
         rim: treeRim,
-        glass: treeGlass,
-        wood: treeRail,
-        rope: treeRope,
+        material: treeBark,
         height: treeGuardHeight
       )
       // The last tread has no tread over its forward run, so a guard closes its leading edge from the bark to the rim
@@ -417,9 +412,7 @@ prototypes {
         from: (polarPoint((treeBarkAt(last) + 0.15), lastBack, treeTreadTop(last)) + lastAcross),
         to: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
         side: -1,
-        glass: treeGlass,
-        wood: treeRail,
-        rope: treeRope,
+        material: treeBark,
         height: treeGuardHeight
       )
       guardRun(
@@ -427,9 +420,7 @@ prototypes {
         from: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
         to: treePadPoint(treeLimbs[(length(treeLimbs) - 1)], treeRim, ((treePadWidth / 2) - 0.06)),
         side: 1,
-        glass: treeGlass,
-        wood: treeRail,
-        rope: treeRope,
+        material: treeBark,
         height: treeGuardHeight
       )
       // Lanterns on brass arms out of the bark, over a walker's head.
@@ -452,7 +443,7 @@ prototypes {
         treeLantern(label: $"lantern-{k}", at: polarPoint((bark + 0.45), angle, y))
       }
       // Each branch: a level pad where it leaves the spiral, on a bough out of the trunk, its bark limb carrying a
-      // timber deck out to its balcony, guards along the pad and both sides of the deck, lamps on the pad's corners, and
+      // timber deck out to its balcony, rails along the pad and both sides of the deck, a lamp on a crook at the pad, and
       // its fork and knots.
       for (b, i) in treeLimbs {
         let top = treeTreadTop(b.tread)
@@ -510,9 +501,7 @@ prototypes {
             c: line[2],
             width: treeDeckWidth,
             side: s,
-            glass: treeGlass,
-            wood: treeRail,
-            rope: treeRope,
+            material: treeBranchBark(i),
             segments: treeBranchSegments,
             height: treeGuardHeight
           )
@@ -521,30 +510,27 @@ prototypes {
             from: treePadPoint(b, treeRim, (s * side)),
             to: treePadPoint(b, (treePadReach - 0.06), (s * side)),
             side: (0 - s),
-            glass: treeGlass,
-            wood: treeRail,
-            rope: treeRope,
-            height: treeGuardHeight
+            material: treeBranchBark(i),
+            height: treeGuardHeight,
+            post: true
           )
-          guardRun(
-            label: $"pad-edge-{i}-{(s + 1) / 2}",
-            from: treePadPoint(b, (treePadReach - 0.06), (s * side)),
-            to: (line[0] - (limbLeft(line[0], line[1], line[2], 0) * (s * ((treeDeckWidth[0] / 2) - 0.06)))),
-            side: (0 - s),
-            glass: treeGlass,
-            wood: treeRail,
-            rope: treeRope,
-            height: treeGuardHeight
-          )
-          let lamp = treePadPoint(b, (treePadReach - 0.03), (s * ((treePadWidth / 2) - 0.03)))
-          shape Cylinder $"lamp-post-{i}-{(s + 1) / 2}" {
-            detail: true
-            material: treeRail
-            position: ((lamp + [0, ((treeLampHeight - 0.3) / 2), 0]) * [-1, 1, -1])
-            scale [0.06, ((treeLampHeight + 0.3) / 2), 0.06]
-          }
-          treeLantern(label: $"lamp-{i}-{(s + 1) / 2}", at: (lamp + [0, (treeLampHeight + 0.17), 0]))
         }
+        let lamp = treePadPoint(b, (treePadReach - 0.12), ((treePadWidth / 2) + 0.05))
+        let reach = polarPoint(0.55, angle, 0)
+        shape Sweep $"lamp-crook-{i}" {
+          rotation: rotate([0, 1, 0], 180)
+          material: treeBranchBark(i)
+          blend: SmoothUnion
+          smooth: 0.05
+          curve {
+            a: (lamp - [0, 0.3, 0])
+            b: ((lamp + [0, (treeLampHeight + 0.5), 0]) - (reach * 0.2))
+            c: ((lamp + reach) + [0, (treeLampHeight + 0.35), 0])
+            radiusStart: 0.07
+            radiusEnd: 0.03
+          }
+        }
+        treeLantern(label: $"lamp-{i}", at: ((lamp + reach) + [0, (treeLampHeight + 0.05), 0]))
         limbFork(
           label: $"fork-{i}",
           a: line[0],

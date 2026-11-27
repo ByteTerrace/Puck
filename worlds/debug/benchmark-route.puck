@@ -185,30 +185,8 @@ routes [
       ]
     )
   }
-  // The gallery tree's walkway (tree-walk.puck): the trunk's foot, the spiral, and every branch out to its landing and
-  // back, a chapter a stretch, every step direct at the next waypoint so the body walks the tree's own treads and limbs
-  // rather than a navigation path. The walker holds the toybox's full-size pass (gallery/wonder.puck) from the start: a
-  // body that walks off a level-1 branch onto the toybox's floor without one is made small there and stays small back
-  // on the tree, below the treads' risers. `seat1: route.play tree-walk` plays the same route headless in
-  // tree-walk-tests.puck.
-  {
-    name: "tree-walk"
-    program: "walker"
-    chapters: map(range(0, length(treeWalkSections)), i => {
-      name: treeWalkSections[i].name
-      steps: concat(
-        ((i == 0) ? [
-          { $type: "pose", point: treeWalkStart, yawDegrees: treeWalkStartYaw }
-          { $type: "line", text: "gallery.wonder pass on" }
-          stand(1)
-        ] : []),
-        map(
-          treeWalkSections[i].points,
-          w => { $type: "go", point: w.point, pace: treeWalkPace, direct: true, within: w.within }
-        )
-      )
-    })
-  }
+  // The gallery tree's walkway (tree-walk.puck's treeWalkRoute), which the tree's lab (labs/tree.puck) plays too.
+  treeWalkRoute
   {
     name: "seams"
     program: "walker"

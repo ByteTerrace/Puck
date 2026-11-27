@@ -2,10 +2,10 @@
 // omits it, so every piece a body stands on is built from shapes contact admits: a limb is a chain of flattened masses
 // along a curve (superellipsoids, which bake their own radii), a walkway along it is a deck of timber boards on the
 // chords of its walking line, a trunk's treads are boards round its taper that climb at a riser a body steps up, and
-// a guard is clear panes that hold a body under a drawn handrail and rope (boxes, whose colliders are exact). A
+// a guard is a low rail of living branch along an edge (capsules, whose colliders are exact). A
 // creation built from them that sets `contact: Shapes` collides as those shapes' hard union, analytic primitives under
 // its smooth blends, so a body walking a whole tree runs no field solve. Detail a body never touches (a fork, a knot,
-// a bracket, twigs, leaves, a guard's posts) is a sweep or a detail shape, and leaf masses stay in separate, non-solid
+// a bracket, twigs, leaves, a rail's posts) is a sweep or a detail shape, and leaf masses stay in separate, non-solid
 // creations (foliage.puck's groupedTree, leafyClump and canopySurface).
 //
 // Every point is in the tree frame, a half turn about up from the creation's (foliage.puck's treePoint): each shape
@@ -167,72 +167,54 @@ template spiralTreads(label, count, start, step, rise, base, apex, rim, material
   }
 }
 
-// A straight run of guard from `from` to `to`, two points on the walking surface along its edge, in the tree frame: a
-// clear pane from `drop` under the surface to just under the handrail, standing in the vertical plane through the two
-// points and tilted with them, so runs end to end along a rising edge climb with it; an outboard post at `from` (and at
-// `to` when `last`), a handrail `height` over the surface and a rope strand at half that height, sagging a little.
-// `side` names the outboard side: 1 to the run's left (round +Y from its heading), -1 to its right. Only the pane
-// collides, so a body walking beside the run meets one flat face, which guides and never snags; the posts, handrail and
-// rope are drawn only.
-template guardRun(label, from, to, side, glass, wood, rope, height = 1.05, drop = 0.16, post = 0.045, rail = 0.045, strand = 0.016, last = false) {
+// A run of living rail from `from` to `to`, two points on the walking surface along its edge, in the tree frame: one
+// round branch `height` over the surface, `radius` thick, a capsule, so runs end to end along an edge meet in one smooth
+// bar that climbs with it. The rail collides: a standing body's collider spans the rail's height, so the bar holds it
+// with no pane or infill, and its round face guides a body sliding along it without snagging. With `post`, a stub of
+// the same branch grows up into the rail from the surface at `from`, curling out of the edge on `side` (1 the run's
+// left, round +Y from its heading; -1 its right), drawn only.
+template guardRun(label, from, to, side, material, height = 0.75, radius = 0.07, post = false) {
+  let joint = (from + [0, height, 0])
   let d = (to - from)
-  let turn = turnAlong(d)
   let flat = vectorUnit((d * [1, 0, 1]))
   let out = ([flat[2], 0, (0 - flat[0])] * side)
-  let top = (height - (rail * 1.5))
-  let mid = ((from + to) / 2)
-  shape Box $"{label}-pane" {
-    material: glass
-    position: ((mid + rotatePoint(turn, [0, ((top - drop) / 2), 0])) * [-1, 1, -1])
-    rotation: (turn * [-1, 1, -1, 1])
-    scale [((vectorLength(d) / 2) + 0.01), ((top + drop) / 2), 0.01]
+  shape Capsule $"{label}-rail" {
+    material: material
+    position: (joint * [-1, 1, -1])
+    rotation: (compose(turnAlong(d), rotate([0, 0, 1], -90)) * [-1, 1, -1, 1])
+    scale [radius, (2 * vectorLength(d)), radius]
   }
-  for (p, n) in (last ? [from, to] : [from]) {
-    shape Cylinder $"{label}-post-{n}" {
-      detail: true
-      material: wood
-      position: (((p + (out * (post + 0.012))) + [0, ((height - 0.05) / 2), 0]) * [-1, 1, -1])
-      scale [post, ((height + 0.05) / 2), post]
-    }
-  }
-  shape Sweep $"{label}-rail" {
-    rotation: rotate([0, 1, 0], 180)
-    material: wood
-    curve {
-      a: (from + [0, height, 0])
-      b: (mid + [0, height, 0])
-      c: (to + [0, height, 0])
-      radiusStart: rail
-      radiusEnd: rail
-    }
-  }
-  shape Sweep $"{label}-rope" {
-    rotation: rotate([0, 1, 0], 180)
-    material: rope
-    curve {
-      a: (from + [0, (height * 0.5), 0])
-      b: (mid + [0, ((height * 0.5) - 0.12), 0])
-      c: (to + [0, (height * 0.5), 0])
-      radiusStart: strand
-      radiusEnd: strand
+  if post {
+    shape Sweep $"{label}-post" {
+      rotation: rotate([0, 1, 0], 180)
+      material: material
+      blend: SmoothUnion
+      smooth: 0.05
+      curve {
+        a: (from - [0, 0.06, 0])
+        b: ((from + (out * 0.1)) + [0, (height * 0.45), 0])
+        c: joint
+        radiusStart: (radius * 1.5)
+        radiusEnd: radius
+      }
     }
   }
 }
 
-// A guard along a spiralTreads walkway's rim, on each tread k listed in `treads`: a guardRun `inset` inside the rim on
+// A rail along a spiralTreads walkway's rim, on each tread k listed in `treads`: a guardRun `inset` inside the rim on
 // the chord across the tread's step, from the riser before it to the riser after, its foot climbing from the middle of
-// that riser to the middle of the next, so the handrail climbs one even helix over the treads.
-template spiralGuard(label, treads, start, step, rise, rim, glass, wood, rope, height = 1.05, inset = 0.06) {
+// that riser to the middle of the next, so the rail climbs one even helix over the treads, and a post every
+// `postEvery`-th tread.
+template spiralGuard(label, treads, start, step, rise, rim, material, height = 0.75, inset = 0.06, postEvery = 3) {
   for k in treads {
     guardRun(
       label: $"{label}-{k}",
       from: polarPoint((rim - inset), (start + (step * (k - 0.5))), (treadTop(rise, k) - (rise / 2))),
       to: polarPoint((rim - inset), (start + (step * (k + 0.5))), (treadTop(rise, k) + (rise / 2))),
       side: sign(step),
-      glass: glass,
-      wood: wood,
-      rope: rope,
-      height: height
+      material: material,
+      height: height,
+      post: ((k % postEvery) == 0)
     )
   }
 }
@@ -262,10 +244,11 @@ template deckedLimb(label, a, b, c, width, thickness, material, segments = 8, ov
   }
 }
 
-// A guard along one side of a deckedLimb (`side` 1 its left, -1 its right): a guardRun for each of its boards from `from`
-// to `to` (board indices; -1 runs to the last board), `inset` inside the deck's edge, its ends on the line's points carried sideways along the
-// line's own level left there, so the runs meet end to end round the curve.
-template limbGuard(label, a, b, c, width, side, glass, wood, rope, segments = 8, from = 0, to = -1, height = 1.05, inset = 0.06) {
+// A rail along one side of a deckedLimb (`side` 1 its left, -1 its right): a guardRun for each of its boards from `from`
+// to `to` (board indices; -1 runs to the last board), `inset` inside the deck's edge, its ends on the line's points
+// carried sideways along the line's own level left there, so the runs meet end to end round the curve, with a post at
+// every `postEvery`-th board's start.
+template limbGuard(label, a, b, c, width, side, material, segments = 8, from = 0, to = -1, height = 0.75, inset = 0.06, postEvery = 3) {
   let end = ((to < 0) ? segments : to)
   for i in range(from, end) {
     let t0 = (i / segments)
@@ -277,11 +260,9 @@ template limbGuard(label, a, b, c, width, side, glass, wood, rope, segments = 8,
       to: (quadraticPoint(a, b, c, t1) +
         (limbLeft(a, b, c, t1) * (side * (((width[0] + ((width[1] - width[0]) * t1)) / 2) - inset)))),
       side: side,
-      glass: glass,
-      wood: wood,
-      rope: rope,
+      material: material,
       height: height,
-      last: ((i + 1) == end)
+      post: (((i - from) % postEvery) == 1)
     )
   }
 }
