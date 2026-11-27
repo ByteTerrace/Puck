@@ -97,6 +97,14 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
         }
         return false;
     }
+    /// <summary>Determines, from a row's declaration alone, whether it can withhold any cell from some audience: its own
+    /// policy is restricted, or its cells may carry policies of their own. A row that cannot encloses every audience
+    /// whatever it holds, so an audience check answers for it from its row policy alone.</summary>
+    /// <param name="policy">The row's declared policy, or <see langword="null"/> for a public row.</param>
+    /// <param name="cellPolicies">Whether the row's declaration lets its cells carry their own policy
+    /// (<see cref="ArenaLayout.DeclaresCellVisibility(StateRow)"/>).</param>
+    /// <returns><see langword="true"/> when some cell of the row can be withheld from some audience.</returns>
+    public static bool Restricts(StateVisibility? policy, bool cellPolicies) => ((policy is { IsPublic: false }) || cellPolicies);
     /// <summary>Determines, from the two declarations alone, whether every reader <paramref name="audience"/> may ever
     /// admit is one <paramref name="policy"/> admits too: a public policy encloses every audience, no restricted policy
     /// encloses a public one, and a restricted policy encloses a restricted audience whose static readers it lists and

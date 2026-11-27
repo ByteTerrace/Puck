@@ -51,6 +51,7 @@ public sealed partial class StateArena {
     private int[] m_reorderWhich = [];
 
     private IReadOnlyList<StateRow> m_rows;
+    private int[][] m_restrictingZones;
     private ulong[] m_rowGenerations;
     private ArenaSlotMap[] m_slotOfKey;
     private int[] m_poolOfDomainRow;
@@ -178,6 +179,7 @@ public sealed partial class StateArena {
             reason: out reason,
             rows: StateCatalog.ExpandRows(section: section)
         );
+        m_restrictingZones = RestrictingZones();
         m_slotOfKey = new ArenaSlotMap[layout.RowCount];
         if (catalog.Pools.Count == 0) {
             m_poolOfDomainRow = [];

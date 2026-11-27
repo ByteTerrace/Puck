@@ -51,6 +51,11 @@ public sealed record StateRowDeclaration(
     private static readonly Puck.Abstractions.CodeDerivedTable<StateRow, StateRowDeclaration> Declarations = new();
     /// <inheritdoc/>
     public override bool IsDraw => Draw is not null;
+    /// <summary>Gets whether the declaration lets the row's cells carry their own audience policy: the row declares
+    /// <see cref="StateRowShape.CellVisibility"/> or a seed cell declares a policy, as
+    /// <see cref="ArenaLayout.DeclaresCellVisibility(StateRow)"/> answers for the source row. The detached declaration
+    /// carries no cells, so this keeps the one answer the store reserves its column by.</summary>
+    public bool DeclaresCellVisibility { get; init; }
     /// <inheritdoc/>
     public override StateDomain EffectiveDomain => Domain ?? StateDomain.Slot.Instance;
     /// <summary>Copies declaration data, resolving inferred shape once without retaining the stored row.</summary>
@@ -89,7 +94,7 @@ public sealed record StateRowDeclaration(
             Enum: row.Enum,
             HostOwned: row.HostOwned,
             CellVisibility: row.CellVisibility
-        ) { Generated = row.Generated };
+        ) { Generated = row.Generated, DeclaresCellVisibility = ArenaLayout.DeclaresCellVisibility(row: row) };
     }
 }
 

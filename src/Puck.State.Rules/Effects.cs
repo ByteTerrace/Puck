@@ -400,6 +400,20 @@ public sealed class TransformStateEffect : RuleEffect {
 
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
+        CollectOwnReads(into: into);
+        FromRow?.CollectReads(into: into);
+        ToRow?.CollectReads(into: into);
+    }
+    /// <summary>Appends every read a firing makes besides the rows its live ends select: the transform's own rows and
+    /// the cells its dynamic key and each live end's index resolve through. A firing checks the row each live end
+    /// selects itself, so these are what its audience check reads beside them.</summary>
+    /// <param name="into">The read set being collected.</param>
+    public void CollectFixedReads(List<CellAccess> into) {
+        CollectOwnReads(into: into);
+        FromRow?.CollectIndexReads(into: into);
+        ToRow?.CollectIndexReads(into: into);
+    }
+    private void CollectOwnReads(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         foreach (var ordinal in m_reads) {
@@ -413,8 +427,6 @@ public sealed class TransformStateEffect : RuleEffect {
             into: into,
             reference: KeyRef
         );
-        FromRow?.CollectReads(into: into);
-        ToRow?.CollectReads(into: into);
     }
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) {

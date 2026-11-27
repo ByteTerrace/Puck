@@ -22,7 +22,7 @@ public static class WorldPlacementAudiences {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
 
-        return (((row.Visibility is { } policy) && !policy.IsPublic) || ArenaLayout.DeclaresCellVisibility(row: row) || RestrictedByZone(definition: definition, row: row));
+        return (StateVisibility.Restricts(policy: row.Visibility, cellPolicies: ArenaLayout.DeclaresCellVisibility(row: row)) || RestrictedByZone(definition: definition, row: row));
     }
     /// <summary>Returns whether a row lies in an ordered zone whose own policy can withhold from some principal.</summary>
     /// <param name="definition">The document declaring the row.</param>
@@ -36,7 +36,7 @@ public static class WorldPlacementAudiences {
 
         foreach (var zone in definition.State) {
             if ((zone?.EffectiveDomain is StateDomain.KeysOf { Ordered: true } ordered) && (ordered.Row == domain) &&
-                (((zone.Visibility is { } policy) && !policy.IsPublic) || ArenaLayout.DeclaresCellVisibility(row: zone))) {
+                StateVisibility.Restricts(policy: zone.Visibility, cellPolicies: ArenaLayout.DeclaresCellVisibility(row: zone))) {
                 return true;
             }
         }
