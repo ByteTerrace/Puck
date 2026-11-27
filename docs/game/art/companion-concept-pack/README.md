@@ -8,7 +8,7 @@ and anything it thinks she should leave alone. Its tall left tail blade and
 the air under its beak give it a profile you can pick out with the lamps off.
 
 The owner called Rivet “better” and saw a remote camera and a family of tools
-in the detachable optic. He agreed with the lead that the frame looked like a
+in the detachable optic. They agreed with the lead that the frame looked like a
 magnet or a toy forklift, that it had lost its whimsy, and that the poses did
 more work than the tiny lights. Spur keeps the load-bearing joints, heavy
 plates, and removable lens. Its body tells you where it is looking and how
