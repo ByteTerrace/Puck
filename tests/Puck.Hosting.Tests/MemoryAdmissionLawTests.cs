@@ -230,6 +230,62 @@ public sealed class MemoryAdmissionLawTests {
         Assert.True(condition: (account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value > (6L * Gibibyte)));
         Assert.True(condition: region.TryReserve(peak: Mebibyte));
     }
+    // Free memory at the authoring margin: authoring has no room, and the forced job and progress floors share the gap to
+    // the headroom (384 MiB on a 4 GiB machine). Refinements are forced heads that narrow and pass the allowance on; a
+    // refined group's readback is a progress floor in the same gap.
+    [Fact]
+    public void AForcedHeadLeavesTheReadbackItsWindowAndPassedReservationsStayUnderOneForcedJob() {
+        const long Readback = (64L * Mebibyte);
+        var account = new MemoryAccount(availablePhysicalBytes: static () => (512L * Mebibyte), clock: static () => 1L, installedPhysicalBytes: (4L * Gibibyte), reclaim: static () => { });
+
+        Assert.Equal(expected: ((128L * Mebibyte), (512L * Mebibyte)), actual: (account.Headroom, account.AuthoringMargin));
+
+        MemoryAccount.Owner Group(string name) => account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: name);
+        using var first = Group(name: "first");
+        using var second = Group(name: "second");
+        using var third = Group(name: "third");
+        using var fourth = Group(name: "fourth");
+        using var fifth = Group(name: "fifth");
+        using var readback = Group(name: "readback");
+        MemoryAdmissionReading Host() => account.ReadAdmission(pool: PhysicalMemory.Host);
+
+        // The first head finds no room, is forced with a readback's window beside it, narrows to what it measured and
+        // passes the allowance on: its narrowed reservation stands past the room in the passed total.
+        Assert.False(condition: first.TryReserve(peak: (200L * Mebibyte)));
+        Assert.True(condition: first.TryReserveForced(peak: (200L * Mebibyte), spare: Readback));
+        Assert.True(condition: first.TryReserve(peak: (50L * Mebibyte)));
+        first.PassForced();
+        Assert.Equal(expected: (0L, (50L * Mebibyte)), actual: (Host().Forced, Host().Passed));
+        Assert.True(condition: second.TryReserveForced(peak: (200L * Mebibyte), spare: Readback));
+        Assert.True(condition: second.TryReserve(peak: (50L * Mebibyte)));
+        second.PassForced();
+        Assert.Equal(expected: (0L, (100L * Mebibyte)), actual: (Host().Forced, Host().Passed));
+        // The refined groups' readback is granted in the gap; the next head would take the window a further readback
+        // needs, so it is refused until the readback ends.
+        Assert.True(condition: readback.TryReserveProgress(peak: Readback));
+        Assert.False(condition: third.TryReserveForced(peak: (200L * Mebibyte), spare: Readback));
+        readback.ReleaseReservation();
+        Assert.True(condition: third.TryReserveForced(peak: (200L * Mebibyte), spare: Readback));
+        Assert.True(condition: third.TryReserve(peak: (60L * Mebibyte)));
+        third.PassForced();
+        Assert.Equal(expected: (160L * Mebibyte), actual: Host().Passed);
+        // A pass that would take the passed total past the largest forced grant keeps the allowance: no other head is
+        // forced, and the reading names what stands past the room.
+        Assert.True(condition: fourth.TryReserveForced(peak: (100L * Mebibyte), spare: Readback));
+        Assert.True(condition: fourth.TryReserve(peak: (60L * Mebibyte)));
+        fourth.PassForced();
+        Assert.Equal(expected: ((100L * Mebibyte), (160L * Mebibyte)), actual: (Host().Forced, Host().Passed));
+        Assert.False(condition: fifth.TryReserveForced(peak: (10L * Mebibyte)));
+        // A passed group done leaves the waiting pass room: the allowance passes on by itself.
+        first.ReleaseReservation();
+        Assert.Equal(expected: (0L, (170L * Mebibyte)), actual: (Host().Forced, Host().Passed));
+        Assert.True(condition: fifth.TryReserveForced(peak: (10L * Mebibyte)));
+        fifth.ReleaseReservation();
+        second.ReleaseReservation();
+        third.ReleaseReservation();
+        fourth.ReleaseReservation();
+        Assert.Equal(expected: (0L, 0L, 0L), actual: (Host().Forced, Host().Passed, Host().AuthoringPromised));
+    }
     [Fact]
     public void OneForcedJobIsAdmittedAtATimeAcrossEveryOwner() {
         var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L * Gibibyte));

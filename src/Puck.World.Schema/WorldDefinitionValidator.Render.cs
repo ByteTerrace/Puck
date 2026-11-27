@@ -1257,6 +1257,7 @@ public static partial class WorldDefinitionValidator {
         if (atmosphere.Fog is { } fog) {
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogDensity, path: $"{path}.fog.density", scalar: fog.Density);
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogLuminance, path: $"{path}.fog.luminance", scalar: fog.Luminance);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogAnisotropy, path: $"{path}.fog.anisotropy", scalar: fog.Anisotropy);
             JudgeColor(color: fog.Color, definition: definition, errors: errors, path: $"{path}.fog.color");
             JudgeHeight(definition: definition, errors: errors, height: fog.Height, path: $"{path}.fog.height");
         }

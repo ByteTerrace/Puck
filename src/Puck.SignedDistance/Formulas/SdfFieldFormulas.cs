@@ -24,6 +24,7 @@ internal static partial class SdfFieldFormulas {
     private static readonly Scalar One = Literal(1);
     private static readonly Scalar Two = Literal(2);
     private static readonly Scalar Three = Literal(3);
+    private static readonly Scalar Six = Literal(6);
     // The carrier's least step, 2⁻¹⁶ (one raw).
     private static readonly Scalar Epsilon = Literal(1.0 / 65536.0);
     // SdfProgram.SqrtHalf and SdfProgram.SmoothRadiusMin, held by the evaluator in fixed point and generated into the
@@ -209,6 +210,21 @@ internal static partial class SdfFieldFormulas {
         f.ReturnIf(h <= Zero, b);
         f.ReturnIf(h >= One, a);
         f.Return(Lerp(a, b, One - h) - ((k * h) * (One - h)));
+    });
+    // The cubic polynomial smooth minimum (C2: its curvature has no step at the band's edge, where the quadratic's seam
+    // shows a crease under a highlight): min(a, b) less k/6·h³, h = 1 − |a − b|/k, over the quadratic's band |a − b| < k.
+    // Its gradient weights (1 − h²/2, h²/2) are a convex pair and it sags at most k/6, under the quadratic's k/4, so every
+    // bound the quadratic's band and depth give (its halo, cull margins, sag and growth) holds for it. Outside the band it
+    // returns the nearer operand to the bit, the far seed included. min(a, b) is written (a + b − |a − b|)/2, exact in
+    // fixed point, so the |a − b| kink cancels against the cubic's slope at a tie and the gradient readers see no seam.
+    private static readonly SdfFormula<SdfScalar> CubicSmoothMinimum = Helper("sdfBlendCubicSmoothMinimum", static f => {
+        var a = f.ParameterOf<SdfScalar>("a");
+        var b = f.ParameterOf<SdfScalar>("b");
+        var k = f.ParameterOf<SdfScalar>("k");
+        var gap = f.Bind("gap", Abs(b - a));
+        f.ReturnIf(gap >= k, Min(a, b));
+        var h = f.Bind("h", One - (gap / k));
+        f.Return((((a + b) - gap) * Half) - ((((k * h) * h) * h) / Six));
     });
 
     // === The swept tube ===============================================================================================
@@ -463,6 +479,12 @@ internal static partial class SdfFieldFormulas {
         -SmoothMinimum.Call(-current, -candidate, SmoothK(f)));
     internal static readonly SdfFormula<SdfScalar> SmoothSubtraction = Blend("sdfBlendSmoothSubtraction", static (f, current, candidate) =>
         -SmoothMinimum.Call(candidate, -current, SmoothK(f)));
+    internal static readonly SdfFormula<SdfScalar> CubicSmoothUnion = Blend("sdfBlendCubicSmoothUnion", static (f, current, candidate) =>
+        CubicSmoothMinimum.Call(current, candidate, SmoothK(f)));
+    internal static readonly SdfFormula<SdfScalar> CubicSmoothIntersection = Blend("sdfBlendCubicSmoothIntersection", static (f, current, candidate) =>
+        -CubicSmoothMinimum.Call(-current, -candidate, SmoothK(f)));
+    internal static readonly SdfFormula<SdfScalar> CubicSmoothSubtraction = Blend("sdfBlendCubicSmoothSubtraction", static (f, current, candidate) =>
+        -CubicSmoothMinimum.Call(candidate, -current, SmoothK(f)));
     internal static readonly SdfFormula<SdfScalar> ChamferUnion = Blend("sdfBlendChamferUnion", static (f, current, candidate) =>
         Min(Min(current, candidate), ((current + candidate) - Chamfer(f)) * SqrtHalf));
     internal static readonly SdfFormula<SdfScalar> ChamferIntersection = Blend("sdfBlendChamferIntersection", static (f, current, candidate) =>

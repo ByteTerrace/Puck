@@ -173,8 +173,20 @@ value expression, uses the same intermediate representation (IR): an
 
 Each operation has a single row in `ExpressionOperators`, so its spelling,
 arity, and cost live in one place. Domain checks, such as division by zero,
-remain in the evaluator. Evaluation allocates nothing once warm: the value
-stack is leased from the arena's scratch storage at the program's own length.
+remain in the evaluator. Evaluation allocates nothing: the value stack and
+its absence marks are one block of machine stack per evaluation, and a call,
+a fold's member body and a short-circuit body run on that block above the
+values beneath them. Each compiled token carries the arm of the one dispatch
+it runs and how many values it consumes (`CompiledExpressionToken.Step`,
+`Consumes`), derived from its operation and payload when the token is built.
+
+An operand reads through the evaluation's `EvaluationFrame`, which asks the
+host for its arena and clocks once per evaluation. A literal key of a fixed,
+trait-free numeric row reads through a `CellReadPlan`, the slot
+`StateArena.TryReadPlannedNumber` cached and checks against the row's
+key-to-slot map on every read. A lattice or ring read through a computed
+integer key reads the cell at that position (`StateArena.TryReadLiveNumberAt`)
+rather than resolving the integer's spelling through the key table.
 
 ### The IR on the wire
 

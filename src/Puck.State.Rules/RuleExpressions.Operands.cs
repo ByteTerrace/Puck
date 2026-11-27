@@ -42,9 +42,7 @@ public static partial class RuleExpressions {
     /// arguments of a call, and for an operand token the values the programs computing its addresses left.</summary>
     /// <param name="token">The compiled token.</param>
     /// <returns>The count.</returns>
-    public static int Arity(in CompiledExpressionToken token) => (token.Call?.Arity ?? ((token.Operand is { } operand)
-        ? FeedCount(operand: operand)
-        : ExpressionOperators.Arity(operation: token.Operation)));
+    public static int Arity(in CompiledExpressionToken token) => token.Consumes;
     /// <summary>Returns how many of an operand's addresses are computed by a program the enclosing program carries.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The count.</returns>
@@ -79,44 +77,44 @@ public static partial class RuleExpressions {
     /// resolution faulted is a faulted fact and the operand is not called; an address that names nothing reaches the
     /// operand as such, and the operand decides what that reads as. A pattern over a per-token program has the word
     /// spelled here first.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="operand">The operand.</param>
     /// <param name="feeds">The values the programs computing the operand's fed addresses left, one per fed address in
     /// address order.</param>
     /// <returns>The fact.</returns>
-    public static Fact ReadOperand(IStateReader reader, IRuleOperand operand, ReadOnlySpan<AddressFeed> feeds) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    public static Fact ReadOperand(ref EvaluationFrame frame, IRuleOperand operand, scoped ReadOnlySpan<AddressFeed> feeds) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        var addresses = operand.Addresses;
-
         // Most operands declare no address and spell no word: they read straight away.
-        if (addresses.IsEmpty && (operand is not IWordFoldOperand)) {
+        if (operand.Addresses.IsEmpty && (operand is not IWordFoldOperand)) {
             return operand.Read(
-                keys: default,
-                reader: reader
+                frame: ref frame,
+                keys: default
             );
         }
 
         return ReadAddressed(
-            addresses: addresses,
             feeds: feeds,
-            operand: operand,
-            reader: reader
+            frame: ref frame,
+            operand: operand
         );
     }
 
-    private static Fact ReadAddressed(IStateReader reader, IRuleOperand operand, ReadOnlySpan<OperandAddress> addresses, ReadOnlySpan<AddressFeed> feeds) {
+    // The interpreter's read of an operand whose token it built as ReadAddressed: every address resolved in the
+    // evaluation's own frame, then the word spelled when the operand matches one.
+    private static Fact ReadAddressed(ref EvaluationFrame frame, IRuleOperand operand, scoped ReadOnlySpan<AddressFeed> feeds) {
+        var addresses = operand.Addresses;
+
         if (addresses.Length > MaxAddresses) {
             throw new InvalidOperationException(message: $"An operand declares at most {MaxAddresses} addresses; {operand.GetType().Name} declares {addresses.Length}.");
         }
 
-        var frame = default(KeyFrame);
-        Span<ResolvedKey> keys = frame;
+        var resolvedFrame = default(KeyFrame);
+        Span<ResolvedKey> keys = resolvedFrame;
         var fed = 0;
 
         for (var slot = 0; (slot < addresses.Length); slot++) {
-            var address = addresses[slot];
+            ref readonly var address = ref addresses[slot];
             var reference = address.Reference;
             var feed = ((address.Feed is null)
                 ? default
@@ -125,7 +123,7 @@ public static partial class RuleExpressions {
             if (address.Use == AddressUse.Key) {
                 var resolved = RuleReads.ResolveReference(
                     feed: in feed,
-                    reader: reader,
+                    frame: ref frame,
                     reference: in reference
                 );
 
@@ -145,7 +143,7 @@ public static partial class RuleExpressions {
 
             var index = RuleReads.ResolveIndex(
                 feed: in feed,
-                reader: reader,
+                frame: ref frame,
                 reference: in reference
             );
 
@@ -165,6 +163,8 @@ public static partial class RuleExpressions {
         var resolvedKeys = keys[..addresses.Length];
 
         if (operand is IWordFoldOperand { WordProgram: { } program } word) {
+            var reader = frame.Reader;
+
             if (!word.TryLocateWord(
                 answer: out var answer,
                 keys: resolvedKeys,
@@ -175,10 +175,10 @@ public static partial class RuleExpressions {
                 return answer;
             }
 
-            var spelled = FoldWord(
+            var spelled = SpellWord(
                 body: program,
+                frame: ref frame,
                 kind: word.WordKind,
-                reader: reader,
                 rowOrdinal: rowOrdinal,
                 start: start,
                 word: reader.PatternWord
@@ -197,8 +197,8 @@ public static partial class RuleExpressions {
         }
 
         return operand.Read(
-            keys: resolvedKeys,
-            reader: reader
+            frame: ref frame,
+            keys: resolvedKeys
         );
     }
 
@@ -217,11 +217,22 @@ public static partial class RuleExpressions {
     /// letter is absent; otherwise the token's fault.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
     public static Outcome FoldWord(IStateReader reader, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, int start = 0) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        var arena = reader.Arena;
-        var cursor = start;
         var frame = new EvaluationFrame(reader: reader);
+
+        return SpellWord(
+            body: body,
+            frame: ref frame,
+            kind: kind,
+            rowOrdinal: rowOrdinal,
+            start: start,
+            word: word
+        );
+    }
+    // The fold itself, inside the evaluation that reads the pattern, so each token's letter reads through its frame.
+    private static Outcome SpellWord(ref EvaluationFrame frame, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, int start) {
+        var reader = frame.Reader;
+        var arena = frame.Arena;
+        var cursor = start;
         var length = 0;
 
         try {
@@ -273,13 +284,22 @@ public static class RuleOperandReads {
     /// <param name="reader">The evaluation in flight.</param>
     /// <returns>The fact.</returns>
     public static Fact Read(this IRuleOperand operand, IStateReader reader) {
+        var frame = new EvaluationFrame(reader: reader);
+
+        return operand.Read(frame: ref frame);
+    }
+    /// <summary>Reads an operand within an evaluation already in flight, running the program behind each address it
+    /// computes first, as <see cref="Read(IRuleOperand, IStateReader)"/> does.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <returns>The fact.</returns>
+    public static Fact Read(this IRuleOperand operand, ref EvaluationFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: operand);
-        ArgumentNullException.ThrowIfNull(argument: reader);
 
         Span<AddressFeed> feeds = stackalloc AddressFeed[RuleExpressions.MaxAddresses];
         var fed = 0;
 
-        foreach (var address in operand.Addresses) {
+        foreach (ref readonly var address in operand.Addresses) {
             if (address.Feed is null) {
                 continue;
             }
@@ -288,7 +308,7 @@ public static class RuleOperandReads {
 
             if (!RuleReads.TryFeed(
                 feed: out var feed,
-                reader: reader,
+                frame: ref frame,
                 reference: in reference
             )) {
                 return Fact.Faulted(kind: operand.ValueKind);
@@ -299,8 +319,8 @@ public static class RuleOperandReads {
 
         return RuleExpressions.ReadOperand(
             feeds: feeds[..fed],
-            operand: operand,
-            reader: reader
+            frame: ref frame,
+            operand: operand
         );
     }
 }

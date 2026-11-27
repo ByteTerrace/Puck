@@ -18,7 +18,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     // A static copy of two shapes turned 30 degrees about up: a wide plate and a small block standing on it, the block
     // baking with the plate (one run), then a lone block elsewhere.
     private static readonly Quaternion Turn = Quaternion.CreateFromAxisAngle(angle: (MathF.PI / 6f), axis: Vector3.UnitY);
-    private static readonly Shape[] Shapes = [
+    internal static readonly Shape[] Shapes = [
         new(Center: new Vector3(x: 0f, y: 0.3f, z: 0f), Half: new Vector3(x: 3f, y: 0.3f, z: 3f), Rotation: Turn, Material: 0),
         new(Center: new Vector3(x: 0.4f, y: 0.7f, z: -0.2f), Half: new Vector3(value: 0.1f), Rotation: Turn, Material: 1),
         new(Center: new Vector3(x: 8f, y: 0.5f, z: 0f), Half: new Vector3(value: 0.5f), Rotation: Quaternion.Identity, Material: 0),
@@ -346,7 +346,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         SameMeshes(actual: mended, expected: baked);
     }
 
-    private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material, float Round = 0f);
+    internal readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material, float Round = 0f);
 
     private static float Field(Shape shape, Vector3 point) {
         var local = Vector3.Transform(value: (point - shape.Center), rotation: Quaternion.Conjugate(value: shape.Rotation));
@@ -604,7 +604,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
     // The program: one static instance per shape with its tight bound, the second baking with the first, or with
     // `oneCopy` every shape after the first baking with the one before it.
-    private static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {
+    internal static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {
         var builder = new SdfProgramBuilder();
         int[] materials = [builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX)), builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitY))];
 
@@ -621,14 +621,15 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         return (builder.Build(), materials);
     }
-    // Answers the bake's lattices frame by frame until it has meshed every group.
-    private static void Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, SdfFrame frame, int[] materials, Shape[] shapes) {
+    // Answers the bake's lattices frame by frame until it has meshed every group, calling `afterStep` after each frame.
+    internal static void Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, SdfFrame frame, int[] materials, Shape[] shapes, Action? afterStep = null) {
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = dresser.Dress(frame: frame);
             if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                 bake.Complete(batch: batch, samples: Answer(batch: batch, materials: materials, shapes: shapes));
             }
+            afterStep?.Invoke();
 
             return !bake.Pending;
         });

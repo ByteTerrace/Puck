@@ -3412,6 +3412,15 @@ place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
+- [high] Materials switch hard across a smooth blend: a baked mesh carries one material a triangle
+  (`SdfMeshMaterialCut` places the boundary where the blend's winner, `SdfFieldFormulas.NearerWins` and its siblings,
+  flips), so a fillet between two colours is two colours with a line between. The fix is a mix the author opts into
+  per blend: the blend factor as a catalogue formula beside `Winner` (Quilez's `smin` weight, `h²/2` for the quadratic
+  and `h³/2` for the cubic, nearer side first), a second material and a unorm16 weight per mesh vertex beside
+  `SdfMesh.Influences` (kept through the store, restore, collapse levels, chunks and planar merge, which must keep
+  blend-zone vertices), and the shading door reading both materials and lerping their appearance rows by the
+  barycentric weight before any authored phase runs. Without the opt-in the weight is zero and nothing changes.
+
 - [high] FreeCell on the game station grew without bound: freecell-tests' World on the RTX 2060 reached 6.1 GB
   private after 5.5 minutes, still climbing about 100 MB every 4 s, and the memory guard killed it; klondike-tests
   peaked at 4.4 GB. Those runs booted the whole debug world for each scenario. The tests now boot stations of their

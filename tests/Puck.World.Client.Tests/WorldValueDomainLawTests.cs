@@ -142,7 +142,8 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.FogDensity] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: s)), present: static e => e.Sky.Atmosphere.FogDensity, member: "fog.density"),
         [WorldValueFields.AirFalloff] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: s))), present: static e => e.Sky.Atmosphere.FogFalloff, member: "fog.height.falloff"),
         [WorldValueFields.HazeAmount] = Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: s)), present: static e => e.Sky.Atmosphere.HazeAmount, member: "haze.amount"),
-        [WorldValueFields.HazeAnisotropy] = Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Anisotropy: s)), present: static e => e.Sky.Atmosphere.HazeAnisotropy, member: "haze.anisotropy"),
+        [WorldValueFields.FogAnisotropy] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Anisotropy: s)), present: static e => e.Sky.Atmosphere.FogAnisotropy, member: "fog.anisotropy"),
+        [WorldValueFields.HazeAnisotropy] =Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Anisotropy: s)), present: static e => e.Sky.Atmosphere.HazeAnisotropy, member: "haze.anisotropy"),
         [WorldValueFields.MediumExtinction] = Air(author: s => new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Extinction: s)), present: static e => e.Sky.Atmosphere.MediumExtinction, member: "medium.extinction"),
         [WorldValueFields.ScrimAlpha] = new Case(
             Author: s => Fixtures.BuildDocument() with {

@@ -179,7 +179,7 @@ Two rules decide whether facets are available at all:
    `ShapePointOps` derives the warp predicate from the point chain's emission
    mask; static and pooled scopes, bake partitioning, bounds and detail share it.
 2. **The creation-wide scope.** If a creation has a `noise` facet, an engraved
-   text run, **or any shape blend outside `Union` and `SmoothUnion`**, the whole
+   text run, **or any shape blend outside `Union` and the smooth unions**, the whole
    static creation emits inside one scope, and `panel`, `trims`, and `cells`
    are refused on **every** shape in it, whatever the placement kind.
 

@@ -1115,7 +1115,7 @@ public static partial class CreationStampEmitter {
         var shapes = (document.Shapes ?? []);
 
         for (var index = 0; (index < shapes.Count); index++) {
-            var blend = (shapes[index].Blend ?? SdfBlendOp.Union);
+            var blend = SdfFieldBlends.SmoothFamilyOf(value: (shapes[index].Blend ?? SdfBlendOp.Union));
 
             if (blend is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion)) {
                 return true;

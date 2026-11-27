@@ -69,8 +69,10 @@ public sealed partial class SdfMeshPathBake {
     public bool DetailSettled => (Volatile.Read(location: ref m_detailQuiet) >= SdfMeshTier.SettleFrames);
 
     // The bytes the bake's meshes may fill, as its grant last answered (Retier); no budget for a bake no residency
-    // observes.
+    // observes. The bytes the finer tiers that budget held back would add, which the next decision asks the selector's
+    // room for (SdfResidencyGrant.Budget).
     private long m_regionBudgetBytes = long.MaxValue;
+    private long m_regionWantedBytes;
 
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
@@ -379,7 +381,7 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
-        var budget = (m_detail?.Budget(filled: filled, named: named) ?? long.MaxValue);
+        var budget = (m_detail?.Budget(filled: filled, named: named, wanted: m_regionWantedBytes) ?? long.MaxValue);
         var replacement = (budget / SdfMeshTier.ReplacementShare);
         var target = (budget - (2L * replacement));
 
@@ -538,6 +540,7 @@ public sealed partial class SdfMeshPathBake {
 
         var replaced = false;
         var heldBack = 0;
+        var wanted = 0L;
 
         firsts.Sort(comparison: static (left, right) => ((left.Pixel.CompareTo(value: right.Pixel) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index)));
         m_firstNext = 0;
@@ -561,9 +564,11 @@ public sealed partial class SdfMeshPathBake {
             var bytes = old.PlacedBytes;
             var delta = Math.Min(val1: replacement, val2: (SdfMeshTier.BytesAt(bytes: bytes, from: old.Tier, to: tier) - bytes));
 
-            // A finer tier the budget has no room for waits, the finest demand first in line for what is freed.
+            // A finer tier the budget has no room for waits, the finest demand first in line for what is freed, and what
+            // it would add is asked of the room the other residencies leave.
             if ((heldBack > 0) || (delta > (budget - filled))) {
                 heldBack++;
+                wanted = wanted.AddSaturating(right: delta);
                 continue;
             }
             if (inFlight >= SdfMeshTier.MaxInFlight) { break; }
@@ -577,6 +582,7 @@ public sealed partial class SdfMeshPathBake {
             replaced = true;
         }
         m_tiersHeldBack = heldBack;
+        m_regionWantedBytes = wanted;
 
         // A mesh the region refuses presses whatever the bytes say: the arena's free runs, not the sum, decide a place.
         var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))) || (m_regionRefused > 0));

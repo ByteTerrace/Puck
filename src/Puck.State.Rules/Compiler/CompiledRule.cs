@@ -28,16 +28,168 @@ public enum GateOp : byte {
 /// <param name="Skip">Tokens skipped by a short-circuit instruction.</param>
 /// <param name="SkipWhen">The truth value that takes that skip.</param>
 public readonly record struct GateToken(CompiledValueSource LeftSource, ExpressionOp Comparison, CompiledValueSource RightSource, CellKind ValueKind, string Describe, GateOp Op = GateOp.Compare, int Arity = 0, int Skip = 0, bool SkipWhen = false);
-/// <summary>One token in an allocation-free postfix numeric expression.</summary>
-/// <param name="Operation">The stack operation.</param>
-/// <param name="Constant">The raw destination-kind literal for a constant token, or the argument slot for an
-/// <see cref="ExpressionOp.Argument"/> token.</param>
-/// <param name="Operand">The live operand for an operand token.</param>
-/// <param name="Board">The compiled topology and direction of a board token.</param>
-/// <param name="Fold">The compiled row and per-cell body of a fold token.</param>
-/// <param name="Call">The compiled subprogram of a <see cref="ExpressionOp.Call"/> token.</param>
-/// <param name="CarrierKind">The numeric kind this instruction reads, or null for a caller-supplied carrier.</param>
-public readonly record struct CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, IRuleOperand? Operand = null, BoardQuery? Board = null, CompiledFold? Fold = null, CompiledSubprogram? Call = null, CellKind? CarrierKind = null);
+/// <summary>How the interpreter runs one compiled token: the arm of its one dispatch, read off the token's operation
+/// and payload when the token is built (<see cref="CompiledExpressionToken.Step"/>).</summary>
+public enum ExpressionStep : byte {
+    /// <summary>A binary arithmetic or comparison operator over the two values below it.</summary>
+    Binary,
+    /// <summary>Pushes the token's constant.</summary>
+    Constant,
+    /// <summary>Pushes one of the enclosing call's arguments.</summary>
+    Argument,
+    /// <summary>Pushes the fold member bound for the evaluation.</summary>
+    Member,
+    /// <summary>Reads an operand that declares no address and spells no word.</summary>
+    Read,
+    /// <summary>Reads an operand through the addresses it declares, the computed ones fed from the stack.</summary>
+    ReadAddressed,
+    /// <summary>Replaces the value below with whether it is absent.</summary>
+    IsAbsent,
+    /// <summary>Negates the truth of the value below.</summary>
+    Not,
+    /// <summary>Evaluates the token's body, then negates its truth.</summary>
+    NotBody,
+    /// <summary>Evaluates the token's body only when the truth below holds.</summary>
+    And,
+    /// <summary>Evaluates the token's body only when the truth below fails.</summary>
+    Or,
+    /// <summary>Replaces an absent value with the fallback above it.</summary>
+    Coalesce,
+    /// <summary>Reduces a row's cells through the token's fold body.</summary>
+    Fold,
+    /// <summary>Evaluates the token's subprogram over the values below it.</summary>
+    Call,
+    /// <summary>Clamps a value between two bounds.</summary>
+    Clamp,
+    /// <summary>Selects one of two values by a condition.</summary>
+    Select,
+    /// <summary>Extracts a bit field.</summary>
+    BitField,
+    /// <summary>Inserts a bit field.</summary>
+    BitInsert,
+    /// <summary>Shifts a board mask one step in the token's direction.</summary>
+    BoardShift,
+    /// <summary>Casts a board mask's rays in the token's direction.</summary>
+    BoardRay,
+    /// <summary>Maps a board mask through the token's symmetry image.</summary>
+    BoardImage,
+    /// <summary>A shared arithmetic function over the values below it.</summary>
+    Function,
+    /// <summary>A unary arithmetic operator over the value below it.</summary>
+    Unary,
+}
+/// <summary>One token in an allocation-free postfix numeric expression. Its <see cref="Step"/> and
+/// <see cref="Consumes"/> are derived from the operation and payload whenever a token is built or one of those is
+/// changed by a <see langword="with"/> expression, so the interpreter dispatches without a table lookup.</summary>
+public readonly record struct CompiledExpressionToken {
+    private readonly CompiledSubprogram? m_call;
+    private readonly int m_consumes;
+    private readonly CompiledFold? m_fold;
+    private readonly IRuleOperand? m_operand;
+    private readonly ExpressionOp m_operation;
+    private readonly ExpressionStep m_step;
+
+    /// <summary>Initializes a new instance of the <see cref="CompiledExpressionToken"/> struct.</summary>
+    /// <param name="Operation">The stack operation.</param>
+    /// <param name="Constant">The raw destination-kind literal for a constant token, or the argument slot for an
+    /// <see cref="ExpressionOp.Argument"/> token.</param>
+    /// <param name="Operand">The live operand for an operand token.</param>
+    /// <param name="Board">The compiled topology and direction of a board token.</param>
+    /// <param name="Fold">The compiled row and per-cell body of a fold token.</param>
+    /// <param name="Call">The compiled subprogram of a <see cref="ExpressionOp.Call"/> token.</param>
+    /// <param name="CarrierKind">The numeric kind this instruction reads, or null for a caller-supplied carrier.</param>
+    public CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, IRuleOperand? Operand = null, BoardQuery? Board = null, CompiledFold? Fold = null, CompiledSubprogram? Call = null, CellKind? CarrierKind = null) {
+        m_call = Call;
+        m_fold = Fold;
+        m_operand = Operand;
+        m_operation = Operation;
+        this.Board = Board;
+        this.CarrierKind = CarrierKind;
+        this.Constant = Constant;
+        (m_step, m_consumes) = Shape(call: Call, fold: Fold, operand: Operand, operation: Operation);
+    }
+
+    /// <summary>Gets the compiled topology and direction of a board token.</summary>
+    public BoardQuery? Board { get; init; }
+    /// <summary>Gets the compiled subprogram of a <see cref="ExpressionOp.Call"/> token, or the body of a
+    /// short-circuit token.</summary>
+    public CompiledSubprogram? Call {
+        get => m_call;
+        init {
+            m_call = value;
+            (m_step, m_consumes) = Shape(call: value, fold: m_fold, operand: m_operand, operation: m_operation);
+        }
+    }
+    /// <summary>Gets the numeric kind this instruction reads, or null for a caller-supplied carrier.</summary>
+    public CellKind? CarrierKind { get; init; }
+    /// <summary>Gets the raw destination-kind literal for a constant token, or the argument slot for an
+    /// <see cref="ExpressionOp.Argument"/> token.</summary>
+    public long Constant { get; init; }
+    /// <summary>Gets how many values the token consumes from the value stack: the operands of an operator, the
+    /// arguments of a call, and for an operand token the values the programs computing its addresses left.</summary>
+    public int Consumes => m_consumes;
+    /// <summary>Gets the compiled row and per-cell body of a fold token.</summary>
+    public CompiledFold? Fold {
+        get => m_fold;
+        init {
+            m_fold = value;
+            (m_step, m_consumes) = Shape(call: m_call, fold: value, operand: m_operand, operation: m_operation);
+        }
+    }
+    /// <summary>Gets the live operand for an operand token.</summary>
+    public IRuleOperand? Operand {
+        get => m_operand;
+        init {
+            m_operand = value;
+            (m_step, m_consumes) = Shape(call: m_call, fold: m_fold, operand: value, operation: m_operation);
+        }
+    }
+    /// <summary>Gets the stack operation.</summary>
+    public ExpressionOp Operation {
+        get => m_operation;
+        init {
+            m_operation = value;
+            (m_step, m_consumes) = Shape(call: m_call, fold: m_fold, operand: m_operand, operation: value);
+        }
+    }
+    /// <summary>Gets the arm of the interpreter's dispatch the token runs.</summary>
+    public ExpressionStep Step => m_step;
+
+    // The one derivation of a token's arm and arity, in the precedence the interpreter has always applied: the stack
+    // and truth operations by operation, then a fold or a call by payload, then the operator families.
+    private static (ExpressionStep Step, int Consumes) Shape(ExpressionOp operation, IRuleOperand? operand, CompiledFold? fold, CompiledSubprogram? call) {
+        var consumes = (call?.Arity ?? ((operand is not null)
+            ? RuleExpressions.FeedCount(operand: operand)
+            : ExpressionOperators.Arity(operation: operation)));
+        var step = operation switch {
+            ExpressionOp.Constant => ExpressionStep.Constant,
+            ExpressionOp.Argument => ExpressionStep.Argument,
+            ExpressionOp.Member => ExpressionStep.Member,
+            ExpressionOp.Operand => (((operand is not null) && operand.Addresses.IsEmpty && (operand is not IWordFoldOperand))
+                ? ExpressionStep.Read
+                : ExpressionStep.ReadAddressed),
+            ExpressionOp.IsAbsent => ExpressionStep.IsAbsent,
+            ExpressionOp.Not => ((call is null) ? ExpressionStep.Not : ExpressionStep.NotBody),
+            ExpressionOp.And => ExpressionStep.And,
+            ExpressionOp.Or => ExpressionStep.Or,
+            ExpressionOp.Coalesce => ExpressionStep.Coalesce,
+            _ when (fold is not null) => ExpressionStep.Fold,
+            _ when (call is not null) => ExpressionStep.Call,
+            ExpressionOp.Clamp => ExpressionStep.Clamp,
+            ExpressionOp.Select => ExpressionStep.Select,
+            ExpressionOp.BitField => ExpressionStep.BitField,
+            ExpressionOp.BitInsert => ExpressionStep.BitInsert,
+            ExpressionOp.BoardShift => ExpressionStep.BoardShift,
+            ExpressionOp.BoardRay => ExpressionStep.BoardRay,
+            ExpressionOp.BoardImage => ExpressionStep.BoardImage,
+            _ when (ExpressionArithmetic.FunctionArity(operation: operation) > 0) => ExpressionStep.Function,
+            _ when ExpressionArithmetic.IsUnary(operation: operation) => ExpressionStep.Unary,
+            _ => ExpressionStep.Binary,
+        };
+
+        return (step, consumes);
+    }
+}
 /// <summary>A compiled fold: the one row whose cells are reduced, and the body evaluated once per cell the row holds.</summary>
 /// <param name="Operation">All, Any, Count, or Sum.</param>
 /// <param name="RowOrdinal">The folded row's catalog ordinal, the one row the fold reads.</param>
@@ -64,7 +216,11 @@ public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressi
 /// <param name="CarrierKind">The default carrier for literals and tokens without their own kind. It can be
 /// <see cref="CellKind.Fixed"/> when <paramref name="Kind"/> is <see cref="CellKind.Int"/> because comparison and
 /// sign expressions leave an integer after consuming exact fixed operands.</param>
-public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression, CellKind CarrierKind);
+public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression, CellKind CarrierKind) {
+    /// <summary>Gets how a refusal names the binding (<c>binding 'name'</c>), spelled once when the local is
+    /// compiled so a refused evaluation reports it without building it again.</summary>
+    public string Describe { get; } = $"binding '{Name}'";
+}
 /// <summary>One compiled rule: its name, its mode, the flattened gate, the compiled effects, and the
 /// <see cref="RuleNeeds"/> the compiler read off its facts' declarations. A document project derives its own record
 /// to carry what only it compiles beside these.</summary>

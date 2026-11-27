@@ -118,6 +118,25 @@ public sealed partial class SdfAtmosphereLawTests {
         Assert.True(condition: (Luminance(color: away) > Luminance(color: sky)), userMessage: "The haze adds the sun's light away from it too, by the phase's back lobe.");
     }
     [Fact]
+    public void FogGlowsTowardABodyOnlyByAnAuthoredAnisotropy() {
+        var lights = new SdfLights { Count = 1 };
+        var toward = Vector3.Normalize(value: new Vector3(x: 0f, y: 0.08f, z: -1f));
+        var away = new Vector3(x: -toward.X, y: toward.Y, z: -toward.Z);
+        var sky = new Vector3(x: 0.3f, y: 0.4f, z: 0.6f);
+
+        lights.Set(index: 0, light: new SdfLight(Color: new Vector3(x: 1f, y: 0.85f, z: 0.6f), Direction: toward, Kind: SdfLightKind.Directional, Param: 0f, Shadows: true, Weight: 2f));
+
+        var plain = Pack(atmosphere: SdfAtmosphere.None with { FogDensity = 0.01f }, lights: lights);
+        var glowing = Pack(atmosphere: SdfAtmosphere.None with { FogAnisotropy = 0.5f, FogDensity = 0.01f }, lights: lights);
+
+        Assert.Equal(expected: sky, actual: SdfAir.Colors(block: in plain, direction: toward, sky: sky).Fog);
+
+        var sunward = SdfAir.Colors(block: in glowing, direction: toward, sky: sky).Fog;
+        var opposite = SdfAir.Colors(block: in glowing, direction: away, sky: sky).Fog;
+
+        Assert.True(condition: (Luminance(color: sunward) > (4f * Luminance(color: opposite))), userMessage: $"toward {sunward}, away {opposite}");
+    }
+    [Fact]
     public void AnAtmosphereOfNoKindDoesNothingToAnyRay() {
         var block = Pack(atmosphere: SdfAtmosphere.None);
         var random = new Random(Seed: 1810);

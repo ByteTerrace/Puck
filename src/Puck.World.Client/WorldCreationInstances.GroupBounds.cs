@@ -16,7 +16,7 @@ public sealed partial class WorldCreationInstances {
 
         if (
             (document.Chains is { Count: > 0 }) ||
-            ((anchor.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))
+            (SdfFieldBlends.SmoothFamilyOf(value: (anchor.Blend ?? SdfBlendOp.Union)) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))
         ) {
             return false;
         }
@@ -45,7 +45,7 @@ public sealed partial class WorldCreationInstances {
             if ((shape.Group ?? 0) != groupId) {
                 continue;
             }
-            var blend = (shape.Blend ?? SdfBlendOp.Union);
+            var blend = SdfFieldBlends.SmoothFamilyOf(value: (shape.Blend ?? SdfBlendOp.Union));
 
             if (
                 (shape.Type == SdfSolidPrimitive.Plane) ||

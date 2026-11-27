@@ -573,17 +573,24 @@ public sealed class ExpressionFunctionLawTests {
             kind: CellKind.Int,
             text: "arcTangent2(1, 2)"
         ));
+        // An Int-only function computes in Int whatever its destination: a Fixed destination widens its answer
+        // exactly, an answer past Q48.16's range faults instead of wrapping, and a fractional operand needs an
+        // explicit toInt rather than a silent truncation.
+        Assert.Equal(
+            FixedQ4816.FromInteger(value: Eval("pair(1, 2)")).Value,
+            Eval("pair(1, 2)", kind: CellKind.Fixed)
+        );
+        foreach (var text in (string[])["replicationMask(8)", "repeatBits(1, 8)"]) {
+            Assert.True(condition: Eval(text) > (FixedQ4816.MaxValue.Value >> 16));
+            Assert.False(condition: TryEval(text, out _, kind: CellKind.Fixed));
+        }
         Assert.Throws<RuleException>(testCode: () => Compile(
             kind: CellKind.Fixed,
-            text: "pair(1, 2)"
+            text: "pair(1.5, 2)"
         ));
         Assert.Throws<RuleException>(testCode: () => Compile(
             kind: CellKind.Fixed,
-            text: "replicationMask(8)"
-        ));
-        Assert.Throws<RuleException>(testCode: () => Compile(
-            kind: CellKind.Fixed,
-            text: "repeatBits(1, 8)"
+            text: "repeatBits(1, 8.5)"
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,

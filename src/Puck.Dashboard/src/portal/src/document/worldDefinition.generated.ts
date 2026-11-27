@@ -3542,9 +3542,12 @@ export type SafeName = string;
 
 export type SdfAxis = "X" | "Y" | "Z";
 
-export type SdfBlendOp = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
+export type SdfBlendOp = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction" | "CubicSmoothUnion" | "CubicSmoothIntersection" | "CubicSmoothSubtraction";
 
-export type SdfCellMode = "F1" | "F2MinusF1";
+/**
+ * The feature measure a cellular pattern reads.
+ */
+export type SdfCellMode = "F1" | "F2MinusF1" | "Border";
 
 export type SdfExposureMode = "Manual" | "Auto";
 
@@ -12397,6 +12400,10 @@ export type WorldRenderFog = {
    * The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky's own.
    */
   luminance?: BindableScalar;
+  /**
+   * The Henyey-Greenstein anisotropy of the light of the bodies that cast light (every directional light) which the fog scatters toward the eye, in [0, 0.9]: the fog glows about them, brightest toward a low sun, the more sharply the higher it is. Absent or zero scatters none, so the fog is its colour alone.
+   */
+  anisotropy?: BindableScalar;
 };
 
 export type WorldRenderHaze = {

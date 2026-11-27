@@ -123,7 +123,7 @@ beyond `puck parity`, so a kernel change is judged by running
 | `Sdf/field/sdf-ellipse.hlsli` | The 2D ellipse distance. | None |
 | `Sdf/shade/shade-layers.hlsli` | Generic shading layers in the winning instance frame. | None |
 | `Sdf/shade/shade-weathering.hlsli` | Generic coverage masks; every surface color and response comes from the material. | None |
-| `Sdf/shade/sdf-atmosphere.hlsli` | The atmosphere (`render.atmosphere`): the fog's and the haze's closed-form exponential-height depths, the medium's level surface, a ray's transmittance and each kind's in-scatter weight (`sdfAirAlong`), and the bodies' light the haze and the bounded media scatter by a Henyey-Greenstein phase (`sdfAirBodies`), from the sky block's atmosphere lanes. | `SdfAir`, `SdfAtmosphere`, `SdfSky.PackAtmosphere` |
+| `Sdf/shade/sdf-atmosphere.hlsli` | The atmosphere (`render.atmosphere`): the fog's and the haze's closed-form exponential-height depths, the medium's level surface, a ray's transmittance and each kind's in-scatter weight (`sdfAirAlong`), and the bodies' light the haze, the fog (where its anisotropy is positive) and the bounded media scatter by a Henyey-Greenstein phase (`sdfAirBodies`), from the sky block's atmosphere lanes. | `SdfAir`, `SdfAtmosphere`, `SdfSky.PackAtmosphere` |
 | `Sdf/shade/shade-volumes.hlsli` | Bounded emissive volumes (participating media—plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration with the bodies' light a volume's scatter adds, and the one `shadeVolumes` call site the composite invokes last. | `SdfWorldTables.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
 
 ## Other SDF shaders

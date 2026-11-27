@@ -60,7 +60,7 @@ public sealed class RuleRefusalLawTests {
         [RuleRefusal.ComparandKindMismatch] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
                 Comparison: ExpressionOp.Equal,
-                ComparandState: "ratio",
+                ComparandState: "label",
                 State: "score"
             ),
             name: "mixed"

@@ -7,7 +7,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="frequency">Positive cells per local coordinate unit.</param>
     /// <param name="amplitude">Nonnegative displacement in accumulated-field units.</param>
     /// <param name="seed">Unsigned PCG3D feature seed.</param>
-    /// <param name="mode">F1 or F2MinusF1.</param>
+    /// <param name="mode">The feature measure: F1, F2MinusF1 or Border.</param>
     /// <param name="randomness">Centered feature-box side length, bounded by the selected mode.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A parameter is invalid.</exception>

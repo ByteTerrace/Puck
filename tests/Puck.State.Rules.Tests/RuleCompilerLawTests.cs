@@ -268,17 +268,36 @@ public sealed class RuleCompilerLawTests {
         );
     }
     [Fact]
-    public void ALocalThatMixesAnIntRowAndAFixedRowIsRefusedForItsIntReading() => Assert.Equal(
-        actual: RulesFixture.Refusal(rule: new Rule(
-            Effects: [],
+    public void ALocalThatMixesAnIntRowAndAFixedRowIsFixed() {
+        var compiled = RulesFixture.Compile(rule: new Rule(
             Locals: [new RuleLocal(
                 Expression: RulesFixture.Program(text: "score + ratio"),
                 Name: RulesFixture.Name(value: "value")
             )],
+            Effects: [new ActionEffect.SetState(
+                Expression: RulesFixture.Program(text: "$local:value"),
+                State: "ratio"
+            )],
             Name: RulesFixture.Name(value: "mixed")
-        )),
-        expected: RuleRefusal.EffectSourceKindMismatch
-    );
+        ));
+
+        Assert.Equal(expected: CellKind.Fixed, actual: compiled.Locals![0].Kind);
+        // Writing it to the Int row would narrow it, which only an explicit toInt does.
+        Assert.Equal(
+            actual: RulesFixture.Refusal(rule: new Rule(
+                Locals: [new RuleLocal(
+                    Expression: RulesFixture.Program(text: "score + ratio"),
+                    Name: RulesFixture.Name(value: "value")
+                )],
+                Effects: [new ActionEffect.SetState(
+                    Expression: RulesFixture.Program(text: "$local:value"),
+                    State: "score"
+                )],
+                Name: RulesFixture.Name(value: "narrowed")
+            )),
+            expected: RuleRefusal.EffectSourceKindMismatch
+        );
+    }
     [Fact]
     public void ABindingIsReadBackByItsOrdinal() {
         var compiled = RulesFixture.Compile(rule: new Rule(
@@ -694,17 +713,29 @@ public sealed class RuleCompilerLawTests {
         );
     }
     [Fact]
-    public void AMixedKindComparisonIsRefusedByName() => Assert.Equal(
-        actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
+    public void AnIntAndAFixedCellCompareInFixedAndATextComparandIsRefusedByName() {
+        var gate = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
                 Comparison: ExpressionOp.Equal,
                 ComparandState: "ratio",
                 State: "score"
             ),
             name: "mixed"
-        )),
-        expected: RuleRefusal.ComparandKindMismatch
-    );
+        )).Gate[0];
+
+        Assert.Equal(expected: CellKind.Fixed, actual: gate.ValueKind);
+        Assert.Equal(
+            actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
+                gate: new ActionPredicate.CompareState(
+                    Comparison: ExpressionOp.Equal,
+                    ComparandState: "label",
+                    State: "score"
+                ),
+                name: "text"
+            )),
+            expected: RuleRefusal.ComparandKindMismatch
+        );
+    }
     [Fact]
     public void ATextRowComparedAsANumberIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(

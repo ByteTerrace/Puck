@@ -64,7 +64,7 @@ internal static class WorldShapeDetail {
         // fillet, a pipe's bead and a groove's channel turn at `smooth`; a chamfer's bevel is a face `smooth` wide, kept
         // as a face by a cell per half width; stairs are `steps` turns of a share of `smooth` each.
         if ((shape.Smooth is > 0f and var smooth) && (shape.Blend is { } blend)) {
-            switch (blend) {
+            switch (SdfFieldBlends.SmoothFamilyOf(value: blend)) {
                 case SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction
                     or SdfBlendOp.GrooveUnion or SdfBlendOp.GrooveSubtraction or SdfBlendOp.PipeUnion or SdfBlendOp.PipeSubtraction:
                     Take(spacing: RoundCell(radius: smooth, scale: scale));

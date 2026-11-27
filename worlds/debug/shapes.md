@@ -310,6 +310,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 |---|---|
 | Union, Subtraction, Intersection, Xor | `shape-blend-union`, `-subtraction`, `-intersection`, `-xor` |
 | SmoothUnion, SmoothSubtraction, SmoothIntersection | `shape-smooth-union`, `-subtraction`, `-intersection` |
+| CubicSmoothUnion, CubicSmoothSubtraction, CubicSmoothIntersection: the same seams continuous in curvature, at the quadratic exhibits' radii | `shape-cubic-smooth-union`, `-subtraction`, `-intersection` |
 | ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
 | GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
 | Blends between moving shapes (pooled `group`): a skinned smooth union, a moving cutter as an operand, a swing, three owners split rigid, a paint across a seam | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint` |

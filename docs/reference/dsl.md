@@ -657,7 +657,7 @@ A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absenc
 nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
 its right operand when the left is false; `or` skips it when the left is true. A skipped
 operand neither reads state nor faults, but must still be well-typed. Logical operands may read different
-numeric kinds; arithmetic requires matching kinds. Other arithmetic
+numeric kinds; arithmetic over mixed kinds widens its Int operands to Fixed. Other arithmetic
 propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
@@ -789,7 +789,7 @@ function's parameter reads as the point; everything else it reads (a `let`, a pa
 value at the point, so a pattern's phase or weight can be fixed while its shape is differentiated.
 
 ```text
-let slope = gradient(surface.position, q => 0.01 * shadeFbm(q * 4, uint(7)))
+let slope = gradient(surface.position, q => 0.01 * shadeFbm(q * 4, uint(7), pixel: surface.footprint * 4))
 normal: tilt(surface.normal, slope * -1, 1.2)
 ```
 
@@ -806,6 +806,13 @@ Only slope makes relief. `floor`, `step`, `quantize`, a comparison and a cell's 
 jump, so a pattern built from hard steps gets no relief and reads as painted on. Carve an edge by ramping across it:
 the standard edge helpers (`shadeCellBorder`, `shadeBrick`) ramp over a `bevel` the author sets, never narrower than
 two display pixels' footprint, so the groove has a slope wider than a pixel and does not alias.
+
+The standard noise (`shadeFbm`, `shadeRidged`, `shadeTurbulence`) band-limits itself the same way: each octave fades
+out as its features approach a pixel, by `shadeFade` of `pixel * filterScale * lacunarity^i` cells a pixel, so distant
+noise converges on its mean instead of shimmering. `pixel` is the footprint in the pattern's own units, so a point scaled
+by 4 passes `pixel: surface.footprint * 4`, as the edge helpers do. `filterScale` is 1 by default, blurs sooner above it,
+and keeps every octave at any distance at 0. The shade language has no branch that skips work, so a faded octave still
+runs its lattice, and the fade costs a smoothstep and a multiply an octave.
 
 ## A section written twice composes
 

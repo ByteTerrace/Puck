@@ -263,11 +263,20 @@ process's one forced job (`MemoryAccount.Owner.TryReserveForced`,
 allowance. The allowance paces one step that needs room past the pool's, never
 the work behind it: the holder hands it on (`MemoryAccount.Owner.PassForced`)
 once its step holds what it needs (a forced admission at once, a forced
-refinement once `Prepare` narrows its peak), keeping its reservation. Work that
-finishes an admitted group comes before starting one: no group is admitted
-while a refinement waits for room (`[sdf.mesh-bake] refinement deferred`), and a
-take offers every admitted group's lattice before any other's, taking no other
-group's once an admitted one finds no readback room. The forced job and a
+refinement once `Prepare` narrows its peak), keeping its reservation. The part
+of a passed reservation past the room joins one passed total
+(`MemoryAdmissionReading.Passed`, `forced-passed=` on `host.memory`), excused from
+pressure like the forced job and never past the largest forced grant among the
+passed owners and the holder's: a pass that would exceed it waits, the holder
+keeping the allowance. Work that finishes an admitted group comes before
+starting one: no group is admitted while a refinement waits for room
+(`[sdf.mesh-bake] refinement deferred`); the refinement door forces no head while
+any bake's latest take found the account refusing an admitted group's readback,
+and a forced head leaves one whole readback (`SdfMeshPathBake.ReadbackBytes`)
+under the machine's floor (`TryReserveForced`'s `spare`); and a take offers an
+admitted group's lattice first within its view class, though never ahead of a
+lattice the frame owes, taking no starting group's once an admitted one in view
+or owed finds no readback room. The forced job and a
 progress floor still leave the machine its floor (`MemoryAccount.FitsMachine`:
 nothing while the system signals low memory, nothing past its free physical
 memory less the headroom), so on a machine with little free memory a bake

@@ -277,7 +277,8 @@ overflow rather than wrapping.
 EITHER a literal `value` OR a live copy `(fromState, fromKey)` — another row or
 reserved channel, read fresh on every firing through the identical
 `ResolveOperand`/`ReadWorldFact` path the comparand uses — never both, never
-neither, kinds must match (refused `EffectSourceAmbiguous`/
+neither, and the kinds must meet: Int widens to Fixed, Fixed never narrows
+without `toInt`, and Text or Bool matches only itself (refused `EffectSourceAmbiguous`/
 `EffectSourceKindMismatch`, the effect-side siblings of `ComparandAmbiguous`/
 `ComparandKindMismatch`). A READ operand — gate subject, comparand, or
 `fromState` — must address a cell its row DECLARES; an undeclared cell would

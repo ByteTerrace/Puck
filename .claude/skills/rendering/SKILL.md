@@ -1860,7 +1860,13 @@ paired arithmetic. Carry author-facing parameters through
   frame thread. The queue's door (`GraphicsQueue`, `PresentQueue`, `WaitIdle`
   and the batch's hand-over) issues every queued operation in order before it
   hands anything else over (`IssueSparse`): one graphics checkpoint, each bind
-  waiting the value before it, one graphics wait on the last. A checkpoint
+  waiting the value before it, one graphics wait on the last. That wait is on a
+  binary semaphore the last bind signals, never on the bind's timeline value:
+  synchronization validation does not model `vkQueueBindSparse`, so a graphics
+  wait on a value only a bind signals stalls its model of the queue for good,
+  after which it checks no submission and reports `WRITE_AFTER_PRESENT` on
+  presents (`VulkanQueueTimeline.BindSparse`). Keep any new GPU wait on a
+  bind's signal binary for the same reason. A checkpoint
   reads the door before it takes its value (`GpuQueueTimeline.BeforeCheckpoint`),
   and the door issues nothing inside a checkpoint's signal (`Signaling`), so
   the timeline's values reach the queue in order. Both signals share the

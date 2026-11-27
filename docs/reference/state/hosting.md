@@ -346,7 +346,7 @@ There are two families, each a class hierarchy a host can extend.
 | `IRuleEffect` | `WriteEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`, `IfEffect`, `RewindGroupEffect`, `ClaimEffect`, `ReleaseEffect`, `ClaimPairEffect`, `ForEachPoolEffect`, `InstanceFieldWriteEffect`, `StaticInstanceFieldWriteEffect`, `InstanceFieldScheduleEffect`, `InstanceFieldVectorWriteEffect`, and the vector effects (`VectorCopyEffect`, `VectorMixEffect`, `VectorMeanEffect`, `VectorNearestEffect`, `VectorRememberEffect`) |
 
 Operands declare `IRuleOperand.Addresses`, implement
-`Read(IStateReader, ReadOnlySpan<ResolvedKey>)` and report what they read through
+`Read(ref EvaluationFrame, ReadOnlySpan<ResolvedKey>)` and report what they read through
 `CollectReads`. Effects report what they read and write through `CollectReads`
 and `CollectWrites`. Both report a `Cost`, and every access is a `CellAccess`. Key resolution has a third, smaller family,
 `IRuleKey`, with the core cases `LocalKeyFact` and `ZoneEndKey`.
@@ -402,7 +402,7 @@ public sealed class BodyDistanceFact(int bodyA, int bodyB) : OperandFact<IBodyPo
     public override Fact Read(IStateReader reader, IBodyPositions facet) => Fact.Finite(value: facet.Distance(bodyA: bodyA, bodyB: bodyB));
 
     // Admission proved the host serves the facet before any rule naming it ran.
-    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Read(reader: reader, facet: (IBodyPositions)reader);
+    Fact IRuleOperand.Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Read(reader: frame.Reader, facet: (IBodyPositions)frame.Reader);
 }
 
 public enum DistanceRefusal : byte {

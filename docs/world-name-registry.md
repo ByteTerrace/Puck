@@ -795,6 +795,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.atmosphere.fog.luminance` | State | Binding | Binding | `WorldRenderFog.Luminance` |
 | `render.atmosphere.fog.luminance.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.atmosphere.fog.luminance{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.atmosphere.fog.anisotropy` | State | Binding | Binding | `WorldRenderFog.Anisotropy` |
+| `render.atmosphere.fog.anisotropy.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.atmosphere.fog.anisotropy{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.atmosphere.haze.amount` | State | Binding | Binding | `WorldRenderHaze.Amount` |
 | `render.atmosphere.haze.amount.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.atmosphere.haze.amount{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |

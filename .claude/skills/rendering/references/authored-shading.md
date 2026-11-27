@@ -497,9 +497,11 @@ row is structurally zero and writes nothing, and a height node the point does no
 invariant is that no `variable` node leaves the gradient: `Differentiation.Primal` replaces it by the point in every
 value a row reads, and the variable's key is no digest, so no lowered node can share it. A lattice's row reads
 `latticeGradient`; a `cells` channel's row reads `cellsGradient` (channel 0 F1, 1 F2 − F1, its canonical name the
-channel, as a component's is), which `sdfShadeCellsGradient` answers from `sdfCellDistanceGrad` over the one search.
+channel, as a component's is), which `sdfShadeCellsGradient` answers from `sdfCellDistanceGrad` over the one search;
+a `cellBorder`'s row reads `cellBorderGradient` (`sdfShadeCellBorderGradient`, the same search and its border pass).
 `Compiler.Fuse` then lets a live gradient op answer its noise's value too: a `lattice` beside its `latticeGradient`
-reads lane 0, and a `cells` channel beside its `cellsGradient`, so a pattern and its relief run one noise. Shape,
+reads lane 0, as does a `cellBorder` beside its `cellBorderGradient`, and a `cells` channel beside its
+`cellsGradient`, so a pattern and its relief run one noise. Shape,
 lines, refract, tilt and the gradient ops have no derivative and are refused (PUCK126). `ShadeGradientTests` holds
 the gradient to a central difference across a brick joint and prices relief against its pattern.
 
@@ -507,12 +509,19 @@ the gradient to a central difference across a brick joint and prices relief agai
 from `gradient` over `flowPattern`, its shifts and weights held at the point's values.
 `cells(point, seed)` returns `[F1, F2 - F1, id]` from `sdfShadeCells`, which shares
 `sdfCellNearest`, the one 27-cell Worley search, with the field's cellular relief
-(`sdfCellDistanceGrad`). The standard package's pattern library in
+(`sdfCellDistanceGrad`). `cellBorder(point, seed)` is the true distance to the cell's border (`sdfCellBorderFrom`:
+Quilez's second pass over the 5x5x5 cells about the nearest feature's, the field's `Border` mode too); F2 − F1 is zero
+on a border but its slope there varies with the two features' spacing, so a band of it draws grout and cracks of
+uneven width, and a band of `cellBorder` one width. The standard package's pattern library in
 `worlds/standard/shading.puck` (`shadeFbm`, `shadeRidged`, `shadeTurbulence`,
 `shadeWarp`, `shadeCellBorder`, `shadeCellId`, `shadeRamp`, `shadeBrick`) builds
 on it, and its `relief` template tilts a normal by any height's gradient. The edge
 helpers ramp over an authored `bevel` floored at two pixels' footprint
-(`shadeBevel`), since a hard step has no slope to carve; a template argument may
+(`shadeBevel`), since a hard step has no slope to carve, and the noises fade each octave by
+its footprint (`shadeOctaveFade`: `shadeFade` of `pixel * filterScale * lacunarity^i`, the lattice octave's cells a
+pixel; a faded octave of a noise with a nonzero mean fades to that mean, `shadeBandLimited`). Every octave
+still runs its lattice, since the program is straight-line and has no branch that skips an instruction, and the
+`pixel` a caller passes is in the pattern's own units (`surface.footprint * scale`), as the edge helpers'. A template argument may
 be a function (`WorldShadeLowering.BindParameter` binds it as written), which is how
 `relief` takes its height. Inside a shade program, a `reduce` over a structural array unrolls at
 compile time (`WorldShadeLowering.Reduce`), and an element or member of
