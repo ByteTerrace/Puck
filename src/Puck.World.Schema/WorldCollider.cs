@@ -12,9 +12,27 @@ namespace Puck.World;
 /// the whole switch; <see langword="null"/> means decoration — the row is drawn but bodies pass through it.</summary>
 /// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
 /// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
+/// <param name="Passes">Body registers (<c>state.body</c> counters) that let a body through: a body holding any of them
+/// nonzero meets none of the row's colliders, and every other body meets them all. The authority decides it from the
+/// moving body's own registers at each of its sweeps, so a rule that writes the register (a carried key, a spell, a
+/// puzzle's reward) is the predicate. <see langword="null"/> or empty: every body meets the row.</param>
 /// <remarks>A creation's live <c>sizeBy</c> uniformly scales its complete contact shape, including this margin.
-/// Numerical query padding and the world's body-contact skin remain in world units.</remarks>
-public sealed record WorldSolid(float Margin);
+/// Numerical query padding and the world's body-contact skin remain in world units. A row with passes is kept by row
+/// in the contact providers' live set (<see cref="WorldPlacementStamp.CollidesLive"/>), which is what lets one body's
+/// sweep leave it out; rigid bodies, navigation and the presentation query field do not read passes (the presentation
+/// field leaves a passable row out, so a camera never stops in front of a body that crossed it).</remarks>
+public sealed record WorldSolid(
+    float Margin = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull), DocumentText("a per-body slot name")] IReadOnlyList<string>? Passes = null
+) {
+    /// <summary>The most distinct pass registers one document's solid rows may name together: contact holds a body's
+    /// passes as one bit each of a 64-bit mask.</summary>
+    public const int MaxPassRegisters = 64;
+
+    /// <summary>Gets whether some body may pass the row: it names at least one pass register.</summary>
+    [JsonIgnore]
+    public bool Gated => (Passes is { Count: > 0 });
+}
 /// <summary>A kit's closed body-volume vocabulary. A kit with no collider is not solved against the contact field.</summary>
 [JsonDerivedType(typeof(WorldCollider.Sphere), typeDiscriminator: "sphere")]
 [JsonDerivedType(typeof(WorldCollider.Capsule), typeDiscriminator: "capsule")]

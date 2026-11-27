@@ -956,15 +956,17 @@ public sealed partial class WorldPopulation {
                     self: body.FixedPosition
                 );
 
-                engageEdges[slot] = body.Advance(
-                    effectTargets: targets,
-                    engageProbeOrdinal: probe,
-                    entityIndex: slot,
-                    outputs: m_outputs,
-                    scratch: m_stepScratch,
-                    stepTicks: stepTicks,
-                    tick: tick
-                );
+                using (HoldPasses(index: slot)) {
+                    engageEdges[slot] = body.Advance(
+                        effectTargets: targets,
+                        engageProbeOrdinal: probe,
+                        entityIndex: slot,
+                        outputs: m_outputs,
+                        scratch: m_stepScratch,
+                        stepTicks: stepTicks,
+                        tick: tick
+                    );
+                }
                 RecordFlockMotion(body: body, work: m_serialWork);
             }
         }
@@ -1107,7 +1109,9 @@ public sealed partial class WorldPopulation {
                     m_entries[index].Active &&
                     (m_entries[index].Body is { } rider)
                 ) {
-                    rider.RideAttachedSupport(field: colliders);
+                    using (HoldPasses(index: index)) {
+                        rider.RideAttachedSupport(field: colliders);
+                    }
                 }
             }
         }
@@ -1175,16 +1179,18 @@ public sealed partial class WorldPopulation {
             self: player.FixedPosition
         );
 
-        player.Advance(
-            tick: tick,
-            stepTicks: step.MotionTicks,
-            entityIndex: index,
-            effectTargets: targets,
-            outputs: m_outputs,
-            scratch: m_stepScratch,
-            sleepAfterTicks: m_sleepAfterTicks,
-            contactFieldVersion: contactFieldVersion
-        );
+        using (HoldPasses(index: index)) {
+            player.Advance(
+                tick: tick,
+                stepTicks: step.MotionTicks,
+                entityIndex: index,
+                effectTargets: targets,
+                outputs: m_outputs,
+                scratch: m_stepScratch,
+                sleepAfterTicks: m_sleepAfterTicks,
+                contactFieldVersion: contactFieldVersion
+            );
+        }
         BodyAdvances++;
         WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
         RecordFlockMotion(body: player, work: m_serialWork);

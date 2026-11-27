@@ -40,6 +40,7 @@ same change.
 | Every sweep that moves a body, entity-aware | `WorldBody.SweepContact`, the one dispatch; an `IEntityContactField` learns which body moves | [below](#the-body-step-and-the-seam-door) |
 | Analytic colliders: spheres, boxes (rounded, chamfered, oriented), superellipsoids, cylinders, half-spaces | `FixedStaticCollider` (`TryGetPush`, `RoundedBox`, `ChamferedBox`, `Cylinder`), `FixedOrientedBox`, `FixedConvexContact` (GJK and EPA), `FixedStaticContactSolver` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | A solid creation grows or shrinks with contact | `WorldColliderSet.RefreshAttached` reads compiled `sizeBy` bindings by arena ordinal; `WorldCreationSize.Of` clamps the sample; `TryRideDisplacement` carries the support's material point through `WorldBody.SweepContact`; `WorldSnapshot.SolidScales` publishes the sample | [rig size](../sdf-authoring/references/rig.md#drivers) |
+| A solid some bodies pass and others meet (a barrier a carried key opens) | a placement's `solid { passes [...] }` (`WorldSolid.Passes`, body counter registers): the row lives by row in the live set (`WorldPlacementStamp.CollidesLive`), and `WorldPopulation.HoldPasses` opens the moving body's held mask on it (`WorldColliderSet.HoldPasses`, read by `Excludes` in `QueryAttachedSet` and the field provider's `PosedField`) around its ride, advance, growth clearance and kit escape | [below](#contracts-that-bite) |
 | A carved, relieved or smoothly blended creation collides as drawn | field colliders (`WorldColliderSet.CollidesAsField`) with a `FixedFieldPartition` narrowing hard unions to their exact pieces | [sdf-authoring contact admission](../sdf-authoring/references/shapes.md#contact-admission) |
 | Never tunnel, however fast or thin | `FixedFieldContactSolver.ResolveSweep` (certified sweep through `ICertifiedSweepQuery`); `FixedStaticContactSolver.ResolveSweep` (sliced analytic sweep); both refuse with `ContactRefusal` rather than wrap | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap` | [motion](../puck-world/references/documents-motion.md) |
@@ -210,6 +211,17 @@ same change.
   steers the up while the body travels to the surface the field now holds it on.
   The hold system's walkable reads (`WalkableUnderHoldUp`) measure from
   `HoldGravityUp`, the same axis its cones use.
+- **A body's passes are opened only on the serial path.** A gated row's
+  colliders are left out of a query exactly while the moving body's held mask
+  is set on the live set, and `WorldPopulation.HoldPasses` is the one door that
+  sets it: it refuses inside a kit partition, and a body holding a pass is
+  planned serial (`HoldsPasses` beside `StepIsLocal`). A new body query outside
+  the step (a growth or escape like `SetScaleWithinClearance` and
+  `EscapeEmbedding`) opens its body's passes the same way. The rigid solve,
+  body pairs, navigation and the presentation query field read no passes: a
+  rigid body meets every gated row, a route plans as if it stands, and the
+  presentation field leaves it out so a camera never stops in front of a body
+  that crossed.
 - **A moving solid is one root.** A solid placement attached to a body, or
   sized by state, is a root of the moving set (`WorldColliderSet.Build`'s
   `movingOnly` rows) under either provider; the field provider's static

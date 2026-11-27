@@ -159,19 +159,52 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The tree's sieves.** Each level-1 branch ([the central tree](#the-central-tree))
-dead-ends at a sieve: the lattice bay where it lands is barred 36 to the bay
-(layout.puck's `toyLatticeSieveCells`), so only a body already about a fifth of
-full size slips through. A full-size climber sees the toybox from the branch's
-tip and has to shrink or take the stairs or lift to reach it. Levels 2 and 3
-meet their branches through doorways (architecture.puck's `edgeDoorway`).
+**The tree's barriers.** Each level-1 branch ([the central tree](#the-central-tree))
+dead-ends at a magic barrier: the bay where it lands stands open, and nested
+arches of tinted glass fill the arcade's arch behind it
+(architecture.puck's `rainbowArch`, the `gallery-barrier` rows in
+[gallery/shell.puck](gallery/shell.puck), coloured by look.puck's `lookBarrier`).
+Its outer arch is a solid that holds every body, small or full size, except
+one holding a wonder pass (layout.puck's `wonderPasses`): the `wonderPass`
+register a puzzle sets, or a [wonder key](#the-wonder-key) carried switched
+on. Such a body walks through the barrier and onto level 1 at its full size,
+since the same registers are level 1's size passes ("The size of level 1",
+below). The engine's mechanism is the solid's `passes`: the authority leaves
+the row's colliders out of that body's own sweeps (the physics skill's
+contracts). Levels 2 and 3 meet their branches through doorways
+(architecture.puck's `edgeDoorway`).
 
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
 ceiling painting, a portal back to the floor painting, so a body flying up the
 well crosses to the floor rather than into level 1; the bridge is level 1's
-own floor, inside the lattice. The corner stairs, the lift and the tree's two
-level-1 branches are the ways in.
+own floor, inside the lattice. The corner stairs and the lift are the ways in,
+and the tree's two level-1 branches for a body holding a wonder pass.
+
+### The wonder key
+
+Four keys stand on a pedestal on level 3's south gallery, 3.4 m in from the
+balcony edge where the tree's south branch lands, so a climber who reaches the
+top of the tree steps off the branch in front of them
+([gallery/rentals.puck](gallery/rentals.puck), lent through the rentals' one
+loan row). Press the context button (E, the pad's right shoulder) before a key
+to take it; it hangs on a cord at the body's chest, its violet gem glowing. A
+body holds one key. While the key is switched on, its `wonderKey` register is
+1, so the barrier lets it through and level 1 keeps it its full size, where its
+devices and stalls are in reach.
+
+The key toggle switches a carried key off and on again: H, or the pad's North
+with the right trigger held (I with X), a plate on the Debug page. Switched
+off, its gem goes dark, it passes nothing, and level 1's stairs and lift
+shrink its holder as they shrink anyone. A key goes back to its stand at the
+stand's east end (the returns tray, with the context button), or when its
+holder leaves the gallery or the world.
+
+The state a puzzle reads: `rentalKeyHeld[<body>]` is the loan ordinal of the
+key a body holds (0 for none), `rentalKeyShown[<body>]` is 1 while it is
+switched on and 2 while off, and `rentalLoan[<ordinal>]` names its holder as
+the devices' loans do. `body.where` shows the body; `world.state rentalKeyShown`
+reads every key.
 
 **The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
 L-shaped counter round the open corner of each spiral stair (south-east and
@@ -285,7 +318,7 @@ level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
 step onto its open edge. Each branch's tip lies on the floor's edge, a few
 centimetres proud of it (`treeLandingLift`).
 
-**Level 1's branches give no size.** The owner's design: a level-1 branch is a dead end at a sieve that only a small body passes, so the branches lure a full-size climber toward the toybox without letting them in.
+**Level 1's branches give no size.** The owner's design: a level-1 branch ends at a magic barrier that sells the player a way across: carry the wonder key, and cross without level 1's size change affecting you. Without a pass the barrier holds every body, small or full size ([the lattice](#the-lattice)).
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
@@ -558,15 +591,19 @@ first match winning:
   Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
 
 Outside these zones a body keeps the size it last took (the owner's design):
-only the stairs and the lift are the intended routes, so a small body that
-leaves level 1 another way, through a branch's sieve onto the tree, stays small.
+the stairs and the lift are the routes that size a body, and a body with no
+pass meets each level-1 branch's barrier whatever its size, so it cannot leave
+level 1 another way.
 
-**The pass.** A body holding the `wonderPass` body register nonzero takes its
-full size in every zone, so level 1, its stairs and its lift keep its size. A
-puzzle sets it with `setBodyState(key: $each, state: "wonderPass", value: 1)`;
-no puzzle sets it yet. The register belongs to the body, so the pass does not
-persist with the player between sessions: an identity fact would, but
-`setIdentityFact` refuses a seat driving under no identity.
+**The passes.** A body holding either of the wonder passes (layout.puck's
+`wonderPasses`) nonzero takes its full size in every zone, so level 1, its
+stairs and its lift keep its size, and the tree's barriers let it through. The
+`wonderKey` register is 1 while the body carries a [wonder key](#the-wonder-key)
+switched on. The `wonderPass` register is a puzzle's to set, with
+`setBodyState(key: $each, state: "wonderPass", value: 1)`; no puzzle sets it
+yet, and `gallery.wonder pass on` sets it by hand. Both registers belong to the
+body, so a pass does not persist with the player between sessions: an identity
+fact would, but `setIdentityFact` refuses a seat driving under no identity.
 
 **Out of reach while small.** A screen's engage reach is its route's radius
 times the body's size, measured on the ground plane and within that reach of

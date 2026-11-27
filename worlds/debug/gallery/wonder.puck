@@ -1,7 +1,10 @@
 // Level 1, the toybox, makes you small. A body comes onto the Wonderland floor Alice's size (look.puck's
-// `lookWonderSize`) and too small to reach its cabinets' and stalls' controls, unless it holds the full-size pass, the
-// `wonderPass` body register a puzzle sets; then the floor keeps it its full size and the games are in its reach. The
-// gallery module imports this, so the gallery booted alone and the debug world both size their visitors by it.
+// `lookWonderSize`) and too small to reach its cabinets' and stalls' controls, unless it holds a wonder pass
+// (layout.puck's `wonderPasses`): the full-size pass, the `wonderPass` body register a puzzle sets, or the wonder key
+// lent on level 3 and carried switched on, the `wonderKey` register (rentals.puck); then the floor keeps it its full
+// size and the games are in its reach, and the magic barrier filling each level-1 branch's arch (shell.puck) lets it
+// through. The gallery module imports this, so the gallery booted alone and the debug world both size their visitors by
+// it.
 //
 // The sizing is one standard size field (standard/size-field.puck), its zones in the order the first that holds a body
 // decides:
@@ -16,7 +19,7 @@
 //   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
 //     throughout
 //
-// A body holding the pass takes its full size in every zone. The pass is a body register, so it belongs to the body and
+// A body holding a pass takes its full size in every zone. A pass is a body register, so it belongs to the body and
 // crosses with it, and does not persist with the player: an identity fact would, but `setIdentityFact` refuses a seat
 // driving under no identity, which a pass every visitor can earn cannot depend on.
 //
@@ -72,8 +75,8 @@ function wonderShaft(x0, x1, z0, z1) = [
 let wonderFloorLow = (galleryFloor[toyboxLevel] - wonderShaftMargin)
 let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
 // Only the intended routes in and out (the stairs and the lift) change a body's size. Anywhere outside the zones a body
-// keeps the size it last took (the owner's design): a small body that leaves level 1 another way, through a level-1
-// branch's sieve (shell.puck) onto the tree, stays small, a puzzle left to the player to discover.
+// keeps the size it last took (the owner's design): a body that holds no pass meets each level-1 branch's barrier
+// (shell.puck) whatever its size, so the stairs and the lift are its only ways in and out.
 let wonderZones = concat(
   flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
   wonderShaft(towerWest, towerEast, towerSouth, 0),
@@ -90,7 +93,7 @@ sizeField(
   name: "toybox",
   zones: wonderZones,
   sizes: [{ key: "full", value: 1 }, { key: "small", value: lookWonderSize }],
-  passes: ["wonderPass"],
+  passes: wonderPasses,
   passSize: "full"
 )
 
@@ -111,6 +114,13 @@ state {
       kind: "Counter"
       initial: 0
       envelope { $type: "range", minimum: 0, maximum: 1 }
+    }
+    // 1 while the body carries a wonder key switched on (rentals.puck's `rental-key-pass` keeps it).
+    {
+      name: "wonderKey"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "set", values [0, 1] }
     }
   ]
   world {
@@ -161,7 +171,7 @@ rule "wonder-small-ask" {
 commands [
   {
     name: "gallery.wonder"
-    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lift re-size it); small <s> retunes the size level 1 gives a body without the pass."
+    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size, and the tree's barriers let it through, while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lift re-size it); small <s> retunes the size level 1 gives a body without the pass."
     parameters [
       { name: "setting", kind: Choice, values ["pass", "size", "small"] }
       { name: "value", kind: Text }

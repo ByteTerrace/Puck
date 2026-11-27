@@ -1256,6 +1256,33 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
+// A magic barrier filling an arch: nested arches of tinted light, a rainbow, each a half disc `radius` across over a
+// rectangle down to the floor from its spring line `spring` metres up, the outermost the full opening and each next one
+// `band` metres inside it and a hair in front, so the opening reads as a rainbow standing in the arch. The outermost
+// collides; the rest are drawn only. It stands on y 0, centred on x 0, facing ±Z. Its palette from `base`: one glass
+// entry a hue, outermost first (rainbowArchPalette).
+function rainbowArchPalette(colors, film = 0.3) = map(colors, c => { color: c, roughness: 0.04, glass { depth: film, ior: 1.15 } })
+template rainbowArch(base, radius, spring, hues, band = 0.26, thickness = 0.01) {
+  for k in range(0, hues) {
+    rainbowArchLayer(base: base, k: k, radius: (radius - (k * band)), spring: spring, z: ((0 - k) * (thickness * 0.6)), thickness: thickness, drawnOnly: ((k > 0) ? true : false))
+  }
+}
+template rainbowArchLayer(base, k, radius, spring, z, thickness, drawnOnly) {
+  shape Cylinder $"rainbow-disc-{k}" {
+    detail: drawnOnly
+    material: (base + k)
+    position [0, spring, z]
+    rotation [0.7071068, 0, 0, 0.7071068]
+    scale [radius, (thickness / 2), radius]
+  }
+  shape Box $"rainbow-legs-{k}" {
+    detail: drawnOnly
+    material: (base + k)
+    position [0, (spring / 2), z]
+    scale [radius, (spring / 2), (thickness / 2)]
+  }
+}
+
 // A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
 // drum shade `shade` in radius and `pendantShadeHeight` tall whose foot is `drop` metres under the ceiling, and across
 // the drum's foot a frosted diffuser `glow` in radius, the emitter, whose face's centre is `pendantGlowAt(at, drop)`:

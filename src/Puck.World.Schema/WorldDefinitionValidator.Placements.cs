@@ -1573,6 +1573,13 @@ public static partial class WorldDefinitionValidator {
         var placementsById = WorldPlacementIndex.ById(placements: placements);
         var slotCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
+        // Contact holds a body's passes as one bit each, so the document's solid rows name at most that many together.
+        var passRegisters = placements.SelectMany(selector: static row => (row?.Solid?.Passes ?? [])).Distinct(comparer: StringComparer.Ordinal).Count();
+
+        if (passRegisters > WorldSolid.MaxPassRegisters) {
+            errors.Add(item: $"placements: solid rows name {passRegisters} distinct pass registers; at most {WorldSolid.MaxPassRegisters} may let bodies through.");
+        }
+
         foreach (var index in RowOrdinals(placements.Count, rows)) {
             var placement = placements[index];
             var path = $"placements[{index}]";
@@ -1716,6 +1723,7 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".solid.margin", Path: path),
                     errors: errors
                 );
+                ValidateSolidPasses(definition: definition, errors: errors, path: $"{path}.solid", solid: placementSolid);
 
                 foreach (var variantId in SolidVariantIds(placement: placement)) {
                     if (!TryFindRow(key: variantId, map: creationsById, row: out var variantCreation)) { continue; }
@@ -2387,6 +2395,25 @@ public static partial class WorldDefinitionValidator {
         }
         if (region.Capacity is < 1) {
             errors.Add(item: $"{path}.capacity {region.Capacity} must be at least 1: it is the occupants a rule's sweep over the region is priced at.");
+        }
+    }
+    // A solid row's passes each name a declared counter register, once: contact reads each as a body's own counter.
+    private static void ValidateSolidPasses(WorldDefinition definition, WorldSolid solid, string path, List<string> errors) {
+        if (solid.Passes is not { } passes) {
+            return;
+        }
+        for (var index = 0; (index < passes.Count); index++) {
+            var name = passes[index];
+
+            if (string.IsNullOrEmpty(value: name)) {
+                errors.Add(item: $"{path}.passes[{index}] must name a register.");
+            } else if (!WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out _)) {
+                errors.Add(item: $"{path}.passes[{index}] names register '{name}', which state.body does not declare.");
+            } else if (kind != ActionStateKind.Counter) {
+                errors.Add(item: $"{path}.passes[{index}] names register '{name}', a {kind}; a pass reads a Counter.");
+            } else if (passes.Take(count: index).Contains(value: name, comparer: StringComparer.Ordinal)) {
+                errors.Add(item: $"{path}.passes[{index}] names register '{name}' twice.");
+            }
         }
     }
 }

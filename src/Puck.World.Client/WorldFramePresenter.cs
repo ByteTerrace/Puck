@@ -783,9 +783,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var excluded = new List<(WorldPlacement Placement, string Reason)>();
 
         try {
-            // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
-            // ground texture) has no fixed-point query twin and would refuse the whole field.
-            var solid = definition.Placements.Where(predicate: static placement => (placement.Solid is not null)).ToArray();
+            // Only what every body touches: a solid placement no pass opens (WorldSolid.Passes), since one field serves
+            // every seat and a camera must not stop in front of a body that crossed. A presentation-only placement (the
+            // wallpaper-folded ground texture) has no fixed-point query twin and would refuse the whole field.
+            var solid = definition.Placements.Where(predicate: static placement => (placement.Solid is { Gated: false })).ToArray();
             var queryable = WorldPlacementStamper.Queryable(
                 definition: definition,
                 placements: solid,

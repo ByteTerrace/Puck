@@ -13138,6 +13138,18 @@
       "additionalProperties": false,
       "title": "WorldPointerRegion"
     },
+    "StringListNullable": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
     "WorldSolid": {
       "description": "A row\u0027s solidity facet \u2014 it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration \u2014 the row is drawn but bodies pass through it.",
       "type": [
@@ -13147,12 +13159,15 @@
       "properties": {
         "margin": {
           "description": "The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.",
-          "type": "number"
+          "type": "number",
+          "default": 0
+        },
+        "passes": {
+          "$ref": "#/$defs/StringListNullable",
+          "description": "Body registers (state.body counters) that let a body through: a body holding any of them nonzero meets none of the row\u0027s colliders, and every other body meets them all. The authority decides it from the moving body\u0027s own registers at each of its sweeps, so a rule that writes the register (a carried key, a spell, a puzzle\u0027s reward) is the predicate. null or empty: every body meets the row.",
+          "default": null
         }
       },
-      "required": [
-        "margin"
-      ],
       "additionalProperties": false,
       "title": "WorldSolid"
     },

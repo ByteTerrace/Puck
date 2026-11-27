@@ -566,15 +566,20 @@ function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
-// Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands as a sieve instead
-// (layout.puck's toyLatticeSieveCells): a dead end only a small body passes. Each panel rises in its own
-// `shellLatticeRails` crossbars so the bars keep one spacing.
+// Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
+// it (architecture.puck's rainbowArch, in the arcade's plane): a dead end that sells a way across. Its outer arch holds
+// every body, small or full size, except one holding a wonder pass (layout.puck's `wonderPasses`: the wonder key
+// switched on, rentals.puck), which walks through it and onto level 1 at its full size. Each lattice panel
+// rises in its own `shellLatticeRails` crossbars so the bars keep one spacing.
+// The level-1 arcade's arch opening (architecture.puck's branchedPier): its radius and the height of its spring line.
+let shellArchRadius = ((arcadePitch / 2) - 0.42)
+let shellArchSpring = (((galleryCeiling[1] - galleryFloor[1]) - 0.3) - shellArchRadius)
 function shellLatticeRails(height) = (2 * maximum(1, round((height / (shellLatticeHeight / 3)))))
 let shellGateEdges = [
-  { edge: "south", z: (naveSouth - balconyInset), bay: bayOf(treeLanding(toyboxLevel, "south")) }
-  { edge: "north", z: (naveNorth + balconyInset), bay: bayOf(treeLanding(toyboxLevel, "north")) }
+  { edge: "south", z: (naveSouth - balconyInset), arch: arcadeSouth, bay: bayOf(treeLanding(toyboxLevel, "south")) }
+  { edge: "north", z: (naveNorth + balconyInset), arch: arcadeNorth, bay: bayOf(treeLanding(toyboxLevel, "north")) }
 ]
-let shellLatticeGates = map(shellGateEdges, e => { id: $"sieve-{e.edge}", x: bayX(e.bay), y: 0, z: e.z, prototype: "gallery-lattice-sieve" })
+let shellLatticeGates = map(shellGateEdges, e => { id: $"barrier-{e.edge}", x: bayX(e.bay), y: 0, z: e.arch, prototype: "gallery-barrier" })
 let shellLattices = concat(
   map(filter(shellLatticeBays, b => (b != shellGateEdges[0].bay)), b => shellLatticeBay(b, "south", (naveSouth - balconyInset))),
   map(filter(shellLatticeBays, b => (b != shellGateEdges[1].bay)), b => shellLatticeBay(b, "north", (naveNorth + balconyInset))),
@@ -906,15 +911,19 @@ template shellPrototypes() {
       id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0
     }),
     [
-      {
-        id: "gallery-lattice-sieve", n: treeBay, cells: toyLatticeSieveCells, pitch: ((galleryBayTiles * galleryTile) / toyLatticeSieveCells)
-        height: shellLatticeHeight, upright: 1, sieve: 1
-      }
       { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
     ]
   )
+  prototype "gallery-barrier" {
+    document {
+      name: "gallery-barrier"
+      schema: "puck.creation.v1"
+      palette: rainbowArchPalette(lookBarrier.colors, film: lookBarrier.film)
+      rainbowArch(base: 0, radius: shellArchRadius, spring: shellArchSpring, hues: length(lookBarrier.colors))
+    }
+  }
   for kind in latticeKinds {
     prototype $"{kind.id}" {
       document {
@@ -933,7 +942,7 @@ template shellPrototypes() {
           rails: shellLatticeRails(kind.height),
           upright: kind.upright,
           sill: kind.upright,
-          net: ((kind.sieve == 1) ? null : toyLatticeNet)
+          net: toyLatticeNet
         )
       }
     }
@@ -1166,7 +1175,9 @@ template shellPlacements() {
       prototype: panel.prototype
       parent: "gallery"
       position [panel.x, (galleryFloor[1] + panel.y), panel.z]
-      solid
+      solid {
+        passes: wonderPasses
+      }
     }
   }
   for panel in filter(shellLattices, p => (p.slat != "")) {

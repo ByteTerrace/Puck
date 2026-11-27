@@ -4933,6 +4933,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].route.ports` | `WorldScreenRoute.Ports` | a selector in the machine provider vocabulary |
 | `screens[].route.display.fill` | `WorldScreenDisplay.Fill` | a color literal |
 | `screens[].route.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `screens[].solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `screens[].magazine.entries[][machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].magazine.entries[][session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
@@ -5342,6 +5343,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -5634,6 +5636,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -5926,6 +5929,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6095,6 +6099,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `prototypes[].hash` | `WorldPrototype.HashRaw` | a content digest |
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `placements.rows[].solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `placements.rows[].inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `placements.rows[].inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `placements.rows[].inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6510,6 +6515,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `rules[].effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `rules[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6819,6 +6825,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -7146,6 +7153,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -7445,6 +7453,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
+| `interactions.interactions[].effects[][upsertPlacement].placement.solid.passes` | `WorldSolid.Passes` | a per-body slot name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
