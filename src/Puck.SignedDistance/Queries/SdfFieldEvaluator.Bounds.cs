@@ -1068,15 +1068,12 @@ public sealed partial class SdfFieldEvaluator {
         var root = Point(value: SqrtHalf);
 
         return SdfFieldBlends.IntervalBlendOf(value: ((SdfBlendOp)blend)) switch {
-            SdfIntervalBlendAction.SmoothUnion => SmoothUnionBounds(a: current, b: candidate, k: smoothK),
+            SdfIntervalBlendAction.SmoothUnion => SmoothUnionBounds(a: current, b: candidate, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
             SdfIntervalBlendAction.Subtraction => FixedInterval.Max(first: current, second: -candidate),
             SdfIntervalBlendAction.Intersection => FixedInterval.Max(first: current, second: candidate),
             SdfIntervalBlendAction.Xor => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: -FixedInterval.Max(first: current, second: candidate)),
-            SdfIntervalBlendAction.SmoothIntersection => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
-            SdfIntervalBlendAction.SmoothSubtraction => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK),
-            SdfIntervalBlendAction.CubicSmoothUnion => CubicSmoothUnionBounds(a: current, b: candidate, k: smoothK),
-            SdfIntervalBlendAction.CubicSmoothIntersection => -CubicSmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
-            SdfIntervalBlendAction.CubicSmoothSubtraction => -CubicSmoothUnionBounds(a: candidate, b: -current, k: smoothK),
+            SdfIntervalBlendAction.SmoothIntersection => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
+            SdfIntervalBlendAction.SmoothSubtraction => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK, kind: SdfFieldBlends.SmoothingOf(value: (SdfBlendOp)blend)),
             SdfIntervalBlendAction.GrooveUnion => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
             SdfIntervalBlendAction.PipeUnion => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
             SdfIntervalBlendAction.GrooveSubtraction => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
@@ -1088,20 +1085,42 @@ public sealed partial class SdfFieldEvaluator {
             _ => throw new InvalidOperationException(message: "Invalid IntervalBlend action."),
         };
     }
-    // The smooth minimum (SdfBlendSmoothMinimum) over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
-    // (h, 1 − h)), so over the box it lies between its values at the operands' lower ends and at their upper ends, and
-    // the point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the
-    // point blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
+    // The smooth minimum of either kind (SdfBlendSmoothMinimum, SdfBlendCubicSmoothMinimum) over intervals. The exact
+    // polynomial smooth minimum rises with each operand (its gradient is (h, 1 − h), the cubic's (1 − h²/2, h²/2) with its
+    // own h), so over the box it lies between its values at the operands' lower ends and at their upper ends, and the
+    // point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the point
+    // blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
     // operation hull (the h ≤ 0 select joining both arms wherever the box reaches both) reads b − a twice and doubles its
     // width at every blend, which leaves the carrier over a few trees' smooth unions and with it collapses the frame; it
     // is kept only as the proof that no step of the point blend leaves the carrier, and the two are intersected.
-    // Over a radius enclosure the exact smooth minimum also falls as k rises (min(a, b) less k/4·max(0, 1 − |a − b|/k)²),
-    // so the lower corner reads the greatest radius and the upper corner the least, each allowance at the greatest.
-    private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedInterval k) {
+    // Over a radius enclosure the exact smooth minimum also falls as k rises (min(a, b) less k/4·max(0, 1 − |a − b|/k)²,
+    // or less (k − |a − b|)³/(6k²) inside the cubic's band), so the lower corner reads the greatest radius and the upper
+    // corner the least, each allowance at the greatest.
+    private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedInterval k, SdfSmoothKind kind) {
         if (k.IsUnbounded) {
             return FixedInterval.Entire;
         }
 
+        var cubic = (kind == SdfSmoothKind.Cubic);
+        var stepped = (cubic ? CubicSmoothMinimumHull(a: a, b: b, k: k) : QuadraticSmoothMinimumHull(a: a, b: b, k: k));
+
+        if (stepped.IsUnbounded) {
+            return stepped;
+        }
+
+        var rounding = (2L * SmoothBlendRoundingRaws(k: k.Upper, kind: kind));
+        var lower = (cubic ? SdfBlendCubicSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper) : SdfBlendSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper));
+        var upper = (cubic ? SdfBlendCubicSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower) : SdfBlendSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower));
+
+        return Intersect(
+            first: stepped,
+            second: Within(
+                lower: (((Int128)lower.Value) - rounding),
+                upper: (((Int128)upper.Value) + rounding)
+            )
+        );
+    }
+    private static FixedInterval QuadraticSmoothMinimumHull(FixedInterval a, FixedInterval b, FixedInterval k) {
         var h = FixedInterval.Clamp(
             value: (Point(value: Half) + ((Point(value: Half) * (b - a)) / k)),
             minimum: FixedQ4816.Zero,
@@ -1114,52 +1133,18 @@ public sealed partial class SdfFieldEvaluator {
             : ((h.Lower > FixedQ4816.Zero)
                 ? lerp
                 : FixedInterval.Union(first: b, second: lerp)));
-        var stepped = (blended - ((k * h) * oneMinusH));
 
-        if (stepped.IsUnbounded) {
-            return stepped;
-        }
-
-        var rounding = (2L * SmoothBlendRoundingRaws(k: k.Upper, kind: SdfSmoothKind.Quadratic));
-
-        return Intersect(
-            first: stepped,
-            second: Within(
-                lower: (((Int128)SdfBlendSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper).Value) - rounding),
-                upper: (((Int128)SdfBlendSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower).Value) + rounding)
-            )
-        );
+        return (blended - ((k * h) * oneMinusH));
     }
-    // The cubic smooth minimum (SdfBlendCubicSmoothMinimum) over intervals, by the quadratic's argument: it rises with each
-    // operand (its gradient is (1 − h²/2, h²/2)) and falls as k rises (it is min(a, b) less (k − |a − b|)³/(6k²) inside
-    // the band), so it lies between the point blend at the lower corner, read at the greatest radius, and at the upper
-    // corner, read at the least, each widened by twice its rounding allowance. The operation-for-operation hull, its
-    // weight clamped to [0, 1] so it joins both of the point blend's arms, is intersected with it as the carrier's proof.
-    private static FixedInterval CubicSmoothUnionBounds(FixedInterval a, FixedInterval b, FixedInterval k) {
-        if (k.IsUnbounded) {
-            return FixedInterval.Entire;
-        }
-
+    // The cubic's weight clamped to [0, 1], so the hull joins both of the point blend's arms.
+    private static FixedInterval CubicSmoothMinimumHull(FixedInterval a, FixedInterval b, FixedInterval k) {
         var h = FixedInterval.Clamp(
             value: (Point(value: FixedQ4816.One) - (FixedInterval.Abs(value: (b - a)) / k)),
             minimum: FixedQ4816.Zero,
             maximum: FixedQ4816.One
         );
-        var stepped = (FixedInterval.Min(first: a, second: b) - ((((k * h) * h) * h) / Point(value: FixedQ4816.FromInteger(value: 6))));
 
-        if (stepped.IsUnbounded) {
-            return stepped;
-        }
-
-        var rounding = (2L * SmoothBlendRoundingRaws(k: k.Upper, kind: SdfSmoothKind.Cubic));
-
-        return Intersect(
-            first: stepped,
-            second: Within(
-                lower: (((Int128)SdfBlendCubicSmoothMinimum(a: a.Lower, b: b.Lower, k: k.Upper).Value) - rounding),
-                upper: (((Int128)SdfBlendCubicSmoothMinimum(a: a.Upper, b: b.Upper, k: k.Lower).Value) + rounding)
-            )
-        );
+        return (FixedInterval.Min(first: a, second: b) - ((((k * h) * h) * h) / Point(value: FixedQ4816.FromInteger(value: 6))));
     }
     // The interval between two raw ends, each held to the carrier: every point answer lies in the carrier, so clamping an
     // end that bounds them keeps it a bound.

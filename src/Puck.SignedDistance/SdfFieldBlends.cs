@@ -494,7 +494,7 @@ public static partial class SdfFieldBlends {
     }
 
     // The cubic kinds blend over the quadratic's band and sag less within it (SdfFieldFormulas.CubicSmoothMinimum), so
-    // each takes its quadratic sibling's facets but for its formula and its interval rule.
+    // each takes its quadratic sibling's facets but for its formula; its interval rule reads its kind (Smoothing).
 
     /// <summary>Union with a smooth seam whose curvature stays continuous (blend radius = instruction Data1.x): the
     /// cubic smooth minimum, over the same band as <see cref="SmoothUnion"/>.</summary>
@@ -512,7 +512,7 @@ public static partial class SdfFieldBlends {
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.SmoothUnion;
         public override SdfFormula Winner => SdfFieldFormulas.NearerWins;
-        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothUnion;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothUnion;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.QuarterRadiusFloor;
         public override bool IsIntersection => false;
         public override bool IsSubtraction => false;
@@ -536,7 +536,7 @@ public static partial class SdfFieldBlends {
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Smaller;
         public override SdfFormula Winner => SdfFieldFormulas.FartherWins;
-        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothIntersection;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothIntersection;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
         public override bool IsIntersection => true;
         public override bool IsSubtraction => false;
@@ -560,7 +560,7 @@ public static partial class SdfFieldBlends {
         public override SdfPopAdmissionAction PopAdmission => SdfPopAdmissionAction.Radius;
         public override SdfBlendDistanceGainAction BlendDistanceGain => SdfBlendDistanceGainAction.Subject;
         public override SdfFormula Winner => SdfFieldFormulas.CutWins;
-        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.CubicSmoothSubtraction;
+        public override SdfIntervalBlendAction IntervalBlend => SdfIntervalBlendAction.SmoothSubtraction;
         public override SdfBlendGrowthAction BlendGrowth => SdfBlendGrowthAction.None;
         public override bool IsIntersection => false;
         public override bool IsSubtraction => true;
