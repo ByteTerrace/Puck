@@ -1195,9 +1195,10 @@ laws exercise that boundary.
   longer to land the debug world's mesh region. Jobs take the meshes nearest the views first. A worker packs a job's
   words from the meshes' own arrays into a host-visible buffer of the landing's own before the job is taken
   (`SdfMeshRegionStore.TryTakePackedLanding`, one job packing while the one before it records), so the frame thread writes
-  no mesh word; the job's recording gathers them into the region (`GpuRegion.TryOweGather`) in the job's slot
-  (`MeshLandingSlot`, past the upload ring's), after any move the region owes. A packed buffer is free again only once
-  the job that read it completed. A mesh leaves `m_meshesOwed` only when every job carrying
+  no mesh word; the job's recording gathers them into the region (`GpuRegion.TryOweGather`) in a landing slot of the
+  store's own, after any move the region owes. While a job's words are packing no service takes it
+  (`SdfWorldTables.MeshesPacking`), so a frame-counted law waits the packing out in real time. A packed buffer is free
+  again only once the job that read it completed. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in
   `SdfWorldTables.StageMeshDraw` writes its rows absent until then; a
   relocation, a moved mesh or a trim drops that mesh's progress, so a job still in

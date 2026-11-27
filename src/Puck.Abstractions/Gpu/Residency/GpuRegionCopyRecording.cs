@@ -31,6 +31,24 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     // The copy pipeline the recording last bound, which the next region copying through it does not bind again.
     private nint m_boundPipeline;
 
+    /// <summary>Records one region's slot, which the caller has flushed, into a command buffer already open, handing the
+    /// copied buffer to the readers: the whole recording of an owner that copies one region inside work of its own.</summary>
+    /// <param name="recorder">The recorder the region records its copies through.</param>
+    /// <param name="readers">The stages that read the region's buffers.</param>
+    /// <param name="commandBuffer">The open command buffer the copy is recorded into.</param>
+    /// <param name="region">The region, flushed for <paramref name="slot"/> since its last write.</param>
+    /// <param name="slot">The region slot.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="recorder"/> or <paramref name="region"/> is
+    /// <see langword="null"/>.</exception>
+    public static void RecordFlushed(IGpuRecorder recorder, GpuStage readers, nint commandBuffer, GpuRegion region, int slot) {
+        ArgumentNullException.ThrowIfNull(argument: recorder);
+
+        var copies = new GpuRegionCopyRecording(recorder: recorder, readers: readers, begin: () => commandBuffer);
+
+        copies.Record(flushed: true, handsToReaders: true, region: region, slot: slot);
+        _ = copies.Finish();
+    }
+
     /// <summary>Flushes a region's share of the slot and records the carry a grown region owes, which hands its new
     /// destination to the readers itself when no copy follows, then the copy it owes, recording first, at the
     /// recording's first copy, the barrier that orders the earlier reads of every staged destination before the copies'

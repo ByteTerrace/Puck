@@ -162,14 +162,15 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         Assert.True(condition: node.Produce(context: in context));
     }
 
-    // A tuning constant retuned in the renderer's generated include moves no stamp, so the views kernel compiled from the
+    // A tuning constant retuned in the renderer's generated include moves no stamp, so the kernel compiled from the
     // retuned source reads this host's interface: the reload applies it and the pipeline's bytecode is the retuned one.
+    // The irradiance gather's constant is read by the probe lookup pass, the one kernel that gathers the volume.
     [Fact]
     public void AReloadOfKernelsRetunedByATuningConstantApplies() {
         using var scratch = new TemporaryDirectory(prefix: "puck-test-");
         var source = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
         var tree = Path.Combine(path1: scratch.RootPath, path2: "Sdf");
-        var views = $"{SdfKernelSet.StemOf(kernel: SdfKernel.Views)}.comp.hlsl";
+        var views = $"{SdfKernelSet.StemOf(kernel: SdfKernel.ViewsProbes)}.comp.hlsl";
 
         foreach (var file in Directory.EnumerateFiles(path: source, searchPattern: "*.hls*", searchOption: SearchOption.AllDirectories)) {
             var relative = Path.GetRelativePath(relativeTo: source, path: file);

@@ -97,6 +97,32 @@ internal sealed class SdfWorldShadows : IDisposable {
 
     private static readonly string[] EntryNames = ["near", "far", "second", "distant"];
 
+    /// <summary>Gets the descriptor pool one entry allocates its sets from: per kind of drawing and ring slot a mesh set,
+    /// a glass extinction set and the selection's sets, then a block-reduction set per slot.</summary>
+    public static GpuDescriptorPoolSizes EntryPoolSizes { get; } = PoolSizesOfEntry();
+    /// <summary>Gets the entries whose pools the tables reserve at construction, since the world cannot shadow without
+    /// them: the distant entry and the first anchor's near, far and secondary entries.</summary>
+    public static int ReservedEntries => (1 + AnchorEntries);
+    // The entries an anchor holds (Anchor.Entries), and the pools they create.
+    private const int AnchorEntries = 3;
+    private static readonly GpuDescriptorPoolSizes[] AnchorPools = [EntryPoolSizes, EntryPoolSizes, EntryPoolSizes];
+
+    private static GpuDescriptorPoolSizes PoolSizesOfEntry() {
+        var sizes = default(GpuDescriptorPoolSizes);
+
+        for (var set = 0; (set < (Kinds * SdfWorldTables.FrameRingSize)); set++) {
+            sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
+            sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
+            for (var phase = 0; (phase < OcclusionSets); phase++) {
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
+            }
+        }
+        for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) {
+            sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.ShadowBlocks.Groups);
+        }
+        return sizes;
+    }
+
     private readonly SdfWorldTables m_tables;
     private readonly GpuDeviceServices m_gpu;
     private readonly List<Anchor> m_anchors = [];
@@ -186,6 +212,19 @@ internal sealed class SdfWorldShadows : IDisposable {
     public long ContentRevision => m_contentRevision;
     /// <summary>Gets the device bytes every layer and glass extinction buffer of the world's shadows holds.</summary>
     public long Bytes => m_bytes;
+    /// <summary>Gets whether every entry views read stands: each has drawn its layers and owes no redraw, share, rectangle
+    /// or glass extinction, so the next upload of a frame that moves nothing draws no shadow.</summary>
+    public bool Stands {
+        get {
+            if (!m_distant.Stands) { return false; }
+            foreach (var anchor in m_anchors) {
+                foreach (var entry in anchor.Entries) {
+                    if (!entry.Stands) { return false; }
+                }
+            }
+            return true;
+        }
+    }
 
     /// <summary>Returns the cascade set a view of the frame reads: the entries of its anchor and the world's distant entry,
     /// each through the camera its layers were drawn from, or none for a view that skips shadows.</summary>
@@ -463,7 +502,10 @@ internal sealed class SdfWorldShadows : IDisposable {
             if (chosen < 0) {
                 chosen = m_anchors.FindIndex(match: static anchor => (anchor.View < 0));
             }
-            if ((chosen < 0) && (m_anchors.Count < MaxAnchors)) {
+            // The first anchor's pools are the tables' reservation; a later one is made only where the device's heaps admit
+            // its entries' pools now, else the view reads the nearest anchor.
+            if ((chosen < 0) && (m_anchors.Count < MaxAnchors) &&
+                ((m_anchors.Count == 0) || m_gpu.Bindings.CanAdmit(owner: "SDF world shadows anchor", pools: AnchorPools, refusal: out _))) {
                 m_anchors.Add(item: new Anchor(owner: this, index: m_anchors.Count));
                 chosen = (m_anchors.Count - 1);
             }
@@ -1100,20 +1142,13 @@ internal sealed class SdfWorldShadows : IDisposable {
             var gpu = owner.m_gpu;
             var tables = owner.m_tables;
             var named = $"{tables.DebugLabel} shadows";
-            var sizes = default(GpuDescriptorPoolSizes);
 
-            for (var set = 0; (set < (Kinds * ring)); set++) {
-                // A mesh set and its two selection sets, and a glass extinction set beside each.
-                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
-                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
-                for (var phase = 0; (phase < OcclusionSets); phase++) {
-                    sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
-                }
+            // The distant entry and the first anchor's take the pools the tables reserved at construction; a later anchor's
+            // entries were admitted before it was made (Assign).
+            m_pool = tables.TakeShadowPool();
+            if (m_pool == 0) {
+                m_pool = gpu.Bindings.CreatePool(name: owner.Name(part: Part, detail: "descriptors"), sizes: EntryPoolSizes);
             }
-            for (var slot = 0; (slot < ring); slot++) {
-                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.ShadowBlocks.Groups);
-            }
-            m_pool = gpu.Bindings.CreatePool(name: owner.Name(part: Part, detail: "descriptors"), sizes: sizes);
 
             // Every drawing of the entry selects into one storage: an upload records them one after another, each staging,
             // selecting and drawing before the next stages, and they share the entry's texels.
@@ -1232,6 +1267,8 @@ internal sealed class SdfWorldShadows : IDisposable {
         // The vertices this upload's share of the wanted redraw is expected to draw: the entry's measured whole over its
         // shares, else another anchor's of the same entry, else the whole budget.
         public long ShareVertices => ((m_redraw is { } redraw) && (Estimate is var whole and > 0L)) ? ((whole + redraw.Slices - 1L) / redraw.Slices) : UploadVertices;
+        // Whether the entry, where a view reads it, has drawn its layers and owes nothing a later upload would draw.
+        public bool Stands => (!m_holds || (m_stands && (m_redraw is null) && m_owed.IsEmpty && !m_owedOptical));
         // The vertices a whole redraw of the entry is expected to draw: its own last measurement, else its index's.
         private long Estimate => ((m_wholeVertices > 0L) ? m_wholeVertices : m_owner.m_indexVertices[Index]);
         // The vertices a rectangle of the entry is expected to draw a texel: what its rectangles measured, else its whole
