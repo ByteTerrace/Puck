@@ -5,7 +5,6 @@ using Puck.Cli.Format;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
-using Puck.Transpiler.Ast;
 using Puck.Transpiler.Rewriting;
 using Puck.World.Transpiler;
 
@@ -283,7 +282,7 @@ public static class PuckMigrateCommand {
     // A migration whose rewrite of one source changes what another compiles to: every source is compiled before, every
     // rewrite is written, every source that compiled is compiled again against the others' rewrites and held to the
     // migration's own verdict, and every source is restored when one fails it.
-    private static int Across(PuckMigration migration, IReadOnlyList<string> sources, bool check) {
+    private static int Across(PuckMigration migration, IReadOnlyList<string> sources, bool check, bool keep) {
         var originals = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var parsed = new List<MigrationSource>(capacity: sources.Count);
         var refused = 0;
@@ -335,20 +334,29 @@ public static class PuckMigrateCommand {
         var changed = new List<Plan>();
 
         foreach (var source in parsed) {
-            DocumentNode rewritten;
+            string? printed;
 
             try {
-                rewritten = migration.Apply(document: source.Document, path: source.Path);
+                printed = migration.ApplyText(document: source.Document, path: source.Path, source: originals[source.Path]);
             } catch (PuckRewriteException ex) {
                 Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' could not rewrite it: {ex.Message}");
                 return 2;
             }
-            if (ReferenceEquals(objA: rewritten, objB: source.Document)) { continue; }
-            if (PuckPrinter.TryPrint(document: rewritten) is not { } printed) {
-                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' produced a tree the printer cannot write back");
+            if ((printed is null) || string.Equals(a: printed, b: originals[source.Path], comparisonType: StringComparison.Ordinal)) { continue; }
+
+            var reparsed = PuckParser.ParseDocumentWithDiagnostics(source: printed, vocabulary: CliVocabularyResolver.Instance.Resolve(source: printed));
+
+            if ((reparsed.Value is null) || reparsed.Diagnostics.Any(predicate: static d => (d.Severity == DiagnosticSeverity.Error))) {
+                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' produced a source that does not parse back: {Summarize(diagnostics: reparsed.Diagnostics)}");
+                foreach (var diagnostic in reparsed.Diagnostics.Where(predicate: static d => (d.Severity == DiagnosticSeverity.Error)).Take(count: 3)) {
+                    var lines = printed.Split(separator: '\n');
+
+                    for (var line = Math.Max(val1: 1, val2: (diagnostic.Span.Line - 3)); (line <= Math.Min(val1: lines.Length, val2: diagnostic.Span.Line)); line++) {
+                        Console.Error.WriteLine(value: $"  {line}: {lines[line - 1]}");
+                    }
+                }
                 return 2;
             }
-            if (string.Equals(a: printed, b: originals[source.Path], comparisonType: StringComparison.Ordinal)) { continue; }
 
             changed.Add(item: new Plan(Path: source.Path, Refusal: null, Rewritten: printed));
         }
@@ -377,23 +385,34 @@ public static class PuckMigrateCommand {
 
         var failures = 0;
 
-        foreach (var source in parsed) {
-            if (source.Before is null) { continue; }
+        try {
+            foreach (var source in parsed) {
+                if (source.Before is null) { continue; }
 
-            var text = File.ReadAllText(path: source.Path);
-            var diagnostics = new DiagnosticBag();
-            var (_, after) = CompileCommand.CompileSource(diagnostics: diagnostics, imports: ImportHandling.Validate, sourceMap: new SourceMap(), sourcePath: source.Path, sourceText: text, vocabulary: CliVocabularyResolver.Instance.Resolve(source: text));
+                var text = File.ReadAllText(path: source.Path);
+                var diagnostics = new DiagnosticBag();
+                var (_, after) = CompileCommand.CompileSource(diagnostics: diagnostics, imports: ImportHandling.Validate, sourceMap: new SourceMap(), sourcePath: source.Path, sourceText: text, vocabulary: CliVocabularyResolver.Instance.Resolve(source: text));
 
-            if (diagnostics.HasErrors || (after is null)) {
-                Console.Error.WriteLine(value: $"error: {source.Path}: does not compile after migration '{migration.Name}': {Summarize(diagnostics: diagnostics)}");
-                failures++;
-            } else if (migration.DocumentDifference(after: after, before: source.Before) is { } difference) {
-                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' changed what it compiles to — {difference}");
-                failures++;
+                if (diagnostics.HasErrors || (after is null)) {
+                    Console.Error.WriteLine(value: $"error: {source.Path}: does not compile after migration '{migration.Name}': {Summarize(diagnostics: diagnostics)}");
+                    failures++;
+                } else if (migration.DocumentDifference(after: after, before: source.Before) is { } difference) {
+                    Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' changed what it compiles to — {difference}");
+                    failures++;
+                }
             }
+        } catch {
+            Restore(originals: originals, paths: changed.Select(selector: static plan => plan.Path));
+            throw;
         }
 
         if (failures != 0) {
+            if (keep) {
+                Console.Error.WriteLine(value: $"migrate: {failures} source(s) failed '{migration.Name}''s proof; the rewritten sources were kept.");
+
+                return 2;
+            }
+
             Restore(originals: originals, paths: changed.Select(selector: static plan => plan.Path));
             Console.Error.WriteLine(value: $"migrate: {failures} source(s) failed '{migration.Name}''s proof; every source was restored.");
 
@@ -417,6 +436,7 @@ public static class PuckMigrateCommand {
         var nameArgument = new Argument<string>(name: "name") { Description = "The registered migration to apply; an unknown name lists the registered ones." };
         var pathArgument = new Argument<string>(name: "path") { Description = "The directory whose .puck sources are migrated, or one .puck file." };
         var checkOption = new Option<bool>(name: "--check") { Description = "Report what the migration would change without writing it (exit code 1 when anything would change)." };
+        var keepOption = new Option<bool>(name: "--keep") { Description = "For a migration proven across sources, keep the rewritten sources when the proof fails, so its failures can be read and finished by hand." };
 
         var command = new Command(
             description: "Apply one named syntax-tree rewrite to every .puck source under a path, proving each rewritten source compiles to the document it did before apart from the members the migration declares.",
@@ -425,10 +445,12 @@ public static class PuckMigrateCommand {
             nameArgument,
             pathArgument,
             checkOption,
+            keepOption,
         };
 
         command.SetAction(action: parseResult => Execute(
             check: parseResult.GetValue(option: checkOption),
+            keep: parseResult.GetValue(option: keepOption),
             name: parseResult.GetRequiredValue(argument: nameArgument),
             path: parseResult.GetRequiredValue(argument: pathArgument)
         ));
@@ -448,7 +470,9 @@ public static class PuckMigrateCommand {
     /// untouched. Each write stages a sibling temp file and moves it over its destination, so no single file is
     /// ever left partly written; a move that fails after earlier moves succeeded leaves those destinations
     /// migrated and names them in the refusal.</remarks>
-    public static int Execute(string name, string path, bool check, IReadOnlyList<PuckMigration>? migrations = null) {
+    /// <param name="keep">Whether a migration proven across sources keeps its rewritten sources when the proof
+    /// fails.</param>
+    public static int Execute(string name, string path, bool check, IReadOnlyList<PuckMigration>? migrations = null, bool keep = false) {
         var registered = (migrations ?? PuckMigrations.Registered);
 
         if (PuckMigrations.Resolve(
@@ -473,7 +497,7 @@ public static class PuckMigrateCommand {
         }
 
         if (migration.ProvesAcrossSources) {
-            return Across(check: check, migration: migration, sources: Sources(fullPath: fullPath));
+            return Across(check: check, keep: keep, migration: migration, sources: Sources(fullPath: fullPath));
         }
 
         var plans = Sources(fullPath: fullPath)

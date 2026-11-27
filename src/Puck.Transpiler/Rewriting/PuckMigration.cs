@@ -224,6 +224,17 @@ public abstract class PuckMigration {
     /// <param name="path">The full path of the source, or <see langword="null"/> when it has none.</param>
     /// <returns>The rewritten tree; <paramref name="document"/> itself when nothing changed.</returns>
     public virtual DocumentNode Apply(DocumentNode document, string? path) => this.Apply(document: document);
+    /// <summary>Returns the text of the source at <paramref name="path"/> rewritten by this migration, or
+    /// <see langword="null"/> when nothing changed; by default the printer's text of <see cref="Apply(DocumentNode, string?)"/>.</summary>
+    /// <param name="source">The source's text.</param>
+    /// <param name="document">The source's parse, carrying the author's trivia.</param>
+    /// <param name="path">The full path of the source.</param>
+    /// <returns>The rewritten text, or <see langword="null"/>.</returns>
+    public virtual string? ApplyText(string source, DocumentNode document, string path) {
+        var rewritten = this.Apply(document: document, path: path);
+
+        return (ReferenceEquals(objA: rewritten, objB: document) ? null : (Formatting.PuckPrinter.TryPrint(document: rewritten) ?? throw new PuckRewriteException(message: "the rewritten tree cannot be printed")));
+    }
     /// <summary>Returns the first difference between the document a source compiled to before this migration and the
     /// one it compiles to after that this migration does not account for, or <see langword="null"/> when there is
     /// none.</summary>

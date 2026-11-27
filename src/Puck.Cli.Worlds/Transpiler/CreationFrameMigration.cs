@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Rewriting;
 
 namespace Puck.Cli.Transpiler;
@@ -103,6 +104,8 @@ internal sealed class CreationFrameMigration : PuckMigration {
     private readonly Dictionary<string, List<Definition>> m_topLevel = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<SyntaxNode, string> m_pathOf = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, IReadOnlyList<StatementNode>> m_files = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, List<StatementNode>> m_statementsByPath = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<SyntaxNode, bool> m_shapeVerdicts = new(comparer: ReferenceEqualityComparer.Instance);
     private string? m_currentPath;
 
     /// <inheritdoc/>
@@ -128,6 +131,8 @@ internal sealed class CreationFrameMigration : PuckMigration {
         m_refusals.Clear();
         m_dropVerdicts.Clear();
         m_slotFramedPrototypes.Clear();
+        m_templates.Clear();
+        m_templateLists.Clear();
         m_topLevel.Clear();
         m_pathOf.Clear();
 
@@ -140,12 +145,15 @@ internal sealed class CreationFrameMigration : PuckMigration {
             }
         }
         m_files.Clear();
+        m_statementsByPath.Clear();
+        m_shapeVerdicts.Clear();
         foreach (var source in sources) {
-            m_files[source.Path] = source.Document.Statements;
+            m_files[Path.GetFullPath(path: source.Path)] = source.Document.Statements;
             foreach (var statement in source.Document.Statements) {
-                Index(path: source.Path, statement: statement, topLevel: true);
+                Index(path: Path.GetFullPath(path: source.Path), statement: statement, topLevel: true);
             }
         }
+        PropagateVerdicts();
 
         var anyNew = false;
 
@@ -188,6 +196,21 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
     private static bool IsCreationSchema(string? schema) => (schema is OldSchema or NewSchema);
 
+    private readonly Stack<TemplateNode> m_templates = new();
+    private readonly Dictionary<TemplateNode, Dictionary<string, Kind>> m_templateLists = new(comparer: ReferenceEqualityComparer.Instance);
+
+    // The arguments of a call that a template hands to a creation's lists, each with the list it fills.
+    private IEnumerable<(ArgumentNode Argument, Kind List)> ListArguments(CallExpressionNode call, TemplateNode template) {
+        if (!m_templateLists.TryGetValue(key: template, value: out var lists)) { yield break; }
+
+        for (var index = 0; (index < call.Arguments.Count); index++) {
+            var argument = call.Arguments[index];
+            var name = (argument.Name ?? ((index < template.Parameters.Count) ? template.Parameters[index].Name : null));
+
+            if ((name is not null) && lists.TryGetValue(key: name, value: out var list)) { yield return (argument, list); }
+        }
+    }
+
     private string Describe(SyntaxNode node) {
         var name = node switch {
             TemplateNode template => $"template '{template.Name}'",
@@ -210,7 +233,64 @@ internal sealed class CreationFrameMigration : PuckMigration {
         }
 
         m_pathOf[statement] = path;
+        if (!m_statementsByPath.TryGetValue(key: path, value: out var statements)) {
+            m_statementsByPath[path] = statements = [];
+        }
+        statements.Add(item: statement);
         foreach (var child in ChildStatements(statement: statement)) { Index(path: path, statement: child, topLevel: false); }
+    }
+
+    // A compiled shape is attributed to the statement its source map names: the shape statement itself, or, for a shape a
+    // template built inside another template's expansion, the call or block that expanded it. Each verdict therefore
+    // holds for every shape statement that statement can expand to, so a shape that must keep its half turn keeps it
+    // wherever the map placed it.
+    private void PropagateVerdicts() {
+        foreach (var ((path, offset), verdict) in m_dropVerdicts) {
+            if (Innermost(path: path, offset: offset) is not { } node) {
+                if (!verdict) { m_refusals.Add(item: $"{path}: a shape that must keep its half turn was authored at offset {offset}, which no statement holds"); }
+                continue;
+            }
+
+            foreach (var shape in Expansion(node: node, path: path, visited: new HashSet<SyntaxNode>(comparer: ReferenceEqualityComparer.Instance))) {
+                m_shapeVerdicts[shape] = (m_shapeVerdicts.TryGetValue(key: shape, value: out var held) ? (held && verdict) : verdict);
+            }
+        }
+    }
+
+    private StatementNode? Innermost(string path, int offset) {
+        StatementNode? found = null;
+
+        if (!m_statementsByPath.TryGetValue(key: path, value: out var statements)) { return null; }
+        foreach (var statement in statements) {
+            if ((statement.Offset <= offset) && (offset < (statement.Offset + Math.Max(val1: 1, val2: statement.Length))) && ((found is null) || (statement.Length <= found.Length))) {
+                found = statement;
+            }
+        }
+
+        return found;
+    }
+
+    private IEnumerable<BlockNode> Expansion(StatementNode node, string path, HashSet<SyntaxNode> visited) {
+        if (!visited.Add(item: node)) { yield break; }
+        if (node is BlockNode { Identifier: "shape" } shape) {
+            yield return shape;
+            yield break;
+        }
+        if (node is ExpressionStatementNode { Expression: CallExpressionNode call }) {
+            var previous = m_currentPath;
+
+            m_currentPath = path;
+            var definition = Resolve(name: call.Name, scopes: [m_files.GetValueOrDefault(key: path) ?? []]);
+
+            m_currentPath = previous;
+            if (definition is { Node: TemplateNode template }) {
+                foreach (var found in Expansion(node: template.Body, path: (definition.Path ?? path), visited: visited)) { yield return found; }
+            }
+            yield break;
+        }
+        foreach (var child in ChildStatements(statement: node)) {
+            foreach (var found in Expansion(node: child, path: path, visited: visited)) { yield return found; }
+        }
     }
 
     private static IEnumerable<StatementNode> ChildStatements(StatementNode statement) => statement switch {
@@ -222,16 +302,39 @@ internal sealed class CreationFrameMigration : PuckMigration {
     };
 
     // Every creation document block, at any depth, with whether it is already converted.
-    private static IEnumerable<(BlockNode Block, bool IsNew)> CreationBlocks(IReadOnlyList<StatementNode> statements, string? standalone) {
+    private IEnumerable<(BlockNode Block, bool IsNew)> CreationBlocks(IReadOnlyList<StatementNode> statements, string? standalone, bool inPrototype = false) {
         foreach (var statement in statements) {
-            if ((statement is BlockNode { Identifier: "document" } block) && (SchemaOf(statements: block.Statements) is { } schema) && IsCreationSchema(schema: schema)) {
+            if ((statement is BlockNode { Identifier: "document" } block) && (CreationSchemaOf(document: block, inPrototype: inPrototype) is { } schema)) {
                 yield return (block, (schema == NewSchema));
                 continue;
             }
-            foreach (var found in CreationBlocks(statements: ChildStatements(statement: statement).ToList(), standalone: standalone)) {
+            foreach (var found in CreationBlocks(statements: ChildStatements(statement: statement).ToList(), standalone: standalone, inPrototype: (statement is BlockNode { Identifier: "prototype" }))) {
                 yield return found;
             }
         }
+    }
+
+    // A document block's creation schema: its own literal, or, for a prototype's document, the literal of a template it
+    // calls (a template that writes a creation's whole head), else the retired schema; null for a document that is not a
+    // creation.
+    private string? CreationSchemaOf(BlockNode document, bool inPrototype) {
+        if (SchemaOf(statements: document.Statements) is { } literal) {
+            return (IsCreationSchema(schema: literal) ? literal : null);
+        }
+        if (!inPrototype) { return null; }
+
+        return (SchemaThroughTemplates(statements: document.Statements, visited: new HashSet<SyntaxNode>(comparer: ReferenceEqualityComparer.Instance)) ?? OldSchema);
+    }
+
+    private string? SchemaThroughTemplates(IReadOnlyList<StatementNode> statements, HashSet<SyntaxNode> visited) {
+        foreach (var statement in statements) {
+            if ((statement is ExpressionStatementNode { Expression: CallExpressionNode call }) && (Resolve(name: call.Name, scopes: [m_files.GetValueOrDefault(key: (m_currentPath ?? "")) ?? []]) is { Node: TemplateNode template }) && visited.Add(item: template)) {
+                if ((SchemaOf(statements: template.Body.Statements) is { } literal) && IsCreationSchema(schema: literal)) { return literal; }
+                if (SchemaThroughTemplates(statements: template.Body.Statements, visited: visited) is { } inner) { return inner; }
+            }
+        }
+
+        return null;
     }
 
     private static string? SchemaOf(IReadOnlyList<StatementNode> statements) {
@@ -265,6 +368,9 @@ internal sealed class CreationFrameMigration : PuckMigration {
                 case ExpressionStatementNode { Expression: CallExpressionNode call }:
                     if (Resolve(name: call.Name, scopes: scopes) is { Node: TemplateNode template } definition) {
                         Mark(definition: definition, isNew: isNew, kind: Kind.CreationBody, scopes: scopes);
+                        foreach (var (argument, list) in ListArguments(call: call, template: template)) {
+                            AnalyzeElements(expression: argument.Value, isNew: isNew, kind: ElementOf(list: list), scopes: scopes);
+                        }
                     }
 
                     break;
@@ -276,6 +382,13 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
                     break;
                 case PropertyNode property when CreationLists.TryGetValue(key: property.Name, value: out var list):
+                    // A template that hands a parameter to one of a creation's lists has its callers write those rows.
+                    if ((property.Value is IdentifierExpressionNode parameter) && (m_templates.TryPeek(result: out var enclosing)) && enclosing.Parameters.Any(predicate: p => (p.Name == parameter.Name))) {
+                        if (!m_templateLists.TryGetValue(key: enclosing, value: out var lists)) {
+                            m_templateLists[enclosing] = lists = new Dictionary<string, Kind>(comparer: StringComparer.Ordinal);
+                        }
+                        lists[parameter.Name] = list;
+                    }
                     AnalyzeElements(expression: property.Value, isNew: isNew, kind: ElementOf(list: list), scopes: scopes);
 
                     break;
@@ -358,6 +471,10 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
     private void AnalyzeElement(ExpressionNode element, bool isNew, Kind kind, IReadOnlyList<IReadOnlyList<StatementNode>> scopes) {
         switch (element) {
+            case ForExpressionNode loop:
+                foreach (var produced in loop.Body) { AnalyzeElement(element: produced, isNew: isNew, kind: kind, scopes: scopes); }
+
+                break;
             case ObjectExpressionNode @object:
                 AnalyzeMembers(@object: @object, isNew: isNew, kind: kind, scopes: scopes);
 
@@ -459,7 +576,12 @@ internal sealed class CreationFrameMigration : PuckMigration {
         try {
             switch (node) {
                 case TemplateNode template:
-                    AnalyzeStatements(statements: template.Body.Statements, isNew: isNew, scopes: [template.Body.Statements, .. TopScopes(path: definition.Path)]);
+                    m_templates.Push(item: template);
+                    try {
+                        AnalyzeStatements(statements: template.Body.Statements, isNew: isNew, scopes: [template.Body.Statements, .. TopScopes(path: definition.Path)]);
+                    } finally {
+                        _ = m_templates.Pop();
+                    }
 
                     break;
                 case LetNode { Value: FunctionExpressionNode function }:
@@ -664,9 +786,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
         }
     }
 
-    private bool MayDrop(BlockNode shape) => (m_currentPath is { } path)
-        && m_dropVerdicts.TryGetValue(key: (Path.GetFullPath(path: path), shape.Offset), value: out var verdict)
-        && verdict;
+    private bool MayDrop(BlockNode shape) => (m_shapeVerdicts.TryGetValue(key: shape, value: out var verdict) && verdict);
 
     // ---------------------------------------------------------------------------------------------------------------
     // Rewrite
@@ -682,7 +802,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
         var standalone = (document.Schema == OldSchema);
         var statements = (standalone
-            ? ConvertCreationStatements(statements: document.Statements, setSchema: false)
+            ? ConvertCreationStatements(statements: document.Statements, setSchema: true)
             : VisitStatements(statements: document.Statements));
 
         if (ReferenceEquals(objA: statements, objB: document.Statements) && !standalone) {
@@ -718,11 +838,15 @@ internal sealed class CreationFrameMigration : PuckMigration {
         }
 
         return statement switch {
-            BlockNode { Identifier: "document" } block when (SchemaOf(statements: block.Statements) == OldSchema) => block with {
+            BlockNode { Identifier: "document" } block when (CreationSchemaOf(document: block, inPrototype: false) == OldSchema) => block with {
                 Statements = ConvertCreationStatements(statements: block.Statements, setSchema: true),
             },
             BlockNode { Identifier: "prototype" } prototype when HoldsOldDocument(prototype: prototype) => prototype with {
-                Statements = VisitStatements(statements: [.. prototype.Statements.Select(selector: ConvertMesh)]),
+                Statements = [.. prototype.Statements.Select(selector: s => s switch {
+                    BlockNode { Identifier: "document" } document => document with { Statements = ConvertCreationStatements(statements: document.Statements, setSchema: true) },
+                    BlockNode { Identifier: "mesh" } => ConvertMesh(statement: s),
+                    _ => VisitStatement(statement: s),
+                })],
             },
             BlockNode block => Same(block, block with { Statements = VisitStatements(statements: block.Statements) }, block.Statements),
             TemplateNode template => Same(template, template with { Body = (BlockNode)VisitStatement(statement: template.Body) }, null),
@@ -742,7 +866,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
         _ => rewritten,
     };
 
-    private static bool HoldsOldDocument(BlockNode prototype) => prototype.Statements.Any(predicate: statement => (statement is BlockNode { Identifier: "document" } block) && (SchemaOf(statements: block.Statements) == OldSchema));
+    private bool HoldsOldDocument(BlockNode prototype) => prototype.Statements.Any(predicate: statement => (statement is BlockNode { Identifier: "document" } block) && (CreationSchemaOf(document: block, inPrototype: true) == OldSchema));
 
     // A prototype's mesh is authored in its creation's frame.
     private StatementNode ConvertMesh(StatementNode statement) {
@@ -750,7 +874,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
         return mesh with {
             Statements = [.. mesh.Statements.Select(selector: s => ((s is PropertyNode { Name: "vertices" } vertices)
-                ? vertices with { Value = MapElements(expression: vertices.Value, map: FlipVector) }
+                ? vertices with { Value = MapElements(expression: vertices.Value, map: vertex => Replace(old: vertex, @new: FlipVector(vector: vertex))) }
                 : s))],
         };
     }
@@ -758,7 +882,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
     private StatementNode Convert(StatementNode statement, Kind kind) {
         switch (statement) {
             case TemplateNode template:
-                return template with { Body = template.Body with { Statements = ConvertCreationStatements(statements: template.Body.Statements, setSchema: false) } };
+                return template with { Body = template.Body with { Statements = ConvertCreationStatements(statements: template.Body.Statements, setSchema: true) } };
             case LetNode { Value: FunctionExpressionNode function } let:
                 return let with { Value = function with { Body = ConvertValue(value: function.Body, kind: kind) } };
             case LetNode let:
@@ -789,11 +913,17 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
         switch (statement) {
             case PropertyNode { Name: "schema", Value: LiteralExpressionNode { Value: OldSchema } literal } schema when setSchema:
-                return schema with { Value = literal with { Value = NewSchema } };
+                return schema with { Value = Replace(old: literal, @new: literal with { Value = NewSchema, RawFenced = false }, owner: schema) };
             case BlockNode { Identifier: "shape" } shape:
                 return ConvertShapeBlock(shape: shape);
             case PropertyNode property when CreationLists.TryGetValue(key: property.Name, value: out var list):
                 return property with { Value = ConvertElements(expression: property.Value, kind: ElementOf(list: list)) };
+            case ExpressionStatementNode { Expression: CallExpressionNode call } when (Resolve(name: call.Name, scopes: [m_files.GetValueOrDefault(key: (m_currentPath ?? "")) ?? []]) is { Node: TemplateNode template }):
+                foreach (var (argument, list) in ListArguments(call: call, template: template)) {
+                    _ = ConvertElements(expression: argument.Value, kind: ElementOf(list: list));
+                }
+
+                return statement;
             case ForStatementNode loop:
                 return loop with { Body = ConvertCreationStatements(statements: loop.Body, setSchema: false) };
             case ConditionalStatementNode conditional:
@@ -812,17 +942,21 @@ internal sealed class CreationFrameMigration : PuckMigration {
         var rotated = false;
         var positionAt = -1;
 
+        PropertyNode? position = null;
+
         foreach (var statement in shape.Statements) {
             switch (statement) {
                 case PropertyNode { Name: "position" or "joint" } vector:
-                    if (vector.Name == "position") { positionAt = statements.Count; }
-                    statements.Add(item: vector with { Value = Keep(old: vector.Value, @new: FlipVector(vector: vector.Value)) });
+                    if (vector.Name == "position") { positionAt = statements.Count; position = vector; }
+                    statements.Add(item: vector with { Value = Replace(old: vector.Value, @new: FlipVector(vector: vector.Value), owner: vector) });
 
                     break;
                 case PropertyNode { Name: "rotation" } rotation:
                     rotated = true;
                     if ((symmetric ? Conjugate(rotation: rotation.Value) : HalfTurnThen(rotation: rotation.Value)) is { } value) {
-                        statements.Add(item: rotation with { Value = Keep(old: rotation.Value, @new: value) });
+                        statements.Add(item: rotation with { Value = Replace(old: rotation.Value, @new: value, owner: rotation) });
+                    } else {
+                        Remove(property: rotation);
                     }
 
                     break;
@@ -846,22 +980,192 @@ internal sealed class CreationFrameMigration : PuckMigration {
         }
 
         if (!rotated && !symmetric) {
-            statements.Insert(index: (positionAt + 1), item: new PropertyNode(Name: "rotation", Value: HalfTurnRotation()));
+            var added = new PropertyNode(Name: "rotation", Value: HalfTurnRotation());
+
+            statements.Insert(index: (positionAt + 1), item: added);
+            Insert(after: position, before: shape.Statements.FirstOrDefault(), property: added);
         }
 
         return shape with { Statements = statements };
     }
-
-    private static T Keep<T>(ExpressionNode old, T @new) where T : ExpressionNode => (ReferenceEquals(objA: old, objB: @new) ? @new : (T)@new.WithTrivia(trivia: old.Trivia));
 
     private ExpressionNode ConvertDomainOp(ExpressionNode op) {
         if (op is not CallExpressionNode { Name: "symmetry" } call) { return op; }
 
         return call with {
             Arguments = [.. call.Arguments.Select(selector: (argument, index) => (((argument.Name == "normal") || ((argument.Name is null) && (index == 0)))
-                ? argument with { Value = FlipVector(vector: argument.Value) }
+                ? argument with { Value = Replace(old: argument.Value, @new: FlipVector(vector: argument.Value)) }
                 : argument))],
         };
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Edits: each changed value is spliced into the author's text, so everything the rewrite does not touch keeps its
+    // layout and comments.
+    // ---------------------------------------------------------------------------------------------------------------
+
+    private readonly List<(int Offset, int Length, string Text)> m_edits = [];
+    private string m_source = "";
+
+    // A value's text is found by reading the author's text, not from a node's span: the region of a property's value runs
+    // from after its name (and colon) to where the value ends.
+    private T Replace<T>(ExpressionNode old, T @new, PropertyNode? owner = null) where T : ExpressionNode {
+        if (ReferenceEquals(objA: old, objB: @new)) { return @new; }
+
+        var text = Text(node: @new);
+
+        if (owner is not null) {
+            var nameEnd = (owner.Offset + NameLength(at: owner.Offset));
+            var start = ValueStart(from: nameEnd);
+            var container = (@new is ArrayExpressionNode or ObjectExpressionNode);
+
+            m_edits.Add(item: (nameEnd, (ValueEnd(start: start) - nameEnd), (container ? $" {text}" : $": {text}")));
+        } else {
+            m_edits.Add(item: (old.Offset, (ValueEnd(start: old.Offset) - old.Offset), text));
+        }
+
+        return @new;
+    }
+
+    private int NameLength(int at) {
+        var end = at;
+
+        if ((end < m_source.Length) && (m_source[end] == '`')) {
+            end = (m_source.IndexOf(value: '`', startIndex: (end + 1)) + 1);
+            return (end - at);
+        }
+        while ((end < m_source.Length) && (char.IsLetterOrDigit(c: m_source[end]) || (m_source[end] is '_' or '$' or '.'))) { end++; }
+
+        return (end - at);
+    }
+
+    private int ValueStart(int from) {
+        var at = from;
+
+        while ((at < m_source.Length) && (m_source[at] is ' ' or '\t')) { at++; }
+        if ((at < m_source.Length) && (m_source[at] is ':' or '=')) { at++; }
+        while ((at < m_source.Length) && (m_source[at] is ' ' or '\t')) { at++; }
+
+        return at;
+    }
+
+    // Where a value that starts at `start` ends: at a line break, a comma or a closing bracket outside every bracket it
+    // opens, unless the line ends on an operator that continues it.
+    private int ValueEnd(int start) {
+        var depth = 0;
+        var at = start;
+
+        while (at < m_source.Length) {
+            var c = m_source[at];
+
+            if (c == '"') {
+                at = StringEnd(at: at);
+                continue;
+            }
+            if ((c == '/') && ((at + 1) < m_source.Length) && (m_source[at + 1] == '/')) {
+                if (depth == 0) { break; }
+                at = m_source.IndexOf(value: '\n', startIndex: at);
+                if (at < 0) { at = m_source.Length; }
+                continue;
+            }
+            if (c is '(' or '[' or '{') {
+                depth++;
+            } else if (c is ')' or ']' or '}') {
+                if (depth == 0) { break; }
+                depth--;
+                // A container written as the whole value ends where it closes, whatever stands beside it on the line.
+                if ((depth == 0) && (m_source[start] is '[' or '{')) {
+                    at++;
+                    break;
+                }
+            } else if ((c == ',') && (depth == 0)) {
+                break;
+            } else if ((c is '\n' or '\r') && (depth == 0)) {
+                var before = m_source[start..at].TrimEnd();
+
+                if (!(before.EndsWith(value: '+') || before.EndsWith(value: '-') || before.EndsWith(value: '*') || before.EndsWith(value: '/') || before.EndsWith(value: '?') || before.EndsWith(value: ':') || before.EndsWith(value: " and", comparisonType: StringComparison.Ordinal) || before.EndsWith(value: " or", comparisonType: StringComparison.Ordinal))) {
+                    break;
+                }
+            }
+            at++;
+        }
+
+        while ((at > start) && char.IsWhiteSpace(c: m_source[at - 1])) { at--; }
+
+        return at;
+    }
+
+    private int StringEnd(int at) {
+        if (string.CompareOrdinal(strA: m_source, indexA: at, strB: "\"\"\"", indexB: 0, length: 3) == 0) {
+            var close = m_source.IndexOf(value: "\"\"\"", startIndex: (at + 3), comparisonType: StringComparison.Ordinal);
+
+            return ((close < 0) ? m_source.Length : (close + 3));
+        }
+
+        var i = (at + 1);
+
+        while (i < m_source.Length) {
+            if (m_source[i] == '\\') { i += 2; continue; }
+            if (m_source[i] == '"') { return (i + 1); }
+            i++;
+        }
+
+        return i;
+    }
+
+    // A property removed with its own line, or, written among others on one line, set to the identity.
+    private void Remove(PropertyNode property) {
+        var end = ValueEnd(start: ValueStart(from: (property.Offset + NameLength(at: property.Offset))));
+        var lineStart = (m_source.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (property.Offset - 1))) + 1);
+        var lineEnd = m_source.IndexOf(value: '\n', startIndex: end);
+
+        if (string.IsNullOrWhiteSpace(value: m_source[lineStart..property.Offset]) && (lineEnd >= 0) && string.IsNullOrWhiteSpace(value: m_source[end..lineEnd])) {
+            m_edits.Add(item: (lineStart, ((lineEnd + 1) - lineStart), ""));
+        } else {
+            _ = Replace(old: property.Value, @new: new ArrayExpressionNode(Elements: [Literal(value: 0L), Literal(value: 0L), Literal(value: 0L), Literal(value: 1L)]), owner: property);
+        }
+    }
+
+    // A property added after `after`, on its own line where `after` stands on its own line and beside it otherwise; with
+    // no `after`, before `before`.
+    private void Insert(StatementNode? after, StatementNode? before, PropertyNode property) {
+        var text = $"{property.Name}: {Text(node: property.Value)}";
+        var anchor = (after ?? before);
+
+        if (anchor is null) { return; }
+
+        var lineStart = (m_source.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (anchor.Offset - 1))) + 1);
+        var ownLine = string.IsNullOrWhiteSpace(value: m_source[lineStart..anchor.Offset]);
+        var indent = (ownLine ? m_source[lineStart..anchor.Offset] : "");
+
+        if (after is not null) {
+            var end = ValueEnd(start: ValueStart(from: (after.Offset + NameLength(at: after.Offset))));
+
+            m_edits.Add(item: (end, 0, (ownLine ? $"\n{indent}{text}" : $", {text}")));
+        } else {
+            m_edits.Add(item: (before!.Offset, 0, (ownLine ? $"{text}\n{indent}" : $"{text}, ")));
+        }
+    }
+
+    private static string Text(ExpressionNode node) => PuckPrinter.PrintExpression(expression: node);
+
+    /// <inheritdoc/>
+    public override string? ApplyText(string source, DocumentNode document, string path) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: document);
+        m_edits.Clear();
+        m_source = source;
+        _ = Apply(document: document, path: path);
+
+        if (m_edits.Count == 0) { return null; }
+
+        var builder = new System.Text.StringBuilder(value: source);
+
+        foreach (var (offset, length, text) in m_edits.OrderByDescending(keySelector: static edit => edit.Offset).ThenByDescending(keySelector: static edit => edit.Length)) {
+            builder.Remove(startIndex: offset, length: length).Insert(index: offset, value: text);
+        }
+
+        return builder.ToString();
     }
 
     private ExpressionNode ConvertElements(ExpressionNode expression, Kind kind) {
@@ -891,8 +1195,28 @@ internal sealed class CreationFrameMigration : PuckMigration {
 
     private ExpressionNode ConvertElement(ExpressionNode element, Kind kind) {
         switch (element) {
+            case ForExpressionNode loop:
+                return loop with { Body = [.. loop.Body.Select(selector: produced => ConvertElement(element: produced, kind: kind))] };
             case ObjectExpressionNode @object:
                 return ConvertMembers(@object: @object, kind: kind);
+            case WithExpressionNode { Base: IdentifierExpressionNode @base, Overrides: ObjectExpressionNode overrides } derived when (kind is Kind.Shape or Kind.TextRun or Kind.Volume or Kind.Transform) && (Resolve(name: @base.Name, scopes: [m_files.GetValueOrDefault(key: (m_currentPath ?? "")) ?? []]) is null):
+                // A row derived from one the rewrite cannot reach (a lambda's element): the override turns what it
+                // keeps of the row as well as what it writes.
+                var converted = ConvertElement(element: overrides, kind: kind);
+                var position = overrides.Properties.FirstOrDefault(predicate: static property => property.Name is "position");
+
+                if (!overrides.Properties.Any(predicate: static property => property.Name is "rotation")) {
+                    var kept = new MemberAccessExpressionNode(Target: new WithExpressionNode(Base: new ObjectExpressionNode(Properties: [new PropertyNode(Name: "rotation", Value: new ArrayExpressionNode(Elements: [Literal(value: 0L), Literal(value: 0L), Literal(value: 0L), Literal(value: 1L)]))]), Overrides: @base) { Parenthesized = true }, Member: "rotation");
+
+                    Insert(after: position, before: overrides.Properties.FirstOrDefault(), property: new PropertyNode(Name: "rotation", Value: Call("compose", HalfTurnRotation(), kept)));
+                }
+                if (position is null) {
+                    var kept = new MemberAccessExpressionNode(Target: new WithExpressionNode(Base: new ObjectExpressionNode(Properties: [new PropertyNode(Name: "position", Value: new ArrayExpressionNode(Elements: [Literal(value: 0L), Literal(value: 0L), Literal(value: 0L)]))]), Overrides: @base) { Parenthesized = true }, Member: "position");
+
+                    Insert(after: null, before: overrides.Properties.FirstOrDefault(), property: new PropertyNode(Name: "position", Value: FlipVector(vector: kept)));
+                }
+
+                return derived with { Overrides = converted };
             case WithExpressionNode derived:
                 return derived with {
                     Base = ConvertElement(element: derived.Base, kind: kind),
@@ -916,18 +1240,21 @@ internal sealed class CreationFrameMigration : PuckMigration {
         var properties = new List<PropertyNode>(capacity: (@object.Properties.Count + 1));
         var rotated = false;
         var positionAt = -1;
+        PropertyNode? position = null;
 
         foreach (var property in @object.Properties) {
             switch (MemberKind(element: kind, member: property.Name)) {
                 case Kind.Vector:
-                    if (property.Name == "position") { positionAt = properties.Count; }
-                    properties.Add(item: property with { Value = Keep(old: property.Value, @new: FlipVector(vector: property.Value)) });
+                    if (property.Name == "position") { positionAt = properties.Count; position = property; }
+                    properties.Add(item: property with { Value = Replace(old: property.Value, @new: FlipVector(vector: property.Value), owner: property) });
 
                     break;
                 case Kind.RotationExact:
                     rotated = true;
                     if (HalfTurnThen(rotation: property.Value) is { } value) {
-                        properties.Add(item: property with { Value = Keep(old: property.Value, @new: value) });
+                        properties.Add(item: property with { Value = Replace(old: property.Value, @new: value, owner: property) });
+                    } else {
+                        Remove(property: property);
                     }
 
                     break;
@@ -953,7 +1280,10 @@ internal sealed class CreationFrameMigration : PuckMigration {
         // A row that leaves its rotation out (a shape, a run, a volume or a frame pose) still turns by the half turn; an
         // override (a `with` object) that leaves it out keeps its base's.
         if (!rotated && (kind is Kind.Shape or Kind.TextRun or Kind.Volume or Kind.Transform) && (positionAt >= 0) && !IsOverride(@object: @object)) {
-            properties.Insert(index: (positionAt + 1), item: new PropertyNode(Name: "rotation", Value: HalfTurnRotation()));
+            var added = new PropertyNode(Name: "rotation", Value: HalfTurnRotation());
+
+            properties.Insert(index: (positionAt + 1), item: added);
+            Insert(after: position, before: null, property: added);
         }
 
         return @object with { Properties = properties };
@@ -975,7 +1305,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
     private static ExpressionNode FlipVector(ExpressionNode vector) {
         switch (vector) {
             case ArrayExpressionNode { Elements.Count: 3 } array:
-                return array with { Elements = [Keep(old: array.Elements[0], @new: Negate(value: array.Elements[0])), array.Elements[1], Keep(old: array.Elements[2], @new: Negate(value: array.Elements[2]))] };
+                return array with { Elements = [Negate(value: array.Elements[0]), array.Elements[1], Negate(value: array.Elements[2])] };
             case ArrayExpressionNode { Elements.Count: 2 } pair:
                 // A two-element vertex (a profile's x, y) is not a creation-frame point; only a mesh's three-element one is.
                 return pair;
@@ -986,6 +1316,9 @@ internal sealed class CreationFrameMigration : PuckMigration {
                 return binary.Left;
             case ConditionalExpressionNode conditional:
                 return conditional with { WhenTrue = FlipVector(vector: conditional.WhenTrue), WhenFalse = FlipVector(vector: conditional.WhenFalse) };
+            case LiteralExpressionNode { Value: string }:
+                // A state binding names a cell the world writes, in the frame the world writes it: nothing to turn.
+                return vector;
             default:
                 return new BinaryExpressionNode(Left: Operand(expression: vector), Operator: "*", Right: Mask(count: 3)) { Parenthesized = true };
         }
@@ -1054,10 +1387,14 @@ internal sealed class CreationFrameMigration : PuckMigration {
         _ => ("-" + raw),
     };
 
-    private static ExpressionNode HalfTurnRotation() => new CallExpressionNode(Name: "rotate", Arguments: [
-        new ArgumentNode(Name: null, Value: new ArrayExpressionNode(Elements: [Literal(value: 0L), Literal(value: 1L), Literal(value: 0L)])),
-        new ArgumentNode(Name: null, Value: Literal(value: 180L)),
-    ]);
+    // The arguments of a call the rewrite writes, each but the last followed by its comma, as the parser reads a call broken
+    // across lines.
+    private static CallExpressionNode Call(string name, params ExpressionNode[] arguments) => new(
+        Name: name,
+        Arguments: [.. arguments.Select(selector: (value, index) => new ArgumentNode(Name: null, Value: value) { Trivia = SyntaxTrivia.None with { Separated = (index < (arguments.Length - 1)) } })]
+    );
+
+    private static ExpressionNode HalfTurnRotation() => Call("rotate", new ArrayExpressionNode(Elements: [Literal(value: 0L), Literal(value: 1L), Literal(value: 0L)]), Literal(value: 180L));
 
     /// <summary>The rotation the half turn about +Y followed by <paramref name="rotation"/> makes, or <see langword="null"/>
     /// for none (a half turn twice).</summary>
@@ -1092,10 +1429,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
                     };
                 }
             default:
-                return new CallExpressionNode(Name: "compose", Arguments: [
-                    new ArgumentNode(Name: null, Value: HalfTurnRotation()),
-                    new ArgumentNode(Name: null, Value: rotation.WithTrivia(trivia: SyntaxTrivia.None) as ExpressionNode ?? rotation),
-                ]);
+                return Call("compose", HalfTurnRotation(), (ExpressionNode)rotation.WithTrivia(trivia: SyntaxTrivia.None));
         }
     }
 
@@ -1214,12 +1548,16 @@ internal sealed class CreationFrameMigration : PuckMigration {
         ? new Quaternion(x: Float(node: array[0]), y: Float(node: array[1]), z: Float(node: array[2]), w: Float(node: array[3]))
         : null);
 
-    private static float Float(JsonNode? node) => (float)node!.GetValue<double>();
+    private static float Float(JsonNode? node) => (float)Num(node: node)!.Value;
+
+    private static double? Num(JsonNode? node) => (node is JsonValue value)
+        ? (value.TryGetValue<double>(value: out var d) ? d : value.TryGetValue<long>(value: out var l) ? l : value.TryGetValue<int>(value: out var i) ? i : value.TryGetValue<float>(value: out var f) ? f : value.TryGetValue<decimal>(value: out var m) ? (double)m : null)
+        : null;
 
     private static void FlipInPlace(JsonNode? vector) {
         if (vector is not JsonArray { Count: 3 } array) { return; }
-        array[0] = -array[0]!.GetValue<double>();
-        array[2] = -array[2]!.GetValue<double>();
+        array[0] = -Num(node: array[0])!.Value;
+        array[2] = -Num(node: array[2])!.Value;
     }
 
     private static string? Compare(JsonNode? expected, JsonNode? actual, string path, Dictionary<string, bool> allowances) {
@@ -1253,7 +1591,7 @@ internal sealed class CreationFrameMigration : PuckMigration {
                     return null;
                 }
             case JsonValue expectedValue when (actual is JsonValue actualValue):
-                if (expectedValue.TryGetValue<double>(value: out var e) && actualValue.TryGetValue<double>(value: out var a)) {
+                if ((Num(node: expectedValue) is { } e) && (Num(node: actualValue) is { } a)) {
                     return (Close(a: e, b: a) ? null : $"{path}: expected {e}, found {a}");
                 }
 
@@ -1275,8 +1613,9 @@ internal sealed class CreationFrameMigration : PuckMigration {
             return Compare(expected: e.DeepClone(), actual: a.DeepClone(), path: (path + "#"), allowances: allowances);
         }
 
-        var q = ReadQuaternion(node: e)!.Value;
-        var r = ReadQuaternion(node: a)!.Value;
+        // A rotation is read normalized, as the canonicalizer reads it: an authored literal of a few digits is not unit.
+        var q = Quaternion.Normalize(value: ReadQuaternion(node: e)!.Value);
+        var r = Quaternion.Normalize(value: ReadQuaternion(node: a)!.Value);
 
         if (SameRotation(q: q, r: r)) { return null; }
 
