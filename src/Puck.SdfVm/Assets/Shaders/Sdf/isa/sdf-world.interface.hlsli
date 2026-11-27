@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/cb8240cfd55a35097953f6a3310c4f8775461fcc9090f1c12926d463abd25011). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/80a701df9542abd1a5b5837b54c574bb9c9e730627437708bcff28cb1201e71d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -124,7 +124,7 @@ struct SdfWorldFrame {
 [[vk::binding(22, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t22, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
-[[vk::binding(24, 1)]] StructuredBuffer<uint> sdfFieldSliceWords : register(t24, space1);
+[[vk::binding(24, 1)]] StructuredBuffer<float4> sdfFieldEntries : register(t24, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfWorldPass {
@@ -153,9 +153,9 @@ struct SdfWorldPass {
     [[vk::offset(116)]] uint _pad116;
     [[vk::offset(120)]] uint _pad120;
     [[vk::offset(124)]] uint _pad124;
-    [[vk::offset(128)]] float4 fieldSliceAxisU;
-    [[vk::offset(144)]] float4 fieldSliceAxisV;
-    [[vk::offset(160)]] float4 fieldSliceOrigin;
+    [[vk::offset(128)]] float4 fieldPlane;
+    [[vk::offset(144)]] float4 fieldScope;
+    [[vk::offset(160)]] float4 fieldStyle;
     [[vk::offset(176)]] float flowClock;
     [[vk::offset(180)]] uint _pad180;
     [[vk::offset(184)]] float2 frustumOffset;
@@ -260,8 +260,8 @@ struct SdfWorldPass {
     [[vk::offset(3452)]] uint _pad3452;
     [[vk::offset(3456)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaA5A75D14 : register(b0, space3);
-#define passGroup passGroupIsaA5A75D14
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa495517B7 : register(b0, space3);
+#define passGroup passGroupIsa495517B7
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -303,7 +303,7 @@ struct SdfWorldPass {
 [[vk::binding(166, 3)]] StructuredBuffer<uint> sdfReflectionDepth : register(t166, space3);
 [[vk::binding(167, 3)]] RWStructuredBuffer<uint> sdfReflectionDepthRW : register(u167, space3);
 [[vk::binding(168, 3)]] RWStructuredBuffer<uint> sdfReflectionColorRW : register(u168, space3);
-[[vk::binding(169, 3)]] StructuredBuffer<uint> sdfOverlapSpans : register(t169, space3);
+[[vk::binding(169, 3)]] RWStructuredBuffer<uint> sdfFieldColorsRW : register(u169, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

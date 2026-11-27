@@ -549,7 +549,7 @@ public sealed class SdfMeshDresser : IDisposable {
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
                     // Every group and piece of one placed copy is one object.
-                    ObjectKey = CopyObjectKey(copy: m_copyIndex),
+                    ObjectKey = SdfMeshObjectKeys.OfCopy(copy: m_copyIndex),
                     Piece = m_piece,
                     Tier = ((m_group is null) ? -1 : m_tier),
                     Trace = m_trace,
@@ -578,7 +578,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 IsDynamic = m_group.Dynamic,
                 // Every piece and tier of one bake group is one object, and so is every group of one object the program
                 // declares (SdfInstanceRange.JoinsPreviousObject).
-                ObjectKey = GroupObjectKey(firstInstance: ObjectHeadOf(instances: frame.Program.Instances, instance: m_group.FirstInstance)),
+                ObjectKey = SdfMeshObjectKeys.OfGroup(head: SdfMeshObjectKeys.HeadOf(instances: frame.Program.Instances, instance: m_group.FirstInstance)),
                 Piece = m_piece,
                 Tier = m_tier,
                 Trace = m_trace,
@@ -587,23 +587,6 @@ public sealed class SdfMeshDresser : IDisposable {
             return true;
         }
 
-        // The object keys (SdfMeshDraw.ObjectKey): a placed copy's from its index in the frame's copies, a bake group's
-        // from the first program instance of the object its first instance belongs to, in two halves of the key's range so
-        // no copy shares a group's (SdfMeshRecord.GroupObjectKeyBit).
-        private const uint GroupObjectKeys = SdfMeshRecord.GroupObjectKeyBit;
-        // The first instance of the object an instance belongs to: the instance itself unless it joins the one before it.
-        // An instance the program does not hold (a group kept from another program) is its own head.
-        private static int ObjectHeadOf(IReadOnlyList<SdfInstanceRange> instances, int instance) {
-            if ((instance < 0) || (instance >= instances.Count)) {
-                return instance;
-            }
-            while ((instance > 0) && instances[instance].JoinsPreviousObject) {
-                instance--;
-            }
-            return instance;
-        }
-        private static uint CopyObjectKey(int copy) => (1u + (((uint)copy) % (GroupObjectKeys - 1u)));
-        private static uint GroupObjectKey(int firstInstance) => (GroupObjectKeys | (((uint)firstInstance) & (GroupObjectKeys - 1u)));
     }
 
 }

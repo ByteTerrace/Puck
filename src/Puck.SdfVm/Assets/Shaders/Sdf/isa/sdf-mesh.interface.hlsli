@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/4a01c8d11d79f9ccbf50fa05d3210db72e8b8c7c03137a88b17977f5e7d7f3f4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/0150fee57fe263d323419fa05024d11b99dd8a905b4b02b113499f2873aab710). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -29,9 +29,9 @@ struct SdfMeshPass {
     [[vk::offset(116)]] uint _pad116;
     [[vk::offset(120)]] uint _pad120;
     [[vk::offset(124)]] uint _pad124;
-    [[vk::offset(128)]] float4 fieldSliceAxisU;
-    [[vk::offset(144)]] float4 fieldSliceAxisV;
-    [[vk::offset(160)]] float4 fieldSliceOrigin;
+    [[vk::offset(128)]] float4 fieldPlane;
+    [[vk::offset(144)]] float4 fieldScope;
+    [[vk::offset(160)]] float4 fieldStyle;
     [[vk::offset(176)]] float flowClock;
     [[vk::offset(180)]] uint _pad180;
     [[vk::offset(184)]] float2 frustumOffset;

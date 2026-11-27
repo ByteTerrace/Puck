@@ -223,12 +223,12 @@ public sealed partial class SdfWorldTables {
     public SdfViewExposures? ViewExposures { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
     /// instance-mask width, the mesh draws (the bound of the mesh hit door, zero on a frame <see cref="ForceHitBound"/>
-    /// armed), the debug view mode, the views' exposures and the live field slice.</summary>
+    /// armed), the debug view mode, the views' exposures and the field views.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
         DebugOptions: DebugOptions,
         Exposures: ViewExposures,
-        FieldSlice: FieldSliceValues,
+        Field: m_fieldValues,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: (m_hitBoundForced ? 0u : MeshDrawCount),
         ScreenCount: BoundScreenCount(),

@@ -124,7 +124,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_meshIrradiance.Buffer ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
         WriteWorldBuffer(buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
-        WriteWorldBuffer(buffer: m_fieldSliceRegion.Buffer(slot: slot), member: SdfWorldPackage.FieldSliceWords, set: set);
+        WriteWorldBuffer(buffer: m_fieldEntriesRegion.Buffer(slot: slot), member: SdfWorldPackage.FieldEntries, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 
         var samplers = WorldBinding(member: SdfWorldPackage.Samplers);

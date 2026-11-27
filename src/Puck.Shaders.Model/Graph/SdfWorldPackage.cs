@@ -189,15 +189,19 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the object grid's patch radius in reference-local units, zero disabling it
     /// (<c>float</c>).</summary>
     public const string GridObjectPatchRadius = "gridObjectPatchRadius";
-    /// <summary>The pass-group value holding the live field slice's square centre in world metres and its opacity, zero
-    /// drawing no slice (<c>float4</c>, <c>Puck.SdfVm.SdfLiveFieldSlice</c>).</summary>
-    public const string FieldSliceOrigin = "fieldSliceOrigin";
-    /// <summary>The pass-group value holding the live field slice's unit <c>u</c> axis and the square's half side in
-    /// metres (<c>float4</c>).</summary>
-    public const string FieldSliceAxisU = "fieldSliceAxisU";
-    /// <summary>The pass-group value holding the live field slice's unit <c>v</c> axis and its samples a side
+    /// <summary>The pass-group value placing the field view's slicing plane (<c>Puck.SdfVm.SdfFieldView</c>), read by its
+    /// kind (<see cref="FieldStyle"/>): an axis plane's unit normal and its offset along it, in metres; a camera plane's
+    /// distance ahead of the eye in <c>w</c>; an eye plane's height above the eye in <c>w</c>; a pointer plane's unit normal,
+    /// or zero to face the camera (<c>float4</c>).</summary>
+    public const string FieldPlane = "fieldPlane";
+    /// <summary>The pass-group value styling the field view's slicing plane: its band spacing in metres, its opacity, its
+    /// kind (zero for no plane, then axis, camera, eye and pointer, <c>Puck.SdfVm.SdfFieldPlaneKind</c>) and its panel (zero
+    /// for the distance, one for the gradient, two for both, <c>Puck.SdfVm.SdfFieldPanel</c>) (<c>float4</c>).</summary>
+    public const string FieldStyle = "fieldStyle";
+    /// <summary>The pass-group value the field pass reads beside its entries: how many entries <see cref="FieldEntries"/>
+    /// holds, and the pointer's position in the view as a share of its width and height, negative for none
     /// (<c>float4</c>).</summary>
-    public const string FieldSliceAxisV = "fieldSliceAxisV";
+    public const string FieldScope = "fieldScope";
     /// <summary>The pass-group value set to one to skip the soft-shadow march (<c>uint</c>).</summary>
     public const string DisableSoftShadows = "disableSoftShadows";
     /// <summary>The pass-group value set to one to skip ambient occlusion (<c>uint</c>).</summary>
@@ -265,10 +269,10 @@ public static partial class SdfWorldPackage {
     /// field's header and its heights this frame and the frame before, <c>Puck.SdfVm.SdfFrameSampled</c>). The tables
     /// write it from the frame's sampled set, owing only the words that moved; the mesh bake never reads it.</summary>
     public const string FrameSampled = "sdfFrameSampled";
-    /// <summary>The live field slice's colours, one word a sample, rows from the top: red, green and blue in the low three
-    /// bytes, display-encoded as <c>Puck.SdfVm.SdfFieldSlice.RenderPlane</c> writes them. The composite draws it over the
-    /// view where <see cref="FieldSliceOrigin"/>'s opacity is positive.</summary>
-    public const string FieldSliceWords = "sdfFieldSliceWords";
+    /// <summary>The field view's entries, <see cref="FieldEntryRows"/> rows each (<c>Puck.SdfVm.SdfFieldEntries</c>): every
+    /// run of program instances the field pass walks as one, each with the frame it is evaluated in and the object it
+    /// belongs to. The tables write it only while a view shows a field view.</summary>
+    public const string FieldEntries = "sdfFieldEntries";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
     /// <summary>The presentation's mesh region as a stream of words: the positions, triangle materials and indices a
@@ -397,9 +401,9 @@ public static partial class SdfWorldPackage {
         Value(name: GridObjectPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectFrame, type: ShaderValueType.Float4),
         Value(name: GridObjectPatchRadius, type: ShaderValueType.Float),
-        Value(name: FieldSliceOrigin, type: ShaderValueType.Float4),
-        Value(name: FieldSliceAxisU, type: ShaderValueType.Float4),
-        Value(name: FieldSliceAxisV, type: ShaderValueType.Float4),
+        Value(name: FieldPlane, type: ShaderValueType.Float4),
+        Value(name: FieldStyle, type: ShaderValueType.Float4),
+        Value(name: FieldScope, type: ShaderValueType.Float4),
         Value(name: DisableSoftShadows, type: ShaderValueType.Uint),
         Value(name: DisableAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
@@ -543,7 +547,7 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: ReflectionDepth),
         Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
         Written(element: ShaderValueType.Uint, name: ReflectionColorWritten),
-        Read(element: ShaderValueType.Uint, name: OverlapSpans),
+        Written(element: ShaderValueType.Uint, name: FieldColorsWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

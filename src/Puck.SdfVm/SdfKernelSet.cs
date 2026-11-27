@@ -132,6 +132,7 @@ public sealed class SdfKernelSet {
         SdfKernel.ViewsBins => "sdf-world-views-bins",
         SdfKernel.ViewsShade => "sdf-world-views-shade",
         SdfKernel.ViewsShadePlain => "sdf-world-views-shade-plain",
+        SdfKernel.FieldView => "sdf-world-field",
         SdfKernel.Sky => "sdf-sky-runs",
         SdfKernel.Composite => "sdf-composite",
         SdfKernel.Glass => "sdf-glass",

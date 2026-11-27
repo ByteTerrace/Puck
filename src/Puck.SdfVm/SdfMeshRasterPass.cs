@@ -33,10 +33,6 @@ public sealed class SdfMeshRasterPass {
     /// pass's vertex stage: every glass face accumulates its signed ray distance into the glass sums where it lies before
     /// the opaque hit, and the nearest front face writes the glass target through the pass's own depth.</summary>
     public const string GlassShaderStem = "sdf-mesh-glass";
-    /// <summary>The file stem of the overlap pipeline's fragment stage, <c>sdf-mesh-overlaps.frag</c>, drawn with the mesh
-    /// pass's vertex stage: every opaque face behind a pixel's visible surface keeps its ray distance in the overlap spans
-    /// when it is the nearest of its kind (<c>SdfWorldPackage.WithOverlaps</c>), and no face writes the target.</summary>
-    public const string OverlapShaderStem = "sdf-mesh-overlaps";
     /// <summary>The file stem of the mesh pass's occlusion kernel, <c>sdf-mesh-occlusion.comp</c>, which tests each
     /// draw's box against the depth of the pass's first phase and writes both phases' counted indirect draws.</summary>
     public const string OcclusionShaderStem = "sdf-mesh-occlusion";
@@ -56,7 +52,6 @@ public sealed class SdfMeshRasterPass {
             stage: "frag",
             stem: GlassShaderStem
         ),
-        overlapFragment: Load(target: target, directory: SdfKernelSet.DefaultDirectory, stage: "frag", stem: OverlapShaderStem),
         occlusion: Load(
             target: target,
             directory: SdfKernelSet.DefaultDirectory,
@@ -89,9 +84,8 @@ public sealed class SdfMeshRasterPass {
     /// <param name="occlusion">The mesh pass occlusion kernel's bytecode (<see cref="OcclusionShaderStem"/>).</param>
     /// <param name="shadowGlassVertex">The cascade vertex stage with glass attributes.</param>
     /// <param name="shadowGlassFragment">The cascade's glass extinction stage.</param>
-    /// <param name="overlapFragment">The overlap pipeline's fragment stage's bytecode, drawn with <paramref name="vertex"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment, ReadOnlyMemory<byte> shadowGlassVertex, ReadOnlyMemory<byte> overlapFragment) {
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment, ReadOnlyMemory<byte> shadowGlassVertex) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
@@ -114,7 +108,6 @@ public sealed class SdfMeshRasterPass {
             fragment: glassFragment,
             vertex: vertex
         );
-        OverlapKey = OverlapKeyOf(fragment: overlapFragment, vertex: vertex);
     }
 
     /// <summary>Gets the pipeline's description: the mesh interface's layout, no vertex input, the reversed-Z depth test
@@ -137,10 +130,6 @@ public sealed class SdfMeshRasterPass {
     /// <summary>Gets the glass pipeline's description: the mesh pass's without culling, named for the glass stage. It draws in the mesh
     /// pass's render pass (<see cref="RenderPass"/>), into the glass target and the glass pass's own depth.</summary>
     public static GpuGraphicsPipelineDescription GlassDescription { get; } = Description with { Cull = GpuCullMode.None, Name = GlassShaderStem };
-    /// <summary>Gets the overlap pipeline's description: the mesh pass's without culling, named for the overlap stage, since
-    /// a ray's exits are back faces. It draws in the mesh pass's render pass (<see cref="RenderPass"/>), and its fragment
-    /// stage fails the depth test on every face, so only the overlap spans it writes through its binding change.</summary>
-    public static GpuGraphicsPipelineDescription OverlapDescription { get; } = Description with { Cull = GpuCullMode.None, Name = OverlapShaderStem };
     /// <summary>Gets the render pass the pipeline draws in: the target (<see cref="SdfWorldPackage.MeshTargetFormat"/>)
     /// cleared and stored, left in its attachment layout, and the depth attachment
     /// (<see cref="SdfWorldPackage.MeshDepthAttachment"/>) cleared to its reversed-Z far plane and stored, which the
@@ -191,8 +180,6 @@ public sealed class SdfMeshRasterPass {
     public GpuPassPipelineKey ShadowGlassKey { get; }
     /// <summary>Gets the glass pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey GlassKey { get; }
-    /// <summary>Gets the overlap pipeline's key in <see cref="Pipelines"/>.</summary>
-    public GpuPassPipelineKey OverlapKey { get; }
     /// <summary>Gets the occlusion kernel's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey OcclusionKey { get; }
     /// <summary>Gets the composition's pass pipelines.</summary>
@@ -232,12 +219,6 @@ public sealed class SdfMeshRasterPass {
             renderPass: RenderPass,
             vertex: vertex
         );
-    /// <summary>Returns the key of the overlap pipeline built from given stages.</summary>
-    /// <param name="vertex">The mesh pass's vertex stage's bytecode.</param>
-    /// <param name="fragment">The overlap fragment stage's bytecode.</param>
-    /// <returns>The key.</returns>
-    public static GpuPassPipelineKey OverlapKeyOf(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment) =>
-        GpuPassPipelineKey.OfGraphics(description: OverlapDescription, fragment: fragment, renderPass: RenderPass, vertex: vertex);
     /// <summary>Returns the key of the occlusion kernel built from given bytecode.</summary>
     /// <param name="occlusion">The kernel's bytecode.</param>
     /// <returns>The key.</returns>
@@ -312,16 +293,6 @@ public sealed class SdfMeshRasterPass {
             device: device,
             key: GlassKey
         );
-    }
-    /// <summary>Takes a lease on the overlap pipeline for a device, joining its build or starting it on the thread pool.
-    /// Only a view showing the overlap debug view leases it, so no other view pays for its build.</summary>
-    /// <param name="device">The device.</param>
-    /// <returns>The lease; its <see cref="GpuPassPipeline"/> carries the pipeline and the mesh render pass.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
-    public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireOverlaps(IGpuDeviceContext device) {
-        ArgumentNullException.ThrowIfNull(argument: device);
-
-        return Pipelines.Acquire(device: device, key: OverlapKey);
     }
     /// <summary>Leases the cascade's glass extinction pipeline from the shared cache.</summary>
     /// <param name="device">The device.</param>

@@ -884,82 +884,94 @@ stderr, so `host.log category world.iteration` reads every loop a World has
 run, and `world.wait iteration <seconds>` holds a script until the latest loop
 settles. A host with no renderer reaches no frame and says so.
 
-## Overlap view
+## Field views
 
-`world.debug-view overlaps [<tolerance-mm>] [bodies]` dims the scene and makes
-every surface glow where another placed object's solid passes into the solid
-behind it: a branch through a display station, a pier haunch through a wall, a
-button sunk into a panel. The glow runs from magenta just past the tolerance to
-yellow at five centimetres and deeper, measured as the depth of the first
-overlap behind the surface along the pixel's ray. An overlap under the
-tolerance (three millimetres unless given, `0` shows every one) stays dark, so
-solids meant to touch, a foot on a floor or a cabinet against a wall, read
-clean. The shapes of one placed creation are one object whatever groups they
-bake into, so a creation's own unions never glow; bodies (the seat's character
-and every moving rigid copy, with what rides them) take part only with
-`bodies`. The answer echoes the tolerance and the bodies setting.
+Two debug views show the field itself, evaluated at every render pixel through
+the field interpreter the mesh bake samples, over the whole resident world:
+every placement, every body where it stands and every copy of a template where
+it is placed. One field pass serves both (`SdfWorldPackage.WithField`,
+`passes/sdf-world-field.comp.hlsl`). It is in a view's graph only while one of
+the views shows, so with both off nothing is evaluated, uploaded or allocated.
+The composite lays the pass's colours over the view after its image meter, so a
+field view never moves the exposure, and like every display-referred overlay
+it passes the view's tone curve.
 
-The view reads the baked meshes the frame draws, so it shows what a player
-sees, and it needs no report and no CPU work per frame. While it is on, the
-view's graph adds one raster pass that draws every opaque draw its frustum
-keeps again, faces behind the visible surface only
-(`SdfWorldPackage.WithOverlaps`); with it off, no view allocates or records
-anything for it. Only solids take part: an open authored sheet or a draw cut by
-a portal plane has no inside. The overlap is measured along the ray, so a thin
-contact seen at a grazing angle reads deeper than it is; look again from
-another side before calling it a flaw. An overlap wholly behind another
-object's back face is not seen from that side.
+The field is the union of field entries (`SdfFieldEntries`): each placed copy's
+template walked in the copy's frame, and every other object of the program in
+world space. Each 16 by 16 pixel tile keeps the entries whose bounding spheres
+may answer one of its points, and each query walks only those, skipping an
+entry whose sphere cannot beat the best answer so far. Where no shape's bound
+reaches, the field reads the bound, which the gradient reading shows blue. A
+copy drawn from an authored mesh has no field and takes no part.
 
-## Live field slice
+### Proximity view
+
+`world.debug-view proximity [<tolerance-mm>] [bodies] [band <m>]` dims the
+scene and rings every visible surface with its distance to the nearest other
+object's field. Rings fall every `band` metres (five centimetres unless given)
+in the warm distance palette and fade out past eight bands, with a white line
+where two objects touch. Contacts, near misses and intersections read as rings
+wrapping across walls, piers and props: rings that close on a white line are a
+contact, rings that circle a point and stop short are a near miss.
+
+A surface another object's solid lies inside of glows, magenta just past the
+tolerance to yellow at five centimetres deeper. The pass marches the pixel's ray
+on into the surface's own object and reads the intersection field, the larger
+of the two objects' distances; where it falls below the tolerance (three
+millimetres unless given, `0` shows every one) the two solids overlap there. A
+branch through a display station, a pier haunch through a wall or a button sunk
+into a panel glows; a foot on a floor reads as a contact line. The shapes of one
+placed creation are one object (`SdfMeshDraw.ObjectKey`), so a creation's own
+unions never ring. Bodies (the seat's character and every moving rigid copy,
+with what rides them) take part only with `bodies`. The answer echoes the
+tolerance, the bodies setting and the band.
+
+### Live slicing plane
 
 `world.slice` writes a cut through the field to a PNG; `world.slice.live`
-draws the same cut in the world, as a translucent square on the plane over
-every view of the World's own residency, so an author can walk around a
-creation and read its field where it stands:
+draws a slicing plane through the field over every view of the World's own
+residency, so an author can walk around a creation and read its field where it
+stands, the way an SDF artist sees it:
 
 ```text
-world.slice.live <x|y|z> <offset> <u> <v> <half> [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]
-world.slice.live <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]
+world.slice.live camera [<distance-m>] [options]
+world.slice.live eye [<height-m>] [options]
+world.slice.live pointer [x|y|z] [options]
+world.slice.live <x|y|z> <offset> [options]
+world.slice.live <placement|near> <x|y|z> [offset <m>] [options]
 world.slice.live off
 ```
 
-The plane and square read as `world.slice`'s: the explicit form names the
-plane (`x`, `y` or `z` equal to `offset`) and the square by its centre `(u, v)`
-and half side, where `(u, v)` is `(Z, Y)` on an `x` cut, `(X, Z)` on a `y` cut
-and `(X, Y)` on a `z` cut; the placement form cuts through a placement's
-position, plus `offset` along the axis, over a square reaching 1.25 times its
-creation's reach. `near` names the placement of the spawn point nearest the
-calling seat's body, as `world.slice.save near` does, so standing at a gallery
-display and slicing `near` cuts the exhibit on its turntable. `mode` picks which of the PNG's two panels the square shows,
-in the same colours (`SdfFieldSlice.RenderPlane` and the PNG draw through one
-colour mapping):
+The options are `bands <m>`, `mode distance|gradient|both` and
+`opacity <0..1>`.
 
-- `distance` (the default): warm outside, cool inside, a dark line every
-  `bands` metres of field and a white line on the surface. Bands that bunch or
-  spread show a field that is not the distance.
-- `gradient`: the gradient's magnitude, white within two percent of one (an
-  exact distance), blue below it (a bound, which underestimates) and red above
-  it (an overestimate), with the surface black.
-- `both`: the distance on the square's `-u` half and the gradient on its `+u`
-  half.
+- `camera` faces each view, `distance` metres ahead of the eye (two unless
+  given), so it sweeps through the world as the camera moves.
+- `eye` is horizontal at the eye's height, plus `height` metres.
+- `pointer` passes through the surface under the pointer (two metres along its
+  ray over the sky), facing the view, or normal to the axis named. It keeps its
+  last point while the pointer is off the view.
+- `<x|y|z> <offset>` is the fixed plane where that coordinate is `offset`.
+- The placement form passes through a placement's position, plus `offset`
+  along the axis, with bands a tenth of 1.25 times its creation's reach.
+  `near` names the placement of the spawn point nearest the calling seat's
+  body, as `world.slice.save near` does.
 
-Grey answers no shape and dull magenta marks clipped samples, as in the PNG.
-`opacity` (0.85 unless given) is how much the square covers where it lies in
+`bands` is the band spacing in metres (0.1 unless given). `mode` picks the
+reading:
+
+- `distance` (the default): warm bands outside and cool bands inside, darkening
+  toward the surface, with a white surface line. Bands that bunch, spread or
+  kink show where a min or max breaks the interior or exterior distance.
+- `gradient`: the gradient's magnitude from four tetrahedral taps, white within
+  two percent of one (an exact distance), blue below it (a bound, which
+  underestimates) and red above it (an overestimate), with the surface black.
+- `both`: the distance on the view's left half and the gradient on its right.
+
+`opacity` (0.85 unless given) is how much the plane covers where it lies in
 front of a surface; behind a surface it keeps a fifth of that, enough to place
-the plane by. `res` sets the samples a side, 128 unless given.
-
-The field is sampled by the mesh bake's own sampler, the one field walk, as
-`world.slice` samples it, a frame's bake share at a time; the colours are drawn
-on the CPU and uploaded as one table the composite reads
-(`SdfLiveFieldSlice`, `SdfWorldTables.StageFieldSlice`). The plane samples once
-for each placement and program: a plane that stands over a document that stands
-costs nothing, moving the plane or reloading the document samples again, and
-until the new answer lands the square keeps its last image where that image was
-sampled. A `world.slice` still sampling defers the live plane until it lands.
-With `off`, nothing is sampled, uploaded or drawn. The square is drawn after
-the view's image meter, so it never moves the exposure, and like every
-display-referred overlay it passes the view's tone curve, so its colours read
-slightly flatter than the PNG's.
+the plane by. With `off` and no proximity view, nothing is evaluated, uploaded
+or drawn.
 
 ## Scene diagnostics
 

@@ -263,8 +263,10 @@
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
 
-// The overlap spans the overlap raster pass accumulates and the overlap view reads.
-#define SDF_OVERLAP_SPAN_WORDS 2u
+// The field view's entries (SdfWorldPackage.FieldEntryRows rows each), the entries a field pass group keeps for its tile and the tile's edge in pixels.
+#define SDF_FIELD_ENTRY_ROWS   4u
+#define SDF_FIELD_TILE_ENTRIES 512u
+#define SDF_FIELD_TILE_EDGE    16u
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
 #define SDF_GLASS_SUM_WORDS            18u
@@ -319,6 +321,6 @@
 #define SDF_DEBUG_VIEW_BLOOM       15
 #define SDF_DEBUG_VIEW_SHADE_COST  16
 #define SDF_DEBUG_VIEW_SHADE_TIER  17
-#define SDF_DEBUG_VIEW_OVERLAPS    18
+#define SDF_DEBUG_VIEW_PROXIMITY   18
 
 #endif // SDF_RENDER_HLSLI

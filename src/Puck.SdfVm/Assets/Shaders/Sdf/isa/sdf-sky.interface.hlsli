@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/ccc99e6c2366eb6670c378ad8e28b29c73bcf4b704554eb6ca571c71b70787e4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/2e39d5dc08ed674fb72c51c1902ac0a203ca0e1ad756e780ac0ae7246e232aef). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -124,7 +124,7 @@ struct SdfSkyFrame {
 [[vk::binding(22, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t22, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(23, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t23, space1);
-[[vk::binding(24, 1)]] StructuredBuffer<uint> sdfFieldSliceWords : register(t24, space1);
+[[vk::binding(24, 1)]] StructuredBuffer<float4> sdfFieldEntries : register(t24, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfSkyPass {
@@ -153,9 +153,9 @@ struct SdfSkyPass {
     [[vk::offset(116)]] float farDistance;
     [[vk::offset(120)]] uint _pad120;
     [[vk::offset(124)]] uint _pad124;
-    [[vk::offset(128)]] float4 fieldSliceAxisU;
-    [[vk::offset(144)]] float4 fieldSliceAxisV;
-    [[vk::offset(160)]] float4 fieldSliceOrigin;
+    [[vk::offset(128)]] float4 fieldPlane;
+    [[vk::offset(144)]] float4 fieldScope;
+    [[vk::offset(160)]] float4 fieldStyle;
     [[vk::offset(176)]] float flowClock;
     [[vk::offset(180)]] uint _pad180;
     [[vk::offset(184)]] float2 frustumOffset;
@@ -264,24 +264,25 @@ struct SdfSkyPass {
     [[vk::offset(4108)]] uint _pad4108;
     [[vk::offset(4112)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaA5A75D14 : register(b0, space3);
-#define passGroup passGroupIsaA5A75D14
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa495517B7 : register(b0, space3);
+#define passGroup passGroupIsa495517B7
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);
 [[vk::binding(11, 3)]] StructuredBuffer<uint2> transport : register(t11, space3);
 [[vk::binding(12, 3)]] RWStructuredBuffer<uint> exposureMeterRW : register(u12, space3);
-[[vk::binding(13, 3)]] Texture2D<float4> skyBase : register(t13, space3);
-[[vk::binding(14, 3)]] Texture2D<float4> skyUpper0 : register(t14, space3);
-[[vk::binding(15, 3)]] Texture2D<float4> skyUpper1 : register(t15, space3);
-[[vk::binding(16, 3)]] Texture2D<float4> skyUpper2 : register(t16, space3);
-[[vk::binding(17, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u17, space3);
-[[vk::binding(18, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper0RW : register(u18, space3);
-[[vk::binding(19, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper1RW : register(u19, space3);
-[[vk::binding(20, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper2RW : register(u20, space3);
-[[vk::binding(21, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u21, space3);
-[[vk::binding(22, 3)]] Texture2D<float4> screenSources[128] : register(t22, space3);
-[[vk::binding(150, 3)]] RWStructuredBuffer<uint> workCounters : register(u150, space3);
+[[vk::binding(13, 3)]] StructuredBuffer<uint> sdfFieldColors : register(t13, space3);
+[[vk::binding(14, 3)]] Texture2D<float4> skyBase : register(t14, space3);
+[[vk::binding(15, 3)]] Texture2D<float4> skyUpper0 : register(t15, space3);
+[[vk::binding(16, 3)]] Texture2D<float4> skyUpper1 : register(t16, space3);
+[[vk::binding(17, 3)]] Texture2D<float4> skyUpper2 : register(t17, space3);
+[[vk::binding(18, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u18, space3);
+[[vk::binding(19, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper0RW : register(u19, space3);
+[[vk::binding(20, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper1RW : register(u20, space3);
+[[vk::binding(21, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper2RW : register(u21, space3);
+[[vk::binding(22, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u22, space3);
+[[vk::binding(23, 3)]] Texture2D<float4> screenSources[128] : register(t23, space3);
+[[vk::binding(151, 3)]] RWStructuredBuffer<uint> workCounters : register(u151, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

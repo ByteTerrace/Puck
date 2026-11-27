@@ -125,6 +125,14 @@ public sealed partial class SdfProgram {
         bool Owns(int instruction) => ((instruction >= instance.First) && (instruction < instance.End));
     }
 
+    /// <summary>Returns the bound radius an instance packs, the one the walk skips it by: its live radius with its blend
+    /// halo and scoped reach, <see cref="UnmaskableBoundRadius"/> for an instance no finite sphere bounds, or a negative
+    /// radius for a parked instance, which contributes nothing.</summary>
+    /// <param name="index">The instance's index.</param>
+    /// <returns>The radius, in the units of the instance's bound centre.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no instance.</exception>
+    public float BoundRadiusOf(int index) => m_instanceRadii[index];
+
     // The first word of the per-instruction bound table, which follows the instruction data, then of the segment
     // directory that follows it: as the field interpreter finds them (sdfLoadProgramLayout).
     private int BoundsWord() => (BoundsVectorOf(dataOffset: ((int)PackedWords[ProgramDataOffsetLane]), instructions: InstructionRows.Length) * WordsPerVector);

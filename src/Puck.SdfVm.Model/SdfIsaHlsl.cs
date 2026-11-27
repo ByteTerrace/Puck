@@ -520,8 +520,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfWorldPackage.TemporalPeriod);
         declarations.Tuning(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfWorldPackage.TemporalPeriod);
         declarations.Tuning(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfWorldPackage.TemporalPeriod * SdfTemporalSamples.FeaturePeriods));
-        declarations.Section(title: "The overlap spans the overlap raster pass accumulates and the overlap view reads.");
-        declarations.Count(name: "SDF_OVERLAP_SPAN_WORDS", value: SdfWorldPackage.OverlapSpanWords);
+        declarations.Section(title: "The field view's entries (SdfWorldPackage.FieldEntryRows rows each), the entries a field pass group keeps for its tile and the tile's edge in pixels.");
+        declarations.Count(name: "SDF_FIELD_ENTRY_ROWS", value: SdfWorldPackage.FieldEntryRows);
+        declarations.Count(name: "SDF_FIELD_TILE_ENTRIES", value: SdfWorldPackage.FieldTileEntries);
+        declarations.Count(name: "SDF_FIELD_TILE_EDGE", value: SdfWorldPackage.FieldTileEdge);
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
         // The layer list's length bounds the interfaces a glass pixel shades, which shade admission and the dispatch planner
