@@ -169,8 +169,9 @@ camera light in the pass block. `SdfWorldResidency.IsUnchanged` reads no state o
 volume's background work, so nothing the pool finishes mid-frame decides whether a view
 stands; `SdfMeshIrradiance.Settling` serves a converging frame, the residency's
 preparation and a rig that settles the volume whole.
-Waiting on every allocated residency
-deadlocks on hidden routed scenes whose GPU work correctly never starts.
+A wait on every allocated residency's bake settles once each has baked: a routed scene no
+view renders is staged by the frame's minimum (`SdfWorldPasses.StageMinimum`), so its GPU
+work starts whether or not anything shows it.
 
 ## Mesh pipeline limits
 
@@ -2208,11 +2209,14 @@ counts in `sdf.transforms`, never in `records.posed`.
   whose `SdfWorldResidency.MeshesFirstArriving` holds: a group owing its first mesh or the first detail over its floor (`SdfMeshPathBake.OwedGroups`), or a staged draw waiting for its mesh; a retier or another residency's landing is no arrival. A
   world the sight has not wanted for `SdfWorldResidency.PressedParkSeconds` (`SightLetGo`) takes no window: the render
   observes its residency, so a kept window would hold a world nobody approaches from parking for good. A
-  residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
-  still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
-  background work binds. In `world.residency`, a residency
-  whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
-  nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
+  residency's bake samples, its meshes land and its probes trace only against an upload that binds the bake's program
+  (`SdfWorldTables.BindsBackgroundWork`), and a pack moves what that binds without uploading it. So every residency the
+  frame's minimum serves (`SdfWorldResidency.OwesPreparation`) is also staged, after the packs and before any render is
+  scheduled (`SdfWorldPasses.StageMinimum`), and each frame's upkeep pumps its work against that upload between
+  minimums: a routed scene no view renders still bakes and lights. An idle park passes over a residency whose meshes are
+  making their arrival; pressure parks it. In `world.residency`, a residency whose `uploads` stand still while
+  `unbound` in its `gpu-work` counts every pump and `owed` stays above zero names a staging path that skipped it.
+  `gpu.faults lose` makes every residency land again, a quick check of that path.
 - **A view's storage follows what is shown.** A session view no schedule renders for
   `WorldViewGraphHost.ParkedShrinkFrames`, while its glass asks no footprint (out of sight, held or occluded), renders
   at its least share until its node installs that extent (`ReserveShrinks`, which reads the node's installed `Extent`,

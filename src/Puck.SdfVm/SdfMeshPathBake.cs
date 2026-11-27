@@ -3154,15 +3154,19 @@ public sealed partial class SdfMeshPathBake {
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Finishes the followers of the leaders done since it last ran (Follow), then records the bake's wall time once every
-    // group is done, and reports it: the done line of the work its accounts opened (BeginAccounts), once.
+    // group is done and no floor owes its first detail, and reports it: the done line of the work its accounts opened
+    // (BeginAccounts), once.
     //
-    // Invariant: a bake whose accounts are open and whose groups are all done reports, whatever path made the last group
-    // done (a landing, a load, a library take a replacement starts with, a replacement given back, an evicted floor, a
-    // follower). Every change to a group happens under the gate, and GateScope.Dispose, the one release of the gate, calls
-    // this before it publishes what the bake owes, so no path that changes a group can skip it. Under the gate.
+    // Invariant: a live bake whose accounts are open, whose groups are all done and whose arrivals owe no first detail
+    // reports, whatever path made the last group done (a landing, a load, a library take a replacement starts with, a
+    // replacement given back, an evicted floor, a follower), and a retiring bake never does: its groups end because the
+    // residency let them go, not because their work finished. Every change to a group happens under the gate, and
+    // GateScope.Dispose, the one release of the gate, calls this before it publishes what the bake owes, so no path that
+    // changes a group can skip it; m_retiring is set under the gate before the release lets go of anything
+    // (EndReports, Retire). Under the gate.
     private void SettleCompletion() {
         if (m_followable.Count > 0) { Follow(); }
-        if (m_reported || !m_clock.IsRunning || (DoneThrough() < m_groups.Count)) { return; }
+        if (m_reported || m_retiring || !m_clock.IsRunning || (m_firstDetailsOwed > 0) || (DoneThrough() < m_groups.Count)) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
         // The large pool keeps its arrays past the bake: a world in play restarts a bake at every program change, in each
