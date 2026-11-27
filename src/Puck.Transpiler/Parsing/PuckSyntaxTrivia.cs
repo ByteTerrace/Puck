@@ -879,6 +879,12 @@ public static class PuckSyntaxTrivia {
 
                         return (declaration with { Fields = fields, Trivia = (declaration.Trivia with { Inner = inner, Opening = m_opening }) });
                     }
+                case StateCellEntryNode cell:
+                    return (cell with {
+                        KeyExpression = VisitOptional(expression: cell.KeyExpression),
+                        Modifiers = VisitModifiers(modifiers: cell.Modifiers),
+                        Value = VisitExpression(expression: cell.Value),
+                    });
                 case StateTableDeclarationNode table: {
                         var (cells, inner, header) = Cells(
                             cells: table.Cells,
@@ -891,6 +897,7 @@ public static class PuckSyntaxTrivia {
                             FamilySize = VisitOptional(expression: table.FamilySize),
                             Initializer = VisitOptional(expression: table.Initializer),
                             Modifiers = VisitModifiers(modifiers: table.Modifiers),
+                            NameExpression = VisitOptional(expression: table.NameExpression),
                             Trivia = (table.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
@@ -901,12 +908,13 @@ public static class PuckSyntaxTrivia {
                                 limit: ContentEnd(node: grid),
                                 openFrom: grid.Offset
                             )
-                            : (((IReadOnlyList<StateCellEntryNode>)grid.Cells), ((IReadOnlyList<TriviaPiece>)[]), ((IReadOnlyList<TriviaPiece>)[])));
+                            : (grid.Cells, ((IReadOnlyList<TriviaPiece>)[]), ((IReadOnlyList<TriviaPiece>)[])));
 
                         return (grid with {
                             Cells = cells,
                             FamilySize = VisitOptional(expression: grid.FamilySize),
                             Modifiers = VisitModifiers(modifiers: grid.Modifiers),
+                            NameExpression = VisitOptional(expression: grid.NameExpression),
                             Trivia = (grid.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
@@ -916,7 +924,7 @@ public static class PuckSyntaxTrivia {
             }
         }
 
-        private (IReadOnlyList<StateCellEntryNode> Cells, IReadOnlyList<TriviaPiece> Inner, IReadOnlyList<TriviaPiece> Header) Cells(IReadOnlyList<StateCellEntryNode> cells, int openFrom, int limit) {
+        private (IReadOnlyList<StatementNode> Cells, IReadOnlyList<TriviaPiece> Inner, IReadOnlyList<TriviaPiece> Header) Cells(IReadOnlyList<StatementNode> cells, int openFrom, int limit) {
             var open = FindNext(
                 from: openFrom,
                 limit: limit,
@@ -932,10 +940,7 @@ public static class PuckSyntaxTrivia {
                 bodyEnd: close,
                 bodyStart: (open + 1),
                 items: cells,
-                visit: cell => (cell with {
-                    Modifiers = VisitModifiers(modifiers: cell.Modifiers),
-                    Value = VisitExpression(expression: cell.Value),
-                })
+                visit: VisitStatement
             );
 
             return (entries, inner, Header(

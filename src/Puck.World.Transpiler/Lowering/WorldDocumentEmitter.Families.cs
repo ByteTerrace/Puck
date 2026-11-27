@@ -27,32 +27,34 @@ public static partial class WorldDocumentEmitter {
     }
     internal static Dictionary<string, StateFamilyInfo> GetOrCreateStateFamilies(DocumentScope scope) =>
         GetOrCreateScopeDictionary<StateFamilyInfo>(key: "StateFamilies", scope: scope);
+    // Families written where the scope already knows their names are indexed before anything lowers, so a reference
+    // written above its declaration resolves. A family a loop or a computed name declares is registered when its
+    // section expands it (`ExpandFamily`), before any of its members lower.
     internal static void IndexStateFamilies(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
         var families = GetOrCreateStateFamilies(scope: scope);
 
         foreach (var stmt in statements) {
-            switch (stmt) {
-                case StateTableDeclarationNode table when IsFamily(members: table.FamilyMembers, size: table.FamilySize):
-                    RegisterFamily(members: table.FamilyMembers, name: table.Name, sizeExpr: table.FamilySize, span: table.Span, families: families, scope: scope);
-                    break;
-
-                case StateSlotDeclarationNode slot when IsFamily(members: slot.FamilyMembers, size: slot.FamilySize):
-                    RegisterFamily(members: slot.FamilyMembers, name: slot.Name, sizeExpr: slot.FamilySize, span: slot.Span, families: families, scope: scope);
-                    break;
-
-                case StatePileDeclarationNode pile when IsFamily(members: pile.FamilyMembers, size: pile.FamilySize):
-                    RegisterFamily(members: pile.FamilyMembers, name: pile.Name, sizeExpr: pile.FamilySize, span: pile.Span, families: families, scope: scope);
-                    break;
-
-                case StateGridDeclarationNode grid when IsFamily(members: grid.FamilyMembers, size: grid.FamilySize):
-                    RegisterFamily(members: grid.FamilyMembers, name: grid.Name, sizeExpr: grid.FamilySize, span: grid.Span, families: families, scope: scope);
-                    break;
-
-                case BlockNode block:
-                    IndexStateFamilies(statements: block.Statements, scope: scope);
-                    break;
+            if (FamilyOf(statement: stmt) is { NameExpression: null } family) {
+                RegisterFamily(members: family.Members, name: family.Name, sizeExpr: family.Size, span: stmt.Span, families: families, scope: scope);
+            } else if (stmt is BlockNode block) {
+                IndexStateFamilies(statements: block.Statements, scope: scope);
             }
         }
+    }
+
+    // What a row declaration says about the family it declares, or null for a single row.
+    private sealed record FamilyDeclaration(string Name, ExpressionNode? NameExpression, ExpressionNode? Size, IReadOnlyList<FamilyMemberNode>? Members, string? MemberIndex);
+
+    private static FamilyDeclaration? FamilyOf(StatementNode statement) {
+        var family = (statement switch {
+            StateTableDeclarationNode table => new FamilyDeclaration(MemberIndex: table.MemberIndex, Members: table.FamilyMembers, Name: table.Name, NameExpression: table.NameExpression, Size: table.FamilySize),
+            StateSlotDeclarationNode slot => new FamilyDeclaration(MemberIndex: slot.MemberIndex, Members: slot.FamilyMembers, Name: slot.Name, NameExpression: slot.NameExpression, Size: slot.FamilySize),
+            StatePileDeclarationNode pile => new FamilyDeclaration(MemberIndex: pile.MemberIndex, Members: pile.FamilyMembers, Name: pile.Name, NameExpression: pile.NameExpression, Size: pile.FamilySize),
+            StateGridDeclarationNode grid => new FamilyDeclaration(MemberIndex: grid.MemberIndex, Members: grid.FamilyMembers, Name: grid.Name, NameExpression: grid.NameExpression, Size: grid.FamilySize),
+            _ => null,
+        });
+
+        return (((family is not null) && IsFamily(members: family.Members, size: family.Size)) ? family : null);
     }
 
     private static bool IsFamily(ExpressionNode? size, IReadOnlyList<FamilyMemberNode>? members) => ((size is not null) || (members is { Count: > 0 }));
@@ -279,48 +281,47 @@ public static partial class WorldDocumentEmitter {
 
         return 0;
     }
-    private static IEnumerable<TNode> ExpandFamilyMembers<TNode>(
-        string name,
-        ExpressionNode? size,
-        SourceSpan span,
-        DocumentScope scope,
-        Func<string, TNode> factory
-    ) {
-        foreach (var member in FamilyMemberNames(name: name, scope: scope, size: size, span: span)) {
-            yield return factory(member);
+    // A family declaration as the single-row declarations of its members, each named for its member and paired with the
+    // scope it lowers in: the declaration's own, with `as`'s binder (when written) bound to the member's family index,
+    // so a member's modifiers, cells and value may differ by member. The family registers here when nothing indexed it
+    // before, so its member names, its `state.families` entry and every `<family>[i]` reference agree.
+    internal static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandFamily(StatementNode declaration, DocumentScope scope) {
+        if (FamilyOf(statement: declaration) is not { } family) {
+            yield return (declaration, scope);
+
+            yield break;
+        }
+
+        var families = GetOrCreateStateFamilies(scope: scope);
+
+        if (!families.ContainsKey(key: family.Name)) {
+            RegisterFamily(families: families, members: family.Members, name: family.Name, scope: scope, sizeExpr: family.Size, span: declaration.Span);
+        }
+        if (!families.TryGetValue(key: family.Name, value: out var registered)) {
+            yield break;
+        }
+
+        for (var member = 0; (member < registered.Size); member++) {
+            var memberScope = scope;
+
+            if (family.MemberIndex is { } binder) {
+                var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
+                    [binder] = JsonValue.Create(value: ((long)registered.Indices[member])),
+                };
+
+                memberScope = scope.WithLocals(lambdaLocals: locals);
+            }
+
+            yield return (MemberDeclaration(declaration: declaration, name: registered.MemberNames[member]), memberScope);
         }
     }
-
-    internal static IEnumerable<StateTableDeclarationNode> ExpandTableFamily(StateTableDeclarationNode table, DocumentScope scope) =>
-        ExpandFamilyMembers(name: table.Name, size: table.FamilySize, span: table.Span, scope: scope, member => table with { FamilyMembers = null, FamilySize = null, Name = member });
-    internal static IEnumerable<StateSlotDeclarationNode> ExpandSlotFamily(StateSlotDeclarationNode slot, DocumentScope scope) =>
-        ExpandFamilyMembers(name: slot.Name, size: slot.FamilySize, span: slot.Span, scope: scope, member => slot with { FamilyMembers = null, FamilySize = null, Name = member });
-    internal static IEnumerable<StatePileDeclarationNode> ExpandPileFamily(StatePileDeclarationNode pile, DocumentScope scope) =>
-        ExpandFamilyMembers(name: pile.Name, size: pile.FamilySize, span: pile.Span, scope: scope, member => pile with { FamilyMembers = null, FamilySize = null, Name = member });
-    internal static IEnumerable<StateGridDeclarationNode> ExpandGridFamily(StateGridDeclarationNode grid, DocumentScope scope) =>
-        ExpandFamilyMembers(name: grid.Name, size: grid.FamilySize, span: grid.Span, scope: scope, member => grid with { FamilyMembers = null, FamilySize = null, Name = member });
-
-    // The registered family is the one source of member names, so a declaration and every reference to it agree on
-    // the gaps.
-    private static IReadOnlyList<string> FamilyMemberNames(string name, ExpressionNode? size, SourceSpan span, DocumentScope scope) {
-        if (GetOrCreateStateFamilies(scope: scope).TryGetValue(key: name, value: out var family)) {
-            return family.MemberNames;
-        }
-
-        var count = EvaluateFamilySize(name: name, scope: scope, sizeExpr: size, span: span);
-
-        if (count <= 0) {
-            return [name];
-        }
-
-        var members = new string[count];
-
-        for (var index = 0; (index < count); index++) {
-            members[index] = $"{name}{index}";
-        }
-
-        return members;
-    }
+    private static StatementNode MemberDeclaration(StatementNode declaration, string name) => (declaration switch {
+        StateTableDeclarationNode table => (table with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
+        StateSlotDeclarationNode slot => (slot with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
+        StatePileDeclarationNode pile => (pile with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
+        StateGridDeclarationNode grid => (grid with { FamilyMembers = null, FamilySize = null, MemberIndex = null, Name = name }),
+        _ => declaration,
+    });
 
     // A row position a rule resolves live rather than by name: `$zones[i]`, or `<family>[i]`. The head is the whole
     // bracketed spelling and the remainder, if any, is the cell key inside the selected row.

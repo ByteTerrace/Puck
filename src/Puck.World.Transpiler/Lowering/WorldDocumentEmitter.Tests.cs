@@ -822,7 +822,7 @@ public static partial class WorldDocumentEmitter {
             var key = (cell.Target.Key ?? StateRow.SlotKey.Value);
 
             // A key naming a loop's bound name is that iteration's element, as `row[item]` reads it.
-            if ((bound is not null) && bound.TryGetValue(key: key, value: out var element) && (KeyText(value: element) is { } elementKey)) {
+            if ((bound is not null) && bound.TryGetValue(key: key, value: out var element) && (DocumentLowering.KeyText(node: element) is { } elementKey)) {
                 key = elementKey;
             }
             var value = (cell.Value switch {
@@ -1044,13 +1044,6 @@ public static partial class WorldDocumentEmitter {
 
         return 0L;
     }
-    // The text a bound element stands for in a key or a command line: a number in invariant spelling, a string as
-    // written; null for anything else.
-    private static string? KeyText(JsonNode? value) => ((value is JsonValue scalar)
-        ? (scalar.TryGetValue(value: out string? text)
-            ? text
-            : ((scalar.GetValueKind() == System.Text.Json.JsonValueKind.Number) ? scalar.ToJsonString() : null))
-        : null);
     // `{name}` in a seat step written inside a `for` is the bound element's text; `{{` and `}}` are literal braces.
     private static TestStepNode Substituted(TestSeatStepNode seat, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
         if (bound is null) {
@@ -1078,7 +1071,7 @@ public static partial class WorldDocumentEmitter {
             var close = text.IndexOf(startIndex: index, value: '}');
             var name = ((close < 0) ? "" : text[(index + 1)..close]);
 
-            if ((close < 0) || !bound.TryGetValue(key: name, value: out var element) || (KeyText(value: element) is not { } substituted)) {
+            if ((close < 0) || !bound.TryGetValue(key: name, value: out var element) || (DocumentLowering.KeyText(node: element) is not { } substituted)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.TestStepInadmissible,
                     message: $"'{text}' writes '{{{name}}}' inside a 'for', which binds no such name to a number or a string — write a bound name, or '{{{{' and '}}}}' for literal braces",
