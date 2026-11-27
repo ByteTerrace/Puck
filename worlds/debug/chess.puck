@@ -323,9 +323,12 @@ prototypes {
 
 chessJudge(settleTicks: chessSettleTicks, scope: "chess-demo")
 
-// The idle demonstration holds the computer and the doors off while it plays.
+// The idle demonstration holds the computer and the doors off while it plays. The hold is live bookkeeping, so a search
+// candidate never runs it: the computer's judge takes in every rule that writes a row its rules read, and through
+// `chessHold` this rule would draw in the demonstration's rules, which read the clock, so the search would restart
+// every tick and never answer.
 rule "chess-demo-hold" {
-  when chessHold != chessDemo.playing
+  when search(ply) == 0 and chessHold != chessDemo.playing
   mode: Level
   chessHold = chessDemo.playing
 }

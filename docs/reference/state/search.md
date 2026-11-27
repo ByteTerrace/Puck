@@ -272,8 +272,10 @@ cleared on every restart. A position's key folds:
 - every row the plan names (tokens, turn, verdict, zones, codes, scores, and
   the chance row) and every row the judge rules read or write, plus the rows
   the score reads;
-- the arena's retained key ledger and its byte total, since those decide
-  whether a judge can mint a new cell;
+- the arena's retained key ledger, byte total and layout size, once the walk
+  has met a check against the shared ceilings (a mint, a reservation or a cell
+  visibility), since two paths to one position can then leave a later mint
+  different room;
 - the tick pair, when the job is time-sensitive (see
   [Keep work and progress deterministic](#keep-work-and-progress-deterministic));
 - the move ply, the value a judge reads through `$search:ply`.
@@ -443,17 +445,35 @@ the tick budget uses, over the job's scoped judge rules. `nodes` defaults to
 ### Restarts and time
 
 At the start of each step, the runtime folds each job's input rows into that
-job's **stamp**, together with the arena's key ledger and byte total. A job's
-input rows are the rows its position key covers (the rows the plan names and
-every row its judge rules and score read or write) plus its `held` and
-`revision` slots, less every installed job's outputs. Row versions let it skip
-the fold when none of them moved, but the stamp itself is a hash of content.
-When the stamp differs from the one the job was computed against, the job
-restarts. So a write that stores the value a cell already held, a scope that
-was written and rewound, or a write to a row the job doesn't read doesn't
-restart it: a search keeps its walk while the rest of a composed world's state
-changes around it. A job's own landing doesn't restart it, because outputs are
-excluded.
+job's **stamp**. A job's input rows are the rows its position key covers (the
+rows the plan names and every row its judge rules and score read or write) plus
+its `held` and `revision` slots, less every installed job's outputs. Row
+versions let it skip the fold when none of them moved, but the stamp itself is a
+hash of content. When the stamp differs from the one the job was computed
+against, the job restarts. So a write that stores the value a cell already
+held, a scope that was written and rewound, or a write to a row the job doesn't
+read doesn't restart it: a search keeps its walk while the rest of a composed
+world's state changes around it. A job's own landing doesn't restart it,
+because outputs are excluded.
+
+The arena's key ledger and byte total are shared by every row, so they reach a
+job's answer only through the checks against the shared ceilings that its own
+walk meets: a candidate or judge rule minting a name the ledger doesn't hold,
+growing a row's reservation, or storing a cell visibility. The search watches
+each walk through an `ArenaHeadroomWatch` and keeps what it saw in the job's
+`ArenaSearchHeadroom`, which a checkpoint carries:
+
+- A walk that met no such check never restarts for a mint elsewhere. A judge
+  whose writes all land on cells that already exist is one.
+- A walk whose checks all admitted restarts only when the committed byte total
+  or name count grows past the room the tightest check left, or the storage
+  layout changes.
+- A walk a check refused restarts on any change to the ledger, the byte total or
+  the layout, since any of them could admit it.
+
+`ArenaSearchStatus` counts a job's restarts and names the last one's cause
+(`ArenaSearchRestart`), with the input row whose version moved when the cause
+is an input; `world.search` prints both.
 
 A job is **time-sensitive** when its judge rules or score read `$tick`
 (`IArenaSearchJudge.ReadsTick`), or when any row its position key covers has a

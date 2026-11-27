@@ -194,7 +194,7 @@ public sealed partial class StateArena {
             m_poolAddresses = BuildPoolAddresses(catalog: catalog, layout: layout, occupancy: m_poolOccupancy);
         }
         m_vectors = new sbyte[layout.VectorByteCount];
-        m_keys.SetByteBudget(budget: KeyByteBudget);
+        m_keys.SetAdmission(admit: AdmitKeys);
 
         if (reason.Length != 0) {
             return;

@@ -83,11 +83,25 @@ public sealed record ArenaSearchTreeCheckpoint(
 /// <param name="TtValue">The transposition table's values.</param>
 /// <param name="TtMeta">The transposition table's depth and bound flags.</param>
 /// <param name="Tree">The tree search in flight, or <see langword="null"/>.</param>
+/// <param name="Headroom">What the walk since the last restart asked of the arena's shared ceilings.</param>
 public sealed record ArenaSearchJobCheckpoint(
     string Name, ulong Stamp, bool Running, bool Done, ArenaSearchLevelCheckpoint Root, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long Work, long PeakStepWork,
     int TokenCount, int PassDepth, int Active, ArenaSearchLevelCheckpoint[] Levels, ArenaSearchScopeCheckpoint[] Scopes,
-    ulong[] TtKey, long[] TtValue, long[] TtMeta, ArenaSearchTreeCheckpoint? Tree = null
+    ulong[] TtKey, long[] TtValue, long[] TtMeta, ArenaSearchTreeCheckpoint? Tree = null, ArenaSearchHeadroom Headroom = default
 );
+/// <summary>What a job's walk since its last restart asked of the arena's shared ceilings (the byte total and the
+/// retained key ledger, which <see cref="ArenaHeadroomWatch"/> observes), and so the committed states of them under
+/// which the walk's answer stands.</summary>
+/// <param name="Consulted">Whether any mint, reservation or visibility the walk made reached a ceiling check; a walk
+/// that reached none stands whatever the totals become, and the other members are then zero.</param>
+/// <param name="Refused">Whether a check refused: the walk then stands only while <paramref name="Ledger"/> does.</param>
+/// <param name="ByteCeiling">The most bytes the arena may hold with every admitted check still admitting.</param>
+/// <param name="KeyCeiling">The most retained key names the arena may hold with every admitted check still
+/// admitting.</param>
+/// <param name="LayoutBytes">The bytes of the storage layout the checks were made over.</param>
+/// <param name="Ledger">The fold of the key ledger, byte total and layout bytes the last step that consulted ended
+/// with.</param>
+public readonly record struct ArenaSearchHeadroom(bool Consulted, bool Refused, long ByteCeiling, long KeyCeiling, long LayoutBytes, ulong Ledger);
 /// <summary>The search's checkpointed state, in job order.</summary>
 /// <param name="Jobs">Every installed job's progress.</param>
 public sealed record ArenaSearchCheckpoint(ArenaSearchJobCheckpoint[] Jobs) {

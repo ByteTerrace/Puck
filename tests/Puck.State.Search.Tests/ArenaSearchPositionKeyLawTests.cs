@@ -409,40 +409,6 @@ public sealed class ArenaSearchPositionKeyLawTests {
             )
         );
     }
-    [Fact]
-    public void ARetainedOrphanMemberChangesTheSearchPositionKey() {
-        var position = new Position(rows: Board(
-            cells: 4,
-            tokens: 2
-        ));
-        var search = SearchFixture.Build(
-            judge: RuleJudge(
-                position: position,
-                rules: [SearchFixture.AcceptEveryCandidate()]
-            ),
-            plan: Plan(),
-            position: position
-        );
-        var before = search.PositionKey(index: 0);
-
-        Assert.True(condition: position.Arena.TryMint(
-            key: out var orphan,
-            name: Name(value: "orphan"),
-            reason: out var reason,
-            rowOrdinal: position.Ordinal(name: "piece"),
-            value: CellValue.Int(value: 0L)
-        ), userMessage: reason);
-        Assert.True(condition: position.Arena.TryRemove(
-            key: orphan,
-            reason: out reason,
-            rowOrdinal: position.Ordinal(name: "piece")
-        ), userMessage: reason);
-
-        Assert.NotEqual(
-            expected: before,
-            actual: search.PositionKey(index: 0)
-        );
-    }
     // A two-cell relocate cycle reaches the same position at move plies one and three. Its judge accepts through
     // ply three but closes at ply four: the pass-three value of the first visit is therefore not the value of the
     // pass-four visit. Clearing the table after every suspended step supplies the independent, uncached answer.

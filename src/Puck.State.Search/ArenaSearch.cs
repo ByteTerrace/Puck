@@ -31,12 +31,37 @@ namespace Puck.State;
 /// grows no tree.</param>
 /// <param name="Faults">How many steps a judge rule or score faulted in, each rewound and landing nothing, since the
 /// job was installed or restored.</param>
+/// <param name="Restarts">How many times the job has discarded its progress since it was installed or restored.</param>
+/// <param name="LastRestart">Why the job last discarded its progress.</param>
+/// <param name="LastRestartRow">The input row whose change caused the last restart, when <paramref name="LastRestart"/>
+/// is <see cref="ArenaSearchRestart.Inputs"/> and a row's version moved; otherwise empty.</param>
 public readonly record struct ArenaSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerStep, long JudgeCost,
     long Allowance, long PeakStepWork, long Work,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, int Iteration, int Iterations,
-    int JudgeRules = 0, bool HasOutcome = false, int TreeNodes = 0, long Faults = 0
+    int JudgeRules = 0, bool HasOutcome = false, int TreeNodes = 0, long Faults = 0,
+    long Restarts = 0, ArenaSearchRestart LastRestart = ArenaSearchRestart.None, string LastRestartRow = ""
 );
+/// <summary>Why a search job discarded its progress.</summary>
+public enum ArenaSearchRestart : byte {
+    /// <summary>The job has not restarted.</summary>
+    None,
+    /// <summary>The job started a walk it had no progress toward: it was installed, or a disclosure refusal lifted.</summary>
+    Started,
+    /// <summary>A row the job reads changed.</summary>
+    Inputs,
+    /// <summary>The tick pair moved under a job that reads it.</summary>
+    Clock,
+    /// <summary>The arena's byte total or key ledger left the room the walk's mints and reservations were admitted
+    /// under.</summary>
+    Headroom,
+    /// <summary>A suspended descent could not be reopened from its recorded candidates.</summary>
+    Replay,
+    /// <summary>A judge rule or score faulted.</summary>
+    Fault,
+    /// <summary>A judge, a score or the arena threw out of the step.</summary>
+    Thrown,
+}
 /// <summary>
 /// Runs a set of search jobs over one <see cref="StateArena"/>: each candidate is a journal scope holding the
 /// candidate's own writes and whatever the supplied <see cref="IArenaSearchJudge"/> writes on top of them, and each
@@ -174,14 +199,26 @@ public sealed partial class ArenaSearch {
         // against, less every job's outputs, ascending. A row outside them cannot change what the job lands, so a
         // write to one never restarts it.
         public int[] StampRows { get; set; } = [];
-        // The version each stamp row stood at, and the ledger fold, when the stamp was last folded. A version is the
-        // arena's own and never checkpointed, so it only says the fold may be reused; the stamp a job compares stays
-        // the fold of the rows' content, which a restored arena reproduces.
+        // The version each stamp row stood at when the stamp was last folded. A version is the arena's own and never
+        // checkpointed, so it only says the fold may be reused; the stamp a job compares stays the fold of the rows'
+        // content, which a restored arena reproduces.
         public ulong[] StampVersions { get; set; } = [];
 
         public bool StampFolded { get; set; }
-        public ulong StampLedger { get; set; }
         public ulong StampValue { get; set; }
+        // The first stamp row whose version moved at the last fold that moved one, or -1; a diagnostic.
+        public int StampMovedRow { get; set; } = -1;
+        // The stamp of the job's rows alone, without the tick pair, at this step and at the last restart; diagnostics
+        // that tell an input change from a clock one.
+        public ulong StepState { get; set; }
+        public ulong RestartState { get; set; }
+        // What the walk since the last restart asked of the arena's shared ceilings. It is simulation state: whether a
+        // later step restarts the walk depends on it.
+        public ArenaSearchHeadroom Headroom { get; set; }
+        // How often and why the job discarded its progress; diagnostics, never part of the job's answer.
+        public long Restarts;
+        public ArenaSearchRestart LastRestart;
+        public int LastRestartRow = -1;
         // The judge reads the live clock directly, or one of its keyed rows has value-over-time traits. This is
         // derived once when the job is installed, keeping an idle untimed step to its existing row-version walk.
         public bool TimeSensitive { get; set; }
@@ -273,8 +310,13 @@ public sealed partial class ArenaSearch {
     private readonly List<ArenaSearchWrite> m_outputs = [];
 
     private Job[] m_jobs = [];
-    // Each job's input stamp this step, so choosing the job a step advances allocates nothing.
+    // Each job's input stamp this step and whether its walk must restart, so choosing the job a step advances
+    // allocates nothing.
     private ulong[] m_stepStamps = [];
+    private bool[] m_stepMoved = [];
+    // What the walking job asks of the arena's shared ceilings; registered on the arena only while a walk runs, and
+    // clear outside one.
+    private readonly ArenaHeadroomWatch m_headroom = new();
     private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
@@ -440,6 +482,7 @@ public sealed partial class ArenaSearch {
 
         m_jobs = jobs;
         m_stepStamps = new ulong[jobs.Length];
+        m_stepMoved = new bool[jobs.Length];
 
         foreach (var job in jobs) {
             job.StampRows = ResolveStampRows(job: job);
@@ -471,8 +514,8 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        var ledger = LedgerFold();
         var stamps = m_stepStamps;
+        var moved = m_stepMoved;
         var busy = 0;
 
         for (var index = 0; (index < m_jobs.Length); index++) {
@@ -481,14 +524,13 @@ public sealed partial class ArenaSearch {
             if (!AdmitsAudience(job) || (job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
+            job.StepState = InputStamp(job: job);
             stamps[index] = Stamp(
                 job: job,
-                stateStamp: InputStamp(
-                    job: job,
-                    ledger: ledger
-                )
+                stateStamp: job.StepState
             );
-            if ((job.Stamp != stamps[index]) || job.Running || !job.Done) {
+            moved[index] = ((job.Stamp != stamps[index]) || !HeadroomStands(job: job));
+            if (moved[index] || job.Running || !job.Done) {
                 busy++;
             }
         }
@@ -503,7 +545,7 @@ public sealed partial class ArenaSearch {
 
             if (
                 job.DisclosureRefused || ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) ||
-                ((job.Stamp == stamps[index]) && !job.Running && job.Done)
+                (!moved[index] && !job.Running && job.Done)
             ) {
                 continue;
             }
@@ -511,7 +553,8 @@ public sealed partial class ArenaSearch {
                 return StepJob(
                     apply: apply,
                     job: job,
-                    jobStamp: stamps[index]
+                    jobStamp: stamps[index],
+                    moved: moved[index]
                 );
             }
         }
@@ -519,14 +562,15 @@ public sealed partial class ArenaSearch {
         return false;
     }
 
-    private bool StepJob(Job job, ulong jobStamp, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
+    private bool StepJob(Job job, ulong jobStamp, bool moved, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
         var work = job.Plan.Work;
         var spent = 0L;
 
         // A restart and a replay are work the step does before the walk moves, so both come out of the step's
         // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
-        if (job.Stamp != jobStamp || (!job.Running && !job.Done)) {
+        if (moved || (!job.Running && !job.Done)) {
             Restart(
+                cause: RestartCause(job: job, stamp: jobStamp),
                 job: job,
                 stamp: jobStamp
             );
@@ -536,11 +580,13 @@ public sealed partial class ArenaSearch {
             // A judge rule or score that faults anywhere in the step decides nothing: the step rewinds and restarts as
             // a thrown one does, and lands nothing, so the job's last answer stands.
             job.StepFaulted = false;
+            m_arena.WatchHeadroom(watch: m_headroom);
 
             try {
                 spent += work.Replay(scopes: job.ScopeCount);
                 if (!Replay(job: job)) {
                     Restart(
+                        cause: ArenaSearchRestart.Replay,
                         job: job,
                         stamp: jobStamp
                     );
@@ -556,21 +602,27 @@ public sealed partial class ArenaSearch {
                 // the position the step started from.
                 Suspend(job: job);
                 Restart(
+                    cause: ArenaSearchRestart.Thrown,
                     job: job,
                     stamp: jobStamp
                 );
 
                 throw;
+            } finally {
+                m_arena.WatchHeadroom(watch: null);
             }
 
             Suspend(job: job);
             if (job.StepFaulted) {
                 Restart(
+                    cause: ArenaSearchRestart.Fault,
                     job: job,
                     stamp: jobStamp
                 );
                 job.Faults++;
             }
+
+            NoteHeadroom(job: job);
         }
 
         job.PeakStepWork = Math.Max(
@@ -641,7 +693,10 @@ public sealed partial class ArenaSearch {
             JudgeRules: job.Judge.RuleCount,
             HasOutcome: (plan.Method == SearchMethod.MonteCarlo),
             TreeNodes: job.TreeCount,
-            Faults: job.Faults
+            Faults: job.Faults,
+            Restarts: job.Restarts,
+            LastRestart: job.LastRestart,
+            LastRestartRow: ((((uint)job.LastRestartRow) < ((uint)m_arena.Catalog.Descriptors.Count)) ? m_arena.Catalog.Descriptors[job.LastRestartRow].Name : string.Empty)
         );
     }
 
@@ -844,27 +899,74 @@ public sealed partial class ArenaSearch {
         if (job.DisclosureRefused) { job.Stamp = 0; job.DisclosureRefused = false; }
         return true;
     }
-    // The retained-key ledger and byte charge, which limit a judge's future mints and so are inputs to every job.
+    // The arena's retained key ledger, byte total and layout: everything a check against the shared ceilings reads.
     private ulong LedgerFold() {
         var ledger = Fnv1aHash.Create();
 
         m_arena.AddKeyLedgerTo(hash: ref ledger);
         ledger.Add(value: m_arena.Bytes);
+        ledger.Add(value: m_arena.Layout.Bytes);
 
         return ledger.Value;
     }
-    // One job's input rows folded in ordinal order with the ledger. A row whose version has not moved holds the bytes
-    // it held, so the fold is taken again only when one of the job's rows or the ledger has moved, keeping an idle
-    // tick to one counter per row.
-    private ulong InputStamp(Job job, ulong ledger) {
+    // Whether the arena still admits whatever the job's walk since its last restart was admitted, refused as it was
+    // refused. The ledger and byte total are shared by every row, so they reach a job's answer only through a mint,
+    // a reservation or a visibility the walk made, each of which the watch saw: a walk that made none stands whatever
+    // they become; one whose checks all admitted stands while the committed totals stay inside the room the tightest
+    // check left, over the same layout; one a check refused stands only while all three stand exactly.
+    private bool HeadroomStands(Job job) {
+        var headroom = job.Headroom;
+
+        if (!headroom.Consulted) {
+            return true;
+        }
+        if (headroom.Refused) {
+            return (headroom.Ledger == LedgerFold());
+        }
+
+        return (
+            (m_arena.Bytes <= headroom.ByteCeiling) &&
+            (m_arena.Keys.Count <= headroom.KeyCeiling) &&
+            (m_arena.Layout.Bytes == headroom.LayoutBytes)
+        );
+    }
+    // Takes what this step's walk asked of the shared ceilings into the job's headroom, read after the walk's scopes
+    // rewound so the totals are the ones every check was made over, less the walk's own mints and growth. A check that
+    // left `room` would admit again while the committed totals grow by at most that much.
+    private void NoteHeadroom(Job job) {
+        if (!m_headroom.Consulted) {
+            return;
+        }
+
+        var held = job.Headroom;
+        var bytes = (m_arena.Bytes + m_headroom.ByteRoom);
+        var keys = (m_arena.Keys.Count + m_headroom.KeyRoom);
+
+        job.Headroom = new ArenaSearchHeadroom(
+            ByteCeiling: (held.Consulted ? Math.Min(val1: held.ByteCeiling, val2: bytes) : bytes),
+            Consulted: true,
+            KeyCeiling: (held.Consulted ? Math.Min(val1: held.KeyCeiling, val2: keys) : keys),
+            LayoutBytes: m_arena.Layout.Bytes,
+            Ledger: LedgerFold(),
+            Refused: (held.Refused || m_headroom.Refused)
+        );
+        m_headroom.Clear();
+    }
+    // One job's input rows folded in ordinal order. A row whose version has not moved holds the bytes it held, so the
+    // fold is taken again only when one of the job's rows has moved, keeping an idle tick to one counter per row.
+    private ulong InputStamp(Job job) {
         var rows = job.StampRows;
-        var moved = (!job.StampFolded || (job.StampLedger != ledger));
+        var moved = !job.StampFolded;
+        var first = -1;
 
         for (var index = 0; (index < rows.Length); index++) {
             var version = m_arena.RowVersion(rowOrdinal: rows[index]);
 
             if (job.StampVersions[index] != version) {
                 job.StampVersions[index] = version;
+                if (!moved) {
+                    first = rows[index];
+                }
                 moved = true;
             }
         }
@@ -882,14 +984,18 @@ public sealed partial class ArenaSearch {
             );
         }
 
-        hash.Add(value: ledger);
-
         job.StampFolded = true;
-        job.StampLedger = ledger;
+        job.StampMovedRow = first;
         job.StampValue = hash.Value;
 
         return job.StampValue;
     }
+    // Why a job about to restart restarts: a walk it never started, its rows, the clock, or its headroom.
+    private static ArenaSearchRestart RestartCause(Job job, ulong stamp) => ((!job.Running && !job.Done)
+        ? ArenaSearchRestart.Started
+        : ((job.Stamp == stamp)
+            ? ArenaSearchRestart.Headroom
+            : ((job.StepState != job.RestartState) ? ArenaSearchRestart.Inputs : ArenaSearchRestart.Clock)));
     // A job's key rows with the held and revision slots, less every installed job's outputs: a job's own landing
     // must not look like an input change and restart it.
     private int[] ResolveStampRows(Job job) {
@@ -934,10 +1040,16 @@ public sealed partial class ArenaSearch {
             );
         }
 
-        // A retained orphan name and the arena byte ledger govern whether a judge can mint a later member. They
-        // therefore belong to a candidate's cache identity even when no keyed row presently holds that name.
-        m_arena.AddKeyLedgerTo(hash: ref hash);
-        hash.Add(value: m_arena.Bytes);
+        // Once the walk has met a check against the shared ceilings, the room a later mint finds can differ between
+        // two arrivals at one position (one path minted a name the other did not), so the ledger joins the key; before
+        // that, nothing stored in the table rests on it. The live watch counts: it holds the checks of the step in
+        // flight, which the job's headroom takes in only when the step ends.
+        if (
+            job.Headroom.Consulted ||
+            m_headroom.Consulted
+        ) {
+            hash.Add(value: LedgerFold());
+        }
 
         // A judge that reads the clock directly, or a row whose value-over-time trait reads it, sees this position
         // only at one tick pair.
@@ -966,8 +1078,15 @@ public sealed partial class ArenaSearch {
 
         return false;
     }
-    private void Restart(Job job, ulong stamp) {
+    private void Restart(Job job, ulong stamp, ArenaSearchRestart cause) {
         PopAllScopes(job: job);
+        // The new walk has asked nothing of the ceilings yet, and its table holds nothing that rests on them.
+        job.Headroom = default;
+        m_headroom.Clear();
+        job.Restarts++;
+        job.LastRestart = cause;
+        job.LastRestartRow = ((cause == ArenaSearchRestart.Inputs) ? job.StampMovedRow : -1);
+        job.RestartState = job.StepState;
         job.BaseTurn = Slot(rowOrdinal: job.Plan.TurnOrdinal);
         job.Done = false;
         job.Iteration = 0;

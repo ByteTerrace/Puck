@@ -706,7 +706,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.search",
-            description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates; a job authoring a depth past one and a score also carries the depth it is iterative-deepening through and the negamax answer (token, target cell, score) the deepest completed pass found. A job restarts whenever a row it reads changes, its own outputs excepted.",
+            description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, how many rules the frame evaluates, and how many times the job restarted and why it last did (started, inputs with the row that moved, clock, headroom, replay, fault, thrown); a job authoring a depth past one and a score also carries the depth it is iterative-deepening through and the negamax answer (token, target cell, score) the deepest completed pass found. A job restarts whenever a row it reads changes, its own outputs excepted.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -734,7 +734,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         ? "done"
                         : (job.Running
                             ? "running"
-                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerStep} judgeCost={job.JudgeCost} allowance={job.Allowance} peakTick={job.PeakStepWork} spent={job.Work} judgeRules={job.JudgeRules}{((job.Faults > 0) ? $" faultedSteps={job.Faults}" : string.Empty)}{depth}]");
+                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerStep} judgeCost={job.JudgeCost} allowance={job.Allowance} peakTick={job.PeakStepWork} spent={job.Work} judgeRules={job.JudgeRules}{((job.Faults > 0) ? $" faultedSteps={job.Faults}" : string.Empty)} restarts={job.Restarts} lastRestart={job.LastRestart.ToString().ToLowerInvariant()}{((job.LastRestartRow.Length > 0) ? $":{job.LastRestartRow}" : string.Empty)}{depth}]");
                 }
                 return new CommandResult(Output: string.Join(
                     separator: Environment.NewLine,
