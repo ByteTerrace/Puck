@@ -2623,17 +2623,14 @@ Light through coloured glass:
 
 The volume's cost and convergence:
 
-- [medium] The `scene-placement` stop has no device-free law. A probe job
-  whose scene names a mesh the tables have not placed is refused until
-  `AdmissionWait` and then cancelled (`SdfMeshProbeGpuWork.TryTake`), and the
-  gallery's lighting showed that stop, but only a windowed run reaches it. A
-  law over a fake device that holds a scene's meshes unplaced and checks the
-  head's cancel and the volume's `NoteScenePlacement` answer would witness it.
-- [medium] The `scene-upload` refusal has no time bound. `TryTake` refuses
-  every take while a scene uploads (`ServeSceneUpload`), and only the
-  placement wait is bounded by `AdmissionWait`, so an upload that never
-  completes holds the volume's work indefinitely. Give the upload the same
-  bound and name the stop where it ends.
+- [low] The `scene-placement` cancel has no device-free law over the probe
+  service itself. The volume's answer to it is witnessed device-free
+  (`ASceneTheProbeServiceCouldNotBindIsBuiltAgainThoughItsDrawsStandUnchanged`),
+  but the head's cancel in `SdfMeshProbeGpuWork.TryTake`, and the
+  `scene-upload-stalled` stop beside it (`UploadStalled`), are reached only by a
+  windowed run. A law over a fake device whose region holds a scene's meshes
+  unplaced, and one whose residency uploads never carry the probe scene's
+  chunks, would witness both.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
@@ -5022,6 +5019,13 @@ private-install activation measurement.
   the client was given.
 - Time the front's swap to a newly activated build from a private install root
   (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`).
+- [medium] One malformed client line still ends the operator session and stops
+  every World it owns: `BoundedMcpInput` fails the session on a line over
+  64 KiB, more than 128 unconsumed messages or invalid UTF-8. A line it cannot
+  admit should be dropped and named, not end the session.
+- [medium] A front that ends says why only on standard error, which Claude Code
+  records only while the server connects. Write the reason where an operator
+  can read it after the session is gone.
 - [low] Investigate the reported operator attachment loss on `world.reset`:
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint.

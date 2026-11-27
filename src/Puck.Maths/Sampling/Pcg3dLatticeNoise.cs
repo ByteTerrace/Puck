@@ -403,6 +403,39 @@ public static class Pcg3dLatticeNoise {
 
         return sum;
     }
+    /// <summary>Encloses every fBm over a box of first-octave lattice points whose gain and lacunarity each lie in an
+    /// interval: <see cref="Fbm3(FixedVector3, uint, int, FixedQ4816, FixedQ4816)"/> at every gain and lacunarity a point
+    /// of their intervals holds, and the exact-arithmetic sum another reader evaluates at any of them. Degenerate
+    /// intervals are <see cref="Fbm3Bounds(FixedInterval, FixedInterval, FixedInterval, uint, int, FixedQ4816, FixedQ4816)"/>;
+    /// otherwise each octave's weight and lattice box are the outward-rounded products, which hold every nearest-rounded
+    /// product of their points.</summary>
+    /// <param name="x">The box's extent along X, in first-octave lattice cells.</param>
+    /// <param name="y">The box's extent along Y, in first-octave lattice cells.</param>
+    /// <param name="z">The box's extent along Z, in first-octave lattice cells.</param>
+    /// <param name="seed">The first octave's seed.</param>
+    /// <param name="octaves">The octave count; none sums to zero.</param>
+    /// <param name="gain">The interval holding each octave's weight over the one before.</param>
+    /// <param name="lacunarity">The interval holding each octave's frequency over the one before.</param>
+    /// <returns>The enclosure; unbounded where a product or weighted sum leaves the carrier.</returns>
+    public static FixedInterval Fbm3Bounds(FixedInterval x, FixedInterval y, FixedInterval z, uint seed, int octaves, FixedInterval gain, FixedInterval lacunarity) {
+        if (!gain.IsUnbounded && !lacunarity.IsUnbounded && (gain.Lower == gain.Upper) && (lacunarity.Lower == lacunarity.Upper)) {
+            return Fbm3Bounds(gain: gain.Lower, lacunarity: lacunarity.Lower, octaves: octaves, seed: seed, x: x, y: y, z: z);
+        }
+
+        var weight = FixedInterval.FromPoint(value: FixedQ4816.One);
+        var sum = FixedInterval.FromPoint(value: FixedQ4816.Zero);
+
+        for (var octave = 0u; (octave < octaves); octave++) {
+            var octaveSeed = unchecked(seed + octave);
+
+            sum += (weight * ValueNoise3Bounds(seedX: octaveSeed, seedY: unchecked(octaveSeed * HashStreamA),
+                seedZ: unchecked(octaveSeed * HashStreamB), x: x, y: y, z: z));
+            (x, y, z) = ((x * lacunarity), (y * lacunarity), (z * lacunarity));
+            weight *= gain;
+        }
+
+        return sum;
+    }
     /// <summary>Samples fractal value noise over a cell index (XZ), Q48.16 throughout: the one construction a world
     /// field-lattice Noise fill and a placement Noise region both sum. Octave <c>k</c> is <see cref="ValueNoise01"/> over a
     /// noise-cell edge of <c>frequency</c> halved <c>k</c> times (floored at one cell), seeded <c>seed + k·</c><see

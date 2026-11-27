@@ -330,6 +330,16 @@ public static class CellSetLowering {
                         arena: arena
                     );
 
+                    if ((elements <= BoardMask.MaxCells) && arena.TryReadBoardPlanes(
+                        lower: board.Low,
+                        mask: out word0,
+                        rowOrdinal: rowOrdinal,
+                        upper: board.High
+                    )) {
+                        word0 &= elements.LowMask<ulong>();
+
+                        break;
+                    }
                     for (var cell = 0; (cell < elements); cell++) {
                         if (
                             arena.TryReadBoardCell(

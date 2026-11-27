@@ -37,10 +37,12 @@ public static class ManagedHeapWalk {
     /// totals.</param>
     /// <param name="depth">How many first referrers to name above each tenant's objects, at least one: the holder, the
     /// holder's holder, and so on.</param>
+    /// <param name="pathType">The full name of a type whose every live object is traced back to the root that keeps it
+    /// (<see cref="HeapWalk.Paths"/>), or <see langword="null"/> to trace none.</param>
     /// <returns>The walk.</returns>
     /// <exception cref="InvalidOperationException">The runtime wrote no heap dump.</exception>
     /// <exception cref="ServerNotAvailableException">The process exposes no diagnostics port.</exception>
-    public static HeapWalk Run(int processId, long minimumBytes, int depth = 1) {
+    public static HeapWalk Run(int processId, long minimumBytes, int depth = 1, string? pathType = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: depth, other: 1);
         var keywords = (long)(ClrTraceEventParser.Keywords.GC | ClrTraceEventParser.Keywords.GCHeapCollect | ClrTraceEventParser.Keywords.GCHeapDump | ClrTraceEventParser.Keywords.GCHeapAndTypeNames | ClrTraceEventParser.Keywords.Type);
         var client = new DiagnosticsClient(processId: processId);
@@ -219,7 +221,69 @@ public static class ManagedHeapWalk {
             .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
             .ToArray();
 
-        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants) { LiveBytes = liveBytes, SmallBytes = smallBytes, SmallTenants = smallTenants };
+        var paths = ((pathType is null) ? [] : RetentionPaths(edges: edges, index: index, nodes: nodes, pathType: pathType, roots: roots, typeName: TypeName));
+
+        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants) { LiveBytes = liveBytes, Paths = paths, SmallBytes = smallBytes, SmallTenants = smallTenants };
+    }
+
+    // Each live object of the named type traced to the root that keeps it. One breadth-first pass from every root over
+    // the dump's edges gives each object a referrer on one of its shortest paths from a root, so the chain read back
+    // from an object is a real retention path, not merely its first referrer: the link a first-referrer chain cannot
+    // reach when an object graph refers to itself all the way up. Objects whose chains name the same types are counted
+    // together; an object no root the dump named reaches reads as unreached.
+    private static HeapPath[] RetentionPaths(List<(ulong Address, ulong Size, ulong Type, int FirstEdge, int Edges)> nodes, List<ulong> edges, Dictionary<ulong, int> index, Dictionary<ulong, string> roots, string pathType, Func<ulong, string> typeName) {
+        const int Unvisited = -2;
+        const int Root = -1;
+        var parent = new int[nodes.Count];
+        var queue = new int[nodes.Count];
+        var head = 0;
+        var tail = 0;
+
+        Array.Fill(array: parent, value: Unvisited);
+        foreach (var address in roots.Keys) {
+            if (index.TryGetValue(key: address, value: out var at) && (parent[at] == Unvisited)) {
+                parent[at] = Root;
+                queue[tail++] = at;
+            }
+        }
+        while (head < tail) {
+            var at = queue[head++];
+            var node = nodes[at];
+
+            for (var edge = node.FirstEdge; (edge < Math.Min(val1: (node.FirstEdge + node.Edges), val2: edges.Count)); edge++) {
+                if (index.TryGetValue(key: edges[edge], value: out var target) && (parent[target] == Unvisited)) {
+                    parent[target] = at;
+                    queue[tail++] = target;
+                }
+            }
+        }
+
+        var chains = new Dictionary<string, (int Objects, int Links)>(comparer: StringComparer.Ordinal);
+        var links = new List<string>();
+
+        for (var at = 0; (at < nodes.Count); at++) {
+            if (!string.Equals(a: typeName(arg: nodes[at].Type), b: pathType, comparisonType: StringComparison.Ordinal)) { continue; }
+            links.Clear();
+            links.Add(item: pathType);
+
+            var cursor = at;
+
+            while (parent[cursor] >= 0) {
+                cursor = parent[cursor];
+                links.Add(item: typeName(arg: nodes[cursor].Type));
+            }
+            links.Add(item: ((parent[cursor] == Root) ? roots[nodes[cursor].Address] : "unreached"));
+            links.Reverse();
+
+            var chain = string.Join(separator: " -> ", values: links);
+
+            chains[chain] = (chains.TryGetValue(key: chain, value: out var held) ? ((held.Objects + 1), held.Links) : (1, links.Count));
+        }
+
+        return [.. chains
+            .Select(selector: static entry => new HeapPath(Chain: entry.Key, Links: entry.Value.Links, Objects: entry.Value.Objects))
+            .OrderBy(keySelector: static path => path.Links)
+            .ThenBy(keySelector: static path => path.Chain, comparer: StringComparer.Ordinal)];
     }
 }
 /// <summary>The large objects as one heap dump saw them, in bytes.</summary>
@@ -237,7 +301,16 @@ public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collectio
     /// link a referrer's type, or <c>root</c> or <c>unreached</c> where the chain ends), each group of at least the walk's
     /// minimum size, largest first.</summary>
     public IReadOnlyList<HeapTenant> SmallTenants { get; init; } = [];
+    /// <summary>Gets each retention path the walk traced its path type's objects along, root first, shortest first; empty
+    /// when it traced none.</summary>
+    public IReadOnlyList<HeapPath> Paths { get; init; } = [];
 }
+/// <summary>The objects of one type one retention path keeps.</summary>
+/// <param name="Chain">The path from the root kind through each referrer's type to the objects' own type, joined by
+/// <c> -> </c>; it starts with <c>unreached</c> when no root reaches them.</param>
+/// <param name="Links">The links the chain names, its root included.</param>
+/// <param name="Objects">The objects whose shortest path from a root names these types.</param>
+public sealed record HeapPath(string Chain, int Links, int Objects);
 /// <summary>One tenant of the large object heap: the objects of one type one holder keeps.</summary>
 /// <param name="Type">The objects' type.</param>
 /// <param name="Holder">The first holder the walk found: the type of an object referring to them, a <c>root:</c> kind,
