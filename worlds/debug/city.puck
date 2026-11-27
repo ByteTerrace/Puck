@@ -142,7 +142,7 @@ let timber = 7
 let windowGlow = 8
 
 // A gable's ridge box turned 45 degrees about Z: its upper half stands over the walls as a roof whose ridge runs along Z.
-let gableTurn = [0, 0, 0.382683, 0.92388]
+let gableTurn = [0, 0, -0.382683, 0.92388]
 
 // The terraces' houses: lots 10 m wide and 8 m deep on a 14 by 12 m pitch, in rows that leave the cross street clear.
 // Each lot's height and wall colour cycle through the variants, so neighbours differ.
@@ -650,7 +650,7 @@ prototypes {
           shape Box "roof" {
             material: teal
             position [0, height, 0]
-            rotation: (gableTurn * [-1, 1, -1, 1])
+            rotation: gableTurn
             scale [3.6, 3.6, 4.3]
           }
           shape Box "door" {
@@ -735,7 +735,7 @@ prototypes {
       shape Box "roof" {
         material: teal
         position [0, 12, 0]
-        rotation: (gableTurn * [-1, 1, -1, 1])
+        rotation: gableTurn
         scale [8.55, 8.55, 10.4]
       }
       shape Box "tower" {

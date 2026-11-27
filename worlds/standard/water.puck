@@ -341,9 +341,9 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
           swings [
             swing(
               "fold",
-              [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]],
+              [0, profile[j][1] - profile[j + 1][1], profile[j + 1][0] - profile[j][0]],
               1.5707963267948966,
-              [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
+              [0, (profile[j][1] + profile[j + 1][1]) / 2, standoff - (profile[j][0] + profile[j + 1][0]) / 2]
             ) with { wave: "linear", phase: 1 }
           ]
         }
@@ -354,7 +354,7 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
 // The orientation, as a quaternion [x, y, z, w], of a piece lying on a slope whose climb makes an angle with +Z of cosine
 // `c`, then turned `yaw` degrees about the slope's own normal: the falls' sheets' tilt, so a piece's +Z runs up the slope and
 // its +Y stands off it.
-function onSlope(c, yaw) = turnAfter(turnByCosine([1, 0, 0], c, -1), turnAbout([0, 1, 0], yaw))
+function onSlope(c, yaw) = compose(turnByCosine([1, 0, 0], c, -1), rotate([0, 1, 0], yaw))
 
 // A glacier is a body of ice that melts by shrinking with the gauge `state.<gauge>` (the linear fraction of the melt clock
 // left, so the volume is its cube) about `origin`: put the origin at the glacier's head on its bed and the toe retreats up

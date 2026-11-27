@@ -16,7 +16,7 @@ let swallowEye = 4
 let swallowGroup = 1
 
 // The body's pitch, nose up, shared by the parts laid along it.
-let swallowPitch = [-0.2164, 0, 0, 0.9763]
+let swallowPitch = [0.2164, 0, 0, 0.9763]
 
 // One folded wing a side: a flat convex blade rooted inside the shoulder, lying along the body with its tip back, a
 // little down and over the tail, reaching past the tail's base.
@@ -87,7 +87,7 @@ prototypes {
         group: swallowGroup
         material: swallowTeal
         position [0, 0.034, 0]
-        rotation: (swallowPitch * [-1, 1, -1, 1])
+        rotation: swallowPitch
         scale [0.021, 0.023, 0.052]
       }
       shape Ellipsoid "belly" {
@@ -97,7 +97,7 @@ prototypes {
         material: swallowCream
         parent: "body"
         position [0, 0.025, -0.008]
-        rotation: (swallowPitch * [-1, 1, -1, 1])
+        rotation: swallowPitch
         scale [0.018, 0.017, 0.042]
       }
       shape Ellipsoid "tailBase" {
@@ -107,10 +107,10 @@ prototypes {
         material: swallowTeal
         parent: "body"
         position [0, 0.022, 0.052]
-        rotation: (swallowPitch * [-1, 1, -1, 1])
+        rotation: swallowPitch
         scale [0.013, 0.004, 0.028]
         swings [
-          swing("bob", [1, 0, 0], 0.18, [0, 0.026, -0.03]) with { wave: "sine", phase: 0 }
+          swing("bob", [-1, 0, 0], 0.18, [0, 0.026, 0.03]) with { wave: "sine", phase: 0 }
         ]
       }
       shape Sphere "head" {
@@ -122,7 +122,7 @@ prototypes {
         position [0, 0.074, -0.035]
         scale [0.0195, 0.0195, 0.0195]
         swings [
-          swing("glance", [0, 1, 0], 0.55, [0, 0.06, 0.03]) with { wave: "sine", phase: 0 }
+          swing("glance", [0, 1, 0], 0.55, [0, 0.06, -0.03]) with { wave: "sine", phase: 0 }
         ]
       }
       shape Ellipsoid "throat" {

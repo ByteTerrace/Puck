@@ -56,8 +56,8 @@ let fallbackSun = "#02030A"
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
 // and up axes with the floor's, so a crossing keeps the traveller's heading.
-let faceUp = [-0.707107, 0, 0, 0.707107]
-let faceDown = [0.707107, 0, 0, 0.707107]
+let faceUp = [0.707107, 0, 0, 0.707107]
+let faceDown = [-0.707107, 0, 0, 0.707107]
 
 // Palette slots every painting prototype shares.
 let paintGilt = 0
@@ -308,14 +308,14 @@ prototypes {
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: (faceUp * [-1, 1, -1, 1])
+        rotation: faceUp
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {
         blend: Subtraction
         material: paintBlack
         position [0, 0, 0]
-        rotation: (faceUp * [-1, 1, -1, 1])
+        rotation: faceUp
         scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
       }
       flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: 0, y1: 0.05, slot: paintLip)
@@ -325,7 +325,7 @@ prototypes {
         {
           text: "THE ENDLESS FALL"
           position [0, 0.02, -1.98]
-          rotation: compose(rotate([0, 1, 0], 180), faceUp)
+          rotation: compose(faceUp, rotate([0, 1, 0], 180))
           emHeight: 0.07
           depth: 0.004
           mode: "emboss"
@@ -336,7 +336,7 @@ prototypes {
         {
           text: "Step onto the glass and you fall, out of the ceiling and through the floor again. Backspace or L3 gets you out."
           position [0, 0.02, -1.86]
-          rotation: compose(rotate([0, 1, 0], 180), faceUp)
+          rotation: compose(faceUp, rotate([0, 1, 0], 180))
           emHeight: 0.03
           depth: 0.003
           mode: "emboss"
@@ -362,14 +362,14 @@ prototypes {
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
-        rotation: (faceDown * [-1, 1, -1, 1])
+        rotation: faceDown
         scale [fallHalf, fallHalf, 0.04]
       }
       shape Box "opening" {
         blend: Subtraction
         material: paintBlack
         position [0, 0, 0]
-        rotation: (faceDown * [-1, 1, -1, 1])
+        rotation: faceDown
         scale [(fallHalf - canvasRim), (fallHalf - canvasRim), 0.3]
       }
       flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: -0.05, y1: 0, slot: paintLip)
