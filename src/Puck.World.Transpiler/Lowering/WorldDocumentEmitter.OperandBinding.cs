@@ -381,7 +381,7 @@ public static partial class WorldDocumentEmitter {
             // binding of the name is in scope (a let, a template parameter, a loop variable): then the key is the
             // binding's value, as it is inside brackets (WriteIndex).
             if (form == DocumentValueForm.Key) {
-                if (scope.TryLowerBinding(name.Name, out var boundKey) && (boundKey is JsonValue)) {
+                if (scope.TryReadBinding(name.Name, out var boundKey) && (boundKey is JsonValue)) {
                     if (scope.TryRefuseRead(name: name.Name, span: operand.Span)) {
                         m_text.Append(value: '0');
                         return;
@@ -492,7 +492,7 @@ public static partial class WorldDocumentEmitter {
             m_keyDepth++;
             // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
             // all other values go through the expression binder, including bare lexical names.
-            if ((key is Syntax.SourceName { Quoted: false } boundName) && !IsRuntimeName(name: boundName.Name) && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
+            if ((key is Syntax.SourceName { Quoted: false } boundName) && !IsRuntimeName(name: boundName.Name) && scope.TryReadBinding(boundName.Name, out var boundKey)) {
                 WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
             } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
                 Write(form: DocumentValueForm.Expression, node: key, operand: operand);
@@ -610,7 +610,7 @@ public static partial class WorldDocumentEmitter {
             Syntax.SourceName name => new IdentifierExpressionNode(name.Name, Offset: operand.Offset, Length: operand.Length, Line: operand.Line, Column: operand.Column),
             Syntax.SourceString text => new LiteralExpressionNode(text.Value),
             Syntax.SourceAtom atom => AtomAt(index: atom.Index, operand: operand),
-            Syntax.SourceAccess access when ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out _)) => new IdentifierExpressionNode(qualified),
+            Syntax.SourceAccess access when ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryReadBinding(qualified, out _)) => new IdentifierExpressionNode(qualified),
             Syntax.SourceAccess access when (InstanceName(node: access) is { } instanceName) => new LiteralExpressionNode(instanceName),
             Syntax.SourceAccess access => new IndexExpressionNode(ToCompileTime(node: access.Target, operand: operand), new LiteralExpressionNode(access.Member)),
             Syntax.SourceIndex index => new IndexExpressionNode(ToCompileTime(node: index.Target, operand: operand), ToCompileTime(node: index.Index, operand: operand)),

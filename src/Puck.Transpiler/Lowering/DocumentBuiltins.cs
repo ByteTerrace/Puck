@@ -56,6 +56,7 @@ public static partial class DocumentBuiltins {
         ),
         ["reduce"] = new(
             description: "Folds elements into an accumulated value starting with initial.",
+            borrows: true,
             evaluate: static (call, scope, fieldKey) => Reduce(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
             signature: "reduce(array, initial, (accumulator, item) => value)"
         ),
@@ -238,8 +239,17 @@ public static partial class DocumentBuiltins {
     }
 
     // The lambda's parameters are bound as locals rather than as constants: a bound value is an already-lowered
-    // JSON node, not an expression that could be lowered again.
-    private static JsonNode? Apply(LambdaExpressionNode lambda, DocumentScope scope, string? fieldKey, JsonNode? first, JsonNode? second) {
+    // JSON node, not an expression that could be lowered again. The result is borrowed: read it, or take it into a
+    // container through ApplyOwned's ownership.
+    private static JsonNode? Apply(LambdaExpressionNode lambda, DocumentScope scope, string? fieldKey, JsonNode? first, JsonNode? second) => ApplyOwned(
+        fieldKey: fieldKey,
+        first: first,
+        lambda: lambda,
+        owned: out _,
+        scope: scope,
+        second: second
+    );
+    private static JsonNode? ApplyOwned(LambdaExpressionNode lambda, DocumentScope scope, string? fieldKey, JsonNode? first, JsonNode? second, out bool owned) {
         if (
             (lambda.Parameters.Count > 1) &&
             (lambda.Parameters[0] == lambda.Parameters[1])
@@ -261,15 +271,16 @@ public static partial class DocumentBuiltins {
             locals[lambda.Parameters[1]] = second;
         }
 
-        return DocumentLowering.EvaluateValue(
+        return DocumentLowering.Evaluate(
             expr: lambda.Body,
-            scope: scope.WithLocals(lambdaLocals: locals),
-            fieldKey: fieldKey
+            fieldKey: fieldKey,
+            owned: out owned,
+            scope: scope.WithLocals(lambdaLocals: locals)
         );
     }
     // Appends `lowered` to `arr`: an array splices its items in, anything else is one item. The one rule concat and
     // flatMap share, so the two spellings of a flatten cannot drift.
-    private static void AppendSpliced(JsonArray arr, JsonNode? lowered, DocumentScope scope, SourceSpan span) {
+    private static void AppendSpliced(JsonArray arr, JsonNode? lowered, bool owned, DocumentScope scope, SourceSpan span) {
         scope.Budget.Collection(
             count: (arr.Count + ((lowered is JsonArray list)
             ? list.Count
@@ -278,17 +289,17 @@ public static partial class DocumentBuiltins {
         );
 
         if (lowered is JsonArray nested) {
-            foreach (var item in nested.ToList()) {
-                arr.AppendNode(item: scope.Budget.Copy(
-                    span: span,
-                    value: item
-                ));
+            var items = new Lent(list: nested, owned: owned);
+
+            for (var index = 0; (index < items.Count); index++) {
+                arr.AppendNode(item: items.Take(budget: scope.Budget, index: index, span: span));
             }
 
             return;
         }
 
-        arr.AppendNode(item: scope.Budget.Copy(
+        arr.AppendNode(item: scope.Budget.Take(
+            owned: owned,
             span: span,
             value: lowered
         ));
@@ -297,19 +308,73 @@ public static partial class DocumentBuiltins {
         var arr = new JsonArray();
 
         foreach (var arg in args) {
+            var lowered = DocumentLowering.Evaluate(
+                expr: arg.Value,
+                fieldKey: fieldKey,
+                owned: out var owned,
+                scope: scope
+            );
+
             AppendSpliced(
                 arr: arr,
-                lowered: DocumentLowering.EvaluateValue(
-                    expr: arg.Value,
-                    scope: scope,
-                    fieldKey: fieldKey
-                ),
+                lowered: lowered,
+                owned: owned,
                 scope: scope,
                 span: arg.Span
             );
         }
 
         return arr;
+    }
+    /// <summary>The elements of a list a builtin reads, and how the builtin's result takes them: from a list the
+    /// evaluation alone holds, an element moves, the list letting go of every element first; from a borrowed list,
+    /// the result takes a copy. Either way the budget charges the element as it enters the result.</summary>
+    /// <remarks>An owned list owns every node beneath it (<see cref="DocumentLowering.Evaluate"/>), so an element
+    /// moved out of one is held by nothing else. Each element is taken at most once.</remarks>
+    private readonly struct Lent {
+        private readonly JsonArray? m_borrowed;
+        private readonly JsonNode?[]? m_released;
+
+        /// <summary>Initializes a new instance of the <see cref="Lent"/> struct over a list.</summary>
+        /// <param name="list">The list, which an owned list leaves empty.</param>
+        /// <param name="owned">Whether the evaluation alone holds <paramref name="list"/>.</param>
+        public Lent(JsonArray list, bool owned) {
+            if (owned) {
+                m_released = new JsonNode?[list.Count];
+                ((ICollection<JsonNode?>)list).CopyTo(array: m_released, arrayIndex: 0);
+                // Clearing detaches every element from the list, so each can take a new parent.
+                list.Clear();
+            } else {
+                m_borrowed = list;
+            }
+        }
+
+        /// <summary>Gets the number of elements.</summary>
+        public int Count => (m_released?.Length ?? m_borrowed!.Count);
+
+        /// <summary>Gets an element to read.</summary>
+        /// <param name="index">The element's position.</param>
+        public JsonNode? this[int index] => ((m_released is { } released) ? released[index] : m_borrowed![index]);
+
+        /// <summary>Takes an element into a container: the element itself from an owned list, else a copy.</summary>
+        /// <param name="budget">The compilation's budget, which charges the element.</param>
+        /// <param name="index">The element's position.</param>
+        /// <param name="span">The call taking it.</param>
+        /// <returns>The node to place.</returns>
+        public JsonNode? Take(DocumentEvaluationBudget budget, int index, SourceSpan span) => budget.Take(
+            owned: (m_released is not null),
+            span: span,
+            value: this[index]
+        );
+    }
+    // The list a builtin reads as its first argument, lent: its elements move from a list the evaluation alone holds.
+    private static bool TryLend(ExpressionNode expr, DocumentScope scope, string? fieldKey, out Lent list) {
+        if (DocumentLowering.Evaluate(expr: expr, fieldKey: fieldKey, owned: out var owned, scope: scope) is JsonArray read) {
+            list = new Lent(list: read, owned: owned);
+            return true;
+        }
+        list = default;
+        return false;
     }
     // `flatMap(array, lambda)` is `reduce(array, [], (all, item) => concat(all, lambda(item)))` without recopying the
     // running array each step: an array the lambda yields is spliced in, anything else is one item.
@@ -321,7 +386,8 @@ public static partial class DocumentBuiltins {
             fieldKey: fieldKey,
             lambda: out var lambda,
             scope: scope,
-            source: out var source
+            source: out var source,
+            owned: out var sourceOwned
         )) {
             return null;
         }
@@ -337,15 +403,19 @@ public static partial class DocumentBuiltins {
         var arr = new JsonArray();
 
         for (var index = 0; (index < source!.Count); ++index) {
+            var lowered = ApplyOwned(
+                lambda: lambda,
+                scope: scope,
+                fieldKey: fieldKey,
+                first: source[index],
+                second: JsonValue.Create(value: ((long)index)),
+                owned: out var owned
+            );
+
             AppendSpliced(
                 arr: arr,
-                lowered: Apply(
-                    lambda: lambda,
-                    scope: scope,
-                    fieldKey: fieldKey,
-                    first: source[index],
-                    second: JsonValue.Create(value: ((long)index))
-                ),
+                lowered: lowered,
+                owned: owned,
                 scope: scope,
                 span: call.Span
             );
@@ -364,11 +434,7 @@ public static partial class DocumentBuiltins {
             );
         }
 
-        if (DocumentLowering.EvaluateValue(
-            expr: args[0].Value,
-            scope: scope,
-            fieldKey: fieldKey
-        ) is not JsonArray source) {
+        if (!TryLend(expr: args[0].Value, fieldKey: fieldKey, list: out var source, scope: scope)) {
             return Refuse(
                 call: call,
                 message: "distinct(array) reads an array",
@@ -384,15 +450,12 @@ public static partial class DocumentBuiltins {
         );
         var seen = new HashSet<JsonNode?>(comparer: DocumentValueEqualityComparer.Instance);
 
-        foreach (var item in source.ToList()) {
-            if (!seen.Add(item: item)) {
+        for (var index = 0; (index < source.Count); ++index) {
+            if (!seen.Add(item: source[index])) {
                 continue;
             }
 
-            arr.AppendNode(item: scope.Budget.Copy(
-                item,
-                call.Span
-            ));
+            arr.AppendNode(item: source.Take(budget: scope.Budget, index: index, span: call.Span));
         }
 
         return arr;
@@ -405,7 +468,8 @@ public static partial class DocumentBuiltins {
             fieldKey: fieldKey,
             lambda: out var lambda,
             scope: scope,
-            source: out var source
+            source: out var source,
+            owned: out var sourceOwned
         )) {
             return null;
         }
@@ -419,21 +483,19 @@ public static partial class DocumentBuiltins {
         }
 
         var arr = new JsonArray();
+        var items = new Lent(list: source!, owned: sourceOwned);
 
-        for (var index = 0; (index < source!.Count); ++index) {
+        for (var index = 0; (index < items.Count); ++index) {
             var kept = Apply(
                 lambda: lambda,
                 scope: scope,
                 fieldKey: fieldKey,
-                first: source[index],
+                first: items[index],
                 second: JsonValue.Create(value: ((long)index))
             );
 
             if (DocumentLowering.IsTruthy(node: kept)) {
-                arr.AppendNode(item: scope.Budget.Copy(
-                    source[index],
-                    call.Span
-                ));
+                arr.AppendNode(item: items.Take(budget: scope.Budget, index: index, span: call.Span));
             }
         }
 
@@ -449,7 +511,8 @@ public static partial class DocumentBuiltins {
             fieldKey: fieldKey,
             lambda: out var lambda,
             scope: scope,
-            source: out var source
+            source: out var source,
+            owned: out var sourceOwned
         )) {
             return null;
         }
@@ -463,13 +526,14 @@ public static partial class DocumentBuiltins {
         }
 
         var grouped = new JsonObject();
+        var items = new Lent(list: source!, owned: sourceOwned);
 
-        for (var index = 0; (index < source!.Count); ++index) {
+        for (var index = 0; (index < items.Count); ++index) {
             var key = Apply(
                 lambda: lambda,
                 scope: scope,
                 fieldKey: fieldKey,
-                first: source[index],
+                first: items[index],
                 second: JsonValue.Create(value: ((long)index))
             );
             var name = DocumentLowering.KeyText(node: key);
@@ -487,10 +551,7 @@ public static partial class DocumentBuiltins {
                 grouped[propertyName: name] = bucket;
             }
 
-            bucket.AppendNode(item: scope.Budget.Copy(
-                source[index],
-                call.Span
-            ));
+            bucket.AppendNode(item: items.Take(budget: scope.Budget, index: index, span: call.Span));
         }
 
         return grouped;
@@ -561,7 +622,8 @@ public static partial class DocumentBuiltins {
             fieldKey: fieldKey,
             lambda: out var lambda,
             scope: scope,
-            source: out var source
+            source: out var source,
+            owned: out var sourceOwned
         )) {
             return null;
         }
@@ -577,16 +639,16 @@ public static partial class DocumentBuiltins {
         var arr = new JsonArray();
 
         for (var index = 0; (index < source!.Count); ++index) {
-            arr.AppendNode(item: scope.Budget.Copy(
-                Apply(
-                    lambda: lambda,
-                    scope: scope,
-                    fieldKey: fieldKey,
-                    first: source[index],
-                    second: JsonValue.Create(value: ((long)index))
-                ),
-                call.Span
-            ));
+            var mapped = ApplyOwned(
+                lambda: lambda,
+                scope: scope,
+                fieldKey: fieldKey,
+                first: source[index],
+                second: JsonValue.Create(value: ((long)index)),
+                owned: out var owned
+            );
+
+            arr.AppendNode(item: scope.Budget.Take(owned: owned, span: call.Span, value: mapped));
         }
 
         return arr;
@@ -740,11 +802,7 @@ public static partial class DocumentBuiltins {
             );
         }
 
-        if (DocumentLowering.EvaluateValue(
-            expr: args[0].Value,
-            scope: scope,
-            fieldKey: fieldKey
-        ) is not JsonArray source) {
+        if (!TryLend(expr: args[0].Value, fieldKey: fieldKey, list: out var items, scope: scope)) {
             return Refuse(
                 call: call,
                 message: "sort's first argument is an array",
@@ -774,13 +832,11 @@ public static partial class DocumentBuiltins {
             lambda = written;
         }
 
-        var items = source.ToList();
-
         scope.Budget.Collection(
             count: items.Count,
             span: call.Span
         );
-        var keyed = new List<(JsonNode? Key, JsonNode? Item)>(capacity: items.Count);
+        var keyed = new List<(JsonNode? Key, int Index)>(capacity: items.Count);
 
         for (var index = 0; (index < items.Count); ++index) {
             keyed.Add(item: (
@@ -793,7 +849,7 @@ public static partial class DocumentBuiltins {
                     first: items[index],
                     second: JsonValue.Create(value: ((long)index))
                 )),
-                Item: items[index]));
+                Index: index));
         }
 
         var arr = new JsonArray();
@@ -802,10 +858,7 @@ public static partial class DocumentBuiltins {
             keySelector: static entry => entry.Key,
             comparer: DocumentValueComparer.Instance
         )) {
-            arr.AppendNode(item: scope.Budget.Copy(
-                entry.Item,
-                call.Span
-            ));
+            arr.AppendNode(item: items.Take(budget: scope.Budget, index: entry.Index, span: call.Span));
         }
 
         return arr;
@@ -869,9 +922,11 @@ public static partial class DocumentBuiltins {
         DocumentScope scope,
         string? fieldKey,
         out JsonArray? source,
+        out bool owned,
         out LambdaExpressionNode? lambda
     ) {
         source = null;
+        owned = false;
         lambda = null;
 
         if (args.Count != expected) {
@@ -884,10 +939,11 @@ public static partial class DocumentBuiltins {
             return false;
         }
 
-        if (DocumentLowering.EvaluateValue(
+        if (DocumentLowering.Evaluate(
             expr: args[0].Value,
-            scope: scope,
-            fieldKey: fieldKey
+            fieldKey: fieldKey,
+            owned: out var read,
+            scope: scope
         ) is not JsonArray arr) {
             Refuse(
                 scope: scope,
@@ -913,6 +969,7 @@ public static partial class DocumentBuiltins {
             span: call.Span
         );
         source = arr;
+        owned = read;
         lambda = written;
 
         return true;
@@ -929,13 +986,17 @@ public static partial class DocumentBuiltins {
     /// <param name="scope">The lowering scope.</param>
     /// <param name="fieldKey">The enclosing JSON key, threaded into each element's own lowering.</param>
     /// <param name="result">The evaluated node.</param>
+    /// <param name="owned">Whether the caller alone holds <paramref name="result"/> (<see cref="DocumentLowering.Evaluate"/>):
+    /// every builtin builds its result afresh except <c>reduce</c> and a list fold, which may answer a value a binding
+    /// holds.</param>
     /// <returns><see langword="true"/> when <paramref name="call"/> names a builtin; refusals are reported into the
     /// scope's diagnostics and yield a null <paramref name="result"/>.</returns>
-    public static bool TryFold(CallExpressionNode call, DocumentScope scope, string? fieldKey, out JsonNode? result) {
+    public static bool TryFold(CallExpressionNode call, DocumentScope scope, string? fieldKey, out JsonNode? result, out bool owned) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
 
         result = null;
+        owned = false;
 
         // A fold is told by its lambda, so a construct or a scalar of the same name (a gate's `all`, `minimum(a, b)`)
         // keeps its own meaning.
@@ -958,13 +1019,16 @@ public static partial class DocumentBuiltins {
             return false;
         }
 
-        result = (Collections.TryGetValue(key: call.Name, value: out var collection)
-            ? collection.Evaluate(arg1: call, arg2: scope, arg3: fieldKey)
+        var isCollection = Collections.TryGetValue(key: call.Name, value: out var collection);
+
+        result = (isCollection
+            ? collection!.Evaluate(arg1: call, arg2: scope, arg3: fieldKey)
             : DocumentScalars.Evaluate(
                 call: call,
                 fieldKey: fieldKey,
                 scope: scope
             ));
+        owned = !(isCollection && collection!.Borrows);
 
         return true;
     }
@@ -977,13 +1041,17 @@ public static partial class DocumentBuiltins {
 /// key, returning the produced node or <see langword="null"/> after reporting a refusal into the scope.</param>
 /// <param name="positionalOnly">Whether a call that names any argument is not this builtin: a vocabulary arm of the same
 /// name (<c>all(predicates: [...])</c>) reads its named arguments, so a call written that way is the arm's.</param>
-public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate, bool positionalOnly = false) {
+/// <param name="borrows">Whether a call may answer a value something else holds (<c>reduce</c> answers its seed or
+/// its lambda's value as they stand); every other builtin builds its result afresh.</param>
+public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate, bool positionalOnly = false, bool borrows = false) {
     /// <summary>Gets the call as an author writes it.</summary>
     public string Signature { get; } = signature;
     /// <summary>Gets what the call produces.</summary>
     public string Description { get; } = description;
     /// <summary>Gets whether a call naming any argument belongs to a vocabulary arm instead of this builtin.</summary>
     public bool PositionalOnly { get; } = positionalOnly;
+    /// <summary>Gets whether a call may answer a value something else holds, so its result is borrowed.</summary>
+    public bool Borrows { get; } = borrows;
 
     internal Func<CallExpressionNode, DocumentScope, string?, JsonNode?> Evaluate { get; } = evaluate;
 }

@@ -672,7 +672,7 @@ public static partial class WorldDocumentEmitter {
         var moduleName = subject.Name;
 
         if (
-            host.TryLowerBinding(subject.Name, out var bound) &&
+            host.TryReadBinding(subject.Name, out var bound) &&
             (bound is JsonValue leaf) &&
             leaf.TryGetValue<string>(value: out var boundName)
         ) {
@@ -1121,7 +1121,7 @@ public static partial class WorldDocumentEmitter {
             _ => null,
         };
 
-        if ((expression is IdentifierExpressionNode name) && !scope.TryLowerBinding(name.Name, out _)) { return null; }
+        if ((expression is IdentifierExpressionNode name) && !scope.TryReadBinding(name.Name, out _)) { return null; }
         return ((expression is null) ? null : LowerStateScalarValue(
             context: $"a given line's value for '{cell.Target.Name}'",
             expr: expression, kind: kind, scope: scope));

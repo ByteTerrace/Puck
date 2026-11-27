@@ -354,6 +354,18 @@ public sealed partial class DocumentScope {
         defaultValue: this,
         key: name
     );
+    /// <summary>Reads a lexical binding's value as the binding holds it, without copying it: for a check or a read
+    /// (its kind, its text, its key), never for output. <see cref="TryLowerBinding"/> answers a copy to place.</summary>
+    /// <param name="name">The binding's name.</param>
+    /// <param name="value">The borrowed value, which may be null; the binding keeps it, so it is never changed or
+    /// placed in a container.</param>
+    /// <param name="fieldKey">The destination field used to validate unit suffixes.</param>
+    /// <returns>True when a local, template argument or constant bears the name.</returns>
+    public bool TryReadBinding(string name, out JsonNode? value, string? fieldKey = null) => TryEvaluateBinding(
+        fieldKey: fieldKey,
+        name: name,
+        value: out value
+    );
     // Evaluator-only borrowed values: never mutate or attach these nodes to an output container.
     internal bool TryEvaluateBinding(string name, string? fieldKey, out JsonNode? value) {
         if (Locals.TryGetValue(
