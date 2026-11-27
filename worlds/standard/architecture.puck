@@ -784,7 +784,7 @@ function cabinetDeckAt(x, u, h) = [x, (1.19 - (u * 0.3) + (h * 0.9539)), (0.2 + 
 // each player side by side.
 // A control panel's buttons, [x from the panel's centre, u down the deck]: two rows of three, the first column set a
 // little lower so the rows follow the fingers' curve, clear of the stick on the left and the player's mark in front.
-let cabinetButtonLayout = [[-0.08, 0.21], [0.07, 0.18], [0.22, 0.18], [-0.08, 0.35], [0.07, 0.32], [0.22, 0.32]]
+let cabinetButtonLayout = [[-0.08, 0.28], [0.07, 0.25], [0.22, 0.25], [-0.08, 0.41], [0.07, 0.38], [0.22, 0.38]]
 function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 
 // A bar stool at `at` (on y 0): a round padded seat `height` up on a single post over a weighted foot disc. `seat` and
@@ -1157,7 +1157,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-stick-base-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.32), 0.27, 0.023)
+      position: cabinetDeckAt((c - 0.32), 0.33, 0.023)
       rotation: cabinetDeckRot
       scale [0.075, 0.008, 0.075]
       rounding: 0.004
@@ -1165,20 +1165,20 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-stick-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c - 0.32), 0.27, 0.101)
+      position: cabinetDeckAt((c - 0.32), 0.33, 0.101)
       rotation: cabinetDeckRot
       scale [0.017, 0.07, 0.017]
       detail: true
     }
     shape Sphere $"cabinet-stick-ball-{p}" {
       material: (base + cabinetButton)
-      position: cabinetDeckAt((c - 0.32), 0.27, 0.221)
+      position: cabinetDeckAt((c - 0.32), 0.33, 0.221)
       scale [0.065, 0.065, 0.065]
       detail: true
     }
     shape Cylinder $"cabinet-start-collar-{p}" {
       material: (base + cabinetMetal)
-      position: cabinetDeckAt((c + 0.4), 0.2, 0.021)
+      position: cabinetDeckAt((c + 0.4), 0.27, 0.021)
       rotation: cabinetDeckRot
       scale [0.05, 0.006, 0.05]
       rounding: 0.003
@@ -1186,7 +1186,7 @@ template arcadeCabinet(base, title, em = 0.13, players = 1, stools = false) {
     }
     shape Cylinder $"cabinet-start-{p}" {
       material: (base + cabinetNeon)
-      position: cabinetDeckAt((c + 0.4), 0.2, 0.027)
+      position: cabinetDeckAt((c + 0.4), 0.27, 0.027)
       rotation: cabinetDeckRot
       scale [0.04, 0.01, 0.04]
       rounding: 0.006
