@@ -101,15 +101,46 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     public int CharacterLimit => characterBudget;
 
     /// <summary>Creates a log and tees the process's <see cref="Console.Out"/> and <see cref="Console.Error"/> into
-    /// it, each still writing to the stream it wrote to before.</summary>
-    /// <returns>The log.</returns>
-    public static HostLog CaptureConsole() {
-        var log = new HostLog();
+    /// it, each still writing to the stream it wrote to before, until the returned capture is disposed.</summary>
+    /// <returns>The capture, whose <see cref="ConsoleCapture.Log"/> holds the lines; its owner disposes it when the host
+    /// it serves has ended.</returns>
+    public static ConsoleCapture CaptureConsole() => new(log: new HostLog());
 
-        Console.SetOut(newOut: log.Tee(inner: Console.Out, stream: HostLogStream.Output));
-        Console.SetError(newError: log.Tee(inner: Console.Error, stream: HostLogStream.Error));
+    /// <summary>One host's tee of the process console into its log. The console is the process's and outlives every
+    /// host, so the capture puts back the writers it replaced and releases the log's tick anchor when disposed: a process
+    /// that boots host after host (a test batch, a server cycling worlds) never keeps an ended host reachable through
+    /// its console, and never writes through a chain of every earlier host's tee.</summary>
+    public sealed class ConsoleCapture : IDisposable {
+        private readonly TextWriter m_previousOut;
+        private readonly TextWriter m_previousError;
+        private readonly TextWriter m_installedOut;
+        private readonly TextWriter m_installedError;
+        private int m_disposed;
 
-        return log;
+        internal ConsoleCapture(HostLog log) {
+            Log = log;
+            m_previousOut = Console.Out;
+            m_previousError = Console.Error;
+            Console.SetOut(newOut: log.Tee(inner: m_previousOut, stream: HostLogStream.Output));
+            Console.SetError(newError: log.Tee(inner: m_previousError, stream: HostLogStream.Error));
+            // The console wraps what it is handed; these are the writers it now answers, compared at disposal.
+            m_installedOut = Console.Out;
+            m_installedError = Console.Error;
+        }
+
+        /// <summary>Gets the log every line written through the console is held in while the capture lasts.</summary>
+        public HostLog Log { get; }
+
+        /// <summary>Puts back each console writer the capture replaced, unless a later install has replaced it since,
+        /// and releases the log's tick anchor.</summary>
+        public void Dispose() {
+            if (Interlocked.Exchange(location1: ref m_disposed, value: 1) != 0) { return; }
+            Console.Out.Flush();
+            Console.Error.Flush();
+            if (ReferenceEquals(objA: Console.Out, objB: m_installedOut)) { Console.SetOut(newOut: m_previousOut); }
+            if (ReferenceEquals(objA: Console.Error, objB: m_installedError)) { Console.SetError(newError: m_previousError); }
+            Volatile.Write(location: ref Log.m_tick, value: null);
+        }
     }
 
     /// <summary>Anchors every later line to a tick.</summary>

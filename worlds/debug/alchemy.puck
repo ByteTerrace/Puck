@@ -511,8 +511,8 @@ rules "" when alchemyHold == alchemySettleTicks {
 
 // ---- Seated play at the table ------------------------------------------------------------------------------------
 // Seat 1 sits down with the context button (the board's engage block) and plays with the shared tabletop page
-// (chess.puck): moving the cursor across the 8x5 grid and pressing confirm on two elements in a row loads `left` then
-// `right`. Pressing cancel (or confirm on cell 0) clears a partial hand.
+// (../standard/contexts/tabletop.puck): moving the cursor across the 8x5 grid and pressing confirm on two elements in a
+// row loads `left` then `right`. Pressing cancel (or confirm on cell 0) clears a partial hand.
 
 rule "alchemy-seat-presses" {
   mode: Level

@@ -54,6 +54,7 @@ public sealed class CreationLeadGuessLawTests {
         public int EntityCapacity => inner.EntityCapacity;
         public float? SolidScale(string placementId) => inner.SolidScale(placementId: placementId);
         public WorldEntityAddress EntityAddress(int index) => inner.EntityAddress(index: index);
+        public FixedWorldCollider? Collider(int index) => inner.Collider(index: index);
         public BodyFacts Facts(int index) => inner.Facts(index: index);
         public bool IsActive(int index) => inner.IsActive(index: index);
         public WorldLook Look(int index) => inner.Look(index: index);
