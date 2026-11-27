@@ -10,7 +10,8 @@ public sealed partial class WorldPopulation {
     private static readonly FixedQ4816 OwnershipGuard = new(Value: 8L);
 
     // Tick scratch, shared by every projection and sweep retry for a body. Rebuilding the contact field does not
-    // replenish it. Different body lanes own different slots; the tick owner resets it before dispatching them.
+    // replenish it. A body's slot is written only by that body's own sweeps (AdmitAdjacencyResponse), so the kit
+    // partitions write disjoint slots; the tick owner resets it before dispatching them.
     private FixedQ4816[] m_adjacencyCorrectionSpent = [];
     private ulong m_adjacencyTick = 1;
     private ulong? m_adjacencyImageTick;
@@ -55,8 +56,11 @@ public sealed partial class WorldPopulation {
         previous?.Dispose();
         return projections;
     }
+    // Derived on the thread that owns the tick: a kit fork derives them before it starts (ForkKitPartitions), so a
+    // partition's sweep only reads them.
     private WorldOwnershipFace[] OwnershipFaces() {
         if (!ReferenceEquals(objA: m_ownershipFacesDefinition, objB: m_adjacencyDefinition)) {
+            ThrowIfPartitioned();
             m_ownershipFaces = ((m_adjacencyDefinition is { } definition)
                 ? WorldAdjacencyPolicy.OwnershipFaces(definition: definition)
                 : []);
@@ -75,6 +79,8 @@ public sealed partial class WorldPopulation {
     //   not grow. A crossing the sweep reports therefore comes from the body's own motion, never from a neighbour's push.
     //   While its incoming velocity retreats from a face, no outward correction or reduction of that retreat is admitted.
     // A body index with no local body admits nothing. No budget is refunded on a failed retry.
+    // It reads the ownership faces and the body's radius and writes the named body's budget and the caller's own
+    // position and velocity, nothing else, so a kit partition's sweep may pass it for the body it steps.
     internal void AdmitAdjacencyResponse(int entityIndex, FixedQ4816 overlapDepth, ref FixedVector3 position, ref FixedVector3 velocity,
         FixedVector3 displacement, FixedVector3 proposedVelocity) {
         if ((((uint)entityIndex) >= ((uint)m_adjacencyCorrectionSpent.Length)) ||
@@ -126,7 +132,10 @@ public sealed partial class WorldPopulation {
         position = (start + admitted);
         velocity = admittedVelocity;
     }
+    // Moves the carrier, another body than the one whose sweep reports the response, so it is refused in a kit
+    // partition.
     internal void ApplyCarriedAdjacencyResponse(WorldBody carrier, FixedQ4816 overlapDepth, FixedVector3 displacement) {
+        ThrowIfPartitioned();
         if (carrier.SweepRefusedThisTick) { return; }
         var position = carrier.FixedPosition;
         var velocity = carrier.ApproximateWorldVelocity();
