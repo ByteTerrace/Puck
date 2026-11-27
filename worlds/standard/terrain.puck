@@ -106,16 +106,16 @@ function terrainCarveMask(basins, cuts = [], fade = 8) = {
       type: "Superellipsoid"
       name: basin.label
       exponent: 2
-      position [basin.lateral, basin.y, basin.radial]
+      position: sectorPoint([basin.lateral, basin.y, basin.radial])
       scale: basin.radii
     }),
     map(cuts, cut => {
       type: "Box"
       name: cut.label
       rounding: cut.rounding
-      position: cut.position
+      position: sectorPoint(cut.position)
       scale: cut.half
-      rotation: cut.rotation
+      rotation: sectorTurn(cut.rotation)
     })
   )
 }
