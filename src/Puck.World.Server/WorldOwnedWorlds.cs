@@ -308,8 +308,9 @@ public sealed class WorldOwnedWorlds {
         }
     }
     /// <summary>The file in the account directory whose exclusive hold makes a process the account's one writer — a name
-    /// outside the catalog's <c>*.world.json</c> glob.</summary>
-    public const string AccountLockName = "account.lock";
+    /// outside the catalog's <c>*.world.json</c> glob, and a runtime guard (<see cref="WorldStateRoot.GuardSuffix"/>)
+    /// that nothing archiving a state directory reads.</summary>
+    public const string AccountLockName = "account" + WorldStateRoot.GuardSuffix;
 
     private void Narrate(string text) {
         if (m_narrationHub is { HasNarrationSink: true } hub) {
