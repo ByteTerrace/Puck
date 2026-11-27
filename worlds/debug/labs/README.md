@@ -133,20 +133,29 @@ converged; read `world.exposure`'s `camera=` there before judging.
 
 ### Surface
 
-[surface.puck](surface.puck): the standard's relief patterns (fractal noise,
-ridged noise, cell cracks, bricks) on panels 4 m, 14 m and 40 m from the seat,
-each row on its own stretch of floor. Every pattern stands as a pair: band
-limited on the right (`filterScale` 1) and unlimited on the left (`filterScale`
-0 for the noises, no pixel floor on the edge ramps), so shimmer reads as the
-difference between the two in a presented burst
-(`world.screenshot <path.png> presented 8`), never in a settled still. Down the
-floor's west side a sight line runs 150 m, a marker post every 10 m, through fog
-at a visible density with an authored `anisotropy` of 0.6, toward a sun held at
-half past eight 28 degrees up straight down the line (-Z): look along it for
-the forward glow ([surface-sky.puck](surface-sky.puck)).
+[surface.puck](surface.puck): the standard's patterns (fractal noise, ridged
+noise, cell cracks, bricks) on panels facing the seat, in rows 10 m, 20 m and
+46 m north of its line, each row on its own stretch of floor. Each panel carries
+its pattern twice: as colour (the standard's `crackFace` and `brickFace`, and
+the lab's noise faces), which reads in any light, and as relief, which the sun
+picks out at a grazing angle. Every pattern stands as a pair: band limited on the
+right (`filterScale` 1) and unlimited on the left (`filterScale` 0 for the
+noises, no pixel floor on the edge ramps), so shimmer reads as the difference
+between the two in a presented burst
+(`world.screenshot <path.png> presented 8`), never in a settled still. Along the
+floor's south side a sight line runs 150 m east, a marker post every 10 m,
+through fog at a visible density with an authored `anisotropy` of 0.6. The sun
+is held at half past eight, 28 degrees up and 35 degrees round from the line
+toward the panels' side ([surface-sky.puck](surface-sky.puck)), so it lights
+the panels' faces and a view east along the line looks into the forward glow.
+
+`surface.look near|middle|far|sight` frames a row square on from its viewing
+distance, or the sight line from its head, with the operator camera, and parks
+the body out of view; `view.override camera auto` hands the view back. Judge
+each row from that command so every capture frames it the same way.
 
 Places: `hero`, `surface-near`, `surface-middle`, `surface-far` (6 m before
-each row) and `surface-sight` (the sight line's head, facing down it).
+each row) and `surface-sight` (the sight line's head, facing east along it).
 
 ### Shapes
 
