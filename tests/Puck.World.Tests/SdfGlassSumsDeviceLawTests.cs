@@ -12,9 +12,9 @@ namespace Puck.World.Tests;
 /// <summary>Both hardware backends execute the production glass accumulation (<c>frame/sdf-glass.hlsli</c>) over the
 /// same faces in many orders.
 /// <para>Raster order is unspecified, so the sums a pixel's faces leave must not depend on it: every order of one
-/// case's faces leaves identical words, but for the second record's front entries, which hold the same set of front
-/// faces (each case has at most three) in whatever order they claimed them, and its nearest back face is the nearest
-/// back face, including an exit behind the opaque hit. The decoded optical depth of each channel is the exact Beer-Lambert integral,
+/// case's faces leaves identical words, its layer list included, which holds the nearest visible front faces up to its
+/// length in distance order, and its nearest back face is the nearest back face, including an exit behind the opaque
+/// hit. The decoded optical depth of each channel is the exact Beer-Lambert integral,
 /// the sum over each solid's interval before the opaque hit of its material's absorption times the interval's length,
 /// to within the encoding's quantization; it carries no error proportional to the opaque hit's distance, so glass seen
 /// against the far sky reads as it does against a near wall.</para></summary>
@@ -25,12 +25,11 @@ public sealed class SdfGlassSumsDeviceLawTests {
     private const int Orders = 24;
     private const int Words = (int)SdfWorldPackage.GlassSumWords;
     private const int Rows = (1 + ((Words + 1) / 2));
-    // The second record's words, frame/sdf-glass.hlsli's SdfGlassFrontCountWord on.
-    private const int FrontCountWord = 8;
-    private const int FrontEntryWord = 9;
-    private const int FrontEntries = 3;
-    private const int NearestBackWord = 15;
-    private const int InsideMaterialWord = 16;
+    // The layer list's words, frame/sdf-glass.hlsli's SdfGlassLayerWord on, and the nearest back face's after the
+    // material key.
+    private const int LayerWord = 8;
+    private const int Layers = (int)SdfWorldPackage.GlassLayers;
+    private const int NearestBackWord = (LayerWord + (2 * Layers) + 1);
 
     // A face: its ray distance, the opaque hit's distance, whether it faces the camera, and its absorption's index.
     private readonly record struct Face(float T, float Opaque, bool Front, int Absorption);
@@ -91,19 +90,23 @@ public sealed class SdfGlassSumsDeviceLawTests {
             var results = Run(extension: extension, glassCase: glassCase, orders: orders, services: services);
             var words = Enumerable.Range(start: 0, count: Orders).Select(selector: order => WordsOf(results: results, order: order)).ToArray();
 
+            // The visible front faces nearest first, as (draw, triangle): a face's draw is its index, its triangle three
+            // times that plus one.
             var fronts = glassCase.Faces.Select(selector: static (face, index) => (face, index)).Where(predicate: static pair => pair.face.Front && (pair.face.T < pair.face.Opaque))
-                .Select(selector: static pair => (((uint)pair.index + 1u), ((3u * (uint)pair.index) + 1u))).Order().ToArray();
+                .OrderBy(keySelector: static pair => pair.face.T).ThenBy(keySelector: static pair => pair.index)
+                .Select(selector: static pair => ((uint)pair.index, ((3u * (uint)pair.index) + 1u))).Take(count: Layers).ToArray();
             var backs = glassCase.Faces.Where(predicate: static face => !face.Front).Select(selector: static face => face.T).ToArray();
 
             for (var order = 0; (order < Orders); order++) {
                 var held = words[order];
-                var entries = Enumerable.Range(start: 0, count: Math.Min(val1: fronts.Length, val2: FrontEntries))
-                    .Select(selector: entry => (held[(FrontEntryWord + (2 * entry))], held[(FrontEntryWord + (2 * entry) + 1)])).Order().ToArray();
+                // Each entry is its key inverted: the triangle in the low 24 bits, the draw in the 18 above.
+                var entries = Enumerable.Range(start: 0, count: Layers)
+                    .Select(selector: entry => ~(((ulong)held[(LayerWord + (2 * entry) + 1)] << 32) | held[(LayerWord + (2 * entry))]))
+                    .Where(predicate: static key => (key != ulong.MaxValue))
+                    .Select(selector: static key => ((uint)((key >> 24) & 0x3FFFFUL), (uint)(key & 0xFFFFFFUL))).ToArray();
 
-                Assert.True(condition: (words[0].AsSpan(start: 0, length: FrontEntryWord).SequenceEqual(other: held.AsSpan(start: 0, length: FrontEntryWord)) &&
-                    (words[0][NearestBackWord] == held[NearestBackWord]) && (words[0][InsideMaterialWord] == held[InsideMaterialWord])),
+                Assert.True(condition: words[0].AsSpan().SequenceEqual(other: held),
                     userMessage: $"{glassCase.Name}: order {order} left [{string.Join(separator: ' ', values: held)}], order 0 [{string.Join(separator: ' ', values: words[0])}].");
-                Assert.Equal(expected: (uint)fronts.Length, actual: held[FrontCountWord]);
                 Assert.Equal(expected: fronts, actual: entries);
                 Assert.Equal(expected: ((backs.Length == 0) ? 0u : ~BitConverter.SingleToUInt32Bits(value: backs.Min())), actual: held[NearestBackWord]);
             }
@@ -153,6 +156,7 @@ public sealed class SdfGlassSumsDeviceLawTests {
                 new GpuGroupBinding(binding: 2, kind: GpuBindingKind.ReadOnlyBuffer),
                 new GpuGroupBinding(binding: 3, kind: GpuBindingKind.ReadWriteBuffer),
                 new GpuGroupBinding(binding: 4, kind: GpuBindingKind.StorageImage),
+                new GpuGroupBinding(binding: 5, kind: GpuBindingKind.ReadWriteBuffer),
             ])], pushesIndex: false, stages: GpuShaderStage.Compute));
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))));
@@ -182,6 +186,8 @@ public sealed class SdfGlassSumsDeviceLawTests {
             services.Bindings.WriteBuffer(binding: 3, bufferHandle: sums.BufferHandle, bufferSize: sums.SizeBytes,
                 descriptorSetHandle: set, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 4, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
+            services.Bindings.WriteBuffer(binding: 5, bufferHandle: sums.BufferHandle, bufferSize: sums.SizeBytes,
+                descriptorSetHandle: set, elementStride: 8, kind: GpuBindingKind.ReadWriteBuffer);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 

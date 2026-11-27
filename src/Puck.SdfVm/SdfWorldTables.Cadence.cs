@@ -40,6 +40,7 @@ namespace Puck.SdfVm;
 //   - m_frameSampledRevision : the heights the height fields' draws are displaced by, a geometry value.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
+//   - m_fieldSliceRevision : the live field slice's image and opacity (StageFieldSlice), which only the composite draws.
 //   - m_decalRevision    : the glyph-decal buffer (the screens' cells and the surface texts' glyphs), revision-tracked
 //                          rather than hashed each frame.
 //   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
@@ -67,7 +68,9 @@ public sealed partial class SdfWorldTables {
     private ulong m_shadowDensitySignature;
     private ulong m_visualSignature;
 
-    private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
+    private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [
+        SdfWorldPackage.GeometryOnly, SdfWorldPackage.FieldSliceOrigin, SdfWorldPackage.FieldSliceAxisU, SdfWorldPackage.FieldSliceAxisV,
+    ]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         SdfWorldPackage.ToonMode, SdfWorldPackage.DisplayPixels, SdfWorldPackage.InkEdges,
@@ -329,7 +332,10 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.Composite:
                 hash.Add(value: lighting.Value);
                 hash.Add(value: m_visualSignature);
-                if (part == SdfWorldPackage.Parts.Composite) { hash.Add(value: inputs.Composite); }
+                if (part == SdfWorldPackage.Parts.Composite) {
+                    hash.Add(value: inputs.Composite);
+                    hash.Add(value: m_fieldSliceRevision);
+                }
                 break;
         }
         // The optical tail's own values: the lens's scatter for the pyramid, and for the display pass the sharpen, the
@@ -457,6 +463,7 @@ public sealed partial class SdfWorldTables {
             screenSurfaces,
             screenMappings,
             unchecked((ulong)m_meshIrradianceRevision),
+            m_fieldSliceRevision,
         ];
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));

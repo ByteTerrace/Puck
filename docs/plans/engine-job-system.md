@@ -544,33 +544,42 @@ largest serial phase: 1,920 citizens and 100 vehicles, all kit bodies. Most of
 those bodies never use the transaction's hard parts: a citizen's step writes no
 arena state, makes no foreign effect and commits no selector, and it reads other
 bodies only through its producer. `WorldPopulation.AdvanceSimulated` therefore
-advances every body whose step is local in fixed kit partitions, and every other
-body afterwards, serially, in index order (`AdvanceSerialBody`), inside the kit
-transaction. `WorldPopulation.Partitions.cs` holds the mechanism and its
-invariant; in short:
+takes every body through one set of phases: a body whose step is local advances
+in a fixed kit partition that a fork runs, and every other body in the serial
+partition, one partition of the same shape that the forking thread runs in index
+order, inside the kit transaction. `WorldPopulation.Partitions.cs` holds the
+mechanism and its invariant; in short:
 
 - **Which bodies.** `WorldBody.StepIsLocal` and `WorldPopulation.ProducerIsLocal`,
   read at the plan from the body as compiled now: no action binding, no
   running or fact-reset timer and no fact-reset counter away from its initial
   value (`RegistersRestThisStep`), no hold that spends a register, no rigid,
   carry or tether facet, not carried or parked, no tape, press, staged durable
-  input, capture, pending continuum or script controller, no entity-aware
-  contact field; and a producer with no flock affinity (an authority expression
-  over the arena). Route searches, goal fields and sight tests partition. The
-  standard walker kit's registers and its ground and fall holds pass.
-- **The phases.** A plan fork (which bodies are local, their sleep, field
-  inputs and cadence, each partition planning its share of the tick's step
-  bodies), a serial settlement of the plan (the wakes it logged, the goal fields
-  and perception neighbourhoods the partitions will read, in partition order),
-  a steer fork (each due producer), a serial input pass, and a move fork (motion
-  program, contacts, settlement), then the join. A sleeper nothing wakes is
-  passed by before it is classed (`WorldBody.SleepsThrough`). The step is split
-  (`WorldBody.AdmitProducerObservation`, `BeginStepCore`, `MoveStep`, `EndStep`)
-  because every producer-driven body admits its observation through the one
-  input runtime (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its
-  intent; that admission alone runs in the input pass, in index order, and the
-  rest runs in the move fork with no kit scope. A fork hands out a few jobs of
-  consecutive partitions, and a phase with few bodies runs on the forking thread.
+  input, capture, pending continuum or script controller; and a producer with no
+  flock affinity (an authority expression over the arena). Route searches, goal
+  fields and sight tests partition, and so does a world with a seam: a sweep
+  through its entity-aware contact field (`WorldAdjacencyContactField`) reads
+  the tick's pinned projections and writes only the correction budget of the
+  body it names (`WorldPopulation.AdmitAdjacencyResponse`). The standard walker
+  kit's registers and its ground and fall holds pass.
+- **The phases.** A plan fork (every step body's sleep, field inputs and
+  cadence, and whether its step is local, each partition planning its share of
+  the tick's step bodies), a serial settlement of the plan (the wakes it logged,
+  the serial partition's bodies, the goal fields and perception neighbourhoods
+  the local partitions will read, in partition order), a steer phase (each due
+  producer), a serial input pass, and a move phase (motion program, contacts,
+  settlement). The steer and move phases each fork the local partitions and then
+  run the serial partition, and the move joins the local partitions before the
+  serial one moves, so every producer runs before any body moves and a body a
+  step wakes takes its own first step on the next tick. A sleeper nothing wakes
+  is passed by before it is classed (`WorldBody.SleepsThrough`). A body's
+  admission stands apart from its step (`WorldBody.AdmitProducerObservation`,
+  then `WorldBody.Advance`) because every producer-driven body admits its
+  observation through the one input runtime
+  (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its intent; that
+  admission alone runs in the input pass, and the rest runs in the move phase, a
+  local body's with no kit scope. A fork hands out a few jobs of consecutive
+  partitions, and a phase with few bodies runs on the forking thread.
 - **A partition** is a run of `WorldPopulation.KitPartitionSlots` slots, the
   slot-notes partition, so a body's section writes land in its own partition's
   notes and need no merge.
@@ -589,9 +598,9 @@ invariant; in short:
   goal field read, a cross-domain route search or a bake adoption throws, and a
   domain's own path search (`NavigationRuntime.Domain.FindPath`) rents a
   workspace of its own.
-- **Where it stops.** A body whose step writes state stays serial; the
-  per-partition transaction above is the step for it. The input pass is serial
-  work proportional to the moving local bodies.
+- **Where it stops.** A body whose step writes state steps in the serial
+  partition; the per-partition transaction above is the step for it. The input
+  pass is serial work proportional to the moving bodies.
 
 Open: the city's per-tick kit advance read in the lead's quiet window on the
 2060 against the 30 Hz authority target (`physics.bodies.local-advances` against

@@ -219,7 +219,10 @@ In `.puck` you never write a local's kind; the compiler infers it, and a `: Int`
 or `as Fixed` annotation is refused. Rows and earlier locals supply kinds.
 An unconstrained integer literal selects Int; a decimal spelling such as
 `1.0` selects Fixed. A literal can take its operation's numeric kind; state
-values keep their own kind, and arithmetic requires matching kinds.
+values keep their own kind. Arithmetic widens Int operands when another operand or a function requires Fixed.
+Writes, field copies and function results use the same assignment check: Int widens by an exact 16-bit shift,
+with overflow refused. Fixed requires explicit `toInt(value)` to become Int, truncating toward zero;
+`toFixed(value)` explicitly requests widening. Either conversion preserves a value already in its result kind.
 
 A local stores the expression's result kind. Comparisons, `sign`, and truth
 operators produce Int while reading numeric operands in their own carriers.

@@ -349,7 +349,7 @@ public static partial class WorldDocumentEmitter {
             } else {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-                    message: $"pool '{declaration.Name}' capacity must be a positive whole number",
+                    message: DiagnosticText.Compose(example: $"'pool {declaration.Name} of Record capacity(16)'", fix: "Write the capacity as a positive whole number", problem: $"The capacity of the pool '{declaration.Name}' is not a positive whole number"),
                     span: declaration.Span
                 );
             }
@@ -365,7 +365,7 @@ public static partial class WorldDocumentEmitter {
                     if (instances[slot] is not JsonObject instance) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-                            message: $"pool '{declaration.Name}' initializer entry {slot} must be an object",
+                            message: DiagnosticText.Compose(fix: "Write each initial entry as a block of the record's fields", problem: $"Entry {slot} of the initializer of the pool '{declaration.Name}' is not a block"),
                             span: declaration.Span
                         );
                         continue;
@@ -378,7 +378,7 @@ public static partial class WorldDocumentEmitter {
                         if ((record is not null) && (recordField is null)) {
                             scope.Diagnostics.ReportError(
                                 code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                                message: $"pool '{declaration.Name}' initializer names unknown field '{field}' of record '{declaration.RecordName}'",
+                                message: DiagnosticText.Compose(fix: $"Use a field the record '{declaration.RecordName}' declares", problem: $"The initializer of the pool '{declaration.Name}' names '{field}', which is not a field of the record '{declaration.RecordName}'"),
                                 span: declaration.Span
                             );
                             continue;
@@ -396,7 +396,7 @@ public static partial class WorldDocumentEmitter {
                 if ((capacity > 0) && (instances.Count > capacity)) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.StateDeclarationCapacityTooSmall,
-                        message: $"pool '{declaration.Name}' capacity {capacity} is smaller than its {instances.Count} static instances",
+                        message: DiagnosticText.Compose(fix: $"Raise the capacity to at least {instances.Count}, or remove instances", problem: $"The pool '{declaration.Name}' has capacity {capacity}, and its initializer holds {instances.Count} instances"),
                         span: declaration.Span
                     );
                 }
@@ -409,7 +409,7 @@ public static partial class WorldDocumentEmitter {
         if (capacity == 0) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-                message: $"pool '{declaration.Name}' must declare a positive capacity",
+                message: DiagnosticText.Compose(example: $"'pool {declaration.Name} of Record capacity(16)'", fix: "Add 'capacity(n)' with a positive whole number", problem: $"The pool '{declaration.Name}' declares no capacity"),
                 span: declaration.Span
             );
             capacity = 1;
@@ -446,7 +446,7 @@ public static partial class WorldDocumentEmitter {
         var value = DocumentLowering.LowerValue(expr: declaration.MaxLive, scope: scope);
 
         if ((value is not JsonValue number) || !number.TryGetValue<long>(value: out var maxLive) || (maxLive <= 0) || (maxLive > int.MaxValue)) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.StateDeclarationInvalidDefault, message: $"pairPool '{declaration.Name}' maxLive must be a positive whole number", span: declaration.Span);
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.StateDeclarationInvalidDefault, message: DiagnosticText.Compose(fix: "Write 'maxLive' as a positive whole number", problem: $"The 'maxLive' of the pairPool '{declaration.Name}' is not a positive whole number"), span: declaration.Span);
             maxLive = 1;
         }
         return new JsonObject {

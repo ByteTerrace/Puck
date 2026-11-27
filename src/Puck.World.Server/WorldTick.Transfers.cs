@@ -88,12 +88,7 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                var submission = packet with {
-                    Tick = Host.Input.Interval.Tick,
-                    EntityIndex = index,
-                    Principal = state.Principal,
-                    Input = packet.Input with { Tick = Host.Input.Interval.Tick },
-                };
+                var submission = WorldAcceptedInput.Admitted(entityIndex: index, packet: in packet, principal: state.Principal, tick: Host.Input.Interval.Tick);
                 var epoch = (owner?.Epoch ?? 0UL);
                 var retimed = (owner?.RetimedEvents ?? 0L);
                 var admission = ApplyIntentSubmission(body: body, remote: true, submission: submission);
@@ -122,23 +117,7 @@ public sealed partial class WorldTick {
                 }
                 NoteFederatedDrop(bodyIndex: index, reason: null);
                 admitted = true;
-                var held = submission.Input.Image;
-                var projected = submission.Intent;
-                var mapping = Host.Population.InputCatalog.Mappings[submission.Input.Mapping];
-
-                foreach (var logical in mapping.Live) {
-                    if (Host.Population.InputCatalog.Channels[logical].Shape != ChannelShape.Relative) { continue; }
-                    var address = mapping.Address(logicalId: logical);
-
-                    held = held.WithRelative(ordinal: address, value: default);
-                    projected = projected.WithRelative(ordinal: address, value: default);
-                }
-                state = state with {
-                    Submission = submission with {
-                        Intent = projected,
-                        Input = submission.Input with { Image = held, Events = default, Contributions = WithoutRelative(contributions: submission.Input.Contributions) },
-                    },
-                };
+                state = state with { Submission = WorldAcceptedInput.HeldRepeat(admitted: in submission, catalog: Host.Population.InputCatalog) };
             }
             state = state with { Pending = waiting };
             if (restarted) {
@@ -152,10 +131,7 @@ public sealed partial class WorldTick {
                 state = state with { Submission = null };
                 continue;
             }
-            var repeated = current with {
-                Tick = Host.Input.Interval.Tick,
-                Input = current.Input with { Tick = Host.Input.Interval.Tick },
-            };
+            var repeated = WorldAcceptedInput.Admitted(entityIndex: index, packet: in current, principal: state.Principal, tick: Host.Input.Interval.Tick);
 
             _ = ApplyIntentSubmission(body: body, remote: true, submission: repeated);
         }
@@ -163,27 +139,6 @@ public sealed partial class WorldTick {
     // Whether a batch names an input epoch its owner has left; an owner this authority has not admitted leaves none.
     private bool LeftEpoch(Principal principal, in WorldInputBatch batch, out WorldInputOwner? held) =>
         (Host.Input.TryGet(input: out held, principal: principal) && ((batch.Revision != held!.Revision) || (batch.Epoch != held.Epoch)));
-    // The held image's sources with every relative source at rest: a relative source reports movement since the last
-    // batch, which a republished image must not repeat. Copies only when one moved.
-    private static ReadOnlyMemory<WorldInputContribution> WithoutRelative(ReadOnlyMemory<WorldInputContribution> contributions) {
-        var moved = false;
-
-        foreach (var contribution in contributions.Span) {
-            if ((contribution.Kind == WorldInputContributionKind.Relative) && (contribution.RawValue != 0)) {
-                moved = true;
-                break;
-            }
-        }
-        if (!moved) { return contributions; }
-
-        var copy = contributions.ToArray();
-
-        for (var source = 0; (source < copy.Length); source++) {
-            if (copy[source].Kind == WorldInputContributionKind.Relative) { copy[source] = copy[source] with { RawValue = 0 }; }
-        }
-
-        return copy;
-    }
     /// <summary>Names a federated input this authority did not apply, once when the reason starts or changes, so a
     /// remote seat whose body stands still says why. A <see langword="null"/> reason marks the body as taking input
     /// again.</summary>

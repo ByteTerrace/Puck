@@ -41,7 +41,7 @@ public class OperandAtomLawTests {
             predicate: static diagnostic => string.Equals(a: diagnostic.Code, b: PuckDiagnosticCodes.ExpressionBuiltAsText, comparisonType: StringComparison.Ordinal)
         );
 
-        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"write 'expression: {bare}'");
+        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"Write the expression itself: 'expression: {bare}'");
     }
 
     // Each atom-bearing source and the source that spells what its atoms compute by hand; the two lower alike.

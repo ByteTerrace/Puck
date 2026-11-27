@@ -433,8 +433,10 @@ Source first, then structure, then pixels:
 3. `puck creation shape --world <file> --prototype <id> [--shape <name>]` (live:
    `creation.shape`) says whether each shape's distance is exact, a bound or
    uncertified, whether the fixed-point evaluator takes it, and what contact
-   makes of it. `world.slice <placement> <x|y|z> <path.png>` draws the field's
-   distance bands live.
+   makes of it. `world.slice <placement> <x|y|z> <path.png>` writes the field's
+   distance bands and `|grad d|` to a PNG, and `world.slice.live <placement>
+   <x|y|z> [mode distance|gradient|both]` draws them on a translucent plane in
+   the running world, resampled as the plane moves or the document reloads.
 4. Preview on the CPU before a windowed batch:
    `puck mesh preview --world <file>.puck --prototype <id> --output <dir>` bakes
    the creation with the engine's own CPU bake (no GPU lease, no World boot) and draws front (seen from its −Z side), back, both sides, four three-quarter views, top and

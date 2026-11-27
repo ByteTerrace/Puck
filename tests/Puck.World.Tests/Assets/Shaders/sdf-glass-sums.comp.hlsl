@@ -6,6 +6,8 @@
 [[vk::binding(2, 3)]] StructuredBuffer<uint> glassOrders : register(t2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> sdfGlassSumsRW : register(u3, space3);
 [[vk::binding(4, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> glassResults : register(u4, space3);
+// The same buffer as sdfGlassSumsRW, as the 64-bit words the layer list inserts into.
+[[vk::binding(5, 3)]] RWStructuredBuffer<uint64_t> sdfGlassLayersRW : register(u5, space3);
 #define SDF_GLASS_ACCUMULATES
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-glass.hlsli"
 

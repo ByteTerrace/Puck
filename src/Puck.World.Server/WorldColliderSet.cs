@@ -212,6 +212,9 @@ public sealed partial class WorldColliderSet : IContactField {
     // The holdable subset of m_attachedColliders, published with its bounds beside m_attachedSet.
     private readonly List<FixedStaticCollider> m_movingHoldable = [];
     private readonly FixedStaticColliderSet m_movingHoldableSet = new();
+    // Advances wherever m_movingHoldableSet can change content: a refresh whose fold moved, and every restore. The static
+    // holdable set never changes, and what a probe leaves out is the stamp's mask (TryHoldableStamp).
+    private ulong m_holdableRevision;
     private readonly List<bool> m_movingGripOverrides = [];
 
     internal bool MovingHoldable(int row, out bool grantedByOverride) {
@@ -1016,6 +1019,20 @@ public sealed partial class WorldColliderSet : IContactField {
         RefreshExcluded();
     }
 
+    /// <summary>Collects the active bodies that carry an attached solid row (<see cref="WorldPlacementAttachment"/>),
+    /// ascending and each once: the bodies whose poses <see cref="RefreshAttached"/> reads.</summary>
+    /// <param name="population">The population the rows' carriers resolve in.</param>
+    /// <param name="carriers">Receives the carriers' indices, after it is cleared.</param>
+    internal void CollectCarriers(WorldPopulation population, List<int> carriers) {
+        carriers.Clear();
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            if ((m_attachedRows[row].Placement.Attach is { } attach) && attach.TryCarrier(inhabitants: population, index: out var carrier) &&
+                population.IsActive(index: carrier) && !carriers.Contains(item: carrier)) {
+                carriers.Add(item: carrier);
+            }
+        }
+        carriers.Sort();
+    }
     /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
     /// colliders before and after each move, empty when no row moved.</summary>
     /// <returns>The box; a body whose bounds miss it cannot meet any collider that moved.</returns>
@@ -1163,6 +1180,7 @@ public sealed partial class WorldColliderSet : IContactField {
         if (m_refreshHash.Value != m_attachedHash) {
             m_attachedHash = m_refreshHash.Value;
             AttachedRevision++;
+            m_holdableRevision++;
         }
     }
 
@@ -1309,6 +1327,13 @@ public sealed partial class WorldColliderSet : IContactField {
             ? m_holdableGrantedByOverride[candidate.ColliderIndex] : (m_excluding ? m_excludedGripOverrides : m_movingGripOverrides)[candidate.ColliderIndex]);
 
         return true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>Declines during a ride sweep, whose left-out support no stamp names.</remarks>
+    public bool TryHoldableStamp(out ContactHoldableStamp stamp) {
+        stamp = new ContactHoldableStamp(Mask: m_heldPasses, Revision: m_holdableRevision);
+
+        return (m_rideExcludedRow < 0);
     }
     /// <inheritdoc/>
     public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => FixedSurfaceQuery.TryNearestDirected(

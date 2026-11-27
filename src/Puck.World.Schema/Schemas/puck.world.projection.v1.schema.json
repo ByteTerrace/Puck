@@ -10123,6 +10123,14 @@
             "integer",
             "null"
           ]
+        },
+        "showing": {
+          "description": "The prototype the placement must show (ShownPrototypeId) for the anchor to resolve, or null to resolve whatever it shows: a thing that belongs to one of the creations a responding row swaps between rides the row only while the row shows it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
@@ -14583,6 +14591,8 @@
     },
     "ShapeNonNullable9": {
       "enum": [
+        "ToFixed",
+        "ToInt",
         "Add",
         "Subtract",
         "Multiply",

@@ -110,7 +110,13 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateRenderLanes(WorldDefinition definition, List<string> errors) {
         if (definition.Render.Lanes is not { } lanes) { return; }
         if (lanes.Count > WorldRenderDefaults.MaxLanes) {
-            errors.Add(item: $"render.lanes holds at most {WorldRenderDefaults.MaxLanes} lanes (render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}); got {lanes.Count}.");
+            errors.Add(item: DiagnosticText.Capacity(
+                capacity: WorldRenderDefaults.MaxLanes,
+                fix: $"Remove {(lanes.Count - WorldRenderDefaults.MaxLanes)} of them, or let effects that never animate together share one lane. The lanes are render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}",
+                noun: "lanes",
+                used: [.. lanes.Select(selector: static lane => lane.Name)],
+                what: "render.lanes"
+            ));
         }
         for (var index = 0; (index < lanes.Count); index++) {
             JudgeScalar(WorldValueFields.RenderLane, lanes[index].Value, definition, $"render.lanes[{index}].value", errors);
@@ -139,236 +145,15 @@ public static partial class WorldDefinitionValidator {
 
         if (lighting.Lights is { } lights) {
             if (lights.Count > SdfLights.MaxLights) {
-                errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfLights.MaxLights} fit the lights table.");
+                errors.Add(item: DiagnosticText.Compose(
+                    fix: $"Remove {(lights.Count - SdfLights.MaxLights)} lights, or merge lights that light the same place. The first {SdfLights.MaxLights} fit; {path}.lights[{SdfLights.MaxLights}] and every light after it does not. By kind, the section holds {string.Join(separator: ", ", values: lights.Where(predicate: static light => (light is not null)).GroupBy(keySelector: static light => light!.GetType().Name).OrderByDescending(keySelector: static group => group.Count()).Select(selector: static group => $"{group.Count()} {group.Key}"))}",
+                    problem: $"'{path}.lights' holds {lights.Count} lights, and the lights table has room for {SdfLights.MaxLights}"
+                ));
             }
 
             for (var index = 0; (index < lights.Count); index++) {
-                var light = lights[index];
-                var lightPath = $"{path}.lights[{index}]";
-
-                if (light is null) {
-                    errors.Add(item: $"{lightPath} must be a light.");
-
-                    continue;
-                }
-
-                JudgeScalar(
-                    definition: definition,
-                    errors: errors,
-                    field: WorldValueFields.LightBounce,
-                    path: $"{lightPath}.bounce",
-                    scalar: light.Bounce
-                );
-
-                switch (light) {
-                    case WorldRenderLight.Directional directional: {
-                            JudgeDirection(
-                                direction: directional.Direction,
-                                errors: errors,
-                                path: $"{lightPath}.direction"
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.DirectionalIlluminance,
-                                path: $"{lightPath}.illuminance",
-                                scalar: directional.Illuminance
-                            );
-                            JudgeChromaticity(
-                                color: directional.Color,
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.DirectionalTemperature,
-                                path: lightPath,
-                                temperature: directional.Temperature
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.DirectionalAngularRadius,
-                                path: $"{lightPath}.angularRadius",
-                                scalar: directional.AngularRadius?.Value
-                            );
-
-                            if ((directional.Shadow is WorldShadowMode.Always or WorldShadowMode.Auto) && string.IsNullOrWhiteSpace(value: directional.Name)) {
-                                errors.Add(item: $"{lightPath}.name is required when shadow is always or auto; a shadow-capable light needs a name.");
-                            }
-
-                            if (directional.Source is { } source) {
-                                ValidateLightSource(definition: definition, errors: errors, path: $"{lightPath}.source", source: source);
-                            }
-
-                            break;
-                        }
-                    case WorldRenderLight.Rim rim: {
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.RimLuminance,
-                                path: $"{lightPath}.luminance",
-                                scalar: rim.Luminance
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.RimPower,
-                                path: $"{lightPath}.power",
-                                scalar: rim.Power
-                            );
-
-                            break;
-                        }
-                    case WorldRenderLight.Occluder occluder: {
-                            JudgePosition(
-                                errors: errors,
-                                path: $"{lightPath}.position",
-                                position: occluder.Position
-                            );
-
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.OccluderRadius,
-                                path: $"{lightPath}.radius",
-                                scalar: occluder.Radius
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.OccluderWeight,
-                                path: $"{lightPath}.weight",
-                                scalar: occluder.Weight
-                            );
-                            ValidateLightAnchor(
-                                anchor: occluder.Anchor,
-                                definition: definition,
-                                errors: errors,
-                                path: $"{lightPath}.anchor"
-                            );
-
-                            break;
-                        }
-                    case WorldRenderLight.Point point: {
-                            JudgePosition(
-                                errors: errors,
-                                path: $"{lightPath}.position",
-                                position: point.Position
-                            );
-
-                            JudgeOutput(
-                                definition: definition,
-                                errors: errors,
-                                intensity: point.Intensity,
-                                intensityField: WorldValueFields.PointIntensity,
-                                path: lightPath,
-                                power: point.Power,
-                                powerField: WorldValueFields.PointPower
-                            );
-                            JudgeChromaticity(
-                                color: point.Color,
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.PointTemperature,
-                                path: lightPath,
-                                temperature: point.Temperature
-                            );
-                            ValidateLightAnchor(
-                                anchor: point.Anchor,
-                                definition: definition,
-                                errors: errors,
-                                path: $"{lightPath}.anchor"
-                            );
-
-                            break;
-                        }
-                    case WorldRenderLight.Tube tube: {
-                            JudgePosition(errors: errors, path: $"{lightPath}.from", position: tube.From);
-                            JudgePosition(errors: errors, path: $"{lightPath}.to", position: tube.To);
-                            if (!float.IsFinite(f: tube.Radius) || (tube.Radius < 0f) || (tube.Radius > WorldRenderLight.Tube.MaxRadius)) {
-                                errors.Add(item: $"{lightPath}.radius {tube.Radius} lies outside [0, {WorldRenderLight.Tube.MaxRadius}] metres.");
-                            }
-                            JudgeOutput(
-                                definition: definition,
-                                errors: errors,
-                                intensity: tube.Intensity,
-                                intensityField: WorldValueFields.TubeIntensity,
-                                path: lightPath,
-                                power: tube.Power,
-                                powerField: WorldValueFields.TubePower
-                            );
-                            JudgeChromaticity(
-                                color: tube.Color,
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.TubeTemperature,
-                                path: lightPath,
-                                temperature: tube.Temperature
-                            );
-                            ValidateLightAnchor(anchor: tube.Anchor, definition: definition, errors: errors, path: $"{lightPath}.anchor");
-
-                            break;
-                        }
-                    case WorldRenderLight.Spot spot: {
-                            JudgePosition(
-                                errors: errors,
-                                path: $"{lightPath}.position",
-                                position: spot.Position
-                            );
-                            JudgeDirection(
-                                direction: spot.Direction,
-                                errors: errors,
-                                path: $"{lightPath}.direction"
-                            );
-                            JudgeOutput(
-                                definition: definition,
-                                errors: errors,
-                                intensity: spot.Intensity,
-                                intensityField: WorldValueFields.SpotIntensity,
-                                path: lightPath,
-                                power: spot.Power,
-                                powerField: WorldValueFields.SpotPower
-                            );
-                            JudgeChromaticity(
-                                color: spot.Color,
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.SpotTemperature,
-                                path: lightPath,
-                                temperature: spot.Temperature
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.SpotAngle,
-                                path: $"{lightPath}.angle",
-                                scalar: spot.Angle?.Value
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.SpotInnerAngle,
-                                path: $"{lightPath}.innerAngle",
-                                scalar: spot.InnerAngle?.Value
-                            );
-                            if ((spot.InnerAngle?.Value.Literal is { } inner) && (inner > ((spot.Angle?.Value.Literal) ?? WorldRenderLight.Spot.DefaultAngle))) {
-                                errors.Add(item: $"{lightPath}.innerAngle {inner} is wider than the cone's angle {(spot.Angle?.Value.Literal ?? WorldRenderLight.Spot.DefaultAngle)}; the inner half angle lies inside the outer.");
-                            }
-                            ValidateLightAnchor(
-                                anchor: spot.Anchor,
-                                definition: definition,
-                                errors: errors,
-                                path: $"{lightPath}.anchor"
-                            );
-
-                            break;
-                        }
-                }
-
-                if ((LightColor(light: light) is { } color) && !color.IsAuthorable(definition: definition)) {
-                    errors.Add(item: $"{lightPath}.color '{color}' {BindableColor.Grammar}.");
-                }
+                ValidateLight(definition: definition, errors: errors, light: lights[index], lightPath: $"{path}.lights[{index}]");
             }
-
         }
 
         if (lighting.Curvature is { } curvature) {
@@ -398,6 +183,282 @@ public static partial class WorldDefinitionValidator {
             if ((curvature.InkColor is { } inkColor) && !inkColor.IsAuthorable(definition: definition)) {
                 errors.Add(item: $"{path}.curvature.inkColor '{inkColor}' {BindableColor.Grammar}.");
             }
+        }
+    }
+    // The lights the world's creations carry (WorldCreationLights): they share the lights table with the authored
+    // section, and each rides a placement with one frame.
+    private static void ValidateCreationLights(WorldDefinition definition, WorldRenderLighting? lighting, List<string> errors) {
+        var carried = WorldCreationLights.Carried(definition: definition).Count;
+
+        if (carried > 0) {
+            var authored = (lighting?.Lights?.Count ?? (WorldRenderLighting.Pinned.Lights?.Count ?? 0));
+
+            if ((authored + carried) > SdfLights.MaxLights) {
+                errors.Add(item: $"render.lighting.lights carries {authored} lights and the placed creations {carried} more; at most {SdfLights.MaxLights} fit the lights table.");
+            }
+        }
+
+        foreach (var placement in definition.Placements) {
+            if ((placement?.Id is null) || WorldCreationLights.Carries(placement: placement)) {
+                continue;
+            }
+
+            foreach (var prototypeId in WorldPlacementResponse.Showable(placement: placement)) {
+                if ((prototypeId is not null) && (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId)?.Lights is { Count: > 0 })) {
+                    errors.Add(item: $"placement '{placement.Id}' shows '{prototypeId}', which carries lights, but expands into many copies (a deal, mirror, distribution or several inhabitants) that no one light rides; place the lit creation in a row of its own.");
+
+                    break;
+                }
+            }
+        }
+    }
+    // A prototype's own lights (WorldPrototype.Lights): a point, spot or tube light in the creation's frame, which its
+    // placement anchors, so it names no anchor of its own.
+    private static void ValidatePrototypeLights(WorldDefinition definition, WorldPrototype creation, string path, List<string> errors) {
+        if (creation.Lights is not { } lights) {
+            return;
+        }
+
+        for (var index = 0; (index < lights.Count); index++) {
+            var light = lights[index];
+            var lightPath = $"{path}.lights[{index}]";
+
+            if ((light is not null) && !WorldCreationLights.IsCarriable(light: light)) {
+                errors.Add(item: $"{lightPath} is a {light.GetType().Name.ToLowerInvariant()} light; a creation carries point, spot and tube lights, which stand at a place its frame carries. Author a scene-wide light in render.lighting.");
+
+                continue;
+            }
+            if (light is WorldRenderLight.Point { Anchor: not null } or WorldRenderLight.Spot { Anchor: not null } or WorldRenderLight.Tube { Anchor: not null }) {
+                errors.Add(item: $"{lightPath}.anchor is refused: a creation's light rides each placement of the creation, in the creation's frame.");
+
+                continue;
+            }
+
+            ValidateLight(definition: definition, errors: errors, light: light, lightPath: lightPath);
+        }
+    }
+    // One light's fields, wherever it is authored.
+    private static void ValidateLight(WorldDefinition definition, WorldRenderLight? light, string lightPath, List<string> errors) {
+        if (light is null) {
+            errors.Add(item: $"{lightPath} must be a light.");
+
+            return;
+        }
+
+        JudgeScalar(
+            definition: definition,
+            errors: errors,
+            field: WorldValueFields.LightBounce,
+            path: $"{lightPath}.bounce",
+            scalar: light.Bounce
+        );
+
+        switch (light) {
+            case WorldRenderLight.Directional directional: {
+                    JudgeDirection(
+                        direction: directional.Direction,
+                        errors: errors,
+                        path: $"{lightPath}.direction"
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.DirectionalIlluminance,
+                        path: $"{lightPath}.illuminance",
+                        scalar: directional.Illuminance
+                    );
+                    JudgeChromaticity(
+                        color: directional.Color,
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.DirectionalTemperature,
+                        path: lightPath,
+                        temperature: directional.Temperature
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.DirectionalAngularRadius,
+                        path: $"{lightPath}.angularRadius",
+                        scalar: directional.AngularRadius?.Value
+                    );
+
+                    if ((directional.Shadow is WorldShadowMode.Always or WorldShadowMode.Auto) && string.IsNullOrWhiteSpace(value: directional.Name)) {
+                        errors.Add(item: $"{lightPath}.name is required when shadow is always or auto; a shadow-capable light needs a name.");
+                    }
+
+                    if (directional.Source is { } source) {
+                        ValidateLightSource(definition: definition, errors: errors, path: $"{lightPath}.source", source: source);
+                    }
+
+                    break;
+                }
+            case WorldRenderLight.Rim rim: {
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.RimLuminance,
+                        path: $"{lightPath}.luminance",
+                        scalar: rim.Luminance
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.RimPower,
+                        path: $"{lightPath}.power",
+                        scalar: rim.Power
+                    );
+
+                    break;
+                }
+            case WorldRenderLight.Occluder occluder: {
+                    JudgePosition(
+                        errors: errors,
+                        path: $"{lightPath}.position",
+                        position: occluder.Position
+                    );
+
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.OccluderRadius,
+                        path: $"{lightPath}.radius",
+                        scalar: occluder.Radius
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.OccluderWeight,
+                        path: $"{lightPath}.weight",
+                        scalar: occluder.Weight
+                    );
+                    ValidateLightAnchor(
+                        anchor: occluder.Anchor,
+                        definition: definition,
+                        errors: errors,
+                        path: $"{lightPath}.anchor"
+                    );
+
+                    break;
+                }
+            case WorldRenderLight.Point point: {
+                    JudgePosition(
+                        errors: errors,
+                        path: $"{lightPath}.position",
+                        position: point.Position
+                    );
+
+                    JudgeOutput(
+                        definition: definition,
+                        errors: errors,
+                        intensity: point.Intensity,
+                        intensityField: WorldValueFields.PointIntensity,
+                        path: lightPath,
+                        power: point.Power,
+                        powerField: WorldValueFields.PointPower
+                    );
+                    JudgeChromaticity(
+                        color: point.Color,
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.PointTemperature,
+                        path: lightPath,
+                        temperature: point.Temperature
+                    );
+                    ValidateLightAnchor(
+                        anchor: point.Anchor,
+                        definition: definition,
+                        errors: errors,
+                        path: $"{lightPath}.anchor"
+                    );
+
+                    break;
+                }
+            case WorldRenderLight.Tube tube: {
+                    JudgePosition(errors: errors, path: $"{lightPath}.from", position: tube.From);
+                    JudgePosition(errors: errors, path: $"{lightPath}.to", position: tube.To);
+                    if (!float.IsFinite(f: tube.Radius) || (tube.Radius < 0f) || (tube.Radius > WorldRenderLight.Tube.MaxRadius)) {
+                        errors.Add(item: $"{lightPath}.radius {tube.Radius} lies outside [0, {WorldRenderLight.Tube.MaxRadius}] metres.");
+                    }
+                    JudgeOutput(
+                        definition: definition,
+                        errors: errors,
+                        intensity: tube.Intensity,
+                        intensityField: WorldValueFields.TubeIntensity,
+                        path: lightPath,
+                        power: tube.Power,
+                        powerField: WorldValueFields.TubePower
+                    );
+                    JudgeChromaticity(
+                        color: tube.Color,
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.TubeTemperature,
+                        path: lightPath,
+                        temperature: tube.Temperature
+                    );
+                    ValidateLightAnchor(anchor: tube.Anchor, definition: definition, errors: errors, path: $"{lightPath}.anchor");
+
+                    break;
+                }
+            case WorldRenderLight.Spot spot: {
+                    JudgePosition(
+                        errors: errors,
+                        path: $"{lightPath}.position",
+                        position: spot.Position
+                    );
+                    JudgeDirection(
+                        direction: spot.Direction,
+                        errors: errors,
+                        path: $"{lightPath}.direction"
+                    );
+                    JudgeOutput(
+                        definition: definition,
+                        errors: errors,
+                        intensity: spot.Intensity,
+                        intensityField: WorldValueFields.SpotIntensity,
+                        path: lightPath,
+                        power: spot.Power,
+                        powerField: WorldValueFields.SpotPower
+                    );
+                    JudgeChromaticity(
+                        color: spot.Color,
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.SpotTemperature,
+                        path: lightPath,
+                        temperature: spot.Temperature
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.SpotAngle,
+                        path: $"{lightPath}.angle",
+                        scalar: spot.Angle?.Value
+                    );
+                    JudgeScalar(
+                        definition: definition,
+                        errors: errors,
+                        field: WorldValueFields.SpotInnerAngle,
+                        path: $"{lightPath}.innerAngle",
+                        scalar: spot.InnerAngle?.Value
+                    );
+                    if ((spot.InnerAngle?.Value.Literal is { } inner) && (inner > ((spot.Angle?.Value.Literal) ?? WorldRenderLight.Spot.DefaultAngle))) {
+                        errors.Add(item: $"{lightPath}.innerAngle {inner} is wider than the cone's angle {(spot.Angle?.Value.Literal ?? WorldRenderLight.Spot.DefaultAngle)}; the inner half angle lies inside the outer.");
+                    }
+                    ValidateLightAnchor(
+                        anchor: spot.Anchor,
+                        definition: definition,
+                        errors: errors,
+                        path: $"{lightPath}.anchor"
+                    );
+
+                    break;
+                }
+        }
+
+        if ((LightColor(light: light) is { } color) && !color.IsAuthorable(definition: definition)) {
+            errors.Add(item: $"{lightPath}.color '{color}' {BindableColor.Grammar}.");
         }
     }
     private static void ValidateLightAnchor(WorldAnchor? anchor, WorldDefinition definition, string path, List<string> errors) {
@@ -1054,7 +1115,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if ((value.Literal is { } literal) && !field.Domain.Contains(value: literal)) {
-            errors.Add(item: $"{path} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
+            errors.Add(item: DiagnosticText.Compose(fix: "Change it to a value inside that range", problem: $"{path} {literal} must be finite and within {field.Domain}{Because(field: field)}"));
         }
 
         if (value.Keys is { } keys) {
@@ -1070,7 +1131,7 @@ public static partial class WorldDefinitionValidator {
             if (keys.Keys[index].Value.Keys is { } nested) {
                 JudgeKeys(errors: errors, field: field, keys: nested, path: keyPath);
             } else if (keys.Keys[index].Value.Literal is { } literal && !field.Domain.Contains(value: literal)) {
-                errors.Add(item: $"{keyPath} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
+                errors.Add(item: DiagnosticText.Compose(fix: "Change it to a value inside that range", problem: $"{keyPath} {literal} must be finite and within {field.Domain}{Because(field: field)}"));
             }
         }
     }

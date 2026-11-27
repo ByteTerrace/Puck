@@ -614,7 +614,11 @@ public static partial class WorldDocumentEmitter {
     private static JsonObject RefuseCallGate(CallPredicateNode call, DocumentScope scope) {
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.UnsupportedCallGate,
-            message: $"'{call.Call.Name}(...)' is not a puck.world.definition.v1 gate - a world gate compares two operands",
+            message: DiagnosticText.Compose(
+                example: "'when state.health < 10'",
+                fix: "Write a comparison of two operands, joined with 'and', 'or' and 'not'",
+                problem: $"'{call.Call.Name}(...)' is not a gate a world rule admits"
+            ),
             span: call.Span
         );
 
@@ -662,7 +666,11 @@ public static partial class WorldDocumentEmitter {
                 return NewCompareState(state.Name.Spelling, state.Key?.Spelling, (literalOnRight ? comparison : Enum.GetName(value: parsedComparison.Flip())!), text: literal.Value);
             }
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
-                message: "A text comparison requires a named state row on the other side", span: cmp.Span);
+                message: DiagnosticText.Compose(
+                    example: "'state.mood == \"calm\"'",
+                    fix: "Compare the text with a Text state row, written as 'state.<row>' or by its row name",
+                    problem: "A comparison with text has no state row on its other side"
+                ), span: cmp.Span);
             return new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() };
         }
 
@@ -1253,7 +1261,10 @@ public static partial class WorldDocumentEmitter {
                 if (isVectorRow) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.VectorLiteralMisplaced,
-                        message: "Seconds literal is not admitted on Vector row.",
+                        message: DiagnosticText.Compose(
+                            fix: "Assign a vector literal, such as 'vector(0.1, 0.2)', or an 'embed(...)' text",
+                            problem: "A duration in seconds is written to a Vector row, which holds a vector"
+                        ),
                         span: seconds.Span
                     );
                 } else {
@@ -1331,7 +1342,11 @@ public static partial class WorldDocumentEmitter {
             } else if (text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "vector(") || text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "embed(")) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.VectorLiteralInvalid,
-                    message: $"vector or embed literal is invalid: {parseErr}",
+                    message: DiagnosticText.Compose(
+                    example: "'vector(0.1, 0.2, 0.3)' or 'embed(\"a word\")'",
+                    fix: "Write numbers between the parentheses, or a quoted text for 'embed'",
+                    problem: $"The vector or embed literal is invalid: {parseErr}"
+                ),
                     span: span
                 );
                 return;
@@ -1340,7 +1355,10 @@ public static partial class WorldDocumentEmitter {
             if (text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "embed(") || text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "vector(")) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.VectorLiteralMisplaced,
-                    message: "embed or vector literal appears where no vector operand or value is admitted.",
+                    message: DiagnosticText.Compose(
+                    fix: "Use it where a Vector row is read or written, or in a vector operation such as 'nearest'",
+                    problem: "A 'vector(...)' or 'embed(...)' literal is written where no vector is admitted"
+                ),
                     span: span
                 );
                 return;
@@ -1359,7 +1377,10 @@ public static partial class WorldDocumentEmitter {
             if (isVectorRow && (scope is not null)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.VectorLiteralMisplaced,
-                    message: "Constant value is not admitted on Vector row.",
+                    message: DiagnosticText.Compose(
+                    fix: "Assign a vector literal, such as 'vector(0.1, 0.2)', or an 'embed(...)' text",
+                    problem: "A plain constant is written to a Vector row, which holds a vector"
+                ),
                     span: span
                 );
             } else {
@@ -1602,7 +1623,10 @@ public static partial class WorldDocumentEmitter {
         }
         if (target.FieldAccess && (target.Key?.Contains(value: '.') == true)) {
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
-                message: $"'{target.Name}.{target.Key}' names no module instance's row, and a typed lexical pool-field read admits exactly one dot", span: target.Span);
+                message: DiagnosticText.Compose(
+                    fix: "Write 'alias.row' for a module instance's row, or 'binding.field' for a pool field",
+                    problem: $"'{target.Name}.{target.Key}' names no module instance's row, and a pool field is read with exactly one dot"
+                ), span: target.Span);
             return new EffectTarget(Key: null, Row: target.Name, State: JsonValue.Create(value: target.Name));
         }
         if (TryStaticPoolField(reference: out var staticField, scope: scope, text: written)) {

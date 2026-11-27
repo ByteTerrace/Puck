@@ -67,20 +67,20 @@ public class ArgumentSpellingLawTests {
     public void AStringLiteralWhereAnArgumentIsWrittenBareIsRefusedAndTheRefusalNamesTheBareSpelling(string effect, string spelling) {
         var refusal = Refusal(code: PuckDiagnosticCodes.ArgumentWrittenBare, effect: effect);
 
-        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"write '{spelling}'");
+        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"Write it bare: '{spelling}'");
         Assert.Equal(expected: 18, actual: refusal.Span.Line);
     }
     [Fact]
     public void ABareWordWhereAnArgumentIsTextIsRefusedAndTheRefusalNamesTheQuotedSpelling() {
         var refusal = Refusal(code: PuckDiagnosticCodes.ArgumentWrittenQuoted, effect: "designate(key: $each, register: companion, targetKey: $right)");
 
-        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "write 'register: \"companion\"'");
+        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "quote it: 'register: \"companion\"'");
     }
     [Fact]
     public void AColonChannelWrittenBareIsRefusedByTheCallThatReplacesIt() {
         var refusal = Refusal(code: PuckDiagnosticCodes.OperandColonChannel, effect: "setState(state: hp, expression: $local:next)");
 
-        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "write 'next'");
+        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "Write it as 'next'");
     }
     [Fact]
     public void ABareExpressionReadsTheRulesLocalsAndABareKeyReadsTheKeyGrammar() {

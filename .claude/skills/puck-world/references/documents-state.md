@@ -788,7 +788,15 @@ uses all four):
 
 A light anchored to a placement no body carries (no `attach`, `inhabit` or
 `deal`) stands still, so the irradiance volume traces it as it does an
-unanchored light (`WorldEnvironmentResolve.ApplyAnchors`). A static creation's
+unanchored light (`WorldEnvironmentResolve.ApplyAnchors`). A lamp's light belongs
+to its creation: a prototype's `lights` (point, spot and tube lights in the
+creation's frame, naming no anchor) are lit by every placement showing it, each
+anchored to its row while the row shows that prototype
+(`WorldAnchor.Placement.Showing`), so a response that swaps the prototype swaps
+its light and an attached row's light rides its body. `WorldCreationLights.Expand`
+is the one door every reader of the light list goes through (the resolve,
+`world.lighting`, the validator); the gallery's stair pendant and the standard's
+`flashlight.puck` use it. A static creation's
 paints, a state lattice's origin and a board are still placed in the world's
 frame: a module places those from its site when the document compiles.
 

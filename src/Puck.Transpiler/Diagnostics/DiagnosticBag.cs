@@ -103,6 +103,7 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
             var diag = m_diagnostics[i];
 
             sb.AppendLine(value: diag.Format(filePath: filePath));
+            sb.AppendLine(value: $"  Learn more: {PuckDiagnosticCodes.HelpPath(code: diag.Code)}");
 
             // A diagnostic attributed to another source has no line in this one to show.
             if (

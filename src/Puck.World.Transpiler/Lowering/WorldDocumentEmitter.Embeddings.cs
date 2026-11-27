@@ -106,7 +106,7 @@ public static partial class WorldDocumentEmitter {
         if (!scope.Annotations.TryGetValue(key: "EmbeddingLock", value: out var lockObj) || (lockObj is not EmbeddingLock lockFile)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
+                message: DiagnosticText.Compose(fix: "Run 'puck embed lock <path>' on the source to resolve its embed(...) texts into the committed lock file", problem: $"The embedding lock has no entry for \"{text}\""),
                 span: span
             );
             return false;
@@ -119,7 +119,7 @@ public static partial class WorldDocumentEmitter {
             } else {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.EmbeddingSpaceAmbiguous,
-                    message: $"Embedding literal \"{text}\" has no space source.",
+                    message: DiagnosticText.Compose(fix: "Declare a default embedding space in 'spaces', or give the row a 'space(...)' modifier", problem: $"The embedding literal \"{text}\" has no space to be embedded in"),
                     span: span
                 );
                 return false;
@@ -129,7 +129,7 @@ public static partial class WorldDocumentEmitter {
         if (!lockFile.Spaces.TryGetValue(key: resolvedSpace, value: out var lockSpace)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
+                message: DiagnosticText.Compose(fix: "Run 'puck embed lock <path>' on the source to resolve its embed(...) texts into the committed lock file", problem: $"The embedding lock has no entry for \"{text}\""),
                 span: span
             );
             return false;
@@ -143,7 +143,7 @@ public static partial class WorldDocumentEmitter {
                     if (lockFile.IsSpaceStale(identity: ReadSpaceIdentity(space: spObj), spaceName: resolvedSpace)) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.EmbeddingLockStale,
-                            message: $"Embedding space '{resolvedSpace}' in lock is stale; run puck embed lock.",
+                            message: DiagnosticText.Compose(fix: "Run 'puck embed lock <path>' again to refresh the lock file", problem: $"The embedding lock was made for a different definition of the space '{resolvedSpace}' (its model, revision or dimensions changed)"),
                             span: span
                         );
                         return false;
@@ -159,7 +159,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.EmbeddingLockMissing,
-            message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
+            message: DiagnosticText.Compose(fix: "Run 'puck embed lock <path>' on the source to resolve its embed(...) texts into the committed lock file", problem: $"The embedding lock has no entry for \"{text}\""),
             span: span
         );
         return false;
@@ -182,7 +182,7 @@ public static partial class WorldDocumentEmitter {
                 if (spacesArr.Count >= 16) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
-                        message: "A document can declare at most 16 embedding spaces.",
+                        message: DiagnosticText.Compose(fix: "Merge spaces that share a model and revision, or declare the spaces in separate documents", problem: "The document declares more than 16 embedding spaces, the most one document may hold"),
                         span: spaceBlock.Span
                     );
                     continue;

@@ -56,7 +56,7 @@ public static partial class WorldDocumentEmitter {
             )) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.UnknownShapeType,
-                    message: $"'{type}' is not a recognized shape type",
+                    message: $"{DiagnosticText.Compose(problem: $"'{type}' is not a shape type")}{DocumentNearestNames.Suggestion(candidates: Enum.GetNames<SdfSolidPrimitive>(), name: type)} {DiagnosticText.Compose(problem: "A shape type is written exactly as the primitive is named, with its capitals")}",
                     span: block.Span
                 );
             }
@@ -331,7 +331,10 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.UnrecognizedSectionStatement,
-            message: $"'{section}' carries no {spelling} — it admits {admitted}",
+            message: DiagnosticText.Compose(
+                fix: $"Write one of the forms the section admits: {admitted}",
+                problem: $"'{section}' has no place for {spelling}"
+            ),
             span: stmt.Span
         );
     }

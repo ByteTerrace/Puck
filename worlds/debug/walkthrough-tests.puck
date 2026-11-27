@@ -45,7 +45,7 @@ test "gallery level 1 blends display" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     repeat 13 {
-      seat1: gallery.step blends
+      seat1: world.state.cell.set galleryStepAt blends 1
       repeat displayPressTicks {
         ticks 1
       }
@@ -92,7 +92,7 @@ test "gallery level 0 primitives display" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     repeat 9 {
-      seat1: gallery.step primitives
+      seat1: world.state.cell.set galleryStepAt primitives 1
       repeat displayPressTicks {
         ticks 1
       }

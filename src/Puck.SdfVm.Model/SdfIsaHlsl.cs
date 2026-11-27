@@ -327,6 +327,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD", value: SdfMeshProbeRelight.PartialSkyWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD", value: SdfMeshProbeRelight.SkyOutputWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_ROW", value: SdfMeshProbeRelight.SkyRow);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_EPOCH_ROW", value: SdfMeshProbeRelight.EpochRow);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_INSIDE_SHARE", value: SdfMeshIrradianceProbe.InsideShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE", value: SdfMeshIrradianceProbe.OpenGroundShare);
@@ -390,6 +391,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_VIEWS_REFLECTION_WORDS", value: SdfWorldPackage.ViewsReflectionWords);
         declarations.Count(name: "SDF_REFLECTION_DEPTH_LEVELS", value: SdfWorldPackage.ReflectionDepthLevels);
         declarations.Count(name: "SDF_REFLECTION_DEPTH_GROUP_LEVEL", value: SdfWorldPackage.ReflectionDepthGroupLevel);
+        declarations.Count(name: "SDF_REFLECTION_COLOR_LEVELS", value: SdfWorldPackage.ReflectionColorLevels);
         declarations.Count(name: "SDF_EDGE_REACH", value: SdfShadeOps.EdgeReach);
         declarations.Count(name: "SDF_VIEWS_PROBE_RATE", value: SdfWorldPackage.ViewsProbeRate);
         declarations.Count(name: "SDF_VIEWS_PROBE_WORDS", value: SdfWorldPackage.ViewsProbeWords);
@@ -496,6 +498,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_OFFSET_WORD", value: SdfMeshIrradianceProbe.OffsetWord);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_INVALID", value: SdfMeshIrradianceProbe.InvalidFlag);
+        declarations.Bits(name: "SDF_MESH_IRRADIANCE_EPOCH_MASK", value: SdfMeshIrradianceProbe.EpochMask);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);
@@ -521,6 +524,13 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_OVERLAP_SPAN_WORDS", value: SdfWorldPackage.OverlapSpanWords);
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        // The layer list's length bounds the interfaces a glass pixel shades, which shade admission and the dispatch planner
+        // price (SdfShadeProgram.GlassInterfaces, in an assembly the package cannot reference): the two stay one number
+        // here, where both are visible, or no kernel is generated.
+        if (SdfWorldPackage.GlassLayers != SdfShadeProgram.GlassInterfaces) {
+            throw new InvalidOperationException(message: $"SdfWorldPackage.GlassLayers ({SdfWorldPackage.GlassLayers}) must equal SdfShadeProgram.GlassInterfaces ({SdfShadeProgram.GlassInterfaces}).");
+        }
+        declarations.Count(name: "SDF_GLASS_LAYERS", value: SdfWorldPackage.GlassLayers);
         // Raster encodes these integers and compute decodes them. Raster pipelines are composition-owned and do not
         // hot reload with the compute kernels, so their shared encoding scale must remain in the interface stamp.
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);

@@ -383,6 +383,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
         // The frame's sampled table starts a few words long and grows to the first program with a height field.
         m_frameSampledRegion = scope.Own(created: CreateRegion(byteCount: 256, region: FrameSampledRegionIndex));
+        // One word until a live slice shows an image, which grows it to its samples (StageFieldSlice).
+        m_fieldSliceRegion = scope.Own(created: CreateRegion(byteCount: 16, region: FieldSliceRegionIndex));
         m_shadowHandoffBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: RegionName(region: ShadowHandoffRegionIndex), sizeBytes: ((ulong)RecordBytes(records: m_shadowHandoffs)), usage: GpuBufferUsage.Storage));
         m_shadowHandoffRegion = scope.Own(created: new GpuRegion(

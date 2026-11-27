@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -113,7 +114,7 @@ public static partial class PuckParser {
             );
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RuleNameMissing,
-                message: "Expected an identifier or quoted name after 'rule'",
+                message: DiagnosticText.Compose(example: "'rule \"open-door\" { ... }'", fix: "Name the rule with a name or a quoted string", problem: "A 'rule' has no name"),
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -200,7 +201,7 @@ public static partial class PuckParser {
 
                     diagnostics?.ReportError(
                         code: PuckDiagnosticCodes.DuplicateWhen,
-                        message: $"rule '{name}' has more than one 'when' clause",
+                        message: DiagnosticText.Compose(fix: "Join the conditions with 'and' or 'or' in one 'when'", problem: $"The rule '{name}' has more than one 'when' clause"),
                         span: span
                     );
                 } else {
@@ -239,7 +240,7 @@ public static partial class PuckParser {
         if (!sawEffect) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RuleWithoutEffects,
-                message: $"rule '{name}' carries no effect statements",
+                message: DiagnosticText.Compose(fix: "Add an effect, such as an assignment ('score += 1'), 'push', 'remove' or 'schedule', or delete the rule", problem: $"The rule '{name}' has no effect, so it can change nothing"),
                 span: new SourceSpan(
                     startOffset,
                     (cursor.Offset - startOffset),
@@ -423,7 +424,10 @@ public static partial class PuckParser {
 
         throw CreateException(
             context: context,
-            message: $"Unexpected token '{cursor.Current}' inside rule body"
+            message: DiagnosticText.Compose(
+                fix: "A rule body holds 'local', 'when', 'if', 'for' and effect statements; check for a missing '}' or a misspelled keyword",
+                problem: $"Unexpected token '{cursor.Current}' inside a rule body"
+            )
         );
     }
     // A local's kind is inferred from its expression (see WorldDocumentEmitter's kind inference) rather than
@@ -508,7 +512,7 @@ public static partial class PuckParser {
             );
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.LocalInitializerMissing,
-                message: $"'local {name}' is missing its '=' initializer",
+                message: DiagnosticText.Compose(example: $"'local {name} = state.count + 1'", fix: "Write '=' and the expression the local holds", problem: $"The local '{name}' has no initializer"),
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -548,7 +552,7 @@ public static partial class PuckParser {
         if (text.Length == 0) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.LocalInitializerMissing,
-                message: $"'local {name}' initializer is empty",
+                message: DiagnosticText.Compose(fix: "Write the expression the local holds after '='", problem: $"The initializer of the local '{name}' is empty"),
                 span: span
             );
         } else {
@@ -615,7 +619,7 @@ public static partial class PuckParser {
         if (!sawPeriodSeconds) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.DecisionPeriodMissing,
-                message: "'decision' is missing its required 'periodSeconds'",
+                message: DiagnosticText.Compose(example: "'decision \"wander\" periodSeconds 2 { ... }'", fix: "Add 'periodSeconds' with how often the decision is made", problem: "A 'decision' does not say how often it is made"),
                 span: new SourceSpan(
                     startOffset,
                     (cursor.Offset - startOffset),
@@ -734,7 +738,10 @@ public static partial class PuckParser {
 
         throw CreateException(
             context: context,
-            message: $"Unexpected token '{cursor.Current}' inside 'decision' body"
+            message: DiagnosticText.Compose(
+                fix: "A decision body holds 'option' blocks and the decision's own settings; check for a missing '}' or a misspelled keyword",
+                problem: $"Unexpected token '{cursor.Current}' inside a 'decision' body"
+            )
         );
     }
     private static OptionBlockNode ParseOptionBlock(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
@@ -748,7 +755,7 @@ public static partial class PuckParser {
             );
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.DecisionStructure,
-                message: "Expected a quoted name after 'option'",
+                message: DiagnosticText.Compose(example: "'option \"rest\" { ... }'", fix: "Name the option with a quoted string", problem: "An 'option' has no quoted name"),
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -804,7 +811,7 @@ public static partial class PuckParser {
         if (!sawScore) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.DecisionStructure,
-                message: $"option '{name}' is missing its required 'score'",
+                message: DiagnosticText.Compose(fix: "Add 'score <expression>' so the decision can rank the option", problem: $"The option '{name}' has no 'score'"),
                 span: new SourceSpan(
                     startOffset,
                     (cursor.Offset - startOffset),
@@ -923,7 +930,10 @@ public static partial class PuckParser {
 
         throw CreateException(
             context: context,
-            message: $"Unexpected token '{cursor.Current}' inside option body"
+            message: DiagnosticText.Compose(
+                fix: "An option body holds 'when', 'score' and effect statements; check for a missing '}' or a misspelled keyword",
+                problem: $"Unexpected token '{cursor.Current}' inside an option body"
+            )
         );
     }
     /// <summary>Tries to parse one effect statement (§2): <c>push</c>, <c>remove</c>,
@@ -1643,7 +1653,7 @@ public static partial class PuckParser {
         if (insideTransaction) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.NestedTransaction,
-                message: "nested 'transaction' is not supported",
+                message: DiagnosticText.Compose(fix: "Move the inner effects into the outer 'transaction', or make the transactions siblings", problem: "A 'transaction' is written inside another 'transaction'"),
                 span: new SourceSpan(
                     startOffset,
                     "transaction".Length,
@@ -1737,7 +1747,7 @@ public static partial class PuckParser {
                 );
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.OnFailureStructure,
-                    message: "a 'transaction' may carry at most one 'onFailure' block",
+                    message: DiagnosticText.Compose(fix: "Merge the 'onFailure' blocks into one", problem: "A 'transaction' has more than one 'onFailure' block"),
                     span: new SourceSpan(
                         cursor.Offset,
                         9,
@@ -1804,8 +1814,8 @@ public static partial class PuckParser {
 
             if (!allowText) {
                 var textMessage = ((ownerForDiagnostic == "push")
-                    ? "a string literal cannot be used with 'push'; push takes a numeric expression"
-                    : $"a string literal cannot be used with '{ownerForDiagnostic}'; text cells are assigned with '='");
+                    ? DiagnosticText.Compose(fix: "Push a number or a numeric expression", problem: "'push' is given a string literal")
+                    : DiagnosticText.Compose(fix: "Assign text with '='", problem: $"'{ownerForDiagnostic}' is given a string literal, and only a text cell takes text"));
 
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.EffectRhsShape,
@@ -1844,8 +1854,8 @@ public static partial class PuckParser {
                 ) {
                     if (!allowSeconds) {
                         var durationMessage = ((ownerForDiagnostic == "push")
-                            ? "a duration literal cannot be used with 'push'; push takes a numeric expression"
-                            : $"a duration literal cannot be used with '{ownerForDiagnostic}'; write '=', '+=' or '-=' for duration values");
+                            ? DiagnosticText.Compose(fix: "Push a number or a numeric expression", problem: "'push' is given a duration literal")
+                            : DiagnosticText.Compose(fix: "Write '=', '+=' or '-=' for a duration", problem: $"'{ownerForDiagnostic}' is given a duration literal, which only those assignments take"));
 
                         diagnostics?.ReportError(
                             code: PuckDiagnosticCodes.EffectRhsShape,

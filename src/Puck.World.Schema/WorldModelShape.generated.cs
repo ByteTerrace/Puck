@@ -2742,6 +2742,7 @@ public static partial class WorldModelShape {
             [
                 M("placementId", typeof(global::System.String), typeof(global::Puck.World.WorldAnchor.Placement), "PlacementId", Read | Write | Required, static value => ((global::Puck.World.WorldAnchor.Placement)value).PlacementId, kind: WorldNameKind.Placement, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("shapeId", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldAnchor.Placement), "ShapeId", Read | Write, static value => ((global::Puck.World.WorldAnchor.Placement)value).ShapeId),
+                M("showing", typeof(global::System.String), typeof(global::Puck.World.WorldAnchor.Placement), "Showing", Read | Write, static value => ((global::Puck.World.WorldAnchor.Placement)value).Showing, kind: WorldNameKind.Prototype, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
             ],
             []),
         T(typeof(global::Puck.World.WorldAnchor.RecentSpeaker), true, JsonTypeInfoKind.Object, null,
@@ -5460,6 +5461,7 @@ public static partial class WorldModelShape {
                 M("id", typeof(global::Puck.Assets.Documents.DocumentIdentifier), typeof(global::Puck.World.WorldPrototype), "Id", Read | Write | Required, static value => ((global::Puck.World.WorldPrototype)value).Id, kind: WorldNameKind.Prototype, role: WorldNameRole.Declares, facet: WorldExportFacet.Read),
                 M("hash", typeof(global::System.String), typeof(global::Puck.World.WorldPrototype), "HashRaw", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).HashRaw, text: "a content digest"),
                 M("mesh", typeof(global::Puck.World.WorldPrototypeMesh), typeof(global::Puck.World.WorldPrototype), "Mesh", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Mesh),
+                M("lights", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldRenderLight>), typeof(global::Puck.World.WorldPrototype), "Lights", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Lights),
                 M("document", typeof(global::Puck.World.Authoring.CreationDocument), typeof(global::Puck.World.WorldPrototype), "Document", Read | Write | Required, static value => ((global::Puck.World.WorldPrototype)value).Document),
                 M("rig", typeof(global::System.Object), typeof(global::Puck.World.WorldPrototype), "Rig", None),
                 M("engineDocument", typeof(global::Puck.World.Authoring.CreationDocument), typeof(global::Puck.World.WorldPrototype), "EngineDocument", None),

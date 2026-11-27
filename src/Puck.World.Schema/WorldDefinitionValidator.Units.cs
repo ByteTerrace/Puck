@@ -189,6 +189,7 @@ public static partial class WorldDefinitionValidator {
             ValidateRenderResolution(definition, errors);
             lighting = ExpandValidatedLighting(definition, errors);
             ValidateRenderLighting(definition, lighting, errors);
+            ValidateCreationLights(definition, lighting, errors);
             ValidateRenderEnvironment(definition, definition.Render.Environment, errors);
             ValidateRenderAtmosphere(definition, definition.Render.Atmosphere, errors);
         }

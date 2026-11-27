@@ -8,6 +8,10 @@ namespace Puck.State;
 /// restating the list, so the two can never grow apart.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ExpressionOp>))]
 public enum ExpressionOp : byte {
+    /// <summary>Convert an Int to exact Q48.16, refusing overflow; Fixed is unchanged.</summary>
+    ToFixed,
+    /// <summary>Explicitly convert Fixed to Int, truncating toward zero; Int is unchanged.</summary>
+    ToInt,
     /// <summary>Push a compile-time literal.</summary>
     Constant,
     /// <summary>Push a live state/channel operand.</summary>

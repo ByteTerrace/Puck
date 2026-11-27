@@ -51,6 +51,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][rim].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][point].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][point].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
 | `render.lighting.lights[][point].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][point].intensity` | State | Binding | Binding | `WorldRenderLight.Point.Intensity` |
@@ -68,6 +69,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][spot].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][spot].direction.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][spot].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][spot].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.lights[][spot].angle` | State | Binding | Binding | `WorldRenderLight.Spot.Angle` |
 | `render.lighting.lights[][spot].angle.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][spot].angle{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -93,6 +95,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][occluder].radius.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][occluder].radius{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][occluder].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.lights[][occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
 | `render.lighting.lights[][occluder].weight.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][occluder].weight{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -102,6 +105,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][tube].from.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][tube].to.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][tube].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][tube].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.lights[][tube].color` | State | Binding | Binding | `WorldRenderLight.Tube.Color` |
 | `render.lighting.lights[][tube].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][tube].intensity` | State | Binding | Binding | `WorldRenderLight.Tube.Intensity` |
@@ -167,6 +171,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[rim].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[point].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[point].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.keys[].lights{*}[point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
 | `render.lighting.keys[].lights{*}[point].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[point].intensity` | State | Binding | Binding | `WorldRenderLight.Point.Intensity` |
@@ -184,6 +189,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[spot].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[spot].direction.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[spot].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[spot].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.keys[].lights{*}[spot].angle` | State | Binding | Binding | `WorldRenderLight.Spot.Angle` |
 | `render.lighting.keys[].lights{*}[spot].angle.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[spot].angle{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -209,6 +215,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[occluder].radius.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[occluder].radius{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[occluder].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.keys[].lights{*}[occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
 | `render.lighting.keys[].lights{*}[occluder].weight.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[occluder].weight{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -218,6 +225,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[tube].from.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[tube].to.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[tube].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[tube].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `render.lighting.keys[].lights{*}[tube].color` | State | Binding | Binding | `WorldRenderLight.Tube.Color` |
 | `render.lighting.keys[].lights{*}[tube].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[tube].intensity` | State | Binding | Binding | `WorldRenderLight.Tube.Intensity` |
@@ -936,7 +944,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][clearance].obstructedTargetSkin{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `cameras[].rig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
 | `cameras[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `cameras[].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `cameras[].anchors[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `cameras[].anchors[].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -2426,6 +2436,108 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].when.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `prototypes[].id` | Prototype | Declares |  | `WorldPrototype.Id` |
 | `prototypes[].id` | State | Binding | Binding | `WorldPrototype.Id` |
+| `prototypes[].lights[].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].direction.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `prototypes[].lights[][directional].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].illuminance` | State | Binding | Binding | `WorldRenderLight.Directional.Illuminance` |
+| `prototypes[].lights[][directional].illuminance.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].illuminance{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
+| `prototypes[].lights[][directional].angularRadius.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].angularRadius{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].temperature` | State | Binding | Binding | `WorldRenderLight.Directional.Temperature` |
+| `prototypes[].lights[][directional].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].source.position` | State | Binding | Binding | `WorldRenderLightSource.Position` |
+| `prototypes[].lights[][directional].source.orbits[].clock` | Clock | Names | Read | `WorldRenderLightOrbit.Clock` |
+| `prototypes[].lights[][directional].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][directional].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][directional].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `prototypes[].lights[][rim].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].luminance` | State | Binding | Binding | `WorldRenderLight.Rim.Luminance` |
+| `prototypes[].lights[][rim].luminance.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].luminance{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
+| `prototypes[].lights[][rim].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][rim].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][rim].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `prototypes[].lights[][point].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
+| `prototypes[].lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `prototypes[].lights[][point].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].intensity` | State | Binding | Binding | `WorldRenderLight.Point.Intensity` |
+| `prototypes[].lights[][point].intensity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].intensity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].power` | State | Binding | Binding | `WorldRenderLight.Point.Power` |
+| `prototypes[].lights[][point].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].temperature` | State | Binding | Binding | `WorldRenderLight.Point.Temperature` |
+| `prototypes[].lights[][point].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][point].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][point].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].direction.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `prototypes[].lights[][spot].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
+| `prototypes[].lights[][spot].angle` | State | Binding | Binding | `WorldRenderLight.Spot.Angle` |
+| `prototypes[].lights[][spot].angle.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].angle{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].innerAngle` | State | Binding | Binding | `WorldRenderLight.Spot.InnerAngle` |
+| `prototypes[].lights[][spot].innerAngle.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].innerAngle{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].color` | State | Binding | Binding | `WorldRenderLight.Spot.Color` |
+| `prototypes[].lights[][spot].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].intensity` | State | Binding | Binding | `WorldRenderLight.Spot.Intensity` |
+| `prototypes[].lights[][spot].intensity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].intensity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].power` | State | Binding | Binding | `WorldRenderLight.Spot.Power` |
+| `prototypes[].lights[][spot].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].temperature` | State | Binding | Binding | `WorldRenderLight.Spot.Temperature` |
+| `prototypes[].lights[][spot].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][spot].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][spot].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].position.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
+| `prototypes[].lights[][occluder].radius.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].radius{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `prototypes[].lights[][occluder].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
+| `prototypes[].lights[][occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
+| `prototypes[].lights[][occluder].weight.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].weight{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][occluder].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][occluder].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].from.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].to.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `prototypes[].lights[][tube].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
+| `prototypes[].lights[][tube].color` | State | Binding | Binding | `WorldRenderLight.Tube.Color` |
+| `prototypes[].lights[][tube].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].intensity` | State | Binding | Binding | `WorldRenderLight.Tube.Intensity` |
+| `prototypes[].lights[][tube].intensity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].intensity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].power` | State | Binding | Binding | `WorldRenderLight.Tube.Power` |
+| `prototypes[].lights[][tube].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].temperature` | State | Binding | Binding | `WorldRenderLight.Tube.Temperature` |
+| `prototypes[].lights[][tube].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `prototypes[].lights[][tube].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `prototypes[].lights[][tube].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `prototypes[].document{state}` | State | Binding | Binding | `CreationDocument.state binding` |
 | `placements.rows[].id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `placements.rows[].prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
@@ -2496,6 +2608,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `speakers[][fixed].feed.gain.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `speakers[][fixed].feed.gain{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `speakers[][anchored].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `speakers[][anchored].anchor[placement].showing` | Prototype | Names | Read | `WorldAnchor.Placement.Showing` |
 | `speakers[][anchored].offset` | State | Binding | Binding | `WorldSpeaker.Anchored.Offset` |
 | `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[][anchored].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
@@ -6097,6 +6210,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].bindingBar.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `storage.userId` | `WorldStorageDefaults.UserId` | a principal identifier |
 | `prototypes[].hash` | `WorldPrototype.HashRaw` | a content digest |
+| `prototypes[].lights[][directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
+| `prototypes[].lights[][rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
+| `prototypes[].lights[][point].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `prototypes[].lights[][point].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `prototypes[].lights[][point].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `prototypes[].lights[][point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
+| `prototypes[].lights[][spot].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `prototypes[].lights[][spot].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `prototypes[].lights[][spot].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `prototypes[].lights[][spot].name` | `WorldRenderLight.Spot.Name` | a light name a section key addresses |
+| `prototypes[].lights[][occluder].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `prototypes[].lights[][occluder].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `prototypes[].lights[][occluder].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `prototypes[].lights[][occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
+| `prototypes[].lights[][tube].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `prototypes[].lights[][tube].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `prototypes[].lights[][tube].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `prototypes[].lights[][tube].name` | `WorldRenderLight.Tube.Name` | a light name a section key addresses |
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `placements.rows[].solid.passes` | `WorldSolid.Passes` | a per-body slot name |

@@ -196,14 +196,14 @@ public sealed class LspAttributionAndAuthoringTests {
 
         var unknownTmpl = Assert.Single(collection: comp.Diagnostics, predicate: static d => (d.Code == PuckDiagnosticCodes.UnknownTemplate));
 
-        Assert.Contains(expectedSubstring: "nearest: 'pillar'", actualString: unknownTmpl.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'pillar'?", actualString: unknownTmpl.Message);
         Assert.Equal(expected: 5, actual: unknownTmpl.Span.Line);
 
         var badArg = Assert.Single(collection: comp.Diagnostics, predicate: static d => (d.Code == PuckDiagnosticCodes.TemplateArgument));
 
         Assert.Contains(expectedSubstring: "has no parameter 'heigh'", actualString: badArg.Message);
-        Assert.Contains(expectedSubstring: "nearest: 'height'", actualString: badArg.Message);
-        Assert.Contains(expectedSubstring: "(parameters: width, height)", actualString: badArg.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'height'?", actualString: badArg.Message);
+        Assert.Contains(expectedSubstring: "Its parameters are: width, height", actualString: badArg.Message);
         // Reported at the argument's own line (line 8), not the call's start line (line 6).
         Assert.Equal(expected: 8, actual: badArg.Span.Line);
     }
@@ -250,13 +250,13 @@ public sealed class LspAttributionAndAuthoringTests {
         var state = Assert.Single(collection: bag, predicate: static d => (d.Code == "PUCK_LINT_005"));
 
         Assert.Equal(expected: DiagnosticSeverity.Warning, actual: proto.Severity);
-        Assert.Contains(expectedSubstring: "nearest: 'chair'", actualString: proto.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'chair'?", actualString: proto.Message);
         Assert.Equal(expected: DiagnosticSeverity.Warning, actual: parent.Severity);
-        Assert.Contains(expectedSubstring: "nearest: 'seat1'", actualString: parent.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'seat1'?", actualString: parent.Message);
         Assert.Equal(expected: DiagnosticSeverity.Warning, actual: cam.Severity);
-        Assert.Contains(expectedSubstring: "nearest: 'mainCam'", actualString: cam.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'mainCam'?", actualString: cam.Message);
         Assert.Equal(expected: DiagnosticSeverity.Warning, actual: state.Severity);
-        Assert.Contains(expectedSubstring: "nearest: 'health'", actualString: state.Message);
+        Assert.Contains(expectedSubstring: "Did you mean 'health'?", actualString: state.Message);
 
         var constructComp = WorldCompileSession.Shared.Compile(source: "x: bogusConstruct(1)\n", cancellationToken: TestContext.Current.CancellationToken);
         var p041 = Assert.Single(collection: constructComp.Diagnostics, predicate: static d => (d.Code == PuckDiagnosticCodes.BuiltinRefused));

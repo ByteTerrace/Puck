@@ -117,7 +117,7 @@ public static partial class WorldDefinitionValidator {
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Render),
             reads: StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Timeline, WorldDocumentInput.Curves,
-                WorldDocumentInput.Cameras, WorldDocumentInput.PlacementRows, WorldDocumentInput.Prototypes,
+                WorldDocumentInput.Cameras, WorldDocumentInput.Generation, WorldDocumentInput.PlacementRows, WorldDocumentInput.Prototypes,
                 WorldDocumentInput.Screens, WorldDocumentInput.ScreenMaterials, WorldDocumentInput.Shades, WorldDocumentInput.Views),
             validate: static (run, _) => ValidateRenderUnit(run),
             bound: new WorldBoundValidation(

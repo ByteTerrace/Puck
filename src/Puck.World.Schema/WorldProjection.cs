@@ -1475,7 +1475,12 @@ public sealed record WorldPrototypeReference(DocumentIdentifier Id, string Conte
 /// <summary>The content shared by prototypes, independently of their names in individual worlds.</summary>
 /// <param name="Document">The disclosed creation document.</param>
 /// <param name="Mesh">The disclosed mesh, when present.</param>
-public sealed record WorldPrototypeContent(CreationDocument Document, WorldPrototypeMesh? Mesh);
+/// <param name="Lights">The creation's own lights (<see cref="WorldPrototype.Lights"/>), when present.</param>
+public sealed record WorldPrototypeContent(
+    CreationDocument Document,
+    WorldPrototypeMesh? Mesh,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLight>? Lights = null
+);
 /// <summary>Stores and resolves projection prototype bodies through the existing content-addressed store.</summary>
 public static class WorldProjectionContent {
     private static readonly Lock StoreGate = new();
@@ -1632,7 +1637,7 @@ public static class WorldProjectionContent {
     /// <param name="prototype">The flattened prototype.</param>
     /// <returns>Its compact canonical bytes.</returns>
     public static byte[] Serialize(WorldPrototype prototype) => CanonicalJsonDocument.SerializeCompact(
-        value: new WorldPrototypeContent(Document: prototype.Document, Mesh: prototype.Mesh),
+        value: new WorldPrototypeContent(Document: prototype.Document, Mesh: prototype.Mesh, Lights: prototype.Lights),
         jsonTypeInfo: WorldJsonContext.Default.WorldPrototypeContent);
     /// <summary>Stores a flattened prototype and returns its reference.</summary>
     /// <param name="prototype">The disclosed prototype.</param>
@@ -1673,7 +1678,7 @@ public static class WorldProjectionContent {
             if (TryKnownPrototype(pin: pin, known: known, fallbackKnown: fallbackKnown, prototype: out var local)) {
                 var reused = ((local.Id == reference.Id)
                     ? local
-                    : new WorldPrototype(Id: reference.Id, Document: local.Document, Mesh: local.Mesh));
+                    : new WorldPrototype(Id: reference.Id, Document: local.Document, Mesh: local.Mesh, Lights: local.Lights));
 
                 if (!ReferenceEquals(objA: reused, objB: local)) {
                     DerivedPrototypes.AddOrUpdate(
@@ -1702,7 +1707,7 @@ public static class WorldProjectionContent {
             ) || ((body is null) && !TryParse(bytes: bytes.Span, body: out body))) {
                 return false;
             }
-            var hydrated = new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh);
+            var hydrated = new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh, Lights: body.Lights);
             DerivedPrototypes.AddOrUpdate(
                 key: hydrated,
                 value: new DerivedPrototype {

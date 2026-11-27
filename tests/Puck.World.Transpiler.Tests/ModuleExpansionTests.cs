@@ -148,7 +148,7 @@ public sealed class ModuleExpansionTests {
 
         var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
-        Assert.Contains($"must be a {kind}", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"{kind}. Pass", error.Message, StringComparison.Ordinal);
         Assert.Equal(2, error.Span.Line);
     }
     [Fact]
@@ -433,7 +433,7 @@ public sealed class ModuleExpansionTests {
 
         var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
-        Assert.Contains("must be a Gate", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Gate. Pass", error.Message, StringComparison.Ordinal);
     }
     [Fact]
     public void APreviousModuleInstancesEmittedGateSatisfiesTheNextTypedUse() {
@@ -508,7 +508,7 @@ public sealed class ModuleExpansionTests {
 
         var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
-        Assert.Contains("Duplicate constant 'library.value'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("The constant 'library.value' is declared twice", error.Message, StringComparison.Ordinal);
     }
     [Fact]
     public void DeepImportGraphsRespectTheExpansionDepthLimit() {

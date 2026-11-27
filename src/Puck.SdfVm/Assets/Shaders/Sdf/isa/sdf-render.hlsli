@@ -38,6 +38,7 @@
 #define SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD           44u
 #define SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD            40u
 #define SDF_PROBE_RELIGHT_SKY_ROW                    11u
+#define SDF_PROBE_RELIGHT_EPOCH_ROW                  10u
 #define SDF_MESH_IRRADIANCE_CLEARANCE                0.1
 #define SDF_MESH_IRRADIANCE_INSIDE_SHARE             0.25
 #define SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE        2.0
@@ -126,6 +127,7 @@
 #define SDF_VIEWS_REFLECTION_WORDS       4u
 #define SDF_REFLECTION_DEPTH_LEVELS      8u
 #define SDF_REFLECTION_DEPTH_GROUP_LEVEL 4u
+#define SDF_REFLECTION_COLOR_LEVELS      5u
 #define SDF_EDGE_REACH                   4u
 #define SDF_VIEWS_PROBE_RATE             4u
 #define SDF_VIEWS_PROBE_WORDS            73u
@@ -237,6 +239,7 @@
 #define SDF_MESH_IRRADIANCE_OFFSET_WORD                 17u
 #define SDF_MESH_IRRADIANCE_WRITTEN                     0x40000000u
 #define SDF_MESH_IRRADIANCE_INVALID                     0x80000000u
+#define SDF_MESH_IRRADIANCE_EPOCH_MASK                  0x000FFFFFu
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS                 0.05
 #define SDF_MESH_IRRADIANCE_BEHIND_SHARE                0.05
 #define SDF_MESH_IRRADIANCE_SURFACE_REACH               1.5
@@ -264,7 +267,8 @@
 #define SDF_OVERLAP_SPAN_WORDS 2u
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
-#define SDF_GLASS_SUM_WORDS            17u
+#define SDF_GLASS_SUM_WORDS            18u
+#define SDF_GLASS_LAYERS               4u
 #define SDF_GLASS_SUM_SCALE            4096.0
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0

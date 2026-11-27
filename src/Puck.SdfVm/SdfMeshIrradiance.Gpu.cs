@@ -218,7 +218,8 @@ public sealed partial class SdfMeshIrradiance {
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
                         if (present) { RecordAge(ages, level, age, change != InputChange.None); }
                         var required = !written || token == 0 || probe.Geometry != snapshot.Geometry;
-                        if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, phase, now, ref deferred)) { continue; }
+                        var owed = !all && OwedAfterJump(in probe, present, center, spacing, in snapshot);
+                        if (!required && !owed && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, phase, now, ref deferred)) { continue; }
                         // A probe holding no device hits traces, as the selector's first test answers (sdf-probe-select:
                         // no token is never present), so it takes no row of the selection.
                         if (token != 0) {
@@ -236,10 +237,10 @@ public sealed partial class SdfMeshIrradiance {
                             row[7] = PackedIntPair.High(value: token);
                         }
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
-                        var visible = InAnyView(center, in snapshot);
+                        var visible = InAnyView(center, spacing, 0f, in snapshot);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: (token == 0),
                             Overdue: bound > 0 && age >= bound, Stale: present && change != InputChange.None, Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible,
-                            Seen: visible && present && change == InputChange.Due && probe.Lighting < snapshot.Lighting.Jump));
+                            Seen: owed));
                     }
                 }
             }
@@ -276,7 +277,7 @@ public sealed partial class SdfMeshIrradiance {
             rows[4 + 2 * level] = new(snapshot.Layout.Measures(level) ? snapshot.Layout.SpacingOf(level) : Vector3.Zero, 0);
         }
         rows[9] = new(AxisTotals[0], AxisTotals[1], AxisTotals[2], AxisTotals[3]);
-        rows[10] = new(AxisTotals[4], AxisTotals[5], 0, 0);
+        rows[SdfMeshProbeRelight.EpochRow] = new(AxisTotals[4], AxisTotals[5], (uint)lighting.Epoch & SdfMeshIrradianceProbe.EpochMask, 0);
         for (var i = 0; i < lighting.SkyTexels.Length; i++) { rows[SdfMeshProbeRelight.SkyRow + i] = new(lighting.SkyTexels[i], 0); }
         var cursor = SdfMeshProbeRelight.HeaderRows;
         for (var i = 0; i <= lighting.Materials.Length; i++) {

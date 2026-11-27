@@ -237,8 +237,8 @@ public sealed class WorldSourceIndexLawTests {
     /// <summary>A world declared inside another construct, or under a computed name, is refused by name: a parse would
     /// not find it, so no reader could resolve it.</summary>
     [Theory]
-    [InlineData("for (name, index) in [\"north\", \"south\"] {\n    world name = room(index)\n}\n", "declared at the top level of its source")]
-    [InlineData("let named = \"north\"\nworld $\"{named}\" = room(1)\n", "written as a name or a plain string, never computed")]
+    [InlineData("for (name, index) in [\"north\", \"south\"] {\n    world name = room(index)\n}\n", "inside a loop, a condition or another construct")]
+    [InlineData("let named = \"north\"\nworld $\"{named}\" = room(1)\n", "computed instead of written out")]
     public void AWorldAParseCannotFindIsRefused(string declarations, string refusal) {
         var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,

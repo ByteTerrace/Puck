@@ -4,19 +4,30 @@ namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
     /// <summary>The glass raster pass's writable binding of the glass sums. Each render pixel holds the signed
-    /// path length, winding, RGB optical depth, bounded front records, nearest exit and signed material key.
+    /// path length, winding, RGB optical depth, the layer list of its nearest front faces, signed material key and
+    /// nearest exit.
     /// The raster integrates oriented crossings up to the opaque hit in integer arithmetic so draw order does not
     /// change the result. See <c>frame/sdf-glass.hlsli</c> for the packing and clipping rules.</summary>
     public const string GlassSumsWritten = "sdfGlassSumsRW";
+    /// <summary>The glass raster pass's 64-bit view of the glass sums' buffer, through which a front face enters the
+    /// pixel's layer list (<see cref="GlassLayers"/> entries, each one atomically ordered key). See
+    /// <c>frame/sdf-glass.hlsli</c>.</summary>
+    public const string GlassLayersWritten = "sdfGlassLayersRW";
     /// <summary>The glass sums as the glass shading pass reads them.</summary>
     public const string GlassSums = "sdfGlassSums";
     /// <summary>The glass visibility target as the glass shading pass samples it: per pixel the nearest glass front
     /// face's ray parameter, its draw plus one (zero where no glass face lies before the opaque hit) and its triangle,
     /// in the mesh target's format.</summary>
     public const string GlassVisibility = "glassVisibility";
-    /// <summary>The words one render-extent pixel holds in the glass sums. <c>SdfIsaHlsl</c> generates it as
-    /// <c>SDF_GLASS_SUM_WORDS</c>.</summary>
-    public const uint GlassSumWords = 17;
+    /// <summary>The words one render-extent pixel holds in the glass sums: the sums, the layer list's
+    /// <see cref="GlassLayers"/> 64-bit entries, the material key and the nearest exit. Even, so every pixel's layer list
+    /// lies on 64-bit words. <c>SdfIsaHlsl</c> generates it as <c>SDF_GLASS_SUM_WORDS</c>.</summary>
+    public const uint GlassSumWords = 18;
+    /// <summary>The front faces a pixel's layer list holds: the nearest that many visible glass entries, ordered by
+    /// distance whatever order they rasterized in, each of which the glass shading pass shades as an interface of its
+    /// own. Every glass face still absorbs through the sums however many lie along the ray. <c>SdfIsaHlsl</c> generates
+    /// it as <c>SDF_GLASS_LAYERS</c>.</summary>
+    public const uint GlassLayers = 4;
     /// <summary>The steps a world unit a glass face's ray distance is accumulated at, as a whole number: a quarter of a
     /// millimetre, so sixty faces at the far distance's limit sum within a 32-bit word. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_GLASS_SUM_SCALE</c>.</summary>

@@ -28,7 +28,6 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
     private readonly WorldSeatBindings m_seatBindings;
-    private readonly WorldSeatStateReads m_seatReads;
     private readonly PresentationReadings? m_readings;
     private readonly WorldSpeechClock m_speech;
     private readonly WorldCreationInstances m_stamps;
@@ -57,7 +56,6 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         m_speech = speech;
         m_roster = roster;
         m_seatBindings = seatBindings;
-        m_seatReads = new WorldSeatStateReads(seatBindings: seatBindings);
         m_router = router;
         m_wheel = wheel;
         m_pointer = pointer;
@@ -225,24 +223,6 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 );
         }
     }
-    // A state predicate reads the client's mirror, except one keyed by the body, which reads the cell of the body seat
-    // `slot` controls and holds for no seat it cannot resolve.
-    private bool HoldsState(int slot, OverlayPredicate.State state) => (m_seatReads.TryFind(
-        mirror: out var mirror,
-        seat: slot,
-        slot: out var cell,
-        token: state.Binding
-    )
-        ? ((mirror is not null) && OverlayStateComparison.Holds(
-            mirror: mirror,
-            slot: cell,
-            state: state
-        ))
-        : OverlayStateComparison.Holds(
-            mirror: m_client.StateMirror,
-            state: state
-        )
-    );
     private bool SampleState(int slot, OverlayFact fact) => fact switch {
         OverlayFact.WheelOpen => ((m_wheel() is { } wheel) && wheel.StatusFor(slot: slot).Open),
         OverlayFact.ConsoleOpen => ((m_consoles is { } consoles) && consoles.TryGetVisible(
@@ -406,8 +386,8 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     subject: near.Subject
                 ) <= near.Distance);
             case OverlayPredicate.State state:
-                return HoldsState(
-                    slot: slot,
+                return OverlayStateComparison.Holds(
+                    mirror: m_client.StateMirror,
                     state: state
                 );
             case OverlayPredicate.Reading reading:
@@ -533,8 +513,8 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     : 0f
                 );
             case OverlayPredicate.State state:
-                return (HoldsState(
-                    slot: slot,
+                return (OverlayStateComparison.Holds(
+                    mirror: m_client.StateMirror,
                     state: state
                 )
                     ? 1f

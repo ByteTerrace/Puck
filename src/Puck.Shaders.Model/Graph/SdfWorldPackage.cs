@@ -189,6 +189,15 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the object grid's patch radius in reference-local units, zero disabling it
     /// (<c>float</c>).</summary>
     public const string GridObjectPatchRadius = "gridObjectPatchRadius";
+    /// <summary>The pass-group value holding the live field slice's square centre in world metres and its opacity, zero
+    /// drawing no slice (<c>float4</c>, <c>Puck.SdfVm.SdfLiveFieldSlice</c>).</summary>
+    public const string FieldSliceOrigin = "fieldSliceOrigin";
+    /// <summary>The pass-group value holding the live field slice's unit <c>u</c> axis and the square's half side in
+    /// metres (<c>float4</c>).</summary>
+    public const string FieldSliceAxisU = "fieldSliceAxisU";
+    /// <summary>The pass-group value holding the live field slice's unit <c>v</c> axis and its samples a side
+    /// (<c>float4</c>).</summary>
+    public const string FieldSliceAxisV = "fieldSliceAxisV";
     /// <summary>The pass-group value set to one to skip the soft-shadow march (<c>uint</c>).</summary>
     public const string DisableSoftShadows = "disableSoftShadows";
     /// <summary>The pass-group value set to one to skip ambient occlusion (<c>uint</c>).</summary>
@@ -256,6 +265,10 @@ public static partial class SdfWorldPackage {
     /// field's header and its heights this frame and the frame before, <c>Puck.SdfVm.SdfFrameSampled</c>). The tables
     /// write it from the frame's sampled set, owing only the words that moved; the mesh bake never reads it.</summary>
     public const string FrameSampled = "sdfFrameSampled";
+    /// <summary>The live field slice's colours, one word a sample, rows from the top: red, green and blue in the low three
+    /// bytes, display-encoded as <c>Puck.SdfVm.SdfFieldSlice.RenderPlane</c> writes them. The composite draws it over the
+    /// view where <see cref="FieldSliceOrigin"/>'s opacity is positive.</summary>
+    public const string FieldSliceWords = "sdfFieldSliceWords";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
     /// <summary>The presentation's mesh region as a stream of words: the positions, triangle materials and indices a
@@ -384,6 +397,9 @@ public static partial class SdfWorldPackage {
         Value(name: GridObjectPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectFrame, type: ShaderValueType.Float4),
         Value(name: GridObjectPatchRadius, type: ShaderValueType.Float),
+        Value(name: FieldSliceOrigin, type: ShaderValueType.Float4),
+        Value(name: FieldSliceAxisU, type: ShaderValueType.Float4),
+        Value(name: FieldSliceAxisV, type: ShaderValueType.Float4),
         Value(name: DisableSoftShadows, type: ShaderValueType.Uint),
         Value(name: DisableAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
@@ -526,6 +542,7 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ReflectionHistory, type: ShaderValueType.Float4),
         Read(element: ShaderValueType.Uint, name: ReflectionDepth),
         Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
+        Written(element: ShaderValueType.Uint, name: ReflectionColorWritten),
         Read(element: ShaderValueType.Uint, name: OverlapSpans),
         .. Tables,
     ];

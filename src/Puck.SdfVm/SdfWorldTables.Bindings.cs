@@ -124,6 +124,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_meshIrradiance.Buffer ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
         WriteWorldBuffer(buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
+        WriteWorldBuffer(buffer: m_fieldSliceRegion.Buffer(slot: slot), member: SdfWorldPackage.FieldSliceWords, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 
         var samplers = WorldBinding(member: SdfWorldPackage.Samplers);
@@ -186,6 +187,18 @@ public sealed partial class SdfWorldTables {
         }
 
         WriteInterfaceBuffer(buffer: buffer, layout: SdfWorldInterfaces.MeshLayout, member: member, set: set);
+        bound = buffer;
+    }
+    // Writes the buffer a raster pass accumulates into (the glass sums, a cascade's optical depth, the overlap spans, or
+    // the dummy) at both of the mesh interface's views of it, its 32-bit words and its 64-bit layer entries, when the set
+    // does not already bind it: the one door either member is written through, so the two always name one buffer.
+    internal void WriteMeshAccumulation(ref IGpuBuffer? bound, IGpuBuffer buffer, nint set) {
+        if (ReferenceEquals(objA: bound, objB: buffer)) {
+            return;
+        }
+
+        WriteInterfaceBuffer(buffer: buffer, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.GlassSumsWritten, set: set);
+        WriteInterfaceBuffer(buffer: buffer, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.GlassLayersWritten, set: set);
         bound = buffer;
     }
 }

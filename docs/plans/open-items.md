@@ -2579,6 +2579,28 @@ view can read its authored sky while its new camera sample is pending.
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+Light through coloured glass:
+
+- [high] Light through coloured glass is not coloured. Stained glass (the
+  gallery's east window, `architecture.puck`'s `stainedGlass`) tints what is seen
+  through it, but the light it passes reaches the floor and walls only as the
+  cascades carry it, and a cascade's glass extinction is one density
+  (`glass.shadowDensity`, `sdf-mesh-shadow-glass.frag.hlsl` accumulating one
+  64-bit optical depth a texel), so a pane casts at most a grey shadow and its
+  came the dark grid; the irradiance volume traces no glass at all. The plan:
+  (1) let a cascade's optical buffer carry RGB optical depth, three 64-bit sums a
+  texel from the material's absorption scaled by a transmitted-light opt-in on
+  the glass (an authored `glass.castsColor`, zero by default, so water and
+  windows keep their grey or no shadow), through the same
+  `sdfOpticalDepthAccumulate`; (2) have the surface pass resolve the key light's
+  transmitted colour beside its scalar visibility (`sdfMeshShadowGap` already
+  reads the optical term per tap) and write it as a chroma word of the
+  visibility record, so views multiplies the directional's colour by it with no
+  new tap; (3) carry the same RGB through the probe trace's visibility bits
+  later, so the irradiance volume bounces the coloured patch. Step 1 and 2
+  decide the record's layout; the forcing case is the east window's patch on the
+  nave floor on a morning sun.
+
 The volume's cost and convergence:
 
 - [medium] Faster probe convergence costs host time while the volume works.
@@ -2731,7 +2753,13 @@ What the light gets wrong:
   screen's light (its slot holds no source, so the light walk skips it), the
   irradiance trace's emission reading paints at the hit, and a lane-driven
   emissive's reduction re-running as the world's lanes move (the emission
-  signature folds the program and the decal revision only).
+  signature folds the program and the decal revision only). Neither a screen
+  nor an emitter face enters the relight (`SdfMeshIrradiance.Lighting.Capture`
+  takes directionals and traced point, spot and line lights), so their light
+  reaches the surfaces before them and bounces nowhere: the toybox's twelve
+  pictures light their rugs and beanbags but none of the room beyond. Trace a
+  bound screen's light in the relight's local part at its reduced mean, as a
+  rectangle of its face's area, keyed so the local part follows the reduction.
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case (grazing self-shadowing from the receiver-plane
   clamp, multi-shell meshes oriented by one signed volume, T-junctions
@@ -2743,12 +2771,15 @@ What the light gets wrong:
   a body clipped at a portal's glass or drawn under a mirror is a thin caster
   (`SdfMeshDraw.EnclosesSolid`), shadowed by its own lit side.
 - [high] Night, from the owner's walkthrough at the lawn's trees:
-  - The jump to night is wrong: forcing midnight leaves the scene near-black
-    for seconds while the canopies glow green from inside, since daytime
-    bounce stays in the probes while exposure adapts. From the overlook the
-    valley floor still reads blown white at the EV 2 floor after a minute
-    while `[sdf.mesh-gi] behind` reports a relight shortfall; a layout reset
-    brings the moonlit blue at once.
+  - [unverified] The jump to night. Daytime bounce stayed in the probes for
+    minutes under `[sdf.mesh-gi] behind`; a jump now starts a lighting epoch
+    whose relights read no probe of an earlier one, and the probes a view may
+    read owe it `JumpRelights` relights on the owed allowance
+    ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)). Verify
+    at the lawn's trees (no canopy glowing green from inside) and in the
+    gallery's toybox with every light off, then turn the camera: a probe
+    outside every view keeps its daylight until a view turns toward it, then
+    relights first.
   - The settled night reads as a dim overcast day. The night look is an
     authored standard style (exposure curve, low-light desaturation and blue
     shift, the moon's colour and strength), never an engine default; the
@@ -3498,9 +3529,20 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   its lattices and bodies (what `replay.record` snapshots at its arm,
   `WorldPersistence`), so a stage of a long simulated arc is a file a windowed
   World loads. Build it when a second long-arc feature wants it.
-- [low] A pixel shades two glass interfaces; past three front faces only the
-  nearest is shaded. A 64-bit atomic k-buffer would lift the count. The glass
-  kernel's register count on the RTX 2060 decides whether a third fits.
+- [medium] The glass layer list's length (`SdfWorldPackage.GlassLayers`) is one
+  number for every device, and a pixel pays a full interface (surface resolve,
+  probe gather, light walk, program) for each layer it shows. Read
+  `sdf.world$glass-shade`'s registers and time on the RTX 2060 and the RTX 4070
+  through the gallery's barrier (four layers at its middle) in the lead's quiet
+  window; if the 2060 misses its bar there, give the device quality table a
+  glass-layers lever the shading loop stops at, with the storage left at the
+  list's length.
+- [low] The glass target and its depth duplicate the layer list's nearest face
+  (the target's reversed-Z test keeps the same face the list's first entry
+  holds, `sdf-mesh-glass.frag.hlsl`). The shading pass could take its near face
+  from the list and the raster drop both attachments, a render-sized float4 image
+  and a depth the size of the view, once the list's draw and triangle fields
+  are wide enough for every draw (a face past them takes no entry today).
 - [low] Edge shimmer: `sdfGlassLitAt` takes one bilinear refracted sample and
   marks refraction displacement as reactive in a stationary scene, so the
   resolve suppresses history at the silhouette. Give refraction motion,
@@ -5658,9 +5700,18 @@ confirming its site in the debug world and its work-budget share.
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: the windowed look at the Klondike and
-FreeCell tables, close and wide, with the script in
+ordinary, the owner's direction · Next: the windowed look at the game table's
+chess, Klondike and FreeCell, close and wide, with the script in
 `worlds/debug/cardtable.md`; then Spider.
+
+- The game table is a display table (`worlds/standard/display-table.puck`)
+  whose glass draws chess from the chess table's own `board` row and plays it
+  through that game's display door (`chessPut`). Its cards are still the
+  standard deck's physical card creations lying on the glass: a card face the
+  display draws (flat, glowing like the chess icons) would read as the glass's
+  content. The chess icons (`worlds/standard/chess-icons.puck`) are a first
+  pass of convex silhouettes; the knight wants a curved neck and mane once a
+  look pass has judged them on the glass.
 
 - [medium] The standard's deck departs from the true-size ruling:
   `cards.puck` authors a card 1.76 wide and the table's look scales it
@@ -5950,8 +6001,8 @@ the model.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through `chat.whisper` and `chat.log` (`ChatCommandModule`). The
   standard's terminal console (`worlds/standard/contexts/terminal-console.puck`)
-  is the pattern: a `Text` channel a family offers while a body cell is open, a
-  line built in a `Text` cell, and a per-seat world HUD panel keyed `$body`.
+  is the input pattern: a `Text` channel a family offers while a cell is open,
+  and a line built in a `Text` cell.
 - [medium] A rule sweeps one owner's input events (`forEach: inputEvents(<seat>)`
   takes a compile-time seat), so the terminal console unrolls a rule per local
   seat and a visitor's body at a terminal cannot type into it. Let one rule

@@ -74,11 +74,17 @@ same change.
   `ResolveProgramContacts` sweeps the step through the field. A rigid kit only
   prepares its step and joins the population's one `FixedRigidWorld` solve;
   carried and tethered bodies have their own files beside it.
-- **The kit advance split.** `WorldPopulation.AdvanceSimulated` advances every
+- **The kit advance split.** `WorldPopulation.AdvanceSimulated` takes every
+  body through one set of phases (plan, steer, admit, move), so every producer
+  runs before any body moves and a body a step wakes steps on the next tick. A
   body whose step is local (`WorldBody.StepIsLocal`,
-  `WorldPopulation.ProducerIsLocal`) in fixed slot partitions on the job pool,
-  then the rest serially in index order (`WorldPopulation.Partitions.cs` holds
-  the phases and the invariant). A step that reaches shared population state,
+  `WorldPopulation.ProducerIsLocal`) runs them in a fixed slot partition on the
+  job pool; every other body runs them in the serial partition, on the forking
+  thread in index order, inside the kit transaction
+  (`WorldPopulation.Partitions.cs` holds the phases and the invariant). A world
+  with a seam partitions too: a sweep through `WorldAdjacencyContactField` reads
+  the tick's pinned projections and writes only the correction budget of the
+  body it names. A step that reaches shared population state,
   the input runtime or a register from a partition throws
   (`ThrowIfPartitioned`, `WriteStateRaw`); a new shared write a body step can
   reach goes through the body's `WorldBodyStepLog` or makes the body serial.

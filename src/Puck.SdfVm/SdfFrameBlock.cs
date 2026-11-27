@@ -15,7 +15,8 @@ namespace Puck.SdfVm;
 /// <param name="Exposures">The views' exposures, or <see langword="null"/> to expose every view by one.</param>
 /// <param name="ShadeDefaultFirst">The default program's first vector in the appearance allocation.</param>
 /// <param name="DebugOptions">What the debug view reads beside its mode.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0, DebugViewOptions DebugOptions = default);
+/// <param name="FieldSlice">The live field slice the composite draws, all zero for none.</param>
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0, DebugViewOptions DebugOptions = default, SdfFieldSliceValues FieldSlice = default);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
 /// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
@@ -49,6 +50,9 @@ public static partial class SdfFrameBlock {
     private static readonly int GridObjectFrame = Offset(member: SdfWorldPackage.GridObjectFrame);
     private static readonly int GridObjectOrigin = Offset(member: SdfWorldPackage.GridObjectOrigin);
     private static readonly int GridObjectPatchRadius = Offset(member: SdfWorldPackage.GridObjectPatchRadius);
+    private static readonly int FieldSliceOrigin = Offset(member: SdfWorldPackage.FieldSliceOrigin);
+    private static readonly int FieldSliceAxisU = Offset(member: SdfWorldPackage.FieldSliceAxisU);
+    private static readonly int FieldSliceAxisV = Offset(member: SdfWorldPackage.FieldSliceAxisV);
     private static readonly int GridObjectPitch = Offset(member: SdfWorldPackage.GridObjectPitch);
     private static readonly int GridPlaneY = Offset(member: SdfWorldPackage.GridPlaneY);
     private static readonly int GridWorldFrame = Offset(member: SdfWorldPackage.GridWorldFrame);
@@ -329,6 +333,11 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: (GridWorldFrame + sizeof(float)), value: grid.WorldFrame.Y);
         WriteSingle(block: block, offset: (GridWorldFrame + (2 * sizeof(float))), value: grid.WorldFrame.Z);
         WriteSingle(block: block, offset: (GridWorldFrame + (3 * sizeof(float))), value: grid.WorldFrame.W);
+        var slice = tables.FieldSlice;
+
+        WriteVector4(block: block, offset: FieldSliceOrigin, value: slice.Origin);
+        WriteVector4(block: block, offset: FieldSliceAxisU, value: slice.AxisU);
+        WriteVector4(block: block, offset: FieldSliceAxisV, value: slice.AxisV);
         WriteFlag(block: block, offset: DisableSoftShadows, value: quality.DisableSoftShadows);
         WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);

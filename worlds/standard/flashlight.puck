@@ -1,0 +1,133 @@
+// A hand torch every player can switch on and off: the `flashlight` channel (6) flips the body's `flashlight` cell, and
+// while it is 1 the body carries a lit torch at its right shoulder, aimed where it faces. The torch is a creation that
+// carries its own light (a prototype's `lights`), so the light stands at the torch's lens, moves with the body and goes
+// out when the placement's response puts the torch away: nothing keeps a world light in step with it by hand.
+//
+// A document fragment: a world imports it and every body in `flashlightBodies` (the seats' and visitors' bodies) gets
+// its torch. A world overrides the look by id (the `flashlight-lit` prototype) or the key by the overlay's id.
+//
+// The torch's shapes, its carry offset and its light's place and aim are in the engine frame a body faces in: a body
+// faces -Z, so +X is its right.
+
+import "pad-kit"
+
+// The bodies that carry a torch: the debug world's seats and visitors (gallery/layout.puck's rentalBodies).
+let flashlightBodies = range(0, 12)
+// The key that switches the torch: the first free key past the hotbar's digits.
+let flashlightKeys = ["keyboard.6"]
+// Where the torch rides on its body, in the body's frame: at the right shoulder, a little ahead of the chest.
+let flashlightCarry = [0.2, 1.25, -0.32]
+// The torch: a barrel `flashlightLength` long, its lens at the front (-Z) end.
+let flashlightLength = 0.2
+let flashlightRadius = 0.02
+
+channels [
+  { composition: true, name: "flashlight", shape: Binary }
+]
+
+bindingOverlays [
+  {
+    id: "flashlight-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { channel: "flashlight", id: "flashlight", label: "Torch", scale: 1, sources: flashlightKeys }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+state {
+  world {
+    // Each body's torch: 1 while it is switched on.
+    row {
+      name: "flashlight"
+      kind: Int
+      capacity: length(flashlightBodies)
+      cells: map(flashlightBodies, b => { key: $"{b}", value: 0 })
+    }
+  }
+}
+
+prototypes {
+  prototype "flashlight-none" {
+    document {
+      name: "flashlight-none"
+      schema: "puck.creation.v2"
+      palette [{ color: "#2B2D31" }]
+    }
+  }
+  prototype "flashlight-lit" {
+    document {
+      name: "flashlight-lit"
+      schema: "puck.creation.v2"
+      palette [
+        { color: "#2B2D31", roughness: 0.45, specular: 0.2, metal: 0.6 }
+        { color: "#FFF4E0", roughness: 0.2, emissive: 4000 }
+      ]
+      shape Cylinder "flashlight-barrel" {
+        material: 0
+        position [0, 0, 0]
+        rotation [-0.7071068, 0, 0, 0.7071068]
+        scale [flashlightRadius, (flashlightLength / 2), flashlightRadius]
+        rounding: 0.004
+        detail: true
+      }
+      shape Cylinder "flashlight-lens" {
+        material: 1
+        position [0, 0, (flashlightLength / 2)]
+        rotation [-0.7071068, 0, 0, 0.7071068]
+        scale [(flashlightRadius * 0.8), 0.003, (flashlightRadius * 0.8)]
+        detail: true
+      }
+    }
+    // The beam: a narrow cone with a soft edge, slightly below the body's level gaze, from a white LED of about 400
+    // lumens.
+    lights [
+      spot(
+        name: "beam",
+        position: [0, 0, (0 - ((flashlightLength / 2) + 0.005))],
+        direction: [0, -0.12, -1],
+        angle: 20deg,
+        innerAngle: 9deg,
+        temperature: 5600K,
+        power: 400
+      )
+    ]
+  }
+}
+
+placements {
+  for b in flashlightBodies {
+    placement $"flashlight-carried-{b}" {
+      prototype: "flashlight-none"
+      position [0, 0, 0]
+      attach {
+        bodyIndex: b
+        localOffset: flashlightCarry
+        localYawDegrees: 0
+      }
+      respond [
+        { when: state(state: flashlight, key: $"{b}", comparison: Equal, value: 1), prototypeId: "flashlight-lit" }
+      ]
+    }
+  }
+}
+
+// A press of the torch's key flips the presser's torch.
+rule "flashlight-toggle" {
+  when channel(each, flashlight) >= 1
+  mode: Edge
+  forEach: $players
+  flashlight[$each] = 1 - flashlight[$each]
+}

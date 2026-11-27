@@ -1454,7 +1454,7 @@ public sealed partial class PuckLanguageServer {
         SendResponse(id: id, result: actions);
     }
     private static void TryAddNearestNameActions(JsonArray actions, string code, JsonObject diagnostic, string message, JsonObject range, string text, string uri) {
-        const string Marker = "; nearest: ";
+        const string Marker = Puck.Assets.Documents.DocumentNearestNames.Marker;
         var markerIndex = message.IndexOf(comparisonType: StringComparison.Ordinal, value: Marker);
 
         if (markerIndex < 0) {
@@ -1468,7 +1468,8 @@ public sealed partial class PuckLanguageServer {
         }
 
         var tail = message[(markerIndex + Marker.Length)..];
-        var candidates = ExtractQuotedNames(text: tail);
+        var tailEnd = tail.IndexOf(value: '?');
+        var candidates = ExtractQuotedNames(text: ((tailEnd < 0) ? tail : tail[..tailEnd]));
 
         if (candidates.Count == 0) {
             return;
@@ -1504,7 +1505,7 @@ public sealed partial class PuckLanguageServer {
         }
     }
     private static string? ExtractWrittenName(string code, string message) {
-        // For PUCK135 ("Template 'foo' has no parameter 'bar'; nearest: ..."), the written name is after "no parameter '".
+        // For PUCK135 ("Template 'foo' has no parameter 'bar'. Did you mean ..."), the written name is after "no parameter '".
         if (code == PuckDiagnosticCodes.TemplateArgument) {
             const string ParamMarker = "no parameter '";
             var idx = message.IndexOf(comparisonType: StringComparison.Ordinal, value: ParamMarker);
@@ -1535,10 +1536,6 @@ public sealed partial class PuckLanguageServer {
             var open = text.IndexOf(startIndex: index, value: '\'');
 
             if (open < 0) {
-                break;
-            }
-            // Stop once past the nearest list (e.g. before "(parameters: ...)").
-            if ((names.Count > 0) && text[index..open].Contains(value: '(')) {
                 break;
             }
             var close = text.IndexOf(startIndex: (open + 1), value: '\'');

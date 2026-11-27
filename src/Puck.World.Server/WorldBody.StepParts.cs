@@ -35,7 +35,7 @@ public sealed partial class WorldBody {
     /// <summary>What a step's first part decided and the later parts read: the merged intent, the engage edge, the
     /// marks a refused step withdraws its outputs to, and whether the step runs inside the input runtime's kit
     /// transaction.</summary>
-    internal struct StepStart {
+    private struct StepStart {
         public PlayerIntent Intent;
         public FixedQuaternion PreviousOrientation;
         public ulong InputEpoch;
@@ -56,40 +56,39 @@ public sealed partial class WorldBody {
 
     /// <summary>Advances the body by one exact host-owned simulation step from its single merged intent: a live tape
     /// segment if one is queued, otherwise the tick's submitted intent. The selected program chooses fixed domain
-    /// operations while the host retains phase order and the contact point. The parts (<see cref="TryBeginStep"/>,
-    /// <see cref="MoveStep"/>, <see cref="EndStep"/>) run back to back here, inside the input runtime's kit
-    /// transaction; a kit partition admits the observation on the forking thread
-    /// (<see cref="AdmitProducerObservation"/>) and runs the rest in its partition, outside the transaction
-    /// (<see cref="BeginStepCore"/>), as <see cref="WorldPopulation"/>'s kit advance split does.</summary>
+    /// operations while the host retains phase order and the contact point. The producer's observation is admitted
+    /// before this runs (<see cref="AdmitProducerObservation"/>): the population admits every moving body, then
+    /// advances each (<see cref="WorldPopulation"/>'s kit advance split). A step outside the input runtime's kit
+    /// transaction (<see cref="StepIsLocal"/>) reaches nothing beyond the body, so a kit partition runs it.</summary>
     /// <param name="tick">The explicit simulation tick whose staged durable inputs may enter.</param>
     /// <param name="stepTicks">The exact engine ticks this call advances.</param>
     /// <param name="scratch">The step scratch the caller owns, which this step captures the body into before it begins
     /// and restores from if its sweep is refused (<see cref="StepScratch"/>).</param>
     /// <param name="outputs">Receives the step's effects, designations and generator firings.</param>
+    /// <param name="transactional">Whether the step runs inside the input runtime's kit transaction.</param>
     /// <param name="engageProbeOrdinal">The context-sensitive-button interception (the RPG A-button): a channel
     /// ordinal to test for a rising edge against this same tick's composed intent, before any integration runs, or
     /// <see langword="null"/> for no probe. A fired edge here only reports it; the caller performs the engage.</param>
     /// <param name="entityIndex">The source body's population index.</param>
     /// <param name="effectTargets">The pre-step entity target image.</param>
     /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterSeconds</c> idle floor, in engine ticks, this body
-    /// sleeps under once cleared with no motion and no incoming intent; 0 (the default) never sleeps.</param>
+    /// sleeps under once cleared with no motion and no incoming intent; 0 never sleeps.</param>
     /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,
     /// folded into this body's own idle bookkeeping so a contact-surface change under it is never mistaken for rest.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
-        if (!TryBeginStep(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out var start, stepTicks: stepTicks, tick: tick)) {
+    internal bool Advance(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, bool transactional, int? engageProbeOrdinal, int entityIndex, BodyEffectTargets effectTargets, ulong sleepAfterTicks, ulong contactFieldVersion) {
+        if (!TryBeginStep(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out var start, stepTicks: stepTicks, tick: tick, transactional: transactional)) {
             return false;
         }
         MoveStep(effectTargets: effectTargets, entityIndex: entityIndex, outputs: outputs, start: ref start, stepTicks: stepTicks);
         return EndStep(contactFieldVersion: contactFieldVersion, outputs: outputs, scratch: scratch, sleepAfterTicks: sleepAfterTicks, start: in start, stepTicks: stepTicks, tick: tick);
     }
 
-    /// <summary>The step's first part for a step inside the kit transaction: admits the producer's observation
-    /// (<see cref="AdmitProducerObservation"/>), then captures the body, opens the transaction and resolves the merged
-    /// intent (<see cref="BeginStepCore"/>). Returns <see langword="false"/> for a body that takes no ordinary step this
-    /// tick (parked, carried, or rigid, whose step is prepared here for the population's solve).</summary>
-    internal bool TryBeginStep(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, out StepStart start) {
+    // The step's first part: captures the body for a refusal, opens the kit transaction when transactional, and
+    // resolves the merged intent. False for a body that takes no ordinary step this tick (parked, carried, or rigid,
+    // whose step is prepared here for the population's solve).
+    private bool TryBeginStep(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, bool transactional, out StepStart start) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         start = default;
         if (PopulationSleeping) { return false; }
@@ -97,7 +96,6 @@ public sealed partial class WorldBody {
         // Captured before ExecuteProgram can move m_position — the swept portal-crossing scan's segment start for this
         // step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
-        start.PreviousOrientation = m_orientation;
 
         // A carried body's pose and rigid velocity are DERIVED from its carrier every tick (WorldBody.FollowCarrier,
         // called from WorldPopulation.UpdateCarriedBodies after both advance passes complete), so its own step is a
@@ -117,39 +115,6 @@ public sealed partial class WorldBody {
 
             return false;
         }
-
-        if (AdmitsProducerObservation) {
-            using var admission = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission);
-
-            AdmitProducerObservation(entityIndex: entityIndex, tick: tick);
-        }
-        BeginStepCore(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out start, stepTicks: stepTicks, tick: tick, transactional: true);
-        return true;
-    }
-
-    // Whether the step has a producer observation for the input runtime to admit.
-    private bool AdmitsProducerObservation => (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (m_stateLane?.Input is not null));
-
-    /// <summary>Admits the producer's staged observation through the input runtime: producer observations enter
-    /// history before motion, just like external input, and a refused sweep does not erase an accepted observation or
-    /// turn the same held sample into another press on the following tick. The one part of a step that touches the
-    /// input runtime when the step is local, so a kit partition's bodies admit on the forking thread, in index order.</summary>
-    /// <param name="entityIndex">The body's population index.</param>
-    /// <param name="tick">The explicit simulation tick.</param>
-    internal void AdmitProducerObservation(int entityIndex, ulong tick) {
-        if (AdmitsProducerObservation) {
-            var admitted = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
-
-            if (admitted != InputImages.Producer) { InputImagesEdit.Producer = admitted; }
-        }
-    }
-
-    /// <summary>The first part's remainder, after admission: captures the body for a refusal, opens the kit transaction
-    /// when <paramref name="transactional"/>, and resolves the merged intent. A step outside the transaction
-    /// (<see cref="StepIsLocal"/>) reaches nothing beyond the body, so a kit partition runs it.</summary>
-    internal void BeginStepCore(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, bool transactional, out StepStart start) {
-        start = default;
-        m_previousPosition = m_position;
         start.PreviousOrientation = m_orientation;
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
@@ -183,11 +148,34 @@ public sealed partial class WorldBody {
             && (intent[probeOrdinal] >= m_channelThresholds[probeOrdinal])
             && !Action.PreviousBit[probeOrdinal]);
         start.Intent = intent;
+        return true;
+    }
+
+    // Whether the step has a producer observation for the input runtime to admit: the body takes an ordinary step
+    // (TryBeginStep's own test) and its source names the producer whose image is staged.
+    private bool AdmitsProducerObservation => (
+        !PopulationSleeping && (m_carriedByIndex < 0) && (m_rigid is null) &&
+        InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (m_stateLane?.Input is not null)
+    );
+
+    /// <summary>Admits the producer's staged observation through the input runtime: producer observations enter
+    /// history before motion, just like external input, and a refused sweep does not erase an accepted observation or
+    /// turn the same held sample into another press on the following tick. The one part of a step that touches the
+    /// input runtime when the step is local, so the population admits every moving body on the stepping thread before
+    /// any of them moves.</summary>
+    /// <param name="entityIndex">The body's population index.</param>
+    /// <param name="tick">The explicit simulation tick.</param>
+    internal void AdmitProducerObservation(int entityIndex, ulong tick) {
+        if (AdmitsProducerObservation) {
+            var admitted = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+
+            if (admitted != InputImages.Producer) { InputImagesEdit.Producer = admitted; }
+        }
     }
 
     /// <summary>The step's second part: runs the motion program and its contact phase on the intent the first part
     /// resolved, unless the intent is captured or diverted into an engage.</summary>
-    internal void MoveStep(ref StepStart start, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, StepOutputs outputs) {
+    private void MoveStep(ref StepStart start, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, StepOutputs outputs) {
         // Captured (InputImages.Engaged, i.e. capture:true), OR this tick's press is being diverted into an engage
         // instead of reaching the body: either way the resolved intent never reaches the avatar (no pose integration,
         // so the snapshot holds it stable). The action track still advances in EndStep, so a timed press drains
@@ -230,7 +218,7 @@ public sealed partial class WorldBody {
     /// <summary>The step's last part: restores a refused step whole and withdraws its outputs, or settles an accepted
     /// one's action track, idle floor and kit transaction; then reports a body that moved as awake.</summary>
     /// <returns>Whether the step's engage edge fired.</returns>
-    internal bool EndStep(in StepStart start, ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, ulong sleepAfterTicks, ulong contactFieldVersion) {
+    private bool EndStep(in StepStart start, ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, ulong sleepAfterTicks, ulong contactFieldVersion) {
         try {
             return SettleStep(contactFieldVersion: contactFieldVersion, outputs: outputs, scratch: scratch, sleepAfterTicks: sleepAfterTicks, start: in start, stepTicks: stepTicks, tick: tick);
         } finally {
@@ -305,8 +293,9 @@ public sealed partial class WorldBody {
     /// producer-side state, emits nothing for other bodies or the document, and needs no input-runtime transaction.
     /// That holds for a locomotion kit (<see cref="KitIsLocal"/>) whose registers rest this step, not carried,
     /// tethered or parked, with no tape, timed or pending press, staged durable input, capture, pending continuum or
-    /// script controller, whose contact field takes no entity-aware sweep. The kit partitions run only such bodies;
-    /// everything else steps serially inside the kit transaction.</summary>
+    /// script controller. The kit partitions run only such bodies; every other body steps on the forking thread, inside
+    /// the kit transaction. An entity-aware contact field (<see cref="IEntityContactField"/>) is no bar: its sweep
+    /// writes only the correction budget of the body it names (<see cref="WorldPopulation.AdmitAdjacencyResponse"/>).</summary>
     /// <remarks>Every condition reads the body as compiled now, so a kit that gains a state op or a binding is serial
     /// from the tick it changes; the population adds the producer side (<see cref="WorldPopulation"/>'s
     /// <c>ProducerIsLocal</c>).</remarks>
@@ -315,7 +304,7 @@ public sealed partial class WorldBody {
             if (
                 !KitIsLocal || (m_tether is not null) || (m_carriedByIndex >= 0) || PopulationSleeping || (m_tapeCount != 0) ||
                 (m_pendingContinuum is not null) || InputImages.Engaged || (DurableInput.Tick != 0) ||
-                (m_contactField is IEntityContactField) || RequiresFullRateAutonomy || !RegistersRestThisStep()
+                RequiresFullRateAutonomy || !RegistersRestThisStep()
             ) {
                 return false;
             }

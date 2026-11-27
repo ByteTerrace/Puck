@@ -737,18 +737,10 @@ public static partial class WorldFactsCompiler {
             )
         );
 
-        if (magnitude.ValueKind != CellKind.Fixed) {
-            throw new RuleException(
-                detail: $"'applyRigidImpulse' magnitudeState '{effect.MagnitudeState}' is kind={StateSpelling.Kind(kind: magnitude.ValueKind)} — an impulse magnitude requires a kind=Fixed row",
-                refusal: RuleRefusal.EffectSourceKindMismatch,
-                ruleName: ruleName
-            );
-        }
-
         return new WorldRigidImpulseEffect(
             describe: $"applyRigidImpulse {effect.Key} <- heading:{effect.HeadingKey} magnitude:{effect.MagnitudeState}",
             heading: context.Ordinals(body: in heading),
-            magnitude: magnitude.Operand,
+            magnitude: RuleCompiler.ConvertOperand(magnitude.Operand, CellKind.Fixed, ruleName, "applyRigidImpulse"),
             target: context.Ordinals(body: in target)
         );
     }

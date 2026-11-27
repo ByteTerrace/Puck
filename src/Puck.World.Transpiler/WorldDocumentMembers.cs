@@ -61,6 +61,21 @@ internal static class WorldDocumentMembers {
             }
         }
 
+        // Where the walk stands, spelled as the author reads it: the members from the document root, an index in
+        // brackets ("render.lighting.lights[2]").
+        string Location() {
+            var text = new System.Text.StringBuilder();
+
+            foreach (var (name, index) in segments) {
+                if (name is null) {
+                    text.Append(value: '[').Append(value: index).Append(value: ']');
+                } else {
+                    text.Append(value: ((text.Length == 0) ? string.Empty : ".")).Append(value: name);
+                }
+            }
+
+            return ((text.Length == 0) ? "the document root" : $"'{text}'");
+        }
         string Pointer() {
             var pointer = string.Empty;
             foreach (var (name, index) in segments) {
@@ -201,7 +216,7 @@ internal static class WorldDocumentMembers {
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
                     var finding = Diagnostic.Error(
                         code: PuckDiagnosticCodes.UnknownMember,
-                        message: $"Unknown member '{key}'{DocumentNearestNames.Suggestion(candidates: members.Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read)).Select(selector: static member => member.Name), name: key)}.",
+                        message: UnknownMemberMessage(key: key, location: Location(), members: members, type: type),
                         span: SourceSpan.None
                     );
 
@@ -257,6 +272,29 @@ internal static class WorldDocumentMembers {
     // An object's members in another order are the same object, so a typed object writes its discriminator first, then
     // its members in the model's declared order, then anything else (an extension key, a basis merge's $replace) as it
     // came. A dictionary's keys are data and keep their order.
+    // The refusal of a member the model has no name for. The model is the one this build of the compiler holds, so a
+    // member a newer schema added is unknown to an older build; the message says so, beside the nearest known names.
+    private static string UnknownMemberMessage(string key, string location, IReadOnlyList<WorldModelMember> members, Type type) {
+        var known = members
+            .Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read))
+            .Select(selector: static member => member.Name)
+            .ToArray();
+
+        var suggestion = DocumentNearestNames.Suggestion(candidates: known, name: key);
+
+        // With no name near the written one, the members the type does take are the nearest help there is.
+        if ((suggestion.Length == 0) && (known.Length > 0)) {
+            suggestion = $" It takes {string.Join(separator: ", ", values: known.Take(count: MaxListedMembers).Select(selector: static name => $"'{name}'"))}{((known.Length > MaxListedMembers) ? $" and {known.Length - MaxListedMembers} more" : string.Empty)}.";
+        }
+
+        return string.Concat(
+            DiagnosticText.Compose(problem: $"'{key}' is not a member of {location} ({type.Name}) in this build's schema"),
+            suggestion,
+            " ",
+            DiagnosticText.Compose(problem: "If the member is new, this build of the compiler or the engine may be older than the document: rebuild the CLI and the engine from the same source and compile again")
+        );
+    }
+    private const int MaxListedMembers = 12;
     private static void OrderMembers(JsonObject obj, IReadOnlyList<WorldModelMember> members) {
         if (obj.Count < 2) { return; }
         var rank = Ranks.GetValue(key: members, derive: static list => {

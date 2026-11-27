@@ -334,11 +334,15 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
             velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, responseOrigin: responseOrigin);
     /// <summary>Resolves a carried body's sweep and admits each neighbour's propagated block against its carrier.</summary>
+    /// <exception cref="InvalidOperationException">A kit partition is running: the sweep writes the carrier, another
+    /// body than the one it names.</exception>
     public ContactResolution ResolveCarriedSweep(int entityIndex, WorldBody carrier, in FixedVector3 previousPosition,
         ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+        m_population.ThrowIfPartitioned();
+        return ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
             velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, carrier: carrier);
+    }
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
@@ -407,6 +411,8 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         maxDistance: maxDistance,
         origin: in origin
     );
+    /// <inheritdoc/>
+    public bool TryHoldableStamp(out ContactHoldableStamp stamp) => m_inner.TryHoldableStamp(stamp: out stamp);
     /// <inheritdoc/>
     public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => m_inner.TryNearestSurfaceAlongDirection(
         assistHalfAngle: assistHalfAngle,

@@ -365,6 +365,14 @@ public static class PuckDiagnosticCodes {
         .Select(selector: static field => ((string)field.GetRawConstantValue()!))
         .ToFrozenSet(comparer: StringComparer.Ordinal);
 
+    /// <summary>The repository path of the reference page that explains every code, the page <see cref="HelpPath"/>
+    /// anchors into.</summary>
+    public const string ReferencePage = "docs/reference/diagnostics.md";
+
+    /// <summary>Returns where the reference page explains <paramref name="code"/>: its cause, an example and the fix.</summary>
+    /// <param name="code">The diagnostic code, spelled as reported (<c>PUCK016</c>).</param>
+    /// <returns>The page and the code's anchor, for example <c>docs/reference/diagnostics.md#puck016</c>.</returns>
+    public static string HelpPath(string code) => $"{ReferencePage}#{code.ToLowerInvariant()}";
     /// <summary>Returns whether a constant here declares <paramref name="code"/>.</summary>
     /// <param name="code">The diagnostic code, spelled as reported (<c>PUCK122</c>, <c>PUCK_LINT_001</c>).</param>
     /// <returns><see langword="true"/> when the code is declared.</returns>

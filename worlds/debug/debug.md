@@ -260,7 +260,7 @@ case, `stage` when omitted:
 | `wonderland` | (13.3, 0.05, 30.5), in the gallery's west hall 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
 | `boardroom` | In the board game room on the gallery's level 2, where the lift's landing meets it ([gallery.md](gallery.md)) | +X, into the room |
-| `cards` | At the -Z edge of the card table in the board game room ([`cardtable.md`](cardtable.md)), its chair, close enough to sit | +Z, across the board |
+| `cards` | At the -Z edge of the game table in the board game room ([`cardtable.md`](cardtable.md)), its chair, close enough to sit | +Z, across the glass |
 | `auction`, `shedding` | South of the sealed-bid auction and shedding card tables in the board game room ([`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck)) | +Z, across the table |
 | `deduction`, `skirmish` | North of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
 | `chess`, `go`, `reversi`, `alchemy`, `granaries` | At White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables, along the projecting wing's windows; each close enough to sit | +Z, across the board |

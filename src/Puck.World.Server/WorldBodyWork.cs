@@ -19,7 +19,7 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
     /// <summary>Gets the kind counting simulated body advances: one per non-seat body a tick's integration pass steps.</summary>
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the simulated advances a kit partition ran: the bodies whose step is local, which
-    /// <see cref="Advances"/> also counts. The difference is the advances the serial loop ran.</summary>
+    /// <see cref="Advances"/> also counts. The difference is the advances the serial partition ran.</summary>
     public static WorkKind LocalAdvances { get; } = new(name: "physics.bodies.local-advances", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the producer runs a kit partition ran.</summary>
     public static WorkKind LocalSteers { get; } = new(name: "physics.bodies.local-steers", unit: "count", workClass: WorkClass.Deterministic);

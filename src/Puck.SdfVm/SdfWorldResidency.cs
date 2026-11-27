@@ -901,6 +901,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.StageLandedMeshes(frame: frame);
         }
         tables.AdvanceHitBound();
+        FieldSlice.Serve(bake: MeshPathBake, program: frame.Program);
+        tables.StageFieldSlice(slice: FieldSlice);
 
         // The shading selection follows the frame the passes record (the one the tables hold), never a pending one.
         PrepareShade(device: device, frame: m_frame!);
@@ -1264,6 +1266,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
+    /// <summary>Gets the residency's live slicing plane, which its views draw where a plane is set
+    /// (<c>world.slice.live</c>); it outlives the tables, so a parked residency shows it again when it wakes.</summary>
+    public SdfLiveFieldSlice FieldSlice { get; } = new();
 
     private readonly SdfMeshDresser m_meshDresser;
 

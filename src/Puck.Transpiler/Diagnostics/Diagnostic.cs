@@ -81,6 +81,24 @@ public sealed record Diagnostic(string Code, string Message, DiagnosticSeverity 
             )
         );
     }
+    /// <summary>Lists the errors among <paramref name="diagnostics"/>, one indented line each with its file, line and
+    /// column, so a message about a source that failed can carry what to fix instead of telling the author to go
+    /// and look.</summary>
+    /// <param name="diagnostics">The diagnostics of the source.</param>
+    /// <param name="filePath">The source's path, as the author would open it.</param>
+    /// <param name="limit">The most errors listed; the rest are counted.</param>
+    /// <returns>The lines, joined by newlines; empty when there is no error.</returns>
+    public static string Summarize(IEnumerable<Diagnostic> diagnostics, string? filePath = null, int limit = 3) {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+
+        var errors = diagnostics.Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)).ToArray();
+        var text = string.Join(separator: "\n", values: errors.Take(count: limit).Select(selector: diagnostic => $"  {diagnostic.Format(filePath: filePath)}"));
+
+        return ((errors.Length > limit)
+            ? $"{text}\n  and {(errors.Length - limit).ToString(provider: CultureInfo.InvariantCulture)} more in the same source."
+            : text
+        );
+    }
     /// <summary>Creates an informational diagnostic.</summary>
     public static Diagnostic Info(string code, string message, SourceSpan span) =>
         new(

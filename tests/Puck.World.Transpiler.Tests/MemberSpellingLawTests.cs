@@ -55,7 +55,7 @@ public class MemberSpellingLawTests {
     public void AStringLiteralIsRefusedWhereverTheModelSaysTheMemberIsWrittenBare(string body, string spelling) {
         var refusal = Refusal(code: PuckDiagnosticCodes.ArgumentWrittenBare, source: (Rows + body));
 
-        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"write '{spelling}'");
+        Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"Write it bare: '{spelling}'");
     }
     [Fact]
     public void ABarePropertyLineLowersToTheMemberTheQuotedLineDid() {
@@ -86,7 +86,7 @@ public class MemberSpellingLawTests {
         Assert.Contains(
             actualString: Refusal(code: PuckDiagnosticCodes.ArgumentWrittenBare, source: (Rows + Ray.Replace(comparisonType: StringComparison.Ordinal, newValue: "direction: \"N\"", oldValue: "direction: N"))).Message,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "write 'direction: N'"
+            expectedSubstring: "Write it bare: 'direction: N'"
         );
     }
     [Fact]

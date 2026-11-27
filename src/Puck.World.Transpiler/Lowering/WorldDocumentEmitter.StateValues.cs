@@ -101,7 +101,11 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be {DocumentValueKind.WholeNumber.Words()} for an Int row",
+            message: DiagnosticText.Compose(
+                example: "'initial: 3'",
+                fix: "Write a whole-number literal, or a 'let' constant that holds one",
+                problem: $"{context} of an Int row takes {DocumentValueKind.WholeNumber.Words()}, and {ExpressionDescription.Of(expression: expr)} is written"
+            ),
             span: expr.Span
         );
 
@@ -114,7 +118,11 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be 'true' or 'false' for a Bool row",
+            message: DiagnosticText.Compose(
+                example: "'initial: false'",
+                fix: "Write true or false, or a 'let' constant that holds one. A default is read when the document compiles, so it cannot depend on state that exists only at run time",
+                problem: $"{context} of a Bool row takes {DocumentValueKind.Boolean.Words()}, and {ExpressionDescription.Of(expression: expr)} is written"
+            ),
             span: expr.Span
         );
 
@@ -127,7 +135,11 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a string for a Text row",
+            message: DiagnosticText.Compose(
+                example: "'initial: \"ready\"'",
+                fix: "Write a quoted string, or a 'let' constant that holds one",
+                problem: $"{context} of a Text row takes {DocumentValueKind.Text.Words()}, and {ExpressionDescription.Of(expression: expr)} is written"
+            ),
             span: expr.Span
         );
 
@@ -143,7 +155,11 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a decimal number for a Fixed row",
+            message: DiagnosticText.Compose(
+                example: "'initial: 0.5'",
+                fix: "Write a decimal literal, or a 'let' constant that holds one",
+                problem: $"{context} of a Fixed row takes a decimal number, and {ExpressionDescription.Of(expression: expr)} is written"
+            ),
             span: expr.Span
         );
 

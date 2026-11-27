@@ -88,6 +88,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // The 0-based VkPhysicalDeviceFeatures flag index of geometryShader, which a fragment stage's PrimitiveId needs (the
     // SPIR-V Geometry capability): the SDF mesh and glass passes' indexed draws name the triangle a fragment covers by it.
     private const uint GeometryShaderFeatureIndex = 4u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderInt64, which a 64-bit integer in a shader needs (the SPIR-V
+    // Int64 capability): the glass raster's layer list keys its faces in 64-bit words.
+    private const uint ShaderInt64FeatureIndex = 40u;
+    // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES (Vulkan 1.2 core), whose first VkBool32 is
+    // shaderBufferInt64Atomics (the SPIR-V Int64Atomics capability on storage buffers): the glass raster's layer list
+    // keeps the nearest faces by 64-bit atomic maximum.
+    private const uint StructureTypePhysicalDeviceShaderAtomicInt64Features = 1000180000;
     // Optional storage-buffer indexing, retained as a support reading only.
     private const uint StorageBufferArrayDynamicIndexingFeatureIndex = 35u;
     // The sparse flags among VkPhysicalDeviceFeatures (sparseBinding, sparseResidencyBuffer, sparseResidencyAliased),
@@ -134,6 +141,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
         (ClipDistanceFeatureIndex, "shaderClipDistance", "the SDF mesh and shadow passes clip a body straddling a portal at its glass"),
+        (ShaderInt64FeatureIndex, "shaderInt64", "the SDF glass raster keys its layer list in 64-bit words"),
     ];
 
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
@@ -301,6 +309,10 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");
         }
         featureStructureTypes.Add(item: ShaderDrawParameters);
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: StructureTypePhysicalDeviceShaderAtomicInt64Features)) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderBufferInt64Atomics, which the SDF glass raster's layer list needs to keep the nearest faces.");
+        }
+        featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderAtomicInt64Features);
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 

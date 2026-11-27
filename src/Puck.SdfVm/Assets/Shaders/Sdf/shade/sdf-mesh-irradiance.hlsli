@@ -10,9 +10,16 @@
 #include "../field/sdf-octahedral.hlsli"
 #include "../field/sdf-component.hlsli"
 
+// Whether a slot holds a written probe of `cell`. A reader that defines SDF_MESH_IRRADIANCE_EPOCH (the relight's bounce
+// and the camera sample, sdf-probe-lighting.hlsli) takes only a probe relit under that lighting epoch, so no light from
+// before a jump reaches a probe relit after it; the views take every written probe. KEEP IN SYNC with
+// SdfMeshIrradiance.Holds and Current.
 bool sdfMeshIrradianceHolds(uint address, uint flags, int3 cell) {
     uint at = address + SDF_MESH_IRRADIANCE_CELL_WORD;
     return (flags & SDF_MESH_IRRADIANCE_WRITTEN) != 0u &&
+#if defined(SDF_MESH_IRRADIANCE_EPOCH)
+        ((flags & SDF_MESH_IRRADIANCE_EPOCH_MASK) == SDF_MESH_IRRADIANCE_EPOCH) &&
+#endif
         all(uint3(sdfMeshIrradiance[at], sdfMeshIrradiance[at + 1], sdfMeshIrradiance[at + 2]) == asuint(cell));
 }
 // Floor modulo with unsigned remainder, including at INT_MIN.

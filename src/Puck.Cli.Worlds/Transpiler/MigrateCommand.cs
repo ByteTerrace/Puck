@@ -64,7 +64,7 @@ public static class PuckMigrateCommand {
         if (parsed.Value is not { } document) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not parse, so it cannot be migrated: {Summarize(diagnostics: parsed.Diagnostics)}",
+                Refusal: $"does not parse, so it cannot be migrated: {Diagnostic.Summarize(diagnostics: parsed.Diagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -113,7 +113,7 @@ public static class PuckMigrateCommand {
         if (reparsed.Value is not { } migrated) {
             return new Plan(
                 Path: path,
-                Refusal: $"migration '{migration.Name}' produced a source that does not parse back: {Summarize(diagnostics: reparsed.Diagnostics)}",
+                Refusal: $"migration '{migration.Name}' produced a source that does not parse back: {Diagnostic.Summarize(diagnostics: reparsed.Diagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -148,7 +148,7 @@ public static class PuckMigrateCommand {
         ) is not { } before) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not compile before the migration, so nothing can be compared against: {Summarize(diagnostics: beforeDiagnostics)}",
+                Refusal: $"does not compile before the migration, so nothing can be compared against: {Diagnostic.Summarize(diagnostics: beforeDiagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -162,7 +162,7 @@ public static class PuckMigrateCommand {
         ) is not { } after) {
             return new Plan(
                 Path: path,
-                Refusal: $"does not compile after migration '{migration.Name}': {Summarize(diagnostics: afterDiagnostics)}",
+                Refusal: $"does not compile after migration '{migration.Name}': {Diagnostic.Summarize(diagnostics: afterDiagnostics, filePath: path)}",
                 Rewritten: null
             );
         }
@@ -208,12 +208,6 @@ public static class PuckMigrateCommand {
             searchPattern: "*.puck"
         ).Order(comparer: StringComparer.Ordinal)]
         : [fullPath]
-    );
-    private static string Summarize(DiagnosticBag diagnostics) => string.Join(
-        separator: "; ",
-        values: diagnostics
-            .Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error))
-            .Select(selector: static diagnostic => $"({diagnostic.Span.Line},{diagnostic.Span.Column}) {diagnostic.Code}: {diagnostic.Message}")
     );
     /// <summary>Returns why <paramref name="path"/> could not be opened for writing, or <see langword="null"/>.</summary>
     private static string? Unwritable(string path) {
@@ -302,7 +296,7 @@ public static class PuckMigrateCommand {
             var parse = PuckParser.ParseDocumentWithDiagnostics(source: text, vocabulary: vocabulary);
 
             if (parse.Value is not { } document) {
-                Console.Error.WriteLine(value: $"error: {path}: does not parse, so it cannot be migrated: {Summarize(diagnostics: parse.Diagnostics)}");
+                Console.Error.WriteLine(value: $"error: {path}: does not parse, so it cannot be migrated: {Diagnostic.Summarize(diagnostics: parse.Diagnostics, filePath: path)}");
                 refused++;
                 continue;
             }
@@ -347,7 +341,7 @@ public static class PuckMigrateCommand {
             var reparsed = PuckParser.ParseDocumentWithDiagnostics(source: printed, vocabulary: CliVocabularyResolver.Instance.Resolve(source: printed));
 
             if ((reparsed.Value is null) || reparsed.Diagnostics.Any(predicate: static d => (d.Severity == DiagnosticSeverity.Error))) {
-                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' produced a source that does not parse back: {Summarize(diagnostics: reparsed.Diagnostics)}");
+                Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' produced a source that does not parse back: {Diagnostic.Summarize(diagnostics: reparsed.Diagnostics, filePath: source.Path)}");
                 foreach (var diagnostic in reparsed.Diagnostics.Where(predicate: static d => (d.Severity == DiagnosticSeverity.Error)).Take(count: 3)) {
                     var lines = printed.Split(separator: '\n');
 
@@ -394,7 +388,7 @@ public static class PuckMigrateCommand {
                 var (_, after) = CompileCommand.CompileSource(diagnostics: diagnostics, imports: ImportHandling.Validate, sourceMap: new SourceMap(), sourcePath: source.Path, sourceText: text, vocabulary: CliVocabularyResolver.Instance.Resolve(source: text));
 
                 if (diagnostics.HasErrors || (after is null)) {
-                    Console.Error.WriteLine(value: $"error: {source.Path}: does not compile after migration '{migration.Name}': {Summarize(diagnostics: diagnostics)}");
+                    Console.Error.WriteLine(value: $"error: {source.Path}: does not compile after migration '{migration.Name}': {Diagnostic.Summarize(diagnostics: diagnostics, filePath: source.Path)}");
                     failures++;
                 } else if (migration.DocumentDifference(after: after, before: source.Before) is { } difference) {
                     Console.Error.WriteLine(value: $"error: {source.Path}: migration '{migration.Name}' changed what it compiles to — {difference}");

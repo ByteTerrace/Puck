@@ -1,5 +1,7 @@
 using Puck.Assets;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 using Puck.World.Transpiler.Vocabulary;
@@ -238,7 +240,18 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             // A source that does not parse cleanly cannot say whether it is a library or a document, so the importer
             // is refused rather than left to compose or drop it.
             if (Composition.WorldSourceIndex.Declaration(path: sourcePath) is not { } declaration) {
-                reason = $"Imported '{name}' does not parse; compile '{sourcePath}' alone to read its faults.";
+                var faults = Composition.WorldSourceIndex.ParseFaults(path: sourcePath);
+
+                var intro = DiagnosticText.Compose(problem: $"The imported source '{name}' does not parse, so the importer cannot tell whether it is a library or a document");
+                var fix = ((faults.Count == 0)
+                    ? DiagnosticText.Compose(problem: $"Compile '{sourcePath}' alone to read its faults")
+                    : DiagnosticText.Compose(problem: $"Fix {((faults.Count == 1) ? "that error" : "those errors")} in '{sourcePath}' and compile again")
+                );
+
+                reason = ((faults.Count == 0)
+                    ? $"{intro} {fix}"
+                    : $"{intro} The source reports:\n{Diagnostic.Summarize(diagnostics: faults, filePath: sourcePath)}\n{fix}"
+                );
 
                 return false;
             }

@@ -1,15 +1,19 @@
 // The glass shading pass rewrites the lit image after views and before sky and resolve. It copies pixels that have neither a
-// front face before its opaque hit or a ray that starts inside a solid. The pass shades up to two
-// interfaces: the nearest front face (the glass target's) and the second-nearest, which the sums' second record names
-// (sdfGlassSecondInterface). Each interface is shaded alike (one loop body, never a copy):
+// front face before its opaque hit or a ray that starts inside a solid. The pass shades up to SDF_GLASS_LAYERS
+// interfaces: the nearest front face (the glass target's) and the next nearest after it in the sums' layer list
+// (sdfGlassNextLayer), nearest first, so the order the faces rasterized in never shows. Each interface is shaded alike (one
+// loop body, never a copy):
 // - its surface is the glass draw's triangle at the ray's hit, normal and material resolved as the surface pass resolves
 //   an opaque hit (sdfMeshSurfaceNormal, sdfMeshMaterial), its index of refraction and absorption the material's
 //   (sdfMaterialLoad) and its frost the material's roughness; a material's flow layer moves its shading as on an opaque
 //   surface (sdfShadeFlow, the one flow layer), tilting the normal it reflects and refracts by;
 // - the distance the ray travels through glass is the glass sums' (frame/sdf-glass.hlsli), so a hollow shell absorbs
-//   over both its walls and a solid holding an opaque object over the glass before it. With two interfaces the near
-//   one's share runs from it to the nearest back face (or to the far interface, whichever is nearer), absorbing by its
-//   own material, and the far one takes the rest of the distance and of the optical depth;
+//   over both its walls and a solid holding an opaque object over the glass before it. Of several interfaces the nearest
+//   one's share runs from it to the nearest back face (or to the next interface, whichever is nearer), each later one
+//   but the last takes an even part of the glass left, never past the next interface, each absorbing by its own material,
+//   and the last takes the rest of the distance and of the optical depth (sdfGlassShare);
+// - its own emission (the material's emissive, scaled by its emissive lane) joins what it shows, so an emissive glass
+//   glows over what lies behind it as an emissive surface does;
 // - a medium that scatters (SdfGlass.Scatter, Scattering) shows its own light over a share 1 - exp(-scattering *
 //   distance) of the interface, the light arriving at the surface as a surface of the scatter colour would show it
 //   (sdfGlassReceived), and what lies behind over the rest;
@@ -29,18 +33,20 @@
 // through its share of the glass, then on parallel to the pixel's ray, reaches the opaque hit's depth, projected back to
 // the render grid, and read at the pixel's own sample where that lands on a nearer surface; frost spreads the read over
 // a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind, turned by a
-// per-pixel pattern that never moves between frames. The far interface composes over that light, and the near one over
-// the far one's result, so what the near interface transmits is the far interface's shading.
+// per-pixel pattern that never moves between frames. The interfaces compose front to back: each adds what it shows
+// under the light every nearer interface passes, so what an interface transmits is the shading of every interface
+// behind it and, last, the light behind them all.
 // The glass pixel's coverage is the light behind's, darkened by each interface's luminous transmittance, so the sky the
 // composite puts behind it shows through a clear pane at the pixel's own direction, unrefracted and untinted but
 // darkened; a revealed surface covers it. In a temporal view the pixel's reactivity is raised to one where the refracted
 // read comes from a pixel away or more, since the resolve's history follows the opaque hit the record names, not what the
 // glass shows; a flat pane bending nothing keeps its history and its edges resolve like any other. A debug view's lit
 // image passes through. The pass counts each interface it shades as a work step.
-// Where it stops: transmission integrates every glass material before the opaque hit, but only two interfaces reflect,
-// refract and scatter. A third front face's glass absorbs within the far interface's share and what lies beyond it is
-// the opaque image, never shaded as glass; past SdfGlassFrontEntries front faces the record names no second interface
-// and the near one alone is shaded. A ray that starts in glass takes its starting segment in front of these interfaces.
+// Where it stops: transmission integrates every glass material before the opaque hit, but only the nearest
+// SDF_GLASS_LAYERS interfaces reflect, refract, emit and scatter. A farther front face's glass absorbs within the last
+// interface's share and what lies beyond it is the opaque image, never shaded as glass. The later interfaces' shares
+// assume panes alike, since the sums hold only the nearest exit. A ray that starts in glass takes its starting segment in
+// front of these interfaces.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-glass.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -162,43 +168,59 @@ float sdfGlassInterfaceAt(SdfMeshHit hit, float3 origin, float3 rayDirection, fl
 
     return ((abs(facing) > (1.0e-6 * length(face))) ? (dot((a - origin), face) / facing) : far);
 }
-// The second-nearest glass front face before the opaque hit, from the sums' second record at `word`: the held front
-// face nearest along the ray other than the near one (`nearDraw`, `nearTriangle`, the glass target's), ties going to the
-// lower draw and triangle, so the answer never depends on the order the faces claimed their entries. An entry the mesh
-// hit door rejects is no face. False where fewer than two front faces lie before the opaque hit, or more than the record
-// holds.
-bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3 origin, float3 rayDirection, float nearT, float opaque,
-    out SdfMeshHit far, out float t) {
-    uint count = sdfGlassFrontCountAt(word);
-    bool found = false;
+// The layers the sums' layer list at `word` holds besides the near face (`nearDraw`, `nearTriangle`, the glass target's),
+// counted without resolving them.
+uint sdfGlassLayersBeyond(uint word, uint nearDraw, uint nearTriangle) {
+    uint count = 0u;
 
-    far = (SdfMeshHit)0;
-    t = opaque;
-    if ((count < 2u) || (count > SdfGlassFrontEntries)) {
-        return false;
-    }
     [loop]
-    for (uint entry = 0u; (entry < count); entry++) {
+    for (uint entry = 0u; (entry < SDF_GLASS_LAYERS); entry++) {
         uint entryDraw;
         uint entryTriangle;
-        SdfMeshHit entryHit;
 
-        sdfGlassFrontAt(word, entry, entryDraw, entryTriangle);
-        if (((entryDraw != nearDraw) || (entryTriangle != nearTriangle)) && sdfMeshResolveHit(entryDraw, entryTriangle, entryHit)) {
-            float at = sdfGlassInterfaceAt(entryHit, origin, rayDirection, opaque);
-            // A record's first word orders hits as their draws do.
-            bool nearer = (!found || (at < t) || ((at == t) && ((entryHit.record < far.record) || ((entryHit.record == far.record) && (entryHit.triangleIndex < far.triangleIndex)))));
+        if (!sdfGlassLayerAt(word, entry, entryDraw, entryTriangle)) break;
+        count += (((entryDraw != nearDraw) || (entryTriangle != nearTriangle)) ? 1u : 0u);
+    }
+    return count;
+}
+// The next glass front face after `previousT` from the sums' layer list at `word`, which holds the nearest faces in
+// distance order (frame/sdf-glass.hlsli): the list's entry at `cursor` or after it other than the near face (`nearDraw`,
+// `nearTriangle`, the glass target's), its ray parameter its plane's, held between `previousT` and the opaque hit, so
+// two faces whose codes tie keep the list's order. `cursor` moves past the entry taken. An entry the mesh hit door
+// rejects is no face. False where the list holds no further face.
+bool sdfGlassNextLayer(uint word, inout uint cursor, uint nearDraw, uint nearTriangle, float3 origin, float3 rayDirection, float previousT, float opaque,
+    out SdfMeshHit next, out float t) {
+    next = (SdfMeshHit)0;
+    t = opaque;
+    [loop]
+    for (; (cursor < SDF_GLASS_LAYERS); cursor++) {
+        uint entryDraw;
+        uint entryTriangle;
 
-            if (nearer) {
-                found = true;
-                far = entryHit;
-                t = at;
-            }
+        if (!sdfGlassLayerAt(word, cursor, entryDraw, entryTriangle)) {
+            cursor = SDF_GLASS_LAYERS;
+            break;
+        }
+        if (((entryDraw != nearDraw) || (entryTriangle != nearTriangle)) && sdfMeshResolveHit(entryDraw, entryTriangle, next)) {
+            t = clamp(sdfGlassInterfaceAt(next, origin, rayDirection, opaque), previousT, opaque);
+            cursor++;
+            return true;
         }
     }
-    t = clamp(t, nearT, opaque);
+    return false;
+}
+// The share of the glass an interface at `t` absorbs and scatters over, of the `remaining` the nearer interfaces left:
+// for the nearest interface (`first`) to the nearest back face `back` or the next interface `nextT`, whichever is nearer;
+// for a later one an even part of what is left among the `left` interfaces from it on, never past the next interface;
+// and all that is left for the last (`last`).
+float sdfGlassShare(bool first, bool last, float t, float nextT, float back, float remaining, uint left) {
+    if (last) {
+        return remaining;
+    }
+    float gap = max((nextT - t), 0.0);
+    float share = (first ? ((back > t) ? min((back - t), gap) : gap) : min(gap, (remaining / float(max(left, 1u)))));
 
-    return found;
+    return clamp(share, 0.0, remaining);
 }
 
 // The probes the near interface's receiver at `surfacePoint` shades with, at the normal `normal` its shading tilted it
@@ -299,43 +321,34 @@ void sdfGlassPixel(uint2 pixel) {
         float thickness = clamp(sdfGlassThicknessAt(word, start, opaque) - insideDistance, 0.0, opaque - nearT);
         float3 depth = max(sdfGlassOpticalDepthAt(word) - insideDepth, 0.0);
         float footprint = ((2.0 * view.right.w) / max(float(extent.y), 1.0));
-        SdfMeshHit farHit;
-        float farT;
-        bool second = sdfGlassSecondInterface(word, nearDraw, nearTriangle, origin, rayDirection, nearT, opaque, farHit, farT);
-        uint layers = (second ? 2u : 1u);
-        // The near interface's share of the glass: to the nearest back face, never past the far interface; the far one
-        // takes the rest.
+        // The interfaces nearest first: the near face, then the layer list's faces after it, each found one ahead so an
+        // interface's share can reach to the next.
+        uint layers = min((1u + sdfGlassLayersBeyond(word, nearDraw, nearTriangle)), SDF_GLASS_LAYERS);
+        uint cursor = 0u;
+        SdfMeshHit hit = nearHit;
+        float t = nearT;
+        SdfMeshHit nextHit;
+        float nextT;
+        bool hasNext = ((layers > 1u) && sdfGlassNextLayer(word, cursor, nearDraw, nearTriangle, origin, rayDirection, t, opaque, nextHit, nextT));
         float back = sdfGlassNearestBackAt(word);
-        float nearThickness = (second ? clamp(((back > nearT) ? (min(back, farT) - nearT) : (farT - nearT)), 0.0, thickness) : thickness);
-        float farThickness = (thickness - nearThickness);
-        float3 nearDepth = float3(0.0, 0.0, 0.0);
-        // Each interface's light toward the eye, kept by comparison rather than in an indexed local array: what its
-        // surface shows (`*Shown`, the reflection, highlights and medium), what it passes of the light behind
-        // (`*Passed`, RGB), what its revealed surface shows (`*Cover`) over its revealed share, and its luminous share
-        // passed.
-        float3 nearShown = float3(0.0, 0.0, 0.0);
-        float3 nearPassed = float3(0.0, 0.0, 0.0);
-        float3 nearCover = float3(0.0, 0.0, 0.0);
-        float nearRevealed = 0.0;
-        float nearLuminous = 0.0;
-        float3 farShown = float3(0.0, 0.0, 0.0);
-        float3 farPassed = float3(0.0, 0.0, 0.0);
-        float3 farCover = float3(0.0, 0.0, 0.0);
-        float farRevealed = 0.0;
-        float farLuminous = 0.0;
+        // The glass and optical depth the nearer interfaces left.
+        float remaining = thickness;
+        float3 depthLeft = depth;
+        // The composition front to back: the light the interfaces so far show toward the eye, the share of the light
+        // behind them they pass (RGB) and their luminous share passed.
+        float3 shownSoFar = float3(0.0, 0.0, 0.0);
+        float3 passedSoFar = float3(1.0, 1.0, 1.0);
+        float luminousSoFar = 1.0;
         // The read's displacement from the opaque hit straight down the pixel's ray, and the frost's spread there.
         float3 offset = float3(0.0, 0.0, 0.0);
         float spread = 0.0;
+        uint shaded = 0u;
 
         [loop]
-        for (uint layer = 0u; (layer < layers); layer++) {
+        for (uint layer = 0u; (layer < SDF_GLASS_LAYERS); layer++) {
             bool isNear = (layer == 0u);
-            SdfMeshHit hit = farHit;
-            if (isNear) {
-                hit = nearHit;
-            }
-            float t = (isNear ? nearT : farT);
-            float share = (isNear ? nearThickness : farThickness);
+            bool last = !hasNext;
+            float share = sdfGlassShare(isNear, last, t, (hasNext ? nextT : opaque), back, remaining, (layers - layer));
             float3 surfacePoint = (origin + (rayDirection * t));
             float3 face;
             float curvature;
@@ -361,6 +374,7 @@ void sdfGlassPixel(uint2 pixel) {
             float revealed;
 
             sdfLayerFrame(hit, frameSlot, surfacePoint, normal, rayDirection, layerPoint, layerNormal, layerRay, layerRotation, lanes);
+            sdfApplyEmissiveLane(lanes, material);
             uint paintFirst;
             uint paintCount;
             float3 painted = sdfMaterialPaints(materialId, paintFirst, paintCount);
@@ -383,14 +397,15 @@ void sdfGlassPixel(uint2 pixel) {
                 if (sdfShadeBound(shadeBinding)) { sdfShadeSurfaceInputs(shadeStamp, material, normal, revealed); }
             }
 
-            // The medium's share of what the interface shows over its glass, the rest what lies behind. A lone
-            // interface absorbs the whole optical depth; of two, the near absorbs its own material over its share and
-            // the far the rest.
-            float3 absorbed = (second ? (isNear ? (material.absorption * share) : max((depth - nearDepth), 0.0)) : depth);
+            // The medium's share of what the interface shows over its glass, the rest what lies behind. Each interface but
+            // the last absorbs its own material over its share, never more than the sums left; the last absorbs the rest
+            // of the optical depth, so the interfaces together absorb exactly the sums' whole.
+            float3 absorbed = (last ? depthLeft : min((material.absorption * share), depthLeft));
             float3 medium;
             float3 transmittance = sdfGlassTransmission(material, absorbed, share, medium);
 
-            nearDepth = (isNear ? absorbed : nearDepth);
+            depthLeft = max((depthLeft - absorbed), 0.0);
+            remaining = max((remaining - share), 0.0);
             offset += ((refract(rayDirection, normal, (1.0 / ior)) - rayDirection) * share);
             spread += (roughness * max(((opaque - t) - share), 0.0));
 
@@ -432,7 +447,9 @@ void sdfGlassPixel(uint2 pixel) {
 
             received *= localGain;
 
-            float3 shown = (((((environment * fresnel) + highlights + rim) * localGain) + (((1.0 - fresnel) * medium) * received)) * air * attenuation);
+            // Its own emission joins what it shows, untouched by the occluders' attenuation as an opaque surface's is.
+            float3 emitted = (material.albedo * material.emissive);
+            float3 shown = ((((((environment * fresnel) + highlights + rim) * localGain) + (((1.0 - fresnel) * medium) * received)) * attenuation) + emitted) * air;
             float3 passed = ((1.0 - fresnel) * transmittance);
             float3 revealedAlbedo = max((material.albedo - baseAlbedo * (1.0 - revealed)) / max(revealed, 1.0e-6), 0.0);
             float3 cover = (((sdfShadeBound(shadeBinding) ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
@@ -443,21 +460,20 @@ void sdfGlassPixel(uint2 pixel) {
                 indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12), linework) * air;
             float luminous = ((1.0 - fresnel) * dot(transmittance, PuckRec709Luminance));
 
-            if (isNear) {
-                nearShown = shown;
-                nearPassed = passed;
-                nearCover = cover;
-                nearRevealed = revealed;
-                nearLuminous = luminous;
-            } else {
-                farShown = shown;
-                farPassed = passed;
-                farCover = cover;
-                farRevealed = revealed;
-                farLuminous = luminous;
+            // Under the light the nearer interfaces pass: its revealed surface covers it over its revealed share, and the
+            // rest shows its surface and passes the light behind.
+            shownSoFar += (passedSoFar * lerp(shown, cover, revealed));
+            passedSoFar *= ((1.0 - revealed) * passed);
+            luminousSoFar *= ((1.0 - revealed) * luminous);
+            shaded++;
+            if (!hasNext) {
+                break;
             }
+            hit = nextHit;
+            t = nextT;
+            hasNext = sdfGlassNextLayer(word, cursor, nearDraw, nearTriangle, origin, rayDirection, t, opaque, nextHit, nextT);
         }
-        sdfWorkSteps += layers;
+        sdfWorkSteps += shaded;
 
         // The bent ray reaches the opaque hit's depth displaced by each interface's refraction over its share of the
         // glass: where that lands on the render grid is where the light through the glass is read.
@@ -500,15 +516,8 @@ void sdfGlassPixel(uint2 pixel) {
             through /= float(GlassFrostTaps);
         }
 
-        // The far interface composes over the light behind, and the near one over that.
-        float3 light = through.rgb;
-        float coverage = through.a;
-
-        if (second) {
-            light = lerp((farShown + (farPassed * light)), farCover, farRevealed);
-            coverage = lerp((1.0 - ((1.0 - coverage) * farLuminous)), 1.0, farRevealed);
-        }
-        color = float4(lerp((nearShown + (nearPassed * light)), nearCover, nearRevealed), lerp((1.0 - ((1.0 - coverage) * nearLuminous)), 1.0, nearRevealed));
+        // The interfaces over the light behind them all.
+        color = float4((shownSoFar + (passedSoFar * through.rgb)), (1.0 - ((1.0 - through.a) * luminousSoFar)));
         reactive = saturate(length(at - own));
     }
 

@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -131,7 +132,7 @@ public static partial class PuckParser {
 
         if (!string.Equals(a: respelled, b: operand.Text, comparisonType: StringComparison.Ordinal)) {
             diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandColonChannel,
-                message: $"'{operand.Text}' spells a reserved channel with colons; write '{respelled}'", span: operand.Span);
+                message: DiagnosticText.Compose(fix: $"Write it as '{respelled}'", problem: $"'{operand.Text}' spells a reserved channel with colons"), span: operand.Span);
         } else if ((operand.Syntax is null) && (diagnostics is not null)) {
             diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
                 message: $"'{operand.Text}' {operand.SyntaxError}", span: operand.Span);
@@ -290,7 +291,7 @@ public static partial class PuckParser {
         if (parsed.Instructions is not [{ Payload: InstructionPayload.State state }]) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RowReferenceExpected,
-                message: $"expected a single state-row reference here, not an expression ('{text}')",
+                message: DiagnosticText.Compose(example: "'state.score' or 'score[key]'", fix: "Name one state row, optionally with a key", problem: $"A single state-row reference is expected here, and '{text}' is an expression"),
                 span: span
             );
             return new RowRefNode(

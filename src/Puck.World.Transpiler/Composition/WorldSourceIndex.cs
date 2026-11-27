@@ -304,6 +304,28 @@ public static class WorldSourceIndex {
 
         return TryKnow(digest: out _, path: path)?.Declaration;
     }
+    /// <summary>Parses the <c>.puck</c> source at <paramref name="path"/> again and returns the syntax errors it
+    /// draws, so a message about a source that does not parse can carry them. It reads the file and parses it each
+    /// call; it is for a refusal that is already being written, never a hot path.</summary>
+    /// <param name="path">The <c>.puck</c> source.</param>
+    /// <returns>The errors, in source order; empty when the file cannot be read or draws none.</returns>
+    public static IReadOnlyList<Diagnostic> ParseFaults(string path) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+
+        var diagnostics = new DiagnosticBag();
+
+        try {
+            _ = PuckParser.ParseDocumentWithDiagnostics(
+                diagnostics: diagnostics,
+                source: CompileInputs.ReadAllText(path: path),
+                vocabulary: WorldDocumentVocabulary.Instance
+            );
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            return [];
+        }
+
+        return [.. diagnostics.Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error))];
+    }
     /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
     /// those bytes and persisted beside the process's compiles (<see cref="WorldCompileSession.Shared"/>) when it
     /// persists them.</summary>
