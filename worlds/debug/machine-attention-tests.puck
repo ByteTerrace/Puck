@@ -14,7 +14,7 @@ basis: "avatars/moth"
 documentId: "machine-attention-tests"
 
 import "../standard/machines"
-import "moth-controls"
+import "set-controls"
 
 machines [
   (brickMachine("brick", "cartridges/cgb/tetromino.cgb.puck") with {
