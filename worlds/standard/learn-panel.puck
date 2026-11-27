@@ -1,0 +1,316 @@
+// The learn panel: a terminal's screen opens the maths behind what it shows, in layers. A plain sentence first; "the
+// maths" adds the formula, typeset from the engine's own formula tree (a math text paint's `@formula` line), the same
+// formula with its live values written in, the terms it reads one a row, and its step by step, which scrolls. A tap on a
+// term's row highlights it in every line it appears in and says what it means; a drag on the scrub bar sets the value a
+// subject lets a player change, and the drawn subject and the formula's numbers follow at once. A library: a world
+// expands `learnSubjectsState` and `learnPanelState` in its `state.world` and `learnPanel` once a panel, and draws the
+// panel with its own paints, reading the texts below (`learnMathsText`, `learnTermsText` and the rest), so the look is
+// the world's and the behaviour is here.
+//
+// Everything a panel shows is world state keyed by the panel, shown on the terminal's own screen to everyone looking at
+// it, never a panel in one seat's view (docs/decisions/play.md, "In-world consoles"). Its controls are its screen's
+// pointer surface: a finger, a pen or a mouse click all arrive as contacts (forEach: contacts(<surface>)), the one door
+// each takes. A drag on the steps scrolls them with the finger, and a flick lets them run on and slow (`learnFriction`
+// a tick); the wheel scrolls them for a seat engaged at the panel's terminal (the standard's `scroll` channel, which
+// terminal.puck binds to the wheel, live in the world's `inputModes`).
+//
+// A panel's subject is a row of the world's subject table, the index the world writes to the panel's `learnSubject`
+// cell (a station's chosen exhibit). The table, `learnSubjectsState(subjects)`, holds each subject's formula reference
+// (`shape:Sphere`, `blend:SmoothUnion`, or "" for none), its sentence, and the term a player may scrub, with its value
+// at full size and the least share of it the scrub reaches. A subject's scrubbed size is `learnSize[<index>]`, a share
+// in 0..1 its creation's `sizeBy` reads (with `sizeAbout` at its centre), so the scrub reshapes the drawn subject with no
+// bake: its root scales, and the term's value written into the formula is that share of its value at full size.
+//
+// The pointer surface's regions a panel reads, by id (the world places them):
+//
+//   learn   opens the panel (on the screen's own interface)
+//   back    closes it
+//   layer   turns the maths on and off
+//   terms   a list region, a row a term, in the order the formula reads them
+//   steps   the step by step: a drag scrolls it
+//   scrub   the scrub bar: where a touch stands across it is the share
+//
+// The state, keyed by panel:
+//
+//   learnSubject   the subject's index, which the world writes
+//   learnOpen      0 closed, 1 the sentence, 2 the maths
+//   learnTerm      the selected term's row, -1 for none
+//   learnScroll    the steps' scroll, a share of their overflow (a math text paint's `scroll`)
+//   learnVelocity  the scroll's run on after a flick, a share a tick
+//   learnFormula   the subject's formula reference while the maths shows, else ""
+//   learnSentence  the subject's sentence
+//   learnScrubTerm the term the scrub sets, or "" for none; learnScrubOn is 1 when there is one
+//   learnValue     the scrub term's value as drawn; learnToggle the layer button's label
+//
+// and learnPress, learnLastY, learnLastTick, learnScrubbing, learnSubjectAt and learnView are the gestures' and the
+// rules' own.
+
+// What each of the engine's formula terms means, by its name in the formula (SdfFormulaTypesetting's terms; `world.formula
+// <reference>` lists a formula's). A term the glossary leaves out shows its name alone.
+let learnGlossary = [
+  { name: "p", meaning: "the point being measured" }
+  { name: "radius", meaning: "centre to surface" }
+  { name: "halfExtents", meaning: "half the size on each axis" }
+  { name: "cornerRadius", meaning: "how round the corners are" }
+  { name: "major", meaning: "the ring, centre to tube" }
+  { name: "minor", meaning: "the tube's radius" }
+  { name: "halfHeight", meaning: "half the height" }
+  { name: "rounding", meaning: "how round the edges are" }
+  { name: "endpoint", meaning: "where the segment ends" }
+  { name: "current", meaning: "distance to the shapes so far" }
+  { name: "candidate", meaning: "distance to this shape" }
+  { name: "smoothRadius", meaning: "softness, the fillet's width" }
+  { name: "normal", meaning: "the way the plane faces" }
+  { name: "offset", meaning: "the plane's offset" }
+  { name: "exponent", meaning: "how square the form is" }
+]
+// The highlighted term's, the live values' and the meanings' colours.
+let learnColors = { highlight: "#FFB347", live: "#7FE0D0", quiet: "#A9B4C2" }
+// A wheel notch's scroll, a flick's slowing a tick, and the run on a flick comes to rest under.
+let learnWheelStep = 0.12
+let learnFriction = 0.9
+let learnRest = 0.002
+// How many ticks a finger may rest before its lift is a lift and no flick.
+let learnFlickTicks = 4
+let learnToggleLabels = ["THE MATHS", "THE WORDS"]
+
+// The panel's texts, each a text paint's template: the steps (a math text, scrolled by `learnScrollText`), the terms (a
+// math text set to a list's rows: `pitch: true`), the sentence, the layer button's label and the scrub's reading.
+function learnDirectives(key, colors = learnColors) = [
+  $"@select {{state.learnTerm.{key}}}"
+  $"@value {{state.learnScrubTerm.{key}}} {{state.learnValue.{key}}}"
+  $"@color highlight {colors.highlight}"
+  $"@color live {colors.live}"
+  $"@color quiet {colors.quiet}"
+]
+function learnMathsText(key, colors = learnColors) = join(concat(learnDirectives(key, colors), [
+  $"@formula {{state.learnFormula.{key}}} equation"
+  $"@formula {{state.learnFormula.{key}}} values"
+  ""
+  $"@formula {{state.learnFormula.{key}}} steps"
+]), "\n")
+function learnTermsText(key, glossary = learnGlossary, colors = learnColors) = join(concat(
+  learnDirectives(key, colors),
+  map(glossary, entry => $"@meaning {entry.name} {entry.meaning}"),
+  [$"@formula {{state.learnFormula.{key}}} terms"]
+), "\n")
+function learnScrollText(key) = $"{{state.learnScroll.{key}}}"
+function learnSentenceText(key) = $"{{state.learnSentence.{key}}}"
+function learnToggleText(key) = $"{{state.learnToggle.{key}}}"
+function learnScrubText(key) = $"{{state.learnScrubTerm.{key}}}  {{state.learnValue.{key}}}"
+
+// One subject of the table: no formula, no sentence and nothing to scrub unless it says so.
+function learnSubjectOf(subject) = ({ formula: "", sentence: "", scrub: null } with subject)
+
+// The subject table, a row each by subject index: `subjects` is a list of { formula, sentence, scrub }, `scrub` either
+// null or { term, value, least }: the term's name in the formula, its value at full size, and the least share of it the
+// scrub reaches.
+template learnSubjectsState(subjects) {
+  let rows = map(subjects, subject => learnSubjectOf(subject))
+  let indices = range(0, length(rows))
+
+  row {
+    name: "learnSubjectFormulas"
+    kind: "Text"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: rows[i].formula })
+  }
+  row {
+    name: "learnSubjectSentences"
+    kind: "Text"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: rows[i].sentence })
+  }
+  row {
+    name: "learnSubjectTerms"
+    kind: "Text"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? "" : rows[i].scrub.term) })
+  }
+  row {
+    name: "learnSubjectScrubs"
+    kind: Int
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? 0 : 1) })
+  }
+  row {
+    name: "learnSubjectValues"
+    kind: "Fixed"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? 0 : rows[i].scrub.value) })
+  }
+  row {
+    name: "learnSubjectLeast"
+    kind: "Fixed"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: ((rows[i].scrub == null) ? 1 : rows[i].scrub.least) })
+  }
+  // Each subject's scrubbed size, the share its creation's sizeBy reads.
+  row {
+    name: "learnSize"
+    kind: "Fixed"
+    capacity: length(rows)
+    cells: map(indices, i => { key: $"{i}", value: 1 })
+  }
+}
+
+// Every panel's own cells, keyed by `keys`.
+template learnPanelState(keys) {
+  for name in ["learnSubject", "learnOpen", "learnPress", "learnLastTick", "learnScrubbing", "learnScrubOn", "learnView"] {
+    table $"{name}" capacity(length(keys)) {
+      for key in keys {
+        [key] = 0
+      }
+    }
+  }
+  for name in ["learnTerm", "learnSubjectAt"] {
+    table $"{name}" capacity(length(keys)) {
+      for key in keys {
+        [key] = -1
+      }
+    }
+  }
+  for name in ["learnScroll", "learnVelocity", "learnLastY", "learnValue"] {
+    row {
+      name: name
+      kind: "Fixed"
+      capacity: length(keys)
+      cells: map(keys, key => { key: key, value: 0 })
+    }
+  }
+  for name in ["learnFormula", "learnSentence", "learnScrubTerm"] {
+    table $"{name}" capacity(length(keys)) {
+      for key in keys {
+        [key] = ""
+      }
+    }
+  }
+  table learnToggle capacity(length(keys)) {
+    for key in keys {
+      [key] = learnToggleLabels[0]
+    }
+  }
+}
+
+// One panel's rules. `key` keys its cells; `surface` is the placement whose pointer surface carries the regions above;
+// `terminal` is the panel's terminal (its place among the world's terminals from 1), whose open console stands the panel
+// down and whose engaged seats' wheel scrolls it; `drag` turns a drag's travel down the glass (a share of its height)
+// into scroll (a share of the overflow); `scrubFrom` and `scrubTo` are the scrub bar's left and right edges as shares of
+// the glass's width.
+template learnPanel(key, surface, terminal, drag, scrubFrom, scrubTo) {
+  let number = $"{terminal}"
+
+  // The subject: its cells copied from its table row whenever it changes, the panel's scroll and term reset.
+  rule $"learn-subject-{key}" {
+    when learnSubject[key] != learnSubjectAt[key]
+    mode: Level
+    setState(state: learnSentence, key: $"{key}", fromState: learnSubjectSentences, fromKey: $"$cell:learnSubject:{key}")
+    setState(state: learnScrubTerm, key: $"{key}", fromState: learnSubjectTerms, fromKey: $"$cell:learnSubject:{key}")
+    setState(state: learnScrubOn, key: $"{key}", fromState: learnSubjectScrubs, fromKey: $"$cell:learnSubject:{key}")
+    learnValue[key] = learnSize[learnSubject[key]] * learnSubjectValues[learnSubject[key]]
+    learnTerm[key] = -1
+    learnScroll[key] = 0
+    learnVelocity[key] = 0
+    learnSubjectAt[key] = learnSubject[key]
+  }
+  // The maths shows the subject's formula only while it is open, and the layer button names the other layer. The layer
+  // and the subject pack into one view the gate and the write share, so a firing closes its own gate.
+  rule $"learn-layer-{key}" {
+    local view = (learnOpen[key] * 65536) + learnSubjectAt[key] + 1
+    when learnView[key] != view
+    mode: Level
+    if learnOpen[key] == 2 {
+      setState(state: learnFormula, key: $"{key}", fromState: learnSubjectFormulas, fromKey: $"$cell:learnSubjectAt:{key}")
+      learnToggle[key] = learnToggleLabels[1]
+    } else {
+      learnFormula[key] = ""
+      learnToggle[key] = learnToggleLabels[0]
+    }
+    learnView[key] = view
+  }
+  // The screen's contacts: the buttons on a lift, a drag on the steps, a touch on the scrub bar.
+  rule $"learn-{key}" {
+    forEach: contacts(surface)
+    when contact(each, phase) > 0 and terminalConsoleOpen[number] == 0
+    mode: Level
+    if learnOpen[key] == 0 {
+      if contact(each, phase) == 3 and contact(each, region, learn) == 1 {
+        learnOpen[key] = 1
+        learnTerm[key] = -1
+        learnScroll[key] = 0
+        learnVelocity[key] = 0
+      }
+    } else {
+      if contact(each, phase) == 3 and contact(each, region, back) == 1 {
+        learnOpen[key] = 0
+        learnPress[key] = 0
+        learnScrubbing[key] = 0
+      }
+      if contact(each, phase) == 3 and contact(each, region, layer) == 1 {
+        learnOpen[key] = 3 - learnOpen[key]
+        learnScroll[key] = 0
+        learnVelocity[key] = 0
+      }
+      // A tap on a term's row selects it, and a tap on the selected one lets it go.
+      if contact(each, phase) == 3 and learnOpen[key] == 2 and contact(each, row, terms) >= 0 {
+        learnTerm[key] = (learnTerm[key] == contact(each, row, terms)) ? -1 : contact(each, row, terms)
+      }
+      // A touch down on the steps holds the scroll; each move scrolls it with the finger and keeps the move's pace, which
+      // a lift soon after carries on as a flick.
+      if contact(each, phase) == 1 and contact(each, region, steps) == 1 {
+        learnPress[key] = 1
+        learnLastY[key] = contact(each, y)
+        learnLastTick[key] = $tick
+        learnVelocity[key] = 0
+      }
+      if contact(each, phase) == 2 and learnPress[key] == 1 {
+        learnScroll[key] = clamp(learnScroll[key] + ((learnLastY[key] - contact(each, y)) * drag), 0, 1)
+        learnVelocity[key] = ((learnLastY[key] - contact(each, y)) * drag) / ((($tick - learnLastTick[key]) > 1) ? ($tick - learnLastTick[key]) : 1)
+        learnLastY[key] = contact(each, y)
+        learnLastTick[key] = $tick
+      }
+      if contact(each, phase) >= 3 and learnPress[key] == 1 {
+        learnPress[key] = 0
+        if ($tick - learnLastTick[key]) > learnFlickTicks {
+          learnVelocity[key] = 0
+        }
+      }
+      // A touch on the scrub bar, or one that began there, sets the share where it stands, between the subject's least
+      // share and its whole size.
+      if contact(each, phase) <= 2 and learnScrubOn[key] == 1 and (learnScrubbing[key] == 1 or contact(each, region, scrub) == 1) {
+        learnScrubbing[key] = 1
+        learnSize[learnSubject[key]] = learnSubjectLeast[learnSubject[key]] + ((1 - learnSubjectLeast[learnSubject[key]]) * clamp(
+          (contact(each, x) - scrubFrom) / (scrubTo - scrubFrom),
+          0,
+          1
+        ))
+        learnValue[key] = (learnSubjectLeast[learnSubject[key]] + ((1 - learnSubjectLeast[learnSubject[key]]) * clamp(
+          (contact(each, x) - scrubFrom) / (scrubTo - scrubFrom),
+          0,
+          1
+        ))) * learnSubjectValues[learnSubject[key]]
+      }
+      if contact(each, phase) >= 3 {
+        learnScrubbing[key] = 0
+      }
+    }
+  }
+  // A flick runs on, slowing each tick, and stops at either end.
+  rule $"learn-flick-{key}" {
+    when learnVelocity[key] != 0 and learnPress[key] == 0
+    mode: Level
+    learnScroll[key] = clamp(learnScroll[key] + learnVelocity[key], 0, 1)
+    learnVelocity[key] = learnVelocity[key] * learnFriction
+    if abs(learnVelocity[key]) < learnRest or (learnScroll[key] + learnVelocity[key]) <= 0 or (learnScroll[key] + learnVelocity[key]) >= 1 {
+      learnVelocity[key] = 0
+    }
+  }
+  // The wheel of a seat engaged at the panel's terminal scrolls the steps while the maths shows.
+  rule $"learn-wheel-{key}" {
+    forEach: $players
+    when terminalAt[$each] == terminal and channel(each, scroll) != 0 and learnOpen[key] == 2
+    mode: Level
+    learnScroll[key] = clamp(learnScroll[key] - (channel(each, scroll) * learnWheelStep), 0, 1)
+    learnVelocity[key] = 0
+  }
+}

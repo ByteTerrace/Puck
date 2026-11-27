@@ -100,10 +100,10 @@ public sealed class WorldSurfaceTexts {
         if (!m_resolved) {
             m_reads.Begin();
             for (var index = 0; (index < m_slots.Length); index++) {
-                var text = ((index < manifest.SurfaceTexts.Length) ? manifest.SurfaceTexts[index].Text : null);
+                var authored = ((index < manifest.SurfaceTexts.Length) ? manifest.SurfaceTexts[index].Text : null);
 
-                m_slots[index].Text = ((text is null) ? null : m_reads.ResolveText(line: (text.Template ?? string.Empty)));
-                m_slots[index].Scroll = ((text?.Scroll is { } scroll) ? ScrollShare(text: m_reads.ResolveText(line: scroll)) : 0f);
+                m_slots[index].Text = ((authored is null) ? null : m_reads.ResolveText(line: (authored.Template ?? string.Empty)));
+                m_slots[index].Scroll = ((authored?.Scroll is { } scroll) ? ScrollShare(text: m_reads.ResolveText(line: scroll)) : 0f);
             }
             m_resolved = true;
         }

@@ -6284,6 +6284,34 @@ in a fourth.
 - Arranging panes at runtime beyond the authored layouts: decide once focus
   and switching land.
 
+### Learn panel
+
+Owner: specialist lane (sdf-authoring, rendering, puck-world) · ordinary ·
+Next: let a blend's smooth radius bind state, so the smooth join's softness
+scrubs ([the learn panel](../authoring/learn-panel.md)).
+
+- A blend's softness is `ShapeDocument.Smooth`, a plain float, so a scrub
+  cannot set it and the panel shows its value without a scrub. Make it a
+  `DocumentScalar` that binds state as a shape's position does, every
+  consumer (`ShapeEmission`, `CreationMotion.Envelope`, the canonicalizer's
+  checks, `WorldShapeDetail`, `WorldCreationInstances.GroupBounds`) reading
+  its live value or refusing a reference where it cannot follow one. The
+  contour changes, so the mesh follows when its bake lands; the formula's
+  number changes at once.
+- A tap on a term inside the typeset formula itself: pointer regions are
+  document data and the layout is the presentation's, so terms are tapped on
+  their rows. A presentation-side hit of a math text's glyph placements,
+  published as a pointer region the authority can read, closes it.
+- The scroll is world state, so it steps at the simulation rate; a presented
+  value that eases between ticks (as a turn facet's angle does) would make a
+  flick read smooth at the display's rate.
+- The authority does not know a math text's laid-out height, so a drag scrolls
+  by an authored estimate of the overflow (`learnStepsSpan`): the ends are
+  always reachable, but the steps follow the finger only near enough.
+- A picture beside the sentence: the exhibit on the turntable stands for it
+  today; a diagram (a slice of the field, `world.slice`'s bands) would teach
+  more.
+
 ### Screens on curved and general SDF surfaces
 
 Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary ·
