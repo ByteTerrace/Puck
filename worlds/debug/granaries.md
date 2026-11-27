@@ -1,9 +1,10 @@
 # Debug world granary board
 
 The debug world stands the platform's storage accounts on a tabletop board in the
-gallery hall's board game room, the south-east table on level 2
+gallery hall's board game room, the east end of its row of tables on level 2
 ([`shapes.md`](shapes.md#the-board-game-room)): the board's centre is at
-(65, 9.905, 14.6), south of the Reversi table ([`reversi.md`](reversi.md)). Each
+(65, 9.905, 10.3), over the table's placement (`granaryTable` in
+`granaries.puck`), east of the Alchemy table ([`alchemy.md`](alchemy.md)). Each
 storage account the feed names is one small timber store dealt onto a cell of a
 4 by 4 grid; its look carries the account's kind, and a lectern screen at the
 table's far edge reads the piece under the seated cursor: name, region, kind and
