@@ -245,7 +245,9 @@ public static class HostCommand {
             --path traces every live object of one type to the root that keeps it: one breadth-first pass from the
             dump's roots gives each object a referrer on a shortest path from a root, and each object's chain is
             printed root first (`root:Handle -> System.Object[] -> ... -> T`), objects sharing a chain of types counted
-            together. A first-referrer chain stops inside a graph that refers to itself; this one reaches the root, so
+            together. Weak handles are not roots, since they keep nothing alive, and a conditional weak table's value
+            is reached from its key, as the collector reaches it, so the chain names the strong path that keeps an
+            object. A first-referrer chain stops inside a graph that refers to itself; this one reaches the root, so
             it names what keeps an object graph alive that should have been collected (a disposed host's server).
             Reading the stream takes seconds on a heap of a few gigabytes. Never attach during a frame-time reading:
             the pause is one long frame in the target's host.frames.
