@@ -750,7 +750,7 @@ public sealed class ExpressionIrLawTests {
             2L,
             3L
         ));
-        var program = reader.Compile(text: "count(scores, s -> s > 1) + minimum(scores[0], 4)");
+        var program = new Rules.CompiledProgram(tokens: reader.Compile(text: "count(scores, s -> s > 1) + minimum(scores[0], 4)"));
 
         for (var warm = 0; (warm < 64); warm++) {
             var frame = new Rules.EvaluationFrame(reader: reader);

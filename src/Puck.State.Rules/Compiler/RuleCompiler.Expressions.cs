@@ -19,18 +19,18 @@ public static partial class RuleCompiler {
             if (token.Operation == ExpressionOp.Not) {
                 var body = result.ToArray();
 
-                result = [token with { Call = new CompiledSubprogram("not", 0, body, RuleWorkBudget.Steps(tokens: body)) }];
+                result = [token with { Call = new CompiledSubprogram("not", 0, new CompiledProgram(tokens: body), RuleWorkBudget.Steps(tokens: body)) }];
             } else if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
                 var left = result.ToArray();
 
                 result = [new CompiledExpressionToken(ExpressionOp.Not,
-                    Call: new CompiledSubprogram("truth", 0, left, RuleWorkBudget.Steps(tokens: left))),
+                    Call: new CompiledSubprogram("truth", 0, new CompiledProgram(tokens: left), RuleWorkBudget.Steps(tokens: left))),
                     new CompiledExpressionToken(ExpressionOp.Not)];
                 var right = operands[1].ToArray();
 
                 result.Add(item: token with {
                     Call = new CompiledSubprogram(
-                    Name: token.Operation.ToString(), Arity: 1, Body: right, Steps: RuleWorkBudget.Steps(tokens: right)),
+                    Name: token.Operation.ToString(), Arity: 1, Body: new CompiledProgram(tokens: right), Steps: RuleWorkBudget.Steps(tokens: right)),
                 });
             } else {
                 for (var index = 1; (index < arity); index++) { result.AddRange(collection: operands[index]); }
@@ -566,7 +566,7 @@ public static partial class RuleCompiler {
                 new CompiledExpressionToken(
                     Call: new CompiledSubprogram(
                         Arity: declared.Arity,
-                        Body: body,
+                        Body: new CompiledProgram(tokens: body),
                         Name: declared.Name,
                         Steps: RuleWorkBudget.Steps(tokens: body)
                     ),
@@ -637,7 +637,7 @@ public static partial class RuleCompiler {
             return Push(
                 new CompiledExpressionToken(
                     Fold: new CompiledFold(
-                        Body: body,
+                        Body: new CompiledProgram(tokens: body),
                         Cells: context.RowCapacity(rowOrdinal: folded),
                         Describe: fold.Family,
                         MemberKind: member,

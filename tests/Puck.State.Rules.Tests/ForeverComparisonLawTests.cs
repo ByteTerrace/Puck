@@ -13,7 +13,7 @@ public sealed class ForeverComparisonLawTests {
         public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => Fact.Forever(kind: CellKind.Int);
     }
 
-    private static GateToken[] Gate(CompiledValueSource left, ExpressionOp comparison) => [new GateToken(
+    private static CompiledGate Gate(CompiledValueSource left, ExpressionOp comparison) => [new GateToken(
         Comparison: comparison,
         Describe: "forever",
         LeftSource: left,

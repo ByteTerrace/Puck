@@ -55,7 +55,7 @@ public readonly struct OperandAddress {
     /// <summary>Gets the program computing the address, or <see langword="null"/> when the address needs none. A fed
     /// address is lowered into the enclosing program: these tokens run just before the operand's own, and the operand
     /// token consumes the value they leave.</summary>
-    public CompiledExpressionToken[]? Feed { get; }
+    public CompiledProgram? Feed { get; }
     /// <summary>Gets the compiled address.</summary>
     public CompiledCellRef Reference { get; }
     /// <summary>Gets how the operand reads what the address names.</summary>
@@ -373,10 +373,10 @@ public interface IValueSourcedEffect {
 /// evaluates to), or <see langword="null"/>. An operand's program is lowered into the enclosing program
 /// (<see cref="OperandAddress.Feed"/>); an effect's destination, and a live row selected where no operand reads it,
 /// has the evaluator run it where the address resolves.</param>
-public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, BoundKey Binding = BoundKey.None, IRuleKey? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellKind Kind = CellKind.Int, CompiledExpressionToken[]? Program = null) {
+public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, BoundKey Binding = BoundKey.None, IRuleKey? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellKind Kind = CellKind.Int, CompiledProgram? Program = null) {
     /// <summary>Gets the program whose value this address resolves through: its own <see cref="Program"/>, or the
     /// one a zone endpoint's live row selects through. An address holds at most one.</summary>
-    public CompiledExpressionToken[]? FeedProgram => (Program ?? ((Custom as ZoneEndKey)?.FeedProgram));
+    public CompiledProgram? FeedProgram => (Program ?? ((Custom as ZoneEndKey)?.FeedProgram));
     /// <summary>Gets a value indicating whether the address is the key the evaluation binds to <c>$each</c> and
     /// nothing else: no cell, key fact or program stands between the binding and the cell it names.</summary>
     public bool IsEach => ((Binding == BoundKey.Each) && (RowOrdinal < 0) && (Custom is null) && (Program is null));

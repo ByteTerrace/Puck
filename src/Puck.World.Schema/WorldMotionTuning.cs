@@ -379,8 +379,8 @@ public static class WorldMotionTuningFactory {
         );
         // A hold row's gate shares the shaping table's recency clocks, which the step refreshes before any operation
         // runs, so ResolveHold reads the same tick's answer the shaping row does.
-        var holdGates = new GateToken[(tuning.Holds?.Count ?? 0)][];
-        var holdRestoreGates = new GateToken[holdGates.Length][];
+        var holdGates = new CompiledGate[(tuning.Holds?.Count ?? 0)];
+        var holdRestoreGates = new CompiledGate[holdGates.Length];
 
         for (var index = 0; (index < holdGates.Length); index++) {
             holdGates[index] = BodyActionSpecFactory.CompileGate(

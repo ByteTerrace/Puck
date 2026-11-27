@@ -198,7 +198,7 @@ public readonly record struct CompiledExpressionToken {
 /// <param name="Body">The per-cell body, reading the cell through <see cref="ExpressionOp.Member"/>.</param>
 /// <param name="Cells">The most cells the row can hold (its capacity), which bounds one fold's visits and prices
 /// it; the cells a row is authored with say nothing about the cells a rule writes into it later.</param>
-public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string Describe, CellKind MemberKind, CompiledExpressionToken[] Body, long Cells);
+public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string Describe, CellKind MemberKind, CompiledProgram Body, long Cells);
 /// <summary>A compiled subprogram: the body a call site evaluates over the operands it consumed.</summary>
 /// <param name="Name">The authored name, for a refusal that quotes what the author wrote.</param>
 /// <param name="Arity">How many operands the call consumes.</param>
@@ -207,7 +207,7 @@ public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string
 /// (<see cref="RuleWorkBudget.Steps"/>). A body is shared by its call sites, so a chain that calls the level below
 /// twice at each level is short to write and doubles with its depth; this is what lets a walk know that without
 /// taking it.</param>
-public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressionToken[] Body, long Steps);
+public sealed record CompiledSubprogram(string Name, int Arity, CompiledProgram Body, long Steps);
 /// <summary>One compiled <see cref="RuleLocal"/>: its ordinal is its slot in the evaluation's bound-value scratch,
 /// and its expression may read only locals with a smaller ordinal.</summary>
 /// <param name="Name">The authored name.</param>
@@ -216,7 +216,7 @@ public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressi
 /// <param name="CarrierKind">The default carrier for literals and tokens without their own kind. It can be
 /// <see cref="CellKind.Fixed"/> when <paramref name="Kind"/> is <see cref="CellKind.Int"/> because comparison and
 /// sign expressions leave an integer after consuming exact fixed operands.</param>
-public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression, CellKind CarrierKind) {
+public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledProgram Expression, CellKind CarrierKind) {
     /// <summary>Gets how a refusal names the binding (<c>binding 'name'</c>), spelled once when the local is
     /// compiled so a refused evaluation reports it without building it again.</summary>
     public string Describe { get; } = $"binding '{Name}'";
@@ -240,7 +240,7 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 /// <param name="PoolBindingSlot">The evaluator register carrying each whole-rule pool handle.</param>
 /// <param name="ForEachBodies">Whether the rule iterates every live body the host's <see cref="ILiveBodies"/>
 /// lists (<see cref="RuleFacts.ForEachBodies"/>).</param>
-public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1, bool ForEachBodies = false) {
+public record CompiledRule(string Name, ActionTriggerMode Mode, CompiledGate Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1, bool ForEachBodies = false) {
     /// <summary>A bounded document-owned source sharing the normal each sweep.</summary>
     public RuleIteration? Iteration { get; init; }
     /// <summary>Gets the row family the rule sweeps, or <see langword="null"/>: one binding per key of each member, in

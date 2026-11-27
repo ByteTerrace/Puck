@@ -61,7 +61,39 @@ public static class RuleEvaluation {
     /// <param name="trace">An optional per-conjunct narration sink.</param>
     /// <returns>What the gate decided; a caller reading <see cref="Verdict.Faulted"/> decides what an undecided gate
     /// means where it sits.</returns>
-    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) {
+    public static Verdict Decide(ref EvaluationFrame frame, CompiledGate gate, List<string>? trace = null) {
+        ArgumentNullException.ThrowIfNull(argument: gate);
+
+        if (gate.Length == 0) {
+            return Verdict.Open;
+        }
+
+        _ = frame.Reader;
+
+        var root = gate.Root();
+        var context = ProgramContext.Start();
+        var outer = frame.Trace;
+
+        frame.Trace = trace;
+        try {
+            var open = root.Run(context: ref context, frame: ref frame);
+
+            return ((context.Halt != Halt.None)
+                ? Verdict.Faulted
+                : ((open != 0L)
+                    ? Verdict.Open
+                    : Verdict.Closed));
+        } finally {
+            frame.Trace = outer;
+        }
+    }
+    /// <summary>Decides a gate through the token interpreter the closure trees replace, for the law that compares the
+    /// two.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="gate">The compiled postfix gate.</param>
+    /// <param name="trace">An optional per-conjunct narration sink.</param>
+    /// <returns>What the gate decided.</returns>
+    public static Verdict DecideInterpreted(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) {
         ArgumentNullException.ThrowIfNull(argument: gate);
 
         return ((gate.Length == 0)
@@ -233,32 +265,39 @@ public static class RuleEvaluation {
                 ? CellKind.Int
                 : kind
             ));
-            var outcome = RuleExpressions.Evaluate(
-                frame: ref frame,
-                kind: computedKind,
-                program: expression
-            );
-
-            if (!outcome.TryFinite(raw: out var computed)) {
-                return new Fact(
-                    kind: kind,
-                    outcome: outcome
-                );
-            }
-
-            return Fact.Finite(
+            return LandProgram(
                 kind: kind,
-                value: ((kind == CellKind.Bool)
-                ? ((computed != 0L)
-                    ? 1L
-                    : 0L)
-                : computed)
+                outcome: RuleExpressions.Evaluate(
+                    frame: ref frame,
+                    kind: computedKind,
+                    program: expression
+                )
             );
         }
 
         return Fact.Finite(
             kind: kind,
             value: source.RawValue
+        );
+    }
+
+    // What a program source answers as a fact in the kind it is read in: a Bool lands as 0 for zero and 1 otherwise,
+    // and an absence or a fault is the fact's own case.
+    internal static Fact LandProgram(Outcome outcome, CellKind kind) {
+        if (!outcome.TryFinite(raw: out var computed)) {
+            return new Fact(
+                kind: kind,
+                outcome: outcome
+            );
+        }
+
+        return Fact.Finite(
+            kind: kind,
+            value: ((kind == CellKind.Bool)
+            ? ((computed != 0L)
+                ? 1L
+                : 0L)
+            : computed)
         );
     }
 

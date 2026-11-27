@@ -31,21 +31,38 @@ public static partial class RuleExpressions {
     /// <param name="kind">The kind to evaluate in.</param>
     /// <returns>What the program answered.</returns>
     /// <exception cref="InvalidOperationException">The frame names no reader.</exception>
-    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+    public static Outcome Evaluate(ref EvaluationFrame frame, CompiledProgram program, CellKind kind) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+
         _ = frame.Reader;
 
         return Enter(
             frame: ref frame,
-            kind: kind,
-            program: program
+            root: program.Root(kind: kind)
         );
     }
-    /// <summary>Evaluates a compiled postfix program for a caller that is not a firing and decides what a fault means
-    /// where it sits: the compiler's constant folder (no reader), the search score, a flock's affinity, the console's
-    /// read-back and the browser's.</summary>
+    /// <summary>Evaluates a compiled postfix program for a caller that is not a firing, as
+    /// <see cref="EvaluateDetached(IStateReader?, ReadOnlySpan{CompiledExpressionToken}, CellKind)"/> does, through the
+    /// program's kept tree.</summary>
     /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants: a live read
     /// refuses without one.</param>
-    /// <param name="program">The postfix program.</param>
+    /// <param name="program">The program.</param>
+    /// <param name="kind">The kind to evaluate in.</param>
+    /// <returns>What the program answered.</returns>
+    public static Outcome EvaluateDetached(IStateReader? reader, CompiledProgram program, CellKind kind) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        var frame = ((reader is null) ? default : new EvaluationFrame(reader: reader));
+
+        return Enter(
+            frame: ref frame,
+            root: program.Root(kind: kind)
+        );
+    }
+    /// <summary>Evaluates tokens a caller may rewrite before its next evaluation (the constant folder's window, the
+    /// bounds enumerator's substituted program): the tree is built for this evaluation and not kept.</summary>
+    /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants.</param>
+    /// <param name="program">The postfix tokens.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <returns>What the program answered.</returns>
     public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
@@ -53,16 +70,40 @@ public static partial class RuleExpressions {
 
         return Enter(
             frame: ref frame,
+            root: ProgramClosures.Build(kind: kind, persistent: false, tokens: program)
+        );
+    }
+
+    // Every evaluation of a program's tree enters here, with a context of its own. An arithmetic exception anywhere in
+    // the walk is the evaluation's domain fault, the same answer each nested body's outcome would have carried out.
+    private static Outcome Enter(ref EvaluationFrame frame, ProgramNode root) {
+        var context = ProgramContext.Start();
+
+        try {
+            return context.Close(value: root.Run(context: ref context, frame: ref frame));
+        } catch (ArithmeticException) {
+            return Outcome.Faulted(why: ExpressionFault.Domain);
+        }
+    }
+    /// <summary>Evaluates through the token interpreter the closure trees replace, for the law that compares the two.</summary>
+    /// <param name="reader">The evaluation in flight, or <see langword="null"/>.</param>
+    /// <param name="program">The postfix tokens.</param>
+    /// <param name="kind">The kind to evaluate in.</param>
+    /// <returns>What the program answered.</returns>
+    public static Outcome EvaluateInterpreted(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        var frame = ((reader is null) ? default : new EvaluationFrame(reader: reader));
+
+        return EnterInterpreted(
+            frame: ref frame,
             kind: kind,
             program: program
         );
     }
-
     // Every evaluation of authored tokens enters here: one block of machine stack holds the value stack and its
     // absence marks for the program and every body nested on top of it. A data-dependent overflow anywhere in the
     // walk is the evaluation's domain fault, the same answer each nested body's outcome would have carried out.
     [SkipLocalsInit]
-    private static Outcome Enter(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+    private static Outcome EnterInterpreted(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
         Span<long> values = stackalloc long[InlineDepth];
         Span<ulong> marks = stackalloc ulong[(InlineDepth / MarkBits)];
 

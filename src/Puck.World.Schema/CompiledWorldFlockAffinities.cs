@@ -1,4 +1,4 @@
-using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 namespace Puck.World;
 
 /// <summary>State-layout-specific flock expressions. Recompile on document installation, even when the
@@ -13,14 +13,14 @@ public sealed class CompiledWorldFlockAffinities {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(definition);
         Cohesion = ((profile.CohesionAffinity is { } cohesion)
-            ? WorldFactsCompiler.CompileFlockAffinity(
+            ? (CompiledProgram)WorldFactsCompiler.CompileFlockAffinity(
                 definition: definition,
                 expression: cohesion
             )
             : null
         );
         Alignment = ((profile.AlignmentAffinity is { } alignment)
-            ? WorldFactsCompiler.CompileFlockAffinity(
+            ? (CompiledProgram)WorldFactsCompiler.CompileFlockAffinity(
                 definition: definition,
                 expression: alignment
             )
@@ -41,9 +41,9 @@ public sealed class CompiledWorldFlockAffinities {
     }
 
     /// <summary>Gets the heading expression, or null for uniform influence.</summary>
-    public CompiledExpressionToken[]? Alignment { get; }
+    public CompiledProgram? Alignment { get; }
     /// <summary>Gets the centroid expression, or null for uniform influence.</summary>
-    public CompiledExpressionToken[]? Cohesion { get; }
+    public CompiledProgram? Cohesion { get; }
     /// <summary>Gets the conservative token and state-candidate-visit cost of evaluating both expressions once.</summary>
     public RuleWork WorkUnitsPerNeighbor { get; }
 }
