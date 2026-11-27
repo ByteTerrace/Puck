@@ -1222,6 +1222,7 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.FactPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A position axis and a body-state slot are engine names, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.BodyPositionPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.KinematicsPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A screen index is the document's own, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.EngagedPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.BodyStatePrefix), static read => read.BodyReferenceThen(rows: null)),

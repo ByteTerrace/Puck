@@ -24,12 +24,13 @@ public sealed partial class SdfMeshPathBakeLawTests {
         int First(IReadOnlyList<SdfViewSnapshot> views) {
             using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "demand" });
             var bake = bakeRun.Bake;
-            var dresser = bakeRun.Dresser;
             var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: views) { FarDistance = 100f };
 
             bake.Demand.Observe(frame: frame, height: 1080);
-            _ = dresser.Dress(frame: frame);
-            Assert.True(condition: bake.TryTake(batch: out var batch, field: bake.Program));
+            // Both coarse lattices are bounded on the pool before either is sampled, so the take that chooses between
+            // them is the one made once both offer their lattices.
+            var batch = bakeRun.TakeOffered(frame: frame);
+
             Assert.Equal(expected: 2, actual: batch.Lattices.Length);
 
             return batch.Lattices[0].Selector;
@@ -40,7 +41,9 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: union, actual: First(views: [ViewAt(eye: new Vector3(x: -1f, y: 1.5f, z: 2f)), ViewAt(eye: new Vector3(x: 30f, y: 1.5f, z: 2f))]));
         Assert.Equal(expected: union, actual: First(views: [ViewAt(elsewhere: true, eye: new Vector3(x: 8f, y: 1.2f, z: 1f))]));
 
-        using var nearRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "near" });
+        // The shared bake plans every group at the planned tier, so this one does too: a demanded tier, and the floor an
+        // arrival in view plans first and keeps beside it, would change the meshes, while the order alone must not.
+        using var nearRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "near" });
 
         var near = nearRun.Bake;
 

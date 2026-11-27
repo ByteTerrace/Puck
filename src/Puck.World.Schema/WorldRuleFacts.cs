@@ -85,6 +85,14 @@ public static class WorldRuleFacts {
     /// <c>BodyFacts</c> bit holds (<c>Grounded</c>, <c>Airborne</c>, <c>Rising</c>, <c>Falling</c>, …) and <c>0</c>
     /// otherwise; a reference resolving to no live body reads <c>0</c>.</summary>
     public const string FactPrefix = "$fact:";
+    /// <summary>The prefix; <c>$kinematics:&lt;bodyRef&gt;:&lt;witness&gt;</c> (<c>kinematics(body, 0, stepUps)</c> in
+    /// <c>.puck</c>) reads one of the kinematic witnesses the named body's own step keeps
+    /// (<see cref="WorldKinematicsWitness"/>, spelled as <see cref="WorldKinematicsVocabulary"/> names them): a count as
+    /// an integer, a time in seconds or a length in metres as a fixed-point value, each a total or high-water mark over
+    /// the body's life. A rule reads the value the body's step left this tick; a reference resolving to no live body
+    /// reads <c>0</c>. A name the vocabulary does not declare is refused by name
+    /// (<see cref="WorldRuleRefusal.KinematicsMalformed"/>).</summary>
+    public const string KinematicsPrefix = "$kinematics:";
     /// <summary>The reserved channel reading one fact on the identity a body drives under:
     /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
     public const string IdentityPrefix = "$identity:";

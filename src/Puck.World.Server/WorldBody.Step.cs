@@ -1939,15 +1939,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var forward = Role(
-            intent: in intent,
-            role: ChannelRole.MoveAdvance
-        );
-        var strafe = Role(
-            intent: in intent,
-            role: ChannelRole.MoveStrafe
-        );
-        var idle = ((FixedQ4816.Abs(value: forward) <= ObstructionLatchIdleThreshold) && (FixedQ4816.Abs(value: strafe) <= ObstructionLatchIdleThreshold));
+        var idle = !DrivenBy(intent: in intent);
         var displaced = ((position - m_obstructionWitnessPosition).LengthSquared > ObstructionLatchDisplacementSquared);
 
         if (

@@ -147,7 +147,7 @@ Puck.World extends the rule compiler the way any host does (see
   `$population`, `$physics:quiescent` (optionally scoped to a keyed placement
   roster or a replay scope's stable bodies), `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$producer:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$bodyPosition:`, `$kinematics:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$producer:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
   `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
   [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
@@ -164,6 +164,16 @@ Puck.World extends the rule compiler the way any host does (see
   `WorldRuleRefusal.BodyPositionMalformed`. A gate over it with a `pose`
   effect recovers a body that falls out of the world, as the debug world's
   `fall-recovery` rule does for every live body through `forEach: $bodies`.
+  `kinematics(each, stepUps)` reads one of the witnesses the body's own
+  contact phase keeps (`WorldKinematicsWitness`, named as
+  `WorldKinematicsVocabulary` spells them): a count as an integer, a time in
+  seconds or a length in metres as fixed point, `0` for no live body; any other
+  name is refused with `WorldRuleRefusal.KinematicsMalformed`. The current
+  runs (`airborne`, `stuck`) and the latest `depth` say what the last step
+  left, the rest are totals and high-water marks over the body's life; the
+  witness rides the body's motion section, so a checkpoint carries it and a
+  refused sweep restores it. `worlds/debug/tree-walk-tests.puck` latches them
+  as a route walks the gallery tree.
   `engaged(each, 0)` reads `1` while the body's participant holds a control
   application onto screen 0, captured or mirrored, and `0` otherwise or for no
   live body; a screen index the document declares no screen at is refused with

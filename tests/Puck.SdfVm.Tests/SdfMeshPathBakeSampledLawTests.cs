@@ -185,8 +185,9 @@ public sealed class SdfMeshPathBakeSampledLawTests {
         var program = builder.Build();
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        _ = run.Dresser.Dress(frame: frame);
-        Assert.True(condition: bake.TryTake(batch: out var batch, field: bake.Program));
+        // Both coarse lattices are bounded on the pool before either is sampled; the batch is the take once both offer theirs.
+        var batch = run.TakeOffered(frame: frame);
+
         Assert.Equal(expected: 2, actual: batch.Lattices.Length);
 
         var second = batch.Lattices[1].Selector;

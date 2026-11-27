@@ -43,7 +43,8 @@ same change.
 | A solid some bodies pass and others meet (a barrier a carried key opens) | a placement's `solid { passes [...] }` (`WorldSolid.Passes`, body counter registers): the row lives by row in the live set (`WorldPlacementStamp.CollidesLive`), and `WorldPopulation.HoldPasses` opens the moving body's held mask on it (`WorldColliderSet.HoldPasses`, read by `Excludes` in `QueryAttachedSet` and the field provider's `PosedField`) around its ride, advance, growth clearance and kit escape | [below](#contracts-that-bite) |
 | A carved, relieved or smoothly blended creation collides as drawn | field colliders (`WorldColliderSet.CollidesAsField`) with a `FixedFieldPartition` narrowing hard unions to their exact pieces | [sdf-authoring contact admission](../sdf-authoring/references/shapes.md#contact-admission) |
 | Never tunnel, however fast or thin | `FixedFieldContactSolver.ResolveSweep` (certified sweep through `ICertifiedSweepQuery`); `FixedStaticContactSolver.ResolveSweep` (sliced analytic sweep); both refuse with `ContactRefusal` rather than wrap | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
-| Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap` | [motion](../puck-world/references/documents-motion.md) |
+| Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap`; `FixedStepUp.Attempt` says which check refused a step (`FixedStepUpOutcome`) | [motion](../puck-world/references/documents-motion.md) |
+| Count what the body step decided (step-ups taken and refused, snaps, leaving and meeting the ground, airborne and stuck runs, slope refusals, how deep a solve still pushed) and gate a route on it | `BodyKinematicsWitness` (`WorldBody.Kinematics.cs`) per body, `physics.bodies` for the process, `kinematics(body, n, <witness>)` for rules | [below](#kinematic-witnesses) |
 | Body-against-body depenetration and collision events | `FixedDynamicBodyContacts.TryCorrection`; events ask `FixedDynamicBodyContacts.Overlaps` (a positive push at zero margin, so a touching pair is neither), so an event and a contact never disagree; host pairs in `WorldPopulation.ResolveDynamicContacts` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Which bodies might touch: pairs in sweep order under a candidate budget, or the bodies near a box | `FixedSweepGrid` (X sweep crossed with a Y/Z grid, culling before it charges the budget), the one broadphase behind body contacts, `WorldEventFeed` discovery and the sleeping index (`WorldPopulation.NearbySleepingBodies`, `WakeSleepersNear`) | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Remove a velocity's approach into a contact | `FixedVector3.LimitAlong` with the inward axis and a zero bound, shared by ordinary, field, tether and seam responses | `maths-usage` |
@@ -152,6 +153,31 @@ same change.
   and reach).
 - A kit change whose collider would embed the body steps it out along up or
   world X/Z, never down (`WorldBody.EscapeEmbedding`).
+
+## Kinematic witnesses
+
+`WorldBody.ResolveProgramContacts` folds every contact phase that resolved into
+the body's `BodyKinematicsWitness` (`WitnessKinematics`), where the step
+already decides each fact:
+
+| Witness (rule name) | Decided by |
+|---|---|
+| `stepUps`, `stepRefusals`, `stepRise` | `FixedStepUp.Attempt`'s outcome. A refusal (`FixedStepUpOutcomes.IsRefusal`) is a riser the body cleared at its step height with nothing walkable to stand on beyond (`NoLanding`, `Unstandable`); a wall, a riser taller than the step height or a ceiling is not one |
+| `snaps` | `FixedStepUp.TrySnap` in the ground-follow branch |
+| `leaves`, `landings`, `airborne`, `airborneLongest` | the grounded verdict at the end of the contact phase against the witness's current airborne run |
+| `stuck`, `stuckLongest` | a step whose intent drives the body (`DrivenBy`, the obstruction latch's idle test) and moves it less than `WorldBody.StuckDisplacement` |
+| `slopeRefusals` | a driven step that ends with an obstruction normal facing up more than a sixteenth: a face too steep to stand on |
+| `depth`, `penetration` | `ContactResolution.Residual`: the deepest displacing push the solve's last relaxation pass still applied, zero when that pass found the pose clear (both `FixedStaticContactSolver` and `FixedFieldContactSolver` report it) |
+
+The witness is a field of `BodyMotionSection`, so a checkpoint carries it and a
+refused sweep restores it with the step. `physics.bodies` counts the same
+events for the process (`step-ups`, `step-refusals`, `snaps`, `leaves`,
+`landings`, `stuck-steps`, `slope-refusals`, `residual-steps`) and keeps
+peaks a reader clears (`step-rise-peak` and `penetration-peak` in micrometres,
+`airborne-peak` and `stuck-peak` in milliseconds); `WorldBodyWork` is sharded,
+so a kit partition counts without an interlock. `body.motion` echoes a body's
+witness after `kinematics:`. `worlds/debug/tree-walk-tests.puck` plays the
+`tree-walk` route and latches the witnesses per waypoint.
 
 ## Contracts that bite
 
@@ -304,9 +330,13 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
   Body integration laws are in `tests/Puck.World.Server.Tests`.
 - Scenarios in the debug world: `puck test worlds/debug/gallery-tests.puck --jobs 1`
   (stairs, slabs, the lift), `noclip-tests`, `suit-tests`, the `water-*-tests`,
-  `meadow-tests`; add `--reproduce` for anything that moves a pose.
+  `meadow-tests`, and `tree-walk-tests` (stepping, snaps, airborne and stuck
+  runs and landings over the gallery tree's whole walkway, played by the
+  `walker` route through seat 1's controls); add `--reproduce` for anything
+  that moves a pose.
 - Live read-backs over stdin: `body.where` (pose, support,
-  `sweep=refused(...)`, `asleep=`), `body.motion` (effective `stepHeight=`),
+  `sweep=refused(...)`, `asleep=`), `body.motion` (effective `stepHeight=`
+  and the body's kinematic witness),
   `world.kits`, `world.collision.status`, `world.fields`, `world.counters
   physics.contact`, `physics.sweep` and `physics.bodies`. `puck creation stats`
   builds a creation's contact field offline (`sdf-authoring`).

@@ -392,17 +392,12 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
             var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "pair" });
 
             try {
-                var bake = bakeRun.Bake;
-                var dresser = bakeRun.Dresser;
                 var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
                     DynamicTransforms = [default, new DynamicTransform(Orientation: orientation, Position: position), new DynamicTransform(Orientation: (orientation * hinge), Position: (position + Vector3.Transform(rotation: orientation, value: offset)))],
                     FarDistance = 100f,
                 };
 
-                _ = dresser.Dress(frame: frame);
-                Assert.True(condition: bake.TryTake(batch: out var batch, field: bake.Program));
-
-                return (batch, bakeRun);
+                return (bakeRun.TakeOffered(frame: frame), bakeRun);
             } catch { bakeRun.Dispose(); throw; }
         }
 
@@ -506,16 +501,18 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         Assert.Contains(collection: vertexMembers, filter: static member => (member == SdfMesh.NoMember));
 
         // The region's record flags the members and names their words: the count, the member and the words of a vertex's
-        // influence, the first of which is its member (the root sentinel for a vertex that rides the draw).
+        // influence, the first of which is its member (the root sentinel for a vertex that rides the draw). The only draw's
+        // record stands at word zero, its words where SdfMeshRecord places them, the one home the kernels' offsets are
+        // generated from (SdfIsaHlsl).
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var layout = SdfMeshRegion.Plan(draws: [draw], meshes: placements);
         var words = new uint[layout.Words];
 
         SdfMeshRegion.Write(destination: words, draws: [draw], generations: [1u], layout: layout, meshes: placements);
 
-        var skin = ((int)words[32]);
+        var skin = ((int)words[SdfMeshRecord.SkinWord]);
 
-        Assert.Equal(expected: SdfMeshRecord.SkinFlag, actual: words[20] & SdfMeshRecord.SkinFlag);
+        Assert.Equal(expected: SdfMeshRecord.SkinFlag, actual: words[SdfMeshRecord.FlagsWord] & SdfMeshRecord.SkinFlag);
         Assert.Equal(expected: 1u, actual: words[skin]);
         Assert.Equal(expected: 1u, actual: words[(skin + 1)]);
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: member.Orientation.W), actual: words[(skin + 8)]);

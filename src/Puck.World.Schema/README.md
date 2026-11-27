@@ -2469,6 +2469,12 @@ metres, fixed point, 0 for no live body; any other axis refuses as
 `BodyPositionMalformed`; the debug world's `fall-recovery` rule sweeps
 `forEach: $bodies` and gates a `pose` on it to stand any body that falls out of
 the world on the floor below the valley sector it fell in),
+`$kinematics:<bodyRef>:<witness>` (one witness of the body's own contact
+phase, `WorldKinematicsWitness`: step-ups taken and refused, the tallest
+rise, snaps, steps that left and met the ground, the current and longest
+airborne and stuck runs in seconds, slope refusals, and the latest and deepest
+push a solve still applied in metres; 0 for no live body; an unknown name
+refuses as `KinematicsMalformed`),
 `$engaged:<bodyRef>:<screen>` (1 while the body's participant holds a control
 application onto that declared screen, captured or mirrored,
 0 otherwise or for no live body; an undeclared screen refuses as
