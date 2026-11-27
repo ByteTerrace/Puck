@@ -154,13 +154,34 @@ let structureAcross = [0.7071, 0, 0, 0.7071]
 // exact half width and half depth where it meets the floor, unchamfered so its edge meets the floor there, and the foot
 // tapers on all four sides toward the shaft;
 // by default it splays from the shaft, tapering on its sides only.
-template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null) {
-  shape Prism "pier-foot" {
-    material: (base + structureTeal)
-    position [0, 0.6, 0]
-    scale: ((foot != null) ? [foot[0], 0.6, foot[1]] : [(shaft * 1.5), 0.6, (depth * 1.18)])
-    taper: 0.7
-    chamfer: ((foot != null) ? 0 : 0.05)
+// The height of a pier's plinth (branchedPier), matched to a wall's skirting so the skirting runs into it.
+let pierPlinthHeight = 0.34
+// `reach` [-x, +x] is how far the haunch runs each way along the arcade (span both ways by default); a pier against an end
+// wall stops that side inside the wall, and a side shorter than the span takes no arch.
+template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null, reach = null) {
+  if foot != null {
+    shape Prism "pier-foot" {
+      material: (base + structureTeal)
+      position [0, 0.6, 0]
+      scale [foot[0], 0.6, foot[1]]
+      taper: 0.7
+    }
+  }
+  // A pier with no square foot stands on a proper base: a plinth as tall as a wall's skirting, so the skirting dies into
+  // it, under a rounded moulding that steps in to the shaft.
+  if foot == null {
+    shape Box "pier-plinth" {
+      material: (base + structureTeal)
+      position [0, pierPlinthHeight / 2, 0]
+      scale [(shaft * 1.32), (pierPlinthHeight / 2), (depth * 1.22)]
+      chamfer: 0.02
+    }
+    shape Box "pier-moulding" {
+      material: (base + structureTeal)
+      position [0, (pierPlinthHeight + 0.045), 0]
+      scale [(shaft * 1.16), 0.045, (depth * 1.1)]
+      rounding: 0.04
+    }
   }
   // A prism tapers along its width only, so a square foot is the meet of two, one turned a quarter about Y.
   if foot != null {
@@ -179,14 +200,15 @@ template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null
     scale [shaft, (height / 2), depth]
     chamfer: 0.06
   }
+  let haunchReach = ((reach == null) ? [span, span] : reach)
   shape Box "pier-haunch" {
     material: (base + structureTeal)
-    position [0, (height - ((span - shaft) + 0.3) / 2), 0]
-    scale [span, (((span - shaft) + 0.3) / 2), (depth * 0.82)]
+    position [((haunchReach[1] - haunchReach[0]) / 2), (height - ((span - shaft) + 0.3) / 2), 0]
+    scale [((haunchReach[0] + haunchReach[1]) / 2), (((span - shaft) + 0.3) / 2), (depth * 0.82)]
     chamfer: 0.04
     detail: true
   }
-  for side in [-1, 1] {
+  for side in filter([-1, 1], side => (haunchReach[((side + 1) / 2)] >= span)) {
     shape Cylinder $"pier-arch-{side}" {
       blend: SmoothSubtraction
       smooth: 0.05
@@ -1449,9 +1471,9 @@ template gamePad(base, at, label) {
 }
 
 // A pad's cable from `from` (a console's port, leaving it toward +Z) to `to` (the pad's cable end): it drops to lie
-// `lie` up (on the floor, or on a rug over it) a third of the way out and runs straight along it to the pad. Visual
-// only: a body steps over it.
-template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
+// `lie` up (on the floor, or on a rug over it) a third of the way out and runs along it to the pad with `slack` metres
+// of lazy sideways bow, outward on the pad's own side, so two cables never cross. Visual only: a body steps over it.
+template padCable(base, label, from, to, lie = 0.024, radius = 0.012, slack = 0.22) {
   let drop = [(from[0] + ((to[0] - from[0]) * 0.3)), lie, (from[2] + ((to[2] - from[2]) * 0.35))]
   shape Sweep $"{label}-drop" {
     material: (base + setDark)
@@ -1470,7 +1492,7 @@ template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
     position: drop
     curve {
       a [0, 0, 0]
-      b: (((to - drop) * 0.5))
+      b: (((to - drop) * 0.5) + [((to[0] >= from[0]) ? slack : (0 - slack)), 0, 0])
       c: (to - drop)
       radiusStart: radius
       radiusEnd: radius
@@ -1486,7 +1508,8 @@ let setStandHeight = 0.42
 let setTelevisionAt = [0, setStandHeight, -0.05]
 let setConsoleAt = [0, 0.08, 0.05]
 let televisionSetPicture = (setTelevisionAt + televisionPicture)
-let setPads = [[0.45, 0.012, 1.25], [-0.45, 0.012, 1.25]]
+// Each pad lies on its own port's side (consolePort: player 0 on -X), so the cables run apart.
+let setPads = [[-0.45, 0.012, 1.25], [0.45, 0.012, 1.25]]
 template televisionSet(base, players = 2) {
   lowStand(base: base, at: [0, 0, 0], height: setStandHeight)
   television(base: base, at: setTelevisionAt)

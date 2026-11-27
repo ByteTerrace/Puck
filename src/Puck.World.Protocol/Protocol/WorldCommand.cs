@@ -207,11 +207,16 @@ public enum ControlOutcome : byte {
     /// avatar resumes driving itself. The caller drops the entity's held device state.</summary>
     Dissolved,
 }
-/// <summary>Identifies which pose components a <see cref="WorldCommand.SnapPose"/> replaces. One shape today, and the
-/// enum stays because the wire tag it carries is what lets a second one arrive without re-versioning the leaf.</summary>
+/// <summary>Identifies which pose components a <see cref="WorldCommand.SnapPose"/> replaces.</summary>
 public enum SnapPoseMode : byte {
     /// <summary>A full 6DOF pose (<c>body.pose</c>): position and yaw/pitch/roll are all written. A caller holding
     /// an axis current spells that with <c>-</c> at the verb, which resolves before the command is built — never a
     /// mode of its own.</summary>
     Pose,
+
+    /// <summary>The body's size alone (<c>body.pose size</c>): the register the world's <c>bodies.scale</c> names
+    /// returns to its authored initial value, and the body grows or shrinks to it as a rule's write to that register
+    /// would, held to the room about it. Position and orientation are untouched and the command's are ignored; a world
+    /// that names no scale register changes nothing.</summary>
+    AuthoredSize,
 }

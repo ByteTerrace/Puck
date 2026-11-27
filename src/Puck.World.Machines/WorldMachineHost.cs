@@ -369,16 +369,22 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
 
     private readonly HashSet<string> m_linkedInstances = new(comparer: StringComparer.Ordinal);
-    // The instances whose RunsWhen did not hold at the tick's last evaluation (GateRunning); every advance decision reads
-    // it through Runs.
+    // The instances whose RunsWhen did not hold at the tick's last evaluation, and those nobody attended at it
+    // (GateRunning); every advance decision reads them through Runs and LinkCanAdvance.
     private readonly HashSet<string> m_gatedOff = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_unattended = new(comparer: StringComparer.Ordinal);
 
     /// <inheritdoc/>
-    public void GateRunning(string instance, bool runs) {
+    public void GateRunning(string instance, bool runs, bool attended) {
         if (runs) {
             _ = m_gatedOff.Remove(item: instance);
         } else {
             _ = m_gatedOff.Add(item: instance);
+        }
+        if (attended) {
+            _ = m_unattended.Remove(item: instance);
+        } else {
+            _ = m_unattended.Add(item: instance);
         }
     }
     /// <inheritdoc/>
@@ -461,8 +467,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             m_narrationHub.Narrate(channel: "machine", text: text);
         }
     }
-    // Whether the host advances an instance this tick: authored running, and its RunsWhen, if any, held.
-    private bool Runs(MachineInstance instance) => (instance.Declaration.Running && !m_gatedOff.Contains(item: instance.Declaration.Name));
+    // Whether the host may advance an instance this tick: authored running, and its RunsWhen, if any, held.
+    private bool Allowed(MachineInstance instance) => (instance.Declaration.Running && !m_gatedOff.Contains(item: instance.Declaration.Name));
+    // Whether the host advances an instance outside a link this tick: allowed, and attended where it authors an attention.
+    private bool Runs(MachineInstance instance) => (Allowed(instance: instance) && !m_unattended.Contains(item: instance.Declaration.Name));
 
     private HashSet<string> LinkedInstances() {
         var result = m_linkedInstances;
@@ -513,24 +521,33 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         linkName = string.Empty;
         return false;
     }
+    // A link advances as one machine: while every member may advance, and while anyone attends any of them, since the
+    // members exchange on every cycle and one cannot stand while another runs.
     private bool LinkCanAdvance(LinkEntry entry) {
+        var members = 0;
+        var unattended = 0;
+
         foreach (var member in entry.Members) {
             if (
-                m_slots.TryGetValue(
+                !m_slots.TryGetValue(
                 key: member,
                 value: out var slot
-            ) &&
-                (slot.DeclaredSource is WorldScreenSource.Machine source) &&
-                m_instances.TryGetValue(
+            ) ||
+                (slot.DeclaredSource is not WorldScreenSource.Machine source) ||
+                !m_instances.TryGetValue(
                 key: source.Instance,
                 value: out var instance
-            ) &&
-                !Runs(instance: instance)
+            )
             ) {
+                continue;
+            }
+            if (!Allowed(instance: instance)) {
                 return false;
             }
+            members++;
+            if (m_unattended.Contains(item: source.Instance)) { unattended++; }
         }
-        return true;
+        return ((members == 0) || (unattended < members));
     }
     private (bool Ok, string Message) ValidateLinkMembers(string name, IReadOnlyList<int> members) {
         var named = new HashSet<string>(comparer: StringComparer.Ordinal);

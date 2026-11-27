@@ -287,7 +287,11 @@ section describes the second.
   does not turn the posed body (`WorldBody.SnapYawToPlanarIntent`). A
   recenter after the pose is not a substitute: in first person the body
   turns to a carried look within a tick, and a recenter then centres on the
-  turned body. A button an earlier chapter held through a crossing re-arms
+  turned body. A route's pose also sets the body down at the size it spawns
+  at: once the pose has landed, the driver sends `body.pose size`, which
+  returns the register `bodies.scale` names to its initial value
+  (`SnapPoseMode.AuthoredSize`, under the same grant the pose took), so a
+  chapter that failed at a quarter size does not start the next one small. A button an earlier chapter held through a crossing re-arms
   once its router reports it up (`WorldSeatInput.AcknowledgeReleasedButtons`),
   so the next chapter's press of it acts.
 - **Inside a chapter nothing stops.** A chapter that stands still does so

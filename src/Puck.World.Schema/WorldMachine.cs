@@ -41,6 +41,13 @@ namespace Puck.World;
 /// document mutation or provider operation is involved. The document always names the authored content
 /// (<c>CaptureInstances</c> reports it), so a title's name never enters the document, a capture or a tape. A
 /// selection naming no mountable title runs the machine's own content. Omitted from the wire when null.</param>
+/// <param name="Attention">How far the machine's attention reaches, or <see langword="null"/> for a machine the host
+/// advances on every tick <paramref name="Running"/> and <paramref name="RunsWhen"/> allow, attended or not. A machine
+/// that authors one is advanced only on the ticks it is attended (<see cref="WorldMachineAttention"/>) and is suspended
+/// on every other: its clock stops, it keeps its hardware state, and it resumes from that state on the tick it is
+/// attended again. The tick decides it beside <paramref name="RunsWhen"/> (<c>Server.WorldTick.GateMachines</c>), from
+/// authority state alone, so a replay or a restored checkpoint derives the same ticks: the verdict is never stored.
+/// Omitted from the wire when null.</param>
 public sealed record WorldMachine(
     [property: DocumentName(WorldNameKind.Machine, WorldNameRole.Declares)] string Name,
     [property: DocumentText("a machine provider id")] string Engine,
@@ -52,7 +59,29 @@ public sealed record WorldMachine(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ContentFolders = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PreferFolderDefault = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementResponseCondition.StateCondition? RunsWhen = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineContentSelector? ContentBy = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineContentSelector? ContentBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineAttention? Attention = null
+);
+/// <summary>How far a machine's attention reaches (<see cref="WorldMachine.Attention"/>). A machine is attended on a
+/// tick while a participant holds a control application on a screen that shows it (someone is engaged with it or
+/// playing it), or while a body a human occupies or possesses stands within <paramref name="Within"/> of one of those screens and,
+/// where <paramref name="Behind"/> is authored, on the side its picture faces.</summary>
+/// <remarks>The distances are measured in the world's own fixed-point coordinates, from each occupied body's position
+/// to the screen's place (its authored origin, or the body holding a screen a placement carries), so the reading is an
+/// authority fact: no camera, frustum or presented frame enters it, and a world with no presentation suspends and
+/// resumes its machines on the same ticks as one with a window. A cable link's members are attended together: the
+/// link advances while anyone attends any of them.</remarks>
+/// <param name="Within">The distance in metres, finite and positive.</param>
+/// <param name="Behind">How far behind a screen's face a body still attends it, in metres, finite and at least zero,
+/// or <see langword="null"/> for a machine attended from every side. A screen's face looks along its
+/// <see cref="WorldScreen.Right"/> crossed with its <see cref="WorldScreen.Up"/> (<see cref="WorldScreen.FixedFacing"/>),
+/// and a body stands behind it by the distance from its position to the face's plane, so an allowance of about a
+/// body's height keeps a body beside or just behind the screen attending it. A screen a placement carries is attended
+/// by its holder whichever way it faces. Omitted from the wire when null.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldMachineAttention(
+    float Within,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Behind = null
 );
 /// <summary>The state cell a machine's <see cref="WorldMachine.ContentBy"/> reads: a declared numeric
 /// <c>state.world</c> row, and the cell inside it when the row is keyed.</summary>
