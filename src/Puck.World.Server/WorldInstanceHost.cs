@@ -1603,8 +1603,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             );
         }
 
-        Admit(row: row);
+        // The account is taken before the row is admitted: admission settles the boot row's screen sessions, which start
+        // the worlds its paintings and screens show, and every row started there shares this account.
         m_account = row.Server.Account;
+        Admit(row: row);
         var bootEndpoint = EndpointFor(instance: row);
         // A world declaring fewer local seats than the host's seat ceiling (m_seats.SeatCount) has no entity-table
         // row for the seats it did not declare — Population.Capacity is the entity table's real size.
