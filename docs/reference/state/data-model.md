@@ -235,7 +235,7 @@ Because the two numeric kinds encode differently, you can't turn an `Int` into a
 ## Choose an addressing shape
 
 A row's **domain** decides which keys its storage admits. `StateDomain` is a
-closed union, marked `[Union]`, with five cases:
+closed union, marked `[Union]`, with six cases:
 
 | Domain | What a key names | Running example | `.puck` spelling |
 |---|---|---|---|
@@ -244,10 +244,11 @@ closed union, marked `[Union]`, with five cases:
 | `keysOf` | A key drawn from another row. | `pieceCell`, `hand` | `domain: keysOf(row: pieces)` or `pile hand of cards` |
 | `cellsOf` | A cell of a named topology. | A board occupancy row | `domain: cellsOf(topology: board)` or `grid` |
 | `ring` | A slot in a bounded history. | `recentRolls` | `domain: ring(capacity: 8, empty: 0)` |
+| `tally` | Any 64-bit integer, counted. | `positionCounts` | `domain: tally(capacity: 151)` |
 
 The domain derives one storage shape, `RowShape`: `Slot`, `Keyed`, `Ordered`,
-`Lattice`, or `Ring`. Every store and compiler switches on that shape; you never
-declare it separately.
+`Lattice`, or `Ring` (a tally is stored `Keyed`). Every store and compiler
+switches on that shape; you never declare it separately.
 
 ### Keys and keysOf
 
@@ -292,6 +293,54 @@ Don't confuse a state ring with a ring *topology*. A state ring is a bounded
 history of values. A ring topology is a cyclic arrangement of locations with
 adjacency, declared in `state.lattices`, that `cellsOf` rows lie over.
 
+### Tally
+
+A `tally` row counts how many times each key has been met, where a key is any
+64-bit integer: a cell index, a pair code, or a `hash(…)` of several values. It
+holds at most `capacity` distinct keys between resets, up to
+`StateTally.MaxCapacity`. A rule uses it three ways, and no other:
+
+```puck
+state {
+  world {
+    row {
+      name: "positionCounts"
+      kind: "Int"
+      domain: tally(capacity: 151)
+    }
+  }
+}
+
+rule "count-position" {
+  local position = hash(planeA, planeB, rights)
+  when pending == 1
+  positionCounts[position] += 1
+  repeats = positionCounts[position]
+}
+
+rule "new-stretch" {
+  when reset == 1
+  positionCounts = 0
+}
+```
+
+- `positionCounts[key] += n` adds `n` to the key's count, claiming room for a key
+  the row hasn't met since its last reset.
+- `positionCounts[key]` reads the count, and reads zero for a key the row hasn't
+  met. Read after an add in the same firing, it sees the add.
+- `positionCounts = 0` empties the row.
+
+Every one of these costs a bounded walk of at most `capacity + 1` buckets,
+however long the row has been counting, and a reset is one write however many
+keys the row held. A key past the capacity refuses the firing by name, so a key
+is never dropped uncounted; declare the most keys the rule can meet between
+resets. The engine owns the storage and the probing (`StateTally`): the row's
+cells are its table, so a reduction, fold, transform or any other write of the
+row is refused at compile.
+
+The count is exact for the key it is given. A `hash` of several values can
+collide, so a count keyed by a hash is exact up to a 64-bit collision.
+
 ### Cell ceilings
 
 Every row has a cell ceiling, so no row can grow without bound:
@@ -302,6 +351,7 @@ Every row has a cell ceiling, so no row can grow without bound:
 | `slot` or `keys` without a capacity | 128 cells of growth room. |
 | `keysOf` or `cellsOf` | The declared capacity, or 4,096. |
 | `ring` | The ring's capacity. |
+| `tally` | Its table's cells, `StateTally.CellCount` of its capacity. |
 
 The 4,096 figure is `StateCapacity.MaxCellsPerRow`, which equals the most cells
 a topology can have. An authored capacity can narrow it but never widen it.

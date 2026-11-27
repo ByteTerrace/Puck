@@ -244,7 +244,7 @@ public sealed partial class StateArena {
             return key;
         }
         if (layout.Shape == RowShape.Ring) {
-            return m_catalog.RingKey(position: position);
+            return m_catalog.IndexKey(position: position);
         }
 
         return ((m_memberKeys[slot] >= 0)

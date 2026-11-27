@@ -333,6 +333,14 @@ public static partial class RuleCompiler {
             name: name
         );
 
+        if (row.EffectiveDomain is StateDomain.Tally tally) {
+            var (tallyKey, tallyKeyFrom) = ResolveTallyKey(cell: cell, context: context, key: key, row: row, ruleName: ruleName, site: in site);
+
+            return new ResolvedOperand(
+                describe: describe,
+                operand: new TallyOperand(capacity: tally.Capacity, key: tallyKey, keyFrom: tallyKeyFrom, rowOrdinal: rowOrdinal)
+            );
+        }
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,

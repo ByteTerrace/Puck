@@ -606,6 +606,10 @@ public sealed partial class RuleEvaluator {
                     moved: out moved,
                     strict: strict
                 );
+            case TallyAddEffect tally:
+                return FireTallyAdd(effect: tally, firing: in firing, moved: out moved, strict: strict);
+            case TallyResetEffect reset:
+                return FireTallyReset(effect: reset, firing: in firing, moved: out moved);
             case IStateWriteEffect write:
                 return FireWrite(
                     effect: effect,
@@ -1042,6 +1046,107 @@ public sealed partial class RuleEvaluator {
                 value: raw
             )
         );
+    }
+    // A tally add walks the key's probe sequence (StateTally.Find) and lands as plain cell writes through the one
+    // mutation door, so the firing's scope rewinds them like any other write. A key the row has not met claims the
+    // free bucket the walk ended at, and is refused by name once the row holds its capacity of keys.
+    private Step FireTallyAdd(TallyAddEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+        moved = false;
+
+        var key = effect.LiteralKey;
+
+        if (effect.KeyFrom is { } keyFrom) {
+            var resolved = RuleReads.ResolveIndex(reader: m_host, reference: in keyFrom);
+
+            if (resolved.Case == FaultCase.Faulted) {
+                ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
+                    refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+                return Step.Faulted;
+            }
+            if (!resolved.TryNamed(value: out key)) {
+                if (!strict) {
+                    return Step.Done;
+                }
+                ReportRefusal(detail: "the tally key names nothing", effect: effect.Describe,
+                    refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
+                return Step.Refused;
+            }
+        }
+        if (!TryReadValue(effect: effect, firing: in firing, kind: CellKind.Int, raw: out var amount, source: effect.Source, step: out var read)) {
+            return read;
+        }
+
+        var arena = m_host.Arena;
+        var time = m_host.Time;
+        var probe = StateTally.Find(arena: arena, capacity: effect.Capacity, key: key, rowOrdinal: effect.RowOrdinal, time: in time);
+
+        switch (probe.Case) {
+            case TallyProbeCase.Found: {
+                    long count;
+
+                    try {
+                        count = checked((probe.Count + amount));
+                    } catch (OverflowException) {
+                        RefuseSource(effect: effect, fault: ExpressionFault.Domain, firing: in firing);
+                        return Step.Faulted;
+                    }
+                    return WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: count);
+                }
+            case TallyProbeCase.Free when (probe.Entries < effect.Capacity): {
+                    var step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.KeyCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: key);
+
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: amount); }
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.StampCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: probe.Epoch); }
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: (probe.Entries + 1L)); }
+                    return step;
+                }
+            case TallyProbeCase.Free:
+                ReportRefusal(detail: $"the tally already holds its capacity of {effect.Capacity.ToString(provider: CultureInfo.InvariantCulture)} keys, so key {key.ToString(provider: CultureInfo.InvariantCulture)} cannot be counted; declare a larger capacity or reset the tally sooner",
+                    effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
+                return Step.Refused;
+            default:
+                ReportRefusal(detail: "the tally's cells hold a table no tally write leaves (a raw write reached them); reset the tally", effect: effect.Describe,
+                    refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
+                return Step.Refused;
+        }
+    }
+    // A reset moves the epoch past every bucket's stamp, which frees them all at once; an empty tally is left as it
+    // stands, so a reset of an empty tally moves nothing.
+    private Step FireTallyReset(TallyResetEffect effect, in EffectFiring firing, out bool moved) {
+        moved = false;
+
+        var time = m_host.Time;
+
+        StateTally.ReadHeader(arena: m_host.Arena, entries: out var entries, epoch: out var epoch, rowOrdinal: effect.RowOrdinal, time: in time);
+        if (entries == 0L) {
+            return Step.Done;
+        }
+        if (epoch == long.MaxValue) {
+            RefuseSource(effect: effect, fault: ExpressionFault.Domain, firing: in firing);
+            return Step.Faulted;
+        }
+
+        var step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EpochCell, effect: effect, firing: in firing, moved: ref moved, value: (epoch + 1L));
+
+        return ((step == Step.Done)
+            ? WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: 0L)
+            : step);
+    }
+    private Step WriteTallyCell(IRuleEffect effect, in EffectFiring firing, int rowOrdinal, int cell, long value, ref bool moved) {
+        var step = Apply(
+            effect: effect,
+            firing: in firing,
+            moved: out var landed,
+            mutation: Mutation.Written(
+                key: StateTally.KeyOf(arena: m_host.Arena, cell: cell),
+                operand: value,
+                rowOrdinal: rowOrdinal,
+                write: StateWriteKind.Set
+            )
+        );
+
+        moved |= landed;
+        return step;
     }
     // Under a savepoint a remove of an absent cell is submitted and refused by the door rather than skipped, so a
     // step that cannot do its work rolls its savepoint back.

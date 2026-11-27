@@ -66,6 +66,8 @@ public static partial class ExpressionSpelling {
     private static readonly ExpressionProgram EmptyProgram = new(Instructions: []);
 
     private static IReadOnlyDictionary<string, ExpressionOperator> Calls => ExpressionOperators.Calls;
+    // The one call spelled over a tuple of any length: it lowers to a chain of two-word ExpressionOp.Hash instructions.
+    private const string HashName = "hash";
 
     private static string? BinaryOperator(Instruction instruction) => ExpressionOperators.Find(instruction: instruction)?.Symbol;
     private static Instruction BinaryToken(string symbol) => ExpressionOperators.Binary(symbol: symbol);
@@ -466,6 +468,20 @@ public static partial class ExpressionSpelling {
                     Operator: symbol,
                     Left: operands[0],
                     Right: operands[1]
+                )
+                : null
+            );
+        }
+        // hash(a, b, c) is the chain hash(hash(a, b), c), so a chain prints back as the one call it was spelled as.
+        if (instruction.Operation == ExpressionOp.Hash) {
+            return ((Pop(
+                count: 2,
+                stack: stack
+            ) is { } words)
+                ? new Call(
+                    Arguments: ((words[0] is Call { Name: HashName } chain) ? [.. chain.Arguments, words[1]] : words),
+                    Name: HashName,
+                    Names: []
                 )
                 : null
             );
@@ -1443,6 +1459,14 @@ public static partial class ExpressionSpelling {
                 ));
                 return;
             }
+            if (Name == HashName) {
+                Arguments[0].Emit(builder: builder, into: into);
+                for (var index = 1; (index < Arguments.Length); index++) {
+                    Arguments[index].Emit(builder: builder, into: into);
+                    into.Add(item: Instruction.Of(operation: ExpressionOp.Hash));
+                }
+                return;
+            }
 
             foreach (var argument in Arguments) {
                 argument.Emit(
@@ -1781,6 +1805,15 @@ public static partial class ExpressionSpelling {
         }
         private SyntaxNode ParseCall(string name, int arity, int names) {
             Expect(punctuation: "(");
+            if (name == HashName) {
+                // A hash takes a tuple of any length from two words up.
+                var words = new List<SyntaxNode> { ParseExpression() };
+
+                while (Accept(punctuation: ",")) { words.Add(item: ParseExpression()); }
+                if (words.Count < 2) { throw Fail(message: $"'{name}' takes at least 2 arguments"); }
+                Expect(punctuation: ")");
+                return new Call(Arguments: [.. words], Name: name, Names: []);
+            }
             var arguments = new SyntaxNode[arity];
 
             for (var index = 0; (index < arity); index++) {

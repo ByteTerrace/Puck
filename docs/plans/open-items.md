@@ -5772,7 +5772,7 @@ then Spider.
   station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
   job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
   `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
+  position key in the tally row `positionCounts`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,

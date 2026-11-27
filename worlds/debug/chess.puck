@@ -653,8 +653,8 @@ replays [
       pieceOrdinal, pieceCode, pieceCell, play, putDown, putBefore, putBeforeCode, chessRested, chessHold,
       turn, verdict, illegalCount, settleHold, gameStarted, move,
       promotionPending, enPassantTarget, inCheck, previousInCheck,
-      positionKeys, positionStamps, enPassantProbe, enPassantProbeCheck, repetitionEnPassant,
-      historyPending, historyReset, historyEpoch, historyLength, halfmoveClock, repetitionCount,
+      positionCounts, enPassantProbe, enPassantProbeCheck, repetitionEnPassant,
+      historyPending, historyReset, historyLength, halfmoveClock, repetitionCount,
       shapeLegal, castleLegal, castleRights, castleTransitAttacked,
       boardMismatch, boardChanged, boardCollisions, chessInput
     ]

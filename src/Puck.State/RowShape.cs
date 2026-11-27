@@ -43,6 +43,8 @@ public static class RowShapes {
             ),
             StateDomain.CellsOf => RowShape.Lattice,
             StateDomain.Ring => RowShape.Ring,
+            // A tally's cells are its engine-owned table, keyed by cell index (StateTally).
+            StateDomain.Tally => RowShape.Keyed,
             _ => throw new InvalidOperationException(message: $"State domain '{domain.GetType().Name}' has no row shape."),
         };
     }
