@@ -234,22 +234,74 @@ public sealed class WorldPortalHoleContactField : IContactField {
         position: in position,
         up: out up
     );
+    // Whether the ray from a probe's origin to the surface it found passes through an open door's glass from the front
+    // (the door's own crossing test, WorldFaceRegion.Sweep): the surface then stands behind the door, where a body that
+    // reached it would already have crossed, so it is no surface of this world to hold or anchor to.
+    private bool BehindOpenGlass(in FixedVector3 origin, in FixedVector3 point) {
+        foreach (var (placementId, face, opening) in m_openings) {
+            if ((m_closures is { Any: true } closures) && closures.IsClosed(placementId: placementId, face: face)) { continue; }
+            if (WorldFaceRegion.Sweep(aperture: opening, from: origin, to: point).Crossed) { return true; }
+        }
+
+        return false;
+    }
+
     /// <inheritdoc/>
-    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) => m_inner.TryHoldableSurfaceAlongDirection(
-        candidate: out candidate,
-        direction: in direction,
-        grantedByOverride: out grantedByOverride,
-        maxDistance: maxDistance,
-        origin: in origin
-    );
+    /// <remarks>A surface the ray reaches through an open door's glass is not answered: the wall a door hangs on
+    /// stands behind its glass, and a body walking into the door would otherwise take hold of it there and climb it
+    /// instead of walking through.</remarks>
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        if (
+            m_inner.TryHoldableSurfaceAlongDirection(
+                candidate: out candidate,
+                direction: in direction,
+                grantedByOverride: out grantedByOverride,
+                maxDistance: maxDistance,
+                origin: in origin
+            ) &&
+            !BehindOpenGlass(origin: in origin, point: candidate.Point)
+        ) {
+            return true;
+        }
+
+        candidate = default;
+        grantedByOverride = false;
+
+        return false;
+    }
     /// <inheritdoc/>
-    public bool TryHoldableStamp(out ContactHoldableStamp stamp) => m_inner.TryHoldableStamp(stamp: out stamp);
+    /// <remarks>The holdable answers also read which doors stand open (<see cref="BehindOpenGlass"/>), so the stamp
+    /// moves with the closures as well as with the wrapped field's colliders. Both counts only grow, so their sum
+    /// stands still exactly while neither moves.</remarks>
+    public bool TryHoldableStamp(out ContactHoldableStamp stamp) {
+        if (!m_inner.TryHoldableStamp(stamp: out stamp)) {
+            return false;
+        }
+        if (m_closures is { } closures) {
+            stamp = (stamp with { Revision = unchecked(stamp.Revision + (ulong)closures.Revision) });
+        }
+
+        return true;
+    }
     /// <inheritdoc/>
-    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => m_inner.TryNearestSurfaceAlongDirection(
-        assistHalfAngle: assistHalfAngle,
-        candidate: out candidate,
-        direction: in direction,
-        maxDistance: maxDistance,
-        origin: in origin
-    );
+    /// <remarks>An anchor the aim reaches through an open door's glass is not answered, as a holdable surface there is
+    /// not (<see cref="TryHoldableSurfaceAlongDirection"/>).</remarks>
+    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) {
+        if (
+            m_inner.TryNearestSurfaceAlongDirection(
+                assistHalfAngle: assistHalfAngle,
+                candidate: out candidate,
+                direction: in direction,
+                maxDistance: maxDistance,
+                origin: in origin
+            ) &&
+            !BehindOpenGlass(origin: in origin, point: candidate.Point)
+        ) {
+            return true;
+        }
+
+        candidate = default;
+
+        return false;
+    }
 }
