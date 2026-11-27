@@ -356,6 +356,8 @@ public sealed class CellKeyTable {
         hash.Add(value: m_ledger.Value);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // Whether a key is one the table was seeded with: a declared name, whose ordinal no rewind releases or reuses.
+    internal bool IsSeed(CellKey key) => ((((uint)key.Ordinal) < ((uint)m_initialCount)) && key.BelongsTo(tableIdentity: m_identity));
     internal bool TryGetAddress(CellKey key, out CellName name, out int ordinal) {
         ordinal = key.Ordinal;
         if ((((uint)ordinal) < ((uint)m_initialCount)) && key.BelongsTo(tableIdentity: m_identity)) {

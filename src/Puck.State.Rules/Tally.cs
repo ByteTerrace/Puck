@@ -51,9 +51,7 @@ public sealed class TallyOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => TallyWork.Walk(capacity: Capacity);
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
         var key = Key;
 
         if (KeyFrom is not null) {
@@ -63,8 +61,8 @@ public sealed class TallyOperand : RuleOperand {
             key = keys[0].Index;
         }
 
-        var time = reader.Time;
-        var probe = StateTally.Find(arena: reader.Arena, capacity: Capacity, key: key, rowOrdinal: RowOrdinal, time: in time);
+        var time = frame.Time;
+        var probe = StateTally.Find(arena: frame.Arena, capacity: Capacity, key: key, rowOrdinal: RowOrdinal, time: in time);
 
         return (probe.Case switch {
             TallyProbeCase.Found => Fact.Finite(kind: CellKind.Int, value: probe.Count),

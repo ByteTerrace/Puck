@@ -1268,7 +1268,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (!evaluated.TryFinite(raw: out value)) {
             ReportRefusal(
                 detail: RuleEvaluation.DescribeOutcome(outcome: evaluated),
-                effect: $"binding '{bound.Name}'",
+                effect: bound.Describe,
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: ruleName,
                 tick: tick

@@ -236,8 +236,8 @@ public static class RuleCapacity {
     /// <summary>The most top-level effects one rule may carry. Each is priced on the work sheet; the count bounds
     /// the compiled rule's effect table.</summary>
     public const int MaxEffectsPerRule = 256;
-    /// <summary>The most postfix tokens in one numeric expression. A token pushes at most one value, so this is
-    /// also the deepest an evaluation's leased value stack grows: eight bytes and one mark a token.</summary>
+    /// <summary>The most postfix tokens in one numeric expression. A token pushes at most one value, so this also
+    /// sizes the machine-stack block an evaluation's value stack occupies: eight bytes and one mark bit a token.</summary>
     public const int MaxExpressionTokens = 256;
     /// <summary>The most shared subprograms one expression program may carry. The call graph is acyclic, so this
     /// is how deep a call chain nests, and each level is one evaluator frame of machine stack.</summary>

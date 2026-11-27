@@ -26,11 +26,12 @@ public interface IRuleOperand : ICompiledFact {
     ReadOnlySpan<OperandAddress> Addresses { get; }
 
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
-    /// <param name="reader">The evaluation in flight, which is also the host serving every facet it advertises.</param>
+    /// <param name="frame">The evaluation in flight: its reader, which is also the host serving every facet it
+    /// advertises, and the arena and clocks that reader answers, asked of it once per evaluation.</param>
     /// <param name="keys">What each of <see cref="Addresses"/> named, in the same order: a cell key or an integer, or
     /// nothing. There is no faulted case to receive.</param>
     /// <returns>The fact.</returns>
-    Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys);
+    Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys);
 }
 /// <summary>How an operand reads one of its declared addresses.</summary>
 public enum AddressUse : byte {
@@ -111,7 +112,7 @@ public abstract class RuleOperand : IRuleOperand {
     /// <inheritdoc/>
     public abstract RuleWork Cost(IRuleCostContext context);
     /// <inheritdoc/>
-    public abstract Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys);
+    public abstract Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys);
 }
 /// <summary>Shared shape for the operand cases that address a row through a (row ordinal, key-or-indirection) pair,
 /// so a caller that must accept any of them can read the row and the live key without enumerating every case.</summary>

@@ -861,7 +861,7 @@
             "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run",
             "sources": [{"path": "src/Puck.State.Rules/RuleExpressions.cs"}],
             "formula": "setup + MaxExpressionTokens * (dispatch + the maximum arm) + teardown; the arm maximum is unresolved while the function kernel is",
-            "loopBounds": [{"symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run", "iterations": 64, "contract": "the token walk visits each instruction of a compiled program once, and RuleCapacity.MaxExpressionTokens caps a program at 64"}],
+            "loopBounds": [{"symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run", "iterations": 256, "contract": "the token walk visits each instruction of a compiled program once, and RuleCapacity.MaxExpressionTokens caps a program at 256"}],
             "includedOverhead": "not established",
             "inputDomainBound": "not established",
             "targets": {

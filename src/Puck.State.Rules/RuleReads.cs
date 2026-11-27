@@ -8,15 +8,13 @@ public static class RuleReads {
     /// <summary>Reads one cell as a fact at the reader's own tick pair: the absent fact when the address named no
     /// cell at all, the faulted fact when computing the address faulted, zero for a cell no row holds, and the live
     /// value otherwise.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> for no row.</param>
     /// <param name="resolved">What the address named — see
     /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>. A named invalid key is a cell no row holds.</param>
     /// <param name="kind">The encoding the fact carries.</param>
     /// <returns>The fact.</returns>
-    public static Fact ReadCell(IStateReader reader, int rowOrdinal, Resolved<CellKey> resolved, CellKind kind) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
+    public static Fact ReadCell(ref EvaluationFrame frame, int rowOrdinal, Resolved<CellKey> resolved, CellKind kind) {
         if (!resolved.TryNamed(value: out var key)) {
             return ((resolved.Case == FaultCase.Faulted)
                 ? Fact.Faulted(kind: kind)
@@ -34,16 +32,45 @@ public static class RuleReads {
             );
         }
 
-        var time = reader.Time;
+        var time = frame.Time;
 
         return Fact.Finite(
             kind: kind,
-            value: (reader.Arena.TryReadLiveNumber(
+            value: (frame.Arena.TryReadLiveNumber(
                 key: key,
                 rowOrdinal: rowOrdinal,
                 time: in time,
                 value: out var value
             )
+            ? value
+            : 0L)
+        );
+    }
+    /// <summary>Reads the cell at one position of a lattice or ring row as a fact, the answer <see cref="ReadCell"/>
+    /// gives for the key the position's decimal spelling interns, read straight from the position: the absent fact
+    /// when the address named nothing, zero for a position the row does not hold, and the live value
+    /// otherwise.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="rowOrdinal">The lattice or ring row's catalog ordinal; the catalog interns the decimal spelling
+    /// of each of its in-range positions.</param>
+    /// <param name="position">What the address named, as an integer.</param>
+    /// <param name="kind">The encoding the fact carries.</param>
+    /// <returns>The fact.</returns>
+    public static Fact ReadPosition(ref EvaluationFrame frame, int rowOrdinal, in ResolvedKey position, CellKind kind) {
+        if (!position.Named) {
+            return Fact.Absent(kind: kind);
+        }
+
+        var time = frame.Time;
+
+        return Fact.Finite(
+            kind: kind,
+            value: (((rowOrdinal >= 0) && (((ulong)position.Index) <= int.MaxValue) && frame.Arena.TryReadLiveNumberAt(
+                position: ((int)position.Index),
+                rowOrdinal: rowOrdinal,
+                time: in time,
+                value: out var value
+            ))
             ? value
             : 0L)
         );
@@ -85,17 +112,14 @@ public static class RuleReads {
     }
     /// <summary>Reduces one row's live cells in the row's own raw encoding, with an optional keyed filter whose
     /// nonzero cells admit a candidate and an optional inclusive range over each candidate's live value.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The reduced row's catalog ordinal.</param>
     /// <param name="op">The aggregate.</param>
     /// <param name="filterOrdinal">The filter row's catalog ordinal, or <c>-1</c>.</param>
     /// <param name="range">Inclusive bounds in the source's raw encoding, or <see langword="null"/>.</param>
     /// <returns>The aggregate; zero for no admitted cell.</returns>
-    public static long Reduce(IStateReader reader, int rowOrdinal, StateReduceOp op, int filterOrdinal, (long Lower, long Upper)? range) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        return StateReader.ReduceRaw(reader.Arena, rowOrdinal, op, reader.Time, filterOrdinal, range);
-    }
+    public static long Reduce(ref EvaluationFrame frame, int rowOrdinal, StateReduceOp op, int filterOrdinal, (long Lower, long Upper)? range) =>
+        StateReader.ReduceRaw(frame.Arena, rowOrdinal, op, frame.Time, filterOrdinal, range);
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
     /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateArena, int, int, Span{int})"/>
     /// ranked by <see cref="StateReader.ArrangementRank(ReadOnlySpan{int})"/>.</summary>
@@ -189,16 +213,16 @@ public static class RuleReads {
     /// <param name="reference">The indirection.</param>
     /// <returns>What the indirection named — see <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>.</returns>
     public static Resolved<CellKey> ResolveReference(IStateReader reader, in CompiledCellRef reference) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+        var frame = new EvaluationFrame(reader: reader);
 
         return (TryFeed(
             feed: out var feed,
-            reader: reader,
+            frame: ref frame,
             reference: in reference
         )
             ? ResolveReference(
                 feed: in feed,
-                reader: reader,
+                frame: ref frame,
                 reference: in reference
             )
             : Resolved<CellKey>.Faulted);
@@ -212,15 +236,27 @@ public static class RuleReads {
     /// <returns><see langword="false"/> when the program faulted, which is already raised into the evaluation's
     /// scope; an absence is an answer.</returns>
     public static bool TryFeed(IStateReader reader, in CompiledCellRef reference, out AddressFeed feed) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+        var frame = new EvaluationFrame(reader: reader);
 
+        return TryFeed(
+            feed: out feed,
+            frame: ref frame,
+            reference: in reference
+        );
+    }
+    /// <summary>Runs the program an address resolves through within an evaluation already in flight, as
+    /// <see cref="TryFeed(IStateReader, in CompiledCellRef, out AddressFeed)"/> does.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="reference">The address.</param>
+    /// <param name="feed">The value the program left, or the integer zero for an address that carries none.</param>
+    /// <returns><see langword="false"/> when the program faulted; an absence is an answer.</returns>
+    public static bool TryFeed(ref EvaluationFrame frame, in CompiledCellRef reference, out AddressFeed feed) {
         feed = default;
 
         if (reference.FeedProgram is not { } program) {
             return true;
         }
 
-        var frame = new EvaluationFrame(reader: reader);
         var outcome = RuleExpressions.Evaluate(
             frame: ref frame,
             kind: CellKind.Int,
@@ -250,25 +286,38 @@ public static class RuleReads {
     /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
     /// <returns>What the indirection named — see <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>.</returns>
     public static Resolved<CellKey> ResolveReference(IStateReader reader, in CompiledCellRef reference, in AddressFeed feed) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+        var frame = new EvaluationFrame(reader: reader);
 
+        return ResolveReference(
+            feed: in feed,
+            frame: ref frame,
+            reference: in reference
+        );
+    }
+    /// <summary>Resolves one live key indirection within an evaluation already in flight, once the program it
+    /// resolves through has left its value.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
+    /// <returns>What the indirection named — see <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>.</returns>
+    public static Resolved<CellKey> ResolveReference(ref EvaluationFrame frame, in CompiledCellRef reference, in AddressFeed feed) {
         if (reference.Program is not null) {
             // An integer names that key even when no row holds it. An absence the program read names no cell.
             return (feed.Absent
                 ? Resolved<CellKey>.Nothing
                 : Resolved<CellKey>.Named(value: IndexKey(
                     index: feed.Value,
-                    keys: reader.Arena.Keys
+                    keys: frame.Arena.Keys
                 )));
         }
         if (reference.Custom is { } custom) {
             return custom.Resolve(
                 feed: in feed,
-                reader: reader
+                reader: frame.Reader
             );
         }
 
-        var key = ResolveBuiltIn(named: out var named, reader: reader, reference: in reference);
+        var key = ResolveBuiltIn(frame: ref frame, named: out var named, reference: in reference);
 
         return (named
             ? Resolved<CellKey>.Named(value: key)
@@ -279,13 +328,13 @@ public static class RuleReads {
         ? Resolved<long>.Named(value: index)
         : Resolved<long>.Nothing);
     // The engine's own indirections: none computes arithmetic, so none faults.
-    private static CellKey ResolveBuiltIn(IStateReader reader, in CompiledCellRef reference, out bool named) {
+    private static CellKey ResolveBuiltIn(ref EvaluationFrame frame, in CompiledCellRef reference, out bool named) {
         if (reference.Binding is BoundKey.Each or BoundKey.Member or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
             // A binding that is not bound for this evaluation falls back to the reference's own key, which is how
             // the first token of a pattern word reads $previous as the cell no row holds rather than as no cell.
             var bound = BoundKeyOf(
                 binding: reference.Binding,
-                reader: reader
+                frame: ref frame
             );
             var token = (bound.IsValid
                 ? bound
@@ -300,8 +349,8 @@ public static class RuleReads {
             named = true;
 
             return IndexKey(
-                keys: reader.Arena.Keys,
-                index: reader.BoundIndex(key: reference.Binding)
+                keys: frame.Arena.Keys,
+                index: frame.Reader.BoundIndex(key: reference.Binding)
             );
         }
         if (reference.RowOrdinal < 0) {
@@ -314,7 +363,7 @@ public static class RuleReads {
             ? reference.Key
             : BoundKeyOf(
                 binding: reference.InnerKeyBinding,
-                reader: reader
+                frame: ref frame
             )
         );
 
@@ -324,13 +373,14 @@ public static class RuleReads {
             return default;
         }
 
-        var keys = reader.Arena.Keys;
+        var arena = frame.Arena;
+        var keys = arena.Keys;
 
         if (reference.Kind == CellKind.Text) {
             // Text that spells no cell name addresses no cell: a rule may write any text into the pointer cell, so
             // the read answers the absence rather than refusing.
             if (
-                !reader.Arena.TryRead(
+                !arena.TryRead(
                 key: inner,
                 rowOrdinal: reference.RowOrdinal,
                 value: out var carried
@@ -364,8 +414,8 @@ public static class RuleReads {
         return IndexKey(
             keys: keys,
             index: ReadPointer(
+                frame: ref frame,
                 inner: inner,
-                reader: reader,
                 reference: in reference
             )
         );
@@ -389,9 +439,11 @@ public static class RuleReads {
             return custom.ResolveForWrite(reader: reader);
         }
 
+        var frame = new EvaluationFrame(reader: reader);
+
         return WriteKey.Resolved(key: ResolveBuiltIn(
+            frame: ref frame,
             named: out _,
-            reader: reader,
             reference: in reference
         ));
     }
@@ -414,16 +466,16 @@ public static class RuleReads {
     /// <returns>The index when the indirection spells an integer, <see cref="FaultCase.Faulted"/> when computing it
     /// faulted, and <see cref="FaultCase.Absent"/> otherwise.</returns>
     public static Resolved<long> ResolveIndex(IStateReader reader, in CompiledCellRef reference) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+        var frame = new EvaluationFrame(reader: reader);
 
         return (TryFeed(
             feed: out var feed,
-            reader: reader,
+            frame: ref frame,
             reference: in reference
         )
             ? ResolveIndex(
                 feed: in feed,
-                reader: reader,
+                frame: ref frame,
                 reference: in reference
             )
             : Resolved<long>.Faulted);
@@ -435,8 +487,21 @@ public static class RuleReads {
     /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
     /// <returns>The index when the indirection names one, <see cref="FaultCase.Absent"/> when it names nothing.</returns>
     public static Resolved<long> ResolveIndex(IStateReader reader, in CompiledCellRef reference, in AddressFeed feed) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+        var frame = new EvaluationFrame(reader: reader);
 
+        return ResolveIndex(
+            feed: in feed,
+            frame: ref frame,
+            reference: in reference
+        );
+    }
+    /// <summary>Resolves one live indirection as an integer index within an evaluation already in flight, once the
+    /// program it resolves through has left its value.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
+    /// <returns>The index when the indirection names one, <see cref="FaultCase.Absent"/> when it names nothing.</returns>
+    public static Resolved<long> ResolveIndex(ref EvaluationFrame frame, in CompiledCellRef reference, in AddressFeed feed) {
         if (reference.Program is not null) {
             return (feed.Absent
                 ? Resolved<long>.Nothing
@@ -445,7 +510,7 @@ public static class RuleReads {
         if (reference.Custom is { } custom) {
             return custom.ResolveIndex(
                 feed: in feed,
-                reader: reader
+                reader: frame.Reader
             );
         }
         if (
@@ -457,7 +522,7 @@ public static class RuleReads {
                 ? reference.Key
                 : BoundKeyOf(
                     binding: reference.InnerKeyBinding,
-                    reader: reader
+                    frame: ref frame
                 )
             );
 
@@ -468,18 +533,18 @@ public static class RuleReads {
             // A pointer answers the integer its cell carries; routing it through the key table would lose every
             // index no name is interned for.
             return Resolved<long>.Named(value: ReadPointer(
+                frame: ref frame,
                 inner: inner,
-                reader: reader,
                 reference: in reference
             ));
         }
 
         var key = ResolveBuiltIn(
+            frame: ref frame,
             named: out _,
-            reader: reader,
             reference: in reference
         );
-        var spelled = reader.Arena.Keys.TryKeyInteger(
+        var spelled = frame.Arena.Keys.TryKeyInteger(
             integer: out var keyIndex,
             key: key
         );
@@ -490,15 +555,15 @@ public static class RuleReads {
         );
     }
 
-    private static CellKey BoundKeyOf(IStateReader reader, BoundKey binding) => (binding switch {
-        BoundKey.Write => reader.Scratch.WriteKey,
-        BoundKey.Each => reader.BoundEachKey,
-        BoundKey.Member => reader.BoundMemberKey,
-        BoundKey.Token => reader.BoundTokenKey,
-        BoundKey.Previous => reader.BoundPreviousKey,
+    private static CellKey BoundKeyOf(ref EvaluationFrame frame, BoundKey binding) => (binding switch {
+        BoundKey.Write => frame.Reader.Scratch.WriteKey,
+        BoundKey.Each => frame.Reader.BoundEachKey,
+        BoundKey.Member => frame.Reader.BoundMemberKey,
+        BoundKey.Token => frame.Reader.BoundTokenKey,
+        BoundKey.Previous => frame.Reader.BoundPreviousKey,
         _ => IndexKey(
-        keys: reader.Arena.Keys,
-        index: reader.BoundIndex(key: binding)
+        keys: frame.Arena.Keys,
+        index: frame.Reader.BoundIndex(key: binding)
     ),
     });
     private static CellKey IndexKey(CellKeyTable keys, long index) => (keys.TryResolveIndex(
@@ -509,10 +574,10 @@ public static class RuleReads {
         : default
     );
     // A pointer cell the row does not hold reads zero, the same as any other unheld cell.
-    private static long ReadPointer(IStateReader reader, in CompiledCellRef reference, CellKey inner) {
-        var time = reader.Time;
+    private static long ReadPointer(ref EvaluationFrame frame, in CompiledCellRef reference, CellKey inner) {
+        var time = frame.Time;
 
-        return (reader.Arena.TryReadLiveNumber(
+        return (frame.Arena.TryReadLiveNumber(
             key: inner,
             rowOrdinal: reference.RowOrdinal,
             time: in time,
