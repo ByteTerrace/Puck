@@ -35,7 +35,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
     private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten, SdfWorldPackage.FieldColors];
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -376,6 +376,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor or SdfWorldPackage.Parts.GlassLit => SdfWorldPackage.LitImage,
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
+        SdfWorldPackage.Parts.FieldColors => SdfWorldPackage.FieldColors,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,
         SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperImages[Array.IndexOf(array: ReadParts, value: version)],
         _ => throw new InvalidOperationException(message: $"The sky interface reads no version '{version}'."),

@@ -71,6 +71,19 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 #endif
         }
 
+#ifdef SDF_INSTANCE_RUNS
+        // A run's words lie together: start at its first word, and end past its last.
+        if (maskWordBits == 0u) {
+            uint runFirstWord = (sdfInstanceRunFirst >> 5u);
+            uint runLastWord = ((max(sdfInstanceRunEnd, 1u) - 1u) >> 5u);
+
+            if ((sdfInstanceRunEnd <= sdfInstanceRunFirst) || ((maskWordIndex != 0xFFFFFFFFu) && (maskWordIndex >= runLastWord))) {
+                maskWordIndex = wordCount;
+            } else if ((maskWordIndex + 1u) < runFirstWord) {
+                maskWordIndex = (runFirstWord - 1u);
+            }
+        }
+#endif
         [loop]
         for (uint advance = 0u; advance < SDF_INSTANCE_MASK_MAX_WORDS; advance++) {
             if (maskWordBits != 0u || maskWordIndex + 1u >= wordCount) { break; }

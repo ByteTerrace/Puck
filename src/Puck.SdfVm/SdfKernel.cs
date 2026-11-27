@@ -66,6 +66,10 @@ public enum SdfKernel {
     /// <summary>The binned shading kernel with authored interpretation absent, for the tiles no pixel of which has a
     /// program. Acquired only by a binned view.</summary>
     ViewsShadePlain,
+    /// <summary>The field pass: the residency's field evaluated at every render pixel through the field interpreter, for
+    /// the slicing plane and the proximity view, into the field colours the composite lays over the view. Acquired only by
+    /// a view showing a field view (<c>SdfWorldPackage.WithField</c>).</summary>
+    FieldView,
     /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
     Sky,
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>

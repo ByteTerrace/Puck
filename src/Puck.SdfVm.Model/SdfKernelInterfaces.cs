@@ -342,8 +342,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
     /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
     /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>), which the residency writes as a region of its
-    /// tables, the sky's environment map, which its graph producer renders, and last the live field slice's words, which
-    /// only the composite reads. A kernel binds one only when it reads it. A table added here goes last, so no binding
+    /// tables, the sky's environment map, which its graph producer renders, and last the field view's entries, which only
+    /// the field pass reads. A kernel binds one only when it reads it. A table added here goes last, so no binding
     /// before it moves in the bake's interface, whose bytecode keys the stored meshes.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
@@ -352,7 +352,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.World, name: SkyCoefficients),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: ShadowHandoffs, structure: ShaderInterfaceStructure.From<SdfShadowHandoff>()),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
-        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.World, name: SdfWorldPackage.FieldSliceWords),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.World, name: SdfWorldPackage.FieldEntries),
     ];
     /// <summary>Gets the shared environment producer's typed interface. The map writes through its UAV; the reduction
     /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen

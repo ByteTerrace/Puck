@@ -440,8 +440,11 @@ Source first, then structure, then pixels:
    uncertified, whether the fixed-point evaluator takes it, and what contact
    makes of it. `world.slice <placement> <x|y|z> <path.png>` writes the field's
    distance bands and `|grad d|` to a PNG, and `world.slice.live <placement>
-   <x|y|z> [mode distance|gradient|both]` draws them on a translucent plane in
-   the running world, resampled as the plane moves or the document reloads.
+   <x|y|z> [mode distance|gradient|both]` (or `camera`, `eye`, `pointer`) draws
+   them per pixel on a plane in the running world.
+   `world.debug-view proximity` rings each surface with its distance to the
+   nearest other object, so a contact, a near miss or a sunk part reads at a
+   glance.
 4. Preview on the CPU before a windowed batch:
    `puck mesh preview --world <file>.puck --prototype <id> --output <dir>` bakes
    the creation with the engine's own CPU bake (no GPU lease, no World boot) and draws front (seen from its −Z side), back, both sides, four three-quarter views, top and

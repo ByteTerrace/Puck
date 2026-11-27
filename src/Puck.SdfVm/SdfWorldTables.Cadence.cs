@@ -40,7 +40,8 @@ namespace Puck.SdfVm;
 //   - m_frameSampledRevision : the heights the height fields' draws are displaced by, a geometry value.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
-//   - m_fieldSliceRevision : the live field slice's image and opacity (StageFieldSlice), which only the composite draws.
+//   - m_fieldViewRevision : the field views' entries, plane and pointer (StageFieldView), which only the field pass and the
+//                          composite read.
 //   - m_decalRevision    : the glyph-decal buffer (the screens' cells and the surface texts' glyphs), revision-tracked
 //                          rather than hashed each frame.
 //   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
@@ -69,7 +70,7 @@ public sealed partial class SdfWorldTables {
     private ulong m_visualSignature;
 
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [
-        SdfWorldPackage.GeometryOnly, SdfWorldPackage.FieldSliceOrigin, SdfWorldPackage.FieldSliceAxisU, SdfWorldPackage.FieldSliceAxisV,
+        SdfWorldPackage.GeometryOnly, SdfWorldPackage.FieldPlane, SdfWorldPackage.FieldStyle, SdfWorldPackage.FieldScope, SdfWorldPackage.DebugOptions,
     ]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
@@ -334,8 +335,15 @@ public sealed partial class SdfWorldTables {
                 hash.Add(value: m_visualSignature);
                 if (part == SdfWorldPackage.Parts.Composite) {
                     hash.Add(value: inputs.Composite);
-                    hash.Add(value: m_fieldSliceRevision);
+                    hash.Add(value: m_fieldViewRevision);
                 }
+                break;
+            // The field pass evaluates the field the program and every live transform hold, in or out of the view's scope,
+            // over the entries and plane it was staged with.
+            case SdfWorldPackage.Parts.Field:
+                hash.Add(value: m_fieldViewRevision);
+                hash.Add(value: unchecked((ulong)m_dynamicTransformRevision));
+                hash.Add(value: inputs.Composite);
                 break;
         }
         // The optical tail's own values: the lens's scatter for the pyramid, and for the display pass the sharpen, the
@@ -463,7 +471,7 @@ public sealed partial class SdfWorldTables {
             screenSurfaces,
             screenMappings,
             unchecked((ulong)m_meshIrradianceRevision),
-            m_fieldSliceRevision,
+            m_fieldViewRevision,
         ];
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));

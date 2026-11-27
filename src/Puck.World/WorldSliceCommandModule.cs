@@ -22,9 +22,6 @@ namespace Puck.World;
 public readonly record struct WorldSliceRequest(SdfAxis Axis, float Offset, Vector2 Centre, float Half, int Resolution, float Bands, string Path) {
     /// <summary>Gets the samples a side a request asks for when it names none.</summary>
     public const int DefaultResolution = 192;
-    /// <summary>Gets the samples a side a live slice (<c>world.slice.live</c>) takes when it names none: fine enough to read
-    /// a band a few pixels wide, coarse enough to resample within a few frames as the plane moves.</summary>
-    public const int DefaultLiveResolution = 128;
     /// <summary>Gets how far past a placement's reach its square extends, as a share of that reach.</summary>
     public const float PlacementMargin = 1.25f;
     /// <summary>Gets the bands a square holds across its half side when the request names no spacing.</summary>
@@ -42,7 +39,9 @@ public readonly record struct WorldSliceRequest(SdfAxis Axis, float Offset, Vect
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
 /// <param name="source">The booted document, beside which <c>world.slice.save</c> writes into its <c>slices</c>
 /// folder.</param>
-public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRenderProbe renderProbe, WorldDefinitionSource source) : ICommandModule {
+/// <param name="cursor">The drawn cursor's feed, whose position a pointer plane follows (<c>world.slice.live pointer</c>), or
+/// <see langword="null"/> on a host with no cursor.</param>
+public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRenderProbe renderProbe, WorldDefinitionSource source, WorldCursorFeed? cursor = null) : ICommandModule {
     /// <summary>The folder under the booted document's package that <c>world.slice.save</c> writes into.</summary>
     public const string FolderName = "slices";
     /// <summary>The placement token <c>world.slice.save</c> reads as the placement of the spawn point nearest the
@@ -55,7 +54,6 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
     private static readonly CommandForms WorldSliceForms = CommandForms.Of(verb: Verb, "<x|y|z> <offset> <u> <v> <half> <path.png> [bands <m>] [res <n>]", "<placement> <x|y|z> <path.png> [offset <m>] [bands <m>] [res <n>]");
     private static readonly CommandForms WorldSliceSaveForms = CommandForms.Of(verb: SaveVerb, SaveForm);
-    private static readonly CommandForms WorldSliceLiveForms = CommandForms.Of(verb: LiveVerb, "off", "<x|y|z> <offset> <u> <v> <half> [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]", "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>] [mode distance|gradient|both] [opacity <0..1>]");
 
     /// <summary>Parses a <c>world.slice</c> line's arguments: an explicit plane and square
     /// (<c>&lt;x|y|z&gt; &lt;offset&gt; &lt;u&gt; &lt;v&gt; &lt;half&gt; &lt;path.png&gt;</c>) or a placement's (<c>&lt;placement&gt;
@@ -67,21 +65,14 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     /// <param name="request">The parsed request, on success.</param>
     /// <param name="refusal">The refusal, naming what was wrong, on failure.</param>
     /// <returns><see langword="true"/> when the arguments parse.</returns>
-    public static bool TryParse(IReadOnlyList<string> args, WorldDefinition definition, out WorldSliceRequest request, out CommandResult refusal) =>
-        TryParse(args: args, definition: definition, live: null, refusal: out refusal, request: out request);
-
-    // Parses world.slice's arguments, or, with `live` (which receives the plane's mode and opacity), world.slice.live's:
-    // the same plane and square without a path, and `mode` and `opacity` beside `bands` and `res`.
-    private static bool TryParse(IReadOnlyList<string> args, WorldDefinition definition, LiveOptions? live, out WorldSliceRequest request, out CommandResult refusal) {
+    public static bool TryParse(IReadOnlyList<string> args, WorldDefinition definition, out WorldSliceRequest request, out CommandResult refusal) {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(definition);
 
-        var verb = ((live is null) ? Verb : LiveVerb);
-        var forms = ((live is null) ? WorldSliceForms : WorldSliceLiveForms);
-        var pathTokens = ((live is null) ? 1 : 0);
+        var forms = WorldSliceForms;
 
         request = default;
-        if (args.Count < (2 + pathTokens)) {
+        if (args.Count < 3) {
             refusal = forms.Refuse();
             return false;
         }
@@ -94,17 +85,17 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         int next;
 
         if (TryAxis(token: args[0], axis: out axis)) {
-            if ((args.Count < (5 + pathTokens)) || !TryNumber(token: args[1], value: out offset) || !TryNumber(token: args[2], value: out var u) ||
+            if ((args.Count < 6) || !TryNumber(token: args[1], value: out offset) || !TryNumber(token: args[2], value: out var u) ||
                 !TryNumber(token: args[3], value: out var v) || !TryNumber(token: args[4], value: out half) || !(half > 0f)) {
-                refusal = CommandResult.Error(output: $"[{verb}: {forms.Form} takes finite numbers and a positive half]");
+                refusal = CommandResult.Error(output: $"[{Verb}: {forms.Form} takes finite numbers and a positive half]");
                 return false;
             }
             centre = new Vector2(x: u, y: v);
-            if (live is null) { path = args[5]; }
-            next = (5 + pathTokens);
+            path = args[5];
+            next = 6;
         } else {
             if (WorldDefinitionRows.FindPlacement(id: args[0], placements: definition.Placements) is not { } placement) {
-                refusal = CommandResult.Error(output: $"[{verb}: '{args[0]}' is neither an axis (x|y|z) nor a placement — placements: {string.Join(separator: ", ", values: definition.Placements.Select(selector: static row => row.Id))}]");
+                refusal = CommandResult.Error(output: $"[{Verb}: '{args[0]}' is neither an axis (x|y|z) nor a placement — placements: {string.Join(separator: ", ", values: definition.Placements.Select(selector: static row => row.Id))}]");
                 return false;
             }
             if (!TryAxis(token: args[1], axis: out axis)) {
@@ -112,22 +103,17 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return false;
             }
 
-            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-            var position = frame.Position;
-            var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
-            var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
-
-            half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: frame.Scale));
+            (var position, half) = PlacementFrame(definition: definition, placement: placement);
             if (!float.IsFinite(f: half) || !(half > 0f)) {
-                refusal = CommandResult.Error(output: $"[{verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {forms.Form}]");
+                refusal = CommandResult.Error(output: $"[{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {forms.Form}]");
                 return false;
             }
-            if (live is null) { path = args[2]; }
-            next = (2 + pathTokens);
+            path = args[2];
+            next = 3;
             offset = position[((int)axis)];
             if ((args.Count > (next + 1)) && string.Equals(a: args[next], b: "offset", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 if (!TryNumber(token: args[(next + 1)], value: out var shift)) {
-                    refusal = CommandResult.Error(output: $"[{verb}: offset expects a finite number of metres, got '{args[(next + 1)]}']");
+                    refusal = CommandResult.Error(output: $"[{Verb}: offset expects a finite number of metres, got '{args[(next + 1)]}']");
                     return false;
                 }
                 offset += shift;
@@ -137,13 +123,13 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         }
 
         var bands = (half / WorldSliceRequest.DefaultBandsPerHalf);
-        var resolution = ((live is null) ? WorldSliceRequest.DefaultResolution : WorldSliceRequest.DefaultLiveResolution);
+        var resolution = WorldSliceRequest.DefaultResolution;
 
         while (next < args.Count) {
             var key = args[next];
 
             if ((next + 1) >= args.Count) {
-                refusal = CommandResult.Error(output: $"[{verb}: '{key}' expects a value — {forms.Form}]");
+                refusal = CommandResult.Error(output: $"[{Verb}: '{key}' expects a value — {forms.Form}]");
                 return false;
             }
 
@@ -154,24 +140,18 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             } else if (string.Equals(a: key, b: "res", comparisonType: StringComparison.OrdinalIgnoreCase) && int.TryParse(s: value, provider: CultureInfo.InvariantCulture, result: out var samples) &&
                 (samples >= SdfFieldSlice.MinResolution) && (samples <= SdfFieldSlice.MaxResolution)) {
                 resolution = samples;
-            } else if ((live is not null) && string.Equals(a: key, b: "mode", comparisonType: StringComparison.OrdinalIgnoreCase) && TryMode(token: value, mode: out var mode)) {
-                live.Mode = mode;
-            } else if ((live is not null) && string.Equals(a: key, b: "opacity", comparisonType: StringComparison.OrdinalIgnoreCase) && TryNumber(token: value, value: out var opacity) && (opacity > 0f) && (opacity <= 1f)) {
-                live.Opacity = opacity;
             } else {
-                var options = ((live is null) ? string.Empty : ", mode one of distance|gradient|both, opacity a number in (0, 1]");
-
-                refusal = CommandResult.Error(output: $"[{verb}: cannot read '{key} {value}' — bands takes a positive number of metres, res a whole number in [{SdfFieldSlice.MinResolution}, {SdfFieldSlice.MaxResolution}]{options}]");
+                refusal = CommandResult.Error(output: $"[{Verb}: cannot read '{key} {value}' — bands takes a positive number of metres, res a whole number in [{SdfFieldSlice.MinResolution}, {SdfFieldSlice.MaxResolution}]]");
                 return false;
             }
             next += 2;
         }
-        if ((live is null) && !path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".png")) {
-            refusal = CommandResult.Error(output: $"[{verb}: the path must name a .png file, got '{path}']");
+        if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".png")) {
+            refusal = CommandResult.Error(output: $"[{Verb}: the path must name a .png file, got '{path}']");
             return false;
         }
 
-        request = new WorldSliceRequest(Axis: axis, Bands: bands, Centre: centre, Half: half, Offset: offset, Path: ((live is null) ? System.IO.Path.GetFullPath(path: path) : string.Empty), Resolution: resolution);
+        request = new WorldSliceRequest(Axis: axis, Bands: bands, Centre: centre, Half: half, Offset: offset, Path: System.IO.Path.GetFullPath(path: path), Resolution: resolution);
         refusal = default;
         return true;
     }
@@ -289,6 +269,15 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         }
 
         return nearest;
+    }
+    // A placement's position and the half side of the square its slices frame: PlacementMargin times its creation's reach
+    // at its scale, infinite for a creation no finite bound frames.
+    private static (Vector3 Position, float Half) PlacementFrame(WorldDefinition definition, WorldPlacement placement) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
+        var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
+
+        return (frame.Position, ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: frame.Scale)));
     }
     // A creation's reach; an unbounded lattice clipped by a creation-wide intersection is bounded by its clip, which only
     // the composed bound sees (a scope-free creation's shapes are not one field, so their blends bound nothing).

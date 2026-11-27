@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -379,26 +380,6 @@ public sealed partial class SdfProgram {
 
         return boundaries;
     }
-    // The minimal sphere containing two spheres: one containing the other wins outright; otherwise the classic
-    // segment-spanning enclosure.
-    private static (Vector3 Center, float Radius) EncloseSpheres(Vector3 centerA, float radiusA, Vector3 centerB, float radiusB) {
-        var distance = Vector3.Distance(
-            value1: centerA,
-            value2: centerB
-        );
-
-        if ((distance + radiusB) <= radiusA) {
-            return (centerA, radiusA);
-        }
-
-        if ((distance + radiusA) <= radiusB) {
-            return (centerB, radiusB);
-        }
-
-        var radius = (0.5f * ((distance + radiusA) + radiusB));
-
-        return ((centerA + (Vector3.Normalize(value: (centerB - centerA)) * (radius - radiusA))), radius);
-    }
     // AnalyzeBounds' merge test/production, extracted so its compaction pass can call it without shifting a list on
     // every attempt. `current` is the earlier (lower-index) segment, `next` the one immediately after it — the same
     // roles the inline version tested, so the accepted pairs and the merged record's fields (which side's Center
@@ -437,7 +418,7 @@ public sealed partial class SdfProgram {
         }
 
         if (BoundModeStatic == current.Mode) {
-            var (mergedCenter, mergedRadius) = EncloseSpheres(
+            var (mergedCenter, mergedRadius) = VectorFunctions.EncloseSpheres(
                 centerA: current.Center,
                 radiusA: current.Radius,
                 centerB: next.Center,

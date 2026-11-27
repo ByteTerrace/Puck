@@ -6,7 +6,6 @@
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
 #include "../shade/sdf-light.hlsli"
-#include "../frame/sdf-overlaps.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
 // in the material-id debug view.
@@ -91,24 +90,6 @@ float3 sdfDebugKeyShadow(SdfPixel p, SdfSurfaceSample s) {
     return (visibility * lerp(float3(1.0, 0.7, 0.25), float3(1.0, 1.0, 1.0), cascadeShare));
 }
 
-// The overlap view: the scene dimmed toward grey, and each surface glowing where the first overlap behind it runs deeper
-// along its ray than the view's tolerance (passGroup.debugOptions.x), from magenta just past it to yellow at
-// SdfOverlapHotDepth and beyond, so a solid sunk a hand's width into another reads apart from one grazing it. The glow is in
-// nits under the exposure the composite applies, so it reads alike in a lit hall and a dark room.
-static const float SdfOverlapHotDepth = 0.05;
-float3 sdfOverlapTint(SdfPixel p, SdfSurfaceSample s, float3 color) {
-    float3 dimmed = (lerp(dot(color, PuckRec709Luminance).xxx, color, 0.35) * 0.35);
-    float past = (((s.hit && (p.viewIndex == 0u)) ? sdfOverlapDepthAt(p.pixel, passGroup.imageExtent) : 0.0) - passGroup.debugOptions.x);
-
-    if (past <= 0.0) {
-        return dimmed;
-    }
-
-    float3 hot = lerp(float3(1.0, 0.05, 0.8), float3(1.0, 0.9, 0.1), sqrt(saturate(past / SdfOverlapHotDepth)));
-
-    return lerp(dimmed, (hot * (0.9 / max(passGroup.exposure, 1.0e-12))), 0.9);
-}
-
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
@@ -172,10 +153,6 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
         case SDF_DEBUG_VIEW_RATES:
         case SDF_DEBUG_VIEW_RATE_FLASH: { // each rated item tinted by its update tier
             viewColor = sdfRateTint(p, s, color);
-            break;
-        }
-        case SDF_DEBUG_VIEW_OVERLAPS: { // each surface another object's solid passes into, glowing by the overlap's depth
-            viewColor = sdfOverlapTint(p, s, color);
             break;
         }
     }

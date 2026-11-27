@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-world\.slice|SdfFieldSlice
+world\.slice\.live|world\.debug-view proximity|WithField|sdf-world-field

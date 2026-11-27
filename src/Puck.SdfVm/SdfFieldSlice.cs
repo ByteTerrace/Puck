@@ -322,47 +322,16 @@ public sealed class SdfFieldSlice {
 
         for (var row = 0; (row < Resolution); row++) {
             for (var column = 0; (column < Resolution); column++) {
-                Write(colour: Colour(clipped: clipped, column: column, panel: SdfFieldSliceMode.Distance, row: row), column: column, rgba: rgba, row: row, width: width);
-                Write(colour: Colour(clipped: clipped, column: column, panel: SdfFieldSliceMode.Gradient, row: row), column: (Resolution + column), rgba: rgba, row: row, width: width);
+                Write(colour: Colour(clipped: clipped, column: column, gradient: false, row: row), column: column, rgba: rgba, row: row, width: width);
+                Write(colour: Colour(clipped: clipped, column: column, gradient: true, row: row), column: (Resolution + column), rgba: rgba, row: row, width: width);
             }
         }
 
         return rgba;
     }
-    /// <summary>Draws the answered slice as one square of <see cref="Resolution"/> pixels a side in <see cref="Render"/>'s
-    /// colours, as the live slicing plane shows it (<see cref="SdfLiveFieldSlice"/>): the distance panel, the gradient
-    /// panel, or both, the distance on the square's left half (<c>-u</c>) and the gradient on its right, each sample where
-    /// it lies.</summary>
-    /// <param name="mode">The panel or panels to draw.</param>
-    /// <param name="words">Receives one word a pixel, rows from the top: red, green and blue in the low three bytes as
-    /// <see cref="Render"/> writes them, and 255 above them.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="words"/> holds fewer than <c>Resolution²</c>
-    /// words.</exception>
-    public void RenderPlane(SdfFieldSliceMode mode, Span<uint> words) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: words.Length, other: m_values.Length, paramName: nameof(words));
-
-        var (clipped, _) = Clipping();
-        var half = (Resolution / 2);
-
-        for (var row = 0; (row < Resolution); row++) {
-            for (var column = 0; (column < Resolution); column++) {
-                var panel = ((mode == SdfFieldSliceMode.Both)
-                    ? ((column < half) ? SdfFieldSliceMode.Distance : SdfFieldSliceMode.Gradient)
-                    : mode);
-                var colour = Colour(clipped: clipped, column: column, panel: panel, row: row);
-
-                words[((row * Resolution) + column)] = (((uint)VectorFunctions.ToUnorm8(value: colour.X)) |
-                    ((uint)VectorFunctions.ToUnorm8(value: colour.Y) << 8) |
-                    ((uint)VectorFunctions.ToUnorm8(value: colour.Z) << 16) |
-                    (255u << 24));
-            }
-        }
-    }
-
-    // The one colour mapping of a sample, which the PNG (Render) and the live plane (RenderPlane) both draw with: grey
-    // where no shape answers, ClippedColour where the sample is clipped, and otherwise the distance or the gradient
-    // panel's colour, each line drawn one pixel of the field's own width.
-    private Vector3 Colour(bool[] clipped, int column, int row, SdfFieldSliceMode panel) {
+    // A sample's colour in the PNG (Render): grey where no shape answers, ClippedColour where the sample is clipped, and
+    // otherwise the distance or the gradient panel's colour, each line drawn one pixel of the field's own width.
+    private Vector3 Colour(bool[] clipped, int column, int row, bool gradient) {
         var value = Value(column: column, row: row);
 
         if (!(value < Far)) { return new Vector3(value: 0.5f); }
@@ -373,7 +342,7 @@ public sealed class SdfFieldSlice {
         // rate is, so its bands bunch where the gradient runs high and spread where it runs low.
         var line = (((2f * Half) / Resolution) * MathF.Max(x: magnitude, y: 1.0e-3f));
 
-        return ((panel == SdfFieldSliceMode.Gradient)
+        return (gradient
             ? GradientColour(line: line, magnitude: magnitude, value: value)
             : DistanceColour(bands: Bands, line: line, value: value));
     }
@@ -427,14 +396,4 @@ public sealed class SdfFieldSlice {
             ? "none"
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"min={m_low:0.###} mean={(m_sum / m_count):0.###} max={m_high:0.###} off={((100.0 * m_off) / m_count):0.#}%"));
     }
-}
-/// <summary>What a slice's live plane draws (<see cref="SdfFieldSlice.RenderPlane"/>), and which of the two panels a
-/// sample's colour is read from.</summary>
-public enum SdfFieldSliceMode {
-    /// <summary>The distance: warm outside, cool inside, a line every band and a white surface line.</summary>
-    Distance,
-    /// <summary>The gradient magnitude: white where exact, blue for an underestimate, red for an overestimate.</summary>
-    Gradient,
-    /// <summary>The distance on the plane's <c>-u</c> half and the gradient on its <c>+u</c> half.</summary>
-    Both,
 }

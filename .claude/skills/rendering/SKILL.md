@@ -774,7 +774,8 @@ add the row you found.
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
-| See where one placed object's solid passes into another's (a flaw in placement or shape) | The overlap view (`world.debug-view overlaps`): `SdfWorldPackage.WithOverlaps` adds a raster pass over the opaque draws that keeps, behind each pixel's visible surface, the nearest front face of another object and the nearest back face of any (`passes/sdf-mesh-overlaps.frag.hlsl`), and views tints by the depth between them (`frame/sdf-overlaps.hlsli`); an object is `SdfMeshDraw.ObjectKey`, one per placed creation (`SdfInstanceRange.JoinsPreviousObject`) | `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Overlaps.cs`; [overlap view](../../../docs/reference/commands.md#overlap-view) |
+| See the field itself at every pixel (a slicing plane, or each surface's distance to the nearest other object, where one placed object's solid passes into another's) | The field views: one field pass (`SdfWorldPackage.WithField`, `passes/sdf-world-field.comp.hlsl`, `SdfKernel.FieldView`) evaluates the residency's field per render pixel over the field entries (`SdfFieldEntries`: each copy's template in the copy's frame, every other object in world space), each tile walking the entries its spheres keep; the slicing plane is `SdfFieldView.Plane` (`world.slice.live`), the proximity view the debug mode `proximity`; an object is `SdfMeshDraw.ObjectKey` (`SdfMeshObjectKeys`), and the composite lays the colours over the view | `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Field.cs`, `src/Puck.SdfVm/SdfWorldTables.FieldView.cs`; [field views](../../../docs/reference/commands.md#field-views) |
+| Walk one contiguous run of program instances through `mapCore` without an instance mask buffer | `SDF_INSTANCE_RUNS` (`sdfInstanceRunFirst`, `sdfInstanceRunEnd` in `field/sdf-program.hlsli`, the jump in `field/sdf-layout.hlsli`), with `SDF_INSTANCE_MASK_ALL` as the mask base; only the field pass defines it, so the bake kernels' bytecode never sees it | `field/sdf-program.hlsli` |
 | Keep the nearest few fragments a pixel's raster names, whatever order they arrive in (an order-independent k-buffer) | The glass layer list: one 64-bit key a fragment (distance code, draw, triangle), inserted by 64-bit atomic maximum carrying the displaced entry on (`sdfGlassEnterLayer`), read nearest first (`sdfGlassLayerAt`, `sdfGlassNextLayer`) | `frame/sdf-glass.hlsli`, `passes/sdf-glass-stage.hlsli` |
 | Make a glass pane glow, shimmer or cycle colour (a magic barrier, a portal's surface) | The standard's `magicFilm` shade program (`magicFilmed` lays it on a glass row), a compose phase the glass pass runs per interface; an emissive glass with no program glows by its `emissive` | `worlds/standard/shading.puck`, `passes/sdf-glass-stage.hlsli` |
 | Find where two surfaces, objects, folds or materials meet in a view, or draw a line there | The view's edge search (`sdfViewsGatherFilter`, `sdfViewsEdgesWord`), read by a program as `edge.*` and drawn by its ink phase through `sdfShadeInkPhase`; an object is `SdfMeshDraw.ObjectKey`; the looks are `worlds/standard/ink.puck` | `passes/sdf-views-filter.hlsli`, `src/Puck.SdfVm.Model/SdfShadeHlsl.Invocation.cs`; [the handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#ink) |
@@ -1881,15 +1882,23 @@ wrong. The contracts that bite most often:
 - **Large static unions have independently drawn chunks** (`SdfMeshChunks`, before the merge). Their contour edges
   partition the surface, and every seam edge stays fixed at every level. The store holds the pieces; only those pieces
   enter the region. See the [mesh bake](references/mesh-bake.md#groups-poses-and-materials).
-- **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
-  `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
-  bake and draws the distance bands and `|grad d|` on the CPU from the answers.
-  A per-pixel field view would put a second interpreter copy in a pixel kernel.
-  The live plane (`world.slice.live`, `SdfLiveFieldSlice`) samples the same way
-  once per plane and program, colours through the PNG's one mapping
-  (`SdfFieldSlice.RenderPlane`) and uploads the colours as a table the composite
-  intersects with each pixel's ray (`sdfFieldSliceOver`); its table is the last
-  member of `SdfKernelInterfaces.LightAndSkyTables`, so no bake binding moves.
+- **The field views are the one per-pixel field walk, and they are debug views.**
+  The shading kernels (surface, views, glass) walk no field. The field pass
+  (`passes/sdf-world-field.comp.hlsl`, `SdfKernel.FieldView`, acquired on demand
+  only by a view whose fragment holds it, `SdfWorldPasses.Entry.RequestsField`)
+  holds the one other `mapCore` call site: every query it runs (the visible
+  surface, its march, the plane's four taps) goes through one rolled loop and
+  one `sdfFieldQuery`, which walks each kept entry's run with `SDF_INSTANCE_RUNS`.
+  Keep it that way: a second textual call of `sdfFieldQuery` inlines a second
+  interpreter. Its entries are the last member of
+  `SdfKernelInterfaces.LightAndSkyTables`, and `SDF_INSTANCE_RUNS` is behind an
+  `#ifdef`, so the bake kernels' bytecode is unchanged by either (compare the
+  deployed `sdf-mesh-bake*` bytes before and after an edit to them). A template's
+  instructions stand at its own origin, so a per-pixel walk of the program alone
+  shows every template stacked there and no copy where it is placed; the entries
+  are what put each copy's field where its draws are. `SdfFieldSlice`
+  (`world.slice`) still samples a square through the bake's points lattices for
+  its PNG and statistics.
 - **Winding is one contract across three places.** The bake winds outward
   faces counter-clockwise (`SdfDualContouring`), both backends declare a
   counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two

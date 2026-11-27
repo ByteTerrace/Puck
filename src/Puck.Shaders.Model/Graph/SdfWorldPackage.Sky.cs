@@ -46,8 +46,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The sky and composite interface: the common frame values and <see cref="ResolvedSurface"/>, the lit image,
     /// the visibility records a native view's lit image is read through, the surface transport a
     /// reduced view's is, the sky's field runs as the sky writes them and as the composite reads them, the screens a
-    /// panorama layer or a textured disc samples, the output, the composite's image meter and its centre weight, the work
-    /// counters, and the World group's tables. Each pass
+    /// panorama layer or a textured disc samples, the output, the composite's image meter and its centre weight, the field
+    /// view's colours the composite lays over the view, the work counters, and the World group's tables. Each pass
     /// binds a filler at every member it does not read or write.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> SkyMembers => SkyDeclaration.Members;
 
@@ -73,6 +73,7 @@ public static partial class SdfWorldPackage {
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint2, name: TransportRead),
             Written(element: ShaderValueType.Uint, name: ExposureMeterWritten),
+            Read(element: ShaderValueType.Uint, name: FieldColors),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),

@@ -406,12 +406,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
         }
     }
-    // The overlap pipeline (SdfMeshRasterPass.OverlapKey) for the overlap pass of a view showing the overlap debug view, its
-    // one holder, which releases it through ReleaseOverlapRaster: no other view builds it.
-    internal GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireOverlapRaster(IGpuDeviceContext device) =>
-        m_pipelines.Catalog.MeshRaster.AcquireOverlaps(device: device);
-    internal void ReleaseOverlapRaster(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) =>
-        lease.Release(retired: m_pipelines.Catalog.RetiredBuilds);
     /// <summary>Gets or sets what the debug view reads beside its mode (<see cref="DebugMode"/>), which every view's pass
     /// block carries from the next frame.</summary>
     public DebugViewOptions DebugOptions {
@@ -901,8 +895,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.StageLandedMeshes(frame: frame);
         }
         tables.AdvanceHitBound();
-        FieldSlice.Serve(bake: MeshPathBake, program: frame.Program);
-        tables.StageFieldSlice(slice: FieldSlice);
+        tables.StageFieldView(view: FieldView, frame: frame, shows: ShowsField);
 
         // The shading selection follows the frame the passes record (the one the tables hold), never a pending one.
         PrepareShade(device: device, frame: m_frame!);
@@ -1266,9 +1259,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
-    /// <summary>Gets the residency's live slicing plane, which its views draw where a plane is set
-    /// (<c>world.slice.live</c>); it outlives the tables, so a parked residency shows it again when it wakes.</summary>
-    public SdfLiveFieldSlice FieldSlice { get; } = new();
+    /// <summary>Gets the residency's field views' settings: the slicing plane its views draw (<c>world.slice.live</c>) and the
+    /// pointer a pointer plane follows. They outlive the tables, so a parked residency shows them again when it
+    /// wakes.</summary>
+    public SdfFieldView FieldView { get; } = new();
+    /// <summary>Gets whether the residency's views show a field view: a slicing plane is set, or the debug mode is the
+    /// proximity view. Only then do its views run the field pass and its tables stage the field entries.</summary>
+    public bool ShowsField => ((FieldView.Plane is not null) || (DebugMode == DebugViewModes.Proximity));
 
     private readonly SdfMeshDresser m_meshDresser;
 

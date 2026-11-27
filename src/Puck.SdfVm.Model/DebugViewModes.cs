@@ -26,13 +26,13 @@ public static class DebugViewModes {
         "bloom",
         "shade-cost",
         "shade-tier",
-        "overlaps",
+        "proximity",
     ];
-    /// <summary>The overlap view: the final image dimmed, with every surface another placed object's solid passes into
-    /// glowing by how deep the first overlap behind it runs along the pixel's ray (<see cref="DebugViewOptions"/>). Its
-    /// views read the overlap spans a raster pass of their own draws (<c>SdfWorldPackage.WithOverlaps</c>), which a view
-    /// in any other mode never allocates or records.</summary>
-    public static readonly int Overlaps = Array.IndexOf(array: Names, value: "overlaps");
+    /// <summary>The proximity view: the final image dimmed, with every surface ringed by its distance to the nearest other
+    /// object's field, a white line where they touch, and glowing hot where another object's solid passes into it
+    /// (<see cref="DebugViewOptions"/>). Its views run the field pass (<c>SdfWorldPackage.WithField</c>), which a view in
+    /// any other mode with no slicing plane never allocates or records.</summary>
+    public static readonly int Proximity = Array.IndexOf(array: Names, value: "proximity");
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
     /// <summary>The camera's scatter alone, before the display curve.</summary>
@@ -60,11 +60,11 @@ public static class DebugViewModes {
     /// <returns><see langword="true"/> for <see cref="Rates"/> and <see cref="RateFlash"/>.</returns>
     public static bool ShowsRates(int mode) => ((mode == Rates) || (mode == RateFlash));
     /// <summary>Returns whether a mode's picture is scene light: the final image, a view that tints it (the tier views and
-    /// the overlap view), or the scatter alone. Such a picture is exposed and converted for the display; every other mode's picture is display values
+    /// the proximity view), or the scatter alone. Such a picture is exposed and converted for the display; every other mode's picture is display values
     /// already. The kernels' twin is <c>sdfDebugComposesFinal</c> (<c>frame/sdf-debug-modes.hlsli</c>).</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns><see langword="true"/> when the mode's picture is scene light.</returns>
-    public static bool ComposesFinal(int mode) => (PreservesScene(mode: mode) || ShowsRates(mode: mode) || (mode == Overlaps));
+    public static bool ComposesFinal(int mode) => (PreservesScene(mode: mode) || ShowsRates(mode: mode) || (mode == Proximity));
     /// <summary>Returns the name of a mode, or <c>"off"</c> when out of range.</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns>The mode name.</returns>

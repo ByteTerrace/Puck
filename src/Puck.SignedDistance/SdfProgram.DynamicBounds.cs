@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -53,7 +54,7 @@ public sealed partial class SdfProgram {
                     center = Vector3.Zero;
                     radius = float.PositiveInfinity;
                 } else {
-                    (center, radius) = EncloseSpheres(previous.Center, previous.Radius, center, radius);
+                    (center, radius) = VectorFunctions.EncloseSpheres(previous.Center, previous.Radius, center, radius);
                     radius = ((radius * BoundRadiusScale) + BoundRadiusPadding);
                     if (!float.IsFinite(f: radius)) { center = Vector3.Zero; radius = float.PositiveInfinity; }
                 }

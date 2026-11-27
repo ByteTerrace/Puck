@@ -26,13 +26,16 @@ evaluate analytic fields. Certified range pruning or a hierarchy can serve
 those consumers; assess it against `SdfFieldEvaluator`'s existing reach
 certificates before adding another index.
 
-**Reconsider when:** A view needs per-pixel field rays again.
+**Reconsider when:** A shading view needs per-pixel field rays again. The field
+views' debug pass walks the field per pixel over tile-culled entries, which a
+debug view affords and the frame does not.
 
 ## Per-tile instruction pruning and march scheduling
 
 **Current decision:** Not a GPU frame-rendering path.
 
-No view performs per-pixel field marching. That does not reject region-local
+No shading view performs per-pixel field marching; only the field views' debug
+pass evaluates the field per pixel. That does not reject region-local
 pruning for CPU surface queries or baking: those still pay to evaluate the
 field. Their pruning must preserve exact fixed-point answers and certified
 bounds. `SdfMeshPathBake.BatchTaps` and the background work's GPU share budget bake work; they do not make each

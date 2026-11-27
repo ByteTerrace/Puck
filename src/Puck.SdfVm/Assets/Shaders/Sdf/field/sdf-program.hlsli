@@ -96,6 +96,24 @@ float3 sdfDynamicBoundCenter(float3 offset, uint slot) {
 uint sdfInstanceMaskWordCount(uint instanceCount) {
     return max(1u, ((instanceCount + 31u) >> 5u));
 }
+#ifdef SDF_INSTANCE_RUNS
+// A kernel that walks one contiguous run of instances at a time (the field view, passes/sdf-world-field.comp.hlsl) sets
+// the run [sdfInstanceRunFirst, sdfInstanceRunEnd) before each mapCore call, with SDF_INSTANCE_MASK_ALL as the mask base:
+// the mask words then answer the run's bits alone (sdfInstanceMaskWord), and the walk jumps to the run's words
+// (sdfInstanceRunSkip). No other kernel defines it, so the bake kernels' bytecode never sees it.
+static uint sdfInstanceRunFirst = 0u;
+static uint sdfInstanceRunEnd = 0u;
+// The bits of mask word `wordIndex` the run covers.
+uint sdfInstanceRunBits(uint wordIndex) {
+    uint low = (wordIndex << 5u);
+    uint first = (clamp(sdfInstanceRunFirst, low, (low + 32u)) - low);
+    uint end = (clamp(sdfInstanceRunEnd, low, (low + 32u)) - low);
+    uint below = ((end >= 32u) ? 0xFFFFFFFFu : ((1u << end) - 1u));
+    uint before = ((first >= 32u) ? 0xFFFFFFFFu : ((1u << first) - 1u));
+
+    return (below & ~before);
+}
+#endif
 // One word of the caller's instance mask, already masked to the bits that can name a REAL instance (the
 // all-ones sentinel — and any stale buffer tail — must never enumerate an instance index >= instanceCount): a buffer
 // read at instanceMaskBase + wordIndex for a real mask, or all-ones for the SDF_INSTANCE_MASK_ALL sentinel (and for
@@ -113,6 +131,9 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
         if (instanceMaskBase >= count || wordIndex >= count - instanceMaskBase) { return 0u; }
         word = sdfInstanceMasks[instanceMaskBase + wordIndex];
     }
+#endif
+#ifdef SDF_INSTANCE_RUNS
+    word &= sdfInstanceRunBits(wordIndex);
 #endif
 
     uint remaining = (instanceCount - (wordIndex << 5u));

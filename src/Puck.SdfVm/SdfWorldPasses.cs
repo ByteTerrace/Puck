@@ -192,6 +192,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         SdfWorldPackage.Parts.ViewsReflections => [SdfKernel.ViewsReflections],
         SdfWorldPackage.Parts.ViewsFilter => [SdfKernel.ViewsFilter],
         SdfWorldPackage.Parts.ViewsBins => [SdfKernel.ViewsBins],
+        SdfWorldPackage.Parts.Field => [SdfKernel.FieldView],
         SdfWorldPackage.Parts.Views when ShadesInBins(context: context) => [SdfKernel.ViewsShade, SdfKernel.ViewsShadePlain],
         _ => [],
     };

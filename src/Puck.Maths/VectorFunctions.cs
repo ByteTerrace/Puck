@@ -291,6 +291,27 @@ public static class VectorFunctions {
 
         return (((length > shortest) && float.IsFinite(f: length)) ? (value / length) : fallback);
     }
+    /// <summary>Returns the smallest sphere containing two spheres: the one that contains the other, or the sphere spanning
+    /// both along the line through their centres.</summary>
+    /// <param name="centerA">The first sphere's centre.</param>
+    /// <param name="radiusA">The first sphere's radius; zero or more.</param>
+    /// <param name="centerB">The second sphere's centre.</param>
+    /// <param name="radiusB">The second sphere's radius; zero or more.</param>
+    /// <returns>The enclosing sphere's centre and radius.</returns>
+    public static (Vector3 Center, float Radius) EncloseSpheres(Vector3 centerA, float radiusA, Vector3 centerB, float radiusB) {
+        var distance = Vector3.Distance(value1: centerA, value2: centerB);
+
+        if ((distance + radiusB) <= radiusA) {
+            return (centerA, radiusA);
+        }
+        if ((distance + radiusA) <= radiusB) {
+            return (centerB, radiusB);
+        }
+
+        var radius = (0.5f * ((distance + radiusA) + radiusB));
+
+        return ((centerA + (Vector3.Normalize(value: (centerB - centerA)) * (radius - radiusA))), radius);
+    }
     /// <summary>Returns the dot product of two vectors in double precision, each component product taken in doubles
     /// before the sum, so a plane test on float coordinates loses nothing to the products' rounding.</summary>
     /// <param name="first">The first vector.</param>

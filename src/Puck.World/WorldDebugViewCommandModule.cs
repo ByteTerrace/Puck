@@ -15,13 +15,14 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
     private const string ReportForm = "report [colliders|contacts|all] [--json]";
 
     private static readonly string ViewForm = $"{ModeForm} [focus|pins-only] [--amber]";
-    // The overlap view's options (DebugViewOptions): the tolerance in millimetres and whether bodies take part.
-    private const string OverlapForm = "overlaps [<tolerance-mm>] [bodies]";
-    private static readonly CommandForms WorldDebugViewForms = CommandForms.Of(verb: "world.debug-view", ReportForm, ViewForm, OverlapForm);
+    // The proximity view's options (DebugViewOptions): the tolerance in millimetres, whether bodies take part and the ring
+    // spacing in metres.
+    private const string ProximityForm = "proximity [<tolerance-mm>] [bodies] [band <m>]";
+    private static readonly CommandForms WorldDebugViewForms = CommandForms.Of(verb: "world.debug-view", ReportForm, ViewForm, ProximityForm);
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(audience: CommandAudience.Anyone, name: "world.debug-view", bindability: CommandBindability.Bindable,
-            description: $"{WorldDebugViewForms.Spelling} — colliders and contacts preserve the scene; default is exterior marks and pins. A mode selects what the shared screen draws, so any seat or binding may select one; report and goto read the authority's diagnostics and are operator forms, and a seat's colliders or contacts selection answers the mode alone, without the report's summary. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default. overlaps dims the scene and makes every surface another placed object's solid passes into glow, magenta to yellow by the overlap's depth along the ray; an overlap under the tolerance (default 3 mm) stays dark, and bodies take part only with bodies.", forms: WorldDebugViewForms,
+            description: $"{WorldDebugViewForms.Spelling} — colliders and contacts preserve the scene; default is exterior marks and pins. A mode selects what the shared screen draws, so any seat or binding may select one; report and goto read the authority's diagnostics and are operator forms, and a seat's colliders or contacts selection answers the mode alone, without the report's summary. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default. proximity dims the scene and rings every visible surface with its distance to the nearest other object's field (another placement, body or creation), evaluated at every render pixel: a ring every band (default 5 cm) fading out past eight bands, a white line where they touch, so contacts, near misses and intersections read as rings wrapping across walls, piers and props; a surface another object's solid lies inside of (the ray marched on into the surface's own object) glows magenta to yellow by how deep, and an overlap under the tolerance (default 3 mm) stays a contact; bodies and the seat's own character take part only with bodies.", forms: WorldDebugViewForms,
             handler: (context, args) => Execute(args: args, context: context), routing: CommandRouting.Immediate);
     }
 
@@ -72,9 +73,13 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
         while (index < args.Count) {
             var option = args[index++].ToString();
 
-            if (option == "--amber") { amber = true; } else if ((option is "focus" or "pins-only") && (presentation == "default")) { presentation = option; } else if ((mode == DebugViewModes.Overlaps) && (option == "bodies")) {
+            if (option == "--amber") { amber = true; } else if ((option is "focus" or "pins-only") && (presentation == "default")) { presentation = option; } else if ((mode == DebugViewModes.Proximity) && (option == "bodies")) {
                 options = options with { Bodies = true };
-            } else if ((mode == DebugViewModes.Overlaps) && float.TryParse(s: option, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var millimetres) &&
+            } else if ((mode == DebugViewModes.Proximity) && (option == "band") && (index < args.Count) &&
+                float.TryParse(s: args[index].ToString(), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var band) && float.IsFinite(f: band) && (band > 0f)) {
+                options = options with { Band = band };
+                index++;
+            } else if ((mode == DebugViewModes.Proximity) && float.TryParse(s: option, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var millimetres) &&
                 float.IsFinite(f: millimetres) && (millimetres >= 0f)) {
                 options = options with { Tolerance = (millimetres / 1000f) };
             } else { return WorldDebugViewForms.Refuse(args: in args, got: option); }
@@ -91,8 +96,8 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
         if ((diagnostics.Mode is "colliders" or "contacts") && (context.Registry?.IsOperator(context) == true)) {
             return Report(context, diagnostics.Mode, false);
         }
-        return new CommandResult(Output: ((mode == DebugViewModes.Overlaps)
-            ? $"[world.debug-view: overlaps tolerance={(options.Tolerance * 1000f).ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}mm bodies={(options.Bodies ? "on" : "off")}]"
+        return new CommandResult(Output: ((mode == DebugViewModes.Proximity)
+            ? $"[world.debug-view: proximity tolerance={(options.Tolerance * 1000f).ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}mm bodies={(options.Bodies ? "on" : "off")} band={options.Band.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)}m]"
             : $"[world.debug-view: {diagnostics.Mode}]"));
     }
     private CommandResult Report(CommandContext context, string view, bool json) {
