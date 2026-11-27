@@ -106,14 +106,46 @@ different text, for example composed and decomposed accents or a Cyrillic `а` f
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```puck
-table name [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name [: Enum] [= value] [modifier(...)]*
-pile name of tokenRow [modifier(...)]* { token ... }
-grid name [: Enum] [modifier(...)]* [{ key = value ... }]
+table name [family] [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
+table name [family] [: Enum] [modifier(...)]* = array-or-object
+slot name [family] [: Enum] [= value] [modifier(...)]*
+pile name [family] of tokenRow [modifier(...)]* { token ... }
+grid name [family] [: Enum] [modifier(...)]* [{ key = value ... }]
 ```
 
+`name` is a bare identifier or an interpolation (`$"pile{z}Of"`), and `[family]` is a family bracket (`[count]`,
+`[0, 2..12]`) with an optional `as index` binding each member's family index for its modifiers, cells and value.
+A cell body holds `key = value` entries, a computed key (`$"{s}-held" = 1`, `[expression] = value`), and the
+compile-time `let`, `for` and `if` that produce more entries:
+
+```puck
+template patienceState(stations) {
+  let count = length(stations)
+
+  for z in range(2, 9) {
+    pile $"klondikeDown{z}Of"[count] of solitaireCards capacity(z - 1)
+  }
+  table patienceMarkerOf[count] as s capacity(2) {
+    $"{stations[s].id}-cursor" = 0
+    $"{stations[s].id}-held" = 1
+  }
+  table patiencePosed capacity(52 * count) {
+    for station in stations {
+      for k in range(0, 52) {
+        $"{station.id}-card{k}" = -1
+      }
+    }
+  }
+}
+```
+
+Inside a template, a declaration whose bare name is one of the template's text bindings takes that value, as a
+block's name does, so `template seatCells(name) { table name capacity(4) }` called twice declares two rows. A table's
+`= value` is an array, keyed `0`, `1`, ... in order, or an object, keyed by its members (`table prices = { apple: 2 }`);
+anything else is PUCK053.
+
 `Ast/StateDeclarationNodes.cs` and `Parsing/PuckParser.StateDeclarations.cs` parse this shape for every vocabulary:
-a declared name, an optional `: Enum` naming the enum the row's cells are drawn from (the way a record field names
+a declared name (written out, or computed), an optional `: Enum` naming the enum the row's cells are drawn from (the way a record field names
 one, `field: Enum`), an optional bare-identifier reference (`pile`'s
 `of tokenRow`), zero or more `name(args)` modifier calls (reusing the ordinary call-expression grammar verbatim),
 and an optional `{ }` body — `key = value` cell entries with their own modifiers (`table`/`grid`), or bare `token`
@@ -167,8 +199,9 @@ keeps the explicit `row` form so a round trip does not silently change the domai
 
 A few invariants hold across every declaration form the world vocabulary lowers:
 
-- **One declaration produces one row.** The transpiler never splits a declaration into several rows, never
-  generates a state name, and never changes a grant or a binding.
+- **One declaration produces one row, or one per family member.** A family's members are its only extra rows,
+  named `<name><index>` or as its member list names them; the transpiler invents no other state name and never
+  changes a grant or a binding.
 - **Declarations are accepted only under `state.world`.** `state.body` and `state.identity` hold a different
   record, `ActionStateSlot`, and take no declaration syntax.
 - **A declaration does not imply storage scope.** A `table player { }` declares one world row, not

@@ -55,12 +55,7 @@ function freecellAsked(kind) = freecellIdle() and freecellStatus[$each] == 1 and
 // table's mailbox as one row a field, and each table's deck and sixteen piles as pile families.
 template freecellState(count) {
   // The cards a move may carry for each count of empty columns: two to the power of that count.
-  row {
-    name: "solitaireFreecellPower"
-    kind: "Int"
-    capacity: 9
-    cells: map(range(0, 9), i => { key: $"{i}", value: fcPowers[i] })
-  }
+  table solitaireFreecellPower capacity(9) = fcPowers
 
   for field in fcFields {
     solitaireCells(name: $"freecell{field.name}", count: count, value: field.value)
@@ -68,22 +63,10 @@ template freecellState(count) {
 
   pile freecellDeckOf[count] of solitaireCards capacity(52) = map(range(0, 52), k => $"{k}")
 
-  pile freecellPile0Of[count] of solitaireCards capacity(1)
-  pile freecellPile1Of[count] of solitaireCards capacity(1)
-  pile freecellPile2Of[count] of solitaireCards capacity(1)
-  pile freecellPile3Of[count] of solitaireCards capacity(1)
-  pile freecellPile4Of[count] of solitaireCards capacity(13)
-  pile freecellPile5Of[count] of solitaireCards capacity(13)
-  pile freecellPile6Of[count] of solitaireCards capacity(13)
-  pile freecellPile7Of[count] of solitaireCards capacity(13)
-  pile freecellPile8Of[count] of solitaireCards capacity(19)
-  pile freecellPile9Of[count] of solitaireCards capacity(19)
-  pile freecellPile10Of[count] of solitaireCards capacity(19)
-  pile freecellPile11Of[count] of solitaireCards capacity(19)
-  pile freecellPile12Of[count] of solitaireCards capacity(19)
-  pile freecellPile13Of[count] of solitaireCards capacity(19)
-  pile freecellPile14Of[count] of solitaireCards capacity(19)
-  pile freecellPile15Of[count] of solitaireCards capacity(19)
+  // A free cell holds one card, a foundation a suit's thirteen, and a column at most nineteen.
+  for (zone, k) in fcZones {
+    pile $"{zone}"[count] of solitaireCards capacity((k < 4) ? 1 : ((k < 8) ? 13 : 19))
+  }
 
   row {
     name: "solitaireFreecellStream"

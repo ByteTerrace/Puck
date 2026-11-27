@@ -128,11 +128,10 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
         cells: map(list, (word, w) => { key: $"{w}", value: word })
       }
       for name in ["typingWord", "typingTyped", "typingStep", "typingLive", "typingDue"] {
-        row {
-          name: name
-          kind: Int
-          capacity: lanes
-          cells: map(laneKeys, lane => { key: $"{lane}", value: 0 })
+        table $"{name}" capacity(lanes) {
+          for lane in laneKeys {
+            [lane] = 0
+          }
         }
       }
       row {

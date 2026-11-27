@@ -88,12 +88,7 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
         ])
       }
       for s in range(1, seats + 1) {
-        row {
-          name: $"judgeGrade{s}"
-          kind: Int
-          capacity: steps
-          cells: map(range(0, steps), i => { key: $"{i}", value: 0 })
-        }
+        table $"judgeGrade{s}" capacity(steps) = map(range(0, steps), i => 0)
       }
       for extra in extraWorldRows {
         row {

@@ -281,17 +281,6 @@ template patienceSlotsGraph() {
   ]
 }
 
-// The families the layout's rules sweep and select by a station's place in the list, inside the world's `state` block:
-// each family's member `i` is station `i`'s row (patienceDisplayState declares the rows).
-template patienceDisplayFamilies(count) {
-  families [
-    { name: "patienceCardNoOf", size: count }
-    { name: "patienceMarkerOf", size: count }
-    { name: "patienceSlotOf", size: count }
-    { name: "patienceCardAtOf", size: count }
-  ]
-}
-
 // Each station's glass and near chair, one row a field keyed by the station's place in the list, with the value a
 // station starts at. The glass follows the piles for `SyncLeft` more ticks after the last change, or after the game shown
 // changed (`SyncGame` is the one it last followed), reading one pile a tick (`SyncScan`); `SyncStatus` is the status
@@ -331,83 +320,36 @@ let patienceFields = [
 template patienceDisplayState(stations) {
   let count = length(stations)
 
-  row {
-    name: "patienceSlotBase"
-    kind: "Int"
-    capacity: 14
-    cells: map(range(0, 14), z => { key: $"{z}", value: kBase[z] })
-  }
-  row {
-    name: "patienceFreeBase"
-    kind: "Int"
-    capacity: 16
-    cells: map(range(0, 16), z => { key: $"{z}", value: fBase[z] })
-  }
-  row {
-    name: "patienceTopSlot"
-    kind: "Int"
-    capacity: 14
-    cells: map(range(0, 14), z => { key: $"{z}", value: z == 0 ? 23 : kCaps[z] - 1 })
-  }
-  row {
-    name: "patienceTopZone"
-    kind: "Int"
-    capacity: 7
-    cells: map(range(0, 7), c => { key: $"{c}", value: kTopRowZones[c] })
-  }
-  row {
-    name: "patienceLines"
-    kind: Text
-    capacity: length(patienceLineTexts)
-    cells: map(range(0, length(patienceLineTexts)), code => { key: $"{code}", value: patienceLineTexts[code] })
-  }
+  table patienceSlotBase capacity(14) = kBase
+  table patienceFreeBase capacity(16) = fBase
+  table patienceTopSlot capacity(14) = map(range(0, 14), z => z == 0 ? 23 : kCaps[z] - 1)
+  table patienceTopZone capacity(7) = kTopRowZones
+  table patienceLines capacity(auto) = patienceLineTexts
 
   for field in patienceFields {
     solitaireCells(name: $"patience{field.name}", count: count, value: field.value)
   }
 
-  // A family's members are declared one after another, so each family takes a loop of its own.
-  for (station, i) in stations {
-    row {
-      name: $"patienceCardNoOf{i}"
-      kind: "Int"
-      capacity: 52
-      cells: map(range(0, 52), k => { key: $"{station.id}-card{k}", value: k })
+  // The families the layout's rules sweep and select by a station's place in the list: member `s` is station `s`'s row.
+  table patienceCardNoOf[count] as s capacity(52) {
+    for k in range(0, 52) {
+      $"{stations[s].id}-card{k}" = k
     }
   }
-  for (station, i) in stations {
-    row {
-      name: $"patienceMarkerOf{i}"
-      kind: "Int"
-      capacity: 2
-      cells [{ key: $"{station.id}-cursor", value: 0 }, { key: $"{station.id}-held", value: 1 }]
-    }
+  table patienceMarkerOf[count] as s capacity(2) {
+    $"{stations[s].id}-cursor" = 0
+    $"{stations[s].id}-held" = 1
   }
-  for i in range(0, count) {
-    row {
-      name: $"patienceSlotOf{i}"
-      kind: "Int"
-      capacity: 52
-      min: 0
-      max: fSlotCount
-      cells: map(range(0, 52), k => { key: $"{k}", value: patienceAwaySlot })
-    }
-  }
-  for i in range(0, count) {
-    row {
-      name: $"patienceCardAtOf{i}"
-      kind: "Int"
-      capacity: (fSlotCount + 1)
-      cells: map(range(0, fSlotCount + 1), slot => { key: $"{slot}", value: -1 })
-    }
-  }
+  table patienceSlotOf[count] capacity(52) bounds(0..fSlotCount) = map(range(0, 52), k => patienceAwaySlot)
+  table patienceCardAtOf[count] capacity(fSlotCount + 1) = map(range(0, fSlotCount + 1), slot => -1)
 
   // Each card body's last pose, keyed by placement over every station: its slot twice over, plus one face down.
-  row {
-    name: "patiencePosed"
-    kind: "Int"
-    capacity: (52 * count)
-    cells: flatMap(stations, station => map(range(0, 52), k => { key: $"{station.id}-card{k}", value: -1 }))
+  table patiencePosed capacity(52 * count) {
+    for station in stations {
+      for k in range(0, 52) {
+        $"{station.id}-card{k}" = -1
+      }
+    }
   }
 }
 

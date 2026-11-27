@@ -1,0 +1,12 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table prices {
+      apple = 2
+      pear = 3
+      plum = 5
+    }
+  }
+}

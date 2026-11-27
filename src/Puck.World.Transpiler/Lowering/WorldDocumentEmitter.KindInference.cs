@@ -97,20 +97,12 @@ public static partial class WorldDocumentEmitter {
                     _ => ((literal.RawText is not null) ? "Fixed" : "Int"),
                 });
             case IdentifierExpressionNode identifier:
-                return (scope.TryLowerBinding(
-                    fieldKey: null,
-                    name: identifier.Name,
-                    value: out _
-                )
+                return (IsBound(name: identifier.Name, scope: scope)
                     ? LoweredValueKind(expr: value, scope: scope)
                     : null
                 );
             case MemberAccessExpressionNode { Target: IdentifierExpressionNode } member:
-                return (scope.TryLowerBinding(
-                    fieldKey: null,
-                    name: QualifiedName.From(expression: member)!.ToString(),
-                    value: out _
-                )
+                return (IsBound(name: QualifiedName.From(expression: member)!.ToString(), scope: scope)
                     ? LoweredValueKind(expr: value, scope: scope)
                     : null
                 );
@@ -118,6 +110,11 @@ public static partial class WorldDocumentEmitter {
                 return LoweredValueKind(expr: value, scope: scope);
         }
     }
+    // A name is a compile-time value when the scope binds it, or when it is a member of a bound record (a template
+    // parameter's, a loop item's, `look.rowLit`); any other name is a row or a row's key, which gives no signal.
+    private static bool IsBound(string name, DocumentScope scope) =>
+        (scope.TryLowerBinding(fieldKey: null, name: name, value: out _) ||
+        ((QualifiedName.Parse(text: name) is { IsQualified: true } qualified) && scope.TryLowerBinding(fieldKey: null, name: qualified.Head, value: out _)));
     private static string? LoweredValueKind(ExpressionNode expr, DocumentScope scope) => JsonValueKind(value: DocumentLowering.LowerValue(
         expr: expr,
         scope: scope
