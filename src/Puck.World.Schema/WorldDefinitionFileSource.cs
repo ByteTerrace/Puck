@@ -230,7 +230,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        if (JsonNode.Parse(json: DecodeJson(bytes: bytes)) is not JsonObject root) {
+        if (ParseJson(bytes: bytes) is not JsonObject root) {
             reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
 
             return false;
@@ -712,7 +712,7 @@ public static partial class WorldDefinitionFileSource {
         JsonObject? currentObject;
 
         try {
-            currentObject = (JsonNode.Parse(json: DecodeJson(bytes: rootBytes)) as JsonObject);
+            currentObject = (ParseJson(bytes: rootBytes) as JsonObject);
         } catch (JsonException) {
             currentObject = null;
         }
@@ -778,7 +778,7 @@ public static partial class WorldDefinitionFileSource {
             JsonObject? nextObject;
 
             try {
-                nextObject = (JsonNode.Parse(json: DecodeJson(bytes: content!)) as JsonObject);
+                nextObject = (ParseJson(bytes: content!) as JsonObject);
             } catch (JsonException) {
                 nextObject = null;
             }
@@ -1411,9 +1411,9 @@ public static partial class WorldDefinitionFileSource {
         basisPath = null;
 
         try {
-            var json = File.ReadAllText(path: path);
+            var json = File.ReadAllBytes(path: path);
 
-            if (JsonNode.Parse(json: json) is not JsonObject root) {
+            if (ParseJson(bytes: json) is not JsonObject root) {
                 reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;
@@ -1461,9 +1461,9 @@ public static partial class WorldDefinitionFileSource {
         imports = [];
 
         try {
-            var json = File.ReadAllText(path: path);
+            var json = File.ReadAllBytes(path: path);
 
-            if (JsonNode.Parse(json: json) is not JsonObject root) {
+            if (ParseJson(bytes: json) is not JsonObject root) {
                 reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;

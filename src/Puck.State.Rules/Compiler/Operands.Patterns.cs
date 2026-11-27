@@ -303,8 +303,8 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
         return ((capacity * expression) * (occurrenceSearch ? capacity : 1L));
     }
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var reader = frame.Reader;
 
         if (!TryLocateWord(
             answer: out var answer,
@@ -319,15 +319,17 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
             throw new InvalidOperationException(message: "A pattern over a per-token program is read through RuleExpressions.ReadOperand, which spells its word first.");
         }
 
+        var time = frame.Time;
+
         return MatchWord(
-            length: reader.Arena.ReadWord(
+            length: frame.Arena.ReadWord(
                 attributeOrdinal: ((AttributeOrdinal >= 0)
                     ? AttributeOrdinal
                     : ordinal
                 ),
                 rowOrdinal: ordinal,
                 start: start,
-                time: reader.Time,
+                time: in time,
                 word: reader.PatternWord
             ).Length,
             reader: reader

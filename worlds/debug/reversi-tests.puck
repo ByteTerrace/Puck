@@ -9,14 +9,14 @@ basis: "debug"
 documentId: "reversi-tests"
 import "stopped-machines"
 
-// Seat 1 stands at Black's edge, sits down with the context button and plays 19 with the pick button (the cursor
+// Seat 1 stands at Black's edge (the `reversi` spawn point, which reversi.puck derives from reversiTable), sits down with the context button and plays 19 with the pick button (the cursor
 // starts there): the move brackets white's 27 against black's 35, and the white disc on 27 is turned over on the table.
 test "a seated player plays and the bracketed disc turns over on the table" {
   given {
     reversiAiSide = 0
   }
   when {
-    seat1: body.pose 65 9.25 21 0 0 0 0
+    seat1: body.pose spawn:reversi 0
     ticks 400
     seat1: body.press interact
     ticks 5

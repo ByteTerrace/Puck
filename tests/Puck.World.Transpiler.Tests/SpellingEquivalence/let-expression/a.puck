@@ -1,0 +1,19 @@
+// `let name = value in body` names a value for one expression: a document value evaluates it once, and a rule holds
+// the body with the value in place, which a plain read may take more than once.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+function eased(f, n) = let at = f * n in let from = floor(at) in at - from
+let quarter = eased(0.75, 3)
+
+state {
+  world {
+    slot count = 0
+    slot total = 0
+  }
+}
+
+rule "tick" {
+  local step = 3
+  total = let c = count in c * c + (let s = step * 2 in s + quarter)
+}

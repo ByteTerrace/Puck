@@ -1,0 +1,19 @@
+// A row declaration named by a template parameter, or by an interpolation inside a loop, is the declarations written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template seatCells(name, count) {
+  table name capacity(count) = map(range(0, count), k => 0)
+  slot $"{name}Turn" = 0
+}
+
+state {
+  world {
+    table cards capacity(4) = range(0, 4)
+    seatCells(name: "scores", count: 3)
+    seatCells(name: "bids", count: 2)
+    for z in range(2, 4) {
+      pile $"down{z}Of"[2] of cards capacity(z - 1)
+    }
+  }
+}

@@ -37,7 +37,7 @@
         "player.signal keyboard.z release",
         "body.press suit 1 0.2 0",
         "world.wait 15",
-        "body.pose 56.5 9.25 21.1 0 0 0 0",
+        "body.pose spawn:chess 0",
         "world.wait 150",
         "player.signal keyboard.z press",
         "world.wait 2",

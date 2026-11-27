@@ -62,11 +62,12 @@ public static class OperatorMcpFront {
     /// worker's process ends. A call whose worker ends answers a named error result and retires that worker, and a
     /// worker found ended is replaced before the next call reaches it.</summary>
     /// <param name="input">The session's JSON-RPC input.</param>
-    /// <param name="output">The session's JSON-RPC output.</param>
+    /// <param name="output">The session's JSON-RPC output. A reply waits for the client to drain it however long that takes;
+    /// only a write the client's end refuses, or the end of <paramref name="input"/>, ends the session.</param>
     /// <param name="activate">Resolves the activated release on each new call.</param>
     /// <param name="connect">Starts an owned worker for the activated release.</param>
     /// <param name="cancellationToken">Ends the session and drains its workers.</param>
-    /// <param name="clock">Drives idle-worker inspection and transport deadlines; null uses system time.</param>
+    /// <param name="clock">Drives idle-worker inspection and a failed call's wait for its worker's exit; null uses system time.</param>
     public static async Task RunAsync(Stream input, Stream output, Func<CancellationToken, Task<string>> activate,
         Func<CancellationToken, Task<(McpClient Client, Func<Task> Stop, Task Exited)>> connect, CancellationToken cancellationToken,
         TimeProvider? clock = null) {
@@ -78,7 +79,7 @@ public static class OperatorMcpFront {
         var gate = new SemaphoreSlim(initialCount: 1);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
         using var bounded = new BoundedMcpInput(ended: lifetime.Cancel, input: input);
-        await using var transport = new BoundedMcpTransport(bounded, output, bounded.Fail, clock, lifetime.Token);
+        await using var transport = new WholeReplyMcpTransport(bounded, output, bounded.Fail, lifetime.Token);
         using var interrupt = lifetime.Token.Register(callback: () => { bounded.Dispose(); output.Dispose(); });
         McpServer? endpoint = null;
         string? current = null;

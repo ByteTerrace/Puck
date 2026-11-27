@@ -5478,7 +5478,8 @@
         "Member",
         "And",
         "Or",
-        "Not"
+        "Not",
+        "Hash"
       ]
     },
     "ShapeNonNullable10": {

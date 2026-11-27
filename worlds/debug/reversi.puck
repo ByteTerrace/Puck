@@ -7,7 +7,7 @@ import "gametable"
 // (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
 // black on one face and white on the other, on a table in the gallery hall's board game room (gallery/gallery.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug world
-// imports this file whole. The table stands east of the chess table, its board's centre at (65, 9.905, 22.6) on level
+// imports this file whole. The table stands east of the Go table, its board's centre reversiSurface over reversiTable on level
 // 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 32 discs at their right-hand end.
 // reversi.md beside this file says how to play, read the game and set the opponent.
 //

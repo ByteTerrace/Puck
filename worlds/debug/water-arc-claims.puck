@@ -1,0 +1,60 @@
+// The water's whole arc, stated once for the two worlds that run it: the debug world with its machines stopped
+// (`water-arc-tests.puck`) and the chain alone (`water-chain-tests.puck`). Each readings array holds twelve samples, one
+// per eighth of the melt's length T and then every quarter hour after it (see `water-arc.puck`).
+template waterArcClaims() {
+  test "the water arc: glacier, lake at its sill, falls, aquifer, river" {
+    when {
+      ticks 405040
+    }
+    expect {
+      // The glacier against (1 - t/T)^3 at each eighth: 1, 0.670, 0.422, 0.244, 0.125, 0.053, 0.016, 0.002, 0.
+      glacierAt[0] > 0.99
+      // Each reading is a centre and the tolerance about it.
+      for (band, k) in [[0.67, 0.01], [0.42, 0.01], [0.245, 0.01], [0.125, 0.005], [0.0525, 0.0075], [0.015, 0.005], [0.0025, 0.0025]] {
+        absolute(glacierAt[k + 1] - band[0]) < band[1]
+      }
+      glacierAt[8] == 0
+      // The falls carry the melt as it melts: the discharge over the sill is the fraction of the melt's peak, (1 - t/T)^2 at
+      // each eighth within a thirtieth (0.766, 0.563, 0.391, 0.25, 0.141, 0.063, 0.016), still running at 7T/8, and dry
+      // (under 0.01) at T and every reading after, the first of them a quarter hour after T.
+      fallsAt[0] > 0.95
+      for (share, k) in [0.766, 0.563, 0.391, 0.25, 0.141, 0.063] {
+        absolute(fallsAt[k + 1] - share) < 0.03
+      }
+      fallsAt[7] > 0.005
+      for i in range(8, 12) {
+        fallsAt[i] < 0.01
+      }
+      // The lake stands within a few centimetres of its sill (0.4 m of water) from the first reading to the last, and rests on
+      // it once the melt has ended.
+      for i in range(0, 12) {
+        lakeAt[i] > 0.399
+      }
+      for i in range(0, 3) {
+        lakeAt[i] < 0.5
+      }
+      for i in range(8, 12) {
+        lakeAt[i] < 0.401
+      }
+      // The aquifer fills over the melt, is full by 3T/4 while the falls still run, and holds full after it.
+      for i in range(0, 5) {
+        aquiferAt[i] < aquiferAt[i + 1]
+      }
+      aquiferAt[6] >= 0.95
+      aquiferAt[11] > 0.999
+      // Its cells are capped, so the river takes what the melt still sends and rises past the head the aquifer holds (the
+      // river's bed at 1 m plus 0.6 m of water is the aquifer's full head of 1.6 m).
+      riverAt[8] > riverAt[6]
+      riverAt[11] > 0.6
+      // The river is settled by T + 15 min: its drift over the quarter hours ending at T + 30 and T + 45 min stays under 5 mm.
+      for k in [9, 10] {
+        absolute(riverAt[k + 1] - riverAt[k]) < 0.005
+      }
+      poolAt[11] > poolAt[0] and poolAt[11] < 2.35
+      // Ice plus water is conserved: the chain's total at each later reading is its first reading's.
+      for i in [4, 8, 11] {
+        absolute(totalAt[i] - totalAt[0]) < 0.01
+      }
+    }
+  }
+}

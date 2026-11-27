@@ -308,9 +308,8 @@ public sealed class InstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-        var bindings = reader.InstanceBindings;
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var bindings = frame.Reader.InstanceBindings;
 
         if (((uint)BindingSlot) >= ((uint)bindings.Length)) {
             return Fact.Absent(kind: ValueKind);
@@ -318,7 +317,7 @@ public sealed class InstanceFieldOperand : RuleOperand {
 
         var handle = bindings[BindingSlot];
 
-        return (((handle.PoolOrdinal == Pool.Ordinal) && reader.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: reader.Time))
+        return (((handle.PoolOrdinal == Pool.Ordinal) && frame.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: frame.Time))
             ? Fact.Finite(kind: ValueKind, value: raw)
             : Fact.Absent(kind: ValueKind));
     }
@@ -343,9 +342,11 @@ public sealed class StaticInstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        return ((reader.Arena.TryResolvePoolSlot(poolOrdinal: Pool.Ordinal, slot: Handle.Slot, handle: out var handle) &&
-            reader.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: reader.Time))
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) {
+        var arena = frame.Arena;
+
+        return ((arena.TryResolvePoolSlot(poolOrdinal: Pool.Ordinal, slot: Handle.Slot, handle: out var handle) &&
+            arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: frame.Time))
             ? Fact.Finite(kind: ValueKind, value: raw)
             : Fact.Absent(kind: ValueKind));
     }

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
 
@@ -119,14 +120,13 @@ public static partial class WorldDefinitionFileSource {
     // A tree's compact JSON as UTF-8, the bytes JsonNode.ToJsonString's text encodes to, written straight to bytes, with
     // its root members' ranges recorded as they are written rather than read back.
     internal static byte[] Compact(JsonObject tree, out Member[] members) {
-        var output = new ArrayBufferWriter<byte>(initialCapacity: 4096);
-
         members = new Member[tree.Count];
-        using (var writer = new Utf8JsonWriter(bufferWriter: output)) {
+
+        return CanonicalJsonDocument.Write(options: default, newline: false, state: (Tree: tree, Members: members), write: static (writer, state) => {
             var index = 0;
 
             writer.WriteStartObject();
-            foreach (var (name, value) in tree) {
+            foreach (var (name, value) in state.Tree) {
                 // A member after the first is preceded by the comma the property name writes.
                 var keyStart = ((int)(writer.BytesCommitted + writer.BytesPending) + ((index > 0) ? 1 : 0));
 
@@ -135,26 +135,16 @@ public static partial class WorldDefinitionFileSource {
                 var start = ((int)(writer.BytesCommitted + writer.BytesPending));
 
                 if (value is null) { writer.WriteNullValue(); } else { value.WriteTo(writer: writer); }
-                members[index++] = new Member(KeyStart: keyStart, Length: (((int)(writer.BytesCommitted + writer.BytesPending)) - start), Name: name, Start: start);
+                state.Members[index++] = new Member(KeyStart: keyStart, Length: (((int)(writer.BytesCommitted + writer.BytesPending)) - start), Name: name, Start: start);
             }
             writer.WriteEndObject();
-        }
-
-        return output.WrittenSpan.ToArray();
+        });
     }
     // A node's compact JSON as UTF-8, the bytes JsonNode.ToJsonString's text encodes to; a null node is the literal null.
     /// <summary>Writes the compact UTF-8 JSON of a node, including a literal null.</summary>
-    public static byte[] Compact(JsonNode? node) {
-        if (node is null) { return "null"u8.ToArray(); }
-
-        var output = new ArrayBufferWriter<byte>(initialCapacity: 256);
-
-        using (var writer = new Utf8JsonWriter(bufferWriter: output)) {
-            node.WriteTo(writer: writer);
-        }
-
-        return output.WrittenSpan.ToArray();
-    }
+    public static byte[] Compact(JsonNode? node) => ((node is null)
+        ? "null"u8.ToArray()
+        : CanonicalJsonDocument.Write(options: default, newline: false, state: node, write: static (writer, node) => node.WriteTo(writer: writer)));
     // A shaped tree held as a layer: its compact JSON and its members.
     private static ComposedLayer HoldLayer(JsonObject tree, string path, WorldComposedDocument? image, string? key, WorldModuleExports.Layer? walk, WorldExports? exports, string description) {
         var json = Compact(members: out var members, tree: tree);
@@ -353,7 +343,7 @@ public static partial class WorldDefinitionFileSource {
             JsonObject? root;
 
             try {
-                root = (JsonNode.Parse(json: DecodeJson(bytes: bytes)) as JsonObject);
+                root = (ParseJson(bytes: bytes) as JsonObject);
             } catch (JsonException) {
                 root = null;
             }
@@ -573,7 +563,7 @@ public static partial class WorldDefinitionFileSource {
             held: held?.Own, image: null, path: resolvedPath, key: ownKey, store: store);
 
         if ((ownLayer is null) && (ownBody is null)) {
-            ownBody = (JsonObject)JsonNode.Parse(json: DecodeJson(bytes: bytes))!;
+            ownBody = (JsonObject)ParseJson(bytes: bytes)!;
             ShapeOwn(root: ownBody);
         }
         var own = new Slot(description: resolvedPath, image: null, key: ownKey, path: resolvedPath) {

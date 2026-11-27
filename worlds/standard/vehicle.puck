@@ -298,7 +298,7 @@ template vehicleCrossings(vehicles, crossings) {
       map(distinct(map(vehicles, v => v.group)), g => {
         name: $"vehicleGroup-{g}"
         kind: "Int"
-        capacity: length(filter(vehicles, v => v.group == g))
+        capacity: count(vehicles, v => v.group == g)
         cells: map(filter(vehicles, v => v.group == g), v => { key: $"{v.key}", value: 1 })
       })
     )

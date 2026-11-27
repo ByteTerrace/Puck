@@ -180,6 +180,7 @@ public sealed class ExpressionCostLawTests {
     [InlineData("greatestCommonDivisor(12, 18)")]
     [InlineData("replicationMask(8)")]
     [InlineData("repeatBits(127, 8)")]
+    [InlineData("hash(1, 2, 3)")]
     [Theory]
     public void SuccessfulConstantExpressionsCostOneConstant(string text) {
         Assert.Equal(

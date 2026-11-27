@@ -123,7 +123,11 @@ process streams and leases; stops are routed to the backend that started the
 named World. The front checks superseded backends once a second and disposes one
 after its in-flight calls, live Worlds and pending starts end; completed start
 answers remain available in the front's bounded cache. Session shutdown drains
-every remaining backend and stops those Worlds.
+every remaining backend and stops those Worlds. A session ends only when its
+client goes (the end of its input, or a write its end refuses); a client slow to
+read keeps the session and its Worlds. Claude Code records a server's standard
+error only while it connects, so its MCP log never shows why a connected front
+ended.
 No process from the build output is held open. `puck_adapter` reports the
 serving backend's module id, PID, installed directory, live `ownedWorlds` and
 `pendingStarts`, so an agent can verify which build answered and what it owns.
@@ -553,14 +557,16 @@ The SDK stays outside the base engine. Networking and the adapter retain exact
 architecture profiles, and all three libraries retain AOT/trim analysis. MCP input
 is strictly UTF-8 with a 64 KiB JSON-RPC line ceiling before SDK buffering. At most
 128 nonblank messages may await SDK consumption; malformed messages consume that
-budget too. Stdout admits at most four pending replies with a five-second send
-deadline, including time waiting for the SDK's send lock. Every adapter-side
-deadline runs on the `TimeProvider` passed to `OperatorMcpServer.RunAsync` (the
-system clock by default): each attachment's five-second connect and handshake,
-each call, the control connection's own call deadline and each reply write. The
-World's side runs its handshake and request deadlines on the clock its
-`LocalControlServer` was given. Exceeding either budget
-or failing an input/output operation closes the attachment and exits with failure.
+budget too. Stdout has no deadline and no reply budget (`WholeReplyMcpTransport`):
+a reply waits for the client to drain it however long that takes, because a slow
+client is not a gone one and ending the session stops every World it owns. A
+request's cancellation never cuts a reply mid-line; only the session's own
+shutdown does. Every adapter-side deadline runs on the `TimeProvider` passed to
+`OperatorMcpServer.RunAsync` (the system clock by default): each attachment's
+five-second connect and handshake, each call and the control connection's own
+call deadline. The World's side runs its handshake and request deadlines on the
+clock its `LocalControlServer` was given. Exceeding an input budget, or a read or
+write the client's end refuses, closes the attachment and exits with failure.
 Clean EOF exits successfully. The adapter owns both streams and closes them on
 shutdown, including when a pending read ignores cancellation. Stdout is protocol-only;
 diagnostics use stderr.

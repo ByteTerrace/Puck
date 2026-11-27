@@ -429,11 +429,17 @@ binding's `Left` is an interned key ordinal, so a caller that restores into a
 different catalog persists the key's name and re-interns it. `Prune` drops
 entries for rules a recompile removed.
 
-`Reset` forgets every crossing while keeping the storage each rule has grown.
-A caller that judges many independent positions, such as a search judge, resets
-before each one so every crossing is a first one and no position allocates. A
-reset latch still lists each rule it has seen, so a latch that is hashed or
-checkpointed uses `Clear`, which forgets the storage too. When the arena behind
+`Reset` forgets every crossing while keeping the storage each rule has grown,
+so every crossing after it is a first one and no position allocates. A reset
+latch still lists each rule it has seen, so a latch that is hashed or
+checkpointed uses `Clear`, which forgets the storage too. A caller that judges
+many independent positions and never reads a crossing back, such as a search
+judge, uses a fresh latch (`new RuleLatch(fresh: true)`, `RuleLatch.Fresh`)
+instead: it keeps no edge bit, so every binding reads as never judged, a closed
+gate writes nothing and opens no scope, and an open one fires its effects in its
+scope without the bookkeeping. Within one evaluation no binding is judged twice
+(each rule name once, each sweep binding once), so judging a position over a
+fresh latch answers exactly what judging it over a reset latch does. When the arena behind
 the latch is replaced by an equivalent layout, `InvalidateScheduler` keeps every
 held bit and drops the scheduling caches described in the next section. When
 the replacement can intern the same key names at other ordinals, `RemapKeys`

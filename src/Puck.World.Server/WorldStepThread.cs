@@ -116,8 +116,11 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
             return false;
         }
 
-        // Nothing executes any more: a wave handed over and never collected no longer keeps its handing thread out.
+        // Nothing executes any more: a wave handed over and never collected no longer keeps its handing thread out, and
+        // the last wave's slices no longer hold the authorities they ticked.
         m_boundary.Collected();
+        Clear();
+        m_context = null;
 
         return true;
     }

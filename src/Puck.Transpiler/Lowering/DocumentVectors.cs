@@ -174,6 +174,11 @@ public static class DocumentVectors {
         if (DocumentNumbers.TryInteger(node: lowered, number: out _)) {
             return JsonValue.Create(value: 0L);
         }
+        // A decimal an author wrote keeps its digits: its part above the floor is exact in decimal, as `x - floor(x)`
+        // written out is.
+        if (DocumentNumbers.TryExact(node: lowered, number: out var exact)) {
+            return DocumentNumberSpelling.ExactNode(number: (exact - decimal.Floor(d: exact)));
+        }
         if (!DocumentLowering.TryReadNumber(node: lowered, number: out var value)) {
             return Refuse(call: call, message: "fraction reads a number known at compile time", scope: scope);
         }

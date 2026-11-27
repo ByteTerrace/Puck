@@ -1,0 +1,14 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table cards capacity(4) = [0, 1, 2, 3]
+    table scores capacity(3) = [0, 0, 0]
+    slot scoresTurn = 0
+    table bids capacity(2) = [0, 0]
+    slot bidsTurn = 0
+    pile down2Of[2] of cards capacity(1)
+    pile down3Of[2] of cards capacity(2)
+  }
+}

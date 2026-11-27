@@ -73,11 +73,19 @@ grammar, expression spelling, pattern/cell-set/state spellings):
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```
-table name [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name [: Enum] [= value] [modifier(...)]*
-pile name of tokenRow [modifier(...)]* { token ... }
-grid name [: Enum] [modifier(...)]* [{ key = value ... }]
+table name [family] [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
+table name [family] [: Enum] [modifier(...)]* = array-or-object
+slot name [family] [: Enum] [= value] [modifier(...)]*
+pile name [family] of tokenRow [modifier(...)]* { token ... }
+grid name [family] [: Enum] [modifier(...)]* [{ key = value ... }]
 ```
+
+`name` is an identifier or an interpolation (`$"pile{z}Of"`, the node's `NameExpression`); `[family]` is a family
+bracket with an optional `as i` (the node's `MemberIndex`), which binds each member's family index for its modifiers,
+cells and value. A cell body (`table`/`grid`) holds `key = value` entries (`StateCellEntryNode`, a statement), computed
+keys (`$"…" = v`, `[expr] = v`, its `KeyExpression`), and `let`/`for`/`if` producing more, parsed by
+`PuckParser.ParseCellBody`; `DocumentLowering.ExpandCellBody` flattens it and `DocumentLowering.ResolveDeclarationName`
+settles a computed name.
 
 A schema-agnostic grammar shape (`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`): a name,
 an optional `: Enum` (the node's `Enum`; a cell-kind word there is PUCK107, since the kind is inferred), an optional
@@ -280,16 +288,38 @@ else; a lambda anywhere else is **PUCK042**, an unevaluable call is **PUCK041**.
 | `distinct(array)` | an array | — |
 | `sort(array[, lambda])` | an array | item, projecting the sort key |
 | `groupBy(array, lambda)` | an array | item, or item+index, projecting the group key |
+| `any` / `all` / `count(array[, lambda])` | an array | item, or item+index; truthy tests (`any`, `all` stop at the answer), `count` how many |
+| `sum(array[, lambda])` | an array | optional projection; added as `+` adds, so numeric arrays add element-wise; 0 when empty |
+| `scan(array[, lambda])` | an array | optional projection; the running totals, one more than the array: `scan([3, 4, 5])` is `[0, 3, 7, 12]` |
+| `dot(a, b)` | two numeric arrays of one length | — |
+| `contains(array, value)`, `indexOf(array, value or lambda)`, `find(array, lambda)` | an array | 1 or 0; the position or -1; the item or `null` |
+| `zip(a, b, ...)`, `reverse(array)`, `slice(array, start, end)`, `join(array, separator)` | arrays | — ; `slice` clamps and counts a negative bound from the end |
+| `minimum(array)`, `maximum(array)` | an array of numbers | — (two arguments are the scalar functions) |
 
 `distinct` compares by value (structural hashing), keeping the first
 occurrence. `sort` is stable and total over a mixed array: numbers order
 before strings before booleans before everything else. `groupBy` yields an
 object keyed by the lambda's result, in first-seen key order. A lambda
 parameter shadows a same-named `let` for the length of one application. The
-builtin names apply in compile-time value positions. A call constructing a
+builtin names apply in compile-time value positions; a call that names an argument
+(`all(predicates: [...])`) is a vocabulary arm's, never a list builtin. A call constructing a
 declared document arm takes its meaning from that position: array `sort(...)`
 and a world's `sort` transform coexist. Statement-position calls likewise
 belong to their own vocabulary (a cartridge's `map` step is untouched).
+
+The list folds take a lambda too and work in a rule as well as a value:
+
+| Fold | Written out as |
+|---|---|
+| `sum(list, x => e)` | `e0 + e1 + …` (`0` when empty) |
+| `count(list, x => p)` | the truths of `p` added (a comparison as written, else `p != 0`) |
+| `any(list, x => p)` / `all(list, x => p)` | `p0 or p1 …` (`0`) / `p0 and p1 …` (`1`) |
+| `minimum(list, x => e)` / `maximum(list, x => e)` | nested two-argument calls; an empty list is refused |
+| `first(list, x => c, otherwise)` | `c0 ? x0 : (c1 ? x1 : … : otherwise)` |
+| `first(list, x => c, x => v, otherwise)` | `c0 ? v0 : (c1 ? v1 : … : otherwise)` |
+
+`let name = value in body` names a value for one expression (`let a = 1 in let b = a + 1 in a * b`); in a rule a
+state-reading value read more than once is refused unless it is a plain read (write a rule `local`).
 
 ## Comparisons are 1 or 0
 

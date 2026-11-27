@@ -429,6 +429,18 @@ public static partial class PuckPrinter {
 
                         break;
                     }
+                // A chain of lets that does not fit on its line breaks after every `in`, each binding and then the body
+                // on a line of its own at the same indent, so the bindings read as a column above the expression they
+                // serve.
+                case LetExpressionNode let: {
+                        LetChain(
+                            broken: !FitsOnOneLine(print: () => LetChain(broken: false, let: let, level: level)),
+                            let: let,
+                            level: level
+                        );
+
+                        break;
+                    }
                 case LambdaExpressionNode lambda: {
                         if (lambda.Parameters.Count == 1) {
                             m_builder.Append(value: lambda.Parameters[0]);
@@ -562,6 +574,33 @@ public static partial class PuckPrinter {
         private void EnumAnnotation(string? name) {
             if (name is not null) {
                 m_builder.Append(value: ": ").Append(value: name);
+            }
+        }
+        private void LetChain(LetExpressionNode let, bool broken, int level) {
+            while (true) {
+                m_builder.Append(value: "let ").Append(value: let.Name).Append(value: " = ");
+                Operand(
+                    level: level,
+                    operand: let.Value,
+                    parenthesize: (let.Value is LetExpressionNode)
+                );
+                m_builder.Append(value: " in");
+                if (broken) {
+                    Break(level: level);
+                } else {
+                    m_builder.Append(value: ' ');
+                }
+                if ((let.Body is LetExpressionNode next) && !next.Parenthesized) {
+                    let = next;
+
+                    continue;
+                }
+                Expression(
+                    expression: let.Body,
+                    level: level
+                );
+
+                return;
             }
         }
         private void Operand(ExpressionNode operand, bool parenthesize, int level) {

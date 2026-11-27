@@ -1,10 +1,10 @@
 # Debug world Alchemy table
 
 The debug world stands an Alchemy table in the gallery hall's board game room,
-the east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)), at the
-north-east spot east of the Go table ([`go.md`](go.md)) and north of the Reversi
+on level 2 ([`shapes.md`](shapes.md#the-board-game-room)), east of the Reversi
 table ([`reversi.md`](reversi.md)). The workbench is an 8×5 grid of 0.14 m cells,
-its centre at (65, 9.905, 30.6) on a table 3.5 m by 1.7 m whose top is 0.8 m
+its centre at (58, 9.905, 10.3), over the table's placement (`alchemyTable` in
+`alchemy.puck`), on a table 3.5 m by 1.7 m whose top is 0.8 m
 over the floor. You start with four elements—Air, Earth, Fire and Water—and
 combine two at a time in the cauldron to discover the remaining 27, completing
 the book at 31. [`alchemy.puck`](alchemy.puck) holds the table and rules,
@@ -79,11 +79,11 @@ A cell's ordinal is `8 × row + column`, the column along `+X` and the row along
 `+Z`: cell 0 is the `-X, -Z` reset tile, cells 1 to 31 are the 31 elements in
 enum order (`Air` = 1 .. `House` = 31), cell 37 is the left hand well, and cell
 34 is the right hand well (seated at the `-Z` edge, the seat's left is `+X`). Cell
-`(column, row)` is centred at `x = 64.51 + 0.14 × column`, `z = 30.32 + 0.14 × row`
-(so cell 37 is `(65.21, 9.905, 30.88)` and cell 34 is `(64.79, 9.905, 30.88)`). Element token
+`(column, row)` is centred at `x = 57.51 + 0.14 × column`, `z = 10.02 + 0.14 × row`
+(so cell 37 is `(58.21, 9.905, 10.58)` and cell 34 is `(57.79, 9.905, 10.58)`). Element token
 `e` (`alchemyToken{e}`, `1..31`) is body `513 - e`, below `alchemyCursor` (body
 513), and seat 1 drives all 31 tokens, so posing a token over a hand well drops
-it in: `body.pose 65.21 9.97 30.88 0 0 0 510` drops `Fire` (`alchemyToken3`)
+it in: `body.pose 58.21 9.97 10.58 0 0 0 510` drops `Fire` (`alchemyToken3`)
 into the left hand well.
 
 | To | Console line |
@@ -96,7 +96,7 @@ into the left hand well.
 | Read discoveries, known bitset, hints and completion | `world.state discovered`, `world.state known`, `world.state hints`, `world.state complete` |
 | Read mix, fizzle, refusal and illegal tallies | `world.state mixes`, `world.state fizzles`, `world.state refused`, `world.state alchemyIllegal` |
 | Read the shelf board and token faces | `world.state alchemyBoard`, `world.state alchemyFace`, `world.state alchemyCell` |
-| Frame the table and lectern from the south side | `view.override camera look 65 11.2 28.6 65 9.95 30.7`, then `view.override camera auto` |
+| Frame the table and lectern from the south side | `view.override camera look 58 11.2 8.3 58 9.95 10.4`, then `view.override camera auto` |
 
 ## Tests
 

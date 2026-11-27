@@ -875,7 +875,10 @@ promise is taken under the account's lock before either allocates.
 **Forced progress.** A job admitted whatever the budget holds is what makes
 work always settle. It is one allowance for the process
 (`MemoryAccount.Owner.TryReserveForced`): one forced job at a time across every
-bake, drawn from the workspace class, in place of one per bake. A job whose peak passes the whole class is
+bake, drawn from the workspace class, in place of one per bake. The allowance covers the step that needs room
+past the pool's, and its holder hands it on once that step holds what it needs, keeping its reservation
+(`MemoryAccount.Owner.PassForced`): a bake group passes it on once its admission or its refinement's narrowed
+peak is reserved, so the group's later stages never keep the next group's step waiting. A job whose peak passes the whole class is
 split where it can be (a lattice baked in parts) and failed by name where it
 cannot (`SdfMeshBakeReport.Failed`).
 

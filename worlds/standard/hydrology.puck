@@ -45,18 +45,18 @@ function hydrologyCells(stages) = flatMap(stages, stage => map(range(0, stage.co
   water: stage.water
 }))
 // The index of a stage's first cell, and of its last.
-function hydrologyFirst(stages, kind) = reduce(stages, { at: 0, found: -1 }, (run, stage) => {
-  at: run.at + stage.count
-  found: (run.found < 0 and stage.kind == kind) ? run.at : run.found
-}).found
+function hydrologyFirst(stages, kind) = indexOf(stages, stage => stage.kind == kind) < 0 ? -1 : scan(
+  stages,
+  stage => stage.count
+)[indexOf(stages, stage => stage.kind == kind)]
 function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) +
-  reduce(filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count) -
+  sum(filter(stages, stage => stage.kind == kind), stage => stage.count) -
   1
 
 template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.01, fullHead = 1.6, fallsVisibleAt = 0.002, resolution = 1024, poolBase = 0, poolLevelMax = 100) {
   let meltTicks = meltSeconds * rateHz
   let cells = hydrologyCells(stages)
-  let sourceCount = length(filter(cells, c => c.kind == "source"))
+  let sourceCount = count(cells, c => c.kind == "source")
   // The stores hold `resolution` units to a metre of water, and a row's `heightScale` turns a unit back into a metre. A
   // lattice cell's value is a fixed-point number of 2^-16 units, and the flow gives a neighbour whole units only: a cell
   // holding under two raw units over `rate` stops giving, so a store in metres strands a trickle of about a millimetre
