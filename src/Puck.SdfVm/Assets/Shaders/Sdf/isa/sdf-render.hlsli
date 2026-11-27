@@ -202,9 +202,11 @@
 #define SDF_MESH_MOST_CLUSTER_LEVELS    4u
 #define SDF_MESH_BAND_WORD              51u
 
-// The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.
+// The frame's sampled table (SdfFrameSampled): a handle with no entry, a displacement entry's header and its kinds, and the reference height a height field's baked reference stands at.
 #define SDF_FRAME_SAMPLED_NONE            0xFFFFFFFFu
-#define SDF_FRAME_SAMPLED_HEADER_WORDS    6u
+#define SDF_FRAME_SAMPLED_HEADER_WORDS    13u
+#define SDF_DISPLACEMENT_HEIGHT_FIELD     0x00000000u
+#define SDF_DISPLACEMENT_SHEET            0x00000001u
 #define SDF_HEIGHT_FIELD_REFERENCE_CELLS  1u
 #define SDF_MESH_LEVEL_SHIFT              24u
 #define SDF_MESH_SELECTION_GROUP_SIZE     64u

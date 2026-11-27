@@ -9,20 +9,6 @@ import "../standard/shading"
 let reliefStone = { color: "#A89C8C", roughness: 0.75, specular: 0.04 }
 let reliefBrick = [0.4, 0.2]
 
-// The bricks' colour: mortar grey, each brick its own shade of the material.
-shade template reliefBrickFace(size, mortar, seed) {
-  surface {
-    let brick = shadeBrick(surface.position, size, mortar, seed)
-    albedo: mix(material.albedo * (0.75 + 0.5 * brick.y), [0.55, 0.55, 0.52], brick.x)
-  }
-}
-// The cracks' colour: dark in the crack.
-shade template reliefCrackFace(scale, seed, width) {
-  surface {
-    albedo: material.albedo *
-      (1 - 0.7 * shadeCellBorder(surface.position * scale, seed, width, pixel: surface.footprint * scale))
-  }
-}
 // A height built from every smooth function a height may hold, its normal tilted by its gradient directly.
 shade template reliefSmooth(seed) {
   surface {
@@ -59,7 +45,7 @@ prototypes {
       palette [
         reliefStone with {
           shade [
-            reliefCrackFace(3, 5, 0.06),
+            crackFace(3, 5, 0.06),
             relief(q => -0.006 * shadeCellBorder(q * 3, uint(5), 0.06, pixel: surface.footprint * 3), 1)
           ]
         }
@@ -75,7 +61,7 @@ prototypes {
       palette [
         { color: "#9C4A32", roughness: 0.85, specular: 0.03 } with {
           shade [
-            reliefBrickFace(reliefBrick, 0.025, 3),
+            brickFace(reliefBrick, 0.025, 3),
             relief(q => -0.008 * shadeBrick(q, reliefBrick, 0.025, uint(3)).x, 1)
           ]
         }

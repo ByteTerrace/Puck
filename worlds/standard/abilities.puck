@@ -165,25 +165,28 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
 // Expand it in a document of its own that the kit's document imports, so the climb row composes ahead of the kit's own
 // ground and fall rows. Stamina refills under the rows she rests under, so the kit authors `restore: staminaRestore()`
 // on its ground and fall rows. Which surfaces can be climbed is the world's `collision.defaultHold` and a placement's
-// `grip { holdable }`.
-template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5, cornerDepth = 0.45, cornerSeconds = 0.4) {
-  state {
-    body [
-      {
-        name: "stamina"
-        kind: "Counter"
-        initial: staminaMax
-        envelope { $type: "range", minimum: 0, maximum: staminaMax }
-      }
-      {
-        name: "winded"
-        kind: "Counter"
-        initial: 0
-        envelope { $type: "range", minimum: 0, maximum: 1 }
-      }
-      { name: "climbRest", kind: "Timer", initial: 0 }
-      { name: "mantling", kind: "Timer", initial: 0 }
-    ]
+// `grip { holdable }`. A body with several kits that climb (a suit and the pilot inside it) expands it once a kit and
+// declares the registers once: every expansion after the first passes `registers: 0`, sharing one stamina wheel.
+template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5, cornerDepth = 0.45, cornerSeconds = 0.4, registers = 1) {
+  if registers == 1 {
+    state {
+      body [
+        {
+          name: "stamina"
+          kind: "Counter"
+          initial: staminaMax
+          envelope { $type: "range", minimum: 0, maximum: staminaMax }
+        }
+        {
+          name: "winded"
+          kind: "Counter"
+          initial: 0
+          envelope { $type: "range", minimum: 0, maximum: 1 }
+        }
+        { name: "climbRest", kind: "Timer", initial: 0 }
+        { name: "mantling", kind: "Timer", initial: 0 }
+      ]
+    }
   }
 
   kits [

@@ -43,13 +43,14 @@ same change.
 | A solid some bodies pass and others meet (a barrier a carried key opens) | a placement's `solid { passes [...] }` (`WorldSolid.Passes`, body counter registers): the row lives by row in the live set (`WorldPlacementStamp.CollidesLive`), and `WorldPopulation.HoldPasses` opens the moving body's held mask on it (`WorldColliderSet.HoldPasses`, read by `Excludes` in `QueryAttachedSet` and the field provider's `PosedField`) around its ride, advance, growth clearance and kit escape | [below](#contracts-that-bite) |
 | A carved, relieved or smoothly blended creation collides as drawn | field colliders (`WorldColliderSet.CollidesAsField`) with a `FixedFieldPartition` narrowing hard unions to their exact pieces | [sdf-authoring contact admission](../sdf-authoring/references/shapes.md#contact-admission) |
 | Never tunnel, however fast or thin | `FixedFieldContactSolver.ResolveSweep` (certified sweep through `ICertifiedSweepQuery`); `FixedStaticContactSolver.ResolveSweep` (sliced analytic sweep); both refuse with `ContactRefusal` rather than wrap | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
-| Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap`; `FixedStepUp.Attempt` says which check refused a step (`FixedStepUpOutcome`) | [motion](../puck-world/references/documents-motion.md) |
+| Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap`; `FixedStepUp.Attempt` says which check refused a step (`FixedStepUpOutcome`), and its lowering reaches down to the start's height even when the step rose along its ground, so a step over a crease at a crest lands on the gentler slope beyond; the solver asks for a step only at an edge that rises more than the contact skin above the plane the body is walking (`FixedStaticContactSolver`'s `GroundRise`), so a crease where a slope eases off is walked, not stepped | [motion](../puck-world/references/documents-motion.md) |
 | Count what the body step decided (step-ups taken and refused, snaps, leaving and meeting the ground, airborne and stuck runs, slope refusals, how deep a solve still pushed) and gate a route on it | `BodyKinematicsWitness` (`WorldBody.Kinematics.cs`) per body, `physics.bodies` for the process, `kinematics(body, n, <witness>)` for rules | [below](#kinematic-witnesses) |
 | Body-against-body depenetration and collision events | `FixedDynamicBodyContacts.TryCorrection`; events ask `FixedDynamicBodyContacts.Overlaps` (a positive push at zero margin, so a touching pair is neither), so an event and a contact never disagree; host pairs in `WorldPopulation.ResolveDynamicContacts` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Which bodies might touch: pairs in sweep order under a candidate budget, or the bodies near a box | `FixedSweepGrid` (X sweep crossed with a Y/Z grid, culling before it charges the budget), the one broadphase behind body contacts, `WorldEventFeed` discovery and the sleeping index (`WorldPopulation.NearbySleepingBodies`, `WakeSleepersNear`) | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Remove a velocity's approach into a contact | `FixedVector3.LimitAlong` with the inward axis and a zero bound, shared by ordinary, field, tether and seam responses | `maths-usage` |
 | Rigid bodies: impulses, friction, restitution, warm-started manifolds | `FixedRigidWorld` (the one solver), `FixedRigidContacts`, `FixedRigidManifold`, `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`; host side `WorldBody.Rigid.cs`, `WorldPopulation.Rigid.cs` | [the rigid solver](../../../docs/reference/physics.md#the-rigid-solver) |
 | A rope that caps distance and keeps swing momentum | `FixedTetherConstraint` (`ResolveAnchor`, `Reel`); host `WorldBody.Tether.cs` | [tether](../../../docs/reference/physics.md#the-tether-constraint) |
+| A net of rope strands that gives, sleeps and is climbed (a climbing net, rope bridge, hammock, cargo net, banner, sail) | a placement's `net` facet (`WorldPlacementNet`); the kernel `FixedNet` (strands through `FixedTetherConstraint.SolvePair`, compliant caps; reach through `Solve`; `CellColliders`); host `WorldNets` and `WorldPopulation.StepNets` (after the bodies, from `WorldTick.Step`); colliders `WorldColliderSet.RecordNetColliders`; rides `TryRideDisplacement` (standing) and `TryHeldDisplacement` (a `Pull` hold's anchor) | [net facet](../puck-world/references/documents-render.md#a-placements-net-facet), [decision](../../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh) |
 | Grapple, pick an anchor, probe for a holdable face | `FixedSurfaceQuery.TryNearest`, `TryNearestDirected`; `IContactField.TryHoldableSurfaceAlongDirection`, which the analytic provider answers with `FixedStaticContactField.TryCast` over the holdable subset's own grid, so a probe traces only the colliders near its ray | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Climb a wall: hold a face, spend and restore a register, hang at its edges, pull up over its top, swing round an outside corner, keep a leap on its face | a kit's `Pull` hold row and its `when`, `spend`, `restore`, `driveSeconds`, `mantle` and `corner` facets, resolved in `WorldBody.Hold.cs` (`ResolveHold`, `GuardHeldFace` over `HeldFaceEdges`, `TryBeginMantle` over `FixedStepUp.TryStep` and `FixedStepUp.Stands`, `TryBeginCornerWrap` over the body's own sweeps, `ImpulseStopsAtFaceEdge`, `CommandOnFace`, `HoldOwnsHeading`); the standard's `climbAbility` (`worlds/standard/abilities.puck`) | [holds](../puck-world/references/documents-motion.md), [the climbing plan](../../../docs/plans/climbing.md) |
 | Gravity between many bodies | `GravitySolvers.Create` over `PairwiseGravitySolver` (the oracle), `FastMonopoleGravitySolver`, `AdaptiveFmmGravitySolver` | [choose a solver](../../../docs/reference/physics.md#choose-a-gravity-solver) |
@@ -167,6 +168,7 @@ already decides each fact:
 | `leaves`, `landings`, `airborne`, `airborneLongest` | the grounded verdict at the end of the contact phase against the witness's current airborne run |
 | `stuck`, `stuckLongest` | a step whose intent drives the body (`DrivenBy`, the obstruction latch's idle test) and moves it less than `WorldBody.StuckDisplacement` |
 | `slopeRefusals` | a driven step that ends with an obstruction normal facing up more than a sixteenth: a face too steep to stand on |
+| `refusalOutcome`, `refusalHeight`, `refusalNormalX`/`Y`/`Z`, `refusalX`/`Y`/`Z` | the latest refused step-up: its `FixedStepUpOutcome`, the blocked sweep's `RequiredStepHeight` and `ObstructionNormal`, and where the body stood; a test that gates refusals reports them, so a failure names its edge (`tree-walk-tests.puck`) |
 | `depth`, `penetration` | `ContactResolution.Residual`: the deepest displacing push the solve's last relaxation pass still applied, zero when that pass found the pose clear (both `FixedStaticContactSolver` and `FixedFieldContactSolver` report it) |
 
 The witness is a field of `BodyMotionSection`, so a checkpoint carries it and a
@@ -283,6 +285,18 @@ witness after `kinematics:`. `worlds/debug/tree-walk-tests.puck` plays the
   filter it with `WorldSolidScaleDisclosure` through the source cell's live
   `WorldRecipientView`; a cached binding never caches read permission.
 
+- **A net's nodes stay within their reach of rest.** `FixedNet.Step`'s last pass
+  (`FixedTetherConstraint.Solve` against each rest position) and `FixedNet.Restore`'s
+  range check are the only writers of its offsets, so the drawn box
+  (`SdfSheetDisplacement.Bound`), the collider sheet and the snapshot never measure
+  the nodes. A net steps on the authority alone (`WorldTick.Step` calls
+  `WorldPopulation.StepNets` after `StepBodies`), never inside `StepBodies`, which a
+  client's prediction runs too: a predicting population's nets stay at rest.
+  A body's weight on a net is a `FixedNetLoad` at its hold's anchor; its volumes push
+  nodes to their radius plus the net's strand and the contact reach, the band a body
+  resting on the net's cell colliders stands in, so leaning moves nodes and standing
+  near does not.
+
 ## Where each contract is enforced
 
 | Contract | Enforced by |
@@ -292,6 +306,7 @@ witness after `kinematics:`. `worlds/debug/tree-walk-tests.puck` plays the
 | A refused step changes nothing | `WorldBody.SweepRefusal.cs`'s capture of whole records, restored on refusal |
 | A neighbour's contact answer is admitted against the moving body | `WorldBody.SweepContact` dispatching to `IEntityContactField` |
 | A lattice's solid stays inside the carrier | `FieldLatticeSolid.CellFits` at world validation; the constructor throws otherwise |
+| A net's every node lies within its reach of rest | `FixedNet.Step`'s final reach pass and `FixedNet.Restore`'s range check, its offsets' only writers |
 | Field-program dependency edges mean the same on both sides | `ReadWriteHazard.Conflicts`, called by the lattice and the Schema compiler |
 | Same input, same poses | the population's checkpoint codecs and `puck test --reproduce` |
 

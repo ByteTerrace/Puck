@@ -314,7 +314,8 @@ public sealed partial class WorldRigidAssets {
     private static string? Refusal(WorldPrototype creation, WorldPlacement placement) {
         var document = creation.EngineDocument;
 
-        return (!IsRigid(creation) ? "not-rigid" :
+        // A net (WorldPlacement.Net) draws through its own displacement, which a template other rows share cannot carry.
+        return (!IsRigid(creation) ? "not-rigid" : (placement.Net is not null) ? "net" :
             ((WorldStateDocumentValues.HasReference(creation.Document) || WorldStateDocumentValues.HasReference(placement)) ? "state-reference" :
             ((placement.Mirror is not null) ? "reflection" :
             (((document.TextRuns is { Count: > 0 }) && (placement.Respond is not { Count: > 0 })) ? "text" :

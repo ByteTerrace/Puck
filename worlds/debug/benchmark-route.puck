@@ -1,5 +1,6 @@
 // The debug world's benchmark routes: `world.benchmark run debug` (or `puck benchmark --route debug`) plays the walk,
-// `seams` the three crossings at each pace, and `tree-walk` the gallery tree's walkway. Each chapter is a list of places to go to and how, played by the standard's
+// `seams` the three crossings at each pace, `tree-walk` the gallery tree's walkway, `net-climb` the rope net panel and `climbing-wall` the gallery's
+// climbing wall. Each chapter is a list of places to go to and how, played by the standard's
 // `walker` seat program (standard/benchmark.puck) through seat 1's own controls: the left stick toward the next corner of
 // the navigation path, the right stick turning the camera onto the way ahead, Left Shift held to run and the dash tapped on
 // its cooldown, the context button pressed where a step presses `interact`. A step that strays plans its path again from
@@ -30,6 +31,8 @@ let liftPadX = (liftX + 1)
 let liftPadZ = (galleryWall + 0.6)
 let liftPanelZ = (liftZ - 0.95)
 function liftButton(level) = (liftX - (0.95 - ((1.9 / 6) * (level + 0.5))))
+// Where the net climb starts: on level 1's north aisle, 1.5 m behind the rope net panel, facing it (-Z).
+let netClimbStart = galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5))
 // The line through the middle of the hall's entrance, in the building's frame.
 let entranceMid = ((entranceWest + entranceEast) / 2)
 // A point on Wonderland's floor on the line through its big painting and its mouse hole, `x` as authored against the
@@ -185,30 +188,79 @@ routes [
       ]
     )
   }
-  // The gallery tree's walkway (tree-walk.puck): the trunk's foot, the spiral, and every branch out to its landing and
-  // back, a chapter a stretch, every step direct at the next waypoint so the body walks the tree's own treads and limbs
-  // rather than a navigation path. The walker holds the toybox's full-size pass (gallery/wonder.puck) from the start: a
-  // body that walks off a level-1 branch onto the toybox's floor without one is made small there and stays small back
-  // on the tree, below the treads' risers. `seat1: route.play tree-walk` plays the same route headless in
-  // tree-walk-tests.puck.
+  // The gallery's climbing wall (gallery/climbing-wall.puck), climbed as a player climbs it: from the place before its
+  // pad onto the pad, then straight at the face with the stick held forward, which takes the face, climbs it and,
+  // where it ends under the ledge, pulls up onto the ledge, and through the doorway behind it onto level 3. The climb is
+  // a crossing whose arrival is the ledge's place, since a body on a face gains no ground toward any point.
+  // The climbing lab's `climb-wall` route (labs/climbing.puck) plays the same climb on the lab's copy, headless in
+  // climbing-wall-tests.puck.
   {
-    name: "tree-walk"
+    name: "climbing-wall"
     program: "walker"
-    chapters: map(range(0, length(treeWalkSections)), i => {
-      name: treeWalkSections[i].name
-      steps: concat(
-        ((i == 0) ? [
-          { $type: "pose", point: treeWalkStart, yawDegrees: treeWalkStartYaw }
+    chapters [
+      {
+        name: "the floor onto the pad"
+        steps [
+          {
+            $type: "pose"
+            point: galleryWorld(climbWallX, floor0, ((climbWallFace - climbWallPad.depth) - 2.5))
+            yawDegrees: 180
+          }
+          stand(1)
+          {
+            $type: "go"
+            point: galleryWorld(climbWallStart[0], climbWallStart[1], climbWallStart[2])
+            pace: "walk"
+            direct: true
+            within: 0.3
+          }
+        ]
+      }
+      {
+        name: "the face to the ledge"
+        steps [
+          { $type: "cross", headingDegrees: 180, until: "place-climbing-wall-top", pace: "walk", metres: 3 }
+        ]
+      }
+      {
+        name: "the ledge onto level 3"
+        steps [
+          {
+            $type: "go"
+            point: galleryWorld(climbWallLanding[0], climbWallLanding[1], climbWallLanding[2])
+            pace: "walk"
+            direct: true
+            within: 0.4
+          }
+        ]
+      }
+    ]
+  }
+  // The rope net panel on level 1's north edge (gallery/shell.puck, layout.puck's toyLatticeNetBay), climbed as a player
+  // climbs it: posed 1.5 m back on the aisle at full size (the toybox's full-size pass), she walks straight at the net,
+  // takes it after pushing into it, climbs until she is a metre up (`place-net-high`, places.puck), hangs a moment, then
+  // runs back, which lets go, drops her to the floor and walks her to where she started. The climbing lab's `climb-net`
+  // route (labs/climbing.puck) plays the same climb on the lab's copy, headless in net-tests.puck.
+  {
+    name: "net-climb"
+    program: "walker"
+    chapters [
+      {
+        name: "the rope net"
+        steps [
+          { $type: "pose", point: netClimbStart, yawDegrees: 0 }
           { $type: "line", text: "gallery.wonder pass on" }
           stand(1)
-        ] : []),
-        map(
-          treeWalkSections[i].points,
-          w => { $type: "go", point: w.point, pace: treeWalkPace, direct: true, within: w.within }
-        )
-      )
-    })
+          { $type: "cross", headingDegrees: 0, until: "place-net-high", pace: "walk", metres: 3 }
+          stand(1.5)
+          { $type: "go", point: netClimbStart, pace: "run", direct: true, within: 0.4 }
+          stand(2)
+        ]
+      }
+    ]
   }
+  // The gallery tree's walkway (tree-walk.puck's treeWalkRoute), which the tree's lab (labs/tree.puck) plays too.
+  treeWalkRoute
   {
     name: "seams"
     program: "walker"

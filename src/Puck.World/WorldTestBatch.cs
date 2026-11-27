@@ -315,10 +315,10 @@ internal sealed class WorldTestBatch {
         try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "failure"), line); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private void ArchiveStateFiles(string directory) {
-        var root = Get<WorldStateRoot>().FullPath;
+        var state = Get<WorldStateRoot>();
+        var root = state.FullPath;
 
-        if (!Directory.Exists(path: root)) { return; }
-        foreach (var file in Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+        foreach (var file in state.EnumerateStateFiles()) {
             var target = Path.Combine(path1: directory, path2: "state", path3: Path.GetRelativePath(path: file, relativeTo: root));
 
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);

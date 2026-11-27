@@ -322,14 +322,14 @@ public sealed partial class SdfWorldTables {
     // names a change only shading reads, which no shadow layer shows. Rigid names a slot whose two boxes are one box its
     // pose carries (SdfWorldShadows.Moved). A side that casts no shadow (SdfMeshRegion.CastsShadow) is no caster the
     // shadows judge, though every scope still judges it. Judged with its batch (FlushMotion).
-    private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false, bool affectsShadows = true, bool rigid = false, bool wasCaster = true, bool isCaster = true) {
+    private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false, bool affectsShadows = true, bool rigid = false, bool wasCaster = true, bool isCaster = true, bool conceals = false) {
         // The world's shadows redraw where a caster was and where it is, whatever scope the change meets.
         var (castWas, castIs) = ((wasLive && wasCaster), (isLive && isCaster));
 
         if (affectsShadows && !shading && (castWas || castIs)) {
             var slot = (cause == SdfMotionCause.Slot);
             m_shadows?.Moved(key: slot ? row : ~row, wasLive: castWas, before: in before, isLive: castIs, after: in after,
-                glass: ((castWas && wasGlass) || (castIs && isGlass)), rigid: (slot && rigid && (castWas == castIs)));
+                glass: ((castWas && wasGlass) || (castIs && isGlass)), rigid: (slot && rigid && (castWas == castIs)), conceals: conceals);
         }
         if ((m_motionOpen == 0) || !(wasLive || isLive)) { return; }
         m_pendingMotion[m_pendingMotionCount++] = new(After: after, Before: before, Cause: cause, IsGlass: isGlass, IsLive: isLive, Row: row, Shading: shading, WasGlass: wasGlass, WasLive: wasLive);

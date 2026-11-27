@@ -318,20 +318,16 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Gets a value indicating whether a placement carries a region facet.</summary>
     /// <param name="placementId">The placement's id.</param>
     /// <returns><see langword="true"/> when the placement declares a region.</returns>
-    public bool HasRegion(string placementId) {
+    public bool HasRegion(string placementId) => HasPlacement(placementId: placementId, carries: static placement => (placement.Region is not null));
+    /// <summary>Gets a value indicating whether a placement carries a net facet.</summary>
+    /// <param name="placementId">The placement's id.</param>
+    /// <returns><see langword="true"/> when the placement declares a net.</returns>
+    public bool HasNet(string placementId) => HasPlacement(placementId: placementId, carries: static placement => (placement.Net is not null));
+    // Whether the document declares a placement of an id that carries the facet a test asks for.
+    private bool HasPlacement(string placementId, Func<WorldPlacement, bool> carries) {
         foreach (var placement in Definition.Placements) {
-            if (
-                (placement.Region is not null) &&
-                string.Equals(
-                a: placement.Id,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return true;
-            }
+            if (carries(arg: placement) && string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) { return true; }
         }
-
         return false;
     }
     /// <summary>Gets a value indicating whether the document declares a screen at an index.</summary>

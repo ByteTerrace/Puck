@@ -324,7 +324,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, JoinsPreviousObject = (m_objectInstances > 0), Operands = m_openInstanceOperands, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, Displacement = m_openInstanceDisplacement, JoinsPreviousObject = (m_objectInstances > 0), Operands = m_openInstanceOperands, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
         if (m_objectInstances >= 0) {
             m_objectInstances++;
@@ -350,7 +350,7 @@ public sealed partial class SdfProgramBuilder {
         var extent = field.ReferenceExtent;
 
         _ = BeginInstance(boundCenter: (boxMin + (extent * 0.5f)), boundRadius: (extent.Length() * 0.5f), box: (boxMin, (boxMin + extent)));
-        m_openInstanceHeightField = field;
+        m_openInstanceDisplacement = field;
         return ResetPoint().SampledValues(
             blend: blend,
             boundaryFloor: (field.Cell * SdfSampledField.DistanceScale),
@@ -359,6 +359,30 @@ public sealed partial class SdfProgramBuilder {
             field: field.Reference,
             material: material
         ).EndInstance();
+    }
+    /// <summary>Opens a displacement scope: every static instance opened until the matching <see cref="EndDisplaced"/>
+    /// carries <paramref name="displacement"/> (<see cref="SdfInstanceRange.Displacement"/>), so the meshes its shapes bake
+    /// into are moved by it as they are drawn, with no new program or mesh when it moves. A placed net emits its creation
+    /// inside one (<see cref="SdfSheetDisplacement"/>). Dynamic instances opened inside it carry none.</summary>
+    /// <param name="displacement">The displacement.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="displacement"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A scope is already open, or an instance is open.</exception>
+    public SdfProgramBuilder BeginDisplaced(SdfDisplacement displacement) {
+        ArgumentNullException.ThrowIfNull(argument: displacement);
+        if (m_displacementScope is not null) { throw new InvalidOperationException(message: "BeginDisplaced was called with a displacement scope already open."); }
+        if (m_openInstanceFirst >= 0) { throw new InvalidOperationException(message: "BeginDisplaced was called with an instance open."); }
+        m_displacementScope = displacement;
+        return this;
+    }
+    /// <summary>Closes the displacement scope <see cref="BeginDisplaced"/> opened.</summary>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">No scope is open, or an instance is open.</exception>
+    public SdfProgramBuilder EndDisplaced() {
+        if (m_displacementScope is null) { throw new InvalidOperationException(message: "EndDisplaced was called with no displacement scope open."); }
+        if (m_openInstanceFirst >= 0) { throw new InvalidOperationException(message: "EndDisplaced was called with an instance open."); }
+        m_displacementScope = null;
+        return this;
     }
 
     /// <summary>Opens an object: every instance declared until the matching <see cref="EndObject"/> belongs to one object,
@@ -390,7 +414,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceFirst = -1;
         m_openInstanceBox = null;
         m_openInstanceGlyphs = null;
-        m_openInstanceHeightField = null;
+        m_openInstanceDisplacement = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
         m_openInstanceRestPoseSkin = false;

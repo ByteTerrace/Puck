@@ -42,7 +42,7 @@ aisles.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); levels 2 and 3: glass balustrade, brass rail 1.1 m up. A doorway opens each bay where [the central tree](#the-central-tree)'s branches land on levels 2 and 3, and where [the climbing wall](#the-climbing-wall)'s ledge meets level 3 |
 | Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey, but for the two storeys either side of level 1, whose risers grow finer toward it (see "The size of level 1"). Both forms fill 4 by 4 tiles (5 by 5 m) and arrive on the aisle's tile row in front of the arcade, clear of its end pier. A switchback has two 2.4 m flights of eight 0.47 m treads either side of a spine and a 1.25 m half landing against the long wall. A spiral climbs one turn a storey round a 0.5 m newel, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
@@ -59,10 +59,10 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle between the north-west and north-east stairs, holding the lab wing ([the labs](labs/README.md)): a door onto each lab, three either side of the tree's bay |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, the central tree at its centre, and the climbing wall before the north edge in bay 10 | The north aisle between the north-west and north-east stairs, holding the lab wing ([the labs](labs/README.md)): a door onto each lab, three either side of the tree's bay |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | none (every display is on level 0) |
-| 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
+| 3 | The terrace, with the south-west stair's head | void | The north gallery, open, with the climbing wall's doorway in bay 10 |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
@@ -176,6 +176,22 @@ edge. Each stands on level 1's floor and reaches into the fascia under level
 drawn only; a clear pane threaded through it holds every body, so no body
 flies or jumps in from the void and none drops out, while the panel stays open
 to the eye.
+
+**The rope net panel.** One panel is a real net: `gallery-lattice-north-9`
+(the north edge's bay 9, layout.puck's `toyLatticeNetBay`, kept off the climbing wall's bay 10) keeps the lattice's
+frame and drops its pane, and its placement carries the standard's
+`latticeNet` facet (architecture.puck, `ropeNet`'s material): a grid of 12 by
+9 nodes from post to post and sill to head, pinned at all four members, that
+the authority steps as rope (the engine's net, [the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
+It still holds every body, but it gives: a body leaning on it bulges it, a
+body that walks into it takes it and climbs it like a park climbing net (the
+standard's climb, in or out of the Moth's suit), its weight pulls the net in
+under its hands with a ripple outward, and the drawn strands and knots move
+with the nodes. It settles and sleeps when no one touches it. `debug.go
+rope-net` stands a body before it; `world.nets` reads its nodes, deflection,
+holders and leaners; `world.benchmark run net-climb` plays a climb, and
+the [climbing lab](labs/README.md#climbing) holds a copy of the panel and plays the same climb headless in
+[net-tests.puck](net-tests.puck).
 
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
@@ -306,57 +322,142 @@ branches to the other floors. [gallery/tree.puck](gallery/tree.puck) grows it
 on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
 `treeZ`), as two creations on one spot:
 
-- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor with a
-  flare and six buttress fins that arch from high on the trunk down to the
-  floor, a spiral of bark shelves round it with shelf fungus on every fifth
-  and burls between the turns, and six walkable branches that swell from
-  collars at the trunk, taper, fork and carry knots. Everything a body stands
-  on or will climb is built from shapes contact admits, the standard's
-  [limbs.puck](../standard/limbs.puck): a branch or a root is a chain of
-  flattened superellipsoids along a curve (`limb`), the shelves stand round the
-  trunk's taper and wander in reach and width (`spiralTreads`), and the trunk
-  collides as a stack of cylinders inside the drawn cone (`trunkCore`). The
-  creation sets `contact: Shapes`, so those masses collide as analytic
-  primitives under the smooth blends that draw them as one grown surface, and
-  a body walking the tree runs no field solve; the cone, the forks, knots,
-  burls and fungus brackets are drawn only. Its bark carries no creation
-  relief, which would collide as drawn; its texture is a grain that runs along
-  each limb's own axis (foliage.puck's `landscapeSurface` with `grain`), and
-  twists as the trunk climbs.
-- `gallery-tree-canopy`, not solid: the limbs that carry the foliage and the
-  dark mass closing the crown over the trunk's top.
+- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor, braided
+  strands standing a little proud of it, five buttress roots that flare from
+  low on the trunk to the floor, a timber walkway spiralling up it on bark
+  brackets (shelf fungus under every fifth tread) with burls between the
+  turns, and six branches, each a bark limb carrying a timber deck from a
+  level pad on the spiral out to its balcony, forking and carrying knots, with
+  nests in two of the forks. A low rail of living branch runs along every
+  edge a body could fall from, about the Moth's hip, rising from a stub here
+  and there; it collides exactly as drawn, so a body can stand on it or jump
+  over it, and what keeps a walker on the walkway is its width. Lanterns hang
+  on brass arms over the treads and from a crook of branch at each pad.
+  Everything a body stands on or will climb is built from
+  shapes contact admits, the standard's [limbs.puck](../standard/limbs.puck):
+  a root or a branch's limb is a chain of flattened superellipsoids along a
+  curve (`limb`), a deck is boards on the chords of its walking line
+  (`deckedLimb`), the treads are boards round the trunk (`spiralTreads`), the
+  rails are capsules (`guardRun`, `spiralGuard`, `limbGuard`), and the trunk is
+  a stack of drums blended into one taper (`trunkCore`). The creation sets
+  `contact: Shapes`, so those shapes collide as analytic primitives under the
+  smooth blends that draw them as one grown surface, and a body walking the
+  tree runs no field solve; the strands, boughs, forks, knots, burls,
+  brackets, the rails' stubs, the lanterns and nests are drawn only. Its bark
+  carries no creation relief, which would collide as drawn; its texture is a
+  grain that runs along each limb's own axis (foliage.puck's
+  `landscapeSurface` with `grain`), and twists as the trunk climbs.
+- `gallery-tree-canopy`, not solid: the boughs that carry the foliage, each
+  crossing the walkway level between two of its turns, and the dark mass
+  closing the crown over the trunk's top.
 - The foliage, not solid: leafy clumps (foliage.puck's `leafyClump`, a dark
   mass clothed in whole flat leaves), one creation for each colour family
-  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed once for
-  every clump of the crown, of the two tiers under it and of each branch's fork
+  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed in rings
+  (tree.puck's `treeRings`: the crown, a flat ring of small clumps under the
+  roof, and two tiers under the crown) and round each branch's fork
   (`leafyClumps`: a sunflower spiral on a dome high in the void under the
-  skylights, so sky shows between the clumps). Every copy draws its family's
-  one baked mesh at its own size and turn, and shades as one soft volume
-  (`softVolume`), so a clump's outline is leaf tips while the light falls across
-  it as across a round mass. One fork in three is golden.
+  skylights, so sky shows between the clumps). No clump stands where a body
+  walks (`treeClumpClear`): the walkway's annulus and the space over every
+  deck stay clear, so the decks walk through lanes in the leaves. Every copy
+  draws its family's one baked mesh at its own size and turn, and shades as
+  one soft volume (`softVolume`), so a clump's outline is leaf tips while the
+  light falls across it as across a round mass. One fork in three is golden.
 
-**Climbing it.** The shelves start on the trunk's east side, just south of
+**Climbing it.** The treads start on the trunk's east side, just south of
 east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
 last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
-`treeTreadRise`). Each reaches about 1.4 m past the bark; a body pressed
-against the bark itself does not step up, so the walking line runs a little
-out from it. `debug.go` has no stop yet; in the gallery root,
-`body.pose spawn:tree 0` stands her at their foot.
+`treeTreadRise`). Each is a board out to a rim 4 m from the trunk's axis
+(`treeRim`), its risers radial, so its top spans its whole step at every
+radius, and a body walks the spiral 3.05 m from the axis (`treeWalkRadius`).
+The way in is the floor between the first riser and a root that flanks it.
+The tree's lab, [labs/tree.puck](labs/tree.puck) (document id `lab-tree`),
+holds the tree with just the floor and the balcony landings its branches
+reach; boot it to build, walk and judge the tree, and `body.pose spawn:tree 0`
+stands her at the foot there and in the gallery root.
 
-**The branches.** Two reach each of levels 1 to 3, one to each balcony edge in
-bay 6 (`treeLimbs`, `treeLandings`). Each leaves the trunk from a tread, so the
-walker steps off the spiral onto it, and each pair leaves two treads further
-round than the pair below, so the canopy turns as it climbs. A level's south
-branch rises to its floor from a little below it, its north branch falls to it
-from half a turn higher. Level 1's pair pass through the lattice's gate,
-level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
-step onto its open edge. Each branch's tip lies on the floor's edge, a few
-centimetres proud of it (`treeLandingLift`).
+**The branches.** Two reach each of levels 1 to 3, one to each balcony edge
+(`treeLimbs`, `treeLanding`), each landing at its own bay. Each leaves the
+spiral from a tread that opens onto a level pad (`treePadFrom`,
+`treePadReach`, `treePadWidth`), from whose outer edge its deck walks out to
+its balcony, so the canopy turns as the pairs climb. A level's south branch
+rises to its floor from below it, its north branch falls to it from higher.
+Level 1's pair cross the open bay of the lattice to a magic barrier, level 2's
+and 3's step through doorways in the balcony edge. Each deck ends at its
+balcony's edge, its top flush with the floor.
 
 **Level 1's branches give no size.** The owner's design: a level-1 branch ends at a magic barrier that sells the player a way across: carry the wonder key, and cross without level 1's size change affecting you. Without a pass the barrier holds every body, small or full size ([the lattice](#the-lattice)).
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
+
+## The climbing wall
+
+A sandstone climbing wall rises the full height of the hall, from the nave's
+floor to level 3, in front of the north balcony edge in bay 10
+([gallery/climbing-wall.puck](gallery/climbing-wall.puck), layout.puck's
+`climbWall*` values). A player who walks into it climbs past the toybox's
+lattice and level 2's balustrade, pulls up onto a ledge 13.5 m over the floor
+with the nave, the tree and the far galleries below her, and steps through a
+doorway onto level 3's north gallery. A fall lands on the sage pad at its foot.
+It answers the tree pack's
+[climbing pier](../../docs/game/art/gallery-tree-pack/07-climbing-pier.png),
+grown from a bouldering face into a climb of the whole hall.
+
+Bay 10 is the nave's last even bay that nothing else at the edge claims: the
+tree's branches land in bays 4, 7 and 8, its trunk stands in bay 6, the loose
+lattice panel is bay 8's, the rope net panel on level 1 is bay 9's and bay 12 holds the north-east stair. The displays in
+bays 9 and 11 stand more than a metre clear of the pad on either side.
+
+| Part | What it is | Size |
+|---|---|---|
+| Face | Sandstone plates in four tones from sand to coral over teal seams, each plate a canyon plane leaning a few degrees | 4 m across, 12.95 m from the pad to the coping |
+| Frame | Cream cheeks either side, its body back to the balcony edge, and a warm timber coping whose top is the ledge, level with level 3's floor | 4.4 m across, 1.1 m deep |
+| Pad | Three sage foam blocks, a step up from the floor | 5 m across, reaching 2.5 m out from the face, 0.25 m tall |
+| Doorway | Teal posts and lintel in level 3's balustrade behind the ledge, as at the tree's landings | 2 m clear |
+
+**What can be held.** Only the face: its placement alone carries
+`grip { holdable: true }`, so the standard's `climbAbility` takes it and nothing
+else of the wall. A climber stops at the face's edges, since the cheeks beside
+them cannot be held, and the climb ends at the coping, where the climb's mantle
+proves the ledge and sets her down on it. The face's plates and every hold are
+drawn only. Her contact is the face's flat backing, so the hold system reads one
+plane and she climbs anywhere on it at the ability's pace and stamina; the
+hands and feet her rig plants on the drawn surface find the holds. A climb of
+the wall takes about half her stamina wheel.
+
+**The routes.** Three lines of holds climb the face, each one saturated colour
+(look.puck's `lookClimb`), so a route reads from across the nave:
+
+| Route | Line | Holds |
+|---|---|---|
+| Sunflower | Up the middle, the gentlest | Jugs, slopers and foot chips, 0.6 m apart |
+| Teal | Up the west side | Crimps, pinches and foot chips, 0.72 m apart |
+| Berry | Up the east side, the hardest | Slopers, pinches, crimps and foot chips, 0.8 m apart |
+
+Every route ends just under the coping before the doorway. Four pastel volumes,
+mint and butter, stand on the face between the routes, and a hold that lands on
+one stands on its front. Each hold carries a recessed bolt. A route is a line of
+points on the face (`climbRoutes`), along which the standard's `climbRoute`
+lays a hold every pitch, stepping to either side in turn; each hold is a copy of
+its family's prototype, so the wall's 55 holds bake as ten small creations.
+
+The pieces are the standard's
+([climbing.puck](../standard/climbing.puck)): the face, the frame, the hold
+families (jug, crimp, sloper, pinch, foot chip, volume), the bolt and the pad,
+which any world can stand.
+
+| Console line | What it does |
+|---|---|
+| `debug.go climbing-wall` | Stands a body on the floor before the pad, facing the wall |
+| `gallery.shot climbing-wall` | Looks up the wall from the nave's floor |
+| `gallery.shot climbing-wall-across` | Looks at the wall from level 2's south gallery, across the void |
+| `world.benchmark run climbing-wall` | Climbs it through seat 1's own controls: onto the pad, up the face, over the ledge and through the doorway |
+
+`puck test worlds/debug/climbing-wall-tests.puck` plays the same climb headless on the
+[climbing lab](labs/README.md#climbing)'s copy of the wall
+and checks that the body held the face past the heights of levels 1 and 2, stood on the ledge
+and on the landing past it, never ran out of stamina, never fell and never ended a step
+inside a surface, and that a climber who lets go lands on the pad.
 
 ## The displays
 
@@ -679,8 +780,10 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **Level 1's floor**: the two aisles and the bridge, never the nave's void.
-  Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
+- **Level 1's floor**: the two aisles to their arcades' plane and the bridge,
+  never the nave's void, and never the balcony strip outside the arcade where
+  a tree branch lands before its barrier. Alice's size throughout (`small`,
+  look.puck's `lookWonderSize`, 0.15).
 
 Outside these zones a body keeps the size it last took (the owner's design):
 the stairs and the lift are the routes that size a body, and a body with no

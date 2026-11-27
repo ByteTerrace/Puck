@@ -154,6 +154,43 @@ public struct FixedTetherConstraint {
         return new FixedTetherResolution(Taut: true);
     }
 
+    /// <summary>Solves the rope's cap between two points that both move (a strand of a net, <see cref="FixedNet"/>), as
+    /// one compliant (XPBD) projection: slack, the squared distance at or inside <paramref name="length"/>, is an exact
+    /// no-op as in <see cref="Solve"/>; taut, the two points move along the line joining them by shares of their inverse
+    /// masses, by the multiplier step <c>Δλ = (−C − α̃λ) / (w₁ + w₂ + α̃)</c>, where <c>C</c> is the stretch past the
+    /// cap and <c>α̃</c> the compliance over the step squared, and <paramref name="lambda"/> accumulates across a step's
+    /// iterations so the answer converges on the compliant rope rather than on one that stiffens with the iteration
+    /// count. A point of zero inverse mass (pinned) never moves.</summary>
+    /// <param name="first">The first point (in/out).</param>
+    /// <param name="second">The second point (in/out).</param>
+    /// <param name="firstInverseMass">The first point's inverse mass; zero pins it.</param>
+    /// <param name="secondInverseMass">The second point's inverse mass; zero pins it.</param>
+    /// <param name="length">The cap.</param>
+    /// <param name="compliance">The compliance over the step squared, <c>1 / (stiffness · h²)</c>; zero is rigid.</param>
+    /// <param name="lambda">The strand's multiplier this step, zero at the step's first iteration (in/out).</param>
+    /// <returns>Whether the strand was taut this call.</returns>
+    public static bool SolvePair(ref FixedVector3 first, ref FixedVector3 second, FixedQ4816 firstInverseMass, FixedQ4816 secondInverseMass,
+        FixedQ4816 length, FixedQ4816 compliance, ref FixedQ4816 lambda) {
+        var offset = (second - first);
+        var distanceSquared = offset.LengthSquared;
+
+        if (distanceSquared <= (length * length)) { return false; }
+
+        var weight = ((firstInverseMass + secondInverseMass) + compliance);
+
+        if (weight <= FixedQ4816.Zero) { return true; }
+
+        var distance = FixedQ4816.Sqrt(value: distanceSquared);
+        var direction = (offset / distance);
+        var step = ((-(distance - length) - (compliance * lambda)) / weight);
+
+        lambda += step;
+        first -= (direction * (firstInverseMass * step));
+        second += (direction * (secondInverseMass * step));
+
+        return true;
+    }
+
     /// <summary>Constructs a tether at an initial length.</summary>
     /// <param name="length">The initial rope length. Must be at least <paramref name="minLength"/>.</param>
     /// <param name="minLength">The floor <see cref="Reel"/> clamps to. Must be non-negative.</param>

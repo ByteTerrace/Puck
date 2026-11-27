@@ -185,6 +185,13 @@ the toybox is not reached round its lattice, and the others until the tree gives
 walls are window bays, which are not holdable; the plain stretches are the south face either side of the entrance
 and the west wall.
 
+The gallery's climbing wall is the climb built for it: a 12.95 m face from the nave's floor to a ledge level with
+level 3, in front of the north balcony edge ([gallery.md](../../worlds/debug/gallery.md#the-climbing-wall)). Only its
+face is holdable, a flat backing under drawn plates and holds, so the climb tracks one plane, stops at the face's
+edges and ends in a mantle onto the ledge, which is deep enough to set her down whole. Its holds are drawn only: the
+hold system climbs a face, not individual holds, so a route's holds guide the eye and the rig's hands rather than
+gate where she can climb.
+
 ## Open work
 
 - **A look pass on her climb and its camera.** The `cling` pose, the hand and toe effectors and the wall framing's
@@ -202,6 +209,16 @@ and the west wall.
 - **Wet and icy surfaces** as a grip class per material ([the composition plan](debug-world-composition.md) records
   the precedence the owner asked for), and a rule that raises the drain on them.
 - **A vault** for walls between her step height and her waist, which need a jump first.
+- **Hands on holds.** Her hand and toe effectors plant where their surface probe lands on the drawn face, so on the
+  gallery's climbing wall they meet a hold only by chance. An effector target that seeks the nearest grip a world
+  marks (a hold's placement, or a material that carries a grip class) within its reach would put her hands and feet on
+  the holds a route sets, and a route could then be climbed as set rather than only followed by eye.
+- **The hall's wall and net have no scenario.** The wall's and the net's scenarios (`climbing-wall-tests.puck`,
+  `net-tests.puck`) play the [climbing lab](../../worlds/debug/labs/README.md#climbing)'s copies, which stand the
+  gallery's pieces and routes at the gallery's sizes in a room of their own, so a feature is tested without the whole
+  debug world. What only the hall adds, the doorway onto level 3 and the panel in the toybox's lattice, is played by the
+  benchmark routes `climbing-wall` and `net-climb` and judged there; a scenario that reads the hall would need the
+  debug world's cold bake.
 - **The analytic cast's cost.** Each step of a cast reads every holdable collider. A world that makes everything
   holdable wants the holdable set behind the collider grid the contact solve uses (`FixedColliderGrid`).
 

@@ -7,7 +7,8 @@ namespace Puck.World.Server;
 /// <summary>What a body's contact phase decided over its life since activation: the step-ups it took and refused and
 /// the tallest it took, the ground snaps, the steps that left and met the ground, the current and longest airborne
 /// runs, the current and longest runs of driven steps that did not move it, the driven steps that ended against a face
-/// too steep to stand on, and the push the latest solve and the deepest solve still applied in their last pass. Every
+/// too steep to stand on, the push the latest solve and the deepest solve still applied in their last pass, and what
+/// the latest refused step-up met (its outcome, the edge clearance and normal of the face, and where the body stood). Every
 /// count only rises and every peak only grows, so a reader takes a window by reading at both ends; the current runs and
 /// the latest depth say what the latest step left.</summary>
 /// <remarks>It is part of the body's motion section (<see cref="BodyMotionSection.Kinematics"/>), so a checkpoint
@@ -28,6 +29,12 @@ namespace Puck.World.Server;
 /// <param name="Penetration">The deepest push, in metres, a contact solve still applied in its last pass
 /// (<see cref="ContactResolution.Residual"/>).</param>
 /// <param name="Depth">The push, in metres, the latest contact solve still applied in its last pass.</param>
+/// <param name="RefusalOutcome">The latest refused step-up's <see cref="FixedStepUpOutcome"/>; zero before any refusal.</param>
+/// <param name="RefusalHeight">The edge clearance, in metres, the latest refused step's blocked sweep reported
+/// (<see cref="ContactResolution.RequiredStepHeight"/>).</param>
+/// <param name="RefusalNormal">The unit normal of the face the latest refused step met
+/// (<see cref="ContactResolution.ObstructionNormal"/>).</param>
+/// <param name="RefusalPosition">Where the body stood, in its instance's frame, when its latest step-up was refused.</param>
 public readonly record struct BodyKinematicsWitness(
     long StepUps,
     long StepRefusals,
@@ -41,7 +48,11 @@ public readonly record struct BodyKinematicsWitness(
     ulong StuckLongest,
     long SlopeRefusals,
     FixedQ4816 Penetration,
-    FixedQ4816 Depth
+    FixedQ4816 Depth,
+    long RefusalOutcome = 0L,
+    FixedQ4816 RefusalHeight = default,
+    FixedVector3 RefusalNormal = default,
+    FixedVector3 RefusalPosition = default
 ) {
     /// <summary>Writes a witness into a continuation image.</summary>
     /// <param name="writer">The writer.</param>
@@ -60,6 +71,10 @@ public readonly record struct BodyKinematicsWitness(
         writer.WriteInt64(value: witness.SlopeRefusals);
         writer.WriteFixed(value: witness.Penetration);
         writer.WriteFixed(value: witness.Depth);
+        writer.WriteInt64(value: witness.RefusalOutcome);
+        writer.WriteFixed(value: witness.RefusalHeight);
+        writer.WriteFixedVector(value: witness.RefusalNormal);
+        writer.WriteFixedVector(value: witness.RefusalPosition);
     }
     /// <summary>Reads a witness from a continuation image, in the order <see cref="Write"/> wrote it.</summary>
     /// <param name="reader">The reader.</param>
@@ -77,7 +92,11 @@ public readonly record struct BodyKinematicsWitness(
         StuckLongest: reader.ReadUInt64(),
         SlopeRefusals: reader.ReadInt64(),
         Penetration: reader.ReadFixed(),
-        Depth: reader.ReadFixed()
+        Depth: reader.ReadFixed(),
+        RefusalOutcome: reader.ReadInt64(),
+        RefusalHeight: reader.ReadFixed(),
+        RefusalNormal: reader.ReadFixedVector(),
+        RefusalPosition: reader.ReadFixedVector()
     );
 
     /// <summary>Reads one witness as a rule's cell holds it, in the kind <see cref="WorldKinematicsVocabulary.KindOf"/>
@@ -99,13 +118,21 @@ public readonly record struct BodyKinematicsWitness(
         WorldKinematicsWitness.SlopeRefusals => SlopeRefusals,
         WorldKinematicsWitness.Depth => Depth.Value,
         WorldKinematicsWitness.Penetration => Penetration.Value,
+        WorldKinematicsWitness.RefusalOutcome => RefusalOutcome,
+        WorldKinematicsWitness.RefusalHeight => RefusalHeight.Value,
+        WorldKinematicsWitness.RefusalNormalX => RefusalNormal.X.Value,
+        WorldKinematicsWitness.RefusalNormalY => RefusalNormal.Y.Value,
+        WorldKinematicsWitness.RefusalNormalZ => RefusalNormal.Z.Value,
+        WorldKinematicsWitness.RefusalX => RefusalPosition.X.Value,
+        WorldKinematicsWitness.RefusalY => RefusalPosition.Y.Value,
+        WorldKinematicsWitness.RefusalZ => RefusalPosition.Z.Value,
         _ => 0L,
     });
     /// <summary>Describes the witness as <c>body.where</c> and <c>body.motion</c> read it back, each witness by its rule
     /// name.</summary>
     /// <returns>The <c>name=value</c> pairs, a time in seconds and a length in metres.</returns>
     public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-        handler: $"stepUps={StepUps} stepRefusals={StepRefusals} stepRise={((double)StepRise):0.000} snaps={Snaps} leaves={Leaves} landings={Landings} airborneLongest={((double)Seconds(ticks: AirborneLongest)):0.000} stuckLongest={((double)Seconds(ticks: StuckLongest)):0.000} slopeRefusals={SlopeRefusals} penetration={((double)Penetration):0.0000}");
+        handler: $"stepUps={StepUps} stepRefusals={StepRefusals} stepRise={((double)StepRise):0.000} snaps={Snaps} leaves={Leaves} landings={Landings} airborneLongest={((double)Seconds(ticks: AirborneLongest)):0.000} stuckLongest={((double)Seconds(ticks: StuckLongest)):0.000} slopeRefusals={SlopeRefusals} penetration={((double)Penetration):0.0000} refusal={RefusalOutcome} refusalHeight={((double)RefusalHeight):0.0000} refusalNormal=({((double)RefusalNormal.X):0.000},{((double)RefusalNormal.Y):0.000},{((double)RefusalNormal.Z):0.000}) refusalAt=({((double)RefusalPosition.X):0.000},{((double)RefusalPosition.Y):0.000},{((double)RefusalPosition.Z):0.000})");
 
     private static FixedQ4816 Seconds(ulong ticks) => FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: ticks);
 }
@@ -132,7 +159,8 @@ public sealed partial class WorldBody {
 
     // Folds one resolved contact step into the witness and the process's physics.bodies counts. Runs once per contact
     // phase that resolved (a refused sweep restores the witness with the rest of the step), after the grounded verdict.
-    private void WitnessKinematics(in ContactResolution resolution, FixedStepUpOutcome stepOutcome, FixedQ4816 stepRise, bool snapped, bool attemptedStep, in BodyMotionScratch scratch) {
+    // `blocked` is the step's own sweep before any step-up replaced it: the face a refused step met.
+    private void WitnessKinematics(in ContactResolution resolution, in ContactResolution blocked, FixedStepUpOutcome stepOutcome, FixedQ4816 stepRise, bool snapped, bool attemptedStep, in BodyMotionScratch scratch) {
         var witness = m_kinematics;
         var ticks = scratch.StepTicks;
         var wasAirborne = (witness.AirborneTicks > 0UL);
@@ -161,6 +189,10 @@ public sealed partial class WorldBody {
             SlopeRefusals = (witness.SlopeRefusals + (slope ? 1L : 0L)),
             Penetration = FixedQ4816.Max(x: witness.Penetration, y: resolution.Residual),
             Depth = resolution.Residual,
+            RefusalOutcome = (refused ? ((long)stepOutcome) : witness.RefusalOutcome),
+            RefusalHeight = (refused ? blocked.RequiredStepHeight : witness.RefusalHeight),
+            RefusalNormal = (refused ? blocked.ObstructionNormal : witness.RefusalNormal),
+            RefusalPosition = (refused ? m_position : witness.RefusalPosition),
         };
 
         var work = WorldBodyWork.Process;

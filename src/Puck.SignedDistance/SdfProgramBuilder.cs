@@ -199,6 +199,7 @@ public sealed partial class SdfProgramBuilder {
         m_materialRecolor = null;
         m_positionalFold = null;
         ResetOpenInstance();
+        m_displacementScope = null;
         m_objectInstances = -1;
         m_shapeCount = 0;
     }
@@ -226,7 +227,9 @@ public sealed partial class SdfProgramBuilder {
     // slot's), the instructions they emitted and the finest spacing their strokes ask (GlyphDetail); null until a run
     // emits a glyph. Runs riding two frames leave Slot at GlyphFramesMixed, which fits nothing.
     private (Vector3 Low, Vector3 High, int Slot, int Instructions, float Detail)? m_openInstanceGlyphs;
-    private SdfHeightField? m_openInstanceHeightField;
+    private SdfDisplacement? m_openInstanceDisplacement;
+    // The displacement every static instance opened until EndDisplaced carries (BeginDisplaced), or null.
+    private SdfDisplacement? m_displacementScope;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
@@ -346,7 +349,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceDetail = 0f;
         m_openInstanceBox = null;
         m_openInstanceGlyphs = null;
-        m_openInstanceHeightField = null;
+        m_openInstanceDisplacement = (isDynamic ? null : m_displacementScope);
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;

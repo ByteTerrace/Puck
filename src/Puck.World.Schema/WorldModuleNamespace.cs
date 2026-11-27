@@ -1255,6 +1255,11 @@ public static class WorldModuleNamespace {
         }),
         (ChannelName(spelling: WorldRuleFacts.LinkPrefix), static read => read.Names(from: 0, kind: null)),
         (ChannelName(spelling: WorldRuleFacts.RegionPrefix), static read => read.Names(from: 0, kind: WorldNameKind.Placement)),
+        // The placement carrying the net, then the reading: an engine word no module renames.
+        (ChannelName(spelling: WorldRuleFacts.NetPrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.Placement);
+            read.Words(from: 1);
+        }),
         (ChannelName(spelling: WorldRuleFacts.PhysicsQuiescent), static read => {
             read.Word(index: 0);
             read.Names(from: 1, kind: WorldNameKind.State);

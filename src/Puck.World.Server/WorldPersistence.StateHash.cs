@@ -101,6 +101,7 @@ public sealed partial class WorldPersistence {
             case WorldStateHashComponent.BodyContinuation:
                 Host.Population.AppendContinuationHash(hash: ref hash, recompute: recompute);
                 Host.Population.AppendSleepStateHash(hash: ref hash);
+                Host.Population.AppendNetStateHash(hash: ref hash);
                 Host.Events.AppendDiscoveryHash(hash: ref hash);
 
                 break;
