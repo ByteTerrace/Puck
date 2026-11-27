@@ -36,7 +36,10 @@ alike.
 A text run, a box's face light (`lightsAs: Face`) and a screen face their local
 +Z, the side a viewer reads them from. One on a creation's front therefore turns
 a half turn about up (`rotation: rotate([0, 1, 0], 180)`), as does any shape
-whose local axes a paint, a face or a riding run reads.
+whose local axes a paint, a face or a riding run reads. A portal face (a
+painting's glass) fires only for a body passing through it from the side it
+faces, so a door whose face shape lacks that half turn faces the wall it hangs
+on and nobody walks through it.
 
 A `puck.creation.v1` creation was written in the retired author frame, a half
 turn about up from this one (x and z negated). Validation refuses it by name;
