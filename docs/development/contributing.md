@@ -335,6 +335,11 @@ its own recursive `Directory.Delete`; only best-effort teardown uses `RunDirecto
 The remaining strict-path depth limitation is tracked in
 [open items](../plans/open-items.md#test-runner-and-replay).
 
+On Windows, a run under a long worktree path (`.claude/worktrees/agent-<id>`) can
+build paths past `MAX_PATH`: `puck schema --bootstrap` failed with CS2012 there.
+Point `TEMP` and `TMP` at a short directory for that run until the bootstrap's
+own paths are shortened, and delete what it keeps afterwards.
+
 ## Build output and hard links
 
 Every project copies its dependency closure into its own `bin`, so a built

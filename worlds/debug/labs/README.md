@@ -110,12 +110,15 @@ are played by the debug world's routes `climbing-wall` and `net-climb`
 ### Light
 
 [light.puck](light.puck): one room a subject round a plaza, under the held
-midday and the debug world's thin air, so no subject's light reaches another's:
+midday ([light-noon.puck](light-noon.puck): the real sun's size, so a window's
+patch stays crisp) and the debug world's thin air, so no subject's light
+reaches another's:
 
-- `light-occluders`: a roofed room under a pendant lamp holding a standing
-  citizen and three props with the standard's `propOcclusion` (a crate, a drum,
-  a plinth); walk the Moth in to add her body's occluder. Each darkens the
-  floor about it and shadows the lamp (`world.occluders` lists them);
+- `light-occluders`: a roofed room behind a baffle under a bright pendant lamp
+  holding a standing citizen and three props with the standard's
+  `propOcclusion` (a crate, a drum, a plinth); walk the Moth in to add her
+  body's occluder. Each darkens the floor about it and shadows the lamp, which
+  outshines the little daylight round the baffle (`world.occluders` lists them);
 - `light-night`: a closed room behind a baffle, dark but for its own light:
   three bare bulbs, a screen showing the test pattern and a console whose panel
   is an emitter face (`lightsAs: Face`);

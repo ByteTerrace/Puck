@@ -1569,6 +1569,7 @@ let blendExhibits = [
 // A slab with a capsule, a cone and a torus pressed half way into its front face, each scaled apart in its own X and Z
 // (the torus is turned so its ring faces the label). The three stretched primitives whose field is a bound, as cutters.
 template stretchPrototype(id, label, blend, smooth) {
+  allow PUCK141 "the exhibit cuts with the stretched capsule's bound field on purpose"
   prototype $"{id}" {
     document {
       shape Box "subject" {
@@ -3758,6 +3759,7 @@ template galleryPrototypes(displays = galleryDisplays) {
       exhibit(label: "CYLINDER XZ")
     }
   }
+  allow PUCK141 "the exhibit shows the stretched capsule as the engine draws it: a bound, with its ends stretched"
   prototype "shape-capsule-xz" {
     document {
       shape Capsule "subject" {
