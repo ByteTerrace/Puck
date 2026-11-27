@@ -20,12 +20,16 @@ public sealed class SdfPassBindingLawTests {
     // The kernels each light and sky table is bound by, and no other.
     // The glass shading pass lights its highlights from the lights table, reflects the environment map and reads the
     // atmosphere's lanes of the sky block.
+    // The probe lookup reads the lights table too: a slot drops a traced light that reaches none of the points its pixels
+    // shade (sdfViewsProbesStoreSlot, sdfLightReachesBox); so does a binned view's filter pass, which decides each tile's
+    // lights for the shade bins (sdfViewsTileLights). The screen-space reflections read the sky block and its
+    // environment for the air's in-scatter the composite added where a ray lands, which the history colour does not hold.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [.. GlassKernels, .. ViewsKernels]),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.ViewsProbes, SdfKernel.ViewsFilter, .. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, SdfKernel.ViewsReflections, .. GlassKernels, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. GlassKernels, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, [.. GlassKernels, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, .. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, SdfKernel.ViewsReflections, .. GlassKernels, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

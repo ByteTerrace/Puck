@@ -78,6 +78,15 @@ public sealed class SdfWorldResidencyWorkLawTests {
         for (var warm = 0; (warm < 4); warm++) {
             Frame();
         }
+        // A steady frame is one the residency owes nothing: its bake's samples, landing and contour and its lighting's
+        // first light run across frames and allocate while they do, which is the work's, not the counting's.
+        TestLiveness.Until(
+            reason: () => $"The residency kept owing its preparation: {rig.Node.MeshResidencyPending}",
+            step: () => {
+                Frame();
+                return !rig.Node.OwesPreparation;
+            }
+        );
 
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Frame));
     }
