@@ -622,9 +622,23 @@ internal sealed class RuleDueList {
                 MarkReaders(index: m_literalFactReadersBySource, key: moved.Source);
             }
             if (m_eachFactReaders.TryGetValue(key: moved.Source, value: out var each)) {
-                foreach (var reader in each) {
-                    if (Binds(index: reader, body: moved.Body)) {
-                        MarkBody(index: reader, body: moved.Body);
+                // A source that names its moves by key reaches the keyed sweep's binding under that key; any other
+                // rule reading it for $each is judged whole.
+                if ((moved.Body >= 0) && m_host.TryFactKey(body: moved.Body, key: out var movedKey, source: moved.Source)) {
+                    foreach (var reader in each) {
+                        if (m_kinds[reader] is Visit.RowSweep or Visit.FamilySweep) {
+                            if (movedKey.IsValid) {
+                                MarkKey(index: reader, key: movedKey);
+                            }
+                        } else {
+                            MarkFull(index: reader);
+                        }
+                    }
+                } else {
+                    foreach (var reader in each) {
+                        if (Binds(index: reader, body: moved.Body)) {
+                            MarkBody(index: reader, body: moved.Body);
+                        }
                     }
                 }
             }

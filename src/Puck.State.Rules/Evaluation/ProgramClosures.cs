@@ -411,6 +411,14 @@ internal static class ProgramClosures {
                         step: token.Step,
                         value: Arity(count: 1, operands: operands)[0]
                     );
+                case ExpressionStep.BoardSlide:
+                    Arity(count: 2, operands: operands);
+
+                    return new BoardSlideNode(
+                        occupied: operands[1],
+                        query: ((BoardNeighbourQuery)token.Board!),
+                        sliders: operands[0]
+                    );
                 case ExpressionStep.Function:
                     if (operands.Length > RuleExpressions.MaxArguments) {
                         throw new InvalidOperationException(message: $"A function takes at most {RuleExpressions.MaxArguments} arguments; '{token.Operation}' takes {operands.Length}.");
@@ -1115,6 +1123,24 @@ internal sealed class BoardNode(BoardNeighbourQuery query, ExpressionStep step, 
             ExpressionStep.BoardRay => BoardQueries.RayMask(query, mask),
             _ => BoardQueries.ImageOfMask(query.Topology, query.Direction, mask),
         };
+    }
+}
+// The cells sliders attack over an occupancy mask (BoardQueries.SlideMask): the sliders, then the occupied cells.
+internal sealed class BoardSlideNode(BoardNeighbourQuery query, ProgramNode sliders, ProgramNode occupied) : ProgramNode {
+    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
+        var from = sliders.Run(frame: ref frame, context: ref context);
+
+        if (context.Halt != Halt.None) {
+            return ((context.Halt == Halt.Marked) ? Stop(context: ref context, halt: Halt.Absent) : 0L);
+        }
+
+        var blocked = occupied.Run(frame: ref frame, context: ref context);
+
+        if (context.Halt != Halt.None) {
+            return ((context.Halt == Halt.Marked) ? Stop(context: ref context, halt: Halt.Absent) : 0L);
+        }
+
+        return BoardQueries.SlideMask(occupied: blocked, query: query, sliders: from);
     }
 }
 internal sealed class FunctionNode(ExpressionOp operation, CellKind carrier, ProgramNode[] operands) : ProgramNode {

@@ -441,7 +441,7 @@ public sealed partial class WorldPopulation {
         foreach (var placement in definition.Placements) {
             if (
                 (placement.Inhabit is not { } inhabit) ||
-                (inhabit.Count?.Row is not null) ||
+                inhabit.FollowsCells ||
                 (InhabitKit(
                 definition: definition,
                 placement: placement
@@ -494,8 +494,7 @@ public sealed partial class WorldPopulation {
             var placement = placements[ordinal];
 
             if (
-                (placement.Inhabit is not { } inhabit) ||
-                (inhabit.Count?.Row is not { } row) ||
+                (placement.Inhabit is not { FollowsCells: true } inhabit) ||
                 (InhabitKit(
                 definition: definition,
                 placement: placement
@@ -504,10 +503,16 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var raw = (inhabit.Count.Resolve(arena: arena,
-                definition: definition,
-                tick: tick
-            ) ?? 0L);
+            // A pool cell holding zero stands none of its placements' bodies, so it reads as a count of zero; the cache
+            // holds that effective count, and a pool's one write moves every member's.
+            var row = (inhabit.Count?.Row ?? inhabit.Pool?.Row ?? string.Empty);
+            var admitted = ((inhabit.Pool is not { } pool) || ((pool.Resolve(arena: arena, definition: definition, tick: tick) ?? 0L) != 0L));
+            var raw = (admitted
+                ? (inhabit.ResolvedCount.Resolve(arena: arena,
+                    definition: definition,
+                    tick: tick
+                ) ?? 0L)
+                : 0L);
 
             if (raw == slots.CachedCount(ordinal: ordinal)) {
                 continue;

@@ -400,20 +400,29 @@ public static partial class ExpressionSpelling {
                         Names: []
                     );
                 }
-            case { Payload: InstructionPayload.Board board }:
-                return (((stack.Count >= 1) && (instruction.Operation switch {
-                    ExpressionOp.BoardShift => "boardShift",
-                    ExpressionOp.BoardRay => "boardRay",
-                    ExpressionOp.BoardImage => "boardImage",
-                    _ => null,
-                } is { } boardName))
-                    ? new Call(
+            case { Payload: InstructionPayload.Board board }: {
+                    var boardArity = ExpressionOperators.Arity(operation: instruction.Operation);
+
+                    if ((boardArity < 1) || (stack.Count < boardArity) || (instruction.Operation switch {
+                        ExpressionOp.BoardShift => "boardShift",
+                        ExpressionOp.BoardRay => "boardRay",
+                        ExpressionOp.BoardImage => "boardImage",
+                        ExpressionOp.BoardSlide => "boardSlide",
+                        _ => null,
+                    } is not { } boardName)) {
+                        return null;
+                    }
+                    var boardArguments = new SyntaxNode[boardArity];
+
+                    for (var at = (boardArity - 1); (at >= 0); at--) {
+                        boardArguments[at] = stack.Pop();
+                    }
+                    return new Call(
                         Name: boardName,
-                        Arguments: [stack.Pop()],
+                        Arguments: boardArguments,
                         Names: [board.Topology, board.Index]
-                    )
-                    : null
-                );
+                    );
+                }
             case { Payload: InstructionPayload.Fold fold }:
                 return (((FoldName(operation: instruction.Operation) is { } foldName) &&
                     IsBinderName(name: fold.Binder) &&
@@ -679,7 +688,7 @@ public static partial class ExpressionSpelling {
 
     // The names the parser reads as a call before it considers a row: the folds, the vector functions and the board
     // queries. None of them is in the operator table's call list.
-    private static bool IsReservedCallName(string name) => (IsFoldName(name: name) || (name is "dot" or "similarity" or "identical" or "boardShift" or "boardRay" or "boardImage"));
+    private static bool IsReservedCallName(string name) => (IsFoldName(name: name) || (name is "dot" or "similarity" or "identical" or "boardShift" or "boardRay" or "boardImage" or "boardSlide"));
     // Followed by an opening parenthesis, these open a vector literal rather than a channel call; a bare one is a row.
     private static bool IsLiteralKeyword(string name) => (name is "vector" or "embed");
     // A fold binds its member to a plain variable: one bare name, undotted, unreserved, and not a function's.
@@ -1506,6 +1515,11 @@ public static partial class ExpressionSpelling {
                 operation: ExpressionOp.BoardImage,
                 topology: Names[0]
             ),
+                "boardSlide" => Instruction.Board(
+                index: Names[1],
+                operation: ExpressionOp.BoardSlide,
+                topology: Names[0]
+            ),
                 _ => Instruction.Of(operation: Calls[Name].Operation),
             }));
         }
@@ -2195,10 +2209,10 @@ public static partial class ExpressionSpelling {
                         }
                         if (
                             !quoted &&
-                            calling && (name is "boardShift" or "boardRay" or "boardImage")
+                            calling && (name is "boardShift" or "boardRay" or "boardImage" or "boardSlide")
                         ) {
                             return ParseCall(
-                                arity: 1,
+                                arity: ((name == "boardSlide") ? 2 : 1),
                                 name: name,
                                 names: 2
                             );

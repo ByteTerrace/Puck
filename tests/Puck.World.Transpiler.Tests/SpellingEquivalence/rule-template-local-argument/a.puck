@@ -1,0 +1,58 @@
+// A rule template's argument that reads the calling rule's locals binds those locals, as the expression written in the
+// template's place would: the template's body reads the local, never the argument's spelling as text, through a template
+// that relays it, under a parameter named like the local, and for a reserved binding (`$each`) as a key.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+    table flag {
+      a = 0
+      b = 0
+    }
+    table mark {
+      a = 0
+      b = 0
+    }
+  }
+}
+
+rule template stand(live, step) {
+  flag[$each] = live
+  mark[$each] = 0 - ($tick + step)
+  if live {
+    other = flag[live] + step
+  }
+}
+
+rule template relay(wanted) {
+  stand(live: wanted, step: 2)
+}
+
+rule "tick" {
+  local want = count > 1
+  when flag[$each] != want
+  forEach: flag
+  stand(live: want, step: want + 1)
+}
+
+rule template keyed(at, shown) {
+  flag[at] = shown
+  mark[at] = $tick + 2
+}
+
+rule "keyed" {
+  local shown = count > 3
+  when flag[$each] != shown
+  forEach: flag
+  keyed(at: $each, shown: shown)
+}
+
+rule "again" {
+  local wanted = count > 2
+  when mark[$each] != wanted
+  forEach: mark
+  relay(wanted: wanted)
+}

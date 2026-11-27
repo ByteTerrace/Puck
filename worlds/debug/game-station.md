@@ -79,10 +79,13 @@ every station.
   (`frame: placement:$each`).
 - **The holodeck** ([`../standard/holodeck.puck`](../standard/holodeck.puck)) is
   the pool of bodies a game's tokens stand as: each body an inhabited placement
-  whose count is a cell (`holodeckLive`), asked for and released through one
-  door (`holodeckSet`), posed once it exists. Chess's 32 pieces are the
-  station's instance's pool (`piece0` to `piece31`, as the chess library keys
-  them); the cards are a world pool keyed `<station>-card<k>`. A materialized
+  admitted by its pool's cell (`holodeckShown`, one write through
+  `holodeckShow` when the station's game changes) and counted by its own
+  (`holodeckLive`, through `holodeckSet`, for a captured piece or a queened
+  pawn's new look), posed once it exists. Chess's 32 pieces are the station's
+  instance's pool `pieces` (`piece0` to `piece31`, as the chess library keys
+  them); each station's cards are a world pool keyed by the station's place in
+  the list, their bodies keyed `<station>-card<k>`. A materialized
   body takes the population's highest free slot, so a world sizes its bodies
   for the largest token game each station hosts (`gameStationBodies`: the
   outlines and 52 cards).
@@ -173,7 +176,7 @@ another pile plays the run there.
 | Read every station's game, status and menu | `world.state gameStationGame`, `gameStationStatus`, `gameStationRowInk` |
 | Read who sits where and their presses | `world.state <station>$gameStationChair`, `<station>$gameStationEdges`, `<station>$gameStationPointer` |
 | Read chess at the glass | `world.state <station>$chessStationCursor`, `<station>$chessStationPicked`, `<station>$chessStationRingCode` |
-| Read the holodeck's pieces | `world.state <station>$holodeckLive` (1 a standing body), `<station>$holodeckAt` (the square each was last stood on), `<station>$pieceCell` (the game's squares) |
+| Read the holodeck's pieces | `world.state <station>$holodeckShown` (1 while the pieces stand), `<station>$holodeckLive` (1 a piece the game wants), `<station>$holodeckAt` (the mark of the square each was last stood on), `<station>$pieceCell` (the game's squares) |
 | Read a station's turns played | `world.state <station>$chessStationPlies`, `<station>$chessStationGames` (games a self-playing station set up afresh) |
 | Move in a station's chess | `station.chess <station> 11 27` (e2 to e4) |
 | Start a station's chess afresh | `world.state.cell.set <station>$chessFresh request 1` |
@@ -190,19 +193,23 @@ the same sheet live, and `--spent` what it spent):
 
 | | Sheet (work units a tick, at rest plus one change) |
 |---|---|
-| One station (game-station-root, the board games lab) | 468,465 |
-| Twelve stations playing themselves (the stress lab) | 3,455,784 |
-| The debug world with its one station | 3,600,485 |
+| One station (game-station-root, the board games lab) | 358,663 |
+| Twelve stations playing themselves (the stress lab) | 2,714,219 |
+| The debug world with its one station | 3,543,572 |
 
 The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Each
-station past the first adds about 272 thousand: its instance's own lines
-(about 234 thousand summed, chess most of them) and its members of the
+station past the first adds about 214 thousand: its instance's own lines
+(about 177 thousand summed, chess most of them) and its members of the
 patience set's family sweeps. Every cell a firing writes is priced (about 512
-units), so the holodeck's door writes two cells a body and a body at rest costs
-nothing: each lifecycle and pose rule closes its own gate. The costliest chess
-lines are the ones a game switch, a settle or a put-back opens for all 32
-pieces at once (the lifecycle, the pose and the settled read, each about 17 to
-34 thousand). A put-back or a fresh game stands every body again by flipping
+units), so a game switch is one firing of the pool's door (`holodeckShow`, two
+cells) however many tokens the pool stands, and a body at rest costs nothing:
+each lifecycle and pose rule closes its own gate. The costliest chess line is
+the pose a switch or a put-back opens for all 32 pieces at once (about 18
+thousand). A piece's square is read when its own body comes to rest
+(`fact(placement, $each, Resting)`, a fact the host versions per placement), so
+a settle reads only the pieces that moved; the en-passant check reads the
+sliders' rays over an occupancy mask (`boardSlide`) rather than copying the
+board. A put-back or a fresh game stands every body again by flipping
 one parity the pose rule folds into each body's last pose, rather than marking
 each body; the fresh-game door writes only what something reads before the
 judge's first settled pass; the search's own lines (`search(ply) > 0`) are

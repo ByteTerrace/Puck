@@ -5894,12 +5894,12 @@ shell, each usable alone, each named for what it does.
   may sweep a row family itself (`forEach: pile`, `$each` the card, `$member` the station), due per (member, key) and
   priced at one member's bindings (docs/reference/state/analysis.md). Klondike, FreeCell and the patience layout are
   one set of rules over every station (worlds/games/klondike.puck, freecell.puck, patience-station.puck
-  `patienceSetRules`). With holodeck chess, one station prices 468 thousand, twelve playing themselves (the board games
-  stress lab) 3.46 million, the debug world with its one station 3.60 million (`puck compile <world> --validate
-  --budget 40`; worlds/debug/game-station.md, "Cost"); each station past the first adds about 272 thousand, most of it
-  chess's instance lines and the 32-binding sweeps a game switch, a settle or a put-back opens (the lifecycle 34, the
-  pose 17, the settled read 17 thousand). The lifecycle's 32 releases on a switch are real work while a pool body's
-  count is its own cell; an inhabit count gated by one station-wide cell would make a switch one write. In order: (1) the chairs (worlds/standard/game-station.puck
+  `patienceSetRules`). With holodeck chess, one station prices 359 thousand, twelve playing themselves (the board games
+  stress lab) 2.71 million, the debug world with its one station 3.54 million (`puck compile <world> --validate
+  --budget 40`; worlds/debug/game-station.md, "Cost"); each station past the first adds about 214 thousand, most of it
+  chess's instance lines; a switch is one write of the pool's cell (`WorldPlacementInhabit.Pool`), a settle reads only
+  the pieces that came to rest (`fact(placement, $each, Resting)`), and the 32-binding pose a switch or a put-back
+  opens (18 thousand) is the largest chess line left. In order: (1) the chairs (worlds/standard/game-station.puck
   `gameStationRules`) as a set over the stations, writing rows keyed by the station's number
   (`gameStationChairNear[i]`, `gameStationEdgesNear[i]`, `gameStationPointerNear[i]`, ...) so `patienceStationRules`
   and chess-station join their sets; that needs a host fact over a family member (`board(pointer, <id>Cells, seat)`,
