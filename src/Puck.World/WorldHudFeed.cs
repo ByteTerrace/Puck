@@ -36,11 +36,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     private readonly WorldHudPanel?[] m_seatSources = new WorldHudPanel?[PlayerRoster.MaxSlots];
     private readonly PanelBuild?[] m_seatBuilds = new PanelBuild?[PlayerRoster.MaxSlots];
     private int m_seenRevision = -1;
-    private PanelBuild?[] m_worldPanels = [];
-    // A world panel that reads the body key (StateBinding.BodyKey) is drawn for each joined seat, in its viewport, from a
-    // build of its own per seat (null for a panel drawn once); its draws share the world panels' reservation.
-    private PanelBuild[]?[] m_seatedPanels = [];
-    private readonly OverlayHudPanel[] m_visiblePanels = new OverlayHudPanel[WorldHudCapacity.MaxWorldPanels];
+    private PanelBuild[] m_worldPanels = [];
+    private OverlayHudPanel[] m_visiblePanels = [];
     private WorldHudPanel[] m_worldSources = [];
 
     private WorldHudSection? m_seenHud;
@@ -118,91 +115,18 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
             slot: slot
         );
     }
-    // Each world panel's builds: one for a panel drawn once, or one per seat for a panel that reads the body key.
-    private (PanelBuild?[] Once, PanelBuild[]?[] Seated) BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
-        var once = new PanelBuild?[panels.Count];
-        var seated = new PanelBuild[]?[panels.Count];
+    private PanelBuild[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
+        var built = new PanelBuild[panels.Count];
 
         for (var index = 0; (index < panels.Count); index++) {
-            if (!ReadsBody(panel: panels[index])) {
-                once[index] = BuildPanel(
-                    panel: panels[index],
-                    seat: 1,
-                    slot: -1
-                );
-
-                continue;
-            }
-
-            var perSeat = new PanelBuild[PlayerRoster.MaxSlots];
-
-            for (var slot = 0; (slot < perSeat.Length); slot++) {
-                perSeat[slot] = BuildPanel(
-                    panel: panels[index],
-                    seat: PlayerRoster.DisplayNumber(slot: slot),
-                    slot: slot
-                );
-            }
-
-            seated[index] = perSeat;
+            built[index] = BuildPanel(
+                panel: panels[index],
+                seat: 1,
+                slot: -1
+            );
         }
 
-        return (once, seated);
-    }
-    // A panel that reads a cell keyed by the body is one each seat sees its own of.
-    private static bool ReadsBody(WorldHudPanel panel) => panel.ReadTokens().Any(predicate: StateBinding.IsBodyKeyed);
-    // Draws each world panel that reads the body key once for every joined seat it is visible to, its rect placed in that
-    // seat's viewport as a seat's own panel is, after the panels drawn once and within the same reservation.
-    private int DrawSeatedPanels(float defaultsPresence, double nowSeconds, int visibleCount) {
-        for (var index = 0; (index < m_seatedPanels.Length); index++) {
-            if (m_seatedPanels[index] is not { } perSeat) {
-                continue;
-            }
-
-            var source = m_worldSources[index];
-
-            for (var slot = 0; (slot < perSeat.Length); slot++) {
-                if (
-                    (visibleCount >= m_visiblePanels.Length) ||
-                    !m_roster.IsJoined(slot: slot)
-                ) {
-                    continue;
-                }
-
-                var presence = (defaultsPresence * m_facts.Presence(
-                    predicate: source.Visible,
-                    slot: slot
-                ));
-
-                if (presence <= 0f) {
-                    continue;
-                }
-
-                var build = perSeat[slot];
-                var viewport = m_viewports.Seat(slot: slot).Region;
-                var rect = source.Rect;
-
-                speech.Observe(panel: source, seat: slot);
-
-                RankFrames(
-                    build: build,
-                    nowSeconds: nowSeconds
-                );
-                build.Panel = (build.Panel with {
-                    Alpha = presence,
-                    Rect = new OverlayHudRect(
-                        X: (viewport.X + (rect.X * viewport.Width)),
-                        Y: (viewport.Y + (rect.Y * viewport.Height)),
-                        Width: (rect.Width * viewport.Width),
-                        Height: (rect.Height * viewport.Height)
-                    ),
-                    Seat = slot,
-                });
-                m_visiblePanels[visibleCount++] = build.Panel;
-            }
-        }
-
-        return visibleCount;
+        return built;
     }
     // Walks the joined roster (publishing one entry per seat that is BOTH joined and has authored a player-scope
     // panel), scoping each seat's panel into the SAME published viewport WorldOverlayFeed's binding bar renders in
@@ -455,24 +379,16 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 m_seenHud = hud;
 
                 var previous = m_worldPanels;
-                var previousSeated = m_seatedPanels;
 
                 m_worldSources = (hud.Defaults.Enabled
                     ? [.. hud.Panels]
                     : []
                 );
-                (m_worldPanels, m_seatedPanels) = BuildPanels(panels: m_worldSources);
+                m_worldPanels = BuildPanels(panels: m_worldSources);
+                m_visiblePanels = new OverlayHudPanel[m_worldPanels.Length];
 
                 foreach (var build in previous) {
-                    if (build is not null) {
-                        ReleaseFrameSources(build: build);
-                    }
-                }
-
-                foreach (var perSeat in previousSeated) {
-                    foreach (var build in (perSeat ?? [])) {
-                        ReleaseFrameSources(build: build);
-                    }
+                    ReleaseFrameSources(build: build);
                 }
             }
 
@@ -489,18 +405,13 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
             if (defaultsPresence > 0f) {
                 for (var index = 0; (index < m_worldPanels.Length); index++) {
-                    if (m_worldPanels[index] is not { } build) {
-                        continue;
-                    }
-
                     var presence = (defaultsPresence * PresenceAnySeat(predicate: m_worldSources[index].Visible));
 
-                    if (
-                        (presence <= 0f) ||
-                        (visibleCount >= m_visiblePanels.Length)
-                    ) {
+                    if (presence <= 0f) {
                         continue;
                     }
+
+                    var build = m_worldPanels[index];
 
                     speech.Observe(panel: m_worldSources[index], seat: -1);
 
@@ -511,12 +422,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                     build.Panel = (build.Panel with { Alpha = presence, });
                     m_visiblePanels[visibleCount++] = build.Panel;
                 }
-
-                visibleCount = DrawSeatedPanels(
-                    defaultsPresence: defaultsPresence,
-                    nowSeconds: nowSeconds,
-                    visibleCount: visibleCount
-                );
             }
 
             var seatCount = BuildSeatPanels(nowSeconds: nowSeconds);

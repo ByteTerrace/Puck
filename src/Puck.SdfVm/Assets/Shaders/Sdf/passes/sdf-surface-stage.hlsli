@@ -132,7 +132,10 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
         }
     }
 
-    return saturate(1.0 - ((SdfMeshAoStrength * occlusion) / float(SdfMeshAoSamples)));
+    // Visibility falls exponentially with the taps' mean occlusion: its slope at no occlusion is the strength, and it
+    // stays above zero for any partial cover. The ambient, the probes' indirect light and the traced lights' probe answers
+    // all take this factor, so a zero here leaves a shadowed point with no light at all.
+    return exp(-((SdfMeshAoStrength * occlusion) / float(SdfMeshAoSamples)));
 }
 // One cascade's light camera, from the pass block's rows.
 struct SdfMeshCascade {
@@ -261,13 +264,14 @@ SdfShadowBlock sdfMeshShadowBlock(uint cascade, uint first) {
 // Classifies a receiver against the bounds of the block of a cascade entry's layer its texel lies in, so that only a
 // receiver near a shadow's edge pays for the blocker search and the filter. The arguments are sdfMeshShadow's own for
 // the entry: the receiver's continuous texel, its depth along the light, its plane's depth change per texel
-// (`gradient`), the texel's size in metres, the entry's penumbra slope and its inverse (`cone`), which layer the
-// receiver reads and whether the entry holds glass extinction.
+// (`gradient`), the texel's size in metres, the entry's penumbra slope and its inverse (`cone`), the filter's slope
+// clearance, which layer the receiver reads and whether the entry holds glass extinction.
 //
 // The invariant: a classified receiver's visibility is, to the bit, what the taps would have summed to. The block's
-// record bounds every texel a tap can read: every tap's texel centre lies within SDF_MESH_SHADOW_FILTER_TEXELS + 1/2 of
-// the receiver's texel along each axis (a tap offset shorter than the radius, then the floor to its texel), which the
-// record's apron covers for a receiver whose reach stays inside the layer. A caster at texel centre T stands at a depth
+// record bounds every texel a tap can read: every texel centre a tap reads lies within SDF_MESH_SHADOW_FILTER_TEXELS + 1
+// of the receiver's texel along each axis (a search tap's offset shorter than the radius, then the floor to its texel; a
+// filter tap's four texels about its point, sdfMeshShadowFilterTap), which the record's apron covers for a receiver
+// whose reach stays inside the layer. A caster at texel centre T stands at a depth
 // along the light between the block's plane at T less its high bound and less its low bound (the stored depth runs
 // toward the light), and the receiver's own plane, the block's plane and the difference between them are linear in T,
 // so each takes its extremes over a square of taps at the square's corners.
@@ -282,7 +286,7 @@ SdfShadowBlock sdfMeshShadowBlock(uint cascade, uint first) {
 // within it of either class filters. Defining SDF_SURFACE_OMIT_SHADOW_CLASSES compiles the classes out, every receiver
 // filtering as the taps alone decide: a measuring switch for the classes' share of `sdf.world$surface`, read against a
 // reload of the same tree without it, and the still it must leave unchanged.
-uint sdfMeshShadowClass(uint cascade, SdfMeshCascade c, uint side, float2 texel, float receiver, float2 gradient, float texelWorld, float slope, float cone, bool exit, bool opticalPresent) {
+uint sdfMeshShadowClass(uint cascade, SdfMeshCascade c, uint side, float2 texel, float receiver, float2 gradient, float texelWorld, float slope, float cone, float clearance, bool exit, bool opticalPresent) {
 #if defined(SDF_SURFACE_OMIT_SHADOW_CLASSES)
     return SdfShadowClassFilter;
 #else
@@ -317,19 +321,44 @@ uint sdfMeshShadowClass(uint cascade, SdfMeshCascade c, uint side, float2 texel,
     }
 
     // The widest the filter can be, the half side of the square its taps' texel centres lie in, and the farthest any
-    // lies from the receiver's texel.
+    // lies from the receiver's texel: a filter tap reads the four texels about its point (sdfMeshShadowFilterTap), whose
+    // centres lie less than a texel from it along each axis.
     float widest = clamp(((farthest * slope) / texelWorld), 1.0, SdfMeshShadowMaxTexels);
-    float halfSide = (widest + 0.5);
-    float lateral = (widest + 0.7072);
+    float halfSide = (widest + 1.0);
+    float lateral = (widest + 1.4143);
     float soft = (SdfMeshShadowSoftTexels * texelWorld);
     // The least any filter tap's caster stands in front of the receiver's plane past its slope clearance, and the least
     // any stands inside the light's cone over the receiver.
-    float blocking = ((((span * block.low) - stand) - (halfSide * leaning)) - ((SdfMeshShadowSlopeBias * texelWorld) * lateral));
+    float blocking = ((((span * block.low) - stand) - (halfSide * leaning)) - ((clearance * texelWorld) * lateral));
     float inCone = ((((span * block.low) - stand) - ((halfSide * span) * (abs(block.plane.y) + abs(block.plane.z))))
         - ((texelWorld * cone) * max((lateral - SdfMeshShadowNearTexels), 0.0)));
 
     return (((blocking >= (soft + epsilon)) && (inCone >= (soft + epsilon))) ? SdfShadowClassUmbra : SdfShadowClassFilter);
 #endif
+}
+// One filter tap at `offset` texels from the receiver's texel, as its share of the lit taps and of the taps that know
+// (sdfMeshShadow's `lit` and `known`): the four texels about the tap's point, each weighed by its bilinear share, so the
+// answer moves continuously as the point crosses texels and a silhouette's texel steps read as a ramp, not a staircase.
+// Each texel's caster answers as sdfMeshShadowGap measures it with the receiver's slope clearance (`clearance`, in texels
+// per texel of lateral distance) and `soft`, the depth over which a caster past its clearance comes to occlude fully.
+float2 sdfMeshShadowFilterTap(bool opticalPresent, uint cascade, SdfMeshCascade c, float2 texel, float2 offset, float receiver, float2 gradient, float texelWorld, float clearance, float cone, bool exit, float soft) {
+    float2 centre = ((texel + offset) - 0.5);
+    float2 base = floor(centre);
+    float2 fraction = (centre - base);
+    float2 answer = float2(0.0, 0.0);
+
+    [unroll]
+    for (uint corner = 0u; (corner < 4u); corner++) {
+        float2 next = float2(float(corner & 1u), float(corner >> 1u));
+        float2 shares = lerp((1.0 - fraction), fraction, next);
+        float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (((base + next) + 0.5) - texel), receiver, gradient, texelWorld, clearance, cone, exit);
+        float caster = (saturate(gap.x / soft) * gap.z);
+        float open = (1.0 - caster);
+
+        answer += ((shares.x * shares.y) * float2(open, (open + (caster * saturate(gap.y / soft)))));
+    }
+
+    return answer;
 }
 // A shadow role's visibility at a surface point, in `x`, from the first of its cascade entries that holds it: a blocker
 // search sizes the penumbra from the entry's penumbra slope and the gap to the nearest blocker inside the light's cone
@@ -405,12 +434,19 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         // at that tap's texel centre rather than the depth at the pixel. A receiver near edge-on to the light keeps its
         // slope at that of a normal a fifth of the way toward the light, or away from it for a side past the terminator.
         float facing = dot(face, c.forward);
-        float3 lightNormal = float3(dot(face, c.right), dot(face, c.up), ((facing > 0.0) ? max(facing, 0.2) : min(facing, -0.2)));
+        float edgeOn = ((facing > 0.0) ? max(facing, 0.2) : min(facing, -0.2));
+        float3 lightNormal = float3(dot(face, c.right), dot(face, c.up), edgeOn);
         float2 gradient = (float2((-lightNormal.x * c.aspect), lightNormal.y) * (texelWorld / lightNormal.z));
+        // The filter's slope clearance, in texels of depth per texel of lateral distance: the fixed allowance, plus the
+        // slope the clamp above leaves out of the receiver's plane, so the receiver's own surface, which rises toward
+        // the light by its true slope, never stands in front of the clamped plane by more than the clearance: a face
+        // near edge-on to the light does not shadow itself.
+        float clearance = (SdfMeshShadowSlopeBias + (length(float2((lightNormal.x * c.aspect), lightNormal.y))
+            * max(((1.0 / max(abs(facing), 1.0e-3)) - (1.0 / abs(edgeOn))), 0.0)));
         float searchTexels = SdfMeshShadowMaxTexels;
         // A receiver its block's bounds place wholly in the light or wholly in the umbra takes the taps' answer without
         // them (sdfMeshShadowClass).
-        uint shadowClass = sdfMeshShadowClass(cascade, c, side, texel, receiver, gradient, texelWorld, slope, cone, exit, opticalPresent);
+        uint shadowClass = sdfMeshShadowClass(cascade, c, side, texel, receiver, gradient, texelWorld, slope, cone, clearance, exit, opticalPresent);
 
         if (shadowClass != SdfShadowClassFilter) {
             visibility = ((shadowClass == SdfShadowClassUmbra) ? 0.0 : 1.0);
@@ -443,8 +479,7 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         float penumbra = ((sizing * slope) / texelWorld);
         float filterTexels = clamp(penumbra, 1.0, SdfMeshShadowMaxTexels);
         float soft = (SdfMeshShadowSoftTexels * texelWorld);
-        float lit = 0.0;
-        float known = 0.0;
+        float2 taps = float2(0.0, 0.0);
 
         // A tap with no caster in front of the receiver's surface sees the light; one whose caster lies inside the
         // light's cone over the receiver hides it; and one whose caster lies outside that cone says nothing about this
@@ -453,15 +488,11 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
             float angle = ((float(tap) * PuckGoldenAngle) + rotation);
-            float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone, exit);
-            float caster = saturate(gap.x / soft) * gap.z;
-            float open = (1.0 - caster);
 
-            lit += open;
-            known += (open + (caster * saturate(gap.y / soft)));
+            taps += sdfMeshShadowFilterTap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, clearance, cone, exit, soft);
         }
 
-        visibility = ((known > 0.0) ? (lit / known) : 1.0);
+        visibility = ((taps.y > 0.0) ? (taps.x / taps.y) : 1.0);
     }
 
     return float2(visibility, coverage);

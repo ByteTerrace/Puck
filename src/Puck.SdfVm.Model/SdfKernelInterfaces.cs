@@ -115,8 +115,8 @@ public sealed class SdfKernelInterfaces {
     public const float MeshShadowFilterTexels = 14f;
     /// <summary>The texels past a shadow block's own, on every side, that its bounds also hold
     /// (<see cref="SdfWorldPackage.ShadowBlockEdge"/>): a receiver's blocker search and filter read texels within
-    /// <see cref="MeshShadowFilterTexels"/> of its own, so the bounds of the one block its texel lies in answer for every
-    /// texel it can read.</summary>
+    /// <see cref="MeshShadowFilterTexels"/> of its own, and a filter tap the four texels about its point, one more, so the
+    /// bounds of the one block its texel lies in answer for every texel it can read.</summary>
     public const int MeshShadowBlockApron = (((int)MeshShadowFilterTexels) + 1);
     /// <summary>The bit of the shadow block reduction's pushed index above the first block's column (bits 0 to 7) and
     /// row (bits 8 to 15) that makes a dispatch rewrite the blocks' glass flags alone, leaving their planes and bounds

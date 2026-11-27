@@ -4,14 +4,18 @@
 struct ProbePass {
     float4 meshIrradianceLevels[3];
     float4 meshIrradianceSpacings[3];
+    uint meshIrradianceEpoch;
 };
 static ProbePass passGroup;
+// The relight reads the volume only as the current lighting epoch left it (sdfMeshIrradianceHolds).
+#define SDF_MESH_IRRADIANCE_EPOCH passGroup.meshIrradianceEpoch
 #include "sdf-mesh-irradiance.hlsli"
 void sdfProbeLightingSetup() {
     [unroll] for (uint level = 0; level < 3; level++) {
         passGroup.meshIrradianceLevels[level] = sdfProbeLighting[3 + 2 * level];
         passGroup.meshIrradianceSpacings[level] = sdfProbeLighting[4 + 2 * level];
     }
+    passGroup.meshIrradianceEpoch = (uint)sdfProbeLighting[SDF_PROBE_RELIGHT_EPOCH_ROW].z;
 }
 // Whether a ray reaches `reach` unblocked; `toward` a point light at that distance, past the solid that holds it.
 bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane, bool toward) {

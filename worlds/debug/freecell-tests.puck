@@ -14,8 +14,8 @@ import "stopped-machines"
 
 state {
   world {
-    table solitaire capacity(1) {
-      table = 2
+    table tableGame {
+      game = 2
     }
   }
 }

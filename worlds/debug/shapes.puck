@@ -26,6 +26,7 @@ import "../standard/reach"
 import "../standard/styles"
 import "../standard/rig"
 import "../standard/architecture"
+import "../standard/contexts/terminal-console"
 
 let seatPopulation = 4
 let visitorPopulation = 8
@@ -538,24 +539,28 @@ function consoleRegion(id, rect, rows = 1) = {
 }
 // A filled rectangle on a display's glass, its corners rounded by `round`, in the world's frame. Its box reaches
 // 8 cm either side of the glass, past any rounding, and only the glass wears its palette slot.
-function consoleFill(display, rect, color, round = 0) = {
-  type: "Box"
-  position: displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront))
-  rotation: displayFaceTurn(display)
-  scale [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1]), 0.08]
-  rounding: (displayScale * round)
-  color: color
-}
+function consoleFill(display, rect, color, round = 0) = faceFill(
+  displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront)),
+  displayFaceTurn(display),
+  [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1])],
+  color,
+  (displayScale * round),
+  0.08
+)
 // Lettering in a rectangle on a display's glass: `em` in the plinth's units, `spacing` the line spacing, `wrap` breaking
 // lines at the box's width and `markup` reading the substituted text's colour tags. A text fits its box.
-function consoleText(display, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = {
-  type: "Box"
-  position: displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront))
-  rotation: displayFaceTurn(display)
-  scale [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1]), 0.03]
-  color: ink
-  text { template: template, emHeight: (displayScale * em), align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
-}
+function consoleText(display, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = faceText(
+  displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront)),
+  displayFaceTurn(display),
+  [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1])],
+  template,
+  ink,
+  (displayScale * em),
+  align,
+  wrap,
+  markup,
+  spacing
+)
 // The list's lines, one a row: a row's title in its ink, read from a display's row cells (keyed `<display>-<row>`), and
 // a row's group.
 function consoleNameLine(display, row) = $"[color={{state.galleryRowInk.{display.id}-{row}}}]{{state.galleryRowName.{display.id}-{row}}}[/color]"
@@ -636,12 +641,49 @@ let consolePointer = {
     consoleRegion("faster", consoleFaster)
   ]
 }
-template displayScreen(display) {
-  prototype $"gallery-screen-{display.id}" {
+// A display's screen in terminal mode: the hidden console its terminal opens (../standard/contexts/terminal-console.puck,
+// gallery/gallery.puck's galleryConsole), which the screen placement responds with while the display's
+// `terminalConsoleOpen` cell holds 1. It is the same dark glass in the console's own palette: faint scanlines across the
+// field, an ochre rule over and under the text, the display's group and terminal number small in the top corner, the
+// last line run in teal over its reply in cream, and the line being typed in amber behind its prompt. Its type is about
+// half again the list's, so someone standing a step or two behind the one typing reads along.
+let terminalScreenText = { x0: -0.7, x1: 0.7, y0: -0.105, y1: 0.143 }
+let terminalScreenPrompt = { x0: -0.7, x1: 0.7, y0: -0.172, y1: -0.121 }
+let terminalScreenEm = 0.0185
+let terminalScreenPromptEm = 0.03
+// The scanlines, bands of the world's height laid over the glass: their half thickness and pitch, in metres.
+let terminalScanHalf = 0.0009
+let terminalScanPitch = 0.006
+function terminalScreenPaints(display, number) = [
+  {
+    type: "Box"
+    position: displayWorld(display, plinthOnFace(0, 0, displayGlassFront))
+    scale [3, terminalScanHalf, 3]
+    color: consoleLook.scan
+    repeat { cell [0, terminalScanPitch, 0] }
+  }
+  consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: 0.15, y1: 0.156 }, consoleLook.frame, 0.003)
+  consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: -0.117, y1: -0.111 }, consoleLook.frame, 0.003)
+  consoleText(display, { x0: 0.3, x1: consoleDetail.x1, y0: 0.157, y1: 0.177 }, $"{display.title}  {number}", consoleLook.quiet, 0.012, "right")
+  consoleText(
+    display,
+    terminalScreenText,
+    terminalConsoleScreen(number, echo: consoleLook.quiet),
+    consoleLook.dim,
+    terminalScreenEm,
+    "left",
+    markup: true,
+    spacing: (((terminalScreenText.y1 - terminalScreenText.y0) / (terminalConsoleReplyLines + 1)) / (terminalScreenEm * consoleFontLine))
+  )
+  consoleText(display, terminalScreenPrompt, terminalConsolePrompt(number), consoleLook.lit, terminalScreenPromptEm, "left")
+]
+// One screen creation over a display's console glass, wearing `paints`.
+template consoleScreen(name, paints) {
+  prototype name {
     document {
-      name: $"gallery-screen-{display.id}"
+      name: name
       schema: "puck.creation.v1"
-      palette [consoleGlass with { paints: consolePaints(display) }]
+      palette [consoleGlass with { paints: paints }]
       shape Box "glass" {
         material: 0
         position: plinthOnFace(0, 0, displayGlassOut)
@@ -653,6 +695,11 @@ template displayScreen(display) {
       }
     }
   }
+}
+// A display's two screens: its interface, and its terminal mode for terminal `number`.
+template displayScreen(display, number) {
+  consoleScreen(name: $"gallery-screen-{display.id}", paints: consolePaints(display))
+  consoleScreen(name: $"gallery-screen-{display.id}-terminal", paints: terminalScreenPaints(display, number))
 }
 
 // The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit and
@@ -744,7 +791,7 @@ let galleryCommands = [
 // the exhibit on its turntable, which shows the display's first exhibit and, through its response facet, whichever
 // exhibit of the whole catalog the display's `gallerySelect` cell holds, so any display can show any exhibit.
 template displayPlacements() {
-  for display in galleryDisplays {
+  for (display, index) in galleryDisplays {
     placement $"display-{display.id}-plinth" {
       prototype: "gallery-display"
       parent: "gallery"
@@ -760,6 +807,13 @@ template displayPlacements() {
       yawDegrees: display.yaw
       scale: displayScale
       pointer: consolePointer
+      // The display's terminal (its place in galleryDisplays from 1) turns the screen into its hidden console.
+      respond [
+        {
+          when: state(state: terminalConsoleOpen, key: $"{index + 1}", comparison: Equal, value: 1)
+          prototypeId: $"gallery-screen-{display.id}-terminal"
+        }
+      ]
     }
   }
   for (display, index) in galleryDisplays {
@@ -3109,8 +3163,8 @@ template galleryPrototypes() {
       displayPlinth(base: 0)
     }
   }
-  for display in galleryDisplays {
-    displayScreen(display: display)
+  for (display, index) in galleryDisplays {
+    displayScreen(display: display, number: index + 1)
   }
   // Each primitive at a uniform scale.
   prototype "shape-sphere" {
