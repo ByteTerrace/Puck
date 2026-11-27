@@ -2415,32 +2415,27 @@ check; this packet holds the defects beside it.
   targets by the timer, which is serviced). The control plane's C0.6 puts the
   Direct3D 12 frame latency waitable on the door. Step 3's slow-present
   reading at `world.target 20` says how much is lost.
-- [medium] The lighting's device memory (the trace scene's region, the
-  feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
-  fixed storage with no reservation; only a job's slot buffers reserve
-  (`SdfGpuWorkHold`). Most of it is allocated after the bake settles (a first
-  light, the trace scene over the standing meshes), and the selector's elastic
-  budget is what the pool's limit leaves after everything held
-  (`SdfResidencySelector`'s `UsableOf`), so the bake is granted room mid-bake
-  that the lighting then takes back: the region's budget falls once the bake
-  has filled it, and the bias rises to coarsen what was already placed. The
-  fix is a reservation the lighting makes before the bake fills the region,
-  sized from its indirect tier (`SdfMeshIrradiance.LevelsOf`) for the volume
-  tables and hit cache, with the trace scene's words reserved as the region's
-  meshes stand.
-- [high] A volume's words stand three times: the host's copy
-  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
-  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
-  published table the views read, which each publication copies from the
-  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
-  two device tables bind one layout at one binding
-  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
-  so a view can reject a slot mid-move. On the RTX 2060's route the two read
-  about 230 MB each at the device's peak. Have the views bind the feedback
-  table and make a publication a revision alone, with the barriers the views'
-  stages need on that table. It changes what the passes read, so it is the
-  frame lane's edit with this plan; check that a still view stands until a
-  publication and that the probe history's serials still gate its reuse.
+- [medium] Two parts of the lighting's device storage are still outside its
+  reservation (`SdfLightingHold`): the ray-query structures
+  (`SdfMeshProbeGpuWork.Rays.cs`, `SdfMeshTraceBottoms`), whose sizes only the
+  driver's prebuild answer gives, so they still arrive after the scene builds
+  and lower the elastic budget then; and the trace words, which are estimated
+  from each traced level's triangles (`SdfMeshIrradianceScene.EstimateGpuWords`)
+  rather than measured, so the budget still moves by what the built scene
+  holds past or short of the estimate. A second scene of one world reserves
+  the trace words of the meshes it shares with the first again, though the
+  probe scenes place them once. Ask the device's prebuild size for each traced
+  geometry as its mesh is first named, and reserve the shared geometries once
+  in the probe scenes (`SdfMeshProbeScenes`) rather than per residency.
+- [medium] A volume's words still stand twice: the host's copy
+  (`SdfMeshIrradiance`'s volume words), which the CPU reference and a
+  reattach's snapshot read, and the probe service's feedback table, which the
+  views bind. A relayout or a reattach also sends the whole
+  volume through a host snapshot and the feedback region's staging
+  (`SdfMeshIrradiance.Gpu.cs`'s `volumeSnapshot`), about three tables of host
+  memory at once on the RTX 2060 at the High tier. Stage the snapshot from the
+  volume words under a hold of `m_blocks` instead of a copy, and size the
+  staging by chunks.
 - [medium] The temporal resolve's window (`historyWindow`,
   `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
   1920 by 1080) follows the display and not the device's table, so the RTX
@@ -5448,6 +5443,12 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Go and Reversi (`worlds/debug/go.puck`, `reversi.puck`) are whole documents of the gallery's board game room, so the board
+  games lab (`worlds/debug/labs/board-games.puck`) cannot stand them: each imports the gallery's shape catalog, derives its
+  body slots from `galleryPopulation` and the other tables' counts, grants `Drive` over those absolute body indices and
+  stands at level-2 coordinates. Turning each into a module that takes a table position and a body base, as
+  `physicalChessTable` does, lets the lab stand them and their scenarios (`go-tests.puck`, `reversi-tests.puck`, and
+  `chess-tests.puck`'s absolute coordinates) leave the whole debug world.
 - Two types answer "is this raw value one of a set or inside a range": `CompiledActionStateEnvelope` (`Puck.Physics`,
   a register's runtime envelope: `Contains` by a linear search, and `Clamp`, which substitutes the initial value for a
   set miss) and `ValueBounds` (`Puck.State.Rules`, the rule analysis's bound: a sorted set or a range, with inclusion

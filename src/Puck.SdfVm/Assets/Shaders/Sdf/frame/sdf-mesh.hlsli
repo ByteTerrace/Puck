@@ -165,7 +165,7 @@ float3 sdfMeshPoseRow(uint word) {
 // record alone.
 SdfMeshPose sdfMeshPoseOf(uint record) {
     int slot = asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD));
-    if (slot >= 0) {
+    if (slot != SDF_TRANSFORM_SLOT_NONE) {
         uint shown = sdfViewPoseSlot((uint)slot);
         return sdfMeshPoseOfRow(sdfDynamicTransforms[3u * shown], sdfDynamicTransforms[3u * shown + 1u],
             asfloat(sdfMeshRecordWord(record + SDF_MESH_SCALE_WORD)));

@@ -679,8 +679,9 @@ level 1 another way.
 stairs and its lift keep its size, and the tree's barriers let it through. The
 `wonderKey` register is 1 while the body carries a [wonder key](#the-wonder-key)
 switched on. The `wonderPass` register is a puzzle's to set, with
-`setBodyState(key: $each, state: "wonderPass", value: 1)`; no puzzle sets it
-yet, and `gallery.wonder pass on` sets it by hand. Both registers belong to the
+`setBodyState(key: $each, state: "wonderPass", value: 1)`: the cake in [the
+little house](#the-little-house) sets it, and `gallery.wonder pass on` sets it
+by hand. Both registers belong to the
 body, so a pass does not persist with the player between sessions: an identity
 fact would, but `setIdentityFact` refuses a seat driving under no identity.
 
@@ -735,6 +736,75 @@ the watch reload it.
 Other ways off level 1, checked: a body falling into the endless fall's well
 leaves through its floor painting at the size it had, so it can leave level 1
 small that way.
+
+## Ways back to normal size
+
+The owner's ruling: a visitor who leaves the toybox small has several ways
+back to its normal size. Being small should be a way to play, never a trap, so
+small doors lead to exploration, puzzles and rewards, and anyone in the gallery
+who is asked helps. A body leaves level 1 small by stepping off one of the
+tree's level-1 branches onto the toybox's balcony and back (outside every zone
+it keeps the size it took there, too small for the treads above, so its way is
+down the trunk to the nave), and through the endless fall when it is open. The
+ways back:
+
+- **The stairs and the lift.** Level 1's size field gives a body its full size
+  as it climbs or rides out ([The size of level 1](#the-size-of-level-1)).
+- **A steward.** Four stewards stand on level 0, each one of the Moth's crew
+  (the owner's Arcade Flight Crew sheet, [the Moth concept
+  pack](../../docs/game/art/moth-concept-pack/README.md)) in its own colours.
+  Walk up to a steward's slate and press the context button (E, the pad's RB):
+  it greets you on the slate and lists what you can ask. W and S (the pad's
+  d-pad) move the mark, Space or Enter (the pad's South) asks, and E or
+  Backspace (RB or B) steps away. "Help me back to my normal size" gives the
+  body its full size. [gallery/stewards.puck](gallery/stewards.puck) holds them.
+- **The little house's cake.** [Below](#the-little-house): a mouse door on
+  level 1 whose reward is the full-size pass.
+
+| Steward | Crew | Where (layout.puck's `stewardPlan`) |
+|---|---|---|
+| `tree` | Vector | Level 0, 6.5 m east of the tree's trunk on the nave's axis, facing it: where a visitor coming down the trunk's walkway steps off |
+| `lobby` | Skylark | Level 0, in the lobby beside the way in from the entrance, facing it |
+| `north` | Bulwark | Level 0, the north aisle in the tree's bay, under the toybox's north gallery, facing the nave |
+| `wing` | Forge | Level 0, the painting wing, against its south wall between its first two paintings and facing the aisle, clear of the way along it: before a small visitor walks into a painting |
+
+None stands on level 1's floor: there the stairs and the lift already give a
+body its size back as it leaves, and the toybox's games stay a pass holder's.
+
+**How a steward works.** Talking is the standard's conversation
+([contexts/conversation.puck](../standard/contexts/conversation.puck)): a
+speaker's reach, the context button, a script of choices, and what a choice
+does carried out in the firing that says it. What a steward says is world state
+keyed by the steward (`conversationSaid`), written on its slate for everyone
+near to read. Asking for your size back sets the size fields' released hold
+(`sizeHold` 1): every size field then gives the body its full size, at once off
+the fields and, on a field's own ground, until the body walks off it. While a
+seat talks, the debug world suspends its movement (`input-modes.puck`), so its
+step keys move the mark rather than the body.
+
+| Console line | What it reads |
+|---|---|
+| `world.state conversationWith` | The steward each body talks with, by its place in `stewardPlan` from 1 (0 for none) |
+| `world.state conversationShow` | What each steward shows: 0 its resting line, 1 or 2 its choices with that one marked, 3 or 4 its answer |
+| `world.state conversationSaid` | Each slate's text |
+
+### The little house
+
+A toy house stands free on level 1's north gallery in bay 10, its front toward
+the nave ([gallery/mouse-house.puck](gallery/mouse-house.puck), placed by
+layout.puck's `mouseHouse`). Its front door is a mouse door: the standard's
+`sizedDoorway` (architecture.puck), an opening sized for the Moth's capsule at
+a fifth of her size with room to spare, so a body at the toybox's size walks in
+and a full-size one meets the frame. Inside is one low room with a cake on a
+table at its back. Press the context button before the table and the cake
+grants the full-size pass: level 1's size field gives the body its full size
+from then on, the tree's barriers let it through and the toybox's games are in
+its reach. The room's ceiling stands lower than the door, so a body growing
+inside stays one the door admits; it grows to its full size as it steps out
+under the gallery's own ceiling (`WorldBody.SetScaleWithinClearance`).
+
+`world.state` reads nothing new here: `body.state 0` shows `wonderPass`, and
+`gallery.wonder pass off` takes the pass back to try the house again.
 
 ## What is still open
 

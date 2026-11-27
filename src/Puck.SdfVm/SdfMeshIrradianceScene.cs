@@ -783,6 +783,30 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public override int GetHashCode() => HashCode.Combine(value1: RuntimeHelpers.GetHashCode(o: Source), value2: Level);
     }
 
+    /// <summary>Estimates what a static draw of a mesh adds to the probe scenes' words before any scene builds it: its
+    /// geometry's block (<see cref="Geometry.GpuWords"/>), shared by every draw of the mesh, and the instance's part of a
+    /// scene's prefix. The block is the built geometry's where a scene built one over the same buffers; otherwise a
+    /// hierarchy over the traced level's triangles (<see cref="GeometryKey.Of"/>), one leaf position a triangle, full
+    /// leaves (the build fills a leaf before it splits, <see cref="LeafTriangles"/>) under a binary tree of packed nodes,
+    /// and a frame a braid. A triangle the build splits into several leaf positions (a long thin one) adds words the
+    /// estimate leaves out.</summary>
+    /// <param name="mesh">The mesh a static draw draws or traces.</param>
+    /// <param name="error">The most, in metres, the traced level may move the surface (<see cref="SdfMeshIrradiance.TraceError"/>).</param>
+    /// <returns>The geometry the draw traces, its block's words, and the words its instance adds to a prefix.</returns>
+    internal static (GeometryKey Key, long GeometryWords, long InstanceWords) EstimateGpuWords(SdfMesh mesh, float error) {
+        var key = GeometryKey.Of(error: error, mesh: mesh);
+        var triangles = (long)mesh.LevelOf(level: key.Level).TriangleCount;
+        var braids = Math.Max(val1: 1L, val2: triangles.CeilingDivide(divisor: BraidTriangles));
+        // The top level holds an entry a braid under about as many inner nodes.
+        var instance = (SdfMeshProbeTrace.InstanceWords + (braids * (SdfMeshProbeTrace.EntryWords + (2L * SdfMeshProbeTrace.NodeWords))));
+
+        if (Geometry.SharedGpuWordsOf(key: key) is { } built) { return (key, built, instance); }
+
+        var nodes = Math.Max(val1: 1L, val2: ((2L * triangles.CeilingDivide(divisor: LeafTriangles)) - 1L));
+
+        return (key, ((triangles + (nodes * SdfMeshProbeTrace.PackedNodeWords)) + (braids * SdfMeshProbeTrace.FrameWords)), instance);
+    }
+
     // The world bounds of a box in a draw's frame: its eight corners carried out through the draw's transform.
     private static (Vector3 Low, Vector3 High) Bounds(Matrix4x4 matrix, Vector3 low, Vector3 high) {
         var lowest = new Vector3(value: float.PositiveInfinity);
@@ -884,6 +908,12 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private ClaimCount m_claims = new(claims: 1);
         private GeometryKey? m_sharedAs;
 
+        // The words of the GPU block of the geometry a scene built over the same mesh buffers, or null when none stands.
+        internal static int? SharedGpuWordsOf(GeometryKey key) {
+            lock (SharedGate) {
+                return (SharedGeometries.TryGetValue(key: key, value: out var geometry) ? geometry.GpuWords : null);
+            }
+        }
         // Takes a claim on the geometry another scene built over the same mesh buffers; false when none stands.
         internal static bool TryAcquireShared(GeometryKey key, [NotNullWhen(true)] out Geometry? geometry) {
             lock (SharedGate) {

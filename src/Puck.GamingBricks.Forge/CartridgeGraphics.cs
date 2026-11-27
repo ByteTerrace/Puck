@@ -126,11 +126,15 @@ public static class CartridgeGraphics {
 
         return Halfwords(values: [.. bank.SelectMany(selector: static palette => palette)]);
     }
-    /// <summary>Encodes validated tiles as CGB planar 2bpp or AGB packed 4bpp.</summary>
+    /// <summary>Encodes validated tiles as CGB interleaved 2bpp, AGB packed 4bpp, or the Deck's 2bpp, whose eight rows of
+    /// low bits precede the eight rows of high bits.</summary>
     /// <param name="document">Validated cartridge source.</param>
-    /// <returns>The contiguous native tile bank.</returns>
+    /// <returns>The contiguous native tile bank, 16 bytes a tile except 32 on agb.</returns>
     public static byte[] Tiles(CartridgeDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
         var agb = (document.Target == "agb");
+        var planes = ((document.Target == "hgd") ? 8 : 1);
         var bytes = new byte[(document.Tiles.Length * (agb
             ? 32
             : 16))];
@@ -143,8 +147,11 @@ public static class CartridgeGraphics {
                     if (agb) {
                         bytes[(((tile * 32) + (y * 4)) + (x / 2))] |= ((byte)(color << ((x & 1) * 4)));
                     } else {
-                        bytes[((tile * 16) + (y * 2))] |= ((byte)((color & 1) << (7 - x)));
-                        bytes[(((tile * 16) + (y * 2)) + 1)] |= ((byte)((color >> 1) << (7 - x)));
+                        // The high bit's row sits one byte after its low row on the Brick, eight after on the Deck.
+                        var row = ((tile * 16) + ((planes == 1) ? (y * 2) : y));
+
+                        bytes[row] |= ((byte)((color & 1) << (7 - x)));
+                        bytes[(row + planes)] |= ((byte)((color >> 1) << (7 - x)));
                     }
                 }
             }

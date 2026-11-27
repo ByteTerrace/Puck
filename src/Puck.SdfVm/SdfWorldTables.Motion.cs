@@ -14,7 +14,8 @@ namespace Puck.SdfVm;
 // GpuRegion's CPU-shadow contract holds and only copy requests, never a second matrix, cross the host bus.
 public sealed partial class SdfWorldTables {
     private const int MeshPoseBytes = (SdfMeshRecord.PoseWords * sizeof(float));
-    private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
+    // The stages a view's passes read the tables in: what a writer of a table the World set binds hands it to.
+    internal const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
     private readonly GpuFittedBuffer m_previousDynamicTransforms;
     private readonly GpuFittedBuffer m_previousMeshTransforms;

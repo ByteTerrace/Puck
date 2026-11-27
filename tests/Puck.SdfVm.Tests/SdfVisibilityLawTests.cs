@@ -81,8 +81,6 @@ public sealed partial class SdfVisibilityLawTests {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
             .Where(predicate: static path => !path.StartsWith(comparisonType: StringComparison.Ordinal, value: "isa/"))
-            // The irradiance volume's cage word packs a probe level in its top two bits: a packing of its own, not an identity.
-            .Where(predicate: static path => (path != "shade/sdf-mesh-irradiance.hlsli"))
             .Where(predicate: path => HandSpelledPattern().IsMatch(input: CodeOf(path: path)))
             .Order(comparer: StringComparer.Ordinal);
 
@@ -95,9 +93,12 @@ public sealed partial class SdfVisibilityLawTests {
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
     // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, the identity's
-    // mask or shift written out, or a packed transform-slot word (a rigid segment's plan.z, a part binding's binding.x)
+    // mask written out, its kind shifted by hand (an identity or kind word shifted by 30, or a literal kind shifted by 30
+    // and composed with a source), or a packed transform-slot word (a rigid segment's plan.z, a part binding's binding.x)
     // offset by one or compared with zero by hand rather than through SDF_TRANSFORM_SLOT_UNPACK and
-    // SDF_TRANSFORM_SLOT_STATIC_WORD.
-    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b|\b(?:plan\.z|binding\.x)\s*(?:[-+]\s*1u?\b|[=!]=\s*0u?\b)")]
+    // SDF_TRANSFORM_SLOT_STATIC_WORD. Other words that pack three ten-bit channels under two top bits (the glass sky
+    // filter's written flag, a stationary window's distance bits, a probe mix's flags, the irradiance cage's level) shift
+    // their own operands by 30 and are no identity, so a bare shift by 30 is not one.
+    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|\b\w*(?:[iI]dentity|[kK]ind)\w*\s*(?:>>|<<)\s*30u?\b|\b[0-3]u?\s*<<\s*30u?\b\)*\s*\||\|\s*\(*[0-3]u?\s*<<\s*30u?\b|\b(?:plan\.z|binding\.x)\s*(?:[-+]\s*1u?\b|[=!]=\s*0u?\b)")]
     private static partial Regex HandSpelledPattern();
 }

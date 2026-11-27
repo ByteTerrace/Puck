@@ -11,8 +11,12 @@ public sealed record CartridgeDocument {
 
     /// <summary>Gets the declared schema; absence is invalid.</summary>
     public required string Schema { get; init; }
-    /// <summary>Gets the target: cgb, dmg or agb.</summary>
+    /// <summary>Gets the target: cgb, dmg, agb or hgd.</summary>
     public required string Target { get; init; }
+    /// <summary>Gets the cartridge board an hgd image is built for: nrom, mmc1 or mmc3, or null to let the compiler pick
+    /// the smallest board the image fits. Only the hgd target has boards to choose between; a battery save needs mmc1 or
+    /// mmc3, since an nrom board carries no battery-backed memory.</summary>
+    public string? Board { get; init; }
     /// <summary>Gets the ASCII cartridge title, at most twelve characters.</summary>
     public required string Title { get; init; }
     /// <summary>Gets the four-character ASCII game code.</summary>
@@ -87,8 +91,11 @@ public sealed record CartridgeWindow(
     [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Y,
     [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Visible);
 /// <summary>
-/// The cartridge's color. Each palette holds four colors on the humble machine and sixteen on the advanced one, and a
-/// tile's pixel digits index within whichever palette its map cell or sprite selects.
+/// The cartridge's color. Each palette holds four colors on the humble machines and sixteen on the advanced one, and a
+/// tile's pixel digits index within whichever palette its map cell or sprite selects. Colours are RGB555 integers,
+/// except on the hgd target, whose picture unit draws from a fixed master palette: there each colour is a master-palette
+/// index, 0 through 63, and colour zero of every palette is the shared backdrop, the first background palette's first
+/// colour.
 /// </summary>
 /// <param name="Background">The background palettes, in selection order.</param>
 /// <param name="Object">The object palettes, in selection order. Color zero is transparent.</param>
