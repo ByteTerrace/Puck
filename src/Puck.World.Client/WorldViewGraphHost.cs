@@ -1717,11 +1717,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
-    // Chooses the windows that render at the least share this frame so the worlds behind them become resident. A
-    // world's meshes arrive only in frames that render one of its views: its bake's sampling is dispatched there, and
-    // its baked meshes land in its region only after such a frame's upload (SdfWorldResidency.MeshesFirstArriving). So each
-    // world whose meshes are still arriving needs one rendered view until they are resident, not only until its bake
-    // settles, and a window onto it renders only if its consumer does. The search walks outward from the views that
+    // Chooses the windows that render at the least share this frame so the worlds behind them show an image of their own
+    // as they become resident (SdfWorldResidency.MeshesFirstArriving). Their bake and landing do not wait on it: the
+    // presentation stages every residency whose meshes are arriving whether or not a view renders it
+    // (SdfWorldPasses.StageMinimum). Each world whose meshes are still arriving keeps one rendered view until they are
+    // resident, and a window onto it renders only if its consumer does. The search walks outward from the views that
     // render whatever the windows do (the main instance, the roots, and every producer the root reads this frame: the
     // synthesized footprint, each placed view and each pane, which m_footprints holds before the screens are decided),
     // through session windows only, a pass a level and each pass's edges in footprint order, the filming cameras after:

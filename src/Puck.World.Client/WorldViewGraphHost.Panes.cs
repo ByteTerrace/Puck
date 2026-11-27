@@ -76,8 +76,8 @@ public interface IWorldViewScenes {
         return PortalGlass(consumer: consumer, glass: out glass, producer: producer);
     }
     /// <summary>Returns the world a session view renders when that world's meshes are still making their arrival
-    /// (<see cref="SdfVm.SdfWorldResidency.MeshesFirstArriving"/>) and the view's consumer renders another: a world's meshes arrive
-    /// only in frames that render one of its views, and a consumer that renders the same world brings them already.</summary>
+    /// (<see cref="SdfVm.SdfWorldResidency.MeshesFirstArriving"/>) and the view's consumer renders another, whose window then
+    /// renders an image of the arriving world; a consumer that renders the same world shows it already.</summary>
     /// <param name="view">The session view's instance name.</param>
     /// <param name="consumer">The instance whose image shows the view.</param>
     /// <returns>The world's residency, as an identity to compare by reference; <see langword="null"/> when the

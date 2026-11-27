@@ -558,12 +558,23 @@ public sealed partial class SdfMeshPathBake {
             return (Monitor.Wait(obj: ProgressGate, timeout: timeout) && (ProgressCount != since));
         }
     }
+    // Whether the bake's residency is letting it go (EndReports, Retire): its groups end from then on because they were
+    // let go, so the bake reports no done line (SettleCompletion). Under the gate.
+    private bool m_retiring;
+
+    /// <summary>Marks the bake as being let go by its residency, before anything it holds is released: from then on no
+    /// group's ending, whatever path ends it, reports the bake done. <see cref="Retire"/> follows once the residency's
+    /// device objects go.</summary>
+    public void EndReports() {
+        using (EnterGate(site: BakeGate.Read)) { m_retiring = true; }
+    }
     /// <summary>Retires every group of the bake, for a residency released, without waiting for any of them: their queued
     /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
     /// dropped, and each group frees its workspace when its last running job ends.</summary>
     public void Retire() {
         RetireMeasure();
         using (EnterGate(site: BakeGate.Read)) {
+            m_retiring = true;
             foreach (var group in m_groups.Concat(second: m_retiredGroups)) {
                 group.Retired = true;
                 group.InFlight = false;

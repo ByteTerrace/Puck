@@ -453,6 +453,10 @@ public sealed partial class SdfMeshRegionStore {
     private readonly List<IGpuStorageBuffer> m_landingBuffers = [];
     private readonly MeshWords m_landingPacker = new();
     private LandingJob? m_landingPacking;
+
+    /// <summary>Gets whether the next landing's words are being packed on a worker: until the packing ends no service takes
+    /// it, so a frame that pumps the background work meanwhile lands nothing.</summary>
+    internal bool LandingPacks { get { lock (m_gate) { return (m_landingPacking?.Pack is { IsCompleted: false }); } } }
     // The most free packed buffers the landing keeps between jobs.
     private const int LandingFreeBuffers = 2;
 

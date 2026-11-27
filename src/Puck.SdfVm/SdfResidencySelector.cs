@@ -17,10 +17,12 @@ namespace Puck.SdfVm;
 /// <param name="CanLower">Whether the residency would stay under its budget with every demand half a rung finer, with
 /// nothing owed, in flight or landing.</param>
 /// <param name="Elapsed">The frames since the residency's last decision.</param>
-/// <param name="Floored">Whether another half rung of bias would move none of the residency's demanded tiers: every
-/// demand already stands at its floor or at what its pixel asks past it (<see cref="SdfMeshTier.Demanded"/>). The bias
-/// rises only while some fresh report is not floored, so a demand past the budget at every floor rests over it rather
-/// than raising a bias that coarsens nothing. <see langword="false"/> where the residency does not know.</param>
+/// <param name="Floored">Whether another half rung of bias would relieve nothing the residency draws: no group drawing a
+/// mesh of its own would demand a coarser tier no finer than the one it draws, because every such demand stands at its
+/// floor or at what its pixel asks past it (<see cref="SdfMeshTier.Demanded"/>), or moves only between tiers finer than
+/// the drawn one; a group that draws nothing yet relieves nothing. The bias rises only while some fresh report is not
+/// floored, so a demand past the budget at every floor rests over it rather than raising a bias that coarsens nothing.
+/// <see langword="false"/> where the residency does not know.</param>
 public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool CanLower, int Elapsed, bool Floored = false);
 /// <summary>
 /// A presentation's selector: the one place the residencies of a device share its memory and its background GPU time,

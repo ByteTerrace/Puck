@@ -105,17 +105,19 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
         var movedSecond = (second * Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 5f, zPosition: 6f));
 
-        // The shared copy kernel gathers only the moved matrix into compact history, without a buffer-copy command.
+        // The shared copy kernel gathers only the moved matrix into compact history, without a buffer-copy command. The
+        // moved draws also owe the world's shadows rectangles, whose drawings read back what they measured; those copies
+        // and writes are the shadows', so the history's are read by their own tables' names.
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: new[] { movedFirst, second }, actual: PreviousMatrices(rig: rig, draws: 2));
-        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytesInto(part: HistoryPart));
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: new[] { movedFirst, movedSecond }, actual: PreviousMatrices(rig: rig, draws: 2));
-        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytesInto(part: HistoryPart));
         // A matrix gather uploads its fixed header and one run entry, never a second matrix.
-        Assert.Equal(expected: ((long)((GpuRegion.CopyHeaderWords + 2) * sizeof(uint))), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((GpuRegion.CopyHeaderWords + 2) * sizeof(uint))), actual: rig.Gpu.HostBytes(part: "mesh-history-copy"));
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
-        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytesInto(part: HistoryPart));
     }
     // A slot that changed owner has no previous pose of its own: changed program geometry in the same tables seeds every
     // previous row, a reseated slot seeds its own, and an ordinary move beside it keeps its motion. The pose revisions
@@ -182,8 +184,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
     }
     // The previous mesh table holds a draw with no frame slot's affine rows at the compact pose stride.
+    // The compact mesh-history table's object-name part.
+    private const string HistoryPart = "previous-mesh-transforms";
+
     private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {
-        var words = MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(draws * SdfMeshRecord.PoseWords * sizeof(uint))))).ToArray();
+        var words = MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: HistoryPart, sizeBytes: ((ulong)(draws * SdfMeshRecord.PoseWords * sizeof(uint))))).ToArray();
         var matrices = new Matrix4x4[draws];
 
         for (var draw = 0; (draw < draws); draw++) {

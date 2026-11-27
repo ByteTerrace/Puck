@@ -95,8 +95,7 @@ internal sealed class WorldTestBatch {
                 .. ((first.Workers is { } workers) ? new[] { "--workers", workers.ToString(provider: CultureInfo.InvariantCulture) } : []),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
-                batch.m_legDeadline?.Dispose();
-                batch.m_control?.Dispose();
+                batch.ReleaseHost();
                 if ((exit != 0) || batch.m_aborted || (batch.m_index == startingIndex)) { break; }
             }
 
@@ -114,6 +113,21 @@ internal sealed class WorldTestBatch {
         }
     }
 
+    // Drops everything the batch took from a host that has stopped (its services, console session, observed instances,
+    // probes and crossing log, each of which reaches its server), so an ended run's server is unreachable while the next
+    // host boots. Initialize takes them again from the next host.
+    private void ReleaseHost() {
+        m_legDeadline?.Dispose();
+        m_legDeadline = null;
+        m_control?.Dispose();
+        m_control = null!;
+        m_probes.Clear();
+        m_snapshots.Clear();
+        m_observed.Clear();
+        m_disclosure = null;
+        m_crossings = null!;
+        m_services = null!;
+    }
     private T Get<T>() where T : notnull => m_services.GetRequiredService<T>();
     private void Initialize(IHost host) {
         m_services = host.Services;
@@ -276,8 +290,6 @@ internal sealed class WorldTestBatch {
             try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "1"); } catch { }
             m_failed = true;
         }
-        m_probes.Clear();
-        m_snapshots.Clear();
         m_output.Flush(); m_error.Flush();
         m_index++;
         Get<IHostApplicationLifetime>().StopApplication();
