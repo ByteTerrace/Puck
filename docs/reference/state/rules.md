@@ -231,7 +231,7 @@ happens for one rule, or for one key of a rule that iterates.
 
 ```mermaid
 flowchart TD
-    Start["Next rule, or next snapshotted key"] --> Locals["Evaluate the gate's locals in order"]
+    Start["Next rule, or next snapshotted key"] --> Locals["Evaluate the gate's and zone indices' locals in order"]
     Locals -->|a local is absent| Idle["Report it; skip this evaluation"]
     Locals -->|anything faults| Hold["Report it; the latch keeps its last verdict"]
     Locals --> Zones{"Every live zone selects a row?"}
@@ -250,13 +250,14 @@ Step by step:
 
 1. **Bind.** For an iterating rule, the evaluator binds the next key it
    snapshotted before the sweep began.
-1. **Evaluate the gate's locals.** Each local the gate reads, directly or
-   through another local, runs in declared order and can read the ones before
-   it. A local that can't evaluate (overflow, division by zero, an absent read)
-   is reported as `RuleEffectRefusal.Arithmetic`, and this evaluation stops. A
-   local the gate reads can fail even when the gate would have been closed. The
-   compiler records which locals the gate reads (`CompiledRule.Deferred` holds
-   the rest), since every `$local:` spelling resolves through one door.
+1. **Evaluate the gate's locals.** Each local the gate or a live zone's index
+   reads, directly or through another local, runs in declared order and can
+   read the ones before it. A local that can't evaluate (overflow, division by
+   zero, an absent read) is reported as `RuleEffectRefusal.Arithmetic`, and
+   this evaluation stops. A local the gate reads can fail even when the gate
+   would have been closed. The compiler records which locals the gate and the
+   zone indices read (`ZoneTable.SelectionLocals`; `CompiledRule.Deferred`
+   holds the rest), since every `$local:` spelling resolves through one door.
 1. **Select live zones.** Every `$zones[…]` spelling in the rule resolves to a
    row. If any selects nothing, the gate reads closed without being consulted
    and nothing is reported. An index whose arithmetic faults is reported.

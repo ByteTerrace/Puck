@@ -127,6 +127,11 @@ public static partial class RuleCompiler {
                 ruleName: rule.Name
             );
 
+            // The zone selections resolve before the gate, so the locals their indices read are judged with it.
+            if (context.Zones is { } selections) {
+                gateReads.UnionWith(other: selections.SelectionLocals);
+            }
+
             var compiled = new CompiledRule(
                 Locals: compiledLocals,
                 Describe: rule.Name.Value,

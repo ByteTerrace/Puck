@@ -111,8 +111,8 @@ binding judged and firing at once, which it never refuses.
 - **Setup**: what one sweep costs before its first evaluation, one unit per key
   a `forEach` snapshots.
 - **Check**: what one evaluation costs whether or not its gate holds: the gate,
-  the locals it reads (directly or through another local), and any row
-  selection.
+  any row selection, and the locals either reads (directly or through another
+  local).
 - **Effects**: what one firing costs: the locals only the effects read, which
   the evaluator computes only once the gate has opened on an evaluation that
   fires (`CompiledRule.Deferred`), and the effects themselves.

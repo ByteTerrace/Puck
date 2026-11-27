@@ -572,32 +572,43 @@ public static partial class RuleCompiler {
             throw Malformed(detail: $"index '{inner}' does not parse: {error}");
         }
         CompiledCellRef index;
+        var outerReads = context.LocalReads;
+        var indexReads = new HashSet<int>();
 
-        // An entry of a family table is live at any index, a literal one included: `$zones[2]` is entry 2's member at
-        // the binding's own key, which differs per binding, so a fixed index there still selects a row live.
-        if (overZones && (context.Zones is { PerBinding: true }) && long.TryParse(s: inner, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
-            index = CompileKeyExpression(
+        // The locals the index reads are recorded apart, so a zone selection, which resolves before the gate, can
+        // hand them to its table (ZoneTable.SelectionLocals); they still reach whatever recorded around this spelling.
+        context.LocalReads = indexReads;
+        try {
+            // An entry of a family table is live at any index, a literal one included: `$zones[2]` is entry 2's member
+            // at the binding's own key, which differs per binding, so a fixed index there still selects a row live.
+            if (overZones && (context.Zones is { PerBinding: true }) && long.TryParse(s: inner, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
+                index = CompileKeyExpression(
+                    context: context,
+                    ruleName: ruleName,
+                    text: inner,
+                    where: where
+                );
+            } else if (!TryResolveDynamicKey(
+                cell: out index,
                 context: context,
+                reference: StateChannelRef.OfNullable(spelling: key),
+                keyFieldLabel: "index",
                 ruleName: ruleName,
-                text: inner,
-                where: where
-            );
-        } else if (!TryResolveDynamicKey(
-            cell: out index,
-            context: context,
-            reference: StateChannelRef.OfNullable(spelling: key),
-            keyFieldLabel: "index",
-            ruleName: ruleName,
-            verb: where
-        )) {
-            throw Malformed(detail: $"index '{inner}' is not live — a live row is chosen by a cell, a bound token, a binding, or an expression; a fixed row is named by its row");
+                verb: where
+            )) {
+                throw Malformed(detail: $"index '{inner}' is not live — a live row is chosen by a cell, a bound token, a binding, or an expression; a fixed row is named by its row");
+            }
+        } finally {
+            context.LocalReads = outerReads;
         }
+        outerReads?.UnionWith(other: indexReads);
 
         if (overZones) {
             var table = (context.Zones ?? throw Malformed(detail: "selects a zone live, but the rule declares no 'zones' table"));
 
             row = table.Reference(
                 index: index,
+                locals: indexReads,
                 spelling: name
             );
 

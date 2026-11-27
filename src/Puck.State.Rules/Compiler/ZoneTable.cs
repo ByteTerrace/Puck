@@ -8,6 +8,7 @@ public sealed class ZoneTable {
     private readonly int[] m_ordinals;
     private readonly RowFamily[]? m_families;
     private readonly List<LiveRow> m_references = [];
+    private readonly HashSet<int> m_selectionLocals = [];
 
     /// <summary>Initializes the table.</summary>
     /// <param name="names">The authored entries, in index order; an empty entry is a gap.</param>
@@ -74,12 +75,21 @@ public sealed class ZoneTable {
             }
         }
     }
+    /// <summary>Gets the ordinals of every rule local an index of <see cref="References"/> reads. The references
+    /// resolve before the gate (an evaluation applies only when each selects a row), so these locals are judged with
+    /// the gate rather than deferred to the firing (<see cref="CompiledRule.Deferred"/>).</summary>
+    public IReadOnlySet<int> SelectionLocals => m_selectionLocals;
+
     /// <summary>Returns the live reference a spelling names, minting it on first use — the same spelling in two
     /// places is one reference, resolved once per evaluation.</summary>
     /// <param name="index">The compiled index indirection.</param>
+    /// <param name="locals">The ordinals of the rule locals <paramref name="index"/> reads.</param>
     /// <param name="spelling">The authored spelling.</param>
     /// <returns>The reference.</returns>
-    public LiveRow Reference(CompiledCellRef index, string spelling) {
+    public LiveRow Reference(CompiledCellRef index, IEnumerable<int> locals, string spelling) {
+        ArgumentNullException.ThrowIfNull(argument: locals);
+
+        m_selectionLocals.UnionWith(other: locals);
         foreach (var existing in m_references) {
             if (string.Equals(
                 a: existing.Spelling,

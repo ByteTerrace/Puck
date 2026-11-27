@@ -223,10 +223,13 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   and the world host refuses to leave unversioned a fact
   `WorldFactsCompileContext.Rests` answers for, so the sheet never prices by
   change a fact judged every tick. A new host fact that is a count, a flag or
-  an event is added to both. A local the gate does not read
-  is computed only when the rule fires, and priced with the firing; both read
-  one `CompiledRule.Deferred`, which the compiler derives from the one door
-  every `$local:` spelling resolves through. A second split of a rule's work
+  an event is added to both. A local neither the gate nor a zone selection's
+  index reads is computed only when the rule fires, and priced with the firing;
+  both read one `CompiledRule.Deferred`, which the compiler derives from the one
+  door every `$local:` spelling resolves through. A zone selection resolves
+  before the gate, so `RuleCompiler.TryResolveLiveRow` hands its index's locals
+  to `ZoneTable.Reference`, the only way a selection enters the table, and
+  `ZoneTable.SelectionLocals` joins the gate's reads. A second split of a rule's work
   (a new lazily evaluated part) is priced where the evaluator runs it, or the
   admitted sheet stops bounding the tick. Exclusive lines share an allowance
   unless a write can land between them in the tick's pass

@@ -91,7 +91,8 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
     /// binding the sweep visits may.</summary>
     public int MaxFirings { get; init; }
     /// <summary>Gets, per local in declared order, whether the local is evaluated only once the gate has opened on an
-    /// evaluation that fires, because the gate reads it neither directly nor through another local; or
+    /// evaluation that fires, because neither the gate nor a zone selection's index (<see cref="ZoneTable.SelectionLocals"/>,
+    /// resolved before the gate) reads it, directly or through another local; or
     /// <see langword="null"/> when every local is evaluated before the gate. The evaluator judges a binding by the
     /// locals this leaves undeferred and its gate, and the work sheet prices the deferred ones with the firing, so a
     /// binding whose gate stays closed costs its gate and nothing its effects alone need.</summary>
