@@ -221,5 +221,6 @@ public sealed partial class StateArena {
         );
         ReleaseLaneTouches();
         ResetRowVersions(version: next);
+        InstallBoardPlanes();
     }
 }

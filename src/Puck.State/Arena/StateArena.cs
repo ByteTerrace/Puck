@@ -238,6 +238,7 @@ public sealed partial class StateArena {
             Array.Clear(array: m_rowChangeStamp);
             Array.Clear(array: m_rowGenerations);
             m_rowVersions.ResetAll(count: m_rowVersions.Count, version: 0UL);
+            InstallBoardPlanes();
         }
     }
 
@@ -769,8 +770,10 @@ public sealed partial class StateArena {
         var (first, count) = RowsOf(column: column, index: index);
 
         for (var row = first; (row < (first + count)); row++) {
-            m_rowGenerations[row]++;
+            var before = m_rowGenerations[row]++;
+
             if (m_laneTouches.Length != 0) { NoteLaneTouch(row: row, column: column, index: index); }
+            if (m_boardPlanes.Length != 0) { NoteBoardPlanes(row: row, column: column, index: index, before: before); }
         }
     }
     private void MarkVersion(ArenaColumn column, int index) {
