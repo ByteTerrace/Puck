@@ -40,8 +40,8 @@ state {
   }
 }
 
-use gameStationGames as one(station: stations[0])
-use gameStationGames as two(station: stations[1])
+use gameStationGames as one(station: stations[0], index: 0)
+use gameStationGames as two(station: stations[1], index: 1)
 
 // The deal: a card a tick gathers, shuffles, then deals the 52 cards across the eight columns, 7, 7, 7, 7, 6, 6, 6, 6.
 test "the seeded deal fills the eight columns and leaves the cells and foundations empty" {
@@ -52,15 +52,15 @@ test "the seeded deal fills the eight columns and leaves the cells and foundatio
     ticks 400
   }
   expect {
-    one.solitaireFreecell.deals == 1
-    one.solitaireFreecell.status == 1
-    count(one.solitaireFreecellPile8) == 7
-    count(one.solitaireFreecellPile11) == 7
-    count(one.solitaireFreecellPile12) == 6
-    count(one.solitaireFreecellPile15) == 6
-    count(one.solitaireFreecellDeck) == 0
-    count(one.solitaireFreecellPile0) == 0
-    count(one.solitaireFreecellPile4) == 0
+    freecellDeals[0] == 1
+    freecellStatus[0] == 1
+    count(freecellPile8Of0) == 7
+    count(freecellPile11Of0) == 7
+    count(freecellPile12Of0) == 6
+    count(freecellPile15Of0) == 6
+    count(freecellDeckOf0) == 0
+    count(freecellPile0Of0) == 0
+    count(freecellPile4Of0) == 0
   }
 }
 
@@ -71,17 +71,17 @@ test "a move out of an empty free cell is refused" {
   }
   when {
     ticks 400
-    seat1: world.state.cell.set one$solitaireFreecell from 0
-    seat1: world.state.cell.set one$solitaireFreecell to 8
-    seat1: world.state.cell.set one$solitaireFreecell card 0
-    seat1: world.state.cell.set one$solitaireFreecell action 2
-    seat1: world.state.cell.set one$solitaireFreecell request 1 add
+    seat1: world.state.cell.set freecellFrom 0 0
+    seat1: world.state.cell.set freecellTo 0 8
+    seat1: world.state.cell.set freecellCard 0 0
+    seat1: world.state.cell.set freecellAction 0 2
+    seat1: world.state.cell.set freecellRequest 0 1 add
     ticks 20
   }
   expect {
-    one.solitaireFreecell.result == -1
-    one.solitaireFreecell.moves == 0
-    count(one.solitaireFreecellPile8) == 7
+    freecellResult[0] == -1
+    freecellMoves[0] == 0
+    count(freecellPile8Of0) == 7
   }
 }
 
@@ -93,19 +93,19 @@ test "a game at one station never touches another" {
   }
   when {
     ticks 400
-    seat1: world.state.cell.set one$solitaireFreecell from 0
-    seat1: world.state.cell.set one$solitaireFreecell to 8
-    seat1: world.state.cell.set one$solitaireFreecell card 0
-    seat1: world.state.cell.set one$solitaireFreecell action 2
-    seat1: world.state.cell.set one$solitaireFreecell request 1 add
+    seat1: world.state.cell.set freecellFrom 0 0
+    seat1: world.state.cell.set freecellTo 0 8
+    seat1: world.state.cell.set freecellCard 0 0
+    seat1: world.state.cell.set freecellAction 0 2
+    seat1: world.state.cell.set freecellRequest 0 1 add
     ticks 20
   }
   expect {
-    one.solitaireFreecell.deals == 1
-    two.solitaireFreecell.deals == 0
-    count(two.solitaireFreecellDeck) == 52
+    freecellDeals[0] == 1
+    freecellDeals[1] == 0
+    count(freecellDeckOf1) == 52
     two.solitaire.table == 0
     two.turn == 0
-    two.solitaireFreecell.request == 0
+    freecellRequest[1] == 0
   }
 }

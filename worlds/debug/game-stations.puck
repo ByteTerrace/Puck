@@ -8,12 +8,15 @@
 // and holds its own game of each: a world stands a station by
 //
 //   - expanding the world's part over its list of stations: `gameStationSetPrototypes`, `gameStationSetPlacements`,
-//     `gameStationSetGrids` and `gameStationSetState` in their blocks, `gameStationSetCommands` as its commands, and
-//     the deck (`patienceDeck`, `patienceStationCards`) where its body order wants the cards;
+//     `gameStationSetGrids` and `gameStationSetState` in their blocks, `gameStationSetRules` at its top level (the
+//     rules one set plays for every station: FreeCell's), `gameStationSetCommands` as its commands, and the deck
+//     (`patienceDeck`, `patienceStationCards`) where its body order wants the cards;
 //   - declaring the chess game's three vocabularies (`PieceKind`, `MoveKind`, `TurnColor`, chess.puck's header) in its
 //     own `state` block, since a template cannot carry them;
-//   - and making one instance a station, `use gameStationGames as <id>(station: <station>)`, with the station's id as
-//     the alias, so every row and rule the instance declares is `<id>$<name>` and the console commands reach it.
+//   - and making one instance a station, `use gameStationGames as <id>(station: <station>, index: <i>)`, with the
+//     station's id as the alias, so every row and rule the instance declares is `<id>$<name>` and the console commands
+//     reach it, and `i` the station's place in the list, which keys its cells in the rules one set plays for every
+//     station (`freecellRequest[i]`, `freecellPile8Of<i>`).
 import "../standard/game-station"
 import "../games/chess"
 import "../games/chess-station"
@@ -41,7 +44,7 @@ let rootStation = { id: "station", at [0, -0.5, 0] }
 // chairs (the standard's gameStationRules). Every name it declares is the instance's own, so a station's games and
 // presses never touch another's; it reads and writes the world's rows only by its own station's key. The rules run in
 // the order below: the chairs' presses first, then each game.
-module gameStationGames(station) {
+module gameStationGames(station, index) {
   state {
     chessBoardGrid(cellSize: 0.1, origin: [-0.4, 0, -0.4], band: 0.1)
     patienceStationSlots(station: station)
@@ -72,15 +75,14 @@ module gameStationGames(station) {
   chessStationRules(station: station, game: 0)
 
   klondikeGame()
-  freecellGame()
-  patienceStationRules(station: station, klondike: 1, freecell: 2)
+  patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
 }
 
 // A station whose chess is the world's own game (a physical table's, or chess-game.puck's drawn board): the same
 // station but for its chess game, which it shows and plays through the game's display door (`chessPut`) and leaves to
 // the world's rules to judge, hold and reset. The debug world stands one beside its chess table, so a move at the glass
 // moves the table's pieces too.
-module gameStationSharedChess(station) {
+module gameStationSharedChess(station, index) {
   state {
     patienceStationSlots(station: station)
     world {
@@ -99,8 +101,7 @@ module gameStationSharedChess(station) {
   chessStationRules(station: station, game: 0, owns: false)
 
   klondikeGame()
-  freecellGame()
-  patienceStationRules(station: station, klondike: 1, freecell: 2)
+  patienceStationRules(station: station, index: index, klondike: 1, freecell: 2)
 }
 
 // The world's part, over every station it stands. Prototypes: each station's table (its paints read the world's rows by
@@ -132,6 +133,14 @@ template gameStationSetState(stations) {
   gameStationState(stations: stations, catalog: gameStationCatalog)
   chessStationDisplayState(stations: stations)
   patienceDisplayState()
+  solitaireTables(count: length(stations))
+  freecellState(count: length(stations))
+}
+
+// The rules the world holds once for every station, at the world's top level: FreeCell's, each sweeping the stations'
+// tables (`solitaireTable`, keyed by a station's place in the list, the `index` its instance is made with).
+template gameStationSetRules() {
+  freecellGame()
 }
 
 // A small room holding `stations` on their own: a floor, the seats and visitors with the stations' decks above them,
@@ -201,6 +210,8 @@ template gameStationRoom(stations) {
       gameStationSetState(stations: stations)
     }
   }
+
+  gameStationSetRules()
 }
 
 // The console's commands over every station: `station.game`, a chess move, and the patience games' deals and moves.

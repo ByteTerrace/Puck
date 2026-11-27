@@ -45,7 +45,7 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation)
+use gameStationGames as station(station: rootStation, index: 0)
 
 render {
   farDistance: 200

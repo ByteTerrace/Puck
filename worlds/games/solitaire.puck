@@ -1,9 +1,10 @@
 // The patience collection: the games a game station's glass plays (patience-station.puck), one at a time.
 // `solitaire.table` names the game in play (1 Klondike, 2 FreeCell; 0 pauses them all) and each game's rules are gated
 // on it, so a game kept mid-deal keeps its piles while another is on the table. The station writes it from the game its
-// glass shows. A library: a station's module instance expands `solitaireState()` with `klondikeGame()` and
-// `freecellGame()`, so each station holds its own collection, and the world authors the console's commands over every
-// station's instance (`patienceCommands`).
+// glass shows. A library: a station's module instance expands `solitaireState()` with `klondikeGame()`, so each station
+// holds its own Klondike; FreeCell is one set of rules over every station's table (`solitaireTables`, `freecellState`,
+// `freecellGame`, expanded once in the world); and the world authors the console's commands over every station
+// (`patienceCommands`).
 import "klondike"
 import "freecell"
 
@@ -11,6 +12,24 @@ template solitaireState() {
 
   table solitaire capacity(1) {
     table = 0
+  }
+}
+
+// The tables every game written over them sweeps, inside the world's `state.world` block: `solitaireTable` keyed 0 to
+// `count - 1`, each cell the game that table plays (as `solitaire.table`; FreeCell's rules read it), so a rule over every
+// table is `forEach: solitaireTable`. The station's switch writes both while Klondike still keeps its game in the station's
+// instance.
+template solitaireTables(count) {
+  solitaireCells(name: "solitaireTable", count: count, value: 0)
+}
+
+// One cell a table, keyed 0 to `count - 1`, each starting at `value`.
+template solitaireCells(name, count, value) {
+  row {
+    name: name
+    kind: "Int"
+    capacity: count
+    cells: map(range(0, count), i => { key: $"{i}", value: value })
   }
 }
 
@@ -60,30 +79,30 @@ function patienceCommands(stations) = [
   }
   {
     name: "freecell.deal"
-    help: "Deals a new game of FreeCell on a game station."
+    help: "Deals a new game of FreeCell on a game station's table: the table's number, 0 for the world's first station."
     parameters [
-      { name: "station", kind: Choice, values: map(stations, station => station.id) }
+      { name: "table", kind: Choice, values: map(range(0, length(stations)), i => $"{i}") }
     ]
     lines [
-      "world.state.cell.set {station}$solitaireFreecell action 1"
-      "world.state.cell.set {station}$solitaireFreecell request 1 add"
+      "world.state.cell.set freecellAction {table} 1"
+      "world.state.cell.set freecellRequest {table} 1 add"
     ]
   }
   {
     name: "freecell.move"
-    help: "Moves the run led by a card (0 to 51, suit * 13 + rank - 1) from one pile to another on a game station: piles 0 to 3 free cells, 4 to 7 foundations (suits spades, hearts, clubs, diamonds), 8 to 15 columns."
+    help: "Moves the run led by a card (0 to 51, suit * 13 + rank - 1) from one pile to another on a game station's table (its number, 0 for the world's first station): piles 0 to 3 free cells, 4 to 7 foundations (suits spades, hearts, clubs, diamonds), 8 to 15 columns."
     parameters [
-      { name: "station", kind: Choice, values: map(stations, station => station.id) }
+      { name: "table", kind: Choice, values: map(range(0, length(stations)), i => $"{i}") }
       { name: "from", kind: Number }
       { name: "to", kind: Number }
       { name: "card", kind: Number }
     ]
     lines [
-      "world.state.cell.set {station}$solitaireFreecell from {from}"
-      "world.state.cell.set {station}$solitaireFreecell to {to}"
-      "world.state.cell.set {station}$solitaireFreecell card {card}"
-      "world.state.cell.set {station}$solitaireFreecell action 2"
-      "world.state.cell.set {station}$solitaireFreecell request 1 add"
+      "world.state.cell.set freecellFrom {table} {from}"
+      "world.state.cell.set freecellTo {table} {to}"
+      "world.state.cell.set freecellCard {table} {card}"
+      "world.state.cell.set freecellAction {table} 2"
+      "world.state.cell.set freecellRequest {table} 1 add"
     ]
   }
 ]

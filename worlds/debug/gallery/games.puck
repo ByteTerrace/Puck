@@ -58,5 +58,7 @@ state {
 
 commands: gameStationSetCommands(stations)
 
+gameStationSetRules()
+
 // One instance a station, aliased by the station's id.
-use gameStationSharedChess as south3(station: stations[0])
+use gameStationSharedChess as south3(station: stations[0], index: 0)

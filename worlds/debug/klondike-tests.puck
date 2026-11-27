@@ -38,7 +38,7 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation)
+use gameStationGames as station(station: rootStation, index: 0)
 
 // The deal: a card a tick gathers, shuffles, then deals the 28 cards of the tableau; the stock keeps 24.
 test "the seeded deal fills the tableau and leaves 24 in the stock" {
