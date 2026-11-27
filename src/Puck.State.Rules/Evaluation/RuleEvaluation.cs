@@ -87,164 +87,6 @@ public static class RuleEvaluation {
             frame.Trace = outer;
         }
     }
-    /// <summary>Decides a gate through the token interpreter the closure trees replace, for the law that compares the
-    /// two.</summary>
-    /// <param name="frame">The evaluation in flight.</param>
-    /// <param name="gate">The compiled postfix gate.</param>
-    /// <param name="trace">An optional per-conjunct narration sink.</param>
-    /// <returns>What the gate decided.</returns>
-    public static Verdict DecideInterpreted(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) {
-        ArgumentNullException.ThrowIfNull(argument: gate);
-
-        return ((gate.Length == 0)
-            ? Verdict.Open
-            : Fold(
-                frame: ref frame,
-                gate: gate,
-                scratch: frame.Reader.Scratch,
-                trace: trace
-            ));
-    }
-
-    // Folds the gate's postfix program, answering Faulted the moment a conjunct faults.
-    private static Verdict Fold(scoped ref EvaluationFrame frame, GateToken[] gate, ArenaScratch scratch, List<string>? trace) {
-        // A token pushes at most one Boolean. Bound machine-stack use independently of authored
-        // program size; larger gates keep the arena's reusable storage. Both run the same fold.
-        if (gate.Length <= 128) {
-            Span<bool> stack = stackalloc bool[gate.Length];
-
-            return Fold(frame: ref frame, gate: gate, stack: stack, trace: trace);
-        }
-        using var stackLease = scratch.Rent<bool>(length: gate.Length);
-
-        return Fold(frame: ref frame, gate: gate, trace: trace, stack: stackLease.Span);
-    }
-    private static Verdict Fold(scoped ref EvaluationFrame frame, GateToken[] gate, List<string>? trace, scoped Span<bool> stack) {
-        var reader = frame.Reader;
-        var top = 0;
-
-        for (var index = 0; (index < gate.Length); index++) {
-            ref readonly var predicate = ref gate[index];
-
-            if (predicate.Op == GateOp.ShortCircuit) {
-                var answer = stack[(top - 1)];
-
-                if (answer == predicate.SkipWhen) {
-                    top -= predicate.Arity;
-                    stack[(top - 1)] = answer;
-                    index += predicate.Skip;
-                }
-                continue;
-            }
-            if (predicate.Op == GateOp.Not) {
-                GateProgramEvaluator.Invert(
-                    stack: stack,
-                    top: top
-                );
-                trace?.Add(item: $"not -> {Spell(value: stack[(top - 1)])}");
-
-                continue;
-            }
-            if (predicate.Op is (GateOp.All or GateOp.Any)) {
-                GateProgramEvaluator.FoldGroup(
-                    arity: predicate.Arity,
-                    isAll: (predicate.Op == GateOp.All),
-                    stack: stack,
-                    top: ref top
-                );
-                trace?.Add(item: $"{((predicate.Op == GateOp.All)
-                    ? "all"
-                    : "any")} of {predicate.Arity.ToString(provider: CultureInfo.InvariantCulture)} -> {Spell(value: stack[(top - 1)])}");
-
-                continue;
-            }
-
-            var leftSource = predicate.LeftSource;
-            var rightSource = predicate.RightSource;
-
-            if (predicate.ValueKind == CellKind.Text) {
-                var leftResolved = ((leftSource.Text is { } leftLiteral) ? Resolved<string>.Named(value: leftLiteral) : ReadText(reader: reader, source: leftSource.Operand));
-                var rightResolved = ((rightSource.Text is { } rightLiteral) ? Resolved<string>.Named(value: rightLiteral) : ReadText(reader: reader, source: rightSource.Operand));
-                var leftNamed = leftResolved.TryNamed(value: out var leftValue);
-                var rightNamed = rightResolved.TryNamed(value: out var rightValue);
-                var leftText = (leftValue ?? string.Empty);
-                var rightText = (rightValue ?? string.Empty);
-                var equal = string.Equals(a: leftText, b: rightText, comparisonType: StringComparison.Ordinal);
-                var textHolds = (leftNamed && rightNamed &&
-                    ((predicate.Comparison == ExpressionOp.Equal) ? equal : !equal));
-
-                stack[top++] = textHolds;
-                trace?.Add(item: $"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(value: textHolds)}");
-                if ((leftResolved.Case == FaultCase.Faulted) || (rightResolved.Case == FaultCase.Faulted)) {
-                    return Verdict.Faulted;
-                }
-                continue;
-            }
-
-            var left = ReadSource(
-                frame: ref frame,
-                kind: predicate.ValueKind,
-                source: in leftSource
-            );
-            var right = ReadSource(
-                frame: ref frame,
-                kind: predicate.ValueKind,
-                source: in rightSource
-            );
-
-            // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
-            // not a king" must not read as true of an empty pile. Absence converts to false at a gate.
-            var absent = (
-                (left.Outcome.Case is FaultCase.Absent or FaultCase.Faulted) ||
-                (right.Outcome.Case is FaultCase.Absent or FaultCase.Faulted)
-            );
-
-            // A case with no number (forever, or the absence the comparison already refused) compares as zero beside its flag.
-            var leftRaw = (left.Outcome.TryFinite(raw: out var leftFinite)
-                ? leftFinite
-                : 0L);
-            var rightRaw = (right.Outcome.TryFinite(raw: out var rightFinite)
-                ? rightFinite
-                : 0L);
-
-            var holds = (
-                !absent &&
-                predicate.Comparison.Holds(
-                expected: FixedQ4816.FromRawBits(value: rightRaw),
-                expectedIsForever: (right.Outcome.Case == FaultCase.Forever),
-                value: FixedQ4816.FromRawBits(value: leftRaw),
-                valueIsForever: (left.Outcome.Case == FaultCase.Forever)
-            )
-            );
-
-            stack[top++] = holds;
-            trace?.Add(item: $"{predicate.Describe}: {Spell(
-                fact: in left,
-                read: Read(
-                    fact: in left,
-                    source: in leftSource
-                )
-            )} {predicate.Comparison.Symbol()} {Spell(
-                fact: in right,
-                read: Read(
-                    fact: in right,
-                    source: in rightSource
-                )
-            )} -> {Spell(value: holds)}");
-
-            // A faulted comparison has no truth value to negate or combine.
-            if ((left.Outcome.Case == FaultCase.Faulted) || (right.Outcome.Case == FaultCase.Faulted)) {
-                return Verdict.Faulted;
-            }
-        }
-
-        return (((top == 1) && stack[0])
-            ? Verdict.Open
-            : Verdict.Closed);
-    }
-    // Whether a source answered: an operand always does (an absence is its answer), a program only when it left a number.
-    private static bool Read(in Fact fact, in CompiledValueSource source) => (!source.IsExpression || (fact.Outcome.Case == FaultCase.Finite));
-
     /// <summary>Reads one compiled value source for the evaluation in flight. A literal answers its already-converted
     /// raw value, an operand its live fact, and an expression the number its program computes.</summary>
     /// <param name="frame">The evaluation in flight.</param>
@@ -259,17 +101,11 @@ public static class RuleEvaluation {
             return operand.Read(frame: ref frame);
         }
         if (source.Expression is { } expression) {
-            // A Bool destination's program was compiled in Int, the kind a comparison leaves, so it evaluates in Int
-            // and lands as 0 for zero and 1 for anything else.
-            var computedKind = (source.CarrierKind ?? ((kind == CellKind.Bool)
-                ? CellKind.Int
-                : kind
-            ));
             return LandProgram(
                 kind: kind,
                 outcome: RuleExpressions.Evaluate(
                     frame: ref frame,
-                    kind: computedKind,
+                    kind: ComputedKind(kind: kind, source: in source),
                     program: expression
                 )
             );
@@ -281,6 +117,11 @@ public static class RuleEvaluation {
         );
     }
 
+    // The kind a program source computes in: its carrier, else the kind it is read in, where a Bool destination's
+    // program was compiled in Int, the kind a comparison leaves.
+    internal static CellKind ComputedKind(in CompiledValueSource source, CellKind kind) => (source.CarrierKind ?? ((kind == CellKind.Bool)
+        ? CellKind.Int
+        : kind));
     // What a program source answers as a fact in the kind it is read in: a Bool lands as 0 for zero and 1 otherwise,
     // and an absence or a fault is the fact's own case.
     internal static Fact LandProgram(Outcome outcome, CellKind kind) {
@@ -300,15 +141,6 @@ public static class RuleEvaluation {
             : computed)
         );
     }
-
-    private static string Spell(bool value) => (value
-        ? "true"
-        : "false"
-    );
-    private static string Spell(in Fact fact, bool read) => (read
-        ? DescribeFact(fact: in fact)
-        : "refused"
-    );
 
     /// <summary>Reads a live Text operand through the same addresses used by text-copy effects and gates.</summary>
     /// <param name="reader">The evaluation in flight.</param>

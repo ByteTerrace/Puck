@@ -282,11 +282,24 @@ internal static class ProgramClosures {
                 return new GateTextCompareNode(token: token);
             }
 
-            return new GateCompareNode(
-                left: Source(kind: token.ValueKind, source: token.LeftSource),
-                right: Source(kind: token.ValueKind, source: token.RightSource),
-                token: token
-            );
+            var left = Source(kind: token.ValueKind, source: token.LeftSource);
+            var right = Source(kind: token.ValueKind, source: token.RightSource);
+
+            // A side compared against a literal (`cell == 3`, the shape a sweep's gate takes most) reads one fact and
+            // compares raw values through the comparison's kernel; Q48.16 orders as its raw bits do.
+            if (right is LiteralSource literal) {
+                return token.Comparison switch {
+                    ExpressionOp.Equal => new GateLiteralCompareNode<EqualKernel>(left: left, literal: literal.Fact, token: token),
+                    ExpressionOp.NotEqual => new GateLiteralCompareNode<NotEqualKernel>(left: left, literal: literal.Fact, token: token),
+                    ExpressionOp.Less => new GateLiteralCompareNode<LessKernel>(left: left, literal: literal.Fact, token: token),
+                    ExpressionOp.LessOrEqual => new GateLiteralCompareNode<LessOrEqualKernel>(left: left, literal: literal.Fact, token: token),
+                    ExpressionOp.Greater => new GateLiteralCompareNode<GreaterKernel>(left: left, literal: literal.Fact, token: token),
+                    ExpressionOp.GreaterOrEqual => new GateLiteralCompareNode<GreaterOrEqualKernel>(left: left, literal: literal.Fact, token: token),
+                    _ => new GateCompareNode(left: left, right: right, token: token),
+                };
+            }
+
+            return new GateCompareNode(left: left, right: right, token: token);
         }
         private static ValueSourceNode Source(in CompiledValueSource source, CellKind kind) {
             if (source.Operand is { } operand) {
@@ -296,7 +309,7 @@ internal static class ProgramClosures {
             }
             if (source.Expression is { } expression) {
                 return new ExpressionSource(
-                    computedKind: (source.CarrierKind ?? ((kind == CellKind.Bool) ? CellKind.Int : kind)),
+                    computedKind: RuleEvaluation.ComputedKind(kind: kind, source: in source),
                     kind: kind,
                     program: expression
                 );
@@ -1057,9 +1070,10 @@ internal abstract class ValueSourceNode {
     public abstract Fact Read(ref EvaluationFrame frame);
 }
 internal sealed class LiteralSource(Fact fact) : ValueSourceNode {
+    public Fact Fact { get; } = fact;
     public override bool IsExpression => false;
 
-    public override Fact Read(ref EvaluationFrame frame) => fact;
+    public override Fact Read(ref EvaluationFrame frame) => Fact;
 }
 internal sealed class PlainOperandSource(IRuleOperand operand) : ValueSourceNode {
     public override bool IsExpression => false;
@@ -1112,6 +1126,40 @@ internal sealed class GateCompareNode(GateToken token, ValueSourceNode left, Val
         }
 
         return (holds ? 1L : 0L);
+    }
+}
+// A comparison whose right side is a literal: the one fact read on the left decides it, as the general comparison
+// would, with the literal narrated as its own fact.
+internal sealed class GateLiteralCompareNode<TKernel>(GateToken token, ValueSourceNode left, Fact literal) : ProgramNode where TKernel : struct, IBinaryKernel {
+    private readonly long m_literal = (literal.Outcome.TryFinite(raw: out var raw) ? raw : 0L);
+    // What the comparison answers when the left side is positive infinity: the literal is finite, so only the order of
+    // the two decides it.
+    private readonly bool m_foreverHolds = token.Comparison.Holds(
+        expected: FixedQ4816.FromRawBits(value: (literal.Outcome.TryFinite(raw: out var expected) ? expected : 0L)),
+        expectedIsForever: false,
+        value: FixedQ4816.Zero,
+        valueIsForever: true
+    );
+
+    internal override long Run(ref EvaluationFrame frame, ref ProgramContext context) {
+        var leftFact = left.Read(frame: ref frame);
+        var leftCase = leftFact.Outcome.Case;
+        bool holds;
+
+        if (leftFact.Outcome.TryFinite(raw: out var value)) {
+            // A comparison kernel always answers.
+            _ = TKernel.TryApply(left: value, right: m_literal, value: out var truth);
+            holds = (truth != 0L);
+        } else {
+            holds = ((leftCase == FaultCase.Forever) && m_foreverHolds);
+        }
+        if (frame.Trace is { } trace) {
+            trace.Add(item: $"{token.Describe}: {GateNarration.Spell(fact: in leftFact, read: (!left.IsExpression || (leftCase == FaultCase.Finite)))} {token.Comparison.Symbol()} {GateNarration.Spell(fact: in literal, read: true)} -> {GateNarration.Spell(value: holds)}");
+        }
+
+        return ((leftCase == FaultCase.Faulted)
+            ? Stop(context: ref context, halt: Halt.Domain)
+            : (holds ? 1L : 0L));
     }
 }
 internal sealed class GateTextCompareNode(GateToken token) : ProgramNode {
