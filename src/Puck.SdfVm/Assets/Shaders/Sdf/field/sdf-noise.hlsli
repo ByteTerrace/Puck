@@ -122,17 +122,19 @@ precise float sdfPeriodicFbm3(float3 q, uint seed, uint octaves, float gain) {
 
     return (value / max(total, 1.0e-6));
 }
-// The nearest two features of the exact 27-cell Worley lattice: their squared distances and offsets, and the nearest
-// feature's cell hash. The one search behind the field's cellular relief (sdfCellDistanceGrad) and the shade
-// program's `cells` (sdfShadeCells).
+// The nearest two features of the exact 27-cell Worley lattice: their squared distances and offsets, the nearest
+// feature's cell hash and its cell's offset from q's. The one search behind the field's cellular relief
+// (sdfCellDistanceGrad) and the shade program's `cells` (sdfShadeCells) and `cellBorder` (sdfShadeCellBorder, through
+// sdfCellBorderFrom).
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.
-void sdfCellNearest(float3 q, uint seed, float randomness, out float first, out float second, out float3 firstDelta, out float3 secondDelta, out uint firstHash) {
+void sdfCellNearest(float3 q, uint seed, float randomness, out float first, out float second, out float3 firstDelta, out float3 secondDelta, out uint firstHash, out int3 firstCell) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = q - cellFloor;
     first = 1.0e20; second = 1.0e20;
     firstDelta = 0.0; secondDelta = 0.0;
     firstHash = 0u;
+    firstCell = int3(0, 0, 0);
     [loop] for (int z = -1; z <= 1; z++) {
         [loop] for (int y = -1; y <= 1; y++) {
             [loop] for (int x = -1; x <= 1; x++) {
@@ -143,7 +145,7 @@ void sdfCellNearest(float3 q, uint seed, float randomness, out float first, out 
                 float squared = dot(delta, delta);
                 if (squared < first) {
                     second = first; secondDelta = firstDelta;
-                    first = squared; firstDelta = delta; firstHash = hash.x;
+                    first = squared; firstDelta = delta; firstHash = hash.x; firstCell = offset;
                 } else if (squared < second) {
                     second = squared; secondDelta = delta;
                 }
@@ -151,12 +153,52 @@ void sdfCellNearest(float3 q, uint seed, float randomness, out float first, out 
         }
     }
 }
-// Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
+// The distance from q to the nearest feature's cell border, and its gradient (Quilez's two-pass Voronoi border distance,
+// in 3D): the least distance to the bisector plane between that feature and another, (|δk|² − |δ1|²)/(2|δk − δ1|) along
+// δk − δ1, over the 5x5x5 cells about the nearest feature's cell. first is the nearest feature's squared distance and
+// firstDelta its offset, as sdfCellNearest gives them. A cell whose feature box lies at least |δ1| + 2·border from q is
+// skipped: none of its features can bring a nearer plane, whose distance is at least (|δk| − |δ1|)/2. Exact up to
+// SdfCellDisplacement.MaxBorderRandomness; at a randomness of one (the shade program's cells, whose nearest feature the
+// 27 cells can already miss) a feature past the 125 cells can rarely bound the cell nearer.
+// KEEP IN SYNC with SdfFieldEvaluator.Cells.cs (CellBorder): the 5x5x5 cells in z/y/x order and the cell skip.
+precise float sdfCellBorderFrom(float3 q, uint seed, float randomness, float first, float3 firstDelta, int3 firstCell, out float3 gradient) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = q - cellFloor;
+    float nearest = sqrt(first);
+    float spread = 0.5 * abs(randomness);
+    float border = 1.0e20;
+    gradient = 0.0;
+    [loop] for (int z = -2; z <= 2; z++) {
+        [loop] for (int y = -2; y <= 2; y++) {
+            [loop] for (int x = -2; x <= 2; x++) {
+                int3 offset = firstCell + int3(x, y, z);
+                float3 reach = max(abs(f - (float3(offset) + 0.5)) - spread, 0.0);
+                if (((length(reach) - nearest) * 0.5) >= border) { continue; }
+                uint3 hash = sdfPcg3d(asuint(cell + offset) ^ uint3(seed, seed ^ SDF_NOISE_SEED_STREAM_Y, seed ^ SDF_NOISE_SEED_STREAM_Z));
+                float3 feature = 0.5 + randomness * (float3(hash >> 16u) * (1.0 / 65536.0) - 0.5);
+                float3 delta = f - (float3(offset) + feature);
+                float3 apart = delta - firstDelta;
+                float separation = dot(apart, apart);
+                // The nearest feature itself, which bounds nothing.
+                if (separation <= 0.0) { continue; }
+                float inverse = rsqrt(separation);
+                float distance = 0.5 * (dot(delta, delta) - first) * inverse;
+                if (distance < border) { border = distance; gradient = apart * inverse; }
+            }
+        }
+    }
+    return border;
+}
+// The cellular field within SdfCellDisplacement's mode-specific randomness bounds: the exact 27-cell Worley lattice, and
+// for the border distance the 125 cells about the nearest feature's.
 precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
     float first, second;
     float3 firstDelta, secondDelta;
     uint firstHash;
-    sdfCellNearest(q, seed, randomness, first, second, firstDelta, secondDelta, firstHash);
+    int3 firstCell;
+    sdfCellNearest(q, seed, randomness, first, second, firstDelta, secondDelta, firstHash, firstCell);
+    if (mode == SDF_CELL_MODE_BORDER) { return sdfCellBorderFrom(q, seed, randomness, first, firstDelta, firstCell, gradient); }
     first = sqrt(first); second = sqrt(second);
     gradient = first > 1.0e-12 ? firstDelta / first : 0.0;
     if (mode == SDF_CELL_MODE_F1) return first;
@@ -170,15 +212,29 @@ float3 sdfShadeCells(float3 q, uint seed) {
     float first, second;
     float3 firstDelta, secondDelta;
     uint firstHash;
-    sdfCellNearest(q, seed, 1.0, first, second, firstDelta, secondDelta, firstHash);
+    int3 firstCell;
+    sdfCellNearest(q, seed, 1.0, first, second, firstDelta, secondDelta, firstHash, firstCell);
     first = sqrt(first); second = sqrt(second);
     return float3(first, second - first, float(firstHash >> 8u) * (1.0 / 16777216.0));
+}
+// A shade program's `cellBorder(point, seed)`: over the same cells as `cells`, the distance from `point` to the border of
+// its cell, which unlike F2 - F1 is a true distance, so a band of it is one width along every border.
+float sdfShadeCellBorder(float3 q, uint seed) {
+    float3 gradient;
+    return sdfCellDistanceGrad(q, seed, SDF_CELL_MODE_BORDER, 1.0, gradient);
 }
 // A shade program's `cellsGradient`, which the gradient of a height reading `cells` writes: channel 0 is
 // [F1, its gradient], channel 1 [F2 - F1, its gradient], from the same search as `cells`.
 float4 sdfShadeCellsGradient(float3 q, uint seed, uint channel) {
     float3 gradient;
     float value = sdfCellDistanceGrad(q, seed, (channel == 0u) ? SDF_CELL_MODE_F1 : SDF_CELL_MODE_F2_MINUS_F1, 1.0, gradient);
+    return float4(value, gradient);
+}
+// A shade program's `cellBorderGradient`, which the gradient of a height reading `cellBorder` writes: [the border
+// distance, its gradient], from the same search as `cellBorder`.
+float4 sdfShadeCellBorderGradient(float3 q, uint seed) {
+    float3 gradient;
+    float value = sdfCellDistanceGrad(q, seed, SDF_CELL_MODE_BORDER, 1.0, gradient);
     return float4(value, gradient);
 }
 // The cellular field alone, for a reader that takes no gradient (the fixed-point reader's is SdfFieldEvaluator.SampleCells).

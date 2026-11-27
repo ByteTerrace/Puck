@@ -257,7 +257,7 @@ public static class SdfMeshSkin {
         var narrowest = float.PositiveInfinity;
 
         foreach (var instruction in field.Instructions) {
-            if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Data1.X > 0f) && ((SdfBlendOp)instruction.Blend is SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction)) {
+            if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Data1.X > 0f) && (SdfFieldBlends.SmoothKindOf(value: (SdfBlendOp)instruction.Blend) != SdfSmoothKind.None)) {
                 narrowest = MathF.Min(x: narrowest, y: instruction.Data1.X);
             }
         }

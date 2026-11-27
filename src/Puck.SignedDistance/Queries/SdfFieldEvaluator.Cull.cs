@@ -40,19 +40,29 @@ public sealed partial class SdfFieldEvaluator {
     // product), each within half a raw. Its rounded weight h' leaves the exact h by ε ≤ 2⁻¹⁷(1 + 1/k), and the blend is
     // a convex quadratic in its weight with its minimum at h, so h' moves it by k·ε², at most 2⁻¹⁸(k + 2 + 1/k) raws:
     // under a tenth of a raw for every radius past SmoothRadiusMin, plus k·2⁻¹⁸ raws for a radius past one metre.
+    // The cubic smooth minimum's four rounded steps (k·h, two more products by h and the sixth) stay within a raw and a
+    // half, but its sag k/6·h³ is not stationary in its weight: a weight a raw off moves it by up to k/2·2⁻¹⁶, which is
+    // k·2⁻¹⁷ raws (k in raws) past the constant.
     private const long ScopeBlendRoundingRaws = 8L;
 
     // How far past the accumulator, in raws, a smooth union's candidate must stand for the blend to return the
     // accumulator to the bit: its radius k, floored as the blend floors it, plus k·2⁻¹⁵ + 16 raws, at which both walks
-    // round the blend weight to exactly one.
+    // round the blend weight to exactly one. The cubic returns the nearer operand exactly from a gap of k, so the margin
+    // holds for it too.
     private static Int128 SmoothUnionIdentityMargin(FixedQ4816 smoothRadius) {
         var k = FixedQ4816.Max(x: smoothRadius, y: SmoothRadiusMin);
 
         return ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
     }
     // The rounding allowance, in raws, of one soft blend of radius k (see ScopeBlendRoundingRaws).
-    private static long SmoothBlendRoundingRaws(FixedQ4816 k) =>
-        (ScopeBlendRoundingRaws + (k.Value >> (FixedQ4816.FractionBitCount + 18)));
+    private static long SmoothBlendRoundingRaws(FixedQ4816 k, SdfSmoothKind kind) =>
+        (ScopeBlendRoundingRaws + ((kind == SdfSmoothKind.Cubic)
+            ? ((k.Value >> (FixedQ4816.FractionBitCount + 1)) + 1L)
+            : (k.Value >> (FixedQ4816.FractionBitCount + 18))));
+    // SmoothBlendRoundingRaws for a radius in field units, as the double-precision box reach reads it, a raw past the
+    // double's own rounding.
+    private static double SmoothBlendRoundingRaws(double k, SdfSmoothKind kind) =>
+        ((ScopeBlendRoundingRaws + Math.Floor(d: ((kind == SdfSmoothKind.Cubic) ? ((k * 0.5) + 1.0) : (k / 262144.0)))) + 1.0);
     // Every cullable instance, in First order, with its certificate over the candidates it can join the answer with and
     // its lowering members' certificates (m_members). Both certificates of an instance share one centre, the mean of its
     // shapes'.
@@ -201,7 +211,7 @@ public sealed partial class SdfFieldEvaluator {
 
                                         quarterRaws += ((((Int128)k.Value) + 3L) >> 2);
                                         radiusRaws = Math.Max(val1: radiusRaws, val2: k.Value);
-                                        roundingRaws += SmoothBlendRoundingRaws(k: k);
+                                        roundingRaws += SmoothBlendRoundingRaws(k: k, kind: SdfFieldBlends.SmoothKindOf(value: (SdfBlendOp)instruction.Blend));
                                         break;
                                     }
                                 case SdfCullBoundAction.Local: {
@@ -210,7 +220,7 @@ public sealed partial class SdfFieldEvaluator {
                                     }
                                 case SdfCullBoundAction.LocalWithRadius: {
                                         lowers = false;
-                                        roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: SmoothRadiusReach(instruction: in instruction), y: SmoothRadiusMin));
+                                        roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: SmoothRadiusReach(instruction: in instruction), y: SmoothRadiusMin), kind: SdfFieldBlends.SmoothKindOf(value: (SdfBlendOp)instruction.Blend));
                                         break;
                                     }
                                 case SdfCullBoundAction.Disable: {
@@ -327,11 +337,11 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfFieldStructureAction.ShapeBlend: {
                         var k = step.Smooth;
-                        // The blend's rounding allowance (SmoothBlendRoundingRaws), and k/4 rounded up to a raw, each a
-                        // raw past the double's own rounding.
-                        var allowance = (((ScopeBlendRoundingRaws + Math.Floor(d: (k / 262144.0))) + 1.0) * RawUnit);
+                        // The blend's rounding allowance, and k/4 (which bounds every smooth kind's sag) rounded up to a
+                        // raw, each a raw past the double's own rounding.
+                        var allowance = (SmoothBlendRoundingRaws(k: k, kind: SdfFieldBlends.SmoothKindOf(value: step.Blend)) * RawUnit);
 
-                        if (step.Blend == SdfBlendOp.SmoothUnion) {
+                        if (SdfFieldBlends.CullBoundOf(value: step.Blend) == SdfCullBoundAction.SmoothUnion) {
                             quarters += ((k / 4.0) + (2.0 * RawUnit));
                             widest = Math.Max(val1: widest, val2: (k + RawUnit));
                         }

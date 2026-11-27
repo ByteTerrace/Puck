@@ -6,6 +6,7 @@ case SDF_BLEND_CHAMFER_UNION:
 case SDF_BLEND_GROOVE_UNION:
 case SDF_BLEND_PIPE_UNION:
 case SDF_BLEND_STAIRS_UNION:
+case SDF_BLEND_CUBIC_SMOOTH_UNION:
 {
     candidateWins = sdfNearerWins(result.distance, candidate); break;
 }
@@ -15,12 +16,14 @@ case SDF_BLEND_CHAMFER_SUBTRACTION:
 case SDF_BLEND_GROOVE_SUBTRACTION:
 case SDF_BLEND_PIPE_SUBTRACTION:
 case SDF_BLEND_STAIRS_SUBTRACTION:
+case SDF_BLEND_CUBIC_SMOOTH_SUBTRACTION:
 {
     candidateWins = sdfCutWins(result.distance, candidate); handsSlot = false; break;
 }
 case SDF_BLEND_INTERSECTION:
 case SDF_BLEND_SMOOTH_INTERSECTION:
 case SDF_BLEND_CHAMFER_INTERSECTION:
+case SDF_BLEND_CUBIC_SMOOTH_INTERSECTION:
 {
     candidateWins = sdfFartherWins(result.distance, candidate); handsSlot = false; break;
 }

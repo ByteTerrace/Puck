@@ -44,7 +44,7 @@ test "gallery level 1 blends display" {
     ticks 2
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
-    repeat 13 {
+    repeat 16 {
       seat1: world.state.cell.set galleryStepAt blends 1
       repeat displayPressTicks {
         ticks 1
@@ -55,11 +55,11 @@ test "gallery level 1 blends display" {
     }
   }
   expect {
-    // Arrival: the last blend (PIPE SUBTRACT, the display's fourteenth, catalog index 65) on the turntable and its copy
-    // on the screen, the catalog's sixty-sixth, and the body still at the console, standing.
-    gallerySelect.blends == 65
-    galleryShownAt.blends == 65
-    galleryPlace.blends == 66
+    // Arrival: the last blend (PIPE SUBTRACT, the display's seventeenth, catalog index 68) on the turntable and its copy
+    // on the screen, the catalog's sixty-ninth, and the body still at the console, standing.
+    gallerySelect.blends == 68
+    galleryShownAt.blends == 68
+    galleryPlace.blends == 69
     // Within half a metre of the display's spawn point (34, 4.55, 43.5), before its console.
     bodyPosition(body, 0, x) > 33.5
     bodyPosition(body, 0, x) < 34.5

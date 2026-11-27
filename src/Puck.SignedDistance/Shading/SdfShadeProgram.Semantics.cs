@@ -19,9 +19,9 @@ public sealed partial class SdfShadeProgram {
             case SdfShadeOp.Quantize when (a is SdfShadeType.Float or SdfShadeType.Float3):
                 return ((a == SdfShadeType.Float) ? SdfShadeType.UInt : SdfShadeType.UInt3);
             case SdfShadeOp.Hash when (a == SdfShadeType.UInt3): return SdfShadeType.UInt3;
-            case SdfShadeOp.Lattice when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float;
+            case SdfShadeOp.Lattice or SdfShadeOp.CellBorder when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float;
             case SdfShadeOp.Cells when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float3;
-            case SdfShadeOp.LatticeGradient or SdfShadeOp.CellsGradient when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float4;
+            case SdfShadeOp.LatticeGradient or SdfShadeOp.CellsGradient or SdfShadeOp.CellBorderGradient when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float4;
             case SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4 when args.All(predicate: t => (t == SdfShadeType.Float)):
                 return ((SdfShadeType)args.Length);
             case SdfShadeOp.Select when ((a == SdfShadeType.Float) && (b == c)): return b;

@@ -822,7 +822,7 @@ public sealed record CreationDocument(
     /// <returns><see langword="true"/> when a glass shape blends other than by union.</returns>
     public bool GlassNeedsScope() {
         foreach (var shape in (Shapes ?? [])) {
-            if (IsGlassShape(shape: shape) && ((shape.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))) {
+            if (IsGlassShape(shape: shape) && (SdfFieldBlends.SmoothFamilyOf(value: (shape.Blend ?? SdfBlendOp.Union)) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))) {
                 return true;
             }
         }

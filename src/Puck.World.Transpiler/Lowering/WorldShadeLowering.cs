@@ -409,7 +409,7 @@ internal sealed class WorldShadeLowering {
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
                     call.Name == "hash" ? SdfShadeType.UInt3 :
-                    ((((call.Name is "lattice" or "latticeGradient" or "lines" or "cells") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
+                    ((((call.Name is "lattice" or "latticeGradient" or "lines" or "cells" or "cellBorder" or "cellBorderGradient") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt :
                     call.Name == "select" && i > 0 ? expected : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: DiagnosticText.Compose(fix: "Rewrite it with the shade operations, names and numbers a shade program admits", problem: "This expression uses something a shade program has no word for"));
         }

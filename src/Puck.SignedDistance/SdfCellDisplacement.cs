@@ -1,8 +1,18 @@
 namespace Puck.SignedDistance;
 
-/// <summary>The nearest feature distance, or the gap between the nearest two feature distances.</summary>
-public enum SdfCellMode : uint { F1, F2MinusF1 }
-/// <summary>Cellular field relief with an exact fixed 27-cell neighborhood.</summary>
+/// <summary>The feature measure a cellular pattern reads.</summary>
+public enum SdfCellMode : uint {
+    /// <summary>The distance to the nearest feature.</summary>
+    F1,
+    /// <summary>The gap between the nearest two feature distances, zero on a border but not a distance to it: its slope
+    /// across a border varies with the two features' spacing.</summary>
+    F2MinusF1,
+    /// <summary>The distance to the nearest border of the nearest feature's cell, the plane between that feature and the
+    /// neighbour that bounds it nearest, so a band of it is one width all along every border.</summary>
+    Border,
+}
+/// <summary>Cellular field relief with an exact fixed 27-cell neighborhood, and for the border distance the 125 cells
+/// about the nearest feature's.</summary>
 /// <param name="Frequency">Positive cells per local unit.</param>
 /// <param name="Amplitude">Nonnegative displacement in field units.</param>
 /// <param name="Seed">PCG3D lattice seed.</param>
@@ -15,11 +25,17 @@ public readonly record struct SdfCellDisplacement(float Frequency, float Amplitu
     /// The containing cell and the closest face neighbor supply two points inside that radius;
     /// every cell outside the 27-cell neighborhood starts beyond the right-hand bound.</summary>
     public const float MaxF2Randomness = 0.2f;
+    /// <summary>A conservative border ceiling: the nearest feature is exact under <see cref="MaxF1Randomness"/>, and every
+    /// point of its cell lies within R = sqrt(3)*(0.5+j/2) of it, so a neighbour bounding the cell lies within 2R, under
+    /// the 3-j that separates it from a feature three cells off: the 5x5x5 cells about the nearest feature's hold every
+    /// neighbour that bounds its cell.</summary>
+    public const float MaxBorderRandomness = 0.46f;
 
     /// <summary>The mode's exact-neighborhood admission ceiling.</summary>
     public static float MaxRandomness(SdfCellMode mode) => mode switch {
         SdfCellMode.F1 => MaxF1Randomness,
         SdfCellMode.F2MinusF1 => MaxF2Randomness,
+        SdfCellMode.Border => MaxBorderRandomness,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(mode)),
     };
     /// <summary>Refuses nonfinite inputs, negative amplitude, unsupported modes, or excessive randomness.</summary>
@@ -54,11 +70,11 @@ public readonly record struct SdfCellDisplacement(float Frequency, float Amplitu
 
     /// <summary>The greatest outward relief: both distance functions are nonnegative.</summary>
     public float OutwardReach => (0.5f * Amplitude);
-    /// <summary>The bound on the relief's own slope, amplitude times frequency times the feature distance's: one for F1,
-    /// two for F2 - F1.</summary>
-    public float ReliefSlope => ((Amplitude * Frequency) * ((Mode == SdfCellMode.F1)
-        ? 1f
-        : 2f));
+    /// <summary>The bound on the relief's own slope, amplitude times frequency times the feature distance's: one for F1
+    /// and for the border distance, two for F2 - F1.</summary>
+    public float ReliefSlope => ((Amplitude * Frequency) * ((Mode == SdfCellMode.F2MinusF1)
+        ? 2f
+        : 1f));
     /// <summary>The local derivative bound including an initially unit-Lipschitz field.</summary>
     public float StepFactor => (1f + ReliefSlope);
 }

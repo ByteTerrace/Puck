@@ -11864,6 +11864,9 @@
         "PipeSubtraction",
         "StairsUnion",
         "StairsSubtraction",
+        "CubicSmoothUnion",
+        "CubicSmoothIntersection",
+        "CubicSmoothSubtraction",
         null
       ],
       "title": "SdfBlendOp",
@@ -11882,7 +11885,10 @@
         "GrooveSubtraction": "Carves a round seam while subtracting: max(a, -b, r - sqrt(a\u00B2\u002Bb\u00B2)). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
         "PipeSubtraction": "Leaves a round bead while subtracting: min(max(a, -b), sqrt(a\u00B2\u002Bb\u00B2) - r). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
         "StairsUnion": "Adds continuous steps of radius r (Data1.x) and step count n (Data1.z) to the union. Strictly 1-Lipschitz. PopField compose only.",
-        "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
+        "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction. Strictly 1-Lipschitz. PopField compose only.",
+        "CubicSmoothUnion": "Union with a smooth seam whose curvature stays continuous (blend radius = instruction Data1.x): the cubic smooth minimum, over the same band as SmoothUnion.",
+        "CubicSmoothIntersection": "Intersection with a smooth seam whose curvature stays continuous (blend radius = instruction Data1.x). Subject to the accumulator rule on SdfBlendOp.",
+        "CubicSmoothSubtraction": "Subtraction with a smooth carve seam whose curvature stays continuous (blend radius = instruction Data1.x)."
       }
     },
     "ShapeDomainOpSymmetry": {
@@ -12537,6 +12543,20 @@
       "additionalProperties": false,
       "title": "ShapeErodeDocument"
     },
+    "SdfCellMode": {
+      "description": "The feature measure a cellular pattern reads.",
+      "enum": [
+        "F1",
+        "F2MinusF1",
+        "Border"
+      ],
+      "title": "SdfCellMode",
+      "x-enumDescriptions": {
+        "F1": "The distance to the nearest feature.",
+        "F2MinusF1": "The gap between the nearest two feature distances, zero on a border but not a distance to it: its slope across a border varies with the two features\u0027 spacing.",
+        "Border": "The distance to the nearest border of the nearest feature\u0027s cell, the plane between that feature and the neighbour that bounds it nearest, so a band of it is one width all along every border."
+      }
+    },
     "ShapeCellsDocument": {
       "description": "Shape-local cellular relief. Frequency and amplitude use creation units. Contact geometry retains the base shape; the fixed-point VM can evaluate the emitted field independently.",
       "type": [
@@ -12554,11 +12574,7 @@
           "type": "integer"
         },
         "mode": {
-          "enum": [
-            "F1",
-            "F2MinusF1"
-          ],
-          "title": "SdfCellMode"
+          "$ref": "#/$defs/SdfCellMode"
         },
         "randomness": {
           "type": "number"

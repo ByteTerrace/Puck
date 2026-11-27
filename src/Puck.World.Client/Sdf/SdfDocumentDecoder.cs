@@ -40,7 +40,7 @@ namespace Puck.World.Client.Sdf;
 /// <see cref="SdfDocumentOpKind.Push"/> raises it by one (refused past the builder's
 /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>) and <see cref="SdfDocumentOpKind.Pop"/> lowers it by one. A
 /// shape op's <c>blend</c> at depth 0 must be a union-family value (<see cref="SdfBlendOp.Union"/>/
-/// <see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.ChamferUnion"/>); positive depth (inside a push/pop pair)
+/// <see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.CubicSmoothUnion"/>/<see cref="SdfBlendOp.ChamferUnion"/>); positive depth (inside a push/pop pair)
 /// allows any blend — a document's own field scope is where its subtraction/intersection CSG lives. The same rule
 /// applies to a <see cref="SdfDocumentOpKind.Push"/>'s own <c>blend</c>: it is evaluated at the depth the push itself
 /// sits at (never a fixed depth), because that blend composes the closed scope back into whatever field the push
@@ -126,8 +126,11 @@ public static class SdfDocumentDecoder {
         ["pipeUnion"] = SdfBlendOp.PipeUnion,
         ["grooveSubtraction"] = SdfBlendOp.GrooveSubtraction,
         ["pipeSubtraction"] = SdfBlendOp.PipeSubtraction,
+        ["cubicSmoothUnion"] = SdfBlendOp.CubicSmoothUnion,
+        ["cubicSmoothIntersection"] = SdfBlendOp.CubicSmoothIntersection,
+        ["cubicSmoothSubtraction"] = SdfBlendOp.CubicSmoothSubtraction,
     };
-    private static readonly HashSet<SdfBlendOp> TopLevelBlends = [SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.ChamferUnion];
+    private static readonly HashSet<SdfBlendOp> TopLevelBlends = [SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.CubicSmoothUnion, SdfBlendOp.ChamferUnion];
     private static readonly Dictionary<string, SdfNoiseFlavor> NoiseFlavorNames = new(comparer: StringComparer.Ordinal) {
         ["white"] = SdfNoiseFlavor.White,
         ["blue"] = SdfNoiseFlavor.Blue,
@@ -315,10 +318,10 @@ public static class SdfDocumentDecoder {
             value: out var modeValue
         ) ||
             (modeValue.ValueKind != JsonValueKind.String) ||
-            (modeValue.GetString() is not ("F1" or "F2MinusF1"))
+            (modeValue.GetString() is not ("F1" or "F2MinusF1" or "Border"))
         ) {
             throw new SdfDocumentException(
-                message: $"{context}.mode: expected F1 or F2MinusF1.",
+                message: $"{context}.mode: expected F1, F2MinusF1 or Border.",
                 reason: SdfRefusal.NotANumber
             );
         }
