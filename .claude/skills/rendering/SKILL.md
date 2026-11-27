@@ -1386,14 +1386,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the pyramid pass writes beside the occlusion's pyramid in a reflecting fragment;
   level zero is the mesh target itself. Levels above a group's own are gathered with
   atomics into words the recorder clears (`SdfWorldPackage.ReflectionDepthWordsBelow`,
-  the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
-  occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
-  share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. The
-  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
-  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
-  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
-  render pixel at a time along a reflected silhouette. What it
+  the C# twin of `sdfReflectDepthBase`). A ray walks at most `SdfReflectBehindPixels`
+  render pixels behind occluders before it gives up, and at most `passGroup.reflectionSteps`
+  reads; a hit's share fades over the budget's last quarter (`SdfReflectBudgetFade`), over
+  the pixels it walked behind an occluder before it and toward the screen's edge, and an
+  open-sky answer fades as the ray's end nears the edge, so where rays stop answering the
+  volume takes over with no line. Every per-cell answer must stay continuous in the ray's
+  direction: on a smooth mirror neighbouring cells trace nearly the same ray, and an answer
+  that switches whole between them (a toward-eye test, a count of pixels) shows as
+  stair-steps and streaks along the switch. At level zero the march judges a covered pixel
+  by its sample's tangent plane (`sdfReflectMarch`, the record's distance and normal, the
+  ray's travel at a share from `SdfReflectRay`): it meets the pixel only where it crosses
+  that plane from the front inside the pixel, and a face turned from the ray is never met,
+  so a ray leaving a curved surface walks past its own neighbouring pixels rather than
+  stopping on them. The hit is that crossing (`sdfReflectCrossing`), so what a ray reads
+  moves continuously rather than a render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:

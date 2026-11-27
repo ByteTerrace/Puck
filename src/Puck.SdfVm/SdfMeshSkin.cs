@@ -158,7 +158,8 @@ public static class SdfMeshSkin {
         var pieces = new List<SdfMesh>();
         var vertexMembers = new List<byte>();
         var members = group.Geometry.Poses.Where(predicate: p => (p.Key != group.Slot)).OrderBy(keySelector: p => p.Key).Select(selector: p => new SdfMeshMember((p.Key - group.Slot), p.Value.Position, p.Value.Orientation)).ToArray();
-        var finest = ((group.Detail > 0f) ? MathF.Min(x: SdfMeshPathBake.MinimumCell, y: group.Detail) : SdfMeshPathBake.MinimumCell);
+        var least = (SdfMeshPathBake.MinimumCell * group.Metre);
+        var finest = ((group.Detail > 0f) ? MathF.Min(x: least, y: group.Detail) : least);
 
         foreach (var (slot, fieldProgram) in skin.MemberFields()) {
             using var field = new SdfMeshCpuField(program: fieldProgram);

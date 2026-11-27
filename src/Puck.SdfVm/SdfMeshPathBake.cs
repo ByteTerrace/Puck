@@ -2125,13 +2125,13 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
-    // never fewer than `minimum` samples along any. A final lattice's spacing is never finer than MinimumCell, so a small
-    // part meshes at the detail a view resolves rather than at its own scale.
+    // never fewer than `minimum` samples along any. A final lattice's spacing is never finer than MinimumCell at the group's
+    // metre (SdfMeshBakeGroup.Metre), so a small part meshes at the detail a view resolves rather than at its own scale.
     private static SdfMeshBakeRequest Lattice(Group group, int longest, int minimum, bool gradients) {
         var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
         var target = (MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)) / (longest - 1));
 
-        if (gradients) { target = MathF.Max(x: target, y: MinimumCell); }
+        if (gradients) { target = MathF.Max(x: target, y: (MinimumCell * group.Metre)); }
 
         var (x, y, z) = SdfMeshLattice.Dims(cell: target, extent: extent, minimum: minimum);
 
@@ -2299,16 +2299,29 @@ public sealed partial class SdfMeshPathBake {
             }
         }
         if (regions.Count == 0) {
-            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { PastFloor = (group.Tier > group.FloorTier), TierCell = tierCell };
+            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
+                FineCell = (FineCell * group.Metre),
+                MostRefinement = MostRefinementOf(group: group),
+                PastFloor = (group.Tier > group.FloorTier),
+                TierCell = tierCell,
+            };
         }
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = regions.Max(selector: static region => region.Factor),
+            FineCell = (FineCell * group.Metre),
+            MostRefinement = MostRefinementOf(group: group),
             Regions = [.. regions],
             PastFloor = (group.Tier > group.FloorTier),
             TierCell = tierCell,
         };
     }
+    // The most fine cells a coarse cell splits into by the FineCell rule: MaxRefinement at a group's own size, doubled for
+    // each rung its slot scales it up by (SdfMeshBakeGroup.ScaleRungs), to MaxDetailRefinement. A final lattice's samples
+    // are a share of the group's own extent, so a body scaled up reaches the world spacing it bakes at its own size only by
+    // splitting each cell further; one scaled down splits as at its own size, its coarser metre already asking less.
+    private static int MostRefinementOf(Group group) =>
+        Math.Min(val1: (MaxRefinement << Math.Clamp(value: group.ScaleRungs, min: 0, max: 3)), val2: MaxDetailRefinement);
     // The samples a group's final lattice takes along the longest axis of its box as it stands: FinalSamples at or under
     // its floor tier, and past it the corners of the cells its tier's cell fits there (SdfMeshTier.LatticeSamples).
     private static int FinalLongest(Group group) {
@@ -2335,7 +2348,7 @@ public sealed partial class SdfMeshPathBake {
         var finest = float.PositiveInfinity;
 
         foreach (var (_, radius, _, _, _) in group.Members) {
-            finest = MathF.Min(x: finest, y: MemberCell(radius: radius));
+            finest = MathF.Min(x: finest, y: MemberCell(metre: group.Metre, radius: radius));
         }
 
         // A tier past the group's floor coarsens the lattice itself: no member's own spacing is finer than its cell.
@@ -2350,7 +2363,8 @@ public sealed partial class SdfMeshPathBake {
 
         foreach (var (_, radius, detail, low, high) in group.Members) {
             // The group's tier floors each member's own spacing: a view that resolves no finer cell is baked none.
-            var own = MathF.Max(x: ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius)), y: tierCell);
+            var memberCell = MemberCell(metre: group.Metre, radius: radius);
+            var own = MathF.Max(x: ((detail > 0f) ? MathF.Min(x: memberCell, y: detail) : memberCell), y: tierCell);
 
             // A member the lattice already resolves refines nothing: a declared detail at or past the coarse spacing (a
             // slab's half thickness over a lattice finer than it) would only spend the refinement's sample budget on
@@ -2358,7 +2372,7 @@ public sealed partial class SdfMeshPathBake {
             if ((detail > 0f) ? (own >= coarse) : ((own * RegionRatio) >= coarse)) { continue; }
 
             // Each member refines toward its own spacing, so one fine member refines no other member's box.
-            var ownFactor = RegionFactor(coarse: coarse, most: ((detail > 0f) ? MaxDetailRefinement : MaxRefinement), spacing: own);
+            var ownFactor = RegionFactor(coarse: coarse, most: ((detail > 0f) ? MaxDetailRefinement : MostRefinementOf(group: group)), spacing: own);
 
             regions.Add(item: new SdfLatticeRegion(
                 High: Vector3.Min(value1: group.High, value2: high),
@@ -2370,6 +2384,8 @@ public sealed partial class SdfMeshPathBake {
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = factor,
+            FineCell = (FineCell * group.Metre),
+            MostRefinement = MostRefinementOf(group: group),
             Regions = [.. regions],
             PastFloor = (group.Tier > group.FloorTier),
             TierCell = tierCell,
@@ -2393,8 +2409,8 @@ public sealed partial class SdfMeshPathBake {
         return Spanning(dims: SdfMeshLattice.Dims(cell: cell, extent: extent, minimum: minimum), extent: extent, gradients: false, group: group);
     }
     // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
-    // than MinimumCell.
-    private static float MemberCell(float radius) => MathF.Max(x: MinimumCell, y: ((2f * radius) / (FinalSamples - 1)));
+    // than MinimumCell at the group's metre (SdfMeshBakeGroup.Metre).
+    private static float MemberCell(float radius, float metre) => MathF.Max(x: (MinimumCell * metre), y: ((2f * radius) / (FinalSamples - 1)));
     // The next slab of a group's final lattice: whole planes along Z, as many as a frame's share of field evaluations
     // takes, at least one.
     private static SdfMeshBakeRequest SlabOf(Group group) {
@@ -2551,16 +2567,17 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
     // The fine cells along each axis a final lattice's coarse cell refines into at most: a union's own factor, or as many
-    // as reach FineCell floored by the group's tier, from two to MaxRefinement. A lattice already at that spacing still
-    // refines twofold where its samples cannot resolve the surface at all (SdfSampledLattice.Refine's essential cells: a
-    // sheet or gap thinner than a cell, two patches in one cell): those lose a feature's whole extent, not a fraction of
-    // a cell, so no tier's pixel bound covers them; with no region, only those cells refine.
+    // as reach FineCell (in the group's units) floored by the group's tier, from two to the lattice's most refinement. A
+    // lattice already at that spacing still refines twofold where its samples cannot resolve the surface at all
+    // (SdfSampledLattice.Refine's essential cells: a sheet or gap thinner than a cell, two patches in one cell): those lose
+    // a feature's whole extent, not a fraction of a cell, so no tier's pixel bound covers them; with no region, only those
+    // cells refine.
     private static int FactorOf(FinalLattice final) {
         var cell = final.Lattice.Cell;
 
         return ((final.Factor > 0)
             ? final.Factor
-            : Math.Clamp(value: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: FineCell, y: final.TierCell)))), min: 2, max: MaxRefinement));
+            : Math.Clamp(value: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: final.FineCell, y: final.TierCell)))), min: 2, max: final.MostRefinement));
     }
 
     // The workspace bytes a final lattice's bake holds at once, per lattice sample and per fine sample: the lattice's
@@ -2577,7 +2594,7 @@ public sealed partial class SdfMeshPathBake {
     private static int ThinSplit(FinalLattice final, int factor) {
         var cell = final.Lattice.Cell;
         var shortest = MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z));
-        var finest = (final.PastFloor ? MathF.Max(x: FineCell, y: (final.TierCell * PastFloorThinShare)) : FineCell);
+        var finest = (final.PastFloor ? MathF.Max(x: final.FineCell, y: (final.TierCell * PastFloorThinShare)) : final.FineCell);
 
         while ((factor <= (MaxDetailRefinement / 2)) && (shortest >= (2 * factor * finest))) { factor *= 2; }
 
@@ -4003,6 +4020,10 @@ public sealed partial class SdfMeshPathBake {
 
         // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
         public float TierCell { get; init; }
+        // FineCell in the group's lattice units (SdfMeshBakeGroup.Metre), and the most fine cells a coarse cell splits
+        // into by the FineCell rule (MostRefinementOf). Required, so no final lattice refines by metres of another scale.
+        public required float FineCell { get; init; }
+        public required int MostRefinement { get; init; }
         // The plan's bound of the fine samples the refinement measures (SdfSampledLattice.Plan), null until the last slab
         // lands; and why the lattice was refused, when it was.
         public long? PlannedFine { get; set; }

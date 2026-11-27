@@ -422,6 +422,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// (<see cref="SdfMeshBakeGroup.Seal"/>).</summary>
     /// <param name="tier">The tier, from zero to <see cref="SdfMeshTier.Last"/>.</param>
     public void AppendTier(int tier) => Hash(fact: Fact.Tier, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in tier)));
+    /// <summary>Appends the rungs a dynamic group's slot scale moves the bake's metre spacings by
+    /// (<see cref="SdfMeshTier.ScaleRungs"/>), which set its lattice's least and fine cells and its finest tier in its own
+    /// units, to the geometry and its form. A group whose rungs are zero appends none.</summary>
+    /// <param name="rungs">The rungs.</param>
+    public void AppendScaleRungs(int rungs) => Hash(fact: Fact.ScaleRungs, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in rungs)));
 
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
@@ -617,6 +622,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         OperandPose,
         GlyphStroke,
         ShapeStepScale,
+        ScaleRungs,
     }
     // An operand's key as the bytes the geometry hashes: its slot's offset from the group's own, the steps its pose
     // rounds to, and that pose rounded.

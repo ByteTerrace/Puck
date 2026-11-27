@@ -38,7 +38,9 @@ namespace Puck.SdfVm;
 // for a group a reset sweep has not reached yet, which is at most SdfMeshTier.MeasureFrames frames behind. Enforced by
 // these routes being the only ones that can move a pixel: the clocks and changes are SdfMeshDemand's, the box routes
 // read the frame's own journals, and every group enters the list through GroupList.Set. A change to what a pixel reads
-// (a new input to MeasurePixel) must add its route here, or a group keeps a stale tier.
+// (a new input to MeasurePixel) must add its route here, or a group keeps a stale tier. The demanded tier also reads the
+// group's finest at its slot's scale rungs (FinestTierNow); a moved slot whose scale crossed a whole rung is measured
+// (Moved) and read by the next decision (KeepReading), whatever its pixel did.
 //
 // The tier decisions read only the groups whose demanded tier a measure moved or the list set since they last stood
 // (the attention list, Attend): a group whose demanded tier is the one it draws, with no first detail owed and no
@@ -716,16 +718,19 @@ public sealed partial class SdfMeshPathBake {
             var (center, half) = WorldBox(group: group);
             var delta = Vector3.Abs(value: (half - watch.Half));
             var metres = (Vector3.Distance(value1: center, value2: watch.Center) + ((delta.X + delta.Y) + delta.Z));
+            var units = UnitsOf(group: group);
 
             // A point that did not count could come to: the box moved as far as the nearest of them stood past the top.
             if (metres >= watch.Clearance) { return true; }
             if ((group.FrustumWatch >= 0) && Demand.Moves(metres: metres, watch: m_watches.Of(record: group.FrustumWatch))) { return true; }
+            // A scale past a whole rung moves the group's finest tier (FinestTierNow), which no slack measured at the old
+            // one bounds.
+            if (SdfMeshTier.ScaleRungs(units: units) != SdfMeshTier.ScaleRungs(units: watch.Units)) { return true; }
             if (!float.IsFinite(f: watch.Slack)) { return false; }
 
             // In the group's own units: the world pixel moves by the travel and the box's drift over its new units, the
             // units' change moves the pixel it was measured at by their ratio (an animated slot's scale wavers), and the
             // points' scale multiplies the result.
-            var units = UnitsOf(group: group);
             var pixel = watch.Pixel;
             var travel = (((((clocks[0] - watch.At[0]) + (metres / watch.Focal)) / units)) + (pixel * MathF.Abs(x: ((watch.Units / units) - 1f))));
 
@@ -823,6 +828,9 @@ public sealed partial class SdfMeshPathBake {
         var bias = m_chosenBias;
         var before = group.DemandPixel;
         var pixel = reading.Pixel;
+        // A scale past a whole rung since the last measure moved the group's finest tier (FinestTierNow), so the tier a
+        // standing pixel demands may have moved with it.
+        var rungsMoved = (SdfMeshTier.ScaleRungs(units: watch.Units) != SdfMeshTier.ScaleRungs(units: reading.Units));
 
         group.DemandPixel = pixel;
         watch.Pixel = reading.Anchor;
@@ -841,8 +849,8 @@ public sealed partial class SdfMeshPathBake {
             m_watches.Release(group: group);
         }
         Schedule(group: group, clocks: in clocks);
-        if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
-        if (float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
+        if ((bias > 0) && (rungsMoved || float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
+        if (rungsMoved || float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
     }
     // Leaves a measured group due on each clock at half what its band leaves there, from the readings its measure took:
     // travel at half its tier band's slack in travel units, and scale where a pixel half that far past its band's top
@@ -938,26 +946,33 @@ public sealed partial class SdfMeshPathBake {
     }
     // The least pixel that still demands a group's coarsest held tier under the bias, or the tier half a rung finer while
     // the bias holds any (SdfMeshTier.CoarsestEdge): the larger of the two, so a point that could move either counts.
-    private static float CoarsestEdgeOf(int bias, Group group) {
-        var edge = SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias);
+    private float CoarsestEdgeOf(int bias, Group group) {
+        var finest = FinestTierNow(group: group);
+        var edge = SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: bias);
 
-        return ((bias > 0) ? MathF.Max(x: edge, y: SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1))) : edge);
+        return ((bias > 0) ? MathF.Max(x: edge, y: SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: (bias - 1))) : edge);
     }
+    // The finest tier a group's demand may ask as its slot stands now: its sealed rungs' finest moved by the rungs its slot's
+    // scale stands at (SdfMeshBakeGroup.FinestTierAt), so a body scaled up is asked, and planned at, a tier its own size's
+    // finest holds back. Every demanded tier, slack and edge reads it; a plan seals at the same rungs (Seal), so a group
+    // planned at a demanded tier holds that tier.
+    private int FinestTierNow(SdfMeshBakeGroup group) => group.FinestTierAt(scaleRungs: SdfMeshTier.ScaleRungs(units: UnitsOf(group: group)));
     // The tier a group demands at a pixel under the bias, held to its rungs: the bias reaches its floor and no further
     // (SdfMeshTier.Demanded), the one rule every plan and decision asks.
     private int DemandedTierOf(SdfMeshBakeGroup group, float pixel) =>
-        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel);
+        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: FinestTierNow(group: group), floor: group.FloorTier, halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel);
     // The tier half a rung finer than the bias asks, held to the group's rungs: what the bias would demand one step back.
-    private static int FinerTierOf(int bias, Group group, float pixel) =>
-        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel);
+    private int FinerTierOf(int bias, Group group, float pixel) =>
+        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: FinestTierNow(group: group), floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel);
     // How far a group's pixel may move, in its own units, before the tier it demands under the bias changes, or the tier
     // half a rung finer does while the bias holds any (Retier's finer figure); infinity where no move can change either.
-    private static float DemandSlack(int bias, Group group, float pixel) {
+    private float DemandSlack(int bias, Group group, float pixel) {
         if (!float.IsFinite(f: pixel)) { return float.PositiveInfinity; }
 
-        var slack = SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias, pixel: pixel);
+        var finest = FinestTierNow(group: group);
+        var slack = SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: bias, pixel: pixel);
 
-        return ((bias > 0) ? MathF.Min(x: slack, y: SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel)) : slack);
+        return ((bias > 0) ? MathF.Min(x: slack, y: SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel)) : slack);
     }
     // Lists a group for the tier decisions to read, once.
     private void Attend(Group group) => _ = m_attention.Add(group: group);
