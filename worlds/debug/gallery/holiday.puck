@@ -1,20 +1,25 @@
 // Holiday trees for the owner to judge on level 0: the standard's firs (conifer.puck) on the nave's centre line, two
-// strung with classic bulbs (one taller and fuller) and one plain. The fibre-optic fir needs render lanes of its own,
-// and the debug world's are spent, so it stays in the meadow's grove. Its prototypes and placements join the gallery.
+// strung with classic bulbs (one taller and fuller), bright enough to read lit indoors, and one fibre-optic fir on the
+// world's shared fibre lanes (fir-fiber.puck). Its prototypes and placements join the gallery.
 import "../../standard/conifer"
+import "../fir-fiber"
 import "layout"
+
+// A holiday bulb's glow in nits: the standard's default is a meadow's at dusk, too dim to read as lit under the
+// gallery's lamps.
+let holidayBulbGlow = 450
 
 // Where each tree stands on the nave's centre line, by bay, and which fir it is.
 let holidayTrees = [
   { id: "lit", bay: 3, prototype: "gallery-fir-lit", yaw: 0 }
   { id: "tall", bay: 9, prototype: "gallery-fir-tall-lit", yaw: 40 }
-  { id: "plain", bay: 11, prototype: "gallery-fir", yaw: 200 }
+  { id: "fiber", bay: 11, prototype: "gallery-fir-fiber", yaw: 200 }
 ]
 
 prototypes {
-  firTree(id: "gallery-fir")
-  firTree(id: "gallery-fir-lit", lights: true)
-  firTree(id: "gallery-fir-tall-lit", lights: true, height: 1.3, spread: 0.9, bulbCount: 64)
+  firTree(id: "gallery-fir-lit", lights: true, bulbGlow: holidayBulbGlow)
+  firTree(id: "gallery-fir-tall-lit", lights: true, height: 1.3, spread: 0.9, bulbCount: 64, bulbGlow: holidayBulbGlow)
+  firTree(id: "gallery-fir-fiber", fiber: true, fiberGlow: holidayBulbGlow)
 }
 
 placements {

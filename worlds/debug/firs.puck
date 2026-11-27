@@ -1,24 +1,7 @@
 // A small fir grove in the open meadow: plain firs, one strung with classic bulbs, and two fibre-optic firs whose tips
 // wheel through their colours on the `fiber` clock, a minute of clock time every six seconds.
 import "../standard/conifer"
-
-timeline {
-  clocks [{ name: fiber, state: fiber, spanSeconds: 60 }]
-}
-state {
-  world [
-    {
-      name: fiber
-      kind: "Fixed"
-      value: "0"
-      advance { perSecondNumerator: 1, perSecondDenominator: 6 }
-    }
-  ]
-}
-// The fibre groups glow on three world lanes of their own, a third of a turn of `fiber` apart.
-render {
-  lanes: firFiberLanes("fiber")
-}
+import "fir-fiber"
 
 prototypes {
   firTree(id: "fir")

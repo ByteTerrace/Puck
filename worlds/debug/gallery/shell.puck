@@ -538,7 +538,7 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 // 2's balcony edges take them; level 1's are its lattice (below).
 // Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a tree branch lands; there
 // the bay takes a doorway (below) with a short length either side of it.
-let shellBalconyBays = range(arcadeWestBays, (galleryBays - 1))
+let shellBalconyBays = range(arcadeWestBays, galleryBays)
 function shellDoorSides(k, side, z, yaw) = map([-1, 1], s => {
   id: $"rail-door-{side}-{k}-{s}", x: (treeLanding(k, side) + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2)))), y: galleryFloor[k], z: z, yaw: yaw, short: 2
 })
