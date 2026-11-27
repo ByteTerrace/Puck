@@ -523,9 +523,12 @@ read again is refilled and republished whole.
   about their hits. The rows carry the patches after the lights
   (`SdfMeshProbeRelight.EmitterRows`, their count in the epoch row's fourth
   lane), and `RelightRays` prices one ray a patch in range. A group whose
-  shapes emit (`SdfMeshBakeGroup.Emits`) traces what it draws, never its floor
-  (`SdfMeshPathBake`'s `Group.Trace`), so its patches are its drawn surface.
-  Editing `Emits` or the bake group moves the bake identity. What the volume
+  shapes emit traces what it draws, never its floor, so its patches are its
+  drawn surface: the residency hands its bake the volume's test
+  (`SdfMeshPathBake.Emitting`), which the bake asks against the held program
+  each time it chooses a group's trace, so an emissive edit that keeps the
+  group reaches it. The bake only calls the test, so editing `Emits` or the
+  appearance moves no bake identity (`SdfMeshBakeClosureLawTests`). What the volume
   still leaves dark is in
   [open items](../../../../docs/plans/open-items.md#debug-tools) under
   "Emitters at night".
