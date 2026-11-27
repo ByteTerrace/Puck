@@ -84,6 +84,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     /// <inheritdoc/>
     public CellKey BoundEachKey { get; set; }
     /// <inheritdoc/>
+    public CellKey BoundMemberKey { get; set; }
+    /// <inheritdoc/>
     public CellKey BoundPreviousKey { get; set; }
     /// <inheritdoc/>
     public CellKey BoundTokenKey { get; set; }

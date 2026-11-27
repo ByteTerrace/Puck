@@ -272,6 +272,19 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
                 ruleName: ruleName
             );
         }
+        // A sweep over a row family binds every member's keys, so each member row's keys name placements.
+        if (ForEachFamily is { } family) {
+            var members = new List<int>();
+
+            foreach (var member in family.Ordinals()) {
+                if (FindRowAt(rowOrdinal: member) is { } memberRow) {
+                    members.AddRange(collection: PlacementOrdinals(row: memberRow, channel: channel, ruleName: ruleName));
+                }
+            }
+            Scope[PlacementOrdinalsScope] = members;
+
+            return members;
+        }
 
         var row = (FindRow(name: forEachRow)
             ?? throw new RuleException(

@@ -25,6 +25,7 @@ public class StubReader : IStateReader {
     public Span<long> Locals => m_locals;
     /// <inheritdoc/>
     public CellKey BoundEachKey { get; set; }
+    public CellKey BoundMemberKey { get; set; }
     /// <inheritdoc/>
     public CellKey BoundPreviousKey { get; set; }
     /// <inheritdoc/>

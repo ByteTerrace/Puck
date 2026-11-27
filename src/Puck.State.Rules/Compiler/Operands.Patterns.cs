@@ -168,7 +168,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
         start = 0;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundEachIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out rowOrdinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out rowOrdinal)) {
                 answer = Fact.Absent(kind: CellKind.Int);
 
                 return false;

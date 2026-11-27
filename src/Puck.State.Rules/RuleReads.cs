@@ -280,7 +280,7 @@ public static class RuleReads {
         : Resolved<long>.Nothing);
     // The engine's own indirections: none computes arithmetic, so none faults.
     private static CellKey ResolveBuiltIn(IStateReader reader, in CompiledCellRef reference, out bool named) {
-        if (reference.Binding is BoundKey.Each or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
+        if (reference.Binding is BoundKey.Each or BoundKey.Member or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
             // A binding that is not bound for this evaluation falls back to the reference's own key, which is how
             // the first token of a pattern word reads $previous as the cell no row holds rather than as no cell.
             var bound = BoundKeyOf(
@@ -396,14 +396,16 @@ public static class RuleReads {
         ));
     }
 
-    /// <summary>Returns the integer the key bound to <c>$each</c> spells: the family index a binding's own key
-    /// selects.</summary>
+    /// <summary>Returns the family index a binding's own key selects: the integer <c>$member</c> spells in a sweep over
+    /// a row family, and the integer <c>$each</c> spells in any other sweep.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <returns>The integer, or <see langword="null"/> when no key is bound or the bound key spells none.</returns>
-    public static long? BoundEachIndex(IStateReader reader) {
+    public static long? BoundOwnIndex(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return (reader.Arena.Keys.TryKeyInteger(integer: out var each, key: reader.BoundEachKey) ? each : null);
+        var own = (reader.BoundMemberKey.IsValid ? reader.BoundMemberKey : reader.BoundEachKey);
+
+        return (reader.Arena.Keys.TryKeyInteger(integer: out var index, key: own) ? index : null);
     }
     /// <summary>Resolves one live indirection as an integer index — a live row's table index, a static table's key.
     /// An indirection that spells no integer names nothing.</summary>
@@ -491,6 +493,7 @@ public static class RuleReads {
     private static CellKey BoundKeyOf(IStateReader reader, BoundKey binding) => (binding switch {
         BoundKey.Write => reader.Scratch.WriteKey,
         BoundKey.Each => reader.BoundEachKey,
+        BoundKey.Member => reader.BoundMemberKey,
         BoundKey.Token => reader.BoundTokenKey,
         BoundKey.Previous => reader.BoundPreviousKey,
         _ => IndexKey(

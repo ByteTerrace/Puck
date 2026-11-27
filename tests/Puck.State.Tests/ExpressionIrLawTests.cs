@@ -796,6 +796,7 @@ public sealed class ExpressionIrLawTests {
 
         public StateArena Arena { get; }
         public CellKey BoundEachKey { get; set; }
+        public CellKey BoundMemberKey { get; set; }
         public CellKey BoundPreviousKey { get; set; }
         public CellKey BoundTokenKey { get; set; }
         public StateCatalog Catalog { get; }

@@ -21,6 +21,10 @@ public enum CellReach : byte {
     /// (<c>family[$each]</c>): the binding whose key spells <see cref="CellAccess.Member"/> reaches every cell of
     /// this row, and no other binding reaches any.</summary>
     Member,
+
+    /// <summary>The cell under the key a sweep over a row family binds to <c>$member</c>: a move of the cell whose key
+    /// spells family index <c>m</c> reaches every binding of member <c>m</c>, and no other binding.</summary>
+    MemberKey,
 }
 /// <summary>One state cell a compiled rule reads or writes, addressed by ordinal: the row's catalog ordinal and the
 /// interned cell key, never a name. An invalid <paramref name="Key"/> means "any cell of the row" — what a read that
@@ -42,6 +46,8 @@ public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet
     /// <summary>Gets a value indicating whether the access reaches the family member its binding selects, and no other
     /// binding's.</summary>
     public bool IsMember => ((Reach == CellReach.Member) && (Member >= 0));
+    /// <summary>Gets a value indicating whether the cell is the one under the key bound to <c>$member</c>.</summary>
+    public bool MemberKey => (Reach == CellReach.MemberKey);
 
     /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
     /// <param name="other">The other access.</param>

@@ -70,6 +70,7 @@ public sealed partial class RuleEvaluator {
             var moved = (list.KindOf(index: index) switch {
                 RuleDueList.Visit.BodySweep => SweepBodies(index: index, list: list, stepTicks: stepTicks, whole: out whole),
                 RuleDueList.Visit.RowSweep => SweepRow(index: index, list: list, stepTicks: stepTicks, whole: out whole),
+                RuleDueList.Visit.FamilySweep => SweepFamily(index: index, list: list, stepTicks: stepTicks, whole: out whole),
                 _ => (EvaluateRule(applied: out var ruleMoved, bindings: list.States[index], latch: latch, rule: rules[index], stepTicks: stepTicks) != RuleOutcome.Idle) | ruleMoved,
             });
 
@@ -163,23 +164,27 @@ public sealed partial class RuleEvaluator {
 
     // The latch entry of one binding of a keyed sweep, the one every path that judges or forgets a binding names: the
     // bound key, with the lifetime a host iteration gives it (RuleIteration.Generation).
-    internal LatchKey SweepLatchKey(CompiledRule rule, CellKey key) => new(
+    internal LatchKey SweepLatchKey(CompiledRule rule, CellKey key, int member = -1) => new(
         Left: key.Ordinal,
-        Right: -1,
+        Right: ((member >= 0) ? member : -1),
         LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
     );
+    // The index key $member binds for a member's family index, or the invalid key outside a family sweep. The compiler
+    // interned every index the swept family carries.
+    private CellKey MemberKey(int member) => (((member >= 0) && m_host.Arena.Keys.TryResolveIndex(index: member, key: out var key)) ? key : default);
     // One binding of a keyed sweep the list holds per binding (a body's index, or a row sweep's snapshot position),
     // judged under its key. A verdict that must be judged again keeps the binding due; a binding a partial sweep
     // could not evaluate is closed exactly as a full sweep's end closes it; and a firing's moves are drained at once,
     // so a binding later in the order that the firing reaches is judged this tick.
-    private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks) {
+    private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks, int member = -1) {
         var state = list.States[index];
         var latch = list.Latch;
-        var bound = SweepLatchKey(key: key, rule: list.Rules[index]);
+        var bound = SweepLatchKey(key: key, member: member, rule: list.Rules[index]);
         var firingsRun = m_firingsRun;
 
         list.ClearBinding(binding: binding, index: index);
         m_host.BoundEachKey = key;
+        m_host.BoundMemberKey = MemberKey(member: member);
 
         var outcome = EvaluateOnce(
             applied: out var moved,
@@ -247,6 +252,52 @@ public sealed partial class RuleEvaluator {
         }
 
         m_host.BoundEachKey = default;
+        if (full) {
+            latch.EndSweep(journal: m_host.Arena.Journal, state: state);
+        }
+
+        return applied;
+    }
+
+    // One visit of a sweep over a row family the list holds per (member, key), as SweepRow is for one row: due in
+    // full, it snapshots every member's keys and judges each binding in order; otherwise it judges the due positions
+    // over the snapshot its last full visit took, which stands while every member's structure does.
+    private bool SweepFamily(int index, RuleDueList list, ulong stepTicks, out bool whole) {
+        var rule = list.Rules[index];
+        var state = list.States[index];
+        var latch = list.Latch;
+        var snapshot = list.FamilySnapshotOf(index: index);
+        var family = rule.ForEachFamily!.Value;
+        var applied = false;
+        var full = list.TakeFull(force: !list.FamilySnapshotStands(index: index), index: index);
+
+        whole = full;
+        state.Spent.Visits++;
+        if (full) {
+            state.Spent.Sweeps++;
+            if (!snapshot.Stands(arena: m_host.Arena, family: family)) {
+                EachKeys(rule: rule);
+                snapshot.Take(arena: m_host.Arena, family: family, keys: m_eachKeyScratch, members: m_eachMemberScratch, span: RuleCompiler.FamilySpan(family: family));
+            }
+            list.NoteFamilySwept(index: index);
+        }
+        latch.BeginSweep();
+
+        var every = full;
+
+        for (var position = 0; (position < snapshot.Count); position++) {
+            every |= list.IsFull(index: index);
+            if (!every) {
+                position = list.NextBindingDue(from: position, index: index);
+                if ((position < 0) || (position >= snapshot.Count)) {
+                    break;
+                }
+            }
+            applied |= SweepBinding(binding: position, full: full, index: index, key: snapshot.Keys[position], list: list, member: snapshot.Members[position], stepTicks: stepTicks);
+        }
+
+        m_host.BoundEachKey = default;
+        m_host.BoundMemberKey = default;
         if (full) {
             latch.EndSweep(journal: m_host.Arena.Journal, state: state);
         }

@@ -16,6 +16,7 @@ public sealed class ExpressionFunctionLawTests {
             time: ArenaTime.Origin
         );
         public CellKey BoundEachKey { get; set; }
+        public CellKey BoundMemberKey { get; set; }
         public CellKey BoundPreviousKey { get; set; }
         public CellKey BoundTokenKey { get; set; }
         public ulong EngineTick => 0UL;

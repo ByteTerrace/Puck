@@ -308,7 +308,7 @@ public abstract class RuleEffect : IRuleEffect {
 
         into.Add(item: new CellAccess(
             IsSet: isSet,
-            Reach: ((effect.KeyFrom is { IsEach: true }) ? CellReach.Each : CellReach.Key),
+            Reach: ((effect.KeyFrom is { IsEach: true }) ? CellReach.Each : ((effect.KeyFrom is { IsMember: true }) ? CellReach.MemberKey : CellReach.Key)),
             Key: ((effect.KeyFrom is null)
             ? effect.Key
             : default),
@@ -382,6 +382,12 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
     /// <summary>Gets a value indicating whether the address is the value of the cell the key bound to <c>$each</c>
     /// names in an index row: each binding reads one index cell and is sent to one cell by it.</summary>
     public bool IsEachIndex => ((Binding == BoundKey.None) && (RowOrdinal >= 0) && (InnerKeyBinding == BoundKey.Each) && (Custom is null) && (Program is null));
+    /// <summary>Gets a value indicating whether the address is the key a sweep over a row family binds to
+    /// <c>$member</c> and nothing else.</summary>
+    public bool IsMember => ((Binding == BoundKey.Member) && (RowOrdinal < 0) && (Custom is null) && (Program is null));
+    /// <summary>Gets how a read keyed through this address reaches its row: the cell under the binding's <c>$each</c>
+    /// or <c>$member</c> key, the cell an index row names under <c>$each</c>, or whatever cell the key names.</summary>
+    public CellReach KeyReach => (IsEach ? CellReach.Each : (IsMember ? CellReach.MemberKey : (IsEachIndex ? CellReach.Indexed : CellReach.Key)));
     /// <summary>Gets the facet this indirection's own key fact declares, or <see langword="null"/>.</summary>
     public FacetRef? RequiredFacet => Custom?.RequiredFacet;
 
@@ -415,7 +421,11 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
             Key: ((cell.Binding == BoundKey.None)
             ? cell.Key
             : default),
-            Reach: (((cell.Binding == BoundKey.None) && (cell.InnerKeyBinding == BoundKey.Each)) ? CellReach.Each : CellReach.Key),
+            Reach: ((cell.Binding == BoundKey.None) ? (cell.InnerKeyBinding switch {
+                BoundKey.Each => CellReach.Each,
+                BoundKey.Member => CellReach.MemberKey,
+                _ => CellReach.Key,
+            }) : CellReach.Key),
             RowOrdinal: cell.RowOrdinal
         ));
     }

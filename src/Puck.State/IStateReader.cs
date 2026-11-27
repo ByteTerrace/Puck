@@ -25,6 +25,10 @@ public interface IStateReader {
     /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Each"/>, set by the evaluator for the
     /// duration of one iteration and the default invalid key outside a <see cref="Rule.ForEach"/> evaluation.</summary>
     CellKey BoundEachKey { get; set; }
+    /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Member"/>: the family index, as an index key, of
+    /// the member a sweep over a row family is binding, set by the evaluator beside <see cref="BoundEachKey"/> and the
+    /// default invalid key outside such a sweep.</summary>
+    CellKey BoundMemberKey { get; set; }
     /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Previous"/> — the token before
     /// <see cref="BoundTokenKey"/> in the word being read, the default invalid key on the first token and outside a
     /// pattern read.</summary>

@@ -82,6 +82,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private ulong m_minWake = ulong.MaxValue;
     private readonly List<int> m_bodyIndexScratch = [];
     private readonly List<CellKey> m_eachKeyScratch = [];
+    // For a sweep over a row family, the family index of the member each key of m_eachKeyScratch was bound from.
+    private readonly List<int> m_eachMemberScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
     private readonly List<CellAccess> m_readScratch = [];
     private readonly List<int> m_writtenRows = [];
@@ -443,6 +445,13 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     // next sweep; removals and reordering do not change what this sweep binds.
     private void EachKeys(CompiledRule rule) {
         m_eachKeyScratch.Clear();
+        m_eachMemberScratch.Clear();
+
+        if (rule.ForEachFamily is { } family) {
+            FamilyKeys(family: family);
+
+            return;
+        }
 
         if (rule.Iteration is { } iteration) { iteration.Collect(host: m_host, into: m_eachKeyScratch); return; }
 
@@ -468,6 +477,24 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             rowOrdinal: rule.ForEachOrdinal
         )) {
             m_eachKeyScratch.Add(item: key);
+        }
+    }
+    // A family sweep binds every key of every member, members in family index order and each member's keys in cell
+    // order, the bindings the due list's snapshot positions name.
+    private void FamilyKeys(RowFamily family) {
+        var arena = m_host.Arena;
+
+        for (var member = 0; (member <= RuleCompiler.FamilySpan(family: family)); member++) {
+            if (!family.TryGetOrdinal(index: member, ordinal: out var ordinal)) {
+                continue;
+            }
+
+            var cursor = 0;
+
+            while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: ordinal)) {
+                m_eachKeyScratch.Add(item: key);
+                m_eachMemberScratch.Add(item: member);
+            }
         }
     }
     // A body sweep binds each live body's index key in ascending index order, the set the due list's visit binds
@@ -620,7 +647,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             return ownOutcome;
         }
-        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && (rule.Iteration is null)) {
+        if (rule.EvaluatesOnce) {
             // A rule evaluated once snapshots nothing, and its one visit is priced with its check.
             return EvaluateOnce(
                 applied: out applied,
@@ -678,8 +705,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var aggregate = RuleOutcome.Idle;
         var firings = 0;
 
-        foreach (var key in m_eachKeyScratch) {
-            var eachBinding = SweepLatchKey(key: key, rule: rule);
+        for (var position = 0; (position < m_eachKeyScratch.Count); position++) {
+            var key = m_eachKeyScratch[position];
+            var member = ((position < m_eachMemberScratch.Count) ? m_eachMemberScratch[position] : -1);
+            var eachBinding = SweepLatchKey(key: key, member: member, rule: rule);
 
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.
@@ -688,6 +717,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 continue;
             }
             m_host.BoundEachKey = key;
+            m_host.BoundMemberKey = MemberKey(member: member);
 
             var outcome = EvaluateOnce(
                 applied: out var moved,
@@ -709,6 +739,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         m_host.BoundEachKey = default;
+        m_host.BoundMemberKey = default;
         latch.EndSweep(journal: m_host.Arena.Journal, state: bindings);
 
         return aggregate;

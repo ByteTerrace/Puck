@@ -127,6 +127,10 @@ public enum BoundKey : byte {
     Previous,
     /// <summary>The destination key resolved for the current state write.</summary>
     Write,
+
+    /// <summary>The family index of the member a <see cref="Rule.ForEach"/> sweep over a row family is binding, beside
+    /// the member's own key in <see cref="Each"/>.</summary>
+    Member,
 }
 /// <summary>The binding vocabulary: the key token and reference token each <see cref="BoundKey"/> spells, and the
 /// scope it is live in.</summary>
@@ -142,6 +146,7 @@ public static class RuleBindingTokens {
         (BoundKey.Token, "$token", "a pattern row's value expression, as the cell key of a row keyed over the zone's token domain"),
         (BoundKey.Previous, "$previous", "a pattern row's value expression, as the key of the token before the current one (the absent cell on the first)"),
         (BoundKey.Write, "$write", "a state write's value expression"),
+        (BoundKey.Member, "$member", "a rule declaring 'forEach' over a row family"),
     ];
 
     /// <summary>Returns the binding a key token spells, or <see cref="BoundKey.None"/>.</summary>

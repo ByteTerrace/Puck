@@ -87,6 +87,13 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1, bool ForEachBodies = false) {
     /// <summary>A bounded document-owned source sharing the normal each sweep.</summary>
     public RuleIteration? Iteration { get; init; }
+    /// <summary>Gets the row family the rule sweeps, or <see langword="null"/>: one binding per key of each member, in
+    /// family order and then cell order, each binding the key to <c>$each</c> and the member's family index to
+    /// <c>$member</c>, so a family selection under <c>$member</c> (<c>pile[$member]</c>) and a cell under it
+    /// (<c>table[$member]</c>) are the binding's member's alone.</summary>
+    public RowFamily? ForEachFamily { get; init; }
+    /// <summary>Gets a value indicating whether the rule is evaluated once a pass rather than swept over a set.</summary>
+    public bool EvaluatesOnce => ((ForEachOrdinal < 0) && !ForEachZones && !ForEachBodies && (PoolForEach is null) && (Iteration is null) && (ForEachFamily is null));
     /// <summary>Gets the most bindings of one sweep that may fire (<see cref="Rule.MaxFirings"/>), or 0 when every
     /// binding the sweep visits may.</summary>
     public int MaxFirings { get; init; }
@@ -122,6 +129,11 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
         // Membership controls whether and how often a rule fires, even when its body never reads a cell value.
         if (ForEachOrdinal >= 0) {
             into.Add(new CellAccess(Key: default, Reach: CellReach.Members, RowOrdinal: ForEachOrdinal));
+        }
+        if (ForEachFamily is { } family) {
+            foreach (var member in family.Ordinals()) {
+                into.Add(new CellAccess(Key: default, Reach: CellReach.Members, RowOrdinal: member));
+            }
         }
         if (PoolForEach is { } pool) {
             into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.DomainRowOrdinal));

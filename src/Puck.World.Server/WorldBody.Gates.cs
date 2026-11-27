@@ -34,6 +34,7 @@ public sealed partial class WorldBody {
         public ulong EngineTick => 0;
         public ulong Tick => 0;
         public CellKey BoundEachKey { get; set; }
+        public CellKey BoundMemberKey { get; set; }
         public CellKey BoundPreviousKey { get; set; }
         public CellKey BoundTokenKey { get; set; }
 

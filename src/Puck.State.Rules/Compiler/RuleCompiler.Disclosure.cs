@@ -50,7 +50,7 @@ public static partial class RuleCompiler {
     /// select (<see cref="ArenaTransform.DisclosureReads"/>, and <see cref="ArenaTransform.DisclosureMemberReads"/> for the
     /// family members only one binding reads), and the price of the check. A firing checks the one row each live end's
     /// index selects (<c>ArenaTransforms</c>' disclosure walk reads the bound ends), so a read is left out only when it is
-    /// that bound row: a member a live end selects by the binding's own key (<see cref="LiveRow.SelectsEachMember"/>), read
+    /// that bound row: a member a live end selects by the binding's own key (<see cref="LiveRow.SelectsOwnMember"/>), read
     /// by that same key. Every other control or fixed read stays, a member of a live end's family included, since the
     /// binding may select another member than the one it reads. The price is those reads and writes with the dearest
     /// candidate of each live end added to both, and the member reads of the dearest binding.</summary>
@@ -64,7 +64,7 @@ public static partial class RuleCompiler {
         int[] Candidates(LiveRow? end) {
             accesses.Clear();
             end?.CollectRows(into: accesses, isSet: false);
-            if (end is { SelectsEachMember: true }) {
+            if (end is { SelectsOwnMember: true }) {
                 bound.UnionWith(other: accesses.Where(predicate: static access => access.IsMember).Select(selector: static access => (access.RowOrdinal, access.Member)));
             }
             return accesses.Select(selector: static access => access.RowOrdinal).Distinct().ToArray();

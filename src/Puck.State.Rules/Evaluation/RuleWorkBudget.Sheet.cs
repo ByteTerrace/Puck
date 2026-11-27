@@ -370,6 +370,15 @@ public static partial class RuleWorkBudget {
         if (rule.PoolForEach is { } pool) {
             return pool.Capacity;
         }
+        if (rule.ForEachFamily is { } family) {
+            var capacity = 0L;
+
+            foreach (var member in family.Ordinals()) {
+                capacity = BinaryIntegerFunctions.AddSaturating(left: capacity, right: context.RowCapacity(rowOrdinal: member));
+            }
+
+            return capacity;
+        }
         if (rule.ForEachOrdinal < 0) {
             return 1L;
         }
@@ -385,7 +394,7 @@ public static partial class RuleWorkBudget {
     public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.Iteration is null) && (rule.PoolForEach is null))
+        return (rule.EvaluatesOnce
             ? RuleWork.Zero
             // A sweep of this tick's events snapshots the events that arrived, one for the change the sheet prices.
             : RuleWork.Known(units: (rule.Iteration is { BindsEvents: true }) ? Math.Min(val1: 1L, val2: ForEachCount(context: context, rule: rule)) : ForEachCount(

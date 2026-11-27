@@ -72,7 +72,7 @@ public static partial class RuleCompiler {
             if (
                 (rule.ForEach is { } forEachName) &&
                 !forEachZones &&
-                !forEachBodies && (context.Iteration is null)
+                !forEachBodies && (context.Iteration is null) && (context.ForEachFamily is null)
             ) {
                 forEachOrdinal = ResolveRowOrdinal(
                     context: context,
@@ -103,6 +103,9 @@ public static partial class RuleCompiler {
                 );
             }
             if (forEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: forEachOrdinal, Key: default)); }
+            if (context.ForEachFamily is { } sweptFamily) {
+                foreach (var member in sweptFamily.Ordinals()) { controls.Add(item: new CellAccess(RowOrdinal: member, Key: default)); }
+            }
             if (poolForEach is not null) { controls.Add(item: new CellAccess(RowOrdinal: poolForEach.DomainRowOrdinal, Key: default)); }
             RequireTransformControlAudience(effects: effects, controls: controls, context: context, ruleName: rule.Name);
 
@@ -146,7 +149,7 @@ public static partial class RuleCompiler {
                 PoolBindingSlot: poolBindingSlot,
                 PoolForEach: poolForEach,
                 Zones: context.Zones
-            ) { Deferred = DeferredLocals(gateReads: gateReads, localReads: localReads, count: compiledLocals.Length), Iteration = context.Iteration, MaxFirings = (rule.MaxFirings ?? 0) };
+            ) { Deferred = DeferredLocals(gateReads: gateReads, localReads: localReads, count: compiledLocals.Length), ForEachFamily = context.ForEachFamily, Iteration = context.Iteration, MaxFirings = (rule.MaxFirings ?? 0) };
 
             return ((extend is null)
                 ? compiled
@@ -197,6 +200,10 @@ public static partial class RuleCompiler {
             context.Iteration = context.CompileIteration(reference: forEach, ruleName: rule.Name.Value);
             if (context.Iteration is { } iteration) {
                 for (var index = 0; (index < iteration.KeySpan); index++) { _ = InternKey(context: context, name: IndexKeyCache.Get(index: index)); }
+            } else if (TryFamilySweep(context: context, forEach: forEach, family: out var family)) {
+                // $member spells a member's family index as an index key, which the sweep binds by key.
+                for (var index = 0; (index <= FamilySpan(family: family)); index++) { _ = InternKey(context: context, name: IndexKeyCache.Get(index: index)); }
+                context.ForEachFamily = family;
             } else if (IteratesZones(forEach: forEach)) {
                 if (zones is null) {
                     throw new RuleException(
@@ -237,11 +244,35 @@ public static partial class RuleCompiler {
 
         context.BindingScope = ((rule.ForEach is null)
             ? []
-            : [BoundKey.Each]
+            : ((context.ForEachFamily is null) ? [BoundKey.Each] : [BoundKey.Each, BoundKey.Member])
         );
         context.ForEachRow = rule.ForEach?.Spelling;
         context.Zones = zones;
     }
+    /// <summary>Returns whether a <c>forEach</c> names a declared row family rather than a row: the rule then sweeps
+    /// every key of every member, binding the key to <c>$each</c> and the member's family index to
+    /// <c>$member</c>.</summary>
+    /// <param name="context">The compile context.</param>
+    /// <param name="forEach">The authored sweep source.</param>
+    /// <param name="family">The family, on success.</param>
+    /// <returns><see langword="true"/> when the source names a family and no row of that name.</returns>
+    public static bool TryFamilySweep(RuleCompileContext context, StateChannelRef forEach, out RowFamily family) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        family = default;
+
+        return (
+            !IteratesZones(forEach: forEach) &&
+            !IteratesBodies(forEach: forEach) &&
+            CellName.TryParse(candidate: forEach.Spelling, name: out var name, reason: out _) &&
+            (context.FindRow(name: forEach.Spelling) is null) &&
+            context.Catalog.TryGetFamily(family: out family, name: name)
+        );
+    }
+    /// <summary>Returns the largest family index a family's members carry.</summary>
+    /// <param name="family">The family.</param>
+    /// <returns>The largest index, or -1 for an empty family.</returns>
+    public static int FamilySpan(RowFamily family) => ((family.Slots is { } slots) ? (slots.Length - 1) : (family.Count - 1));
     /// <summary>Compiles every rule in the list, in document order, checking that each carries a unique, unreserved
     /// name.</summary>
     /// <param name="rules">The authored rules.</param>

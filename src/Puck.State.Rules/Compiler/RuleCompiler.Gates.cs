@@ -580,8 +580,9 @@ public static partial class RuleCompiler {
         context.LocalReads = indexReads;
         try {
             // An entry of a family table is live at any index, a literal one included: `$zones[2]` is entry 2's member
-            // at the binding's own key, which differs per binding, so a fixed index there still selects a row live.
-            if (overZones && (context.Zones is { PerBinding: true }) && long.TryParse(s: inner, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
+            // at the binding's own key, which differs per binding, so a fixed index there still selects a row live; a
+            // literal family index (`pile[2]`, read as `pile[2][card]`) selects its one member.
+            if ((!overZones || (context.Zones is { PerBinding: true })) && long.TryParse(s: inner, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
                 index = CompileKeyExpression(
                     context: context,
                     ruleName: ruleName,
@@ -618,7 +619,8 @@ public static partial class RuleCompiler {
         row = LiveRow.OverFamily(
             family: family,
             index: index,
-            spelling: name
+            spelling: name,
+            sweepsFamily: (context.ForEachFamily is not null)
         );
 
         return true;

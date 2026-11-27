@@ -379,6 +379,8 @@ public sealed partial class WorldServer {
                     : string.Empty)}"
                 : ((rule.ForEachOrdinal >= 0)
                     ? $" forEach {catalog.Descriptors[rule.ForEachOrdinal].Name}"
+                    : ((rule.ForEachFamily is { } family)
+                    ? $" forEach family {family.Name}"
                     : (rule.ForEachBodies
                         ? $" forEach {RuleFacts.ForEachBodies}"
                         : ((rule.Iteration is WorldRegionIteration occupants)
@@ -387,7 +389,7 @@ public sealed partial class WorldServer {
                                 ? $" forEach {WorldPlayerIteration.Spelling}"
                                 : ((rule.Iteration is WorldContactIteration contacts)
                                     ? $" forEach contacts({contacts.Surface})"
-                                    : string.Empty))))
+                                    : string.Empty)))))
             ));
 
             lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held

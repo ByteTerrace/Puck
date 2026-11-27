@@ -94,13 +94,19 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // own due tick it is: one when each binding reads its due tick under its own key.
         var opened = 0L;
         var shared = (deadline is not null);
+        // A sweep over a row family binds a member's keys: a move a member's bindings read whole (a family selection or
+        // a cell under $member) opens that member's bindings, and a move of the cell under one $each key opens that
+        // key's binding in every member. Any other sweep's own reads open one binding.
+        var members = ((rule.ForEachFamily is { } family) ? MemberShape(context: context, family: family) : (Count: 1L, Capacity: 1L));
+
+        long Own(CellAccess access) => (access.Members ? 1L : (access.Each ? members.Count : ((access.IsMember || access.MemberKey) ? members.Capacity : 1L)));
 
         if (deadline is not null) {
             var due = new List<CellAccess>();
             var token = rule.Gate[deadline.Token];
 
             (deadline.TickOnLeft ? token.RightSource : token.LeftSource).CollectReads(into: due);
-            opened = (((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember))) ? 1L : multiplier);
+            opened = (((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember || access.MemberKey))) ? due.Max(selector: Own) : multiplier);
         }
 
         if (built.ReadsTick) {
@@ -116,7 +122,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            opened = Math.Max(val1: opened, val2: (each ? 1L : multiplier));
+            opened = Math.Max(val1: opened, val2: (each ? members.Count : multiplier));
             shared |= !each;
         }
         foreach (var access in reads) {
@@ -125,8 +131,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            if (access.Each || access.Members || access.IsMember) {
-                opened = Math.Max(val1: opened, val2: 1L);
+            if (access.Each || access.Members || access.IsMember || access.MemberKey) {
+                opened = Math.Max(val1: opened, val2: Own(access: access));
 
                 continue;
             }
@@ -160,7 +166,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // A settling binding fires twice for a change: once with it, and once more on the next tick, which proves the
         // firing changed nothing and settles it.
         var echo = ((latching == RuleLatching.Settles) ? 2L : 1L);
-        var judged = Math.Min(val1: multiplier, val2: BinaryIntegerFunctions.AddSaturating(left: judgedAtRest, right: (shared ? multiplier : Math.Min(val1: opened, val2: 1L))));
+        var judged = Math.Min(val1: multiplier, val2: BinaryIntegerFunctions.AddSaturating(left: judgedAtRest, right: (shared ? multiplier : Math.Min(val1: opened, val2: multiplier))));
         var fired = Math.Min(val1: firings, val2: BinaryIntegerFunctions.AddSaturating(left: firedAtRest, right: BinaryIntegerFunctions.MultiplySaturating(left: opened, right: echo)));
         var rest = ((judgedAtRest == 0L)
             ? "not visited at rest"
@@ -178,6 +184,18 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Latching: latching,
             Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s)"
         );
+    }
+    // A swept family's member count and its widest member's capacity, read from declarations.
+    private static (long Count, long Capacity) MemberShape(RuleCompileContext context, RowFamily family) {
+        var count = 0L;
+        var capacity = 0L;
+
+        foreach (var member in family.Ordinals()) {
+            count++;
+            capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: member));
+        }
+
+        return (Math.Max(val1: count, val2: 1L), Math.Max(val1: capacity, val2: 1L));
     }
     /// <summary>Returns whether a rule's firing provably closes its own gate, so a binding that fired stays closed
     /// until another line writes: the gate is one comparison, or a conjunction one of whose terms is a comparison,
@@ -475,8 +493,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static StateCellOperand? Cell(in CompiledValueSource source) => (Operand(source: source) as StateCellOperand);
     // The one operand a source reads: the operand itself, or a program of that one read.
     private static IRuleOperand? Operand(in CompiledValueSource source) => (source.Operand ?? ((source.Expression is [{ Operand: { } operand }]) ? operand : null));
-    // A key the binding itself fixes: a literal, or the key bound to $each.
-    private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach);
+    // A key the binding itself fixes: a literal, or the key bound to $each or $member.
+    private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach || key.Value.IsMember);
     // A key no program or key fact computes, so two equal references name the same cell.
     private static bool Plain(CompiledCellRef? key) => ((key is null) || ((key.Value.Program is null) && (key.Value.Custom is null)));
 }

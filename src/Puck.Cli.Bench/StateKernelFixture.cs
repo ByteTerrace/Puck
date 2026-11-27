@@ -74,6 +74,7 @@ public sealed class StateKernelReader : IStateReader {
     }
 
     public CellKey BoundEachKey { get; set; }
+    public CellKey BoundMemberKey { get; set; }
     public CellKey BoundPreviousKey { get; set; }
     public CellKey BoundTokenKey { get; set; }
     public Span<long> Locals => m_locals;

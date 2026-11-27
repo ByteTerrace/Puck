@@ -467,7 +467,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 rule: rule,
                 context: WorldFactsCompiler.Context(definition: definition)
             )}{firings}"
-            : (rule.ForEachBodies
+            : ((rule.ForEachFamily is { } family)
+                ? $"forEach family '{family.Name}' capacity={RuleWorkBudget.ForEachCount(rule: rule, context: WorldFactsCompiler.Context(definition: definition))} over {family.Count} member(s){firings}"
+                : (rule.ForEachBodies
                 ? $"forEach {RuleFacts.ForEachBodies} body capacity={definition.Population.Capacity}{firings}"
                 : ((rule.PoolForEach is { } pool)
                     ? $"pool sweep over '{pool.Name}' capacity={pool.Capacity}{firings}"
@@ -479,7 +481,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                                 ? $"forEach {WorldPlayerIteration.Spelling} players={players.Players} (localSeats + networkPlayers){firings}"
                                 : ((rule.Iteration is WorldContactIteration contacts)
                                     ? $"forEach contacts({contacts.Surface}), the contacts one tick carries={contacts.Capacity} ({contacts.Participants} participants x {Puck.Commands.SurfaceContact.MaximumPerTick}){firings}"
-                                    : "no forEach — priced once"))))))
+                                    : "no forEach — priced once")))))))
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

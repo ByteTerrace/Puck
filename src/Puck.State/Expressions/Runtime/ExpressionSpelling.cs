@@ -228,6 +228,22 @@ public static partial class ExpressionSpelling {
 
         return true;
     }
+    // A cell read's row chosen live by a family index (`pile[$member]`, read as `pile[$member][card]`) prints its index
+    // in the source dialect, as a live zone does.
+    private static bool TryAppendLiveSelection(StringBuilder into, string name) {
+        var bracket = name.IndexOf(value: '[');
+
+        if ((bracket <= 0) || !name.EndsWith(value: ']') || !IsBareName(name: name[..bracket]) || (MatchingBracket(open: bracket, text: name) != (name.Length - 1))) {
+            return false;
+        }
+
+        into.Append(value: name[..bracket])
+            .Append(value: '[')
+            .Append(value: Reprint(infix: name[(bracket + 1)..^1]))
+            .Append(value: ']');
+
+        return true;
+    }
     private static bool IsFoldName(string name) => (name is "all" or "any" or "count" or "sum");
     private static string? FoldName(ExpressionOp operation) => operation switch {
         ExpressionOp.All => "all",
@@ -1254,7 +1270,10 @@ public static partial class ExpressionSpelling {
                 ) || TryAppendLiveZone(
                     into: into,
                     name: name
-                ))
+                ) || ((key is not null) && TryAppendLiveSelection(
+                    into: into,
+                    name: name
+                )))
             ) {
                 into.Append(value: PrintName(
                     name: name,
@@ -2176,6 +2195,16 @@ public static partial class ExpressionSpelling {
                             } else if (dotError is not null) {
                                 throw Fail(message: dotError);
                             }
+                        }
+                        // A cell of a row chosen live, `pile[$member][card]`: the first index stays in the row's
+                        // spelling, as a family selection's does in a reduction, and the rule compiler resolves it
+                        // against the declared family or zone table; the second is the cell's key.
+                        if (!quoted && (channel is null) && (typedName is null) && (m_kind == Lexeme.Punctuation) && (m_value == "[") &&
+                            (!name.StartsWith(value: '$') || (name == "$zones")) &&
+                            (BracketEnd(open: m_start) is var selected and > 0) && ((selected + 1) < text.Length) && (text[selected + 1] == '[')) {
+                            stateName = $"{stateName}[{text[(m_start + 1)..selected].Trim()}]";
+                            m_position = (selected + 1);
+                            Advance();
                         }
                         if (Accept(punctuation: "[")) {
                             if (typedName is not null) {

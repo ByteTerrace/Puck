@@ -63,6 +63,9 @@ public class RuleCompileContext : IRuleCostContext {
     public string? ForEachRow { get; set; }
     /// <summary>The bounded extension selected for the rule currently being compiled.</summary>
     public RuleIteration? Iteration { get; set; }
+    /// <summary>Gets or sets the row family the rule being compiled sweeps (<see cref="CompiledRule.ForEachFamily"/>),
+    /// for the duration of one compile, or <see langword="null"/>.</summary>
+    public RowFamily? ForEachFamily { get; set; }
 
     /// <summary>Resolves a document-owned each source; null leaves resolution to the core row and body vocabulary.</summary>
     public virtual RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) => null;
@@ -250,6 +253,7 @@ public class RuleCompileContext : IRuleCostContext {
     public void ClearScope() {
         BindingScope = null;
         ForEachRow = null;
+        ForEachFamily = null;
         Iteration = null;
         m_instanceBindings.Clear();
         m_releasedInstanceSlots.Clear();

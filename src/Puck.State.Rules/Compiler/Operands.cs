@@ -48,7 +48,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
                 Key: ((KeyFrom is null)
                 ? Key
                 : default),
-                Reach: ((KeyFrom is { IsEach: true }) ? CellReach.Each : ((KeyFrom is { IsEachIndex: true }) ? CellReach.Indexed : CellReach.Key)),
+                Reach: (KeyFrom?.KeyReach ?? CellReach.Key),
                 RowOrdinal: RowOrdinal
             ));
         }
@@ -68,7 +68,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundEachIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[next++]).TryNamed(value: out ordinal)) {
                 return Fact.Absent(kind: ValueKind);
             }
         }
@@ -315,7 +315,7 @@ public sealed class ReductionOperand : RuleOperand {
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundEachIndex(reader: reader) : null), index: in keys[0]).TryNamed(value: out ordinal)) {
+            if (!live.Select(each: (live.SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null), index: in keys[0]).TryNamed(value: out ordinal)) {
                 return Fact.Absent(kind: ValueKind);
             }
         }

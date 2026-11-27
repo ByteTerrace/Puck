@@ -103,6 +103,9 @@ public static partial class WorldFactsCompiler {
                     if (compiled.MaxFirings > 0) {
                         throw new RuleException(detail: "'maxFirings' bounds a rule's sweep, and a decision chooses per binding on its own period", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
                     }
+                    if (compiled.ForEachFamily is not null) {
+                        throw new RuleException(detail: "a decision binds one key a choice, and a sweep over a row family binds a member and a key; sweep a keyed row instead", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
+                    }
 
                     var controls = new List<CellAccess>();
 

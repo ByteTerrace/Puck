@@ -144,11 +144,12 @@ public sealed class ZoneTable {
 public sealed class LiveRow {
     private readonly RowFamily m_family;
 
-    private LiveRow(ZoneTable? table, RowFamily family, CompiledCellRef index, string spelling) {
+    private LiveRow(ZoneTable? table, RowFamily family, CompiledCellRef index, string spelling, bool ownMember = false) {
         Index = index;
         Spelling = spelling;
         Table = table;
         m_family = family;
+        SelectsOwnMember = ((table is null) && ownMember);
     }
 
     /// <summary>Gets the family the index selects a member of, or <see langword="null"/> for a zone table.</summary>
@@ -184,10 +185,13 @@ public sealed class LiveRow {
     /// <param name="family">The declared family.</param>
     /// <param name="index">The live index indirection.</param>
     /// <param name="spelling">The authored spelling.</param>
+    /// <param name="sweepsFamily">Whether the enclosing rule sweeps a row family, whose binding's own member is the one
+    /// <c>$member</c> names; in any other sweep it is the one <c>$each</c> names.</param>
     /// <returns>The reference.</returns>
-    public static LiveRow OverFamily(RowFamily family, CompiledCellRef index, string spelling) => new(
+    public static LiveRow OverFamily(RowFamily family, CompiledCellRef index, string spelling, bool sweepsFamily = false) => new(
         family: family,
         index: index,
+        ownMember: (sweepsFamily ? index.IsMember : index.IsEach),
         spelling: spelling,
         table: null
     );
@@ -229,9 +233,10 @@ public sealed class LiveRow {
 
         CollectIndexReads(into: into);
     }
-    /// <summary>Gets a value indicating whether the selection is the family member the binding's own <c>$each</c> key
-    /// spells: each binding of a sweep then reaches its own member row and no other.</summary>
-    public bool SelectsEachMember => ((Table is null) && Index.IsEach);
+    /// <summary>Gets a value indicating whether the selection is the family member the binding's own key spells
+    /// (<see cref="RuleReads.BoundOwnIndex"/>: <c>$member</c> in a sweep over a row family, <c>$each</c> in any other):
+    /// each binding of a sweep then reaches its own member row and no other.</summary>
+    public bool SelectsOwnMember { get; }
     /// <summary>Appends every row this reference can select, without the cells its index resolves through.</summary>
     /// <param name="into">The access set being collected.</param>
     /// <param name="isSet">Whether the access replaces the row's contents.</param>
@@ -249,10 +254,10 @@ public sealed class LiveRow {
 
         CollectMembers(into: into, isSet: isSet);
     }
-    private void CollectMembers(List<CellAccess> into, bool isSet) => CollectMembers(each: SelectsEachMember, family: m_family, into: into, isSet: isSet);
-    /// <summary>Appends every member row of a family, as any cell of it. A member the binding's own <c>$each</c> key
-    /// selects is tagged with the family index that selects it (<see cref="CellReach.Member"/>), so a due list wakes
-    /// the one binding whose key spells it.</summary>
+    private void CollectMembers(List<CellAccess> into, bool isSet) => CollectMembers(each: SelectsOwnMember, family: m_family, into: into, isSet: isSet);
+    /// <summary>Appends every member row of a family, as any cell of it. A member the binding's own key selects is
+    /// tagged with the family index that selects it (<see cref="CellReach.Member"/>), so a due list wakes the bindings
+    /// whose own key spells it.</summary>
     /// <param name="family">The family.</param>
     /// <param name="each">Whether the binding's own key selects the member.</param>
     /// <param name="into">The access set being collected.</param>
@@ -313,7 +318,7 @@ public sealed class LiveRow {
     /// <summary>Selects the row an index the interpreter already resolved names: an operand reads its live row through
     /// this, since the index is one of its declared addresses.</summary>
     /// <param name="index">What the index address named.</param>
-    /// <param name="each">The integer the binding's <c>$each</c> key spells (<see cref="RuleReads.BoundEachIndex"/>),
+    /// <param name="each">The integer the binding's own key spells (<see cref="RuleReads.BoundOwnIndex"/>),
     /// which selects a family entry's member when <see cref="SelectsByBinding"/>; otherwise ignored.</param>
     /// <returns>The selected row's catalog ordinal when the index selects a row, and
     /// <see cref="FaultCase.Absent"/> otherwise.</returns>
@@ -328,7 +333,7 @@ public sealed class LiveRow {
     public CompiledExpressionToken[]? FeedProgram => Index.FeedProgram;
 
     private Resolved<int> Select(IStateReader reader, Resolved<long> resolved) => Select(
-        each: (SelectsByBinding ? RuleReads.BoundEachIndex(reader: reader) : null),
+        each: (SelectsByBinding ? RuleReads.BoundOwnIndex(reader: reader) : null),
         resolved: resolved
     );
     private Resolved<int> Select(long? each, Resolved<long> resolved) {
