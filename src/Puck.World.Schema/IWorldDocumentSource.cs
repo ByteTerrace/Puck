@@ -46,6 +46,29 @@ public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chai
     internal WorldDefinitionFileSource.ComposedLayers? Layers { get; init; }
     internal WorldDefinitionFileSource.LayerIndex? CachedLayers { get; private init; }
 
+    /// <summary>Gets the bytes this image retains that no other held image shares: its composed tree as UTF-8 JSON, the
+    /// bytes of every file its composition read, and the shaped tree of each layer it was composed from. A file's bytes
+    /// are shared with every image whose chain also read it, so a total over images counts the shared array once per
+    /// image that names it.</summary>
+    public long RetainedBytes {
+        get {
+            var total = ComposedJson.LongLength;
+
+            for (var index = 0; (index < Chain.Count); index++) {
+                total += (Chain[index].Bytes?.LongLength ?? 0L);
+            }
+            if (Layers is { } layers) {
+                total += layers.Own.Json.LongLength + (layers.Basis?.Json.LongLength ?? 0L);
+
+                foreach (var layer in layers.ImportLayers) {
+                    total += layer.Json.LongLength;
+                }
+            }
+
+            return total;
+        }
+    }
+
     /// <summary>Reads the index of a verified composition image's layers. The layer entries are opened on recomposition.</summary>
     public WorldComposedDocument ReadLayerIndex(BinaryReader reader) =>
         this with { CachedLayers = WorldDefinitionFileSource.ReadLayerIndex(reader: reader, json: ComposedJson) };

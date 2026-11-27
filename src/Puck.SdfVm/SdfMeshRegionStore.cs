@@ -559,7 +559,15 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     internal bool Owes(SdfMesh mesh) {
         lock (m_gate) { return (OwesOne(mesh: mesh) || ((mesh.GeometrySource is { } source) && OwesOne(mesh: source))); }
     }
-    private bool OwesOne(SdfMesh mesh) => (m_arena.Refused.Contains(item: mesh) || (m_arena.Placements.ContainsKey(key: mesh) && m_owed.Contains(mesh: mesh)));
+    private bool OwesOne(SdfMesh mesh) => (m_arena.Refused.Contains(item: mesh) || LandsOne(mesh: mesh));
+    /// <summary>Returns whether a mesh is on its way into the region: it is placed and the region still owes its words, so
+    /// it stands once its landing completes. A mesh the arena refuses, or holds no place for, is not.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns><see langword="true"/> while the mesh, or the mesh whose geometry it draws, is landing.</returns>
+    internal bool Lands(SdfMesh mesh) {
+        lock (m_gate) { return (LandsOne(mesh: mesh) || ((mesh.GeometrySource is { } source) && LandsOne(mesh: source))); }
+    }
+    private bool LandsOne(SdfMesh mesh) => (m_arena.Placements.ContainsKey(key: mesh) && m_owed.Contains(mesh: mesh));
     /// <summary>Returns whether a draw names a mesh the arena refuses under its limit, so its draws wait out of the frame
     /// until a later plan fits it.</summary>
     /// <param name="mesh">The mesh.</param>
@@ -585,12 +593,15 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// waits for an upload, and none an upload recorded is still in flight.</summary>
     internal bool CopiesComplete { get { lock (m_gate) { return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && (m_inFlight == 0)); } } }
 
-    // Called only during a background admission on the frame thread. An owed geometry is never bound.
-    internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version) {
+    // Called only during a background admission on the frame thread. An owed geometry is never bound. `unplaced` tells a
+    // refusal for the scene's own meshes (one the region does not place or whose words do not stand, which only a scene
+    // that leaves the mesh out answers) from one for the region's copies in flight, which the next upload settles.
+    internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version, out bool unplaced) {
         lock (m_gate) {
             placements = m_placements;
             meshes = m_region.Buffer(slot: 0);
             version = m_version;
+            unplaced = false;
             if (m_region.OwesMoves || m_region.OwesCarry || (m_unsubmitted != 0)) { return false; }
 
             // A successful check can become false only when placement changes or the destination loses backing.
@@ -607,7 +618,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             }
 
             scene.Counters.Count(kind: SdfMeshIrradiance.PlacementChecks);
-            if (!scene.HasGpuPlacements(placements: placements, stands: (m_probeStands ??= StandsUnderGate))) { return false; }
+            if (!scene.HasGpuPlacements(placements: placements, stands: (m_probeStands ??= StandsUnderGate))) { unplaced = true; return false; }
             (proof.Buffer, proof.PlacementVersion, proof.PageRevision, proof.Bytes) = (meshes, version, pageRevision, bytes);
             return true;
         }

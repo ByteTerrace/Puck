@@ -263,14 +263,11 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     public override void CollectReads(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (RowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new CellAccess(
-                Key: default,
-                RowOrdinal: RowOrdinal
-            ));
-        }
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: RowFrom,
+            rowOrdinal: RowOrdinal
+        );
 
         CompiledCellRef.CollectReference(
             into: into,

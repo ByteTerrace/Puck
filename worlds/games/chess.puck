@@ -62,6 +62,23 @@ let initialPieceCodes = concat(
   map(backRankCodes, code => -code)
 )
 
+// Repetition is counted by position key, never by comparing positions: a position's five words (four piece-code
+// bitplanes and its rights) fold into one 62-bit key (`historyFolds`), and the key's bucket in `positionKeys`
+// and `positionStamps` holds how many times the position has stood since the last reset. The table is open addressed:
+// a position takes the first of `historyProbes` buckets that is free or already holds its key, so a count is read and
+// written in O(1) however long the game runs. A stretch of play holds at most 151 positions (the 75-move limit ends
+// play after 150 reversible plies), so a position finds a bucket unless all `historyProbes` buckets from its own hold
+// other positions, which at that load is vanishingly rare; such a position goes uncounted. Two positions folding to
+// one 62-bit key would be counted as one. Neither is detected: exactness holds up to those two bounds.
+let historyBuckets = 1024
+let historyProbes = 8
+
+// One Rabin-Karp step: `word` folded into `hash` modulo `prime`. A position's key packs two folds of its five words, one
+// per entry of `historyFolds`. Neither prime is of the form 2^k - 1 (such a prime cannot tell bit `b` from bit `b + k`,
+// and the planes are bit sets), and a step's product stays under 2^62.
+let historyFolds = [{ prime: 2147483629, base: 1103515245 }, { prime: 2147483587, base: 1664525 }]
+function foldWord(prime, base, hash, word) = (hash * base + floorModulo(word, prime)) % prime
+
 // Where each piece could move, as (column, row) steps on the `chessBoard` grid: the search tries only these cells and
 // the judging rules still decide every move. A pawn steps, double-steps and takes (en passant included) forward, the
 // king steps and castles two columns, and the bishop, rook and queen slide to the edge or the first piece. Each side's
@@ -265,19 +282,19 @@ template chessGameState(settleTicks, digital = false) {
     "1" = 0
   }
 
-  for name in ["boardHistory0", "boardHistory1", "boardHistory2", "boardHistory3", "boardHistoryRights"] {
-    row {
-      name: name
-      kind: "Int"
-      domain: ring(capacity: 151, empty: 0)
-    }
+  // The positions of the current stretch of reversible play, counted by position key: bucket `key % historyBuckets` (then
+  // the next `historyProbes - 1` buckets) holds the key and the stretch (`historyEpoch`) and times the position has
+  // stood, packed as `historyEpoch << 7 | count`. A bucket of an earlier stretch is free, so a reset clears nothing.
+  row {
+    name: "positionKeys"
+    kind: "Int"
+    capacity: historyBuckets
   }
 
   row {
-    name: "historyAges"
+    name: "positionStamps"
     kind: "Int"
-    capacity: 75
-    cells: map(range(0, 75), i => { key: $"{i}", value: 2 * (i + 1) })
+    capacity: historyBuckets
   }
 
   row {
@@ -293,6 +310,7 @@ template chessGameState(settleTicks, digital = false) {
   slot repetitionEnPassant = -1 bounds(-1..63)
   slot historyPending = 0 bounds(0..1)
   slot historyReset = 0 bounds(0..1)
+  slot historyEpoch = 0 bounds(0..1000000000000)
   slot historyLength = 0 bounds(0..151)
   slot halfmoveClock = 0 bounds(0..150)
   slot repetitionCount = 0 bounds(0..76)
@@ -841,15 +859,15 @@ template chessJudge(settleTicks, scope = "", digital = false) {
       }
     }
 
-    // Exact position identity: four injective piece-code bitplanes, plus side to
-    // move, castling rights, and an en-passant target only when a legal capture exists.
-    // The 75-move limit ends play after 150 reversible plies, so 151 positions
-    // include the initial position and every possible repetition without eviction.
+    // A reset starts a new stretch of play: every position of the old one is unreachable, and its table buckets read as
+    // free from now on (`historyEpoch` moves past every stamp they hold), so nothing is cleared. The 75-move limit ends
+    // play after 150 reversible plies, so a stretch holds at most 151 positions, the initial one included.
     rule "tabletop-history-prepare" {
       when historyPending == 1
       repetitionEnPassant = -1
       if historyReset == 1 {
         historyLength = 0
+        historyEpoch += 1
       }
     }
 
@@ -997,26 +1015,45 @@ template chessJudge(settleTicks, scope = "", digital = false) {
       }
     }
 
+    // The position's key folds its exact identity: four injective piece-code bitplanes, plus side to move, castling
+    // rights, and an en-passant target only when a legal capture exists. `first{j}` is the lowest probe from j on whose
+    // bucket is free or holds the key, and -1 when none does (the position then goes uncounted beyond this one).
     rule "tabletop-board-history" {
+      local planeA = board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)
+      local planeB = board(mask, board, -5, -3) | board(mask, board, 2, 5)
+      local planeC = board(mask, board, -4, 3)
+      local planeD = board(mask, board, 0, 6)
+      local rights = turn | castleRights << 1 | repetitionEnPassant + 1 << 5
+      for (fold, f) in historyFolds {
+        local $"fold{f}0" = foldWord(fold.prime, fold.base, 0, planeA)
+        local $"fold{f}1" = foldWord(fold.prime, fold.base, $"fold{f}0", planeB)
+        local $"fold{f}2" = foldWord(fold.prime, fold.base, $"fold{f}1", planeC)
+        local $"fold{f}3" = foldWord(fold.prime, fold.base, $"fold{f}2", planeD)
+        local $"fold{f}4" = foldWord(fold.prime, fold.base, $"fold{f}3", rights)
+      }
+      local positionId = ($"fold04" << 31) | $"fold14"
+      for j in range(0, historyProbes) {
+        local $"free{j}" = (
+          (positionStamps[(positionId + j) % historyBuckets] >> 7 != historyEpoch) or
+          (positionKeys[(positionId + j) % historyBuckets] == positionId)
+        )
+      }
+      local $"first{historyProbes}" = -1
+      for j in range(0, historyProbes) {
+        local $"first{historyProbes - 1 - j}" = (
+          $"free{historyProbes - 1 - j}" ? historyProbes - 1 - j : $"first{historyProbes - j}"
+        )
+      }
+      local landing = (positionId + maximum(first0, 0)) % historyBuckets
+      local count = (
+        (first0 >= 0 and positionStamps[landing] >> 7 == historyEpoch) ? (positionStamps[landing] & 127) + 1 : 1
+      )
       when historyPending == 1
-      push boardHistory0 = board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)
-      push boardHistory1 = board(mask, board, -5, -3) | board(mask, board, 2, 5)
-      push boardHistory2 = board(mask, board, -4, 3)
-      push boardHistory3 = board(mask, board, 0, 6)
-      push boardHistoryRights = turn | castleRights << 1 | repetitionEnPassant + 1 << 5
       historyLength += 1
-      repetitionCount = 1
-    }
-
-    rule "tabletop-history-count" {
-      when historyPending == 1 and historyAges[$each] < historyLength
-      forEach: historyAges
-      if (history(boardHistoryRights, 0) == history(boardHistoryRights, historyAges[$each]) and
-        history(boardHistory0, 0) == history(boardHistory0, historyAges[$each]) and
-        history(boardHistory1, 0) == history(boardHistory1, historyAges[$each]) and
-        history(boardHistory2, 0) == history(boardHistory2, historyAges[$each]) and
-        history(boardHistory3, 0) == history(boardHistory3, historyAges[$each])) {
-        repetitionCount += 1
+      repetitionCount = count
+      if first0 >= 0 {
+        positionKeys[landing] = positionId
+        positionStamps[landing] = (historyEpoch << 7) | count
       }
     }
 

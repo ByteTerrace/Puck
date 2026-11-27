@@ -53,7 +53,9 @@ public sealed partial class SdfMeshIrradiance {
                 m_gpuCameraSampleViewPositions[view] = frame.Views[view].Camera.Position;
                 m_gpuCameraSampleViewCuts[view] = frame.Views[view].Cut;
             }
-            if (GpuTrace is not { } client || m_disposed || !m_windowValid || m_gpuVolume is null) { return; }
+            // A scene the probe service could not bind binds no camera sample either: the sample waits for the rebuild that
+            // replaces it (m_sceneUnplaced) rather than queueing behind the cancelled head.
+            if (GpuTrace is not { } client || m_disposed || !m_windowValid || m_gpuVolume is null || m_sceneUnplaced) { return; }
             // A fault is Stage's to report, once, as the worker's is.
             if (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) { return; }
             if (frame.ConvergesLighting && (m_owed || m_worker is { IsCompleted: false })) { return; }
@@ -127,7 +129,8 @@ public sealed partial class SdfMeshIrradiance {
     /// <summary>Names what a view's camera sample waits for while it has none, for <c>world.exposure</c>: <c>window</c>
     /// before the volume has a window, <c>scene-build</c> before the volume's scene is built (which the CPU trace answers
     /// from), <c>cpu</c> when the volume samples on the CPU alone; and for the device's camera sample, <c>scene</c> or
-    /// <c>scene-upload</c> before the device holds the volume's scene, <c>unpublished</c> before it holds a publication of
+    /// <c>scene-upload</c> before the device holds the volume's scene, <c>scene-rebuild</c> while the probe service could not
+    /// bind the volume's scene and its replacement is being built, <c>unpublished</c> before it holds a publication of
     /// the volume, <c>camera-sample</c> while a camera sample is in flight, <c>unasked</c> before any answered, and <c>cut</c> while
     /// the answered camera sample was asked before the view's latest cut.</summary>
     /// <returns>The wait's name.</returns>
@@ -140,6 +143,7 @@ public sealed partial class SdfMeshIrradiance {
             if (m_scene is null) { return "scene-build"; }
             if (client is null) { return "cpu"; }
             if (scene is not null) { return scene; }
+            if (m_sceneUnplaced) { return "scene-rebuild"; }
             if (m_gpuVolume is null) { return "unpublished"; }
             if (m_gpuCameraSampleTask is { IsCompleted: false }) { return "camera-sample"; }
             return ((m_gpuCameraSample is null) ? "unasked" : "cut");
