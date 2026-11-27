@@ -8,7 +8,7 @@
 // Two kinds of station alternate along each gallery (layout.puck's toyboxPlan), and every connection is an object in
 // the world:
 //
-//   a two-player arcade cabinet   one picture over a wide shelf with a control panel for each player, marked 1P and
+//   a two-player arcade cabinet   one picture over a sloped deck with a control panel for each player, marked 1P and
 //                                 2P; the deck inside it takes the 1P panel on its first controller port and the 2P
 //                                 panel on its second
 //   a living-room television set  a toy television on a low stand, the deck on the stand's shelf with a pad cabled to
@@ -35,7 +35,7 @@ prototypes {
         name: $"toybox-cabinet-{i}"
         schema: "puck.creation.v1"
         palette: lookCabinetPalette(c)
-        arcadeCabinet(base: 0, title: "BOUNCE", players: 2, stools: true)
+        arcadeCabinet(base: 0, title: deckDeviceName, players: 2, stools: true)
       }
     }
   }
@@ -117,10 +117,11 @@ machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/
   attention { within: toyboxAttention, behind: toyboxBehind }
 }))
 
-// Each station's picture stands upright in its frame (a cabinet's bezel, a television's), its glass exactly the deck's
-// picture at the largest size the frame holds. A screen's frame is in the world's, so it is placed from the building's
-// site (galleryWorld), as the gallery's other world-space pieces are. A station facing +z (the south gallery's) has the
-// picture's right along +x, one facing -z along -x.
+// Each station's picture stands in its frame (a cabinet's bezel, a television's), upright in a television's and leaning
+// back in a cabinet's (`cabinetPictureUp`), its glass exactly the deck's picture at the largest size the frame holds. A
+// screen's frame is in the world's, so it is placed from the building's site (galleryWorld), as the gallery's other
+// world-space pieces are. A station facing +z (the south gallery's) has the picture's right along +x, one facing -z
+// along -x.
 //
 // A station's one screen seats a player on each of the deck's ports (machines.puck's deckRoute).
 screens [
@@ -134,7 +135,7 @@ screens [
       index: (toyboxScreen + i)
       origin: galleryWorld(at[0], (at[1] + picture[1]), (at[2] + (s.facing * picture[2])))
       right [s.facing, 0, 0]
-      up [0, 1, 0]
+      up: ((s.kind == "cabinet") ? cabinetPictureUp(s.facing) : [0, 1, 0])
       halfWidth: half[0]
       halfHeight: half[1]
       halfDepth: 0.004

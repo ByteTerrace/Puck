@@ -91,9 +91,13 @@ alternate, a station and its twin across the void in one colourway:
 | 7 | television set (sky blue, lilac rug) | `cartridges/deck/moving-sprite.deck` |
 | 8 | arcade cabinet BOUNCE (mint) | `cartridges/deck/moving-sprite.deck` |
 
-The cabinet is the standard's `arcadeCabinet` with two players: one picture
-over a wide shelf carrying a stick and two buttons for each player, marked 1P
-and 2P, and a glowing marquee. The television set is the standard's
+The cabinet is the standard's `arcadeCabinet` with two players: a tapering
+upright with a chamfered hood, a glowing marquee flanked by speaker grilles,
+one picture in a deep dark well with its glass leaning back, and a control deck
+sloping out below it with a cream panel for each player (a ball-top stick and
+six buttons in two curved rows, marked P1 and P2 at the deck's outer front
+corners), lit T-molding down its fronts and a neon underglow. The
+television set is the standard's
 `televisionSet` and `lounge`: a toy television with rabbit ears on a low stand,
 the deck on the stand's shelf with a pad cabled to each of its two ports lying
 on a rug, and two beanbags behind the pads
