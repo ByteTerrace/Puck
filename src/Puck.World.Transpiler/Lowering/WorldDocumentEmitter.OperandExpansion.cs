@@ -201,7 +201,7 @@ public static partial class WorldDocumentEmitter {
                 Syntax.SourceAccess or Syntax.SourceIndex when ((value is JsonObject or JsonArray) && (Root(node: current) is Syntax.SourceName { Quoted: false } root) && (root.Name == name)) =>
                     Spelled(read: ReadThrough(node: current)),
                 Syntax.SourceAtom atom when ReadsName(expression: AtomAt(index: atom.Index, operand: operand), name: name) =>
-                    ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), Bound(name: name, value: value))),
+                    ElementSyntax(operand: operand, value: DocumentLowering.LowerValue(AtomAt(index: atom.Index, operand: operand), scope.WithLocal(name: name, value: value))),
                 Syntax.SourceLambda lambda when (lambda.Binder == name) => lambda,
                 Syntax.SourceLet let when (let.Name == name) => let with { Value = Rebind(current: let.Value) },
                 _ => Syntax.MapSourceChildren(map: Rebind, node: current),
@@ -247,11 +247,9 @@ public static partial class WorldDocumentEmitter {
             JsonNode? ReadAt(JsonNode target, ExpressionNode key) {
                 const string Held = "$held";
 
-                return DocumentLowering.LowerValue(new IndexExpressionNode(new IdentifierExpressionNode(Held), key), Bound(name: Held, value: target));
+                return DocumentLowering.LowerValue(new IndexExpressionNode(new IdentifierExpressionNode(Held), key), scope.WithLocal(name: Held, value: target));
             }
         }
-        // The scope with one more compile-time binding, as a collection builtin binds its lambda's parameter.
-        private DocumentScope Bound(string name, JsonNode? value) => scope.WithLocal(name: name, value: value);
         // A compile-time value as the syntax a binding holding it is written as: a number (or a truth) as its literal,
         // a name or text as an atom holding it, which WriteValue writes as WriteName writes a bound name, and a list
         // as the list of its elements, which only a fold or a compile-time index may read.
