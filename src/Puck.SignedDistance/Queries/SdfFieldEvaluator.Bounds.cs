@@ -470,9 +470,11 @@ public sealed partial class SdfFieldEvaluator {
                         // Off the grid, each axis is the point times its reciprocal's interval: the symbols carry at its
                         // centre, and its half-width times the axis's reach is noise.
                         if (affine) {
+                            var one = Point(value: FixedQ4816.One);
+
                             affineLocal = Meet(box: ref local, point: (instruction.ExactData0
                                 ? MapPoint(instruction: in instruction, p: affineLocal)
-                                : FixedAffineForms.MultiplyComponents(a: affineLocal, b: Lift(box: Reciprocal(value: scale)))));
+                                : FixedAffineForms.MultiplyComponents(a: affineLocal, b: Lift(box: new IntervalVector3(X: (one / scale.X), Y: (one / scale.Y), Z: (one / scale.Z))))));
                         }
                         break;
                     }
@@ -695,9 +697,9 @@ public sealed partial class SdfFieldEvaluator {
                     var limit = instruction.BoundsVector1;
 
                     return new(
-                        X: (local.X - (spacing.X * Clamp(value: FixedInterval.Round(value: (local.X / spacing.X)), limit: limit.X))),
-                        Y: (local.Y - (spacing.Y * Clamp(value: FixedInterval.Round(value: (local.Y / spacing.Y)), limit: limit.Y))),
-                        Z: (local.Z - (spacing.Z * Clamp(value: FixedInterval.Round(value: (local.Z / spacing.Z)), limit: limit.Z)))
+                        X: (local.X - (spacing.X * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.X / spacing.X)), minimum: -limit.X, maximum: limit.X))),
+                        Y: (local.Y - (spacing.Y * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.Y / spacing.Y)), minimum: -limit.Y, maximum: limit.Y))),
+                        Z: (local.Z - (spacing.Z * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.Z / spacing.Z)), minimum: -limit.Z, maximum: limit.Z)))
                     );
                 }
             case SdfIntervalFoldAction.SymmetryPlane: {
@@ -817,25 +819,13 @@ public sealed partial class SdfFieldEvaluator {
                 upper: FixedQ4816.Max(x: Fold(x: value.Upper, e: extent.Lower), y: Fold(x: value.Upper, e: extent.Upper))
             ));
     }
-    // clamp(x, −l, l) over a box of x and l: min(max(x, −l), l), each step monotone in its operands.
-    private static FixedInterval Clamp(FixedInterval value, FixedInterval limit) =>
-        FixedInterval.Min(first: FixedInterval.Max(first: value, second: -limit), second: limit);
     // A table value off the raw grid, read within a raw of the raw it compiled to (CompiledInstruction.TableInexact).
     private static readonly FixedInterval TableSlack = new(lower: -FixedQ4816.Epsilon, upper: FixedQ4816.Epsilon);
     private static FixedInterval Widened(FixedQ4816 value) => (Point(value: value) + TableSlack);
     private static FixedInterval TableValue(FixedQ4816 value, bool inexact) => (inexact ? Widened(value: value) : Point(value: value));
-    // The largest magnitude an interval reaches; the carrier's greatest for an unbounded one.
-    private static FixedQ4816 LaneReach(FixedInterval value) => (value.IsUnbounded ? FixedQ4816.MaxValue : FixedQ4816.Max(x: FixedQ4816.Abs(value: value.Lower), y: FixedQ4816.Abs(value: value.Upper)));
-    // The largest smooth radius a blend's enclosure holds, which every margin and rounding allowance rising in the radius
-    // is charged at.
-    private static FixedQ4816 SmoothRadiusReach(in CompiledInstruction instruction) =>
-        (instruction.Bounds1X is var radius && radius.IsUnbounded ? FixedQ4816.MaxValue : radius.Upper);
-    // Each axis's reciprocal, outward: a scale's lanes off the grid as the affine reading's factors.
-    private static IntervalVector3 Reciprocal(IntervalVector3 value) {
-        var one = Point(value: FixedQ4816.One);
-
-        return new(X: (one / value.X), Y: (one / value.Y), Z: (one / value.Z));
-    }
+    // The largest smooth radius a blend's enclosure holds (the carrier's greatest for an unbounded one), which every
+    // margin and rounding allowance rising in the radius is charged at.
+    private static FixedQ4816 SmoothRadiusReach(in CompiledInstruction instruction) => instruction.Bounds1X.Upper;
     // A Rotate in the affine reading: the generated turn by the quaternion's raws, and, for a quaternion off the grid,
     // what any quaternion of its enclosure turns the point by beyond it. Both lie in the enclosed map's entries
     // (RotationBounds, built from the enclosure), so each entry's difference is at most its width, and axis i moves by at
@@ -1159,7 +1149,7 @@ public sealed partial class SdfFieldEvaluator {
         ) {
             // Each delta component lies within |x| + 1/2 + |randomness|/2 + 1 of zero; the own cell (x = 0) bounds the
             // nearest feature and a face neighbour bounds the second, and F2 − F1 is at most the second.
-            var reach = (LaneReach(value: randomness) * Half);
+            var reach = (FixedInterval.Abs(value: randomness).Upper * Half);
             var near = ((Half + reach) + FixedQ4816.One);
             var far = (near + FixedQ4816.One);
             var span = FixedInterval.Magnitude(

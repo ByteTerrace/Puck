@@ -317,6 +317,15 @@ public readonly record struct FixedInterval {
             lower: FixedQ4816.Clamp(value: value.Lower, minimum: minimum, maximum: maximum),
             upper: FixedQ4816.Clamp(value: value.Upper, minimum: minimum, maximum: maximum)
         ));
+    /// <summary>Returns the interval of every clamp <c>min(max(x, lo), hi)</c> of a value between bounds that each lie in
+    /// an interval of their own, as a bound reads a clamp whose limits are known only to within their enclosures: each
+    /// step is monotone in both operands, so the steps' hulls enclose it.</summary>
+    /// <param name="value">The value's interval.</param>
+    /// <param name="minimum">The lower bound's interval.</param>
+    /// <param name="maximum">The upper bound's interval.</param>
+    /// <returns>The enclosure; <see cref="Entire"/> when any operand is unbounded.</returns>
+    public static FixedInterval Clamp(FixedInterval value, FixedInterval minimum, FixedInterval maximum) =>
+        Min(first: Max(first: value, second: minimum), second: maximum);
     /// <summary>Encloses the rounded projection parameter of every point in a two-dimensional box onto a fixed segment
     /// from the origin, without rounding either dot product to the carrier.</summary>
     /// <param name="x">The point's X interval.</param>
