@@ -163,6 +163,13 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
         }
+
+        writer.WriteBoolean(value: job.Headroom.Consulted);
+        writer.WriteBoolean(value: job.Headroom.Refused);
+        writer.WriteInt64(value: job.Headroom.ByteCeiling);
+        writer.WriteInt64(value: job.Headroom.KeyCeiling);
+        writer.WriteInt64(value: job.Headroom.LayoutBytes);
+        writer.WriteUInt64(value: job.Headroom.Ledger);
     }
     private static ArenaSearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
         var name = reader.ReadRequiredString(
@@ -269,11 +276,21 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
+        var headroom = new ArenaSearchHeadroom(
+            Consulted: reader.ReadBoolean(),
+            Refused: reader.ReadBoolean(),
+            ByteCeiling: reader.ReadInt64(),
+            KeyCeiling: reader.ReadInt64(),
+            LayoutBytes: reader.ReadInt64(),
+            Ledger: reader.ReadUInt64()
+        );
+
         return new ArenaSearchJobCheckpoint(
             Active: active,
             Count: count,
             Counts: counts,
             Done: done,
+            Headroom: headroom,
             Legal: legal,
             Levels: levels,
             Name: name,

@@ -27,6 +27,11 @@ public sealed partial class ArenaSearch {
             hash.Add(value: ((uint)job.PassDepth));
             hash.Add(value: ((uint)job.Active));
             hash.Add(value: ((uint)job.TokenCount));
+            hash.Add(value: ((byte)((job.Headroom.Consulted ? 1 : 0) | (job.Headroom.Refused ? 2 : 0))));
+            hash.Add(value: job.Headroom.ByteCeiling);
+            hash.Add(value: job.Headroom.KeyCeiling);
+            hash.Add(value: job.Headroom.LayoutBytes);
+            hash.Add(value: job.Headroom.Ledger);
             AddLevelTo(
                 hash: ref hash,
                 level: job.Root
@@ -142,7 +147,8 @@ public sealed partial class ArenaSearch {
                 TtKey: (job.TtKey?.ToArray() ?? []),
                 TtValue: (job.TtValue?.ToArray() ?? []),
                 TtMeta: (job.TtMeta?.ToArray() ?? []),
-                Tree: CaptureTree(job: job)
+                Tree: CaptureTree(job: job),
+                Headroom: job.Headroom
             );
         }
 
@@ -211,6 +217,7 @@ public sealed partial class ArenaSearch {
             job.PassDepth = entry.PassDepth;
             job.Running = entry.Running;
             job.Stamp = entry.Stamp;
+            job.Headroom = entry.Headroom;
             job.PeakStepWork = entry.PeakStepWork;
             job.TokenCount = entry.TokenCount;
             job.Work = entry.Work;

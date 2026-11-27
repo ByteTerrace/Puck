@@ -181,6 +181,17 @@ and a wrapping sum of per-name digests, and the sum changes only when a name is
 admitted or released, so no sorting or allocation happens at hash time. Ring
 slot names are compiled addresses and aren't ledger reservations.
 
+The ledger and the byte total belong to no row, so an operation depends on them
+only when it reaches a check against the shared ceilings: a mint of a name the
+ledger doesn't hold, a row growing its reservation, or a cell visibility
+stored. Each of those checks passes one door, `StateArena.FitsCeilings`, which
+reports the room it left to the `ArenaHeadroomWatch` registered through
+`StateArena.WatchHeadroom`. A refusal that no byte or name count describes (a
+vector or journal ceiling, or the host's growth admission) reports through
+`StateArena.RefuseHeadroom`. Work during which nothing reported didn't depend
+on either total. A search job reads its watch to keep its walk while other
+rows mint ([restarts and time](search.md#restarts-and-time)).
+
 ## Read a cell
 
 Suppose a host wants to know where the rook stands. It resolves `pieceCell` to a

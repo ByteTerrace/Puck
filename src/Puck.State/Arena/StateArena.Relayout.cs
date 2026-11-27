@@ -204,7 +204,7 @@ public sealed partial class StateArena {
         m_visibilities = source.m_visibilities;
         m_declarationVisibilityBytes = source.m_declarationVisibilityBytes;
         m_visibilityBytes = source.m_visibilityBytes;
-        m_keys.SetByteBudget(budget: KeyByteBudget);
+        m_keys.SetAdmission(admit: AdmitKeys);
 
         m_changeDiffers = new ArenaColumnBuffer<bool>?[ArenaColumns.All.Length];
         m_changeStamp = new ArenaColumnBuffer<long>?[ArenaColumns.All.Length];

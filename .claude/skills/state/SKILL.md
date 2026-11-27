@@ -307,6 +307,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | A fact the sheet prices by change is one the host versions | `WorldRuleHost.TryScheduleFact`, which throws for a fact `WorldFactsCompileContext.Rests` answers for and no source names |
 | A row's content number names one content | `StateArena.SettleContent`, called by the one door every version moves through (`BumpRowVersion`): numbers are compared only for a settled commit that changed the row's number cells alone, and every other move empties the row's memory |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
+| A search job keeps its walk across a mint elsewhere unless its own mints could now answer differently | the one ceiling door `StateArena.FitsCeilings` (`RefuseHeadroom` for a vector, journal or host growth refusal) reporting to the `ArenaHeadroomWatch` a walk registers, read by `ArenaSearch.HeadroomStands`; a new ceiling comparison in `StateArena` that skips the door is caught only by review |
 
 ## Open gaps
 

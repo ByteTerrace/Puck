@@ -49,7 +49,10 @@ public sealed partial class StateArena {
         }
     }
 
+    // Every refusal here reads the arena's storage as a whole, so each reaches the headroom watch: the byte total
+    // through FitsCeilings, the others through RefuseHeadroom.
     private bool AdmitReservation(ArenaLayout next, long additionalBytes, out string reason) {
+        var fits = FitsCeilings(bytes: ((((next.Bytes + m_declarationVisibilityBytes) + m_visibilityBytes) + m_keys.Bytes) + additionalBytes), keys: m_keys.Count);
         var vectorBytes = 0L;
         for (var ordinal = 0; ordinal < next.RowCount; ordinal++) {
             if (m_catalog.IsPoolRow(rowOrdinal: ordinal)) { continue; }
@@ -57,16 +60,18 @@ public sealed partial class StateArena {
             if (!row.IsStored || row.Kind != CellKind.Vector) { continue; }
             var bytes = (long)row.CellCapacity * row.Dimensions;
             if (bytes > StateCapacity.MaxVectorRowBytes) {
+                RefuseHeadroom();
                 reason = $"State row '{ordinal}' reserves {bytes} vector bytes, past the {StateCapacity.MaxVectorRowBytes}-byte row ceiling.";
                 return false;
             }
             vectorBytes += bytes;
         }
         if (vectorBytes > StateCapacity.MaxVectorSectionBytes) {
+            RefuseHeadroom();
             reason = $"Vector storage reaches {vectorBytes} bytes, past the {StateCapacity.MaxVectorSectionBytes}-byte section ceiling.";
             return false;
         }
-        if (next.Bytes + m_declarationVisibilityBytes + m_visibilityBytes + m_keys.Bytes + additionalBytes > ArenaCapacity.MaxBytes) {
+        if (!fits) {
             reason = $"arena growth exceeds the {ArenaCapacity.MaxBytes}-byte ceiling";
             return false;
         }
@@ -76,11 +81,13 @@ public sealed partial class StateArena {
                 bytes += EstimateUndoGroupBytes(catalog: m_catalog, layout: next, rows: group.Rows, depth: group.Depth);
             }
             if (bytes > ArenaCapacity.MaxJournalBytes) {
+                RefuseHeadroom();
                 reason = $"arena growth exceeds the {ArenaCapacity.MaxJournalBytes}-byte retained journal ceiling";
                 return false;
             }
         }
         reason = GrowthAdmission?.Invoke(next) ?? string.Empty;
+        if (reason.Length != 0) { RefuseHeadroom(); }
         return reason.Length == 0;
     }
 

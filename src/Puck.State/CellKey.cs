@@ -53,7 +53,9 @@ public sealed class CellKeyTable {
 
     private readonly List<ulong> m_nameDigests;
 
-    private Func<long>? m_byteBudget;
+    // The owning arena's admission of one more name, given the bytes and the name count the table would then hold;
+    // without one, the table admits up to the arena ceilings on its own.
+    private Func<long, int, bool>? m_admit;
     private long m_bytes;
     private MultisetDigest m_ledger;
 
@@ -112,19 +114,21 @@ public sealed class CellKeyTable {
     // compiler symbols until a write admits them, independent of when a particular arena was constructed.
     internal void SealSeed() => m_seedCount = m_names.Count;
     internal bool ContainsLocal(CellName name) => m_byName.ContainsKey(key: name.Value);
-    internal void SetByteBudget(Func<long> budget) => m_byteBudget = budget;
+    internal void SetAdmission(Func<long, int, bool> admit) => m_admit = admit;
     internal static long EntryBytes(CellName name) => (96L + (2L * name.Value.Length));
     internal bool TryAdmitIntern(CellName name, out string reason) {
         if (ContainsLocal(name: name)) {
             reason = string.Empty;
             return true;
         }
-        if (m_names.Count >= StateCapacity.MaxCellKeys) {
-            reason = $"Cell key '{name.Value}' cannot be interned: the table already holds {StateCapacity.MaxCellKeys} distinct keys.";
-            return false;
-        }
-        if ((m_bytes + EntryBytes(name: name)) > (m_byteBudget?.Invoke() ?? ArenaCapacity.MaxBytes)) {
-            reason = $"Cell key '{name.Value}' cannot be interned: its retained storage exceeds the arena byte budget.";
+
+        var count = (m_names.Count + 1);
+        var bytes = (m_bytes + EntryBytes(name: name));
+
+        if (!(m_admit?.Invoke(arg1: bytes, arg2: count) ?? ((count <= StateCapacity.MaxCellKeys) && (bytes <= ArenaCapacity.MaxBytes)))) {
+            reason = ((count > StateCapacity.MaxCellKeys)
+                ? $"Cell key '{name.Value}' cannot be interned: the table already holds {StateCapacity.MaxCellKeys} distinct keys."
+                : $"Cell key '{name.Value}' cannot be interned: its retained storage exceeds the arena byte budget.");
             return false;
         }
         reason = string.Empty;
