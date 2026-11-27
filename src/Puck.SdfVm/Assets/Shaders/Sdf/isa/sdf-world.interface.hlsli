@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/c3178a561275cf4f03ccbc771633af0ddfe0d6cc569eacf9d35966d56009351f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/96513abb1214d149657d52590b76b5dcf01a324e2680b65f5dbd744457a6deec). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -252,8 +252,8 @@ struct SdfWorldPass {
     [[vk::offset(3388)]] uint _pad3388;
     [[vk::offset(3392)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa80A8228D : register(b0, space3);
-#define passGroup passGroupIsa80A8228D
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa076EBAA3 : register(b0, space3);
+#define passGroup passGroupIsa076EBAA3
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -294,7 +294,8 @@ struct SdfWorldPass {
 [[vk::binding(165, 3)]] Texture2D<float4> sdfReflectionHistory : register(t165, space3);
 [[vk::binding(166, 3)]] StructuredBuffer<uint> sdfReflectionDepth : register(t166, space3);
 [[vk::binding(167, 3)]] RWStructuredBuffer<uint> sdfReflectionDepthRW : register(u167, space3);
-[[vk::binding(168, 3)]] StructuredBuffer<uint> sdfOverlapSpans : register(t168, space3);
+[[vk::binding(168, 3)]] RWStructuredBuffer<uint> sdfReflectionColorRW : register(u168, space3);
+[[vk::binding(169, 3)]] StructuredBuffer<uint> sdfOverlapSpans : register(t169, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

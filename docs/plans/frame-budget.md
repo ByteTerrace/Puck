@@ -451,8 +451,9 @@ pass's cost. Then the time:
    2 by 2 block of the render extent where the device table asks for half
    (`reflections { cell: 2 }`), its representative turning through the block's
    pixels, marched through the pyramid pass's nearest-depth chain
-   (`frame/sdf-reflection-depth.hlsli`) and blended by views over each pixel on
-   the representative's surface. What is left: the pyramid's coarse levels rarely
+   (`frame/sdf-reflection-depth.hlsli`), its hit read as one sample of the
+   prefiltered history colour the pass writes first (`frame/sdf-reflection-color.hlsli`),
+   and blended by views over each pixel on the representative's surface. What is left: the pyramid's coarse levels rarely
    skip on a floor, whose own nearer pixels fill the cells beside a ray's path,
    so a ray takes some 28 reads; a march that reads its first levels against the
    ray's own receiver, or a pyramid of the farthest depth beside the nearest for a

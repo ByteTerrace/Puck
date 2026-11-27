@@ -126,6 +126,7 @@
 #define SDF_VIEWS_REFLECTION_WORDS       4u
 #define SDF_REFLECTION_DEPTH_LEVELS      8u
 #define SDF_REFLECTION_DEPTH_GROUP_LEVEL 4u
+#define SDF_REFLECTION_COLOR_LEVELS      5u
 #define SDF_EDGE_REACH                   4u
 #define SDF_VIEWS_PROBE_RATE             4u
 #define SDF_VIEWS_PROBE_WORDS            73u

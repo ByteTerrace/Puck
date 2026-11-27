@@ -15,6 +15,19 @@ public static partial class SdfWorldPackage {
     /// <summary>The preceding frame's resolved colour the reflection pass reads a mirror ray's hit from: the history colour
     /// (<see cref="HistoryColor"/>) of a temporal fragment, which holds the lit image premultiplied by coverage.</summary>
     public const string ReflectionHistory = "sdfReflectionHistory";
+    /// <summary>The preceding frame's history colour prefiltered for the reflection pass, which its first dispatch writes and
+    /// its second reads: <see cref="ReflectionColorLevels"/> levels over the output extent, each texel the mean of its
+    /// block of history pixels, premultiplied by coverage as the history is, two words of half-floats a texel, so a ray's
+    /// hit reads the level its specular lobe's footprint spans in one filtered sample (<c>frame/sdf-reflection-color.hlsli</c>
+    /// owns the layout).</summary>
+    public const string ReflectionColorWritten = "sdfReflectionColorRW";
+    /// <summary>The levels of the prefiltered history colour (<see cref="ReflectionColorWritten"/>) above the output extent,
+    /// the coarsest a texel of 32 pixels a side: one group of the prefilter reduces a 32 by 32 block of history pixels to
+    /// every level. <c>SdfIsaHlsl</c> generates it as <c>SDF_REFLECTION_COLOR_LEVELS</c>.</summary>
+    public const uint ReflectionColorLevels = 5;
+    // The words a tile of the output extent provides the prefiltered colour, two a texel: a level k texel spans 2^k pixels,
+    // so level one takes at most sixteen a tile's ceiling, level two four, and every level from three one.
+    private const uint ReflectionColorWordsPerTile = (2 * (16 + 4 + (ReflectionColorLevels - 2)));
     /// <summary>The depth pyramid the reflection pass marches its mirror rays through, which the pyramid pass writes in a
     /// fragment that reflects (<see cref="ReflectionDepthWritten"/>): levels one to <see cref="ReflectionDepthLevels"/> of the
     /// render extent, each texel the inverse forward depth of the nearest surface of its block, zero where none is
@@ -88,8 +101,9 @@ public static partial class SdfWorldPackage {
 
     /// <summary>Returns a fragment whose views pass reads screen-space reflections: the pyramid pass also writes the
     /// reflection pyramid (<see cref="ReflectionDepth"/>), and <see cref="Parts.ViewsReflections"/> runs before views,
-    /// tracing one mirror ray a cell of <paramref name="cell"/> pixels a side through it and reading what each reaches from
-    /// the preceding frame's history colour, which views blends over the irradiance volume's reflection. Only a fragment
+    /// prefiltering the preceding frame's history colour (<see cref="ReflectionColorWritten"/>) and then tracing one mirror
+    /// ray a cell of <paramref name="cell"/> pixels a side through it, reading what each reaches from that colour at its
+    /// lobe's footprint, which views blends over the irradiance volume's reflection. Only a fragment
     /// that keeps the history colour (<see cref="IsTemporal"/>) has a picture to read.</summary>
     /// <param name="fragment">A temporal fragment.</param>
     /// <param name="cell">The cell's edge, one of <see cref="ReflectionCells"/>.</param>
@@ -143,8 +157,8 @@ public static partial class SdfWorldPackage {
                     new ResourceReference(Name: Parts.ReflectionDepth),
                 ],
                 Name: Parts.ViewsReflections,
-                OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
-                Outputs: [new ResourceReference(Name: Parts.Reflections)]
+                OutputAccesses: [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+                Outputs: [new ResourceReference(Name: Parts.Reflections), new ResourceReference(Name: Parts.ReflectionColor)]
             ));
             passes.Add(item: pass with {
                 InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
@@ -159,6 +173,8 @@ public static partial class SdfWorldPackage {
                 visibility with { Name = Parts.Reflections, StrideBytes = sizeof(uint), Count = PerTile(pixels: visibility.Count!, elements: ReflectionWordsPerTile(cell: cell)) },
                 // One pyramid serves the view's every viewport, as the occlusion's pyramid does.
                 visibility with { Name = Parts.ReflectionDepth, StrideBytes = sizeof(uint), Count = PerTile(pixels: visibility.Count!, elements: ReflectionDepthWordsPerTile, perViewport: false) },
+                // The prefiltered colour follows the history colour: the output extent, one for the view as the history is.
+                Buffer(count: [Term(ReflectionColorWordsPerTile, ShaderPipelineCountBasis.ExtentTiles)], name: Parts.ReflectionColor, sizeBytes: null, strideBytes: sizeof(uint)),
             ],
         };
     }
@@ -172,5 +188,7 @@ public static partial class SdfWorldPackage {
         public const string Reflections = "viewsReflections";
         /// <summary>The reflection pyramid the pyramid pass writes (<see cref="SdfWorldPackage.ReflectionDepth"/>).</summary>
         public const string ReflectionDepth = "reflectionDepth";
+        /// <summary>The prefiltered history colour the reflection pass writes and reads (<see cref="SdfWorldPackage.ReflectionColorWritten"/>).</summary>
+        public const string ReflectionColor = "reflectionColor";
     }
 }
