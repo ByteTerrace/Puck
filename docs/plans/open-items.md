@@ -5445,6 +5445,9 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two rule vocabularies spell an engine enum the same way: `WorldKinematicsVocabulary` and `WorldNetVocabulary`
+  (`Puck.World.Schema`) each keep a name array in enum order with `All`, `TryResolve` by `Array.IndexOf` and `KindOf`. One
+  generic name table over the enum (names, resolve, kind) serves both and the next reading a rule takes.
 - Go and Reversi (`worlds/debug/go.puck`, `reversi.puck`) are whole documents of the gallery's board game room, so the board
   games lab (`worlds/debug/labs/board-games.puck`) cannot stand them: each imports the gallery's shape catalog, derives its
   body slots from `galleryPopulation` and the other tables' counts, grants `Drive` over those absolute body indices and
