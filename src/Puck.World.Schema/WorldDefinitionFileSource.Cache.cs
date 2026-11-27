@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Puck.Abstractions;
 using Puck.Assets;
 using System.Text.Json.Nodes;
@@ -15,7 +14,7 @@ public static partial class WorldDefinitionFileSource {
             image = null;
             return false;
         }
-        ComposedDocuments.TryAdd(key: key, value: image);
+        ComposedDocuments.Set(key: key, value: image);
         return true;
     }
 
@@ -27,7 +26,20 @@ public static partial class WorldDefinitionFileSource {
     // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
     // a file that has since vanished or turned unreadable does the same. Identity is the resolved path plus the catalog
     // fingerprint, freshness is content: no clock takes part in either.
-    private static readonly ConcurrentDictionary<ImageCacheKey, WorldComposedDocument> ComposedDocuments = new();
+    //
+    // The store is bounded by the bytes its images retain, least recently used out first: a process that composes
+    // many documents of its own (a test worker booting one generated scenario after another, each its own file over the
+    // same basis) would otherwise hold one whole composed document per scenario for its lifetime. A document that is
+    // composed again in a running host is still a hit while it is recent; an evicted one recomposes, from the
+    // persistent store's layers where it has them. An image heavier than the whole budget is returned to its
+    // composer and not held.
+    private const int MaxHeldImages = 1024;
+    private const long MaxHeldImageBytes = (512L << 20);
+    private static readonly CodeDerivedCache<ImageCacheKey, WorldComposedDocument> ComposedDocuments = new(
+        capacity: MaxHeldImages,
+        weigh: static image => image.RetainedBytes,
+        weightCapacity: MaxHeldImageBytes
+    );
 
     // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
     // differently (the directory source refuses what the composer compiles), so neither answers for the other.
@@ -104,7 +116,7 @@ public static partial class WorldDefinitionFileSource {
             Inputs: inputs
         ) { Layers = layers, Origins = ((composed is null) ? null : origins?.Snapshot(node: composed)) };
 
-        ComposedDocuments[key] = image;
+        ComposedDocuments.Set(key: key, value: image);
         if (inputs is not null) { source.Compositions?.WriteComposition(image: image, key: key.DiskKey); }
 
         return image;

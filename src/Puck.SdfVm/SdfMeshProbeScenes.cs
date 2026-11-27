@@ -64,6 +64,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     private long m_rooted;
     private long m_withdrawn;
     private long m_recorded;
+    private long m_landed;
     private long m_recordedBytes;
     private long m_slotMisses;
     private long m_refusals;
@@ -101,6 +102,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     /// into an upload not yet submitted. A probe job recorded meanwhile would bind the new buffer before the words it
     /// holds were copied into it, so a client takes no query while this holds.</summary>
     internal bool Carrying { get { lock (m_gate) { return (!m_disposed && (m_region.OwesCarry || m_carryUnsubmitted)); } } }
+
+    /// <summary>Gets a count that moves whenever the store moves any upload forward: a chunk or root taken into a
+    /// residency's upload, or an upload's slot completed. A claimant whose upload waits while this stands still waits on
+    /// nothing that is coming. Safe to read from any thread.</summary>
+    internal long Progress { get { lock (m_gate) { return (m_recorded + m_landed); } } }
 
     /// <summary>Gets the device bytes the region holds. Safe to read from any thread.</summary>
     internal GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
@@ -373,6 +379,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
                 chunk.Dispose();
             }
             if (store.m_disposed) { return; }
+            store.m_landed++;
             store.m_region.Retire(slot: slot);
             store.m_freeSlots.Push(item: slot);
         }

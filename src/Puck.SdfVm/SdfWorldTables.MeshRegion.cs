@@ -29,9 +29,10 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the presentation's mesh region the residency's draws name their meshes in.</summary>
     public SdfMeshRegionStore MeshStore => m_meshStore;
 
-    // Called only during a background admission on the frame thread. An owed geometry is never bound.
-    internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version) {
-        var bound = m_meshStore.TryProbeScene(scene: scene, placements: out placements, meshes: out meshes, version: out version);
+    // Called only during a background admission on the frame thread. An owed geometry is never bound; `unplaced` names a
+    // refusal for the scene's own meshes (SdfMeshRegionStore.TryProbeScene).
+    internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version, out bool unplaced) {
+        var bound = m_meshStore.TryProbeScene(scene: scene, placements: out placements, meshes: out meshes, version: out version, unplaced: out unplaced);
 
         return (BindsBackgroundWork && bound);
     }

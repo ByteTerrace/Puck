@@ -127,9 +127,9 @@ public enum RuleRefusal : byte {
     [Refusal(door: "state.rule.compile", condition: "a READ operand addresses a cell its declared row does not carry", kind: RefusalKind.Verdict)]
     StateCellUndeclared,
 
-    /// <summary>A <c>$reduce:</c> channel does not spell <c>$reduce:&lt;max|min|sum|count|arrangementRank&gt;:&lt;row&gt;</c>,
+    /// <summary>A <c>$reduce:</c> channel does not spell <c>$reduce:&lt;max|min|sum|count|arrangementRank|position&gt;:&lt;row&gt;</c>,
     /// or names a row that is not declared or is kind=Text.</summary>
-    [Refusal(door: "state.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count|arrangementRank>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count|arrangementRank|position>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
     ReduceChannelMalformed,
 
     /// <summary>A rule's <c>zones</c> table is empty, names something other than distinct ordered zones over one

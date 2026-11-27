@@ -438,36 +438,26 @@ packet; these are the ones owed now, most valuable first.
      far wall, `world.screenshot <path>.png presented 16`) on both backends:
      the resolve reads each sample's air from views, so the haze along a
      silhouette holds as it did.
-10. **Three render-graph laws to read before calling them stale or real.**
-   Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
-   of the GPU leap:
-   - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
-     assertion in its `Cadence` file fails.
-   - `PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion`: three copies
-     where none was asked for.
-   - `TheViewsRecorderWritesTheLiveFadeCountAsync`: "Resource 'sdf.world$lit'
-     was refused at the frame's latch", from `SdfWorldPassRecorder.BindPorts`.
+10. **Two render-graph laws wait on one run each.** `SdfWorldPassesLawTests`
+    holds both, and each fails on the head after the plan changes of the GPU
+    leap, with a cause no reading has named:
+    - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
+      assertion in its `Cadence` file fails.
+    - `PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion`: three copies
+      where none was asked for.
 
-   `ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput` and
-   `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
-   history port and the cascades' move out of the plan); update or delete
-   them when the class is next touched.
-11. **`SdfWorldPassesLawTests` run whole: about fifty laws wait out a volume
-    that never settles, and the process holds about 15 GB.** On the fake
-    device about fifty of the class's 104 laws fail with "The irradiance
-    volume's lighting never settled within 200000 frames", most from the
-    rig's constructor, with the volume describing an empty scene
-    (`triangles=0 lights=0 traced=0 relit=0`) while
-    `SdfMeshIrradiance.Settling` stays true;
-    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` above is one of them.
-    The integration head fails them without the `gpu-frame` changes. It may
-    be the stop the gallery's lighting showed
-    ([lighting](#lighting-and-gi)), reproduced without a device, which would
-    make one such law the cheapest witness of that fix. Unread: which of
-    `Settling`'s terms holds, and whether a rig whose constructor throws
-    leaves its volume's native storage held, which fifty failures would
-    multiply into the process's size. Until then run one law by
-    `--filter-method`, and the class only under `puck lease heavy`.
+    Run them by `--filter-method`, with
+    `AMovingPointerGetsAnAnswerEveryRoundTripWithOneCopyInFlight` beside the
+    picking law, and read the failing assertion before changing either.
+11. **`SdfWorldPassesLawTests` run whole: one re-run owed.** A rig whose
+    irradiance volume never settled used to fail about fifty laws and leave the
+    process holding about 15 GB. The stuck term was `worker`: the probe scene's
+    root was never uploaded while views stood, which
+    `SdfWorldPasses.StageOwedCopies` now stages. `TemporalRig` releases its
+    residencies, runtime and feed when its constructor throws, so a failing law
+    no longer leaves native storage held. Run the class once under
+    `puck lease heavy` and read what still fails; a law that still waits out a
+    volume names its cause in the `settling=` term of `world.probe`.
 
 ### Tooling caveats
 
@@ -2654,6 +2644,14 @@ Light through coloured glass:
 
 The volume's cost and convergence:
 
+- [low] The `scene-placement` cancel has no device-free law over the probe
+  service itself. The volume's answer to it is witnessed device-free
+  (`ASceneTheProbeServiceCouldNotBindIsBuiltAgainThoughItsDrawsStandUnchanged`),
+  but the head's cancel in `SdfMeshProbeGpuWork.TryTake`, and the
+  `scene-upload-stalled` stop beside it (`UploadStalled`), are reached only by a
+  windowed run. A law over a fake device whose region holds a scene's meshes
+  unplaced, and one whose residency uploads never carry the probe scene's
+  chunks, would witness both.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
@@ -5789,10 +5787,10 @@ then Spider.
   `seatAtSide`; `BoardSeat` matches its anchor by topology, WorldFactsVocabulary.Operands.cs, so stations sharing one
   pick grid need it found by occupancy row) and per-binding channel versions, so a `$each` channel read is due only
   when that station's seat input moves. (2) chess.puck's digital form and chess-station.puck as family sweeps (a
-  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, the history
-  rows (`tabletop-history-count` sweeps 75 ages for 40 thousand units; a count over the ages cannot read
-  `history(row, age)` through a fold member, ExpressionSpelling.ParseChannel), and one search job per station whose
-  key rows are that station's cells only, with no clock-reading rules (`world.search` prints `lastRestart=`). (3) The
+  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
+  job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
+  `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
+  position key in one open-addressed table, `positionKeys` and `positionStamps`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
   gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,

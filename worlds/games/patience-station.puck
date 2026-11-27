@@ -412,13 +412,13 @@ template patienceDisplayState(stations) {
 }
 
 // Each pile's cards read their depth: how many cards of the pile stand before them, and of the pile `under` it in the
-// same column (a Klondike column's face-down part, "" for none). The length pattern matched from a card to the pile's
-// end counts the cards from it on, so a card's depth is the pile's count less that. Each read sweeps the pile's family,
-// a station's cards each a binding, and writes the card's slot and the slot's card.
+// same column (a Klondike column's face-down part, "" for none). A card's depth in its pile is its position there, one
+// lookup in the arena's position view of the pile. Each read sweeps the pile's family, a station's cards each a binding,
+// and writes the card's slot and the slot's card.
 template patienceRead(game, turn, base, pile, under) {
   if under == "" {
     rule $"patience-read-{game}-{turn}" {
-      local slot = base + count(pile[$member]) - match(solitaireLength, pile[$member], prefix)[$each]
+      local slot = base + reduce(position, pile[$member])[$each]
       when solitaireTable[$member] == game and patienceSyncLeft[$member] > 0 and patienceSyncScan[$member] == turn
       mode: Level
       forEach: pile
@@ -427,7 +427,7 @@ template patienceRead(game, turn, base, pile, under) {
     }
   } else {
     rule $"patience-read-{game}-{turn}" {
-      local slot = base + count(under[$member]) + count(pile[$member]) - match(solitaireLength, pile[$member], prefix)[$each]
+      local slot = base + count(under[$member]) + reduce(position, pile[$member])[$each]
       when solitaireTable[$member] == game and patienceSyncLeft[$member] > 0 and patienceSyncScan[$member] == turn
       mode: Level
       forEach: pile
@@ -436,11 +436,6 @@ template patienceRead(game, turn, base, pile, under) {
     }
   }
 }
-
-// Whether a station's card lies face down in Klondike: in the stock or in a column's face-down part.
-function patienceKlondikeDown(card) = ((klondikeStockOf[$member][card] ?? 0) + (klondikeDown2Of[$member][card] ?? 0) +
-  (klondikeDown3Of[$member][card] ?? 0) + (klondikeDown4Of[$member][card] ?? 0) + (klondikeDown5Of[$member][card] ?? 0) +
-  (klondikeDown6Of[$member][card] ?? 0) + (klondikeDown7Of[$member][card] ?? 0) + (klondikeDown8Of[$member][card] ?? 0)) > 0
 
 // The layout's rules, one set for every station at the world's top level, after the patience games' (solitaireGame): a
 // rule about a station sweeps the stations' tables (`forEach: solitaireTable`, `$each` the station's place in the list)
@@ -513,7 +508,7 @@ template patienceSetRules() {
   rule "patience-pose" {
     local card = patienceCardNoOf[$member][$each]
     local klondikeSlot = (klondikeStockOf[$member][card] == 1) ? (card % 24) : patienceSlotOf[$member][card]
-    local down = ((solitaireTable[$member] == 1) ? patienceKlondikeDown(card) :
+    local down = ((solitaireTable[$member] == 1) ? klondikeFaceDownOf[$member][card] :
       ((solitaireTable[$member] == 2) ? (freecellDeckOf[$member][card] ?? 0) : 0))
     local slot = (
       (solitaireTable[$member] == 1) ? klondikeSlot :
@@ -724,9 +719,7 @@ template patienceStationRules(station, index, klondike, freecell) {
       freecellBusy[t] == 0
     )
     local card = patienceSeatCard[t]
-    local klondikeDown = ((klondikeStockOf[index][card] ?? 0) + (klondikeDown2Of[index][card] ?? 0) +
-      (klondikeDown3Of[index][card] ?? 0) + (klondikeDown4Of[index][card] ?? 0) + (klondikeDown5Of[index][card] ?? 0) +
-      (klondikeDown6Of[index][card] ?? 0) + (klondikeDown7Of[index][card] ?? 0) + (klondikeDown8Of[index][card] ?? 0)) > 0
+    local klondikeDown = klondikeFaceDownOf[index][card]
     local zone = patienceSeatZone[t]
     local heldZone = patienceSeatHeldZone[t]
     local lifts = (
