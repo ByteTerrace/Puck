@@ -205,6 +205,33 @@ public static partial class WorldAuthorityCheckpointCodec {
         reason = string.Empty;
         return true;
     }
+    // The digest of what a prediction restores from a body's continuation (WorldPopulation.RestorePredicted reads the
+    // kit, the body's own sections, the tail and the attached solid rows, and nothing else): the folded body sections'
+    // digests in the continuation's order, then the kit, the tail and the rows. The entry's own sections (who holds the
+    // slot, its producer, route and look) are the capturing authority's and no restore reads them, so they are left out,
+    // and a continuation and a predicted body restore to one body exactly when their digests agree.
+    internal static ulong PredictedBodyDigest(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, byte kit, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+        var sections = new BodySectionDigester { Digester = new SectionDigester(hash: Fnv1aHash.Create(), held: 0U, heldDigests: default, work: null, writer: writer) };
+
+        WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref sections);
+
+        var hash = sections.Digester.Hash;
+
+        hash.Add(value: kit);
+        hash.Add(value: ContinuationTailDigest(tail: in entry.Tail, work: null, writer: writer));
+        writer.Reset();
+        WriteAttachedSolids(rows: attached, writer: writer);
+        hash.Add(value: Fnv1aHash.Compute(values: writer.WrittenSpan));
+        return hash.Value;
+    }
+    // Digests the sections a body owns, which the section kinds list before the entry's own (Admission first).
+    private ref struct BodySectionDigester : IContinuationSectionVisitor {
+        internal SectionDigester Digester;
+
+        public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> {
+            if (TSection.Section < WorldContinuationSectionKind.Admission) { Digester.Visit(section: ref section); }
+        }
+    }
     private static void WriteAttachedSolids(WireWriter writer, IReadOnlyList<WorldAttachedSolidCheckpoint> rows) =>
         writer.WriteArray(items: rows, writeItem: static (w, row) => {
             w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation); w.WriteInt64(value: row.Scale.Value);

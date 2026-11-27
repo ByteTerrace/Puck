@@ -297,6 +297,7 @@
     { "name": "world.population.defaults", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.population.spawn", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.portals", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.prediction", "bindable": false, "audience": "host", "valueKind": "digital", "wireArgs": true },
     { "name": "world.probe", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.projection", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.properties", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

@@ -54,9 +54,20 @@ public sealed class WorldSeatSentInput {
     private readonly Sent[] m_sent = new Sent[Capacity];
     private int m_count;
     private int m_next;
+    // Every batch ever recorded is numbered in order, never reusing a number across a forgetting, so a batch keeps one
+    // name while older ones are dropped: the batches recorded, and how many had been when the held ones were last forgotten.
+    private long m_recorded;
+    private long m_forgottenAt;
 
     /// <summary>Gets the batches held.</summary>
     public int Count => m_count;
+    /// <summary>Gets the serial of the oldest held batch (<see cref="At"/> position 0): every batch recorded is numbered
+    /// in order, and a number names one batch for good, while newer batches push older ones out of the history.</summary>
+    public long FirstSerial => (m_recorded - m_count);
+    /// <summary>Gets the serial the first batch recorded since the held batches were last forgotten took (<see cref="Clear"/>):
+    /// one less names no batch at all, and a <see cref="FirstSerial"/> past it means batches recorded since have been
+    /// dropped for newer ones.</summary>
+    public long ForgottenSerial => m_forgottenAt;
 
     /// <summary>Gets the authority the held batches were sent to.</summary>
     public WorldAuthorityEndpoint? Endpoint { get; private set; }
@@ -97,11 +108,13 @@ public sealed class WorldSeatSentInput {
         m_sent[m_next] = new Sent(Sequence: sequence, Submission: submission, Tick: Clock.TickAt(clientTick: clientTick));
         m_next = ((m_next + 1) % Capacity);
         m_count = Math.Min(val1: (m_count + 1), val2: Capacity);
+        m_recorded++;
     }
     /// <summary>Forgets every batch, as a new route or input epoch starts.</summary>
     public void Clear() {
         m_count = 0;
         m_next = 0;
+        m_forgottenAt = m_recorded;
     }
     /// <summary>Reads a held batch, oldest first.</summary>
     /// <param name="position">The 0-based position, below <see cref="Count"/>.</param>

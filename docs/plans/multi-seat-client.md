@@ -680,16 +680,27 @@ reads what lies outside the body. The static ground, gravity, kits and motion
 programs come from the delivered document and the moving solids' poses from the
 continuation, so they are exact at its tick; another body, a moving solid's
 motion after that tick and a rule's write to the body's registers are not
-predicted, and show as a correction at the next delivery. When the round trip
-outgrows `WorldSeatPrediction.MaxSteps` the seat steers from the delivery.
+predicted, and show as a correction at the next delivery. When the sent
+history no longer holds the batch the continuation holds, the seat steers from
+the delivery.
+
+**The path.** Each seat's predicted body is kept between predictions as a path,
+one digest of what a restore reads (`WorldPopulation.PredictedBodyDigest`) per
+tick, and each prediction steps only the ticks new since the last. A delivery
+leaves the path standing when the path's body at the continuation's tick
+digests as the continuation does and every batch the path took from there is
+the one a replay takes now; otherwise the path is replayed from the
+continuation, once per correction. `world.prediction check on` replays every
+continued prediction from its continuation and counts the tips that differ.
 
 **Attacks it closes.** A prediction writes nothing an authority or the
 delivered mirror reads: its population and arena are its own. A client that
 predicts wrongly, or lies about its prediction, gains nothing, since the
 authority steps the body from the input alone.
 
-**Cost.** Bytes: one encoded entry per remote seat per delivery. Work: one
-restore and up to a round trip of steps of one body per seat per client tick.
+**Cost.** Bytes: one encoded entry per remote seat per delivery. Work: the
+authority ticks new since the last prediction, each one step and one digest of
+one body per seat, and one restore and a round trip of steps per correction.
 The digest-first form of replication's decision 7 (send eight bytes while the
 client's digest matches) is the step that cuts the bytes.
 
