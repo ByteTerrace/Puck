@@ -24,6 +24,9 @@ public abstract record ArenaTransform {
 
     // Resolved selector and declared-set dependencies survive live binding substitution.
     internal IReadOnlyList<int> DisclosureReads { get; set; } = [];
+    // The dependencies only one binding of a sweep reads: a family member the binding's own key selects
+    // (CellReach.Member), checked at a firing whose key spells its member index and priced once per binding.
+    internal IReadOnlyList<CellAccess> DisclosureMemberReads { get; set; } = [];
 
     /// <summary>Reorders an ordered zone into the arrangement at a Lehmer rank read from an integer cell.</summary>
     /// <param name="RowOrdinal">The ordered zone's catalog ordinal.</param>
@@ -157,9 +160,12 @@ public readonly record struct ArenaTransformBinding {
     /// <param name="toRowOrdinal">The resolved destination row, or <c>-1</c> to keep the transform's own.</param>
     /// <param name="bindsInstance">Whether <paramref name="instance"/> supplies a live pool mover.</param>
     /// <param name="instance">The live pool mover.</param>
-    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, int fromRowOrdinal = -1, int toRowOrdinal = -1, bool bindsInstance = false, StateInstanceHandle instance = default) {
+    /// <param name="each">The integer the firing's <c>$each</c> key spells, or <see langword="null"/> when the firing binds
+    /// none or its key spells no integer.</param>
+    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, int fromRowOrdinal = -1, int toRowOrdinal = -1, bool bindsInstance = false, StateInstanceHandle instance = default, long? each = null) {
         BindsKey = bindsKey;
         BindsInstance = bindsInstance;
+        Each = each;
         Instance = instance;
         Key = key;
         m_from = Math.Max(
@@ -178,6 +184,9 @@ public readonly record struct ArenaTransformBinding {
     public bool BindsKey { get; }
     /// <summary>Gets a value indicating whether <see cref="Instance"/> supplies a live pool mover.</summary>
     public bool BindsInstance { get; }
+    /// <summary>Gets the integer the firing's <c>$each</c> key spells, which decides the reads only that binding makes
+    /// (a family member its key selects); <see langword="null"/> when unknown, which checks every binding's.</summary>
+    public long? Each { get; }
     /// <summary>Gets the live pool mover.</summary>
     public StateInstanceHandle Instance { get; }
     /// <summary>Gets the resolved source row's catalog ordinal, or <c>-1</c>.</summary>

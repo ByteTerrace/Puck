@@ -1131,7 +1131,8 @@ public sealed partial class RuleEvaluator {
             key: key,
             toRowOrdinal: toRowOrdinal,
             bindsInstance: ((effect.Arena is ArenaTransform.PushRay ray) && (((uint)ray.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))),
-            instance: (((effect.Arena is ArenaTransform.PushRay pushRay) && (((uint)pushRay.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))) ? m_host.InstanceBindings[pushRay.OriginBindingSlot] : default)
+            instance: (((effect.Arena is ArenaTransform.PushRay pushRay) && (((uint)pushRay.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))) ? m_host.InstanceBindings[pushRay.OriginBindingSlot] : default),
+            each: RuleReads.BoundEachIndex(reader: m_host)
         );
 
         return ApplyTransform(

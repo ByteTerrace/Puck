@@ -218,6 +218,74 @@ public sealed class TransformDisclosureLawTests {
         Assert.Equal(CellValue.Int(value: 3L), host.Arena.Read(rowOrdinal: pool!.Fields[0].RowOrdinal, key: slotKey));
     }
 
+    // A catalog is reused across a redeclaration that changes only a row's policy (StateCatalog.MatchesShape does not
+    // compare it), so the zones the arena's check walks come from the arena's own declarations, not the catalog's.
+    [Fact]
+    public void AZoneRedeclaredPrivateUnderAReusedCatalogWithholdsItsTokensFromAPublicTransfer() {
+        var fixture = TransformFixture.Section();
+        var hand = fixture.Rows!.Single(row => row.Name.Value == "hand");
+        var rows = fixture.Rows!.Select(row => (row == hand) ? row with { Cells = [TransformFixture.Cell(key: "a", value: 1L)] } : row)
+            .Append(hand with { Name = TransformFixture.Name(value: "discard") }).ToArray();
+        var declared = fixture with { Rows = rows };
+        var redeclared = declared with { Rows = rows.Select(row => (row.Name.Value == "hand") ? row with { Visibility = Private } : row).ToArray() };
+        var catalog = StateCatalog.Compile(section: declared);
+        Assert.True(catalog.MatchesShape(section: redeclared));
+        var context = new RuleCompileContext(section: redeclared, catalog: catalog, tables: null, patterns: TransformFixture.Patterns(),
+            generators: TransformFixture.Generators(), simulationRateHz: 30, vocabulary: RuleVocabulary.Core);
+        var host = TransformFixture.Host(context: context, section: redeclared);
+        Assert.True(RuleCompiler.TryResolveTransform(new StateTransform.Transfer(From: "deck", To: "discard", Selector: ZoneSelector.First), context, out var transform, out var reason), reason);
+
+        var applied = host.TryTransform(binding: ArenaTransformBinding.None, transform: transform, moved: out var moved, refusal: out var refusal);
+
+        Assert.False(applied);
+        Assert.False(moved);
+        Assert.Contains("TransformWidensAudience", refusal.Reason);
+        Assert.Equal("a=1,b=2,c=3", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "deck")));
+        Assert.Equal("", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "discard")));
+    }
+
+    // A firing checks the one row each live end selects, so a gate's read of another member of the end's family is a
+    // read the check makes itself: here the binding moves its own pile (pile[$each]) on the face-down top card of the
+    // pile its next cell names, read through the rule's zone table over the same members.
+    [Fact]
+    public void AGateOnAFamilyMemberTheBindingDidNotSelectCannotChooseAPublicTransfer() {
+        static StateRow Pile(string name, bool cellPolicies, params string[] tokens) => new(
+            Name: TransformFixture.Name(value: name), Kind: CellKind.Int, Capacity: 4, CellVisibility: cellPolicies,
+            Domain: new StateDomain.KeysOf(Ordered: true, Row: TransformFixture.Name(value: "tokens")),
+            Cells: [.. tokens.Select(token => TransformFixture.Cell(key: token, value: 0L))]);
+        var section = new StateSection(
+            Families: [new StateFamily(Name: TransformFixture.Name(value: "pile"), Size: 2)],
+            Rows: [
+                new StateRow(Name: TransformFixture.Name(value: "tokens"), Kind: CellKind.Int, Capacity: 4,
+                    Cells: [.. Enumerable.Range(0, 4).Select(token => TransformFixture.Cell(key: $"{token}", value: token))]),
+                Pile(name: "pile0", cellPolicies: true, "0"),
+                Pile(name: "pile1", cellPolicies: true, "2"),
+                Pile(name: "discard", cellPolicies: false),
+                new StateRow(Name: TransformFixture.Name(value: "tables"), Kind: CellKind.Int, Capacity: 2, Cells: [TransformFixture.Cell(key: "0", value: 0L)]),
+                new StateRow(Name: TransformFixture.Name(value: "next"), Kind: CellKind.Int, Capacity: 2, Cells: [TransformFixture.Cell(key: "0", value: 1L)]),
+                // A public face per token key, kept off the token domain so no zone restricts it: only the pile it is
+                // read through withholds the card.
+                new StateRow(Name: TransformFixture.Name(value: "faces"), Kind: CellKind.Int, Capacity: 4,
+                    Cells: [.. Enumerable.Range(0, 4).Select(token => TransformFixture.Cell(key: $"{token}", value: 5L + token))]),
+            ]);
+        var context = TransformFixture.Context(section: section);
+        var rules = RuleCompiler.CompileAll(context: context, rules: [new Rule(
+            Name: TransformFixture.Name(value: "peek"), ForEach: "tables", Mode: ActionTriggerMode.Level, Zones: ["pile0", "pile1"],
+            Gate: new ActionPredicate.CompareValue(Comparison: ExpressionOp.Equal, Kind: CellKind.Int,
+                Left: RulesFixture.Program(text: "faces[zone($zones[next[$each]], last)]"), Right: RulesFixture.Program(text: "7")),
+            Effects: [new ActionEffect.TransformState(Transform: new StateTransform.Transfer(From: "pile[$each]", To: "discard", Selector: ZoneSelector.First))])]);
+        var host = TransformFixture.Host(context: context, section: section);
+        Assert.True(host.Arena.TryWriteVisibility(rowOrdinal: TransformFixture.Ordinal(context: context, name: "pile1"),
+            key: host.Arena.Keys.Intern(name: TransformFixture.Name(value: "2")), visibility: Private));
+        var evaluator = new RuleEvaluator(host: host);
+
+        _ = evaluator.Evaluate(latch: new RuleLatch(), rules: rules, stepTicks: 1UL);
+
+        Assert.Contains(evaluator.Diagnostics(), diagnostic => diagnostic.ToString()!.Contains("TransformWidensAudience", StringComparison.Ordinal));
+        Assert.Equal("0=0", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "pile0")));
+        Assert.Equal("", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "discard")));
+    }
+
     [Fact]
     public void ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject() {
         var remember = new StateTransform.Remember(Into: "dest", Key: "k", From: "(`pack$secretVec`[a])", UnlessWithin: "0.5");

@@ -151,7 +151,9 @@ public static partial class RuleCompiler {
         var writes = writeAccesses.Select(selector: static access => access.RowOrdinal).Distinct().ToList();
 
         if (resolved is not null) {
-            resolved.DisclosureReads = reads.ToArray();
+            // A scalar transform's audience reads leave out the rows its live ends select, and SettleDisclosure settles
+            // them below; every other transform checks each row it reads.
+            if (effect is not TransformStateEffect) { resolved.DisclosureReads = reads.ToArray(); }
             ArenaTransforms.CollectAccesses(transform: resolved, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
         }
         RequireEnclosedAudience(context: context, reads: reads, ruleName: ruleName, writes: writes);

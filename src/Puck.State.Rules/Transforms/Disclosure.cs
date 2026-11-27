@@ -18,12 +18,14 @@ public static partial class ArenaTransforms {
 
     // Collect intrinsic dependencies as well as the compiler's selector/set dependencies. Written rows can also
     // be read: sorting reveals their values, moving reveals membership, and remembering tests prior contents.
-    internal static void CollectAccesses(ArenaTransform transform, StateCatalog catalog, in ArenaTransformBinding binding, List<int> reads, List<int> writes) {
+    // With memberReads false the walk leaves out the reads only one binding makes (ArenaTransform.DisclosureMemberReads),
+    // so a price can charge them once per binding rather than every binding's at once.
+    internal static void CollectAccesses(ArenaTransform transform, StateCatalog catalog, in ArenaTransformBinding binding, List<int> reads, List<int> writes, bool memberReads = true) {
         Span<int> readRows = stackalloc int[catalog.Rows.Count];
         Span<int> writeRows = stackalloc int[catalog.Rows.Count];
         var accesses = new DisclosureAccesses(catalog: catalog, reads: readRows, writes: writeRows);
 
-        accesses.Collect(binding: in binding, transform: transform);
+        accesses.Collect(binding: in binding, memberReads: memberReads, transform: transform);
         foreach (var row in accesses.Reads) { reads.Add(item: row); }
         foreach (var row in accesses.Writes) { writes.Add(item: row); }
     }
@@ -65,8 +67,14 @@ public static partial class ArenaTransforms {
             }
         }
 
-        public void Collect(ArenaTransform transform, in ArenaTransformBinding binding) {
+        public void Collect(ArenaTransform transform, in ArenaTransformBinding binding, bool memberReads = true) {
             for (var index = 0; (index < transform.DisclosureReads.Count); index++) { Read(row: transform.DisclosureReads[index]); }
+            // A member read is the firing's only when its key spells the member's index; a firing whose key is unknown
+            // checks every binding's.
+            for (var index = 0; (memberReads && (index < transform.DisclosureMemberReads.Count)); index++) {
+                var read = transform.DisclosureMemberReads[index];
+                if ((binding.Each is not { } each) || (each == read.Member)) { Read(row: read.RowOrdinal); }
+            }
             switch (transform) {
                 case ArenaTransform.Arrange value:
                     Write(row: value.RowOrdinal, read: true); Read(row: value.FromRowOrdinal); Read(row: value.DomainRowOrdinal); break;

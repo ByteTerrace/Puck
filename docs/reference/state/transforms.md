@@ -418,7 +418,14 @@ row a live selector can choose and every cell of a read row.
 Before applying a transform, the arena checks the same dependencies against
 current cell visibility and the restrictions of every ordered zone containing
 each token. A restriction acquired after compilation therefore cannot leak
-through a later sort, selection or board write. Refusal happens before kernel
+through a later sort, selection or board write, and neither can a zone
+redeclared private: the arena takes the zones it checks from its own
+declarations, never from a catalog reused across the redeclaration. A firing
+checks the one row each live end selects rather than every candidate, and
+every other row the transform or its gate reads, a member of the end's own
+family included, since a gate may read another member than the one the binding
+selects. A family member read by the binding's own key (`pile[$each]`) is
+checked only at that binding's firing. Refusal happens before kernel
 writes, and a refused rule firing rewinds its earlier effects as well. Private
 transforms remain valid when every source encloses the destination audience.
 `observe` retains the deliberate projection its knowledge row declares.
