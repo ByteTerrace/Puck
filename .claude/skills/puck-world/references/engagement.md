@@ -304,7 +304,7 @@ seat camera eases to `WorldTabletopFraming`'s board view (the whole board from
 the chair's side at `pitch`, near plane at the board) on the rig's dynamics
 through `WorldFramingEase`. `TabletopEngagementLawTests` (Server) and
 `WorldTabletopFramingLawTests` (Client) hold the probe, the reads and the view;
-the debug world's chess table (`worlds/debug/chess.puck`, `chess.md`) is the
+the debug world's chess table (`worlds/debug/chess-table.puck`, `chess.md`) is the
 worked game, and `chess-tests.puck`'s seated-player test plays it headless with
 `body.press` and `source.pointer.*` steps. A tabletop has no matte or screen
 fidelity: the board view stays the in-world look.

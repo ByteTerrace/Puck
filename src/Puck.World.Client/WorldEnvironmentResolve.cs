@@ -208,9 +208,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                 occluder = occluder.Placed(orientation: pose.Orientation, position: pose.Position, scale: 1f);
             }
 
-            _ = output.TryAdd(occluder: in occluder);
+            _ = output.TryAdd(occluder: in occluder, source: AuthoredOccluderSource);
         }
     }
+    // The source an authored render.lighting occluder row reads as in a read-back (SdfOccluders.SourceOf).
+    private const string AuthoredOccluderSource = "render.lighting occluder";
 
     // Two lighting sections that light alike: the same section, or sections whose members and lights compare equal, as a
     // definition rebuilt around the same render section and prototypes composes them.

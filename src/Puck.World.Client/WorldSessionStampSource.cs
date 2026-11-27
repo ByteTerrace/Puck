@@ -45,6 +45,8 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     /// <inheritdoc/>
     public WorldEntityAddress EntityAddress(int index) => m_mirror.Address(index: index);
     /// <inheritdoc/>
+    public FixedWorldCollider? Collider(int index) => m_mirror.Collider(index: index);
+    /// <inheritdoc/>
     public BodyFacts Facts(int index) => m_mirror.Facts(index: index);
     /// <inheritdoc/>
     public bool IsActive(int index) => m_mirror.IsActive(index: index);

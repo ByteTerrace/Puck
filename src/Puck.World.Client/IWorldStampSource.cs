@@ -59,6 +59,11 @@ public interface IWorldStampSource : IWorldInhabitants {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The address.</returns>
     WorldEntityAddress EntityAddress(int index);
+    /// <summary>Gets the compiled collider of an entity's kit (<see cref="WorldKit.Collider"/>): the volumes the authority
+    /// resolves the body's contact with, in the body's frame at unit scale.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The collider, or <see langword="null"/> for an entity whose kit authors none.</returns>
+    FixedWorldCollider? Collider(int index);
     /// <summary>Gets an entity's latest fact mask.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The facts.</returns>
