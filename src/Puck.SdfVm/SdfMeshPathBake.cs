@@ -1059,6 +1059,12 @@ public sealed partial class SdfMeshPathBake {
     /// floor it landed first (<see cref="SdfMeshTier"/>). Ordinary background work in play (a tier the demand moved to, a
     /// resample, an eviction's floor) owes nothing. Read from any thread.</summary>
     public int OwedGroups => Volatile.Read(location: ref m_owedGroups);
+    /// <summary>Gets how many groups still baking hold a stage on the pool now: a grid lattice's bounds
+    /// (<c>QueueBounds</c>), a contour or a refinement. A group holding one offers no lattice, so a take made while any
+    /// does chooses among fewer groups than it will once they finish; a driver that needs one take to choose among every
+    /// group (an offline bake's ordering, a law) waits for this to read zero, through <see cref="WaitForProgress"/>.
+    /// Read from any thread.</summary>
+    public int WorkingGroups => m_tally.Read().Working;
 
     // The groups that owed the frame as of the latest Prioritize.
     private int m_owedGroups;
