@@ -1,0 +1,120 @@
+// What every lab (README.md) shares: the way back to the gallery's lab wing, the admission that lets the wing's door
+// watch the lab and a body walk in from it, and a plain studio floor. A module library: it hands its importers
+// templates and emits no document.
+//
+// A lab's `arrival` frame is the counterpart of its door in the wing (../lab-wing.puck, `lab-<id>`): a body that walks
+// into the door comes out of the frame walking out of its front, and one that walks back into the frame comes out of
+// the door into the aisle. The frame's glass is dark (a `none` source) rather than a window onto the gallery, so a lab
+// booted alone never starts the debug world beside it: the debug world starts only when a body crosses back.
+
+import "../painting-kit"
+import "../../standard/visitors"
+
+// The colour the labs' frames and the wing's doors wear: a dark teal, apart from the painting wing's gilt, black and
+// brass, with posts and lintel `labFramePost` thick.
+let labFrameColor = "#245F5C"
+let labFramePost = 0.1
+
+// The way back: a reference to the debug world (this package's entry, beside this directory) as the destination
+// `gallery`, and the `arrival` frame at `at`, turned `yaw`, whose glass leads to the wing's door `lab-<id>`. The window
+// a wing's door shows observes the lab whole as a session, and a body that walks in arrives as a visitor with the
+// standard visitor row. The lab steps while its door is at least glimpsed or someone stands in it.
+template labWayBack(id, at, yaw = 0) {
+  simulation {
+    rateHz: 30
+    stepsAt: Glimpsed
+  }
+
+  admission [
+    {
+      admits: Session
+      disclosure: Replica
+      domain: "*"
+      grants [
+        {
+          budget: 8
+          capability: Drive
+          exclusive: true
+        }
+        {
+          budget: 64
+          capability: Observe
+          subject: "all"
+        }
+      ]
+      mode: FederatedAuthority
+    }
+    visitorAdmissionRow(domain: "*")
+  ]
+
+  references [
+    {
+      document: "../debug"
+      name: "gallery"
+    }
+  ]
+
+  destinations [
+    {
+      durability: persisted
+      name: "gallery"
+      reference: "gallery"
+      scope: global
+    }
+  ]
+
+  prototypes {
+    prototype "frame" {
+      document {
+        arrivalFrame(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost)
+      }
+    }
+  }
+
+  placements {
+    placement "arrival" {
+      prototype: "frame"
+      position: at
+      yawDegrees: yaw
+      faceSources [
+        {
+          face: "glass"
+          filter: linear
+          portal {
+            arrival: "mapped"
+            counterpart: $"lab-{id}/glass"
+            destination: "gallery"
+            travel: "body"
+          }
+          source { $type: "none" }
+        }
+      ]
+    }
+  }
+}
+
+// A studio floor: a slab `halfX` by `halfZ` metres either way with its top at y 0, a warm neutral grey that judges
+// light and colour without tinting them.
+template labFloor(halfX, halfZ, color = "#A9A59D") {
+  prototypes {
+    prototype "lab-floor" {
+      document {
+        name: "lab-floor"
+        schema: "puck.creation.v2"
+        palette [{ color: color, roughness: 0.7, specular: 0.04 }]
+        shape Box "slab" {
+          material: 0
+          position [0, -0.25, 0]
+          scale [halfX, 0.25, halfZ]
+        }
+      }
+    }
+  }
+  placements {
+    placement "lab-floor" {
+      prototype: "lab-floor"
+      position [0, 0, 0]
+      solid
+    }
+  }
+}

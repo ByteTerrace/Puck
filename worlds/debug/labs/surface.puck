@@ -1,0 +1,133 @@
+// The surface lab (README.md): the standard's relief patterns (../../standard/shading.puck) on panels seen near, at a
+// middle distance and far, and a long sight line through fog at a visible density toward a low sun, so the fog's
+// forward glow (its authored `anisotropy`) shows across the floor.
+//
+// Every pattern stands as a pair: band limited (the default `filterScale` of 1, which fades each octave as its features
+// approach a pixel) on the right of the pair, and unlimited on the left (`filterScale` 0 for the noises, and no pixel
+// floor on the edge ramps of the cracks and the bricks), so shimmer reads as the difference between the two in a
+// presented burst. The near row stands 4 m from the seat, the middle row 14 m and the far row 40 m, each on its own
+// stretch of the floor so no row hides another, and the sight line runs 150 m down the floor's west side, a marker post
+// every 10 m.
+//
+// The day holds at half past eight with the sun 28 degrees up straight down the sight line (-Z), so looking along it
+// faces the glow. Boot it with `--world worlds/debug/labs/surface.puck`; the gallery's lab wing reaches it through its
+// door `lab-surface`, and the `arrival` frame behind the seat leads back there.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-surface"
+
+import "../set-controls"
+import "../noclip"
+import "../../standard/shading"
+import "lab-kit"
+import "surface-sky"
+
+metadata {
+  title: "Surface lab"
+  description: "Relief panels near, middle and far, each band limited beside unlimited, down a long fogged sight line toward a low sun."
+}
+
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// The patterns, each a height in metres over a point in metres: fractal noise, ridged noise, cell cracks and running
+// bricks. `pixel` is the footprint in the pattern's own units and `filterScale` how soon an octave fades (1 at the
+// pixel's own sampling limit, 0 never); an edge pattern (cracks, bricks) takes a pixel of 0 when unlimited.
+let surfaceBrick = [0.4, 0.2]
+function surfaceHeight(kind, q, filterScale) = (
+  (kind == "fbm") ? (0.012 * shadeFbm(q * 4, uint(7), octaves: 5, pixel: surface.footprint * 4, filterScale: filterScale)) :
+  (kind == "ridged") ? (0.02 * shadeRidged(q * 3, uint(11), octaves: 5, pixel: surface.footprint * 3, filterScale: filterScale)) :
+  (kind == "cracks") ? (-0.006 * shadeCellBorder(q * 3, uint(5), 0.06, pixel: surface.footprint * 3 * filterScale)) :
+  (-0.008 * shadeBrick(q, surfaceBrick, 0.025, uint(3), pixel: surface.footprint * filterScale).x)
+)
+let surfaceKinds = ["fbm", "ridged", "cracks", "bricks"]
+let surfaceStone = { color: "#A89C8C", roughness: 0.75, specular: 0.04 }
+let surfaceBrickRow = { color: "#9C4A32", roughness: 0.85, specular: 0.03 }
+// A panel's half side and the height of its centre; the far row stands on taller posts so it shows over the floor.
+let surfacePanelHalf = 1
+let surfacePanelGap = 0.5
+// The rows: how far from the seat, which stretch of the floor (the x of its first pair) and how high a panel's centre.
+let surfaceRows = [
+  { name: "near", z: -4, x: -11, y: 1.2 }
+  { name: "middle", z: -14, x: 2, y: 1.6 }
+  { name: "far", z: -40, x: -10, y: 3.2 }
+]
+// The filters a pair holds, unlimited on the left (the panel's -X, seen from the seat) and band limited on the right.
+let surfaceFilters = [{ name: "raw", scale: 0 }, { name: "limited", scale: 1 }]
+// Where pattern `k`'s panel of filter `f` stands along its row.
+function surfacePanelX(row, k, f) = (row.x + ((((2 * k) + f) * ((2 * surfacePanelHalf) + surfacePanelGap)) + (k * surfacePanelGap)))
+// The sight line runs down the floor's west side, clear of every row.
+let surfaceSightX = -24
+let surfaceSightLength = 150
+let surfaceMarkerStep = 10
+
+// The seat boots at the near row's end of the floor, facing down the sight line; a spawn point stands before each row.
+spawnPoints: concat(
+  [{ id: "hero", position [0, 0, 6], yawDegrees: 0 }],
+  map(surfaceRows, row => { id: $"surface-{row.name}", position [0, 0, (row.z + 6)], yawDegrees: 0 }),
+  [{ id: "surface-sight", position [surfaceSightX, 0, 2], yawDegrees: 0 }]
+)
+
+labFloor(halfX: 30, halfZ: ((surfaceSightLength / 2) + 10), color: "#9E9A92")
+labWayBack(id: "surface", at: [0, 0, 10], yaw: 0)
+
+prototypes {
+  for kind in surfaceKinds {
+    for filter in surfaceFilters {
+      prototype $"surface-{kind}-{filter.name}" {
+        document {
+          name: $"surface-{kind}-{filter.name}"
+          schema: "puck.creation.v2"
+          palette [
+            ((kind == "bricks") ? surfaceBrickRow : surfaceStone) with {
+              shade: relief(q => surfaceHeight(kind, q, filter.scale), 1)
+            }
+          ]
+          shape Box "panel" {
+            material: 0
+            scale [surfacePanelHalf, surfacePanelHalf, 0.04]
+          }
+        }
+      }
+    }
+  }
+  // The sight line's marker: a slim dark post 2 m tall.
+  prototype "surface-post" {
+    document {
+      name: "surface-post"
+      schema: "puck.creation.v2"
+      palette [{ color: "#4A4A4C", roughness: 0.6, specular: 0.04 }]
+      shape Box "post" {
+        material: 0
+        position [0, 1, 0]
+        scale [0.05, 1, 0.05]
+      }
+    }
+  }
+}
+
+placements {
+  for row in surfaceRows {
+    for (kind, k) in surfaceKinds {
+      for (filter, f) in surfaceFilters {
+        placement $"surface-{row.name}-{kind}-{filter.name}" {
+          prototype: $"surface-{kind}-{filter.name}"
+          position [surfacePanelX(row, k, f), row.y, row.z]
+          yawDegrees: 180
+          solid
+        }
+      }
+    }
+  }
+  for n in range(1, ((surfaceSightLength / surfaceMarkerStep) + 1)) {
+    placement $"surface-marker-{n}" {
+      prototype: "surface-post"
+      position [surfaceSightX, 0, (0 - (n * surfaceMarkerStep))]
+    }
+  }
+}

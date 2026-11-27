@@ -1,0 +1,115 @@
+// The lab wing: a door in the gallery's level-0 north aisle for each lab (labs/README.md), the small worlds that each test
+// one behaviour or a set of behaviours together, so a player debugs a feature as the team does: walk into a door's glass
+// and you stand in its lab; turn round and its `arrival` frame brings you back out of the same door. Each door is a
+// freestanding frame (painting-kit.puck's `arrivalFrame`) with its plaque on a post at its right, and its glass shows the
+// lab live while you stand outside (`paintingFace`, the painting wing's portal face). The debug world imports this file
+// whole.
+//
+// The doors are layout.puck's `labWingPlan`, one row a lab: its bay along the aisle, its document and its plaque. A row
+// whose `open` is false stands its door and plaque with OPENING SOON on the glass and no portal, and names no
+// destination, so a lab whose document has not landed costs nothing and opens by setting `open` alone.
+
+import "painting-kit"
+import "labs/lab-kit"
+import "gallery/layout"
+
+// What a lab's glass shows past the deepest window inside a window: a lab's neutral studio grey.
+let labFallback = "#8C8A86"
+// How far beyond the door's outer post the plaque's post stands.
+let labPlaqueGap = 0.35
+// The plaque: a cream board on a post at the door's right (the creation's -X), its face toward the door's front.
+let labPlaqueHalf = [0.5, 0.3]
+let labPlaqueX = (0 - (((1.12 + (2 * labFramePost)) + labPlaqueGap) + labPlaqueHalf[0]))
+let labPlaqueY = 1.3
+let labPlaqueDepth = 0.03
+// Where a door stands in the building's frame, on its bay's centre and the wing's tile row, its glass facing -z.
+function labDoorAt(lab) = [bayX(lab.bay), galleryFloor[0], tileZ(labWingRow)]
+let labOpen = filter(labWingPlan, lab => lab.open)
+
+// A lab's door: the arrival frame, then a post and a board at its right with the lab's title and what it tests.
+template labDoor(label, title, note) {
+  arrivalFrame(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost, label: label)
+  palette [paintingBoardRow, paintingInkRow, paintingBlackRow]
+  shape Box "plaque-post" {
+    material: 3
+    position [labPlaqueX, ((labPlaqueY - labPlaqueHalf[1]) / 2), (labPlaqueDepth / 2)]
+    scale [0.035, ((labPlaqueY - labPlaqueHalf[1]) / 2), 0.035]
+  }
+  shape Box "plaque" {
+    material: 1
+    position [labPlaqueX, labPlaqueY, 0]
+    scale [labPlaqueHalf[0], labPlaqueHalf[1], (labPlaqueDepth / 2)]
+  }
+  textRuns [
+    {
+      text: title
+      position [labPlaqueX, (labPlaqueY + 0.17), (0 - (labPlaqueDepth / 2))]
+      rotation [0, 1, 0, 0]
+      emHeight: 0.07
+      depth: 0.004
+      mode: "emboss"
+      material: 2
+      align: "center"
+      maxWidth: (2 * (labPlaqueHalf[0] - 0.06))
+    }
+    {
+      text: note
+      position [labPlaqueX, (labPlaqueY + 0.06), (0 - (labPlaqueDepth / 2))]
+      rotation [0, 1, 0, 0]
+      emHeight: 0.032
+      depth: 0.003
+      mode: "emboss"
+      material: 2
+      align: "center"
+      maxWidth: (2 * (labPlaqueHalf[0] - 0.06))
+      lineSpacing: 1.15
+    }
+  ]
+}
+
+references: map(labOpen, lab => { document: lab.document, name: $"lab-{lab.id}" })
+
+destinations: map(labOpen, lab => { durability: persisted, name: $"lab-{lab.id}", reference: $"lab-{lab.id}", scope: global })
+
+prototypes {
+  for lab in labWingPlan {
+    prototype $"lab-{lab.id}" {
+      document {
+        labDoor(label: $"lab-{lab.id}", title: lab.title, note: lab.note)
+      }
+    }
+  }
+}
+
+placements {
+  for lab in labWingPlan {
+    placement $"lab-{lab.id}" {
+      prototype: $"lab-{lab.id}"
+      parent: "gallery"
+      position: labDoorAt(lab)
+      yawDegrees: 0
+      if lab.open {
+        paintingFace(destination: $"lab-{lab.id}", counterpart: "arrival/glass", fallback: labFallback)
+      } else {
+        faceSources [
+          {
+            face: "glass"
+            filter: linear
+            source { $type: "text", lines ["OPENING", "SOON"] }
+          }
+        ]
+      }
+    }
+  }
+}
+
+// `lab-wing` stands at the aisle's west end looking east down the doors; `lab-<id>` stands before each door, facing it.
+spawnPoints: concat(
+  [{ id: "lab-wing", parent: "gallery", position [bayX(1), galleryFloor[0], tileZ((arcadeRowNorth + 2))], yawDegrees: 250 }],
+  map(labWingPlan, lab => {
+    id: $"lab-{lab.id}"
+    parent: "gallery"
+    position: (labDoorAt(lab) + [0, 0, -3.2])
+    yawDegrees: 180
+  })
+)

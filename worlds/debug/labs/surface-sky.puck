@@ -1,0 +1,24 @@
+// The surface lab's sky (surface.puck): the standard's day cycle held at half past eight, its sun 28 degrees up straight
+// down the lab's sight line (-Z), and air at a visible density whose fog scatters the sun's light forward by a
+// Henyey-Greenstein lobe, so a view along the sight line takes the glow and a view away from it hardly any. A document
+// fragment of its own, since the cycle's template authors `render` and an array-form `state.world`.
+
+import "../../standard/skies"
+
+// The hour, the noon elevation and the heading that put the sun at `surfaceSunHour` straight down -Z: the heading solves
+// the sun direction's x for zero at that hour (skies.puck's `sunDirection`).
+let surfaceSunHour = 8.5
+let surfaceNoonElevation = 50
+let surfaceHourAngle = ((surfaceSunHour - 12) * sunRadiansPerHour)
+let surfaceHeading = (atan2(sine(surfaceHourAngle), (cosine(surfaceHourAngle) * cosine(surfaceNoonElevation * sunRadiansPerDegree))) / sunRadiansPerDegree)
+
+dayCycle(daySeconds: 86400, start: surfaceSunHour, noonElevation: surfaceNoonElevation, heading: surfaceHeading, cloudiness: 0.1)
+
+render {
+  atmosphere {
+    fog {
+      density: 0.008
+      anisotropy: 0.6
+    }
+  }
+}

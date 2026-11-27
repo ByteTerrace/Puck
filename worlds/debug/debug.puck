@@ -66,6 +66,8 @@ import "shedding"
 import "deduction"
 import "skirmish"
 import "paintings"
+// The lab wing (lab-wing.puck): a door in the north aisle onto each lab under labs/.
+import "lab-wing"
 import "moon-beacon"
 // The sun (sun.puck): the switch this world owns and the sun's light and mass as they reach the valley.
 import "sun-watch"

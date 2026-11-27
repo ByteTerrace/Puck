@@ -218,6 +218,44 @@ let fallHole = 1
 // floor is whole over it and the wing's fall paintings below stand as they are.
 let fallOpen = false
 
+// The lab wing (../lab-wing.puck, labs/README.md): level 0's north aisle, where a door stands for each lab, a small world
+// that tests one behaviour or a set of behaviours together and boots alone in minutes. Each row is one lab: `id` names
+// its door (`lab-<id>`), its spawn point before the door and its destination; `bay` is the arcade bay the door stands
+// in, on the aisle's tile row `labWingRow`, its glass facing the nave; `document` is the lab's world document, named as
+// the debug world's entry names it; `title` and `note` are its plaque. `open` says whether the door leads anywhere: a
+// closed door's glass reads OPENING SOON and its plaque still stands, so a lab whose document lands later opens by
+// setting `open` alone. Adding a lab is one row. The doors keep clear of the corner stairs (bays 0 and 12), and the
+// tree's bay (6) stays open across the aisle, so the wing is two courts of three either side of it.
+let labWingRow = (wallRowNorth - 1)
+let labWingPlan = [
+  {
+    id: "climbing", bay: 2, open: true, document: "labs/climbing"
+    title: "CLIMBING LAB", note: "The Moth's climb on holdable faces, a tall face to a ledge, and the slots for the wall kit and the rope net."
+  }
+  {
+    id: "light", bay: 3, open: true, document: "labs/light"
+    title: "LIGHT LAB", note: "A room a subject: occluders, a dark room of bulbs, a screen and a glowing console, stained glass, the magic barrier, haze."
+  }
+  {
+    id: "surface", bay: 4, open: true, document: "labs/surface"
+    title: "SURFACE LAB", note: "Relief panels near, middle and far, each filtered beside unfiltered, down a long fogged sight line toward a low sun."
+  }
+  {
+    id: "shapes", bay: 8, open: true, document: "labs/shapes"
+    title: "SHAPE LAB", note: "One display station holding the whole catalog: every exhibit, the blends and the cubic blends among them, a tap away."
+  }
+  {
+    id: "tree", bay: 9, open: false, document: "labs/tree"
+    title: "TREE LAB", note: "The gallery's tree on its own, and a walker to climb its treads and branches."
+  }
+  {
+    id: "board-games", bay: 10, open: false, document: "labs/board-games"
+    title: "BOARD GAME LAB", note: "Physical chess, the game station, Go and Reversi on one floor."
+  }
+]
+// Whether level 0's north wall keeps its bench or planter at plan x `x`: none stands behind a lab's door.
+function labWingClear(x) = (count(labWingPlan, lab => (bayX(lab.bay) == x)) == 0)
+
 // The flaw's route (flaw.puck): the corners of one closed polyline in the building's frame, metres, which the flaw
 // follows with each corner rounded (look.puck's `lookFlaw.bend`). It is one loop that rises through the building and
 // returns down the tree:

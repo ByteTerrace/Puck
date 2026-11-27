@@ -45,13 +45,14 @@ template paintingFace(destination, counterpart, fallback) {
 
 // The frame a destination world stands a traveller's way back in: a canvas whose bottom reaches the ground, so a body's
 // feet cross the glass, with posts and a lintel `post` metres thick round it, in one palette row. Face 0, the rim, names
-// the glass, which shows through the opening carved out of it. The garden, the night field, the hearth and the city
-// each wear it in their own colour.
-template arrivalFrame(color, roughness = 0.45, specular = 0.2, post = 0.08) {
+// the glass, which shows through the opening carved out of it. The garden, the night field, the hearth, the city and
+// the labs each wear it in their own colour, and the lab wing's doors (lab-wing.puck) add their plaques to it under the
+// creation name `label`.
+template arrivalFrame(color, roughness = 0.45, specular = 0.2, post = 0.08, label = "frame") {
   behavior {
     faces [{ name: "glass", shapeId: 0 }]
   }
-  name: "frame"
+  name: label
   palette [{ color: color, roughness: roughness, specular: specular }]
   schema: "puck.creation.v2"
   shape Box "rim" {

@@ -1,0 +1,140 @@
+// The climbing lab (README.md): the Moth's climb (avatars/moth-climb.puck, the standard's `climbAbility`) on a studio
+// floor under a held midday, with three bays along one line, each facing the seat as she boots:
+//
+//   west     a practice face 6 m tall in front of a block whose top is floor: a climb, a top-out and a mantle
+//   middle   the rope net's slot: an empty frame 3 m wide and 4 m tall where the climbing net panel stands once its
+//            `net` facet lands
+//   east     the climbing wall's slot: a plain holdable face as tall as the gallery's wall (from the hall's floor to
+//            level 3's) over a ledge, where the standard's climbing wall kit (worlds/standard/climbing.puck: face,
+//            frame, holds and pad) stands once it lands, placed as the gallery places it
+//
+// Boot it with `--world worlds/debug/labs/climbing.puck`; the gallery's lab wing reaches it through its door
+// `lab-climbing`, and the `arrival` frame behind the seat leads back there.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-climbing"
+
+import "../still-noon"
+import "../set-controls"
+import "../noclip"
+import "../gallery/layout"
+import "lab-kit"
+
+metadata {
+  title: "Climbing lab"
+  description: "The Moth's climb on a practice face, a face as tall as the gallery's climbing wall, and the slots for the wall kit and the rope net."
+}
+
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// The bays' centres along x, and the plane every face stands in, facing +Z.
+let climbBayX = [-6, 0, 6]
+let climbFaceZ = -4
+// The practice face's height, and the climbing wall's: from the hall's floor to level 3's.
+let climbPracticeHeight = 6
+let climbWallHeight = (galleryFloor[3] - galleryFloor[0])
+// A face's half width and thickness, and how deep the block or ledge behind it runs.
+let climbFaceHalf = 2
+let climbFaceThickness = 0.2
+let climbLedgeDepth = 3
+// The net slot's frame: its clear opening and its posts.
+let climbNetHalf = 1.5
+let climbNetHeight = 4
+let climbNetPost = 0.12
+
+let climbStone = "#A39686"
+let climbBlock = "#C2B9AB"
+
+// The seat boots 12 m before the faces, facing them (yaw 0 faces -Z); each bay has a spawn point 3 m before it.
+spawnPoints [
+  { id: "hero", position [0, 0, 8], yawDegrees: 0 }
+  { id: "climb-practice", position [climbBayX[0], 0, (climbFaceZ + 3)], yawDegrees: 0 }
+  { id: "climb-net", position [climbBayX[1], 0, (climbFaceZ + 3)], yawDegrees: 0 }
+  { id: "climb-wall", position [climbBayX[2], 0, (climbFaceZ + 3)], yawDegrees: 0 }
+]
+
+labFloor(halfX: 16, halfZ: 16)
+labWayBack(id: "climbing", at: [0, 0, 12], yaw: 0)
+
+// A holdable face `height` tall standing in the plane z 0 of its placement, facing +Z, and the block behind it whose top
+// is floor at the face's top.
+template climbFace(name, height) {
+  prototype $"{name}-face" {
+    document {
+      name: $"{name}-face"
+      schema: "puck.creation.v2"
+      palette [{ color: climbStone, roughness: 0.8, specular: 0.04 }]
+      shape Box "face" {
+        material: 0
+        position [0, (height / 2), (0 - (climbFaceThickness / 2))]
+        scale [climbFaceHalf, (height / 2), (climbFaceThickness / 2)]
+      }
+    }
+  }
+  prototype $"{name}-block" {
+    document {
+      name: $"{name}-block"
+      schema: "puck.creation.v2"
+      palette [{ color: climbBlock, roughness: 0.85, specular: 0.04 }]
+      shape Box "block" {
+        material: 0
+        position [0, (height / 2), (0 - (climbFaceThickness + (climbLedgeDepth / 2)))]
+        scale [climbFaceHalf, (height / 2), (climbLedgeDepth / 2)]
+      }
+    }
+  }
+}
+
+prototypes {
+  climbFace(name: "climb-practice", height: climbPracticeHeight)
+  climbFace(name: "climb-wall", height: climbWallHeight)
+  // The net's frame: two posts and a head over an opening the panel fills.
+  prototype "climb-net-frame" {
+    document {
+      name: "climb-net-frame"
+      schema: "puck.creation.v2"
+      palette [{ color: "#3B4048", roughness: 0.5, specular: 0.2 }]
+      for side in [-1, 1] {
+        shape Box $"post-{side}" {
+          material: 0
+          position [(side * (climbNetHalf + (climbNetPost / 2))), ((climbNetHeight + climbNetPost) / 2), 0]
+          scale [(climbNetPost / 2), ((climbNetHeight + climbNetPost) / 2), (climbNetPost / 2)]
+        }
+      }
+      shape Box "head" {
+        material: 0
+        position [0, (climbNetHeight + (climbNetPost / 2)), 0]
+        scale [climbNetHalf, (climbNetPost / 2), (climbNetPost / 2)]
+      }
+    }
+  }
+}
+
+placements {
+  for bay in [{ name: "climb-practice", x: climbBayX[0] }, { name: "climb-wall", x: climbBayX[2] }] {
+    placement $"{bay.name}-face" {
+      prototype: $"{bay.name}-face"
+      position [bay.x, 0, climbFaceZ]
+      grip {
+        holdable: true
+      }
+      solid
+    }
+    placement $"{bay.name}-block" {
+      prototype: $"{bay.name}-block"
+      position [bay.x, 0, climbFaceZ]
+      solid
+    }
+  }
+  placement "climb-net-slot" {
+    prototype: "climb-net-frame"
+    position [climbBayX[1], 0, climbFaceZ]
+    solid
+  }
+}
