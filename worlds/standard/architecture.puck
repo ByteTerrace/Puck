@@ -68,7 +68,7 @@ let consoleLook = {
 // placeholders) in `ink` at an em of `em`, shrunk to fit the rectangle, `wrap` breaking lines at its width, `markup`
 // reading colour tags and `spacing` the line spacing. The box reaches `depth` either side of the glass, past any
 // rounding, so only the glass that wears the paint's palette slot takes it. The floor's consoles (shapes.puck) and the
-// display table (display-table.puck) draw their interfaces with these two.
+// game station (game-station.puck) draw their interfaces with these two.
 function faceFill(at, rotation, half, color, round = 0, depth = 0.03) = {
   type: "Box"
   position: at

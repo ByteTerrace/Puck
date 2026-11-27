@@ -1,0 +1,18 @@
+// The debug world set's game stations: the catalog every station of the set offers and where each one stands. A module
+// library: game-station-root.puck stands one station alone and the gallery's board game room stands its own
+// (gallery/gallery.puck), both over the standard's game station (../standard/game-station.puck).
+
+// The catalog, in the order the glass lists it: chess, then the two patience games, each a game of its own as the shape
+// catalog lists each exhibit as its own row.
+let gameStationCatalog = [
+  { id: "chess", title: "CHESS" }
+  { id: "klondike", title: "KLONDIKE" }
+  { id: "freecell", title: "FREECELL" }
+]
+
+// The station the isolated root stands: at the origin, its creation's floor on the root's floor.
+let rootStation = { id: "station", at [0, -0.5, 0] }
+
+// The board game room's station (gallery/games.puck), where the card table stood at the west end of the row of tables
+// toward the balustrade: its creation's floor on level 2's floor (y 9.05).
+let boardRoomStation = { id: "boardroom", at [38, 8.55, 17.2] }

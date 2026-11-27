@@ -194,15 +194,16 @@ pieces are the arcade cabinet (for one player or two), the television set (a tel
 its shelf and a cabled pad for each player) and the lounge (a rug and two beanbags). The debug world's gallery is built
 from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each canyon piece for `puck mesh preview`.
 
-`display-table.puck` is a library for a table whose top is a glass display: the `displayTable` creation template (a
-chassis with a lit line round its rim on a slim column, its glass split into panels that each carry a palette slot's
-paints), `displayTablePalette` over a look's tokens, `displayFill` and `displayText` for painting the glass in the
-world's frame (over `architecture.puck`'s `faceFill` and `faceText`, which the gallery's consoles paint with too), and
-`displayTokens`, a board of placements whose response facets show the token each cell of a state row picks. Everything
-on the glass is paint or token, so it follows the game's state without a bake. `chess-icons.puck` is a chess set for
-such a glass: the six pieces as flat silhouettes in a rim and a fill (`chessIconPrototypes`), in the order of the chess
-vocabulary's piece codes (`chessIconKinds`). The debug world's game table (`../debug/cardtable.md`) is the worked
-example: it plays the chess table's game and the patience games on one glass.
+`game-station.puck` is a station whose table's top is one glass display that plays a catalog of games, one at a time, as
+a display station shows a catalog of shapes: the table in the display stations' family, its glass panels, the catalog's
+list with its taps and NEW GAME, the `station.game` mailbox, the status line, the board engage and pick grid, the seat's
+presses packed into one cell, glass paints (`displayFill`, `displayRing`, `displayText`, over `architecture.puck`'s
+`faceFill` and `faceText`, which the gallery's consoles paint with too) and `gameStationTokens`, a board of placements
+whose response facets show the token each cell of a game's state picks. A game draws itself on a station from its own
+state: `../games/chess-station.puck` and `../games/patience-station.puck`. `chess-pieces.puck` is a chess set in
+miniature, the six Staunton pieces turned from primitives (`chessPiecePrototypes`, in the order of the chess
+vocabulary's piece codes, `chessPieceKinds`). The debug world's station (`../debug/game-station.md`) is the worked
+example.
 
 `place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
 so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:

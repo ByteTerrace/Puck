@@ -1,0 +1,111 @@
+// One game station on its own: the standard's game station (../standard/game-station.puck) with the debug world set's
+// catalog, on a small floor under a clear day, booted alone so a change to the station bakes and boots only the station.
+// The gallery's board game room instantiates the same station; this root exists for iterating on it. Boot it with
+// `--world worlds/debug/game-station-root.puck`: the seat starts at the station's chair (`hero`), and the context button
+// sits it down at the glass.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "game-station"
+
+import "set-controls"
+import "../standard/skies"
+import "../standard/game-station"
+import "../games/chess-game"
+import "../games/chess-station"
+import "../games/solitaire"
+import "../games/patience-station"
+import "game-stations"
+
+metadata {
+  title: "Game station"
+  description: "One game station from the standard's module on a small floor, for iterating on the station."
+}
+
+// The seats and visitors, and above them the deck's 54 bodies (patienceStationCards).
+bodies {
+  capacity: 66
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// The seat starts at the station's chair, 1.5 m from its centre at its -Z edge, facing the glass.
+spawnPoints [
+  { id: "hero", position [rootStation.at[0], 0, (rootStation.at[2] - 1.5)], yawDegrees: 180 }
+]
+
+commands: gameStationCommands([rootStation], gameStationCatalog)
+
+// The font the glass letters in, as the debug world declares it.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+  gameStationPlacement(station: rootStation)
+  chessStationTokens(station: rootStation, game: 0)
+  patienceStationSpots(station: rootStation)
+}
+
+patienceStationCards(station: rootStation)
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v2"
+      palette [{ color: "#B9AE9C", roughness: 0.8, specular: 0.03 }]
+      shape Box "floor" {
+        material: 0
+        position [0, -0.2, 0]
+        scale [6, 0.2, 6]
+      }
+    }
+  }
+  gameStationPrototype(station: rootStation, catalog: gameStationCatalog, boardPanels: chessStationPanels(rootStation))
+  chessStationPrototypes()
+  patienceStationPrototypes()
+}
+
+state {
+  gameStationGrid(station: rootStation)
+  patienceStationSlots(station: rootStation)
+  world {
+    gameStationState(stations: [rootStation], catalog: gameStationCatalog)
+    chessStationState(stations: [rootStation])
+    patienceStationState()
+  }
+}
+
+gameStationRules(station: rootStation, catalog: gameStationCatalog)
+chessStationRules(station: rootStation, game: 0, ordinal: 0)
+patienceStationRules(station: rootStation, klondike: 1, freecell: 2)
+
+render {
+  farDistance: 200
+  lighting {
+    lights [
+      sunlight(direction: [-2, 4, -3], color: "#FFF1D6", illuminance: 60000lx)
+    ]
+  }
+  sky {
+    clearDay()
+  }
+  atmosphere {
+    clearDayAir()
+  }
+}

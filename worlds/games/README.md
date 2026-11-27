@@ -11,6 +11,21 @@ opponent. Its header lists what a table expands and what it owns. The debug
 world's table ([`../debug/chess.puck`](../debug/chess.puck), notes in
 [`chess.md`](../debug/chess.md)) is the worked example.
 
+[`chess-game.puck`](chess-game.puck) is chess as a document for a drawn board:
+the library in its digital mode, its pieces their cells alone, for a world
+without a physical table (`gallery-root.puck`, `game-station-root.puck`).
+[`klondike.puck`](klondike.puck) and [`freecell.puck`](freecell.puck) are
+patience as rules over piles, which [`solitaire.puck`](solitaire.puck) collects
+and switches between.
+
+Two libraries draw these games on the standard's game station
+([`../standard/game-station.puck`](../standard/game-station.puck)) from their
+own state: [`chess-station.puck`](chess-station.puck) (the board as paints on
+the glass, the pieces as tokens) and
+[`patience-station.puck`](patience-station.puck) (the deck's posed cards). The
+debug world's station ([`../debug/game-station.md`](../debug/game-station.md))
+is the worked example.
+
 Four hidden-information games, each the debug world's table and a fixture of
 the [disclosure plan](../../docs/plans/disclosure.md)'s noninterference
 harness. Each header names what a table expands, who reads which rows, and the

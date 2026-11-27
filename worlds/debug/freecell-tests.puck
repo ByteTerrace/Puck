@@ -1,4 +1,5 @@
-// The FreeCell scenarios (freecell.puck, cardtable.puck), each booted in the whole debug world with the game switched to
+// The FreeCell scenarios on the board game room's game station (../games/freecell.puck, ../games/patience-station.puck,
+// gallery/games.puck), each booted in the whole debug world with the game switched to
 // FreeCell: `puck test worlds/debug/freecell-tests.puck --reproduce`. The table deals by itself at boot from the seeded
 // stream, so every scenario sees the same deal. Piles are 0 to 3 the free cells, 4 to 7 the foundations (suits spades,
 // hearts, clubs, diamonds) and 8 to 15 the columns, which hold 7, 7, 7, 7, 6, 6, 6, 6 cards. A card is
@@ -14,8 +15,11 @@ import "stopped-machines"
 
 state {
   world {
-    table tableGame {
-      game = 2
+    row {
+      name: "gameStationGame"
+      kind: "Int"
+      capacity: 1
+      cells [{ key: "boardroom", value: 2 }]
     }
   }
 }
@@ -120,7 +124,7 @@ test "a free cell holds one card" {
 test "a seated player lifts the ace and plays it on its foundation" {
   when {
     ticks 400
-    seat1: body.pose 60.8 9.25 34.4 180 0 0 0
+    seat1: body.pose 38 9.25 15.7 180 0 0 0
     ticks 60
     seat1: body.press interact
     ticks 10
@@ -148,11 +152,11 @@ test "a seated player lifts the ace and plays it on its foundation" {
     ticks 120
   }
   expect {
-    board(engaged, kBoard, 1) == 1
+    board(engaged, boardroomCells, 1) == 1
     solitaireFreecell.moves == 1
     count(solitaireFreecellPile6) == 1
     count(solitaireFreecellPile15) == 5
-    kSeat.heldZone == -1
+    patienceSeat.heldZone == -1
   }
 }
 
