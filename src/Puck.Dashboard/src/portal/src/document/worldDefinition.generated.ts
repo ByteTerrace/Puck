@@ -12050,7 +12050,7 @@ export type WorldPrototypeOcclusion = {
    */
   shadow?: number | null;
   /**
-   * How far past the occluder's bounding sphere, in the creation's units, it still darkens and shadows, eased to nothing there; the bounding sphere's own radius by default.
+   * How far past the occluder's bounding sphere, in the creation's units, it still darkens the ambient and indirect light, eased to nothing there; the bounding sphere's own radius by default. It bounds only that darkening: the shadow toward a light reaches as far as the light does.
    */
   reach?: number | null;
   /**

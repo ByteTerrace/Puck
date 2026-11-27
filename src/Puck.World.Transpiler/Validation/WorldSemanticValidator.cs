@@ -308,6 +308,14 @@ public static class WorldSemanticValidator {
                 severity: DiagnosticSeverity.Warning
             ));
         }
+        foreach (var warning in StretchedCapsules(definition: definition)) {
+            Report(diagnostics: diagnostics, finding: locator.Locate(
+                code: PuckDiagnosticCodes.StretchedCapsule,
+                message: warning.Message,
+                pointer: Vocabulary.WorldDocumentPointers.ToJsonPointer(path: warning.Path, table: Vocabulary.WorldConstructs.Table),
+                severity: DiagnosticSeverity.Warning
+            ));
+        }
 
         return (errors.Count == 0);
     }
@@ -368,6 +376,16 @@ public static class WorldSemanticValidator {
 
             return rig.Contests.Select(selector: contest => ($"effectors[{contest.Later}].chain", CreationMotion.DescribeContest(contest: contest, rig: rig)));
         }
+    );
+    /// <summary>Returns a warning for each Capsule of a creation that scales x and z unequally
+    /// (<see cref="CreationStretchedCapsules.Of"/>), whose ends the generic scale stretches, carrying its document path as
+    /// data.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype and shape order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<WorldValidationFinding> StretchedCapsules(WorldDefinition definition) => CreationWarnings(
+        definition: definition,
+        warn: static document => CreationStretchedCapsules.Of(document: document).Select(selector: shape => ($"shapes[{shape}].scale", CreationStretchedCapsules.Describe(document: document, shape: shape)))
     );
     // A warning for each member `warn` names in each creation, its document path carried as structured data and its
     // message written in authored terms (creation id and sentence, with no internal JSON path prefix).

@@ -643,6 +643,24 @@ public static class SdfSolidGeometry {
         _ = chain.Ellipse(semiX: radial, semiY: axial, lift: SdfLift.Revolve, liftAmount: 0f, material: material, blend: blend, smooth: smooth, detail: detail);
         return true;
     }
+    /// <summary>Returns whether a primitive is a Capsule scaled unequally in X and Z, which <see cref="AppendScaledPrimitive"/>
+    /// emits as the unit capsule under a generic <see cref="SdfProgramBuilder.Scale"/>: its ends stretch along every axis
+    /// (the Y scale included, where a capsule scaled alike in X and Z keeps spherical ends however long its segment) and
+    /// its field reads a bound, where <see cref="AppendNativePrimitive"/> bakes the equal-radius capsule's dimensions.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <returns><see langword="true"/> for a Capsule whose X and Z scales, as emitted, differ.</returns>
+    public static bool IsStretchedCapsule(SdfSolidPrimitive type, Vector3 scale) {
+        var effectiveScale = EffectiveScale(scale: scale);
+
+        return ((type == SdfSolidPrimitive.Capsule) && (effectiveScale.X != effectiveScale.Z));
+    }
+    /// <summary>Returns half the length of a Capsule's straight segment at a scale: the segment runs from the shape's
+    /// position up its own Y by <c>0.5·scale.y</c>, so its midpoint, and half its length, stand a quarter of the Y scale
+    /// above the position.</summary>
+    /// <param name="scaleY">The authored Y scale.</param>
+    /// <returns>The half-length, in the shape's units.</returns>
+    public static float CapsuleHalfSegment(float scaleY) => (CapsuleEndpoint.Y * 0.5f * EffectiveScale(scale: new Vector3(value: scaleY)).Y);
     /// <summary>Returns whether <see cref="AppendScaledPrimitive"/> emits a primitive as a spheroid's revolved ellipse, a
     /// true distance: a Sphere, Ellipsoid or exponent-2 Superellipsoid whose radii are unequal with two of them tied.
     /// Every other ellipsoid-family shape off a uniform radius emits the scaled gauge, which reads under its
@@ -976,7 +994,7 @@ public static class SdfSolidGeometry {
         // Scale, whose support along d is the unit capsule's along scale ⊙ d. A capsule is the segment's support plus
         // its radius times the direction's length.
         if (type == SdfSolidPrimitive.Capsule) {
-            if (effectiveScale.X == effectiveScale.Z) {
+            if (!IsStretchedCapsule(scale: scale, type: type)) {
                 return (MathF.Max(x: 0f, y: ((CapsuleEndpoint.Y * effectiveScale.Y) * direction.Y)) + (CapsuleRadius * effectiveScale.X));
             }
 

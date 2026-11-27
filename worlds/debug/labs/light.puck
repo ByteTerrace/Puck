@@ -2,8 +2,8 @@
 // midday with the debug world's thin air. From west to east along the plaza's north side, each room's doorway in its
 // south wall:
 //
-//   occluders   a roofed room under a pendant lamp: the Moth when she walks in, a standing citizen and props with the
-//               standard's `propOcclusion`, each darkening the floor about it and shadowing the lamp
+//   occluders   a roofed room behind a baffle under a pendant lamp: the Moth when she walks in, a standing citizen and
+//               props with the standard's `propOcclusion`, each darkening the floor about it and shadowing the lamp
 //   night       a closed room behind a baffle, dark but for its own light: bare bulbs, a screen showing the test
 //               pattern and a console whose panel is an emitter face
 //   stained     a closed room whose east wall holds the gallery's stained glass bay, the sun coming through it in colour
@@ -17,7 +17,7 @@ schema: "puck.world.definition.v1"
 basis: "../avatars/moth"
 documentId: "lab-light"
 
-import "../still-noon"
+import "light-noon"
 import "../set-controls"
 import "../noclip"
 import "../ship-rows"
@@ -81,12 +81,25 @@ let lightBulbs = [
   [-17, -9], [-13, -9], [-15, -14]
   [20, -10], [20, -20], [20, -30]
 ]
-// The occluders' pendant: its diffuser's luminance and how far under the ceiling it hangs.
+// The occluders' pendant: its diffuser's luminance and how far under the ceiling it hangs. A spot's intensity is the
+// face's luminance times its area (`glowSpotPower`, `pendantGlowArea`: 0.0908 m2), so the floor 3.4 m under the lamp
+// takes about 0.0078 lux a nit: the gallery's 3000 nits gave 24 lux, a fraction of the bounce light at the doorway. At
+// 120000 nits (a frosted bulb's order) it gives about 940 lux, many times the little light the baffle lets round it,
+// so the lamp's shadows are the room's.
 let lightPendantDrop = 1.2
-let lightPendantLuminance = 3000
+let lightPendantLuminance = 120000
 // The night room's screen, on its north wall facing +Z, and its console, against its east wall facing -X.
 let lightScreen = { x: -15, y: 2, z: (lightRoom("night").z0 + 0.065), halfWidth: 1.2, halfHeight: 0.7 }
 let lightConsoleAt = [(lightRoom("night").x1 - 0.6), 0, -12]
+// The baffles: a freestanding wall `lightBaffleSetback` inside a doorway, `half` either side of the doorway's middle and
+// `height` high, wider than the doorway so no light reaches the room straight from the plaza. The night room's reaches
+// a doorway's width past it; the occluders' doorway is wider, so its baffle is too, and taller, so light rising off the
+// plaza floor does not clear it. A body walks round either end, 1 m (night) or 2 m (occluders) from the walls.
+let lightBaffleSetback = 1.6
+let lightBaffles = [
+  { room: "night", half: 2, height: 3 }
+  { room: "occluders", half: 3, height: 3.4 }
+]
 // The barrier: the gallery's (shell.puck's arch over a level-1 bay), standing across the bay's middle.
 let lightArchRadius = 2.08
 let lightArchSpring = 1.82
@@ -181,13 +194,24 @@ prototypes {
       }
     }
   }
-  // The night room's baffle: a freestanding wall 1.6 m inside the doorway, wider than it, so no daylight reaches the room.
-  prototype "light-baffle" {
-    document {
-      name: "light-baffle"
-      schema: "puck.creation.v2"
-      palette [{ color: "#D9D4CA", roughness: 0.85, specular: 0.04 }]
-      boundsBox(label: "baffle", x0: -2, x1: 2, y0: 0, y1: 3, z0: -0.15, z1: 0.15, slot: 0)
+  // The night and occluders' rooms' baffles.
+  for baffle in lightBaffles {
+    prototype $"light-baffle-{baffle.room}" {
+      document {
+        name: $"light-baffle-{baffle.room}"
+        schema: "puck.creation.v2"
+        palette [{ color: "#D9D4CA", roughness: 0.85, specular: 0.04 }]
+        boundsBox(
+          label: "baffle",
+          x0: (0 - baffle.half),
+          x1: baffle.half,
+          y0: 0,
+          y1: baffle.height,
+          z0: -0.15,
+          z1: 0.15,
+          slot: 0
+        )
+      }
     }
   }
 
@@ -361,10 +385,12 @@ placements {
       solid
     }
   }
-  placement "light-baffle" {
-    prototype: "light-baffle"
-    position [lightDoorX(lightRoom("night")), 0, (lightRoom("night").z1 - 1.6)]
-    solid
+  for baffle in lightBaffles {
+    placement $"light-baffle-{baffle.room}" {
+      prototype: $"light-baffle-{baffle.room}"
+      position [lightDoorX(lightRoom(baffle.room)), 0, (lightRoom(baffle.room).z1 - lightBaffleSetback)]
+      solid
+    }
   }
   for (bulb, n) in lightBulbs {
     placement $"light-bulb-{n}" {

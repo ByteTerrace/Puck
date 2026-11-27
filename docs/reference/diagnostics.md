@@ -916,6 +916,18 @@ Example: five rows in `render.lanes`.
 Fix: rename or delete the duplicate; keep at most four lanes, or let effects that never animate together share one
 lane. The message lists the lanes that were written.
 
+### PUCK141
+
+Warning. A creation's `Capsule` scales x and z unequally. Only equal x and z keep the capsule's ends round: the unit
+capsule then rides a generic scale that stretches its ends along every axis (the y scale included) and reads a bound
+rather than the distance, and a solid placement refuses it.
+
+Example: `shape Capsule "leg" { scale [0.2, 1.2, 0.16] }`.
+
+Fix: make x and z equal, or write an elliptic section with round ends as an `Ellipsoid` at the capsule's segment
+midpoint with `elongate [0, h, 0]`, where `h` is a quarter of the capsule's y scale (the message gives it). Where the
+stretch is the look, `allow PUCK141 "why"` on the line before the row.
+
 ## Validation of the composed world
 
 ### PUCK030
