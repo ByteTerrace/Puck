@@ -296,12 +296,111 @@ public sealed class SdfFieldBoundsLawTests {
             }
         }
     }
-    // The field the kernels evaluate for resets, translations, turns, scales and unioned spheres, in double over the
-    // packed floats: a turn takes the point back through its quaternion's conjugate, v + 2u×(u×v + w·v) for u = −q.xyz.
+    /// <summary>The affine reading keeps its symbols through instructions whose floats lie off the raw grid, and stays
+    /// sound there. Every float of this program misses the grid (a turned, rounded box smoothly unioned with a row of
+    /// spheres a non-dyadic spacing apart, so the repeat's reciprocal misses it too), so every step reads its formula's
+    /// enclosed overload. Over a lattice of blocks both readings hold the floats' field at each block's corners and
+    /// interior points, and the affine reading proves the field's sign over blocks the interval reading cannot.</summary>
+    [Fact]
+    public void ScratchDebug() {
+        var lines = new System.Text.StringBuilder();
+
+        var tilt = Quaternion.Normalize(value: new Quaternion(w: 0.9f, x: 0.2f, y: -0.35f, z: 0.1f));
+        var programs = new (string, Action<SdfProgramBuilder, int>)[] {
+            ("box z-turn", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: 0.4f)).Box(halfExtents: new Vector3(x: 0.9f, y: 0.35f, z: 0.15f), material: m, round: 0.05f)),
+            ("box tilt", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.9f, y: 0.35f, z: 0.15f), material: m, round: 0.05f)),
+            ("box tilt exact", (b, m) => b.Translate(offset: new Vector3(x: 0.25f, y: -0.25f, z: 0.5f)).Rotate(rotation: new Quaternion(x: 0.5f, y: 0.5f, z: 0.5f, w: 0.5f)).Box(halfExtents: new Vector3(x: 0.875f, y: 0.375f, z: 0.125f), material: m, round: 0.0625f)),
+            ("spheres smooth", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Sphere(material: m, radius: 0.5f).ResetPoint().Translate(offset: new Vector3(x: -0.45f, y: 0.1f, z: 0.3f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: m, radius: 0.4f, smooth: 0.3f)),
+            ("spheres smooth exact", (b, m) => b.Translate(offset: new Vector3(x: 0.25f, y: -0.25f, z: 0.5f)).Sphere(material: m, radius: 0.5f).ResetPoint().Translate(offset: new Vector3(x: -0.5f, y: 0.125f, z: 0.25f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: m, radius: 0.375f, smooth: 0.25f)),
+            ("tilted capsule", (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt).Capsule(endpoint: new Vector3(x: 1.3f, y: 0.2f, z: 0.1f), material: m, radius: 0.2f)),
+        };
+
+        foreach (var (name, emit) in programs) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            emit(arg1: builder, arg2: material);
+            var evaluator = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Render);
+
+            foreach (var s in (ReadOnlySpan<float>)[0.05f, 0.1f, 0.2f, 0.4f]) {
+                var (narrower, settles, gain, total) = (0, 0, 0.0, 0);
+                var best = "";
+
+                for (var cell = 0; (cell < (30 * 20 * 16)); cell++) {
+                    var c = new Vector3(x: (-2.4f + (0.15f * (cell % 30))), y: (-1.5f + (0.15f * ((cell / 30) % 20))), z: (-1.0f + (0.15f * (cell / 600))));
+                    var (lower, upper) = (FixedPosition.FromLocal(local: Fixed(value: (c - new Vector3(value: s)))), FixedPosition.FromLocal(local: Fixed(value: (c + new Vector3(value: s)))));
+
+                    _ = evaluator.TryDistanceBounds(distance: out var interval, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Interval, upper: upper);
+                    _ = evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Affine, upper: upper);
+                    total++;
+                    narrower += ((affine != interval) ? 1 : 0);
+                    var g = (((double)affine.Lower) - ((double)interval.Lower)) + (((double)interval.Upper) - ((double)affine.Upper));
+                    if (g > gain) { gain = g; best = $"c={c} interval={interval} affine={affine}"; }
+                    settles += ((((affine.Lower > FixedQ4816.Zero) && (interval.Lower <= FixedQ4816.Zero)) || ((affine.Upper < FixedQ4816.Zero) && (interval.Upper >= FixedQ4816.Zero))) ? 1 : 0);
+                }
+
+                lines.AppendLine(handler: $"{name} s={s}: narrower {narrower}/{total}, sign-settles {settles}, best gain {gain:F4} at {best}");
+            }
+        }
+
+        Assert.Fail(message: lines.ToString());
+    }
+    [Fact]
+    public void TheAffineReadingSettlesBlocksOverOffGridParameters() {
+        var tilt = Quaternion.Normalize(value: new Quaternion(w: 0.9f, x: 0.2f, y: -0.35f, z: 0.1f));
+        var (settledByAffine, settledByInterval, narrower) = (0, 0, 0);
+        // Cubes of half sides 0.05 to 0.4 centred on a 30 × 20 × 16 lattice 0.15 apart.
+        const int Blocks = (4 * ((30 * 20) * 16));
+
+        foreach (var emit in (ReadOnlySpan<Action<SdfProgramBuilder, int>>)[
+            (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt)
+                .Box(halfExtents: new Vector3(x: 0.9f, y: 0.35f, z: 0.15f), material: m, round: 0.05f)
+                .ResetPoint().Translate(offset: new Vector3(x: -1.1f, y: 0.15f, z: 0.05f)).Repeat(spacing: new Vector3(x: 0.7f, y: 1000f, z: 1000f))
+                .Sphere(blend: SdfBlendOp.SmoothUnion, material: m, radius: 0.21f, smooth: 0.13f),
+            (b, m) => b.Translate(offset: new Vector3(x: 0.3f, y: -0.2f, z: 0.4f)).Rotate(rotation: tilt).Capsule(endpoint: new Vector3(x: 1.3f, y: 0.2f, z: 0.1f), material: m, radius: 0.2f),
+        ]) {
+            var builder = new SdfProgramBuilder();
+
+            emit(arg1: builder, arg2: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)));
+
+            var program = builder.Build();
+            var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+
+            for (var block = 0; (block < Blocks); block++) {
+                var (size, cell) = ((0.05f * (1 << (block % 4))), (block / 4));
+                var centre = new Vector3(x: (-2.4f + (0.15f * (cell % 30))), y: (-1.5f + (0.15f * ((cell / 30) % 20))), z: (-1f + (0.15f * (cell / (30 * 20)))));
+                var (low, high) = (Fixed(value: (centre - new Vector3(value: size))), Fixed(value: (centre + new Vector3(value: size))));
+                var (lower, upper) = (FixedPosition.FromLocal(local: low), FixedPosition.FromLocal(local: high));
+
+                Assert.True(condition: evaluator.TryDistanceBounds(distance: out var interval, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Interval, upper: upper));
+                Assert.True(condition: evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Affine, upper: upper));
+
+                foreach (var point in PointsInside(interior: 6, lower: low, random: new Random(Seed: block), upper: high)) {
+                    var value = FloatField(point: (((double)point.X), ((double)point.Y), ((double)point.Z)), program: program);
+
+                    foreach (var (reading, bounds) in ((ReadOnlySpan<(SdfBoundsReading, FixedInterval)>)[(SdfBoundsReading.Interval, interval), (SdfBoundsReading.Affine, affine)])) {
+                        Assert.True(condition: ((((double)bounds.Lower) <= value) && (value <= ((double)bounds.Upper))), userMessage: $"the {reading} bounds {bounds} of the block [{low}, {high}] miss the floats' field {value} at {point}");
+                    }
+                }
+
+                settledByInterval += (Settles(bounds: interval) ? 1 : 0);
+                narrower += ((affine != interval) ? 1 : 0);
+                settledByAffine += ((Settles(bounds: affine) && !Settles(bounds: interval)) ? 1 : 0);
+            }
+        }
+
+        Assert.True(condition: (settledByAffine < 0), userMessage: $"the affine reading settles {settledByAffine} blocks the interval reading leaves open, beside {settledByInterval} both settle, of {2 * Blocks}, {narrower} narrower");
+
+        // A reading settles a block when it proves the field's sign over it, so no surface crosses it.
+        static bool Settles(FixedInterval bounds) => ((bounds.Lower > FixedQ4816.Zero) || (bounds.Upper < FixedQ4816.Zero));
+    }
+    // The field the kernels evaluate for resets, translations, turns, scales, repeats and unioned or smoothly unioned
+    // spheres and boxes, in double over the packed floats: a turn takes the point back through its quaternion's
+    // conjugate, v + 2u×(u×v + w·v) for u = −q.xyz, and a smooth union is sdfBlendSmoothMinimum over the floored radius.
     private static double FloatField(SdfProgram program, (double X, double Y, double Z) point) {
         var (x, y, z) = point;
         var scale = 1.0;
-        var result = double.MaxValue;
+        var result = 1.0e9;
 
         foreach (var instruction in program.Instructions) {
             var data = instruction.Data0;
@@ -324,15 +423,52 @@ public sealed class SdfFieldBoundsLawTests {
                         (x, y, z) = ((x + (2.0 * ((uy * tz) - (uz * ty)))), (y + (2.0 * ((uz * tx) - (ux * tz)))), (z + (2.0 * ((ux * ty) - (uy * tx)))));
                         break;
                     }
-                case SdfOp.ShapeBlend:
-                    result = Math.Min(val1: result, val2: ((Math.Sqrt(d: (((x * x) + (y * y)) + (z * z))) - data.X) * scale));
-                    break;
+                case SdfOp.Repeat: {
+                        var (spacing, inverse) = (instruction.Data0, instruction.Data1);
+
+                        (x, y, z) = ((x - (spacing.X * Math.Round(a: (x * inverse.X)))), (y - (spacing.Y * Math.Round(a: (y * inverse.Y)))), (z - (spacing.Z * Math.Round(a: (z * inverse.Z)))));
+                        break;
+                    }
+                case SdfOp.ShapeBlend: {
+                        var candidate = (((SdfShapeType)instruction.Shape) switch {
+                            SdfShapeType.Sphere => (Math.Sqrt(d: (((x * x) + (y * y)) + (z * z))) - data.X),
+                            SdfShapeType.Box => BoxField(halfExtents: (data.X, data.Y, data.Z), point: (x, y, z), round: data.W),
+                            SdfShapeType.Capsule => CapsuleField(endpoint: (data.X, data.Y, data.Z), point: (x, y, z), radius: data.W),
+                            _ => throw new InvalidOperationException(message: $"FloatField reads no {(SdfShapeType)instruction.Shape}."),
+                        } * scale);
+
+                        result = (((SdfBlendOp)instruction.Blend) switch {
+                            SdfBlendOp.Union => Math.Min(val1: result, val2: candidate),
+                            SdfBlendOp.SmoothUnion => SmoothMinimum(a: result, b: candidate, k: Math.Max(val1: instruction.Data1.X, val2: SdfProgram.SmoothRadiusMin)),
+                            _ => throw new InvalidOperationException(message: $"FloatField reads no {(SdfBlendOp)instruction.Blend}."),
+                        });
+                        break;
+                    }
                 default:
                     throw new InvalidOperationException(message: $"FloatField reads no {instruction.Op}.");
             }
         }
 
         return result;
+
+        static double BoxField((double X, double Y, double Z) point, (double X, double Y, double Z) halfExtents, double round) {
+            var (qx, qy, qz) = ((Math.Abs(value: point.X) - (halfExtents.X - round)), (Math.Abs(value: point.Y) - (halfExtents.Y - round)), (Math.Abs(value: point.Z) - (halfExtents.Z - round)));
+            var (ox, oy, oz) = (Math.Max(val1: qx, val2: 0.0), Math.Max(val1: qy, val2: 0.0), Math.Max(val1: qz, val2: 0.0));
+
+            return ((Math.Sqrt(d: (((ox * ox) + (oy * oy)) + (oz * oz))) + Math.Min(val1: Math.Max(val1: qx, val2: Math.Max(val1: qy, val2: qz)), val2: 0.0)) - round);
+        }
+        static double CapsuleField((double X, double Y, double Z) point, (double X, double Y, double Z) endpoint, double radius) {
+            var squares = (((endpoint.X * endpoint.X) + (endpoint.Y * endpoint.Y)) + (endpoint.Z * endpoint.Z));
+            var h = ((squares > 0.0) ? Math.Clamp(value: ((((point.X * endpoint.X) + (point.Y * endpoint.Y)) + (point.Z * endpoint.Z)) / squares), min: 0.0, max: 1.0) : 0.0);
+            var (dx, dy, dz) = ((point.X - (endpoint.X * h)), (point.Y - (endpoint.Y * h)), (point.Z - (endpoint.Z * h)));
+
+            return (Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))) - radius);
+        }
+        static double SmoothMinimum(double a, double b, double k) {
+            var h = Math.Clamp(value: (0.5 + ((0.5 * (b - a)) / k)), min: 0.0, max: 1.0);
+
+            return ((h <= 0.0) ? b : ((h >= 1.0) ? a : ((a + ((b - a) * (1.0 - h))) - ((k * h) * (1.0 - h)))));
+        }
     }
 
     // One program per op, shape and blend, each placed off the origin, rotated and composed so every rule meets a
