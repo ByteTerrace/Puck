@@ -694,6 +694,7 @@ public static partial class WorldDocumentEmitter {
                 hashed: true,
                 member: "addons",
                 parent: parent,
+                row: typeof(WorldAddonRow),
                 scope: scope
             ),
             WorldRootArm.Cartridge => LowerCartridgeBlock(
@@ -858,9 +859,10 @@ public static partial class WorldDocumentEmitter {
 
         return true;
     }
-    // One `addon { }`/`material { }` block, appended to the named root array under its own pointer. An addon
-    // additionally resolves its content hash.
-    private static bool LowerRowCollectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string member, bool hashed) {
+    // One `addon { }`/`material { }` block, appended to the named root array under its own pointer. A row given its
+    // model type lowers each member at its own position, so a file path member (an addon's module) written by a
+    // template in another directory is re-expressed for the document. An addon additionally resolves its content hash.
+    private static bool LowerRowCollectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string member, bool hashed, Type? row = null) {
         if (parent[member] is not JsonArray rows) {
             rows = [];
             parent[member] = rows;
@@ -876,9 +878,9 @@ public static partial class WorldDocumentEmitter {
         var oldPointer = scope.CurrentPointer;
 
         scope.CurrentPointer = rowPointer;
-        var rowObj = LowerBlockToObject(
-            block: block,
-            scope: scope
+        var rowObj = ((row is null)
+            ? LowerBlockToObject(block: block, scope: scope)
+            : DocumentLowering.At(context: row, lower: () => LowerBlockToObject(block: block, scope: scope), scope: scope)
         );
 
         scope.CurrentPointer = oldPointer;
@@ -1476,10 +1478,15 @@ public static partial class WorldDocumentEmitter {
         }
 
         byte[]? wasmBytes = null;
+        // An addon's module path is already re-expressed for the document being lowered (LowerRowCollectionBlock), so
+        // it resolves beside that document, not beside a template's source that wrote it.
+        var beside = ((isAddon && (scope.Annotations.GetValueOrDefault(key: WorldDocumentVocabulary.DocumentDirectoryAnnotation) is string document))
+            ? document
+            : scope.BasePath);
 
-        if (scope.BasePath is not null) {
+        if (beside is not null) {
             var fullPath = Path.Combine(
-                path1: scope.BasePath,
+                path1: beside,
                 path2: sourcePath
             );
 
