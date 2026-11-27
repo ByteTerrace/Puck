@@ -3326,9 +3326,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var primary = m_cellBlocks[(cx + (cellsX * (cy + (cellsY * cz))))];
 
         if (primary >= 0) { return m_blockSlots[((((primary * side) * side) * side) + (lx + (side * (ly + (side * lz)))))]; }
-        if ((lx != 0) && (ly != 0) && (lz != 0)) { return -1; }
 
+        var zeros = LowFaces(lx: lx, ly: ly, lz: lz);
+
+        if (zeros == 0) { return -1; }
         for (var shift = 1; (shift < 8); shift++) {
+            if ((shift & ~zeros) != 0) { continue; }
+
             var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
 
             if ((cell >= 0) && (m_cellBlocks[cell] is var block and >= 0)) { return m_blockSlots[((((block * side) * side) * side) + (bx + (side * (by + (side * bz)))))]; }
@@ -3347,6 +3351,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return (((ax < 0) || (ay < 0) || (az < 0)) ? (-1, 0, 0, 0) : ((ax + ((m_samplesX - 1) * (ay + ((m_samplesY - 1) * az)))), bx, by, bz));
     }
+    // The axes along which a sample lies on its cell's low face, a bit each (x 1, y 2, z 4): the only axes a step back
+    // (Holder's shift) can find another holder along, so a shift with any other bit names no cell.
+    private static int LowFaces(int lx, int ly, int lz) => (((lx == 0) ? 1 : 0) | ((ly == 0) ? 2 : 0) | ((lz == 0) ? 4 : 0));
     // A measured fine sample's value by its slot: the value CloseSheets closed it at, or the one measured.
     private float MeasuredValue(int slot) {
         if (m_closedCount == 0) { return m_fineValues[slot]; }
@@ -3372,7 +3379,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         // A coarse position: every place in the cell is 0 or the far face's m_factor.
         if (((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) {
-            return Values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
+            return Values[Index(x: (cx + ((lx == 0) ? 0 : 1)), y: (cy + ((ly == 0) ? 0 : 1)), z: (cz + ((lz == 0) ? 0 : 1)))];
         }
 
         if (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) is var slot and >= 0) { return MeasuredValue(slot: slot); }
@@ -3385,11 +3392,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var sum = 0f;
 
         foreach (var corner in corners[..count]) {
-            var (gx, gy, gz) = (corner.X, corner.Y, corner.Z);
+            // The corner's cell and place in it (FineCell's division by the reciprocal), which name a coarse sample where
+            // every place is the cell's near or far face.
+            var (gx, gy, gz, gu, gv, gw) = FineCell(x: corner.X, y: corner.Y, z: corner.Z);
 
-            sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
-                ? Values[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
-                : ((FineSlot(x: gx, y: gy, z: gz) is var cornerSlot and >= 0) ? MeasuredValue(slot: cornerSlot) : CoarseValue(x: gx, y: gy, z: gz))));
+            sum += (corner.Weight * ((((gu == 0) || (gu == factor)) && ((gv == 0) || (gv == factor)) && ((gw == 0) || (gw == factor)))
+                ? Values[Index(x: (gx + ((gu == 0) ? 0 : 1)), y: (gy + ((gv == 0) ? 0 : 1)), z: (gz + ((gw == 0) ? 0 : 1)))]
+                : ((FineSlot(cx: gx, cy: gy, cz: gz, lx: gu, ly: gv, lz: gw) is var cornerSlot and >= 0) ? MeasuredValue(slot: cornerSlot) : CoarseValue(x: corner.X, y: corner.Y, z: corner.Z))));
         }
 
         return sum;
@@ -3423,8 +3432,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
+        var zeros = LowFaces(lx: lx, ly: ly, lz: lz);
 
         for (var shift = 0; (shift < 8); shift++) {
+            if ((shift & ~zeros) != 0) { continue; }
+
             var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
 
             if ((cell < 0) || (m_cellBlocks[cell] < 0)) { continue; }
