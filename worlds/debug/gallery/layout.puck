@@ -476,16 +476,19 @@ let treePadWidth = 2.8
 // The branches: each leaves the spiral from a tread's pad and walks out to its level's edge, a pair to each level, the
 // pairs turning round the trunk as they climb, so the canopy turns too; a level's south branch leaves from below its
 // floor and rises to it, its north branch from higher and falls to it. Level 1's pads stand between the four displays
-// round the trunk (bays 5 and 7 on both showcase rows), whose exhibits stand taller than a pad over the hall's floor. A
+// round the trunk (bays 5 and 7 on both showcase rows), whose exhibits stand taller than a pad over the hall's floor.
+// Each branch's tread is the one whose bearing points within about 25 degrees of its landing, so its deck leaves the
+// pad nearly straight on: a deck that leaves sideways crosses its own pad and the walk across it, and one that turns
+// back passes over the treads below. A
 // branch's deck ends at its balcony's edge, its top flush with the floor, and the walk goes on `treeOverhang` metres onto
 // the balcony (`treeDoorOverhang` through a doorway).
 let treeLimbs = [
-  { level: 1, side: "south", tread: 16, x: bayX(4) }
+  { level: 1, side: "south", tread: 16, x: bayX(6) }
   { level: 1, side: "north", tread: 24, x: bayX(8) }
-  { level: 2, side: "south", tread: 36, x: bayX(8) }
-  { level: 2, side: "north", tread: 46, x: bayX(4) }
-  { level: 3, side: "south", tread: 58, x: bayX(5) }
-  { level: 3, side: "north", tread: 68, x: bayX(7) }
+  { level: 2, side: "south", tread: 38, x: bayX(8) }
+  { level: 2, side: "north", tread: 48, x: bayX(4) }
+  { level: 3, side: "south", tread: 54, x: bayX(5) }
+  { level: 3, side: "north", tread: 64, x: bayX(7) }
 ]
 // Where a level's branch lands on one side, and the arcade bay that x stands in.
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
@@ -532,7 +535,7 @@ function treeBranchReach(b) = vectorLength((treeBranchC(b) - treeBranchA(b)) * [
 // How high a branch's control point stands over the straight rise from its pad to its landing: level 1's branches cross
 // the hall low beside the showcase's displays, so they arch enough to leave the exhibits breathing room and no more, a
 // gentle walk up and down (a quadratic's middle rises half its control point's height over the line).
-function treeBranchArch(b) = ((b.level == toyboxLevel) ? 1.2 : 0.35)
+function treeBranchArch(b) = ((b.level == toyboxLevel) ? (0.12 * treeBranchReach(b)) : 0.35)
 function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
   (0.45 * treeBranchReach(b)),
   (treeTreadAngle(b.tread) + treeAuthorTurn),
