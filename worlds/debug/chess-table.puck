@@ -1,7 +1,7 @@
 // A physical chess table as a module library: 32 rigid piece bodies on a tabletop board, whose every settled arrangement
 // is judged against the last legal board (the rules are ../games/chess.puck's), a one-ply computer opponent, and a seat
 // that sits at the board and plays with the board page. The debug world stands one (chess.puck, `use physicalChessTable(…)`
-// without an alias, so its rows keep their plain names); the stress world stands twelve (chess-stress.puck, each
+// without an alias, so its rows keep their plain names); the stress world stands twelve (labs/board-games-stress.puck, each
 // `use physicalChessTable as <id>(…)`, so every row, rule, placement and topology an instance declares is `<id>$<name>`
 // and no table reads another's rows). chess.md says how to play a table, read its game and set its opponent.
 //

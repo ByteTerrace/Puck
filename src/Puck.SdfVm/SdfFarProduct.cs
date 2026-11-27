@@ -35,9 +35,17 @@ public sealed class SdfFarProduct : IDisposable {
     // What the name digests besides the inputs: the product's kind, so no bake group's geometry shares a name with one.
     private static ReadOnlySpan<byte> Kind => "puck.far-product"u8;
 
-    private SdfFarProduct(SdfMesh mesh, IReadOnlyList<SdfMaterial> materials, UInt128 key, bool derived, int sourceDraws, long sourceTriangles) {
+    // The palette the product's material ids name, and those ids, from which Materials is picked when first read: the
+    // derivation names materials by id and copies no material value, so no material's layout reaches the bake's code
+    // identity (SdfMeshBakeClosure).
+    private readonly IReadOnlyList<SdfMaterial> m_palette;
+    private readonly int[] m_materialIds;
+    private SdfMaterial[]? m_materials;
+
+    private SdfFarProduct(SdfMesh mesh, IReadOnlyList<SdfMaterial> palette, int[] materialIds, UInt128 key, bool derived, int sourceDraws, long sourceTriangles) {
         Mesh = mesh;
-        Materials = materials;
+        m_palette = palette;
+        m_materialIds = materialIds;
         Key = key;
         Derived = derived;
         SourceDraws = sourceDraws;
@@ -48,7 +56,7 @@ public sealed class SdfFarProduct : IDisposable {
     /// (<see cref="DrawsAt"/>). The product holds one claim on it until it is disposed.</summary>
     public SdfMesh Mesh { get; }
     /// <summary>Gets the materials the mesh's triangles name, in the order its triangle materials count them.</summary>
-    public IReadOnlyList<SdfMaterial> Materials { get; }
+    public IReadOnlyList<SdfMaterial> Materials => (m_materials ??= Array.ConvertAll(array: m_materialIds, converter: id => m_palette[id]));
     /// <summary>Gets the digest of what the product is derived from: each static draw's shape, placement and material
     /// ids, and the options. It names the product in the mesh store, on every machine and run.</summary>
     public UInt128 Key { get; }
@@ -82,7 +90,7 @@ public sealed class SdfFarProduct : IDisposable {
     }
     /// <summary>Describes the product as <c>world.residency</c> prints it.</summary>
     /// <returns>One line.</returns>
-    public override string ToString() => $"far-product key={Key:x32} {(Derived ? $"derived source-draws={SourceDraws} source-triangles={SourceTriangles}" : "stored")} triangles={Triangles} pieces={Mesh.PieceCount} materials={Materials.Count} bytes={Bytes}";
+    public override string ToString() => $"far-product key={Key:x32} {(Derived ? $"derived source-draws={SourceDraws} source-triangles={SourceTriangles}" : "stored")} triangles={Triangles} pieces={Mesh.PieceCount} materials={m_materialIds.Length} bytes={Bytes}";
     /// <summary>Releases the product's claim on its mesh. A draw that still names the mesh keeps it through its own
     /// rows' claims.</summary>
     public void Dispose() {
@@ -138,17 +146,13 @@ public sealed class SdfFarProduct : IDisposable {
         using (inputs) {
             var (key, ids) = Name(inputs: inputs);
             var geometry = new SdfMeshGeometry(Dynamic: false, Hash: key);
-            var materials = new SdfMaterial[ids.Length];
             // The product's triangles count its own materials, so the store's material places are its indices.
             var places = new int[ids.Length];
 
-            for (var place = 0; (place < ids.Length); place++) {
-                materials[place] = inputs.Materials[ids[place]];
-                places[place] = place;
-            }
+            for (var place = 0; (place < ids.Length); place++) { places[place] = place; }
             if ((library is not null) && library.Holds(geometry: geometry, identity: identity)) {
                 if (library.TryLoad(declined: out var declined, geometry: geometry, identity: identity, materials: places, mesh: out var stored, refusal: out _)) {
-                    return ((stored is null) ? null : new SdfFarProduct(derived: false, key: key, materials: materials, mesh: stored, sourceDraws: 0, sourceTriangles: 0L));
+                    return ((stored is null) ? null : new SdfFarProduct(derived: false, key: key, materialIds: ids, mesh: stored, palette: inputs.Materials, sourceDraws: 0, sourceTriangles: 0L));
                 }
                 // A stored product the account has no room to read is never derived instead: deriving it needs more.
                 if (declined) { throw new HostMemoryRefusedException(bytes: 0L, owner: "far-product"); }
@@ -160,7 +164,7 @@ public sealed class SdfFarProduct : IDisposable {
                 library?.StoreEmpty(geometry: geometry, identity: identity, persist: true);
                 return null;
             }
-            return new SdfFarProduct(derived: true, key: key, materials: materials, sourceDraws: drawn, sourceTriangles: sourceTriangles,
+            return new SdfFarProduct(derived: true, key: key, materialIds: ids, palette: inputs.Materials, sourceDraws: drawn, sourceTriangles: sourceTriangles,
                 mesh: ((library is null) ? derived : library.Store(geometry: geometry, identity: identity, materials: places, mesh: derived)));
         }
     }
@@ -170,7 +174,7 @@ public sealed class SdfFarProduct : IDisposable {
     // positions), its placement, its material base and the ids its triangles carry. A group's mesh is counted at its
     // first piece alone, since how many pieces it has is its tier's.
     private static (UInt128 Key, int[] Ids) Name(Inputs inputs) {
-        var count = inputs.Materials.Count;
+        var count = inputs.MaterialCount;
         var ids = new SortedSet<int>();
         var digest = MultisetDigest.Empty;
         var element = new XxHash3();
@@ -336,12 +340,17 @@ public sealed class SdfFarProduct : IDisposable {
             m_claims.Update(draws: draws);
             Draws = draws;
             Materials = materials;
+            MaterialCount = materials.Count;
             Options = options;
             Shown = shown;
         }
 
         internal IReadOnlyList<SdfMeshDraw> Draws { get; }
+        // The palette, which the derivation hands on to the product and never reads: a read of a material value, or a call
+        // on the list, would put the material's layout in the bake's code identity (SdfMeshBakeClosure). Its count is read
+        // apart for the same reason.
         internal IReadOnlyList<SdfMaterial> Materials { get; }
+        internal int MaterialCount { get; }
         internal SdfFarProductOptions Options { get; }
         // By mesh reference: a draw whose mesh is absent names an authored mesh.
         internal Dictionary<SdfMesh, SdfFarSource> Shown { get; }

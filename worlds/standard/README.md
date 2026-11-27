@@ -57,13 +57,14 @@ documents under [`contexts/`](contexts/) hold them:
 | Swimming | [`contexts/swimming.puck`](contexts/swimming.puck) | `swimPlay()`: the `swimming` row and its rule, and the `swim` group (surface and dive) | The seat's body is in a world's medium: `swimming[<body>]` is 1 |
 | At a tabletop | [`contexts/tabletop.puck`](contexts/tabletop.puck) | `tabletopControls()`: the `tabletop` group's Board page, and the seat library a game's rules read a seated player through (`seatButtons`, `seatHeld`, `seatPress`, `seatStepCell`) | The seat sits at a board: `engagement` reads `tabletop` |
 | At a terminal | [`contexts/terminal.puck`](contexts/terminal.puck) | `terminalPlay(terminals)`, `terminalFamily()`, `terminalCamera(...)`, `terminalRoute()` and `pointerCapture()` | The context button, within a terminal's reach |
+| In conversation | [`contexts/conversation.puck`](contexts/conversation.puck) | `conversationPlay(speakers, script)`: speakers a seat talks with, a script of choices each speaker shows and answers (on a sign whose text reads `conversationLine(number)`), what a choice does (body registers it sets, an action for the world's rules, whether it ends the talk), the `conversation` group and `conversationFamily()` | The context button, within a speaker's reach |
 | At a terminal's console | [`contexts/terminal-console.puck`](contexts/terminal-console.puck) | `terminalPlay(console: ...)`'s hidden command line, kept per terminal for the terminal's own screen to show: the `terminal-console` group, `terminalConsoleFamily()`, `terminalConsoleScreen(...)` and `terminalConsolePrompt(...)` for the screen's text, and `terminalWrap(...)` for replies | The console key (the backtick), while engaged at a desk-view terminal |
 
 `contexts/modes.puck` holds the other half of a context: which actions the
 simulation accepts in it. `engagementFamily()` is the `inputModes` family for the
 contexts the engine's engagement selects (a tabletop, a machine's screen, a
 screen pointed at, another body), and each opt-in context brings its own family
-(`terminalFamily`, `typingFamily`, `instrumentFamily`). A binding group decides
+(`terminalFamily`, `conversationFamily`, `typingFamily`, `instrumentFamily`). A binding group decides
 what a key does; an input family decides whether the action is live.
 
 A world switches a seat between contexts with the mechanism every one of these

@@ -31,6 +31,17 @@ public readonly record struct MemoryOwnerReading(string Name, MemoryCategory Cat
     /// <summary>Gets the allowance the owner's storage draws on; device families and segments are play.</summary>
     public MemoryAllowance Allowance { get; init; }
 }
+/// <summary>One device owner's reservation (<see cref="MemoryAccount.ReserveDevice"/>), as
+/// <see cref="MemoryAccount.ReadReservations"/> reads it: every reservation of the owner in one pool together.</summary>
+/// <param name="Owner">The owner the reservation and its resources' names share (<see cref="GpuObjectName.MemoryOwner"/>).</param>
+/// <param name="Pool">The pool the reservation promises in.</param>
+/// <param name="Class">What the storage is for.</param>
+/// <param name="Peak">The bytes the owner's reservations promise its resources hold at once, together.</param>
+/// <param name="Held">The bytes the owner's resources hold now.</param>
+/// <param name="Promised">The part of <paramref name="Peak"/> not yet held: what the pool counts as promised.</param>
+/// <param name="Floor">The part of <paramref name="Peak"/> the owner cannot run without, reserved whatever the pool
+/// holds.</param>
+public readonly record struct MemoryReservationReading(string Owner, PhysicalMemory Pool, MemoryClass Class, long Peak, long Held, long Promised, long Floor);
 /// <summary>A detached account reading and the charged/reserved owners that reconcile to it, captured under one
 /// account lock: the admitted owners' rows reconcile to the account's categories and reservations, the segment owners'
 /// to their pools' device blocks, and every other owner's to the parts named in the rows

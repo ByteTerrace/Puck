@@ -69,12 +69,27 @@ public sealed class SdfFrameBlockLawTests {
         // The bins pass alone reads the widths, and its recorder writes them from the frame's plan just before it dispatches
         // (SdfFrameBlock.WriteShadeBins).
         SdfWorldPackage.ShadeBinWidths,
+        // The reflection pass's cell and step budget are its recorder's, which follows the pass's records
+        // (SdfFrameBlock.WriteScreenReflections).
+        SdfWorldPackage.ScreenReflections, SdfWorldPackage.ReflectionSteps,
+        // The screens' image windows follow the images the pass samples, which its recorder binds
+        // (SdfFrameBlock.WriteScreenWindows).
+        SdfWorldPackage.ScreenWindows,
         // The cascade set is the recorder's, written after the view's values (SdfFrameBlock.WriteMeshShadows).
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
         SdfWorldPackage.MeshShadowSlopes, SdfWorldPackage.MeshShadowRoles,
-        SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
-        // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
-        SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
+        // The irradiance volume's levels and its geometry and window serials, written with them (SdfFrameBlock.WriteMeshIrradiance).
+        SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings, SdfWorldPackage.MeshIrradianceGeometry,
+        // No exposures are staged here, so the meter has no reading, a manual exposure adapts nothing locally, and the view
+        // has no camera sample of its shot, so its air lights no sky (SdfFrameBlock writes zero airLight without exposures).
+        SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance,
+        SdfWorldPackage.AirLight,
+        // The fixture's view is geometry only, a sky layer's geometry, which applies none of its own exposure: its consumer's
+        // sky composes it in nits and exposes it with its own layers.
+        SdfWorldPackage.ExposeShare];
+    // The values whose trailing components no reader takes, which the writer leaves zero: the debug options' tolerance,
+    // bodies and band fill three of its four, and the views rate's coarsest rate and tile size two of its four.
+    private static readonly Dictionary<string, int> UsedComponents = new(StringComparer.Ordinal) { [SdfWorldPackage.DebugOptions] = 3, [SdfWorldPackage.ViewsRate] = 2 };
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.
@@ -96,11 +111,20 @@ public sealed class SdfFrameBlockLawTests {
         DisableSoftShadows = true,
         GeometryOnly = true,
     };
-    private static readonly (string Member, SdfViewQuality Quality, uint Bits)[] QualityValues = [
-        (SdfWorldPackage.GeometryOnly, new() { GeometryOnly = true }, 1u),
-        (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u),
-        (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u),
+    // A geometry-only view is a sky layer's geometry, published unexposed, so its quality also zeroes the share of its own
+    // exposure the view applies (SdfFrameBlock's exposeShare): that lever writes two members, each view its own.
+    private static readonly string[] GeometryOnlyMembers = [SdfWorldPackage.GeometryOnly, SdfWorldPackage.ExposeShare];
+    private static readonly (string Member, SdfViewQuality Quality, uint Bits, string[] Members)[] QualityValues = [
+        (SdfWorldPackage.GeometryOnly, new() { GeometryOnly = true }, 1u, GeometryOnlyMembers),
+        (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u, [SdfWorldPackage.DisableAmbientOcclusion]),
+        (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u, [SdfWorldPackage.DisableSoftShadows]),
     ];
+    // Whether a block byte lies in one of the members a lever writes.
+    private static bool InMembers(int index, string[] members) => members.Any(predicate: member => {
+        var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
+
+        return ((index >= offset) && (index < (offset + sizeof(uint))));
+    });
 
     private static SdfFrame Frame() {
         var builder = new SdfProgramBuilder();
@@ -143,8 +167,20 @@ public sealed class SdfFrameBlockLawTests {
             FarDistance = 30f,
             IndirectTier = SdfIndirectTier.High,
             Lights = Lights(),
+            Occluders = Occluders(),
             Toon = new SdfToon { Enabled = true },
         };
+    }
+    // A full table of occluders about the camera, each of whose reach the view meets, so every word of the view's occluder
+    // mask is set.
+    private static SdfOccluders Occluders() {
+        var occluders = new SdfOccluders();
+
+        for (var index = 0; (index < SdfOccluders.MaxOccluders); index++) {
+            Assert.True(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = new Vector3(x: 1f, y: 2f, z: 3f), Radius = 0.5f, Reach = 4f, Strength = 0.5f }));
+        }
+
+        return occluders;
     }
     // Lights whose count, shadow light and curvature gains are none of them zero, and a full table of directionals, which
     // every view shades, so every word of the view's light mask is set.
@@ -212,7 +248,10 @@ public sealed class SdfFrameBlockLawTests {
                 InstanceMaskWordCount: 2u,
                 MeshDraws: 5u,
                 ScreenCount: 3u
-            ),
+            ) {
+                DebugOptions = new DebugViewOptions(Tolerance: 0.25f, Bodies: true, Band: 0.5f),
+                Field = new SdfFieldValues(Plane: new Vector4(x: 1f, y: 2f, z: 3f, w: 4f), Style: new Vector4(x: 5f, y: 6f, z: 7f, w: 8f), Scope: new Vector4(x: 9f, y: 0.25f, z: 0.75f, w: 1f)),
+            },
             view: 0,
             width: 300u
         );
@@ -258,7 +297,9 @@ public sealed class SdfFrameBlockLawTests {
                 Assert.True(condition: !bytes.ContainsAnyExcept(value: ((byte)0)), userMessage: member.Name);
             } else {
                 // Every component of a written value is non-zero here, so a component the writer misses reads as zero.
-                for (var component = 0; (component < member.Type.ComponentCount()); component++) {
+                var components = (UsedComponents.TryGetValue(key: member.Name, value: out var used) ? used : (int)member.Type.ComponentCount());
+
+                for (var component = 0; (component < components); component++) {
                     Assert.True(condition: bytes.Slice(length: 4, start: (component * 4)).ContainsAnyExcept(value: ((byte)0)), userMessage: $"{member.Name}[{component}]");
                 }
             }
@@ -286,12 +327,12 @@ public sealed class SdfFrameBlockLawTests {
 
         SdfFrame WithQuality(SdfViewQuality quality) => (defaults with { Views = [(defaults.Views[0] with { Quality = quality })] });
 
-        (string Member, SdfFrame Frame)[] levers = [
-            (SdfWorldPackage.ScreenFidelity, (defaults with { Views = [(defaults.Views[0] with { ScreenFidelity = 1f })] })),
-            (SdfWorldPackage.GeometryOnly, WithQuality(quality: new() { GeometryOnly = true })),
-            (SdfWorldPackage.DisableAmbientOcclusion, WithQuality(quality: new() { DisableAmbientOcclusion = true })),
-            (SdfWorldPackage.DisableScreenLights, (defaults with { DisableScreenLights = true })),
-            (SdfWorldPackage.DisableSoftShadows, WithQuality(quality: new() { DisableSoftShadows = true })),
+        (string[] Members, SdfFrame Frame)[] levers = [
+            ([SdfWorldPackage.ScreenFidelity], (defaults with { Views = [(defaults.Views[0] with { ScreenFidelity = 1f })] })),
+            (GeometryOnlyMembers, WithQuality(quality: new() { GeometryOnly = true })),
+            ([SdfWorldPackage.DisableAmbientOcclusion], WithQuality(quality: new() { DisableAmbientOcclusion = true })),
+            ([SdfWorldPackage.DisableScreenLights], (defaults with { DisableScreenLights = true })),
+            ([SdfWorldPackage.DisableSoftShadows], WithQuality(quality: new() { DisableSoftShadows = true })),
         ];
 
         static byte[] Block(SdfFrame frame) {
@@ -316,14 +357,13 @@ public sealed class SdfFrameBlockLawTests {
 
         var baseline = Block(frame: defaults);
 
-        foreach (var (member, frame) in levers) {
+        foreach (var (members, frame) in levers) {
             var block = Block(frame: frame);
-            var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
             var changed = Enumerable.Range(count: block.Length, start: 0).Where(predicate: index => (block[index] != baseline[index])).ToArray();
 
             Assert.NotEmpty(collection: changed);
             Assert.All(
-                action: index => Assert.InRange(actual: index, high: (offset + 3), low: offset),
+                action: index => Assert.True(condition: InMembers(index: index, members: members), userMessage: $"{members[0]} changed byte {index}"),
                 collection: changed
             );
         }
@@ -335,7 +375,7 @@ public sealed class SdfFrameBlockLawTests {
         var authored = Frame();
         var blocks = new[] { new byte[SdfFrameBlock.SizeBytes], new byte[SdfFrameBlock.SizeBytes] };
 
-        foreach (var (member, quality, bits) in QualityValues) {
+        foreach (var (member, quality, bits, members) in QualityValues) {
             var frame = (authored with { Views = [(authored.Views[0] with { Quality = quality }), (authored.Views[0] with { Quality = default })] });
 
             for (var view = 0; (view < blocks.Length); view++) {
@@ -360,7 +400,7 @@ public sealed class SdfFrameBlockLawTests {
             Assert.Equal(actual: BitConverter.ToUInt32(value: blocks[0], startIndex: offset), expected: bits);
             Assert.Equal(actual: BitConverter.ToUInt32(value: blocks[1], startIndex: offset), expected: 0u);
             for (var index = 0; (index < SdfFrameBlock.SizeBytes); index++) {
-                if ((index < offset) || (index >= (offset + sizeof(uint)))) {
+                if (!InMembers(index: index, members: members)) {
                     Assert.Equal(actual: blocks[1][index], expected: blocks[0][index]);
                 }
             }
