@@ -1,5 +1,5 @@
 using Puck.Abstractions.Documents;
-using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledProgram = Puck.State.Rules.CompiledProgram;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using RuleDataflow = Puck.State.Rules.RuleDataflow;
@@ -1009,7 +1009,7 @@ public static class WorldSearchCompilation {
     /// <param name="plan">The plan.</param>
     /// <param name="score">The compiled score program the job's judge reads, or <see langword="null"/>.</param>
     /// <param name="reason">Why the job cannot run, or empty.</param>
-    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long allowance, long position, WorldFactsCompileContext context, out SearchPlan? plan, out CompiledExpressionToken[]? score, out string reason) {
+    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long allowance, long position, WorldFactsCompileContext context, out SearchPlan? plan, out CompiledProgram? score, out string reason) {
         score = null;
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
@@ -1318,7 +1318,7 @@ public static class WorldSearchCompilation {
 
         if (row.Score is { } scoreProgram) {
             try {
-                score = RuleCompiler.CompileExpression(
+                score = (CompiledProgram)RuleCompiler.CompileExpression(
                     expression: scoreProgram,
                     kind: CellKind.Int,
                     ruleName: row.Name,
@@ -1460,7 +1460,7 @@ public static class WorldSearchCompilation {
     // Price only after the plan's authored inputs are validated. Keeping this separate lets admission reserve every
     // job's stamp rows before giving any job the remainder, without compiling its score a second time.
     private static bool TryPrice(WorldDefinition definition, WorldSearchRow row, long judgeCost, long allowance, long position,
-        WorldFactsCompileContext context, SearchShapePlan[] shapes, int cellCount, int chanceCells, CompiledExpressionToken[]? score,
+        WorldFactsCompileContext context, SearchShapePlan[] shapes, int cellCount, int chanceCells, CompiledProgram? score,
         out SearchWork work, out string reason) {
         work = default;
         var scoreCost = ((score is null)
@@ -1523,7 +1523,7 @@ public static class WorldSearchCompilation {
     /// <param name="judges">Each plan's compiled judge rules.</param>
     /// <param name="scores">Each plan's score, or null when absent.</param>
     /// <param name="reason">Why planning refused, or empty on success.</param>
-    public static bool TryPlanAll(WorldRuleCompilation compilation, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) {
+    public static bool TryPlanAll(WorldRuleCompilation compilation, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledProgram?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(compilation);
         return TryPlanAll(compilation.Definition, compilation.Rules, out plans, out judges, out scores, out reason);
     }
@@ -1531,7 +1531,7 @@ public static class WorldSearchCompilation {
     // Every job's plan against the compiled rules. Each job is priced against the search lane
     // (SearchCapacity.MaxWorkUnitsPerStep) less its own per-tick upkeep, never against what the rules' sheet or
     // another job leaves, so no other rule or job changes whether one job is admitted.
-    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) {
+    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledProgram?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
@@ -1539,7 +1539,7 @@ public static class WorldSearchCompilation {
 
         judges = new CompiledRule[rows.Count][];
         plans = new SearchPlan[rows.Count];
-        scores = new CompiledExpressionToken[]?[rows.Count];
+        scores = new CompiledProgram?[rows.Count];
 
         if (rows.Count == 0) {
             reason = string.Empty;

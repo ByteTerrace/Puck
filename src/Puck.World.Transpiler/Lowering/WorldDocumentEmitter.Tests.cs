@@ -312,11 +312,14 @@ public static partial class WorldDocumentEmitter {
             : slug
         );
     }
-    // The cell key a folded value is recorded under: the row's own name for a slot, and the generated `row$key` for
-    // a cell of a keyed row, so no two reads share a key and none shares the status key. A read the key cannot name —
-    // a generated or reserved row, or a key decided when the rule fires — records nothing.
+    // The cell key a folded value is recorded under: the row's own name for a slot, and `row$key` for a cell of a
+    // keyed row. A module instance's row is named under its alias (`s0$plies`, GeneratedName.Qualify) and is recorded
+    // by that name like any other. A row the engine keeps under the reserved prefix (`$pool$…`) records nothing, so no
+    // recorded key opens with the prefix the verdict row's own cells (`$status`, `$firedTick`) open with; nor does a
+    // key decided when the rule fires, whose spelling carries the joiner. An author row named as an alias and keyed
+    // by an instance's row name (`s0` keyed `plies`) would spell the same key as that slot; the first read keeps it.
     private static string? SawKey(string state, string? key) {
-        if (state.Contains(value: GeneratedName.Joiner)) {
+        if (state.StartsWith(value: GeneratedName.Joiner)) {
             return null;
         }
 
@@ -326,7 +329,7 @@ public static partial class WorldDocumentEmitter {
 
         return (key.Contains(value: GeneratedName.Joiner)
             ? null
-            : GeneratedName.Join(state, key)
+            : GeneratedName.Append(name: state, part: key)
         );
     }
     // Every (row, key) a lowered gate reads. A `compareValue` node holds operand text rather than a row, so it
@@ -1430,6 +1433,29 @@ public static partial class WorldDocumentEmitter {
         var witnesses = new SortedDictionary<CellKind, JsonArray>();
 
         foreach (var (readState, readKey) in reads) {
+            // A reduction over a whole Int row (`sum(row)`, `count(row)`: `$reduce:<op>:<row>` with no filter) answers
+            // one integer, which is recorded under `<row>$<op>` in the verdict row, copied from the same channel.
+            if (
+                (readKey is null) &&
+                readState.StartsWith(value: RuleFacts.ReducePrefix, comparisonType: StringComparison.Ordinal) &&
+                (readState[RuleFacts.ReducePrefix.Length..].Split(separator: ':') is [{ Length: > 0 } reduceOp, { Length: > 0 } reduceRow]) &&
+                ((KindOfRow(name: reduceRow, state: state) ?? ((inheritedState is null) ? null : KindOfRow(name: reduceRow, state: inheritedState))) == CellKind.Int)
+            ) {
+                var reduceKey = GeneratedName.Append(name: reduceRow, part: reduceOp);
+
+                if (folded.Add(item: (CellKind.Int, reduceKey))) {
+                    cells.AppendNode(item: new JsonObject { ["key"] = reduceKey, ["value"] = 0 });
+                    effects.AppendNode(item: new JsonObject {
+                        ["$type"] = "setState",
+                        ["fromState"] = readState,
+                        ["key"] = reduceKey,
+                        ["state"] = row,
+                    });
+                }
+
+                continue;
+            }
+
             // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
             // read of a Fixed, Bool or Text row is a cell of that kind's witness.
             if (

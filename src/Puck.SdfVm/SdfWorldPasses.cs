@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;

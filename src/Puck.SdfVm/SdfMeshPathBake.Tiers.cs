@@ -221,7 +221,12 @@ public sealed partial class SdfMeshPathBake {
     }
     // The units a group's lattice is in: its slot's for a dynamic group (SdfMeshGeometryBuilder.UnitsOf), metres for any
     // other.
-    private float UnitsOf(Group group) => ((group.Dynamic && (group.Slot < m_slotPoses.Length)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_slotPoses[group.Slot]) : 1f);
+    private float UnitsOf(SdfMeshBakeGroup group) {
+        // Read once: a plan made on a build's thread asks a demanded tier while the frame's thread may replace the array.
+        var poses = m_slotPoses;
+
+        return ((group.Dynamic && ((uint)group.Slot < (uint)poses.Length)) ? SdfMeshGeometryBuilder.UnitsOf(transform: poses[group.Slot]) : 1f);
+    }
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy. Also the
     // fewest units a copy is measured in.
@@ -745,8 +750,9 @@ public sealed partial class SdfMeshPathBake {
 
             if (!drawn.Done || (drawn.Mesh is null)) { continue; }
 
-            var now = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias, pixel: group.DemandPixel);
-            var risen = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias + 1), pixel: group.DemandPixel);
+            var finest = FinestTierNow(group: group);
+            var now = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: bias, pixel: group.DemandPixel);
+            var risen = SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: finest, floor: group.FloorTier, halfRungs: (bias + 1), pixel: group.DemandPixel);
 
             if ((risen > now) && (risen >= drawn.Tier)) { return true; }
         }

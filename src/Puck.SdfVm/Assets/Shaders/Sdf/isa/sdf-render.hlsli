@@ -65,7 +65,7 @@
 #define SDF_PAINT_VECTORS_PER_ENTRY    11u
 #define SDF_MAX_PAINTS_PER_MATERIAL    32u
 #define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
-#define SDF_MAX_SURFACE_TEXTS          256u
+#define SDF_MAX_SURFACE_TEXTS          1024u
 #define SDF_SURFACE_TEXT_TINT          0x00000001u
 
 // The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).

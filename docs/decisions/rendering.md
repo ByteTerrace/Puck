@@ -2204,6 +2204,46 @@ authored fill, and no volume is traced.
 
 [Decisions](README.md) · [The programme](../plans/rendering.md)
 
+## The maths a screen shows is the engine's own formula tree
+
+**A console that teaches the maths behind an exhibit shows the arithmetic the
+engine runs, typeset from the one formula tree every reader lowers, never
+hand-typed (the owner's request for the shape stations' learn panels).** Every
+primitive's and blend's distance is one formula in `SdfFieldFormulas`, already
+lowered to the evaluator's fixed point, the kernels' HLSL, the wide, dual and
+affine readers. `SdfFormulaTypesetting` is one more lowering of the same tree,
+to math markup: fractions, roots, absolute values, norms, scripts, `min` and
+`max`, each operand a named term, the formula's local bindings written in
+place for its equation and its helpers expanded into a step by step. The
+catalogue lists its formulas through the generated `FormulaUses`, so a shape
+or blend an author adds is typeset with no further work, and a change to a
+formula changes what every screen shows in the same build.
+
+Options weighed: hand-written TeX strings per exhibit (drift the moment a
+formula changes, and a second statement of every formula); a typeset form
+recorded at build time (a cache with nothing to gain over lowering at load,
+since the tree is in memory); a dedicated maths glyph tier in the shaders (a
+second text path). Lowering the tree once more and setting the result through
+the surface text tier closes all three: one formula, one text path, and a
+rule is a glyph quad.
+
+The markup describes the arithmetic operand for operand, not the carriers'
+rounding: the fixed reader's widening primitives (a segment parameter divided
+once, a scaled ratio rounded once) read as the plain expression they compute.
+A reader-only operand (a reciprocal only the kernels read) is that reader's
+form of another and is not a term. The three nodes that stand for a loop the
+language does not carry (the ellipse's root, the noises, a strand's search)
+read as named functions. `FormulaTypesettingLawTests` holds every typeset
+formula to well-formed markup that names every term it reads.
+
+**A scrub reshapes without a bake where the mechanism allows it.** A
+subject's size is its creation's `sizeBy`, scaled about `sizeAbout` so a
+stand's exhibit grows about its own centre: the root matrix changes and
+nothing bakes, so a scrub is live. A term that changes the contour itself (a
+blend's smooth radius) needs a new mesh: `ShapeDocument.Smooth` binds state as
+a position does, so each scrub step re-emits the creation and rebakes the
+groups its blend sits in, and the formula's number follows at once.
+
 ## In-world devices and screens
 
 **An engaged screen is the in-world screen, framed until it passes for an

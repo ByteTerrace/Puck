@@ -55,9 +55,11 @@ template arrivalFrame(color, roughness = 0.45, specular = 0.2, post = 0.08, labe
   name: label
   palette [{ color: color, roughness: roughness, specular: specular }]
   schema: "puck.creation.v2"
+  // A box's face is its local +Z: the rim's half turn faces the glass to the creation's front (-Z).
   shape Box "rim" {
     material: 0
     position [0, 1.3, 0]
+    rotation [0, 1, 0, 0]
     scale [1.12, 1.42, 0.04]
   }
   shape Box "opening" {

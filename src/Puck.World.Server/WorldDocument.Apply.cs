@@ -1018,7 +1018,7 @@ public sealed partial class WorldDocument {
 
     // The snapshot's partitioned phase: partition p writes entity indices [256p, 256(p+1)) at the offset the serial
     // count assigned it. Retained across ticks, so a fork allocates nothing.
-    private sealed class SnapshotRows(WorldDocument document) : Puck.Hosting.Jobs.IJobPartitions {
+    private sealed class SnapshotRows(WorldDocument document) : Puck.Abstractions.Jobs.IJobPartitions {
         public WorldPopulation Population { get; set; } = null!;
 
         public void Run(int partition) {

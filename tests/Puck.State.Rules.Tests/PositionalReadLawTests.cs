@@ -54,7 +54,7 @@ public sealed class PositionalReadLawTests {
             Assert.True(condition: RuleExpressions.Evaluate(
                 frame: ref frame,
                 kind: CellKind.Int,
-                program: program
+                program: new CompiledProgram(tokens: program)
             ).TryFinite(raw: out var actual));
 
             var time = ArenaTime.Origin;

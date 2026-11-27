@@ -1,8 +1,11 @@
+using Puck.Abstractions.Jobs;
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -89,8 +92,21 @@ public static class SdfMeshCollapse {
     public static readonly WorkKind Tried = new(name: "sdf.collapse.tried", unit: "edges", workClass: WorkClass.Pacing);
     /// <summary>Counts the collapses taken, a part of <see cref="Tried"/>.</summary>
     public static readonly WorkKind Taken = new(name: "sdf.collapse.taken", unit: "edges", workClass: WorkClass.Pacing);
+    /// <summary>Counts the candidates measured side by side ahead of their pass's turn, a part of <see cref="Priced"/>.</summary>
+    public static readonly WorkKind Speculated = new(name: "sdf.collapse.speculated", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the speculated candidates an earlier commit of their block reached, which their turn measured
+    /// again, a part of <see cref="Speculated"/>.</summary>
+    public static readonly WorkKind Redone = new(name: "sdf.collapse.redone", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the places a pass left out because every target's kept refusal still stood (the collapser's quiet
+    /// places), beside <see cref="Priced"/>, the places it listed.</summary>
+    public static readonly WorkKind Quiet = new(name: "sdf.collapse.quiet", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried listed from their source fans to measure.</summary>
+    public static readonly WorkKind Listed = new(name: "sdf.collapse.listed", unit: "samples", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried measured against their laid-out triangles, speculated
+    /// measures included.</summary>
+    public static readonly WorkKind Measured = new(name: "sdf.collapse.measured", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Gets the collapse's work, process-wide: what building every baked mesh's levels costs, counted, never timed.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Tried, Taken]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Quiet, Tried, Taken, Speculated, Redone, Listed, Measured]);
 
     /// <summary>Returns a mesh with its coarser levels of detail.</summary>
     /// <param name="mesh">The merged mesh.</param>
@@ -159,6 +175,7 @@ public static class SdfMeshCollapse {
             if ((clusterOf is not null) && (level < ClusteredRuns)) { collapser.CountClusters(into: runs); }
         }
 
+        collapser.CountSamples();
         if (levels.Count == 0) { return mesh; }
 
         var clusters = ((clusterOf is null) ? null : collapser.Clusters(clusters: clusterCount, runs: runs));
@@ -313,7 +330,7 @@ public static class SdfMeshCollapse {
     // crease. Each vertex and material its triangles carry is a sample, tracked to the triangle it is measured to.
     // Collapses run in passes: each pass lists every place's triangles, and a place a collapse moved triangles onto takes
     // part in no other collapse that pass, since its list misses them.
-    private sealed class Collapser {
+    private sealed class Collapser : IJobPartitions {
         private const byte Free = 0;
         private const byte Locked = 2;
         private const byte Slides = 1;
@@ -400,19 +417,47 @@ public static class SdfMeshCollapse {
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
         private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
 
-        private readonly OwnedBuffer<int> m_stamp;
         private readonly OwnedBuffer<byte> m_kind;
         private readonly OwnedBuffer<int> m_slideTargets;
         private readonly OwnedBuffer<int> m_slideCounts;
         private readonly double m_lineLimit;
-        private readonly OwnedBuffer<double> m_candidateCosts;
+        private readonly OwnedBuffer<(double Cost, int Place)> m_candidateKeys;
         private readonly OwnedBuffer<int> m_candidatePlaces;
 
-        private int m_pass;
-        private int m_stampValue;
+        // A pass's speculation (Speculate): the block a commit last stamped each place in, the block's number, each
+        // candidate's speculated outcomes (its first record and their count, or -1 for a candidate the block did not
+        // speculate), and the records themselves, a target, its outcome and the budget its refusal stands through.
+        private readonly OwnedBuffer<int> m_blockStamp;
+        private int m_block;
+        // The quiet places (TryPlace): each one's revision and the budget its refusals stand through when it went quiet,
+        // the cost a pass listed it at and the pass that left it out of its candidates; the woken places of this pass
+        // still to take (Wake), cheapest first; and the candidate the pass is taking, whose key orders a woken place.
+        private readonly OwnedBuffer<bool> m_quiet;
+        private readonly OwnedBuffer<int> m_quietRevision;
+        private readonly OwnedBuffer<int> m_quietThrough;
+        private readonly OwnedBuffer<double> m_quietCost;
+        private readonly OwnedBuffer<int> m_leftOut;
+        private readonly OwnedBuffer<(double Cost, int Place)> m_woken;
+        private int m_wokenCount;
+        private (double Cost, int Place) m_taking;
+        private readonly OwnedBuffer<int> m_specFirst;
+        private readonly OwnedBuffer<int> m_specCount;
+        private readonly OwnedBuffer<int> m_specTarget;
+        private readonly OwnedBuffer<Outcome> m_specOutcome;
+        private readonly OwnedBuffer<int> m_specThrough;
+        private readonly List<int> m_speculating = [];
+        private readonly ConcurrentStack<Collapser> m_workers = new();
 
-        // Scratch every collapse reuses.
+        private int m_pass;
+
+        // Scratch every collapse reuses. A speculating worker (the sharing constructor) holds its own, so every method that measures a collapse
+        // writes only these and reads the shared tables, which no measure writes.
         private readonly List<int> m_from = [];
+        // The places about the prepared fan, which every neighbour's link test reads (PrepareFrom, Links).
+        private readonly List<int> m_neighbours = [];
+        // The edge's two triangles of the collapse TryCollapse took last, which CommitTaken commits.
+        private int m_first;
+        private int m_second;
         private readonly List<int> m_to = [];
         private readonly List<int> m_targetPlaces = [];
         private readonly List<int> m_features = [];
@@ -429,18 +474,17 @@ public static class SdfMeshCollapse {
         private readonly List<Source> m_sources = [];
 
         private int m_source;
-        private bool m_sourcesListed;
+        private int m_sourcesListed;
+        // The samples this collapser listed and measured, which Levels adds to the process's work (CountSamples).
+        private long m_listedSamples;
+        private long m_measuredSamples;
         private bool m_linesListed;
         private int m_laidCount;
 
-        // Lines' scratch: each fan triangle's corner and the places after it, and per place the first triangle whose
-        // second place after the corner it is, with how many are; Lines clears every place it reads.
+        // Lines' scratch: each fan triangle's corner and the places after it.
         private int[] m_ringCorner = new int[16];
         private int[] m_ringNext = new int[16];
         private int[] m_ringAfter = new int[16];
-
-        private readonly OwnedBuffer<int> m_afterFirst;
-        private readonly OwnedBuffer<int> m_afterCount;
 
         private int[] m_fanCorner = new int[16];
         private int[] m_fanNext = new int[16];
@@ -557,17 +601,26 @@ public static class SdfMeshCollapse {
             m_touched = scope.Buffer<int>(length: m_places, clear: true);
             m_changed = scope.Buffer<int>(length: m_places, clear: true);
             m_revisions = scope.Buffer<int>(length: m_places, clear: true);
-            m_stamp = scope.Buffer<int>(length: m_places, clear: true);
             m_fanEdges = scope.Buffer<(int, int)>(length: m_places);
-            m_afterFirst = scope.Buffer<int>(length: m_places, clear: true);
-            m_afterCount = scope.Buffer<int>(length: m_places, clear: true);
+            m_blockStamp = scope.Buffer<int>(length: m_places, clear: true);
+            m_quiet = scope.Buffer<bool>(length: m_places, clear: true);
+            m_quietRevision = scope.Buffer<int>(length: m_places);
+            m_quietThrough = scope.Buffer<int>(length: m_places);
+            m_quietCost = scope.Buffer<double>(length: m_places);
+            m_leftOut = scope.Buffer<int>(length: m_places, clear: true);
+            m_woken = scope.Buffer<(double, int)>(length: m_places);
             m_kind = scope.Buffer<byte>(length: m_places, clear: true);
             m_slideTargets = scope.Buffer<int>(length: (SlideTargets * m_places), clear: true);
             m_slideCounts = scope.Buffer<int>(length: m_places, clear: true);
             m_prices = scope.RentList<(double Cost, int Place)>(capacity: (3 * m_triangles));
             m_priceRuns = scope.Buffer<(int, int, int, bool)>(length: m_places, clear: true);
-            m_candidateCosts = scope.Buffer<double>(length: m_places);
+            m_candidateKeys = scope.Buffer<(double, int)>(length: m_places);
             m_candidatePlaces = scope.Buffer<int>(length: m_places);
+            m_specFirst = scope.Buffer<int>(length: SpeculativeBlock);
+            m_specCount = scope.Buffer<int>(length: SpeculativeBlock);
+            m_specTarget = scope.RentList<int>(capacity: (8 * SpeculativeBlock));
+            m_specOutcome = scope.RentList<Outcome>(capacity: (8 * SpeculativeBlock));
+            m_specThrough = scope.RentList<int>(capacity: (8 * SpeculativeBlock));
             m_quadrics = scope.Buffer<double>(length: (10 * m_places), clear: true);
             m_tracked = scope.Buffer<int>(length: m_triangles);
             m_stray = scope.Buffer<double>(length: m_triangles, clear: true);
@@ -637,6 +690,74 @@ public static class SdfMeshCollapse {
             }
             m_feature = scope.Buffer<double>(length: m_places);
             if (m_waivesNormals) { FeatureDistances(scope: scope); }
+        }
+        // A worker for Speculate: every table is the shared collapser's, read and never written, and every scratch field
+        // (the lists and arrays a measure fills) is the worker's own, so workers measure side by side.
+        private Collapser(Collapser shared) {
+            m_placeOf = shared.m_placeOf;
+            m_point = shared.m_point;
+            m_normals = shared.m_normals;
+            m_ownVertices = shared.m_ownVertices;
+            m_madeVertices = shared.m_madeVertices;
+            m_feature = shared.m_feature;
+            m_waivesNormals = shared.m_waivesNormals;
+            m_corners = shared.m_corners;
+            m_cornerPlace = shared.m_cornerPlace;
+            m_materials = shared.m_materials;
+            m_alive = shared.m_alive;
+            m_quadrics = shared.m_quadrics;
+            m_places = shared.m_places;
+            m_triangles = shared.m_triangles;
+            m_carriesMaterials = shared.m_carriesMaterials;
+            m_sampleVertex = shared.m_sampleVertex;
+            m_sampleCount = shared.m_sampleCount;
+            m_sampleMaterial = shared.m_sampleMaterial;
+            m_sampleDistance = shared.m_sampleDistance;
+            m_sampleNext = shared.m_sampleNext;
+            m_tracked = shared.m_tracked;
+            m_lineX = shared.m_lineX;
+            m_lineY = shared.m_lineY;
+            m_lineZ = shared.m_lineZ;
+            m_lineDistance = shared.m_lineDistance;
+            m_lineNext = shared.m_lineNext;
+            m_lines = shared.m_lines;
+            m_stray = shared.m_stray;
+            m_fanStart = shared.m_fanStart;
+            m_fan = shared.m_fan;
+            m_filled = shared.m_filled;
+            m_touched = shared.m_touched;
+            m_changed = shared.m_changed;
+            m_revisions = shared.m_revisions;
+            m_rejected = shared.m_rejected;
+            m_errors = shared.m_errors;
+            m_cosines = shared.m_cosines;
+            m_kind = shared.m_kind;
+            m_slideTargets = shared.m_slideTargets;
+            m_slideCounts = shared.m_slideCounts;
+            m_lineLimit = shared.m_lineLimit;
+            m_candidateKeys = shared.m_candidateKeys;
+            m_candidatePlaces = shared.m_candidatePlaces;
+            m_blockStamp = shared.m_blockStamp;
+            m_specFirst = shared.m_specFirst;
+            m_specCount = shared.m_specCount;
+            m_specTarget = shared.m_specTarget;
+            m_specOutcome = shared.m_specOutcome;
+            m_specThrough = shared.m_specThrough;
+            m_quiet = shared.m_quiet;
+            m_quietRevision = shared.m_quietRevision;
+            m_quietThrough = shared.m_quietThrough;
+            m_quietCost = shared.m_quietCost;
+            m_leftOut = shared.m_leftOut;
+            m_woken = shared.m_woken;
+            m_prices = shared.m_prices;
+            m_priceRuns = shared.m_priceRuns;
+            m_fanEdges = shared.m_fanEdges;
+            m_clusterOf = shared.m_clusterOf;
+            m_clusters = shared.m_clusters;
+            m_clusterLow = shared.m_clusterLow;
+            m_clusterHigh = shared.m_clusterHigh;
+            m_seam = shared.m_seam;
+            m_seamsHeld = shared.m_seamsHeld;
         }
 
         /// <summary>Gets the vertices the collapses made past the mesh's own.</summary>
@@ -765,57 +886,292 @@ public static class SdfMeshCollapse {
             m_pass++;
 
             var count = 0;
+            var quiet = 0L;
 
+            m_wokenCount = 0;
             for (var place = 0; (place < m_places); place++) {
                 if (m_kind[place] == Locked) { continue; }
 
                 var prices = Prices(place);
-                m_candidateCosts[count] = prices.IsEmpty ? double.PositiveInfinity : prices[0].Cost;
-                m_candidatePlaces[count] = place;
+                var cost = (prices.IsEmpty ? double.PositiveInfinity : prices[0].Cost);
+
+                // A quiet place still quiet would skip every target by its kept refusals: the pass leaves it out, and a
+                // commit that moves its revision wakes it at its turn (Wake).
+                if (m_quiet[place] && (m_quietRevision[place] == m_revisions[place]) && (m_budget <= m_quietThrough[place])) {
+                    m_quietCost[place] = cost;
+                    m_leftOut[place] = m_pass;
+                    quiet++;
+                    continue;
+                }
+                m_quiet[place] = false;
+                m_candidateKeys[count] = (cost, place);
                 count++;
             }
 
-            // The sort draws on no randomness, so places of equal cost come out in one order on every run.
-            m_candidateCosts.GetSpan().Slice(start: 0, length: count).Sort(items: m_candidatePlaces.GetSpan().Slice(start: 0, length: count));
+            // Candidates are taken in one total order, cheapest first and the lower place among equal costs, so where a
+            // candidate stands never depends on which other places are listed (a woken place's turn, Wake).
+            var keys = m_candidateKeys.GetSpan()[..count];
+
+            keys.Sort();
+            for (var at = 0; (at < count); at++) { m_candidatePlaces[at] = keys[at].Place; }
 
             var taken = 0;
             var tried = 0L;
+            var speculated = 0L;
+            var redone = 0L;
+            // A pass with enough places is taken in blocks whose candidates are measured side by side first (Speculate);
+            // any other runs every candidate in order, as a block of one does.
+            var parallel = (count >= SpeculativeCandidates);
 
-            for (var at = 0; (at < count); at++) {
-                var place = m_candidatePlaces[at];
+            for (var start = 0; (start < count); start += SpeculativeBlock) {
+                var end = Math.Min(val1: count, val2: (start + SpeculativeBlock));
+                // A block speculates only while other threads could help, since its caller checks and partly repeats
+                // what they measured; either way the pass takes the same collapses, so only the speculated and redone
+                // counts follow the machine's load.
+                var speculating = (parallel && !PoolFork.Saturated);
 
-                if (m_touched[place] == m_pass) { continue; }
-                if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
+                if (speculating) {
+                    speculated += Speculate(cosine: cosine, end: end, error: error, start: start);
+                }
+                for (var at = start; (at < end); at++) {
+                    var place = m_candidatePlaces[at];
 
-                var prepared = false;
-                foreach (var (_, target) in Prices(place)) {
-                    if (m_touched[target] == m_pass || Refused(place, target)) { continue; }
-                    if (!prepared) { PrepareFrom(place); prepared = true; }
-                    tried++;
-                    var outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
+                    taken += TakeWoken(before: m_candidateKeys[at], cosine: cosine, error: error, tried: ref tried);
+                    m_taking = m_candidateKeys[at];
 
-                    if (outcome == Outcome.Taken) {
-                        taken++;
-                        break;
+                    var first = (speculating ? m_specFirst[(at - start)] : -1);
+                    var clean = ((first >= 0) && Clean(place: place));
+
+                    redone += (((first >= 0) && !clean) ? 1 : 0);
+                    if (!clean) {
+                        if (m_touched[place] == m_pass) { continue; }
+                        if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
                     }
-                    // A refusal that read the neighbour's vertices (a corner's third face matched to one) is kept by no
-                    // revision; it is tried again.
-                    if (outcome == Outcome.RefusedUnkept) { continue; }
-                    // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
-                    // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
-                    m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
-                        Outcome.RefusedLinks => m_revisions[target],
-                        Outcome.RefusedMeasure => MeasuredAt(budget: m_refusedThrough),
-                        _ => AnyRevision,
-                    });
+                    taken += TryPlace(cosine: cosine, error: error, place: place, records: (clean ? first : 0), recordsEnd: (clean ? (first + m_specCount[(at - start)]) : 0), tried: ref tried);
                 }
             }
+            taken += TakeWoken(before: (double.PositiveInfinity, int.MaxValue), cosine: cosine, error: error, tried: ref tried);
 
             ProcessWork.Count(kind: Passes);
             ProcessWork.Add(amount: count, kind: Priced);
             ProcessWork.Add(amount: tried, kind: Tried);
             ProcessWork.Add(amount: taken, kind: Taken);
+            ProcessWork.Add(amount: speculated, kind: Speculated);
+            ProcessWork.Add(amount: redone, kind: Redone);
+            ProcessWork.Add(amount: quiet, kind: Quiet);
             return taken;
+        }
+
+        // Quiet places: a place whose last turn skipped or refused every target, each refusal kept by the place's own
+        // revision and the level's budget alone (no link refusal, no unkept refusal, no target skipped as touched), skips
+        // every target again until its revision moves or the budget passes what its measured refusals stand through.
+        //
+        // Invariant: a pass that leaves quiet places out takes exactly the collapses and refusals a pass listing them
+        // takes. At its turn a listed quiet place tries nothing and writes nothing, and only Commit moves a revision; a
+        // commit that moves a left-out place's revision wakes it (Wake), and the pass takes it at the turn its listed
+        // key would have had, the order being total (cost, then place), or not at all if that turn has passed, where the
+        // listed place stood quiet. Enforced by the one revision writer, Commit, calling Wake, and by TryPlace alone
+        // making a place quiet. Where it stops: a new input a kept refusal reads beyond the place's revision and the
+        // budget (a link refusal reads the target's revision, so a place holding one never goes quiet) must wake or
+        // disqualify the place here.
+
+        // Takes the woken places whose turn comes before `before`, cheapest first.
+        private int TakeWoken(in (double Cost, int Place) before, double error, double cosine, ref long tried) {
+            var taken = 0;
+
+            while ((m_wokenCount > 0) && (m_woken[0].CompareTo(other: before) < 0)) {
+                var key = BinaryHeap.Pop(count: ref m_wokenCount, heap: m_woken.GetSpan(), order: default(ItemThenIndexOrder<double>));
+                var place = key.Place;
+
+                m_taking = key;
+                if (m_touched[place] == m_pass) { continue; }
+                if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
+                taken += TryPlace(cosine: cosine, error: error, place: place, records: 0, recordsEnd: 0, tried: ref tried);
+            }
+
+            return taken;
+        }
+        // Wakes a quiet place whose revision a commit moved: one the pass left out takes its turn later in the pass when
+        // that turn is still to come.
+        private void Wake(int place) {
+            if (!m_quiet[place]) { return; }
+            m_quiet[place] = false;
+            if (m_leftOut[place] != m_pass) { return; }
+            m_leftOut[place] = 0;
+
+            var key = (m_quietCost[place], place);
+
+            if (key.CompareTo(other: m_taking) > 0) { BinaryHeap.Push(count: ref m_wokenCount, heap: m_woken.GetSpan(), item: key, order: default(ItemThenIndexOrder<double>)); }
+        }
+        // Tries a place's targets cheapest first, taking the first collapse every bound holds and keeping each refusal
+        // until what it read changes; returns 1 when it took one, and makes the place quiet when every refusal it kept
+        // stands on its own revision and the budget alone. The records between `records` and `recordsEnd` are a clean
+        // speculation's outcomes of this same loop (Speculate), taken in place of measuring again; the loop measures
+        // every target past them, and the taken collapse, itself.
+        private int TryPlace(int place, double error, double cosine, int records, int recordsEnd, ref long tried) {
+            var prepared = false;
+            var quiet = true;
+            var through = int.MaxValue;
+
+            foreach (var (_, target) in Prices(place)) {
+                if (m_touched[target] == m_pass) { quiet = false; continue; }
+                if (Refused(place, target)) {
+                    var low = PackedIntPair.Low(value: m_rejected[PackedIntPair.Pack(high: place, low: target)]);
+
+                    quiet &= (low < 0);
+                    through = ((low < AnyRevision) ? Math.Min(val1: through, val2: (AnyRevision - low)) : through);
+                    continue;
+                }
+                Outcome outcome;
+
+                if ((records < recordsEnd) && (m_specTarget[records] == target) && (m_specOutcome[records] != Outcome.Taken)) {
+                    outcome = m_specOutcome[records];
+                    m_refusedThrough = m_specThrough[records];
+                    records++;
+                } else {
+                    records = recordsEnd;
+                    if (!prepared) { PrepareFrom(place); prepared = true; }
+                    outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
+                }
+                tried++;
+                if (outcome == Outcome.Taken) {
+                    CommitTaken(from: place, to: target);
+                    return 1;
+                }
+                // A refusal that read the neighbour's vertices (a corner's third face matched to one) is kept by no
+                // revision; it is tried again.
+                if (outcome == Outcome.RefusedUnkept) { quiet = false; continue; }
+                // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
+                // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
+                m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
+                    Outcome.RefusedLinks => m_revisions[target],
+                    Outcome.RefusedMeasure => MeasuredAt(budget: m_refusedThrough),
+                    _ => AnyRevision,
+                });
+                quiet &= (outcome != Outcome.RefusedLinks);
+                through = ((outcome == Outcome.RefusedMeasure) ? Math.Min(val1: through, val2: m_refusedThrough) : through);
+            }
+            if (quiet) {
+                m_quiet[place] = true;
+                m_quietRevision[place] = m_revisions[place];
+                m_quietThrough[place] = through;
+            }
+
+            return 0;
+        }
+
+        // The candidates a pass must hold before its blocks are speculated, and the candidates a block holds.
+        private const int SpeculativeCandidates = 4096;
+        private const int SpeculativeBlock = 1024;
+
+        // Measures a block of a pass's candidates side by side before the pass takes them in order, recording each one's
+        // outcomes (m_specFirst, m_specCount and the records) for TryPlace to take in place of measuring again.
+        //
+        // Invariant: a pass that speculates takes exactly the collapses, refusals and kept refusals a pass taking every
+        // candidate in order takes, so the levels are the same function of the mesh. A speculation measures against the
+        // tables as the block's earlier commits found them; it stands only where no commit of the block since wrote
+        // anything it read, which Clean decides from the places Commit stamps. Enforced by the two doors: a worker reads
+        // the shared tables and writes only its own scratch and its candidate's records (the sharing constructor, IJobPartitions.Run), and only Commit writes
+        // what a measure reads, stamping every place of both fans it changes. Where it stops: a new write a commit makes
+        // outside those places, or a new read a measure makes outside the place's fan, would let a stale speculation
+        // stand, so either must stamp or check its places here. Returns the candidates speculated.
+        private int Speculate(int start, int end, double error, double cosine) {
+            m_block++;
+            m_speculating.Clear();
+
+            var records = 0;
+
+            // Each candidate's preamble runs here, in order, as TryPlace's caller would run it: a candidate that a commit
+            // of this block then reaches is stamped, so the pass runs its preamble again.
+            for (var at = start; (at < end); at++) {
+                var place = m_candidatePlaces[at];
+
+                m_specFirst[(at - start)] = -1;
+                if (m_touched[place] == m_pass) { continue; }
+                if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
+                m_specFirst[(at - start)] = records;
+                records += Prices(place).Length;
+                m_speculating.Add(item: (at - start));
+            }
+            m_specTarget.Resize(length: records, clear: false, preserve: false);
+            m_specOutcome.Resize(length: records, clear: false, preserve: false);
+            m_specThrough.Resize(length: records, clear: false, preserve: false);
+            (m_specStart, m_specError, m_specCosine) = (start, error, cosine);
+            PoolFork.Run(body: this, partitions: PartitionRuns.Count(count: m_speculating.Count, run: SpeculativeRun));
+
+            return m_speculating.Count;
+        }
+        // Adds the samples this collapser and its workers listed and measured to the process's work.
+        public void CountSamples() {
+            var (listed, measured) = (m_listedSamples, m_measuredSamples);
+
+            foreach (var worker in m_workers) { (listed, measured) = ((listed + worker.m_listedSamples), (measured + worker.m_measuredSamples)); }
+            ProcessWork.Add(amount: listed, kind: Listed);
+            ProcessWork.Add(amount: measured, kind: Measured);
+        }
+        // The speculated candidates one partition of a block measures.
+        private const int SpeculativeRun = 16;
+        // The block Speculate is measuring: its first candidate and the level's bounds.
+        private int m_specStart;
+        private double m_specError;
+        private double m_specCosine;
+
+        // One partition of Speculate's block, on a worker: a collapser sharing this one's tables, with scratch of its own,
+        // at this pass and budget, measures each of the partition's candidates.
+        void IJobPartitions.Run(int partition) {
+            var worker = (m_workers.TryPop(result: out var kept) ? kept : new Collapser(shared: this));
+            var (first, end) = PartitionRuns.Of(count: m_speculating.Count, partition: partition, run: SpeculativeRun);
+
+            worker.m_pass = m_pass;
+            worker.m_budget = m_budget;
+            try {
+                for (var index = first; (index < end); index++) {
+                    var slot = m_speculating[index];
+
+                    m_specCount[slot] = worker.Evaluate(cosine: m_specCosine, error: m_specError, first: m_specFirst[slot], place: m_candidatePlaces[(m_specStart + slot)], owner: this);
+                }
+            } finally {
+                m_workers.Push(item: worker);
+            }
+        }
+        // Whether a speculated candidate's records still stand: no commit of the block stamped the place or a place of its
+        // fan. Every target is a place of the fan, and a commit that changes a triangle stamps all its places, so a
+        // changed fan, a changed target fan and every refusal, quadric, sample and line the measures read show here.
+        private bool Clean(int place) {
+            if (m_blockStamp[place] == m_block) { return false; }
+            for (var at = m_fanStart[place]; (at < m_fanStart[(place + 1)]); at++) {
+                var triangle = m_fan[at];
+
+                if (!m_alive[triangle]) { continue; }
+                for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
+                    if (m_blockStamp[m_cornerPlace[corner]] == m_block) { return false; }
+                }
+            }
+
+            return true;
+        }
+        // On a worker: TryPlace's loop with nothing written but this worker's scratch and the candidate's records from
+        // `first` on, stopping at a taken collapse, which the owner measures again and commits. Returns the records.
+        private int Evaluate(Collapser owner, int place, int first, double error, double cosine) {
+            var prepared = false;
+            var count = 0;
+            ref readonly var run = ref m_priceRuns[place];
+
+            if (!run.Ready) { throw new InvalidOperationException(message: "A speculated place is priced before its block is measured."); }
+            foreach (var (_, target) in m_prices.GetSpan().Slice(start: run.Start, length: run.Count)) {
+                if (m_touched[target] == m_pass || Refused(place, target)) { continue; }
+                if (!prepared) { PrepareFrom(place); prepared = true; }
+
+                var outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
+
+                owner.m_specTarget[(first + count)] = target;
+                owner.m_specOutcome[(first + count)] = outcome;
+                owner.m_specThrough[(first + count)] = m_refusedThrough;
+                count++;
+                if (outcome == Outcome.Taken) { break; }
+            }
+
+            return count;
         }
         private ReadOnlySpan<(double Cost, int Place)> Prices(int place) {
             ref var run = ref m_priceRuns[place];
@@ -1075,7 +1431,6 @@ public static class SdfMeshCollapse {
             var secondOpposite = m_previous[secondAt].Next;
 
             if (firstOpposite == secondOpposite) { return Outcome.Refused; }
-            if (!Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return Outcome.RefusedLinks; }
 
             // Each side of the collapsed edge keeps its own vertices: a triangle about the place takes, at the neighbour,
             // the vertex the edge's triangle on its side has there.
@@ -1130,6 +1485,9 @@ public static class SdfMeshCollapse {
                 }
                 if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Refusal(outcome: Outcome.Refused); }
             }
+            // The link test walks the neighbour's fan, so it follows the turn and facing tests over the place's own fan,
+            // which refuse most collapses; its refusal reads no other copy, so it is kept by the neighbour's revision.
+            if (!Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return Outcome.RefusedLinks; }
 
             // Each measure that refuses names the budget its refusal stands through (m_refusedThrough).
             if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Refusal(outcome: Outcome.RefusedMeasure); }
@@ -1137,9 +1495,20 @@ public static class SdfMeshCollapse {
             if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Refusal(outcome: Outcome.RefusedMeasure); }
             if (!MeasureReverse(error: error, fan: fan)) { return Refusal(outcome: Outcome.RefusedMeasure); }
 
-            Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
+            // A measure writes nothing the shared tables hold, so a worker can measure beside others; only the collapser
+            // that owns the tables commits a taken collapse (CommitTaken).
+            m_first = first;
+            m_second = second;
 
             return Outcome.Taken;
+        }
+        // Commits the collapse TryCollapse took last, of a place onto a neighbour.
+        private void CommitTaken(int from, int to) => Commit(fan: m_from, first: m_first, from: from, fromFirst: m_fromFirst, second: m_second, to: to, toFirst: m_toFirst, toSecond: m_toSecond);
+        // The first place at or past `after + 1` in a span that holds a value, or -1.
+        private static int NextIndex(ReadOnlySpan<int> span, int value, int after) {
+            var rest = span[(after + 1)..].IndexOf(value: value);
+
+            return ((rest < 0) ? -1 : (after + 1 + rest));
         }
         // Failed neighbours leave the source fan unchanged. Lay its old geometry out once for all their forward and
         // reverse checks; Pass stops trying neighbours immediately after the first commit changes it.
@@ -1150,7 +1519,8 @@ public static class SdfMeshCollapse {
             // The source fan's lines and tracked samples are the same for every neighbour tried, so the first that needs
             // them lists them.
             m_linesListed = false;
-            m_sourcesListed = false;
+            m_sourcesListed = 0;
+            m_sources.Clear();
             m_source = place;
 
             if (m_measured.Length < fan.Count) {
@@ -1158,8 +1528,8 @@ public static class SdfMeshCollapse {
                 m_previous = new OriginalTriangle[(2 * fan.Count)];
                 m_laid = new int[(2 * fan.Count)];
             }
-            // Every neighbour's link test reads one stamp of the place's neighbours.
-            m_stampValue++;
+            // Every neighbour's link test reads the place's neighbours.
+            m_neighbours.Clear();
             for (var index = 0; (index < fan.Count); index++) {
                 var triangle = fan[index];
 
@@ -1168,8 +1538,8 @@ public static class SdfMeshCollapse {
                 var face = Cross(ax: ax, ay: ay, az: az, bx: bx, by: by, bz: bz, cx: ex, cy: ey, cz: ez);
                 var sum = Vector3.Zero;
 
-                m_stamp[next] = m_stampValue;
-                m_stamp[after] = m_stampValue;
+                m_neighbours.Add(item: next);
+                m_neighbours.Add(item: after);
                 for (var at = (3 * triangle); (at < ((3 * triangle) + 3)); at++) { sum += Normal(vertex: m_corners[at]); }
                 m_previous[index] = new OriginalTriangle {
                     Surface = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle },
@@ -1183,35 +1553,35 @@ public static class SdfMeshCollapse {
                 Bounds(candidate: ref m_previous[index].Surface);
             }
         }
-        // Lists the samples tracked to the prepared fan's triangles, the removed vertex's first, for Measure.
+        // Lists the next phase of the samples tracked to the prepared fan's triangles for Measure: the removed vertex's,
+        // then every other. Most refusals are decided by the removed vertex's own samples, so the rest are listed only
+        // once a measure has passed all of those, in the order a whole listing gives.
         private void ListSources() {
             var fan = m_from;
             var place = m_source;
+            var phase = m_sourcesListed++;
 
-            m_sourcesListed = true;
-            m_sources.Clear();
-            for (var phase = 0; (phase < 2); phase++) {
-                for (var index = 0; (index < fan.Count); index++) {
-                    for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
-                        var vertex = m_sampleVertex[sample];
-                        var at = m_placeOf[vertex];
+            for (var index = 0; (index < fan.Count); index++) {
+                for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
+                    var vertex = m_sampleVertex[sample];
+                    var at = m_placeOf[vertex];
 
-                        if ((at == place) != (phase == 0)) { continue; }
-                        var own = m_normals[vertex];
+                    if ((at == place) != (phase == 0)) { continue; }
+                    var own = m_normals[vertex];
 
-                        m_sources.Add(item: new Source {
-                            Sample = sample,
-                            Index = index,
-                            Vertex = vertex,
-                            Px = m_point[at].X,
-                            Py = m_point[at].Y,
-                            Pz = m_point[at].Z,
-                            Own = own,
-                            OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
-                            Material = m_sampleMaterial[sample],
-                            Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
-                        });
-                    }
+                    m_listedSamples++;
+                    m_sources.Add(item: new Source {
+                        Sample = sample,
+                        Index = index,
+                        Vertex = vertex,
+                        Px = m_point[at].X,
+                        Py = m_point[at].Y,
+                        Pz = m_point[at].Z,
+                        Own = own,
+                        OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
+                        Material = m_sampleMaterial[sample],
+                        Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
+                    });
                 }
             }
         }
@@ -1306,27 +1676,19 @@ public static class SdfMeshCollapse {
                 m_ringNext = new int[(2 * count)];
                 m_ringAfter = new int[(2 * count)];
             }
-            // Index each triangle by the place after its corner, so every edge finds its twins at once; every place the
-            // index reads is cleared first.
             for (var at = 0; (at < count); at++) {
                 (m_ringCorner[at], m_ringNext[at], m_ringAfter[at]) = Around(place: place, triangle: fan[at]);
-                m_afterCount[m_ringNext[at]] = 0;
-                m_afterCount[m_ringAfter[at]] = 0;
             }
-            for (var at = 0; (at < count); at++) {
-                if (m_afterCount[m_ringAfter[at]]++ == 0) { m_afterFirst[m_ringAfter[at]] = at; }
-            }
+            // Each edge's twins are the fan's triangles whose place after the corner is the edge's far place, in fan
+            // order: one on a manifold edge, every one on a non-manifold edge. A fan is a few triangles, so the search
+            // reads only the fan, never a table as long as the mesh's places, and workers measure side by side.
+            var afters = m_ringAfter.AsSpan(start: 0, length: count);
+
             for (var at = 0; (at < count); at++) {
                 var next = m_ringNext[at];
-                var twins = m_afterCount[next];
 
-                if (twins == 1) {
-                    Line(at: at, into: into, twin: m_afterFirst[next], fan: fan);
-                    continue;
-                }
-                // A non-manifold edge: every twin in fan order.
-                for (var twin = 0; ((twins > 1) && (twin < count)); twin++) {
-                    if (m_ringAfter[twin] == next) { Line(at: at, fan: fan, into: into, twin: twin); }
+                for (var twin = afters.IndexOf(value: next); (twin >= 0); twin = NextIndex(span: afters, value: next, after: twin)) {
+                    Line(at: at, fan: fan, into: into, twin: twin);
                 }
             }
         }
@@ -1422,11 +1784,13 @@ public static class SdfMeshCollapse {
         }
         // Whether the two places share no neighbour but the edge's two opposite places, so the collapse pinches nothing.
         private bool Links(int from, int to, int firstOpposite, int secondOpposite) {
+            var neighbours = CollectionsMarshal.AsSpan(list: m_neighbours);
+
             foreach (var triangle in Alive(fan: m_to, place: to)) {
                 var (_, next, after) = Around(place: to, triangle: triangle);
 
-                if ((next != from) && (m_stamp[next] == m_stampValue) && (next != firstOpposite) && (next != secondOpposite)) { return false; }
-                if ((after != from) && (m_stamp[after] == m_stampValue) && (after != firstOpposite) && (after != secondOpposite)) { return false; }
+                if ((next != from) && (next != firstOpposite) && (next != secondOpposite) && neighbours.Contains(value: next)) { return false; }
+                if ((after != from) && (after != firstOpposite) && (after != secondOpposite) && neighbours.Contains(value: after)) { return false; }
             }
 
             return true;
@@ -1489,11 +1853,16 @@ public static class SdfMeshCollapse {
             var candidates = Lay(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
             m_laidCount = candidates;
-            if (!m_sourcesListed) { ListSources(); }
-            // The removed vertex is often the first sample that refuses a target, so PrepareFrom lists its samples first,
-            // then all remaining samples; each still chooses its exact nearest admissible witness independently of the
-            // others.
-            foreach (ref readonly var source in CollectionsMarshal.AsSpan(list: m_sources)) {
+            // The removed vertex is often the first sample that refuses a target, so its samples are listed and measured
+            // first, then all remaining samples; each still chooses its exact nearest admissible witness independently of
+            // the others.
+            for (var next = 0; ; next++) {
+                while ((next == m_sources.Count) && (m_sourcesListed < 2)) { ListSources(); }
+                if (next >= m_sources.Count) { break; }
+
+                ref readonly var source = ref CollectionsMarshal.AsSpan(list: m_sources)[next];
+
+                m_measuredSamples++;
                 // A sample's own triangle, where it stays, is measured first: it is most often the nearest, and the
                 // others then fall to the bound on the nearest yet.
                 var laid = m_laid[source.Index];
@@ -1706,18 +2075,23 @@ public static class SdfMeshCollapse {
         // measured sample is tracked to its chosen triangle, and the neighbour takes the place's planes.
         private void Commit(List<int> fan, int from, int to, int first, int second, int fromFirst, int toFirst, int toSecond) {
             m_revision++;
-            // The target gains the source quadric even for neighbours outside the source fan.
+            // The target gains the source quadric even for neighbours outside the source fan. Every place of both fans is
+            // stamped with the block: they are the places of every triangle, sample, line, quadric and revision the commit
+            // writes, so a speculated measure that read none of them read what the commit left as it was (Clean).
             for (var at = m_fanStart[to]; at < m_fanStart[to + 1]; at++) {
                 var triangle = m_fan[at];
                 if (!m_alive[triangle]) { continue; }
                 for (var corner = 3 * triangle; corner < 3 * triangle + 3; corner++) {
                     m_priceRuns[m_cornerPlace[corner]].Ready = false;
+                    m_blockStamp[m_cornerPlace[corner]] = m_block;
                 }
             }
             foreach (var triangle in fan) {
                 for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
                     m_priceRuns[m_cornerPlace[corner]].Ready = false;
                     m_revisions[m_cornerPlace[corner]] = m_revision;
+                    Wake(place: m_cornerPlace[corner]);
+                    m_blockStamp[m_cornerPlace[corner]] = m_block;
                 }
                 m_tracked[triangle] = -1;
             }

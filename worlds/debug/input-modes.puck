@@ -24,7 +24,7 @@ let engagedAnywhere = [
 
 inputModes {
   // A tap reaches a pointer surface in every mode, as the context button reaches what is beside her.
-  global ["interact", "tap"]
+  global ["interact", "tap", "scroll"]
   families [
     {
       name: "form"

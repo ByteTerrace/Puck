@@ -780,6 +780,7 @@ add the row you found.
 | You need to | Existing mechanism | Home |
 |---|---|---|
 | Draw text in the world: lettering that is relief, a display's own text, or words on a surface that follow state | `SdfProgramBuilder.Text` (marchable `Glyph` shapes, a creation's `textRuns`), a screen's glyph decal (`SdfWorldTables.SetScreenDecal`, `WorldScreenTextDecal`), and a text paint's surface text (`SdfPaint.Text`, `SdfWorldTables.SetSurfaceText`, `WorldSurfaceTexts`); both shade-time tiers sample through `shade/sdf-glyph-ink.hlsli` | `src/Puck.SignedDistance`, `src/Puck.SdfVm`, `src/Puck.World.Client`; [text and glyphs](../../../docs/rendering/sdf/reference/text-and-glyphs.md) |
+| Show a formula on a surface (fractions, roots, norms, scripts), or the engine's own primitive and blend maths as a person reads it | A math text paint (`math: true`): `Puck.Text.MathMarkup` and `MathLayout` set the lines through the surface text tier (a rule is a stretched glyph cell, so no shader of its own), and `WorldMathText`'s `@formula` brings in `SdfFormulaTypesetting`, a lowering of the same `SdfFieldFormulas` tree every reader runs, listed through the catalogues' generated `FormulaUses`; never hand-type a formula a screen shows. `world.formula` prints one, `world.texts` reads back a laid-out math text | `src/Puck.Text`, `src/Puck.SignedDistance/Typesetting`, `src/Puck.World.Client/WorldMathText.cs`; [math text](../../../docs/rendering/sdf/reference/text-and-glyphs.md#math-text), [the learn panel](../../../docs/authoring/learn-panel.md) |
 | Compute or check a lane the builder derives from others (a scale's correction, a repeat's reciprocal, a noise relief's normalization), or ask how the program door classes a lane | `SdfDerivedLanes` (the one function per derived lane, called by the builder and the door), `SdfNoiseDisplacement` (the decoded noise relief), `SdfProgram.LaneContractOf` | `src/Puck.SignedDistance`; [Lipschitz reference](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md#procedural-detail) |
 | Weight a relief by regions (no relief over a bowl, a pad, a path) | `SdfReliefMask` (a band, `SdfReliefBand`, over listed region shapes, `SdfReliefRegion`), carried as `SdfOp.ReliefRow` rows before the relief and decoded once by the program's door (`SdfProgram.ReliefMasksAt`); a document's masks compile through `CreationStampEmitter.ReliefMasks` | `src/Puck.SignedDistance`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore`. A box rule, certificate or region drop reads a parameter through the compiled instruction's enclosures (`Bounds0X` and the rest), never its raw lane, so the render reading's bounds hold the kernels' float parameters | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
@@ -1386,14 +1387,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the pyramid pass writes beside the occlusion's pyramid in a reflecting fragment;
   level zero is the mesh target itself. Levels above a group's own are gathered with
   atomics into words the recorder clears (`SdfWorldPackage.ReflectionDepthWordsBelow`,
-  the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
-  occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
-  share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. The
-  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
-  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
-  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
-  render pixel at a time along a reflected silhouette. What it
+  the C# twin of `sdfReflectDepthBase`). A ray walks at most `SdfReflectBehindPixels`
+  render pixels behind occluders before it gives up, and at most `passGroup.reflectionSteps`
+  reads; a hit's share fades over the budget's last quarter (`SdfReflectBudgetFade`), over
+  the pixels it walked behind an occluder before it and toward the screen's edge, and an
+  open-sky answer fades as the ray's end nears the edge, so where rays stop answering the
+  volume takes over with no line. Every per-cell answer must stay continuous in the ray's
+  direction: on a smooth mirror neighbouring cells trace nearly the same ray, and an answer
+  that switches whole between them (a toward-eye test, a count of pixels) shows as
+  stair-steps and streaks along the switch. At level zero the march judges a covered pixel
+  by its sample's tangent plane (`sdfReflectMarch`, the record's distance and normal, the
+  ray's travel at a share from `SdfReflectRay`): it meets the pixel only where it crosses
+  that plane from the front inside the pixel, and a face turned from the ray is never met,
+  so a ray leaving a curved surface walks past its own neighbouring pixels rather than
+  stopping on them. The hit is that crossing (`sdfReflectCrossing`), so what a ray reads
+  moves continuously rather than a render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:

@@ -229,6 +229,11 @@ public static partial class RuleWorkBudget {
     public static RuleWork OperationCost(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) => ((board, operation) switch {
         ( { } shifted, (ExpressionOp.BoardShift or ExpressionOp.BoardImage)) => RuleWork.Known(units: ((shifted.Topology.CellCount / 2) + shifted.Visits)),
         ( { } ray, ExpressionOp.BoardRay) => (((long)ray.Topology.CellCount) * RuleWork.Known(units: ((ray.Topology.CellCount / 2) + ray.Visits))),
+        // A uniform step's Kogge-Stone fill runs one round of four word operations per doubling of the longest run; any
+        // other direction shifts once per step of it.
+        (BoardNeighbourQuery slide, ExpressionOp.BoardSlide) => (slide.Topology.TryUniformStep(direction: slide.Direction, landing: out _, step: out _)
+            ? RuleWork.Known(units: (4L + (4L * (System.Numerics.BitOperations.Log2(value: ((uint)Math.Max(val1: 1, val2: slide.Topology.LongestRay(direction: slide.Direction)))) + 1L))))
+            : (((long)Math.Max(val1: 1, val2: slide.Topology.LongestRay(direction: slide.Direction))) * RuleWork.Known(units: ((slide.Topology.CellCount / 2) + slide.Visits)))),
         _ => ((ExpressionOperators.Find(operation: operation) is { } row)
             ? RuleWork.Known(units: row.Cost)
             : RuleWork.Unmodeled(reason: $"expression operation {((byte)operation)} is not registered")

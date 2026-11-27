@@ -20,16 +20,8 @@ public static partial class ExpressionArithmetic {
         switch (operation) {
             case ExpressionOp.And: value = left != 0L && right != 0L ? 1L : 0L; return true;
             case ExpressionOp.Or: value = left != 0L || right != 0L ? 1L : 0L; return true;
-            case ExpressionOp.Add:
-                return Narrow(
-                value: out value,
-                wide: (((Int128)left) + right)
-            );
-            case ExpressionOp.Subtract:
-                return Narrow(
-                value: out value,
-                wide: (((Int128)left) - right)
-            );
+            case ExpressionOp.Add: return TryAdd(left: left, right: right, value: out value);
+            case ExpressionOp.Subtract: return TrySubtract(left: left, right: right, value: out value);
             case ExpressionOp.Minimum:
                 value = Math.Min(
                 val1: left,
@@ -40,36 +32,12 @@ public static partial class ExpressionArithmetic {
                 val1: left,
                 val2: right
             ); return true;
-            case ExpressionOp.Equal:
-                value = ((left == right)
-                ? 1L
-                : 0L
-            ); return true;
-            case ExpressionOp.NotEqual:
-                value = ((left != right)
-                ? 1L
-                : 0L
-            ); return true;
-            case ExpressionOp.Less:
-                value = ((left < right)
-                ? 1L
-                : 0L
-            ); return true;
-            case ExpressionOp.LessOrEqual:
-                value = ((left <= right)
-                ? 1L
-                : 0L
-            ); return true;
-            case ExpressionOp.Greater:
-                value = ((left > right)
-                ? 1L
-                : 0L
-            ); return true;
-            case ExpressionOp.GreaterOrEqual:
-                value = ((left >= right)
-                ? 1L
-                : 0L
-            ); return true;
+            case ExpressionOp.Equal: value = Truth(holds: (left == right)); return true;
+            case ExpressionOp.NotEqual: value = Truth(holds: (left != right)); return true;
+            case ExpressionOp.Less: value = Truth(holds: (left < right)); return true;
+            case ExpressionOp.LessOrEqual: value = Truth(holds: (left <= right)); return true;
+            case ExpressionOp.Greater: value = Truth(holds: (left > right)); return true;
+            case ExpressionOp.GreaterOrEqual: value = Truth(holds: (left >= right)); return true;
             case ExpressionOp.Remainder:
                 // The raw remainder is the remainder in either kind (Q48.16 bits share one scale); -1 divides
                 // everything, so it reads zero rather than faulting on long.MinValue.
@@ -187,6 +155,31 @@ public static partial class ExpressionArithmetic {
             default: return false;
         }
     }
+    /// <summary>Adds two raw values of one kind (Int or raw Q48.16, which share one scale), refusing a sum the carrier
+    /// cannot hold.</summary>
+    /// <param name="left">The left raw operand.</param>
+    /// <param name="right">The right raw operand.</param>
+    /// <param name="value">The raw sum, or zero on refusal.</param>
+    /// <returns>False when the sum overflows the carrier.</returns>
+    public static bool TryAdd(long left, long right, out long value) => Narrow(
+        value: out value,
+        wide: (((Int128)left) + right)
+    );
+    /// <summary>Subtracts two raw values of one kind, refusing a difference the carrier cannot hold.</summary>
+    /// <param name="left">The left raw operand.</param>
+    /// <param name="right">The right raw operand.</param>
+    /// <param name="value">The raw difference, or zero on refusal.</param>
+    /// <returns>False when the difference overflows the carrier.</returns>
+    public static bool TrySubtract(long left, long right, out long value) => Narrow(
+        value: out value,
+        wide: (((Int128)left) - right)
+    );
+    /// <summary>Returns the Int a comparison leaves: one when it holds, zero when it does not.</summary>
+    /// <param name="holds">Whether the comparison holds.</param>
+    /// <returns>One or zero.</returns>
+    public static long Truth(bool holds) => (holds
+        ? 1L
+        : 0L);
     /// <summary>Gets a value indicating whether a core arithmetic operator consumes one stack value (functions have their own dispatcher).</summary>
     /// <param name="operation">An expression operation.</param>
     public static bool IsUnary(ExpressionOp operation) => (ExpressionOperators.Find(operation: operation) is { Function: false, Arity: 1 });

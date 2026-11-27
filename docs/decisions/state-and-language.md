@@ -696,7 +696,7 @@ verdict covers everything the firing decides: the arena scope, the edge latch,
 a decision's choice and the arms it queued commit through one door after the
 verdict is in, or not at all.
 
-The mechanism is [one outcome, one interpreter and one journal](#rule-faults),
+The mechanism is [one outcome, one evaluator and one journal](#rule-faults),
 with its precise behavior and examples in
 [Reads and expressions](../reference/state/expressions.md#constant-folding-and-faults),
 [Rules and firing](../reference/state/rules.md#make-a-firing-atomic) and
@@ -777,8 +777,8 @@ The old status-register approach required two channels to agree by convention.
 A nested success could overwrite a shared fault variable, the register lived
 on an arena that installation could replace, every deciding caller had to
 remember to poll it, and a read-side flag could not order latch and decision
-writes. The correction removes those mechanisms: `RuleExpressions.Run`
-returns each child outcome as a value, and `RuleEvaluator.Commit` reads the
+writes. The correction removes those mechanisms: the evaluator
+(`RuleExpressions.Evaluate`) returns each child outcome as a value, and `RuleEvaluator.Commit` reads the
 proposal's `FiringDecision` once. Faulted and fires are distinct cases, with
 no faulted-and-fires combination.
 

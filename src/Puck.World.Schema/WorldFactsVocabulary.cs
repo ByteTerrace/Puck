@@ -126,7 +126,8 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// facts the world host versions that answer a count, a flag or an event, so that they move when something
     /// happens rather than with time or motion. A region's occupants, the population and quiescence censuses, a
     /// musical beat, an input event read for a literal owner, and a body's fact bits, counter registers and producer
-    /// stand-down for a literal body or the one bound to <c>$each</c> rest; a pose, a distance, a pointer, a channel and every fact the
+    /// stand-down for a literal body or the one bound to <c>$each</c> rest, and so do a body's fact bits read through a
+    /// literal placement or <c>placement:$each</c> (a piece's <c>fact(placement, $each, Resting)</c>); a pose, a distance, a pointer, a channel and every fact the
     /// host versions no source for do not. The host refuses to leave unversioned a fact this answers for
     /// (<c>WorldRuleHost.TryScheduleFact</c>), so the work sheet never prices by change a fact judged every tick.</summary>
     /// <param name="fact">The compiled fact.</param>
@@ -145,7 +146,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             case WorldBodyFactOperand { Payload: ProducerOperand producer }:
                 return BodyRests(body: producer.BodyA, each: out each);
             case WorldBodyFactOperand { Payload: BodyFactOperand bits }:
-                return BodyRests(body: bits.Body, each: out each);
+                return FactRests(body: bits.Body, each: out each);
             // A counter register moves only when something writes its lane row, which the host names as the read's
             // version (WorldRuleHost.TryScheduleFact); a timer's presented value ages with time.
             case WorldBodyFactOperand { Payload: BodyStateOperand { Kind: Puck.Physics.Motion.ActionStateKind.Counter } state }:
@@ -165,6 +166,16 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             each = ((body.Kind == CompiledBodyRefKind.Binding) && (((BoundKey)body.Index) == BoundKey.Each));
 
             return (each || ((body.Kind == CompiledBodyRefKind.Literal) && (body.Index >= 0)));
+        }
+        // A body's facts are also versioned through the placement it inhabits, a literal one or the one $each names,
+        // whose moves the host names by that placement's key (WorldRuleHost.TryFactKey).
+        static bool FactRests(in CompiledBodyRef body, out bool each) {
+            if (body.Kind != CompiledBodyRefKind.Placement) {
+                return BodyRests(body: body, each: out each);
+            }
+            each = (body.PlacementOrdinals is not null);
+
+            return (each || (body.Index >= 0));
         }
     }
 

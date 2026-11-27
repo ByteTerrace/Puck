@@ -283,9 +283,11 @@ prototypes {
       name: "range-window"
       schema: "puck.creation.v2"
       palette: rangePalette
+      // A box's face is its local +Z: the rim's half turn faces the glass to the creation's front (-Z).
       shape Box "rim" {
         material: rangeInk
         position [0, windowCentre, 0]
+        rotation [0, 1, 0, 0]
         scale [windowHalfWidth, windowHalfHeight, 0.04]
       }
       shape Box "opening" {

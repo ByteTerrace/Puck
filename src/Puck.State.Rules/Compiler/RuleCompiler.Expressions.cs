@@ -19,18 +19,18 @@ public static partial class RuleCompiler {
             if (token.Operation == ExpressionOp.Not) {
                 var body = result.ToArray();
 
-                result = [token with { Call = new CompiledSubprogram("not", 0, body, RuleWorkBudget.Steps(tokens: body)) }];
+                result = [token with { Call = new CompiledSubprogram("not", 0, new CompiledProgram(tokens: body), RuleWorkBudget.Steps(tokens: body)) }];
             } else if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
                 var left = result.ToArray();
 
                 result = [new CompiledExpressionToken(ExpressionOp.Not,
-                    Call: new CompiledSubprogram("truth", 0, left, RuleWorkBudget.Steps(tokens: left))),
+                    Call: new CompiledSubprogram("truth", 0, new CompiledProgram(tokens: left), RuleWorkBudget.Steps(tokens: left))),
                     new CompiledExpressionToken(ExpressionOp.Not)];
                 var right = operands[1].ToArray();
 
                 result.Add(item: token with {
                     Call = new CompiledSubprogram(
-                    Name: token.Operation.ToString(), Arity: 1, Body: right, Steps: RuleWorkBudget.Steps(tokens: right)),
+                    Name: token.Operation.ToString(), Arity: 1, Body: new CompiledProgram(tokens: right), Steps: RuleWorkBudget.Steps(tokens: right)),
                 });
             } else {
                 for (var index = 1; (index < arity); index++) { result.AddRange(collection: operands[index]); }
@@ -125,7 +125,7 @@ public static partial class RuleCompiler {
             result: out result,
             resultKind: resultKind,
             ruleName: ruleName,
-            shared: new Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)>(comparer: StringComparer.Ordinal),
+            shared: new Dictionary<string, (CompiledProgram Body, CellKind Result, bool[] FixedArguments)>(comparer: StringComparer.Ordinal),
             verb: verb
         );
     }
@@ -201,7 +201,7 @@ public static partial class RuleCompiler {
     // member reads as inside a fold body; `argumentKinds` are the kinds a subprogram's own operands carry;
     // `calling` is the chain of subprograms already open, which is what makes the call graph a proven DAG; and
     // `shared` holds each subprogram body compiled once per signature.
-    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments)> shared, out CellKind result, bool[]? contextualArguments = null) {
+    private static CompiledExpressionToken[] CompileInstructions(ExpressionProgram expression, IReadOnlyList<Instruction> instructions, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds, IReadOnlyList<int> calling, string ruleName, string verb, RuleCompileContext context, Dictionary<string, (CompiledProgram Body, CellKind Result, bool[] FixedArguments)> shared, out CellKind result, bool[]? contextualArguments = null) {
         if (
             (instructions is not { Count: > 0 } authored) ||
             (authored.Count > RuleCapacity.MaxExpressionTokens)
@@ -484,6 +484,7 @@ public static partial class RuleCompiler {
                 ExpressionOp.BoardShift => ("shifts", "direction"),
                 ExpressionOp.BoardRay => ("extends", "direction"),
                 ExpressionOp.BoardImage => ("carries", "symmetry element"),
+                ExpressionOp.BoardSlide => ("slides", "direction"),
                 _ => throw Malformed(detail: $"instruction '{operation}' is not a board query"),
             });
 
@@ -503,11 +504,15 @@ public static partial class RuleCompiler {
                 throw Malformed(detail: $"instruction '{operation}' names no {indexKind} '{board.Index}' of '{board.Topology}'");
             }
 
+            var arity = ExpressionOperators.Arity(operation: operation);
+
             Require(
-                arity: 1,
+                arity: arity,
                 operation: operation
             );
-            MatchKinds(operation, 1, CellKind.Int);
+            MatchKinds(operation, arity, CellKind.Int);
+            depth -= (arity - 1);
+            kinds[(depth - 1)] = CellKind.Int;
 
             return new CompiledExpressionToken(
                 Board: new BoardNeighbourQuery(
@@ -603,7 +608,7 @@ public static partial class RuleCompiler {
                 ? CellKind.Fixed
                 : member;
             var outerMember = context.FoldMember;
-            (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) shape;
+            (CompiledProgram Body, CellKind Result, bool[] FixedArguments) shape;
 
             context.FoldMember = member;
             try {
@@ -815,7 +820,7 @@ public static partial class RuleCompiler {
         }
         // A subprogram body depends only on the subprogram and the kinds it is entered with, so one compiled body
         // per signature serves every call site and every fold that names it.
-        (CompiledExpressionToken[] Body, CellKind Result, bool[] FixedArguments) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
+        (CompiledProgram Body, CellKind Result, bool[] FixedArguments) SharedBody(int subprogram, CellKind kind, CellKind? resultKind, CellKind? memberKind, IReadOnlyList<CellKind> argumentKinds) {
             var signature = $"{subprogram}:{kind}:{resultKind}:{memberKind}:{string.Join(
                 separator: ',',
                 values: argumentKinds
@@ -842,7 +847,7 @@ public static partial class RuleCompiler {
                     verb: verb
                 );
 
-                body = (compiled, left, requiredArguments);
+                body = (new CompiledProgram(tokens: compiled), left, requiredArguments);
                 shared[signature] = body;
             }
 

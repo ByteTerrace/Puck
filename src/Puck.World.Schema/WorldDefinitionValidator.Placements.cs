@@ -457,6 +457,14 @@ public static partial class WorldDefinitionValidator {
         if (document.SizeBy is { } sizeBy) {
             RequireNumericStateReference(definition: definition, errors: errors, path: $"{path}.sizeBy", reference: sizeBy, subject: "a size");
         }
+        if (document.SizeAbout is { } sizeAbout) {
+            if (document.SizeBy is null) {
+                errors.Add(item: $"{path}.sizeAbout places the point sizeBy scales about, so it needs a sizeBy.");
+            }
+            if (sizeAbout.Reference is not null) {
+                errors.Add(item: $"{path}.sizeAbout must be a literal point, not the state binding '{sizeAbout.Reference}'.");
+            }
+        }
         var drivers = (document.Drivers ?? []);
 
         for (var index = 0; (index < drivers.Count); index++) {
@@ -818,6 +826,15 @@ public static partial class WorldDefinitionValidator {
                     if (paintText.Template is { } template) {
                         _ = TryValidateTextTemplate(definition: definition, errors: errors, line: template, literalRunes: out _, path: $"{textPath}.template");
                     }
+                    if (paintText.Scroll is { } scroll) {
+                        if (!paintText.Math) {
+                            errors.Add(item: $"{textPath}.scroll scrolls only a math text (math: true).");
+                        }
+                        _ = TryValidateTextTemplate(definition: definition, errors: errors, line: scroll, literalRunes: out _, path: $"{textPath}.scroll");
+                    }
+                    if (paintText.Pitch && !paintText.Math) {
+                        errors.Add(item: $"{textPath}.pitch sets only a math text's lines (math: true).");
+                    }
                 }
             }
 
@@ -1030,6 +1047,13 @@ public static partial class WorldDefinitionValidator {
 
             if ((countRowDeclaration is not { Kind: CellKind.Int }) || (countRowDeclaration.IsKeyed != (count.Key is not null))) {
                 errors.Add(item: $"{path}.count must name a declared Int row with a matching key shape.");
+            } else if (
+                (count.Key is { } countKey) &&
+                (countRowDeclaration.EffectiveDomain is StateDomain.Keys) &&
+                !(countRowDeclaration.Cells ?? []).Any(predicate: cell => string.Equals(a: cell.Key.Value, b: countKey, comparisonType: StringComparison.Ordinal))
+            ) {
+                // An undeclared cell reads 0 for ever, so its placement would never stand a body.
+                errors.Add(item: $"{path}.count names cell '{countKey}' of row '{countRow}', which the row does not declare.");
             }
         } else if (
             (count.Literal is not { } literal) ||
@@ -1037,6 +1061,14 @@ public static partial class WorldDefinitionValidator {
             (literal > peerCapacity)
         ) {
             errors.Add(item: $"{path}.count {count.Literal} is outside 1..{peerCapacity} for the authored population capacity.");
+        }
+
+        if (inhabit.Pool is { } pool) {
+            var poolRow = ((pool.Row is { } poolName) ? WorldDefinitionRows.FindStateRow(definition.State, poolName) : null);
+
+            if ((poolRow is not { Kind: CellKind.Int }) || (poolRow.IsKeyed != (pool.Key is not null))) {
+                errors.Add(item: $"{path}.pool must name a declared Int row with a matching key shape: the cell that admits the facet's bodies while it is nonzero.");
+            }
         }
 
         ValidateDistribution(

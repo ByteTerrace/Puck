@@ -189,7 +189,13 @@ internal sealed class RuleDueList {
     private long m_walk;
     private int m_visits;
     private readonly bool[] m_full;
+    // The earliest deadline a rule's verdicts must be judged again at: for a keyed sweep, never later than the
+    // earliest of its bindings' own (m_bindingWakes), which a lower one only costs a look at.
     private readonly ulong[] m_wake;
+    // A keyed sweep's bindings' deadlines, by the binding the sweep's due bits name: what a deadline coming due marks,
+    // so it judges the bindings whose deadline it is rather than the whole sweep. Every binding a visit judges records
+    // its own (RuleEvaluator.SweepBinding), and a full visit judges every binding, so it starts the table afresh.
+    private readonly Dictionary<int, ulong>?[] m_bindingWakes;
     // The due bindings of a keyed sweep: by body index for a body sweep, by position in the row's snapshot for a row
     // sweep.
     private readonly ulong[]?[] m_bindings;
@@ -243,6 +249,7 @@ internal sealed class RuleDueList {
         m_full = new bool[rules.Length];
         m_wake = new ulong[rules.Length];
         Array.Fill(array: m_wake, value: ulong.MaxValue);
+        m_bindingWakes = new Dictionary<int, ulong>?[rules.Length];
         m_bindings = new ulong[]?[rules.Length];
         m_live = new ulong[]?[rules.Length];
         m_snapshots = new RowSnapshot?[rules.Length];
@@ -281,6 +288,9 @@ internal sealed class RuleDueList {
             m_kinds[index] = kind;
             if (kind == Visit.Always) {
                 continue;
+            }
+            if (kind is (Visit.RowSweep or Visit.BodySweep or Visit.FamilySweep)) {
+                m_bindingWakes[index] = [];
             }
             if (kind == Visit.RowSweep) {
                 if (!snapshots.TryGetValue(key: rule.ForEachOrdinal, value: out var snapshot)) {
@@ -439,16 +449,58 @@ internal sealed class RuleDueList {
         }
         m_wake[index] = (whole ? wake : Math.Min(val1: m_wake[index], val2: wake));
     }
-    /// <summary>Marks every rule whose earliest deadline has come due in full, so each of its bindings is judged
-    /// against the tick that may now open it.</summary>
-    public void Wake(ulong tick) {
-        for (var index = 0; (index < m_wake.Length); index++) {
-            if (m_wake[index] <= tick) {
-                m_wake[index] = ulong.MaxValue;
-                MarkFull(index: index);
-            }
+    /// <summary>Records the deadline one binding of a keyed sweep must be judged again at, as its judgement just
+    /// answered: <see cref="ulong.MaxValue"/> for none.</summary>
+    /// <param name="index">The rule.</param>
+    /// <param name="binding">The binding, as the sweep's due bits name it: a body's index, or a snapshot position.</param>
+    /// <param name="wake">The binding's deadline.</param>
+    public void RecordBindingWake(int index, int binding, ulong wake) {
+        if (m_bindingWakes[index] is not { } wakes) {
+            return;
+        }
+        if (wake == ulong.MaxValue) {
+            wakes.Remove(key: binding);
+        } else {
+            wakes[binding] = wake;
         }
     }
+    /// <summary>Marks what each deadline that has come due opens, so it is judged against the tick that may now open
+    /// it: the bindings of a keyed sweep whose own deadline it is, while the positions they were recorded at still name
+    /// them, and otherwise the whole rule.</summary>
+    public void Wake(ulong tick) {
+        for (var index = 0; (index < m_wake.Length); index++) {
+            if (m_wake[index] > tick) {
+                continue;
+            }
+            m_wake[index] = ulong.MaxValue;
+            if ((m_bindingWakes[index] is not { } wakes) || !BindingsStand(index: index)) {
+                m_bindingWakes[index]?.Clear();
+                MarkFull(index: index);
+
+                continue;
+            }
+
+            var earliest = ulong.MaxValue;
+
+            foreach (var (binding, wake) in wakes) {
+                if (wake <= tick) {
+                    SetBinding(binding: binding, index: index);
+                    wakes.Remove(key: binding);
+                } else {
+                    earliest = Math.Min(val1: earliest, val2: wake);
+                }
+            }
+            m_wake[index] = earliest;
+        }
+    }
+    // Whether a keyed sweep's binding numbers still name the bindings they were recorded for: a body's index always
+    // does, and a position does while the snapshot it was taken in stands.
+    private bool BindingsStand(int index) => (m_kinds[index] switch {
+        Visit.BodySweep => true,
+        Visit.RowSweep => SnapshotStands(index: index, structure: m_host.Arena.RowStructureVersion(rowOrdinal: Rules[index].ForEachOrdinal)),
+        Visit.FamilySweep => FamilySnapshotStands(index: index),
+        _ => false,
+    });
     /// <summary>Closes one walk of the list and answers how many rules it did not visit. A rule's own
     /// <see cref="RuleLatch.RuleSpent.Elided"/> takes the walks it was left out of when it is next visited or when
     /// <see cref="SettleElided"/> runs, so closing a walk costs nothing per rule.</summary>
@@ -570,9 +622,23 @@ internal sealed class RuleDueList {
                 MarkReaders(index: m_literalFactReadersBySource, key: moved.Source);
             }
             if (m_eachFactReaders.TryGetValue(key: moved.Source, value: out var each)) {
-                foreach (var reader in each) {
-                    if (Binds(index: reader, body: moved.Body)) {
-                        MarkBody(index: reader, body: moved.Body);
+                // A source that names its moves by key reaches the keyed sweep's binding under that key; any other
+                // rule reading it for $each is judged whole.
+                if ((moved.Body >= 0) && m_host.TryFactKey(body: moved.Body, key: out var movedKey, source: moved.Source)) {
+                    foreach (var reader in each) {
+                        if (m_kinds[reader] is Visit.RowSweep or Visit.FamilySweep) {
+                            if (movedKey.IsValid) {
+                                MarkKey(index: reader, key: movedKey);
+                            }
+                        } else {
+                            MarkFull(index: reader);
+                        }
+                    }
+                } else {
+                    foreach (var reader in each) {
+                        if (Binds(index: reader, body: moved.Body)) {
+                            MarkBody(index: reader, body: moved.Body);
+                        }
                     }
                 }
             }
@@ -593,6 +659,10 @@ internal sealed class RuleDueList {
         m_full[index] = false;
         if (full && (m_bindings[index] is { } bindings)) {
             Array.Clear(array: bindings);
+        }
+        if (full) {
+            // A full visit judges every binding, and each records its deadline afresh.
+            m_bindingWakes[index]?.Clear();
         }
 
         return full;
@@ -698,6 +768,15 @@ internal sealed class RuleDueList {
         if (evaluator.Owns(rule: rule)) {
             return Visit.Whole;
         }
+
+        return SweepKind(rule: rule);
+    }
+    /// <summary>Returns how a rule the list visits by change, and its host does not evaluate itself, is visited: per
+    /// body, per family member and key, per key of one row, or whole. The work sheet reads the same answer for what a
+    /// change or a deadline reaches (<see cref="RuleResponse.Of"/>).</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <returns>The visit.</returns>
+    internal static Visit SweepKind(CompiledRule rule) {
         if (rule.ForEachBodies || (rule.Iteration is { BindsBodies: true })) {
             return Visit.BodySweep;
         }

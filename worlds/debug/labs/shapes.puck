@@ -75,7 +75,7 @@ bodies {
 // What a seat may press: the Moth's movement and forms, the context button that engages the console and the tap that
 // presses its glass, and the terminal's own channels while engaged and while its console is open.
 inputModes {
-  global: concat(movementChannels, ["interact", "tap", "jump", "rise", "flight", "dash", "suit", "noclip"])
+  global: concat(movementChannels, ["interact", "tap", "scroll", "jump", "rise", "flight", "dash", "suit", "noclip"])
   families [
     terminalFamily()
     terminalConsoleFamily()

@@ -488,7 +488,7 @@ public static partial class CreationStampEmitter {
             );
             var shapeScale = EffectiveScale(value: shape.Scale).ToVector3();
             var blend = ContactBlend(document: document, shape: shape);
-            var smooth = ((blend == SdfBlendOp.Union) ? 0f : ((shape.Smooth ?? 0f) * frame.FacetScale));
+            var smooth = ((blend == SdfBlendOp.Union) ? 0f : (shape.SmoothRadius * frame.FacetScale));
 
             foreach (var copy in frames) {
                 var placed = copy.Compose(inner: local);

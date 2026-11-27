@@ -165,8 +165,8 @@ template gameStationRoom(stations, seats = gameStationSeats, extraBodies = 0) {
   }
 
   patienceDeck()
-  for station in stations {
-    patienceStationCards(station: station)
+  for (station, index) in stations {
+    patienceStationCards(station: station, index: index)
   }
   chessStationSet(stations: stations)
 

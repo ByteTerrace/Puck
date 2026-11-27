@@ -1,0 +1,19 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+    table cells {
+      "0" = 0
+      "1" = 0
+      "2" = 0
+    }
+  }
+}
+
+rule "tick" {
+  when count < 3
+  other = (cells[count + 1] + 1) + (cells[count] + 1)
+}

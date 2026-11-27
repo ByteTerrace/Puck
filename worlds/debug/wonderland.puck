@@ -61,9 +61,11 @@ template wonderPainting(label, size) {
   name: label
   schema: "puck.creation.v2"
   palette: wonderPaintPalette
+  // A box's face is its local +Z: the rim's half turn faces the glass to the creation's front (-Z).
   shape Box "rim" {
     material: wonderPaintBlack
     position [0, (1.3125 * size), 0]
+    rotation [0, 1, 0, 0]
     scale [(1.125 * size), (1.4375 * size), (0.0625 * size)]
   }
   shape Box "opening" {

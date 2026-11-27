@@ -450,6 +450,9 @@ public sealed partial class WorldPopulation {
         RestoreSleepingIslands(checkpoint: checkpoint);
         m_bodyCellDefinition = null;
         m_factAllSlotsDirty = true;
+        // The cell-driven counts' cache describes the counts the replaced entries were reconciled to, not the restored
+        // ones: the next count pass resolves every count cell afresh against the restored arena and bodies.
+        Live().InvalidateCountCache();
     }
 
     // Writes a captured entry's own sections into its slot's entry: the entry half of a restore, beside the body half

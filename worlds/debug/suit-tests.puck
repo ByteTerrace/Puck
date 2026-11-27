@@ -4,8 +4,9 @@
 // pressing flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
 //
 // The crossing scenarios walk her at the garden painting and back. A headless seat's camera faces -Z, so
-// `body.fly -1 …` walks +Z: from the pose before the painting (z 36.3) into its glass, and in the garden from just past
-// the arrival frame (z -8.2) back through it, out of the painting at z 39.3. Her registers cross with her both ways.
+// `body.fly 1 …` walks -Z from the painting's own place before it (`spawn:portal-garden`) into its glass on the south
+// wall, and `body.fly -1 …` walks +Z in the garden from just past the arrival frame back through it, out of the painting
+// into the gallery, in front of its glass (z 12.9). Her registers cross with her both ways.
 // `garden { … }` is judged in the garden the crossing starts, so what she is there reads there: a claim holds when it
 // held on any tick the garden ran, and a body that is not in a world reads every register as 0, so a claim that a
 // register is 0 there says she is present as well (`size == 1`). A scenario that never crosses starts no garden to
@@ -54,9 +55,9 @@ test "a press on the ground takes the suit off and refuses flight" {
 test "in the suit she crosses suited, and flight mode works in the garden" {
   when {
     ticks 30
-    seat1: body.pose 57 0.05 36.3 180 0 0
+    seat1: body.pose spawn:portal-garden 0
     ticks 10
-    seat1: body.fly -1 0 0 0 0 0 2
+    seat1: body.fly 1 0 0 0 0 0 2
     ticks 70
     seat1: body.press flight 1 0.2 0
     ticks 15
@@ -70,7 +71,7 @@ test "in the suit she crosses suited, and flight mode works in the garden" {
     }
     bodyState(body, 0, suit) == 1
     bodyState(body, 0, flightFuel) > 0
-    bodyPosition(body, 0, z) > 38
+    bodyPosition(body, 0, z) > 12.9
   }
 }
 
@@ -79,9 +80,9 @@ test "out of the suit she crosses unsuited, and the garden refuses her flight" {
     ticks 30
     seat1: body.press suit 1 0.2 0
     ticks 15
-    seat1: body.pose 57 0.05 36.3 180 0 0
+    seat1: body.pose spawn:portal-garden 0
     ticks 10
-    seat1: body.fly -1 0 0 0 0 0 2
+    seat1: body.fly 1 0 0 0 0 0 2
     ticks 70
     seat1: body.press flight 1 0.2 0
     ticks 15
@@ -96,7 +97,7 @@ test "out of the suit she crosses unsuited, and the garden refuses her flight" {
     }
     bodyState(body, 0, suit) == 0
     bodyState(body, 0, flightFuel) == 0
-    bodyPosition(body, 0, z) > 38
+    bodyPosition(body, 0, z) > 12.9
   }
 }
 
@@ -105,9 +106,9 @@ test "suited up in the garden, she comes home suited and flies" {
     ticks 30
     seat1: body.press suit 1 0.2 0
     ticks 15
-    seat1: body.pose 57 0.05 36.3 180 0 0
+    seat1: body.pose spawn:portal-garden 0
     ticks 10
-    seat1: body.fly -1 0 0 0 0 0 2
+    seat1: body.fly 1 0 0 0 0 0 2
     ticks 70
     seat1: body.press suit 1 0.2 0
     ticks 15
@@ -125,7 +126,7 @@ test "suited up in the garden, she comes home suited and flies" {
     }
     bodyState(body, 0, suit) == 1
     bodyPosition(body, 0, y) > 1
-    bodyPosition(body, 0, z) > 38
+    bodyPosition(body, 0, z) > 12.9
   }
 }
 

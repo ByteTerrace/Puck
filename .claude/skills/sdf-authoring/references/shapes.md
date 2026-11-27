@@ -225,7 +225,7 @@ are the authored ones. Strands closer than twice their radius fuse.
 |---|---|---|
 | `material` | palette slot, clamped to [0, 32) | 0 |
 | `blend` | see `composition.md` | `Union` |
-| `smooth` | blend radius, clamped [0, 0.5] | 0 |
+| `smooth` | blend radius, clamped [0, 0.5]; a number or a `state.<row>[.<key>]` binding, each write of which re-emits the creation and rebakes the groups its blend sits in | 0 |
 | `group` | ≥ 0 | 0, ungrouped |
 | `domain` | up to 4 folds | none |
 | `panel`, `trims` | see `composition.md` | none |
