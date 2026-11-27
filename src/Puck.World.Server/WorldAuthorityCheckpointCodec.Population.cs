@@ -205,32 +205,43 @@ public static partial class WorldAuthorityCheckpointCodec {
         reason = string.Empty;
         return true;
     }
-    // The digest of what a prediction restores from a body's continuation (WorldPopulation.RestorePredicted reads the
-    // kit, the body's own sections, the tail and the attached solid rows, and nothing else): the folded body sections'
-    // digests in the continuation's order, then the kit, the tail and the rows. The entry's own sections (who holds the
-    // slot, its producer, route and look) are the capturing authority's and no restore reads them, so they are left out,
-    // and a continuation and a predicted body restore to one body exactly when their digests agree.
-    internal static ulong PredictedBodyDigest(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, byte kit, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
-        var sections = new BodySectionDigester { Digester = new SectionDigester(hash: Fnv1aHash.Create(), held: 0U, heldDigests: default, work: null, writer: writer) };
+    // The parts of one body's continuation a prediction compares, in order: a digest per section (by section kind; zero
+    // for a section the fold leaves out), then the tail's contact-field observation, profile and registers, then the
+    // attached solid rows. Two images whose parts agree restore to one body with the same attached rows, and the first
+    // part that differs names what diverged.
+    private static readonly int SectionKindCount = Enum.GetValues<WorldContinuationSectionKind>().Length;
+    private static readonly string[] PredictedBodyPartNames = [.. Enum.GetNames<WorldContinuationSectionKind>(), "contact observation", "profile", "registers", "attached rows"];
+
+    internal static int PredictedBodyPartCount => PredictedBodyPartNames.Length;
+
+    internal static string PredictedBodyPartName(int part) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: part);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: part, other: PredictedBodyPartNames.Length);
+        return PredictedBodyPartNames[part];
+    }
+    internal static void PredictedBodyParts(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, Span<ulong> parts) {
+        ArgumentOutOfRangeException.ThrowIfNotEqual(value: parts.Length, other: PredictedBodyPartNames.Length);
+
+        var sections = new SectionPartDigester(parts: parts[..SectionKindCount], writer: writer);
 
         WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref sections);
-
-        var hash = sections.Digester.Hash;
-
-        hash.Add(value: kit);
-        hash.Add(value: ContinuationTailDigest(tail: in entry.Tail, work: null, writer: writer));
+        parts[SectionKindCount] = (entry.Tail.ContactFieldObservationCurrent ? 1UL : 0UL);
+        writer.Reset();
+        WorldIdentityProjectionWire.WriteOptional(projection: entry.Tail.Profile, writer: writer);
+        parts[SectionKindCount + 1] = Fnv1aHash.Compute(values: writer.WrittenSpan);
+        writer.Reset();
+        WriteLongs(values: entry.Tail.Registers.Span, writer: writer);
+        parts[SectionKindCount + 2] = Fnv1aHash.Compute(values: writer.WrittenSpan);
         writer.Reset();
         WriteAttachedSolids(rows: attached, writer: writer);
-        hash.Add(value: Fnv1aHash.Compute(values: writer.WrittenSpan));
-        return hash.Value;
+        parts[SectionKindCount + 3] = Fnv1aHash.Compute(values: writer.WrittenSpan);
     }
-    // Digests the sections a body owns, which the section kinds list before the entry's own (Admission first).
-    private ref struct BodySectionDigester : IContinuationSectionVisitor {
-        internal SectionDigester Digester;
+    // Digests each folded section into its kind's place.
+    private ref struct SectionPartDigester(Span<ulong> parts, WireWriter writer) : IContinuationSectionVisitor {
+        private readonly Span<ulong> m_parts = parts;
 
-        public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> {
-            if (TSection.Section < WorldContinuationSectionKind.Admission) { Digester.Visit(section: ref section); }
-        }
+        public readonly void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> =>
+            m_parts[(int)TSection.Section] = (TSection.Folded ? SectionDigest(section: in section, writer: writer) : 0UL);
     }
     private static void WriteAttachedSolids(WireWriter writer, IReadOnlyList<WorldAttachedSolidCheckpoint> rows) =>
         writer.WriteArray(items: rows, writeItem: static (w, row) => {

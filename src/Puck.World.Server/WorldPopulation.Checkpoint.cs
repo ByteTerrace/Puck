@@ -397,90 +397,7 @@ public sealed partial class WorldPopulation {
 
             RestoreEntryBody(captured: in captured, defaults: defaults, index: captured.Index, seatKit: checkpoint.SeatKit);
 
-            var admission = captured.Admission;
-            var producer = captured.Producer;
-            var navigation = captured.Navigation;
-            var route = captured.Route.Path.Span;
-
-            captured.Designations.Targets.Span[..Math.Min(val1: captured.Designations.Targets.Length, val2: entry.Designations.Length)].CopyTo(destination: entry.Designations);
-            entry.KitIndex = admission.KitIndex;
-            entry.SelectedKit = admission.SelectedKit;
-            entry.SelectedLook = captured.Look.SelectedLook;
-            entry.BodyColor = captured.Look.BodyColor;
-            entry.CatalogRig = captured.Look.CatalogRig;
-            entry.TravelTurn = admission.TravelTurn;
-            entry.Generation = admission.Generation;
-            entry.IsAuthorityTransferred = admission.IsAuthorityTransferred;
-            entry.IsRemoteHuman = admission.IsRemoteHuman;
-            entry.Mobility = admission.Mobility;
-            entry.MobilityGeneration = admission.MobilityGeneration;
-            entry.Parked = admission.Parked;
-            entry.ParkedUntilTick = admission.ParkedUntilTick;
-            entry.PlacementId = admission.PlacementId;
-            entry.Titled = admission.Titled;
-            entry.SpawnPosition = admission.SpawnPosition;
-            entry.SpawnYaw = admission.SpawnYaw;
-            entry.AdmissionInstalledGrantTemplates = admission.InstalledGrantTemplates;
-            entry.AdmissionRevokedKeys = [.. admission.RevokedKeys.Select(selector: static key => (key.Capability, key.Subject))];
-            entry.IdentityDomain = admission.IdentityDomain;
-            entry.IdentitySubject = admission.IdentitySubject;
-            entry.AdmissionTrust = admission.AdmissionTrust;
-            entry.AdmissionTier = admission.AdmissionTier;
-            entry.ProducerState = new BodyProducerState {
-                AcquiredTarget = producer.AcquiredTarget,
-                ActiveProducerCurveIndex = producer.ActiveCurveIndex,
-                ActiveProducerName = producer.ActiveName,
-                ActiveProducerNavigationDomainIndex = producer.ActiveNavigationDomainIndex,
-                ActivityPhase = producer.ActivityPhase,
-                ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
-                ActivityRate = producer.ActivityRate,
-                CurveArcRaw = producer.CurveArcRaw,
-                CurveArcRemainder = producer.CurveArcRemainder,
-                FlockDesired = producer.Flock.Desired,
-                FlockGeneration = producer.Flock.Generation,
-                FlockRemainingTicks = producer.Flock.RemainingTicks,
-                FlockSampleOrdinal = producer.Flock.SampleOrdinal,
-                FlockSeeded = producer.Flock.Seeded,
-                FlockTarget = producer.Flock.Target,
-                Phase = producer.Phase,
-                PhaseRemainder = producer.PhaseRemainder,
-                PreferredAltitude = producer.PreferredAltitude,
-                StandDown = producer.StandDown,
-                WeaveFrequency = producer.WeaveFrequency,
-            };
-            entry.AutonomyState = new BodyAutonomyState {
-                MotionElapsedTicks = captured.Cadence.MotionElapsedTicks,
-                MotionPeriodTicks = captured.Cadence.MotionPeriodTicks,
-                MotionRemainingTicks = captured.Cadence.MotionRemainingTicks,
-                SteeringElapsedTicks = captured.Cadence.SteeringElapsedTicks,
-                SteeringIntent = captured.Steering.Intent,
-                SteeringPeriodTicks = captured.Cadence.SteeringPeriodTicks,
-                SteeringRemainingTicks = captured.Cadence.SteeringRemainingTicks,
-                SteeringSeeded = captured.Steering.Seeded,
-            };
-            if (
-                (producer.ActiveName is { } activeName) &&
-                m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Producers.TryGetValue(
-                key: activeName,
-                value: out var binding
-            )
-            ) {
-                entry.ProducerState.FlockBinding = binding;
-            }
-            entry.NavigationState.DomainIndex = navigation.DomainIndex;
-            entry.NavigationState.GoalCell = navigation.GoalCell;
-            entry.NavigationState.Waypoint = navigation.Waypoint;
-            entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
-            entry.NavigationState.Status = navigation.Status;
-            entry.NavigationState.PathLength = route.Length;
-            if (route.Length != 0) {
-                route.CopyTo(destination: entry.NavigationState.WritablePath());
-            }
-            if (navigation.DomainIndex >= 0) {
-                // Even a failed search retains its domain, goal, and status. The source baked that domain
-                // before searching; preserve the same retention proof after restore, including an empty path.
-                m_navigation[navigation.DomainIndex].EnsureBaked();
-            }
+            RestoreEntrySections(captured: in captured, entry: entry, seatKit: checkpoint.SeatKit);
 
             if (
                 entry.IsRemoteHuman &&
@@ -508,10 +425,98 @@ public sealed partial class WorldPopulation {
         m_factAllSlotsDirty = true;
     }
 
+    // Writes a captured entry's own sections into its slot's entry: the entry half of a restore, beside the body half
+    // (RestoreEntryBody), shared by a whole checkpoint's restore and a client's prediction of one body.
+    private void RestoreEntrySections(Entry entry, in WorldPopulationEntryCheckpoint captured, byte seatKit) {
+        var admission = captured.Admission;
+        var producer = captured.Producer;
+        var navigation = captured.Navigation;
+        var route = captured.Route.Path.Span;
+
+        captured.Designations.Targets.Span[..Math.Min(val1: captured.Designations.Targets.Length, val2: entry.Designations.Length)].CopyTo(destination: entry.Designations);
+        entry.KitIndex = admission.KitIndex;
+        entry.SelectedKit = admission.SelectedKit;
+        entry.SelectedLook = captured.Look.SelectedLook;
+        entry.BodyColor = captured.Look.BodyColor;
+        entry.CatalogRig = captured.Look.CatalogRig;
+        entry.TravelTurn = admission.TravelTurn;
+        entry.Generation = admission.Generation;
+        entry.IsAuthorityTransferred = admission.IsAuthorityTransferred;
+        entry.IsRemoteHuman = admission.IsRemoteHuman;
+        entry.Mobility = admission.Mobility;
+        entry.MobilityGeneration = admission.MobilityGeneration;
+        entry.Parked = admission.Parked;
+        entry.ParkedUntilTick = admission.ParkedUntilTick;
+        entry.PlacementId = admission.PlacementId;
+        entry.Titled = admission.Titled;
+        entry.SpawnPosition = admission.SpawnPosition;
+        entry.SpawnYaw = admission.SpawnYaw;
+        entry.AdmissionInstalledGrantTemplates = admission.InstalledGrantTemplates;
+        entry.AdmissionRevokedKeys = [.. admission.RevokedKeys.Select(selector: static key => (key.Capability, key.Subject))];
+        entry.IdentityDomain = admission.IdentityDomain;
+        entry.IdentitySubject = admission.IdentitySubject;
+        entry.AdmissionTrust = admission.AdmissionTrust;
+        entry.AdmissionTier = admission.AdmissionTier;
+        entry.ProducerState = new BodyProducerState {
+            AcquiredTarget = producer.AcquiredTarget,
+            ActiveProducerCurveIndex = producer.ActiveCurveIndex,
+            ActiveProducerName = producer.ActiveName,
+            ActiveProducerNavigationDomainIndex = producer.ActiveNavigationDomainIndex,
+            ActivityPhase = producer.ActivityPhase,
+            ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
+            ActivityRate = producer.ActivityRate,
+            CurveArcRaw = producer.CurveArcRaw,
+            CurveArcRemainder = producer.CurveArcRemainder,
+            FlockDesired = producer.Flock.Desired,
+            FlockGeneration = producer.Flock.Generation,
+            FlockRemainingTicks = producer.Flock.RemainingTicks,
+            FlockSampleOrdinal = producer.Flock.SampleOrdinal,
+            FlockSeeded = producer.Flock.Seeded,
+            FlockTarget = producer.Flock.Target,
+            Phase = producer.Phase,
+            PhaseRemainder = producer.PhaseRemainder,
+            PreferredAltitude = producer.PreferredAltitude,
+            StandDown = producer.StandDown,
+            WeaveFrequency = producer.WeaveFrequency,
+        };
+        entry.AutonomyState = new BodyAutonomyState {
+            MotionElapsedTicks = captured.Cadence.MotionElapsedTicks,
+            MotionPeriodTicks = captured.Cadence.MotionPeriodTicks,
+            MotionRemainingTicks = captured.Cadence.MotionRemainingTicks,
+            SteeringElapsedTicks = captured.Cadence.SteeringElapsedTicks,
+            SteeringIntent = captured.Steering.Intent,
+            SteeringPeriodTicks = captured.Cadence.SteeringPeriodTicks,
+            SteeringRemainingTicks = captured.Cadence.SteeringRemainingTicks,
+            SteeringSeeded = captured.Steering.Seeded,
+        };
+        if (
+            (producer.ActiveName is { } activeName) &&
+            m_kits[CapturedKitIndex(captured: captured, seatKit: seatKit)].Producers.TryGetValue(
+            key: activeName,
+            value: out var binding
+        )
+        ) {
+            entry.ProducerState.FlockBinding = binding;
+        }
+        entry.NavigationState.DomainIndex = navigation.DomainIndex;
+        entry.NavigationState.GoalCell = navigation.GoalCell;
+        entry.NavigationState.Waypoint = navigation.Waypoint;
+        entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
+        entry.NavigationState.Status = navigation.Status;
+        entry.NavigationState.PathLength = route.Length;
+        if (route.Length != 0) {
+            route.CopyTo(destination: entry.NavigationState.WritablePath());
+        }
+        if (navigation.DomainIndex >= 0) {
+            // Even a failed search retains its domain, goal, and status. The source baked that domain
+            // before searching; preserve the same retention proof after restore, including an empty path.
+            m_navigation[navigation.DomainIndex].EnsureBaked();
+        }
+    }
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
     // Builds a slot's body from a captured entry and writes the entry's body sections and registers into it: the body
     // half of a restore, shared by a whole checkpoint's restore and a client's prediction of its own body, which
-    // restores an entry another authority captured into a slot of its own.
+    // restores an entry another authority captured at that entry's own index.
     private WorldBody RestoreEntryBody(in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, int index, byte seatKit) {
         var entry = m_entries[index];
         var profile = ((captured.Tail.Profile is { } projection)
@@ -555,79 +560,91 @@ public sealed partial class WorldPopulation {
         ApplyRigidContactImages(index: index, images: captured.Body.Contacts.Slots.Span);
         return body;
     }
-    /// <summary>Restores into a local seat slot the body another authority captured, for a client's prediction of its own
-    /// body: the slot holds that body's exact sections and registers, under its captured kit, and no other entry or
-    /// relationship changes. The population must be one no authority steps.</summary>
-    /// <param name="slot">The 0-based local seat slot.</param>
-    /// <param name="captured">The captured entry, in this population's document.</param>
+    /// <summary>Restores the body another authority captured, at its own index and with its whole entry (admission,
+    /// producer, cadence, route and the rest), for a client's prediction of that body: the population then holds that
+    /// body alone, as the capturing authority held it, so the authority's own step (<see cref="StepBodies"/>) steps it
+    /// down the same path. Every other slot is released. The population must be one no authority steps.</summary>
+    /// <param name="captured">The captured entry, in this population's document, whose index names a slot of this
+    /// population.</param>
     /// <param name="defaults">The document's player defaults, which an identity projection resolves against.</param>
-    /// <returns>The restored body.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is not a local seat slot.</exception>
     /// <param name="attached">The world's attached solid rows as the capturing authority's step left them, which the
     /// body's step reads where it stands on or against one.</param>
-    public WorldBody RestorePredicted(int slot, in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: slot, other: LocalSeatCount);
+    /// <returns>The restored body.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="defaults"/> or <paramref name="attached"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The captured index names no slot of this population.</exception>
+    /// <exception cref="InvalidOperationException">The captured entry or attached rows do not fit this population.</exception>
+    public WorldBody RestorePredicted(in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
         ArgumentNullException.ThrowIfNull(argument: attached);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: captured.Index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: captured.Index, other: Capacity);
         if ((MovingSolids is { } moving) && (attached.Count != 0)) {
             moving.ValidateAttached(rows: attached);
             moving.RestoreAttached(rows: attached);
         }
-        m_entries[slot].Active = false;
-        m_entries[slot].Body = null;
-
-        var body = RestoreEntryBody(captured: in captured, defaults: defaults, index: slot, seatKit: m_seatKit);
-
-        // The slot's own entry keeps its admission, so the kit the body was built under is kept beside it for the digest.
-        (m_predictedKits ??= new byte[WorldBodiesLimits.LocalSeatCount])[slot] = CapturedKitIndex(captured: in captured, seatKit: m_seatKit);
-        return body;
-    }
-    // The kit each local seat slot's predicted body was restored under (RestorePredicted), or null before any was.
-    private byte[]? m_predictedKits;
-
-    /// <summary>Digests the predicted body a local seat slot holds now as <see cref="PredictedBodyDigest(in WorldPopulationEntryCheckpoint, IReadOnlyList{WorldAttachedSolidCheckpoint})"/>
-    /// digests a continuation: over the kit the body runs, its own sections, its registers, profile and contact-field
-    /// observation, and the attached solid rows its step reads. A continuation that digests alike restores
-    /// (<see cref="RestorePredicted"/>) to a body whose step gives the same results; what the population holds outside the
-    /// slot's body and the attached rows is not digested. Taken between a completed step and the next.</summary>
-    /// <param name="slot">The 0-based local seat slot, which <see cref="RestorePredicted"/> filled.</param>
-    /// <returns>The digest.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is not a local seat slot.</exception>
-    /// <exception cref="InvalidOperationException">The slot holds no body <see cref="RestorePredicted"/> restored.</exception>
-    public ulong PredictedBodyDigest(int slot) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: slot, other: LocalSeatCount);
-        if ((m_predictedKits is not { } kits) || (m_entries[slot] is not { Active: true, Body: { } body } entry)) {
-            throw new InvalidOperationException(message: $"local seat slot {slot} holds no predicted body.");
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index].Active || (m_entries[index].Body is not null)) { m_entries[index].Retire(clearAdmission: true); }
         }
 
-        EntryCheckpoint(alias: true, body: body, entry: entry, held: false, image: out var image, index: slot);
-        return WorldAuthorityCheckpointCodec.PredictedBodyDigest(
+        var body = RestoreEntryBody(captured: in captured, defaults: defaults, index: captured.Index, seatKit: m_seatKit);
+
+        RestoreEntrySections(captured: in captured, entry: m_entries[captured.Index], seatKit: m_seatKit);
+        AdoptRestoredIsland(index: captured.Index, rootPlusOne: captured.Body.Clocks.RigidSleepRootPlusOne);
+        return body;
+    }
+
+    /// <summary>Gets the parts of a body's continuation a prediction compares (<see cref="PredictedBodyParts(int, Span{ulong})"/>):
+    /// one digest per continuation section, by <see cref="WorldContinuationSectionKind"/>, then the tail's contact-field
+    /// observation, its profile and its registers, then the attached solid rows.</summary>
+    public static int PredictedBodyPartCount => WorldAuthorityCheckpointCodec.PredictedBodyPartCount;
+
+    /// <summary>Returns the name of one part of a body's continuation (<see cref="PredictedBodyPartCount"/>): a section
+    /// kind's name, <c>contact observation</c>, <c>profile</c>, <c>registers</c> or <c>attached rows</c>.</summary>
+    /// <param name="part">The 0-based part.</param>
+    /// <returns>The part's name.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="part"/> names no part.</exception>
+    public static string PredictedBodyPartName(int part) => WorldAuthorityCheckpointCodec.PredictedBodyPartName(part: part);
+
+    /// <summary>Digests, part by part, the body a slot holds now (<see cref="PredictedBodyPartCount"/>), as
+    /// <see cref="PredictedBodyParts(in WorldPopulationEntryCheckpoint, IReadOnlyList{WorldAttachedSolidCheckpoint}, Span{ulong})"/>
+    /// digests a continuation: equal parts mean the slot holds the body <see cref="RestorePredicted"/> restores from that
+    /// continuation. What the population holds outside the slot and the attached rows is not digested. Taken between a
+    /// completed step and the next.</summary>
+    /// <param name="index">The slot's 0-based population index.</param>
+    /// <param name="parts">The destination, one digest per part.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no slot, or <paramref name="parts"/>
+    /// holds other than <see cref="PredictedBodyPartCount"/> values.</exception>
+    /// <exception cref="InvalidOperationException">The slot holds no active body.</exception>
+    public void PredictedBodyParts(int index, Span<ulong> parts) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: Capacity);
+        if (m_entries[index] is not { Active: true, Body: { } body } entry) {
+            throw new InvalidOperationException(message: $"slot {index} holds no active body.");
+        }
+
+        EntryCheckpoint(alias: true, body: body, entry: entry, held: false, image: out var image, index: index);
+        WorldAuthorityCheckpointCodec.PredictedBodyParts(
             attached: (MovingSolids?.CaptureAttached() ?? []),
             entry: ref image,
-            kit: kits[slot],
+            parts: parts,
             writer: (m_continuationWriter ??= new WireWriter())
         );
     }
-    /// <summary>Digests a captured continuation as <see cref="PredictedBodyDigest(int)"/> digests the body
-    /// <see cref="RestorePredicted"/> restores from it: equal digests mean the continuation and a predicted body restore
-    /// to the same body under this population's document.</summary>
-    /// <param name="captured">The captured entry, in this population's document.</param>
+    /// <summary>Digests a captured continuation part by part (<see cref="PredictedBodyPartCount"/>), as
+    /// <see cref="PredictedBodyParts(int, Span{ulong})"/> digests the slot <see cref="RestorePredicted"/> fills from it.</summary>
+    /// <param name="captured">The captured entry.</param>
     /// <param name="attached">The attached solid rows the continuation carries.</param>
-    /// <returns>The digest.</returns>
+    /// <param name="parts">The destination, one digest per part.</param>
     /// <exception cref="ArgumentNullException"><paramref name="attached"/> is <see langword="null"/>.</exception>
-    public ulong PredictedBodyDigest(in WorldPopulationEntryCheckpoint captured, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="parts"/> holds other than
+    /// <see cref="PredictedBodyPartCount"/> values.</exception>
+    public void PredictedBodyParts(in WorldPopulationEntryCheckpoint captured, IReadOnlyList<WorldAttachedSolidCheckpoint> attached, Span<ulong> parts) {
         ArgumentNullException.ThrowIfNull(argument: attached);
 
         var image = captured;
 
-        return WorldAuthorityCheckpointCodec.PredictedBodyDigest(
-            attached: attached,
-            entry: ref image,
-            kit: CapturedKitIndex(captured: in captured, seatKit: m_seatKit),
-            writer: (m_continuationWriter ??= new WireWriter())
-        );
+        WorldAuthorityCheckpointCodec.PredictedBodyParts(attached: attached, entry: ref image, parts: parts, writer: (m_continuationWriter ??= new WireWriter()));
     }
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);

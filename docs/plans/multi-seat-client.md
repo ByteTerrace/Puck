@@ -635,9 +635,12 @@ is a real divergence, never rounding.
   reaches only through a crossing (the garden, the city, the moon) is not yet
   predicted, and resolving those from the package by pin, as creations already
   are, is the next step. It restores the
-  continuation into a local seat slot (`WorldPopulation.RestorePredicted`, the
-  body half of a checkpoint restore shared with `WorldPopulation.Restore`) and
-  steps it with `WorldPopulation.AdvanceSeats`.
+  continuation at the body's own index with its whole entry
+  (`WorldPopulation.RestorePredicted`, the body and entry halves of a
+  checkpoint restore shared with `WorldPopulation.Restore`) and steps it with
+  the authority's own tick of bodies (`WorldPopulation.StepBodies`), so the
+  attached solids refresh, the body rides them, sleeps and wakes as it does at
+  the authority.
 - *The input.* The client keeps every batch a remote seat sends, stamped with
   the authority tick it was sent at. The seat clock
   (`WorldClient.SeatClockSeconds`, which runs on through a stalled delivery) is
@@ -676,21 +679,24 @@ so the only prediction there is runs the one step behind
 `IWorldSeatPrediction`, implemented in the composition root with no motion code
 of its own; and the input reaches the predicted body only through the fold and
 the owner-input write the authority uses. **Where it stops:** the step also
-reads what lies outside the body. The static ground, gravity, kits and motion
-programs come from the delivered document and the moving solids' poses from the
-continuation, so they are exact at its tick; another body, a moving solid's
-motion after that tick and a rule's write to the body's registers are not
-predicted, and show as a correction at the next delivery. When the sent
+reads what lies outside the body. The static ground, gravity, orbits, kits and
+motion programs come from the client's copy of the document and the attached
+solids' poses from the continuation, then from the attached refresh the
+authority runs; another body (and a solid attached to one), field regions,
+state-bound values the authority changed and a rule's write to the body's
+registers are not predicted, and show as a correction at the next delivery,
+named by the part of the continuation that differed. When the sent
 history no longer holds the batch the continuation holds, the seat steers from
 the delivery.
 
 **The path.** Each seat's predicted body is kept between predictions as a path,
-one digest of what a restore reads (`WorldPopulation.PredictedBodyDigest`) per
-tick, and each prediction steps only the ticks new since the last. A delivery
-leaves the path standing when the path's body at the continuation's tick
-digests as the continuation does and every batch the path took from there is
+its body's continuation digested part by part (`WorldPopulation.PredictedBodyParts`)
+each tick, and each prediction steps only the ticks new since the last. A
+delivery leaves the path standing when the path's body at the continuation's
+tick agrees with the continuation in every part and every batch the path took from there is
 the one a replay takes now; otherwise the path is replayed from the
-continuation, once per correction. `world.prediction check on` replays every
+continuation, once per correction, and the correction is counted against each
+part that differed. `world.prediction check on` replays every
 continued prediction from its continuation and counts the tips that differ.
 
 **Attacks it closes.** A prediction writes nothing an authority or the

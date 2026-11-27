@@ -1072,6 +1072,38 @@ public sealed partial class WorldPopulation {
         return true;
     }
 
+    /// <summary>Steps every body one authority tick, in the tick's one order: carry relationships the drain invalidated
+    /// are released, the field inputs sampled, the simulated bodies (<see cref="AdvanceSimulated"/>) and then the seats
+    /// (<see cref="AdvanceSeats"/>) advanced, tethers resolved, carried bodies settled around the dynamic-contact solve,
+    /// mounts followed and the step completed (<see cref="CompleteStep"/>). The one sequence an authority's tick and a
+    /// client's prediction of its own body (<see cref="RestorePredicted"/>) both run, so a body steps alike in
+    /// either.</summary>
+    /// <param name="definition">The authority's current live definition and state binding.</param>
+    /// <param name="tick">The authority tick being advanced.</param>
+    /// <param name="stepTicks">The sub-step duration in engine ticks.</param>
+    /// <param name="stepStartEngineTick">The engine-time boundary at the start of the sub-step.</param>
+    /// <param name="regionResistance">The travel resistance of each field region this tick, by region index
+    /// (<see cref="SampleFieldInputs"/>).</param>
+    /// <param name="engageProbeOrdinals">The seats' engage probe ordinals (<see cref="AdvanceSeats"/>).</param>
+    /// <param name="engageEdges">Receives the seats' engage edges (<see cref="AdvanceSeats"/>).</param>
+    /// <param name="jobs">The pool the kit partitions fork across, or <see langword="null"/> to run them on the calling
+    /// thread; the result is the same either way.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
+    /// <exception cref="ArgumentException"><paramref name="regionResistance"/> does not hold one value per field
+    /// region.</exception>
+    public void StepBodies(WorldDefinition definition, ulong tick, ulong stepTicks, ulong stepStartEngineTick, ReadOnlySpan<FixedQ4816> regionResistance, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges, Puck.Hosting.Jobs.JobPool? jobs = null) {
+        PrepareCarriedBodies();
+        SampleFieldInputs(regionResistance: regionResistance);
+        AdvanceSimulated(definition: definition, jobs: jobs, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
+        AdvanceSeats(engageEdges: engageEdges, engageProbeOrdinals: engageProbeOrdinals, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
+        ResolveTethers();
+        UpdateCarriedBodies();
+        using (Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickContact)) { ResolveDynamicContacts(); }
+        // The solve may move a rigid carrier. Reconcile its held pose after the contact step as well.
+        UpdateCarriedBodies();
+        FollowMounts();
+        CompleteStep(tick: tick);
+    }
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
     /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
