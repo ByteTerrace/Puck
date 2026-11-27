@@ -208,6 +208,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         public IGpuBuffer? Sums;
         public ulong ClearStart;
         public ulong ClearEnd;
+        // The glass clear's sky filter, cleared whole: the glass pass writes only its glass pixels, so every other word
+        // must pass the sky as it is.
+        public IGpuBuffer? SkyFilter;
         // A raster part's draw.
         public bool Occlude;
         public SdfMeshCull Cull;
@@ -534,7 +537,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         m_owner.RecordHits(instance: m_context.Instance, part: m_part, tables: tables);
-        // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation: the bytes the last
+        // The glass clear zeroes its sky filter whole, and the glass sums ahead of the glass pass's accumulation: the bytes the last
         // submitted raster may have written (m_glassDirty), and it stages the rows this frame's raster may write, at the
         // render grid's width that the raster addresses the sums by (sdfGlassSumWord).
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
@@ -553,6 +556,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_decided.Sums = sums;
             m_decided.ClearStart = start;
             m_decided.ClearEnd = end;
+            m_decided.SkyFilter = recording.Outputs[1].Buffer!;
             m_glassPending = ((rows is { } span) ? (sums, (span.First * rowBytes), ((span.Last + 1UL) * rowBytes)) : (sums, 0UL, 0UL));
 
             return RenderGraphPackageOutcome.Drew;
@@ -647,6 +651,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             if (m_decided.ClearEnd > m_decided.ClearStart) {
                 recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, m_decided.Sums!.BufferHandle, (m_decided.ClearEnd - m_decided.ClearStart), m_decided.ClearStart);
             }
+            recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, m_decided.SkyFilter!.BufferHandle, m_decided.SkyFilter.SizeBytes, 0UL);
             return;
         }
         if (IsMesh) {

@@ -74,6 +74,7 @@ public static partial class SdfWorldPackage {
             Read(element: ShaderValueType.Uint2, name: TransportRead),
             Written(element: ShaderValueType.Uint, name: ExposureMeterWritten),
             Read(element: ShaderValueType.Uint, name: FieldColors),
+            Read(element: ShaderValueType.Uint, name: GlassSkyFilter),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),

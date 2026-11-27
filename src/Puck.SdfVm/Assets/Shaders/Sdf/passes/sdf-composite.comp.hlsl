@@ -14,7 +14,8 @@
 //   run's scale and offset. The field runs are read from the grid the sky evaluated them on, filtered over the texels it
 //   evaluated; where it evaluated none beside the pixel, the composite evaluates every field layer here, and each counts
 //   its own evaluation. The sky share then passes through the haze and the medium to the far distance; the fog ends at the
-//   sky, which is its colour at infinity. A wholly covered pixel reads no run.
+//   sky, which is its colour at infinity. A wholly covered pixel reads no run. Behind glass the sky share is tinted by
+//   the glass's sky filter (frame/sdf-glass-sky-filter.hlsli), since the coverage carries only its luminance.
 // - The bounded volumes composite last over each share, the surface share's clipped at the transport's distance and the
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
@@ -39,10 +40,31 @@
 #include "Shared/transfer.hlsli"
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
+#include "../frame/sdf-glass-sky-filter.hlsli"
 
 // Whether the view shows a field view: the proximity view, or a slicing plane (passGroup.fieldStyle.z).
 bool sdfFieldShown() {
     return ((passGroup.debugMode == SDF_DEBUG_VIEW_PROXIMITY) || (passGroup.fieldStyle.z > 0.0));
+}
+// The index of the render pixel under an output pixel in a buffer of one word a render pixel, and whether a buffer of
+// `count` words holds one for every render pixel: the tables' dummy, which a view binds where no pass wrote the buffer
+// this frame, does not, and a pixel then reads none of it.
+bool sdfRenderWordIndex(uint2 pixel, uint count, out uint index) {
+    uint2 grid = max(passGroup.imageExtent, uint2(1u, 1u));
+    uint2 render = min(((pixel * passGroup.imageExtent) / max(passGroup.extent, uint2(1u, 1u))), (grid - 1u));
+
+    index = ((render.y * passGroup.imageExtent.x) + render.x);
+    return (count >= (grid.x * grid.y));
+}
+// The tint the glass a pixel shows passes the sky behind it with (frame/sdf-glass-sky-filter.hlsli), from the glass sky
+// filter's word at the render pixel under the output pixel: one where no glass pass wrote the filter this frame.
+float3 sdfCompositeGlassTint(uint2 pixel) {
+    uint count;
+    uint stride;
+    uint index;
+
+    sdfGlassSkyFilter.GetDimensions(count, stride);
+    return (sdfRenderWordIndex(pixel, count, index) ? sdfGlassSkyTint(sdfGlassSkyFilter[index]) : float3(1.0, 1.0, 1.0));
 }
 // The field views over a composited, display-referred pixel: the proximity view dims the scene, then the field pass's
 // word at the render pixel under the output pixel covers it by its share. A view whose graph has not yet taken the field
@@ -52,13 +74,12 @@ float3 sdfFieldOver(float3 color, uint2 pixel) {
         color = (lerp(dot(color, PuckRec709Luminance).xxx, color, 0.35) * 0.35);
     }
 
-    uint2 render = min(((pixel * passGroup.imageExtent) / max(passGroup.extent, uint2(1u, 1u))), (max(passGroup.imageExtent, uint2(1u, 1u)) - 1u));
-    uint index = ((render.y * passGroup.imageExtent.x) + render.x);
     uint count;
     uint stride;
+    uint index;
 
     sdfFieldColors.GetDimensions(count, stride);
-    if (index >= count) {
+    if (!sdfRenderWordIndex(pixel, count, index)) {
         return color;
     }
 
@@ -168,7 +189,7 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
             if (sdfAirBeforeSky()) {
                 sky = ((skyAir.transmittance * sky) + (skyAir.weights.y * hazeColor) + (skyAir.weights.z * sdfSky[0].MediumColor));
             }
-            sky = ((1.0 - coverage) * sky);
+            sky = (((1.0 - coverage) * sky) * sdfCompositeGlassTint(id.xy));
         }
 
         float far = worldFarDistance(view);

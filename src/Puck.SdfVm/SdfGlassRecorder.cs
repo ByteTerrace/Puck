@@ -29,6 +29,8 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
     private readonly SdfWorldTables?[] m_portTables;
     // The glass probe history's ports (SdfWorldPackage.GlassProbeHistory).
     private readonly SdfHistoryPorts m_history;
+    // The output position of the sky filter the pass writes (SdfWorldPackage.GlassSkyFilter).
+    private readonly int m_skyFilterOutput;
 
     private bool m_disposed;
     private SdfShadeDispatch? m_shadePlan;
@@ -39,11 +41,14 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        var outputs = LocalNames(pass: context.Pass, part: SdfWorldPackage.Parts.GlassShade, ports: context.Outputs);
+
         m_history = new SdfHistoryPorts(
             inputs: LocalNames(pass: context.Pass, part: SdfWorldPackage.Parts.GlassShade, ports: context.Inputs),
-            outputs: LocalNames(pass: context.Pass, part: SdfWorldPackage.Parts.GlassShade, ports: context.Outputs),
+            outputs: outputs,
             slots: context.InFlightFrames
         );
+        m_skyFilterOutput = Array.IndexOf(array: outputs, value: SdfWorldPackage.Parts.GlassSkyFilter);
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -125,6 +130,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         tables.WriteInterfaceBuffer(buffer: recording.Inputs[GlassSumsInput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSums, set: set);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: ((m_temporal ? recording.Outputs[1].Buffer : null) ?? tables.DummyBuffer), layout: layout, member: SdfWorldPackage.ReactivityWritten, set: set);
+        tables.WriteInterfaceBuffer(buffer: recording.Outputs[m_skyFilterOutput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSkyFilterWritten, set: set);
         m_history.Forget(slot: slot);
         m_portTables[slot] = tables;
     }

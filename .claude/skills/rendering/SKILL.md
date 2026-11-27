@@ -1386,7 +1386,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   read the volume as off that way). A medium (`SdfGlass.Scatter`, `Scattering`, material row
   31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves) are
   functions of the thickness, `opaque - t` and that light alone: the pass reads
-  the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
+  the lit image once (`sdfGlassLitAt`, or the frost's disc, whose taps that land
+  nearer than the glass are left out, `sdfGlassReadsBehind`). The lit image's
+  coverage carries only the luminance of what the glass passes, so the sky the
+  composite puts behind glass is tinted by the glass's sky filter
+  (`SdfWorldPackage.GlassSkyFilter`, `frame/sdf-glass-sky-filter.hlsli`): the
+  glass clear zeroes it whole, the shading pass writes its glass pixels, and
+  `SdfSkyRecorder` binds it to the composite only while `GlassSeen` holds this
+  frame, the tables' dummy otherwise, since a frame that skips the glass passes
+  leaves an earlier frame's filter. A new reader of a glass product downstream
+  of the glass passes keeps that rule. The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits. A frame in which no glass draw's host box meets the view's
   frustum (`SdfWorldPasses.GlassSeen`, decided once per instance and frame for
