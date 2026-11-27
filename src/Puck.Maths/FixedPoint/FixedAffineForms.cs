@@ -503,9 +503,7 @@ public static class FixedAffineForms {
     /// <param name="segment">The segment's end.</param>
     /// <returns>The clamped parameter.</returns>
     public static FixedAffineForm SegmentParameter(FixedAffineForm2 p, FixedAffineForm2 segment) =>
-        (((segment.X.RawRadius == 0) && (segment.Y.RawRadius == 0) && !segment.X.IsUnbounded && !segment.Y.IsUnbounded)
-            ? SegmentParameter(p: p, segment: new FixedVector2(X: segment.X.Center, Y: segment.Y.Center))
-            : ClampedQuotient(numerator: Dot(a: p, b: segment), squares: Dot(a: segment, b: segment)));
+        SegmentParameter(p: [p.X, p.Y], segment: [segment.X, segment.Y]);
     /// <summary>Returns the parameter of a point's projection onto a segment from the origin whose end is itself a form, as
     /// <see cref="FixedVector3.SegmentParameter"/> takes it (see
     /// <see cref="SegmentParameter(FixedAffineForm2, FixedAffineForm2)"/>).</summary>
@@ -513,9 +511,7 @@ public static class FixedAffineForms {
     /// <param name="segment">The segment's end.</param>
     /// <returns>The clamped parameter.</returns>
     public static FixedAffineForm SegmentParameter(FixedAffineForm3 p, FixedAffineForm3 segment) =>
-        (((segment.X.RawRadius == 0) && (segment.Y.RawRadius == 0) && (segment.Z.RawRadius == 0) && !segment.X.IsUnbounded && !segment.Y.IsUnbounded && !segment.Z.IsUnbounded)
-            ? SegmentParameter(p: p, segment: new FixedVector3(X: segment.X.Center, Y: segment.Y.Center, Z: segment.Z.Center))
-            : ClampedQuotient(numerator: Dot(a: p, b: segment), squares: Dot(a: segment, b: segment)));
+        SegmentParameter(p: [p.X, p.Y, p.Z], segment: [segment.X, segment.Y, segment.Z]);
     /// <summary>Turns a point back through a constant rotation as <see cref="FixedQuaternion.RotateInverse"/> does: the
     /// exact linear map of the conjugate applied to the centre and every symbol's coefficients, so a rotated box stays a
     /// rotated box, and the point rotation's own few raws in the error.</summary>
@@ -839,10 +835,32 @@ public static class FixedAffineForms {
         // quotient's form clamps every value it holds.
         return Clamp(a: Linear(denominator: squares, forms: components, pad: 1L, weights: weights), high: FixedQ4816.One, low: FixedQ4816.Zero);
     }
-    // clamp(numerator / squares, 0, 1) for a segment parameter whose segment varies: the point side rounds the exact
-    // quotient once and clamps it, or answers zero for a zero segment, so every answer lies in [0, 1], and where the
-    // squared length's range stays above zero the quotient's form holds the rounded one before the clamp.
-    private static FixedAffineForm ClampedQuotient(FixedAffineForm numerator, FixedAffineForm squares) {
+    // A segment parameter whose segment is a form: the constant segment's rule where the end holds one value, else
+    // clamp(dot(p, s) / dot(s, s), 0, 1) over the two dot products' forms (each holds the exact dot product, as Dot's do).
+    // The point side rounds the exact quotient once and clamps it, or answers zero for a zero segment, so every answer
+    // lies in [0, 1], and where the squared length's range stays above zero the quotient's form holds the rounded one
+    // before the clamp.
+    private static FixedAffineForm SegmentParameter(ReadOnlySpan<FixedAffineForm> p, ReadOnlySpan<FixedAffineForm> segment) {
+        Span<long> ends = stackalloc long[segment.Length];
+        var held = true;
+
+        for (var index = 0; (index < segment.Length); index++) {
+            held &= (!segment[index].IsUnbounded && (segment[index].RawRadius == 0));
+            ends[index] = segment[index].RawCenter;
+        }
+
+        if (held && (Squares(segment: ends) is { } constantSquares)) {
+            return SegmentParameter(components: p, segment: ends, squares: constantSquares);
+        }
+
+        var numerator = FixedAffineForm.FromPoint(value: FixedQ4816.Zero);
+        var squares = FixedAffineForm.FromPoint(value: FixedQ4816.Zero);
+
+        for (var index = 0; (index < segment.Length); index++) {
+            numerator = Add(a: numerator, b: Product(a: p[index], b: segment[index], pad: 0L));
+            squares = Add(a: squares, b: Product(a: segment[index], b: segment[index], pad: 0L));
+        }
+
         var unit = FixedAffineForm.FromInterval(interval: new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One));
 
         if (numerator.IsUnbounded || squares.IsUnbounded || (squares.RawLow <= 0)) {
