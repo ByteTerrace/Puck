@@ -254,6 +254,31 @@ is much larger. The player has broad control over organizing it and over their
 own notes: free notes, tags, links between entries, people, places and marks,
 and their own arrangement.
 
+**Quests are shared and chained (the owner's ruling).** A player can share a
+quest with others. A recipient who hasn't met a chain's prerequisites starts at
+the farthest part of the chain they are eligible for. The sharer sees who
+accepted, who completed and who didn't meet the requirements, so a group stays
+on the same page.
+
+**Marks are shared with the group (the owner's ruling).** A player's marks are
+visible to their group by default, and an author may allow fully public marks.
+
+**The menu is the journal, worn on the wrist (the owner's ruling).** Menu,
+journal and wrist panel are one thing: a panel worn on the Moth's forearm,
+revealed through a flap in her armour when the player opens it. It is worn on
+the left forearm by default, and a player can move it to the right. Its look is
+minimalist and suits the mecha-cartoon style, yet distinctive and full of
+character, as the Pip-Boy is without its clutter. Opening it raises the arm and
+the camera focuses in slightly, tastefully and smoothly animated, in two reads:
+a pause read, standing still and truly working the panel, and an action read, a
+glance at it while moving. The world keeps running while it is open.
+
+**Companions live in the journal's menagerie (the owner's ruling).** The
+player keeps companions in a menagerie, a page of the journal, and swaps the
+active one at will. The first two are Mintstitch and Tangerine
+(`docs/game/art/companion-concept-pack/`). One companion is active at a time;
+the menagerie is owned by the character and travels with them across worlds.
+
 ## Creatures and scale
 
 **Creature collectives are authorable local laws**, not a prescribed group
