@@ -21,7 +21,7 @@ public static class TextEdit {
         edited = text;
 
         if (edit > 0L) {
-            if ((edit > 0x10FFFFL) || !Rune.IsValid(value: ((int)edit))) {
+            if ((edit > int.MaxValue) || !Rune.IsValid(value: ((int)edit))) {
                 return false;
             }
 

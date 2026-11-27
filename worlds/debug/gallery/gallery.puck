@@ -1279,11 +1279,12 @@ cameras: concat(map(galleryDisplays, display => terminalCamera(
 // her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
 //
 // Engaged, the backtick opens the display's console (../../standard/contexts/terminal-console.puck), a typed line that
-// works the display she stands at as its screen does: `shape <exhibit>` shows an exhibit on its turntable, `list` names
-// the groups and `list <group>` a group's exhibits, `turntable on` and `turntable off` set it turning or stop it,
-// `speed <-3..3>` sets its pace and the way it turns (0 stops it), and `help` says so. A command posts its action to the
-// display's terminal mailbox, which the gallery-console-command rules below carry into the same cells a tap on the
-// screen writes (gallerySelect, and the turntable's mailbox), so a typed command and a press leave the same state.
+// works the display she stands at as its screen does: `show <exhibit>` (or `shape <exhibit>`, its prototype name) shows
+// an exhibit on its turntable, `list` names the groups and `list <group>` a group's exhibits, `turntable on` and
+// `turntable off` set it turning or stop it, `speed <-3..3>` sets its pace and the way it turns (0 stops it), and `help`
+// says so. A command posts its action to the display's terminal mailbox, which the gallery-console-command rules below
+// carry into the same cells a tap on the screen writes (gallerySelect, and the turntable's mailbox), so a typed command
+// and a press leave the same state.
 let galleryConsoleActions = { show: 1, turn: 2, pace: 3 }
 let galleryConsoleSpeeds = filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0))
 let galleryConsole = {
@@ -1295,7 +1296,8 @@ let galleryConsole = {
       {
         line: "help"
         reply [
-          "shape <exhibit>    show an exhibit on this turntable"
+          "show <exhibit>     show an exhibit on this turntable"
+          "                   (shape <exhibit> too; list names them)"
           "list               name the groups"
           "list <group>       name a group's exhibits"
           "turntable on|off   set the turntable turning, or stop it"
@@ -1305,12 +1307,12 @@ let galleryConsole = {
       { line: "list", reply: concat(["groups (list <group> names its exhibits):"], terminalWrap(map(galleryDisplays, display => display.id))) }
     ],
     map(galleryDisplays, display => { line: $"list {display.id}", reply: terminalWrap(display.names) }),
-    map(galleryCatalog, entry => {
-      line: $"shape {entry.name}"
+    flatMap(galleryCatalog, entry => map(["show", "shape"], verb => {
+      line: $"{verb} {entry.name}"
       action: galleryConsoleActions.show
       value: entry.index
       reply [$"showing {galleryCopy[entry.name].title}"]
-    }),
+    })),
     [
       { line: "turntable on", action: galleryConsoleActions.turn, value: 1, reply ["the turntable turns"] }
       { line: "turntable off", action: galleryConsoleActions.turn, value: 0, reply ["the turntable stops"] }

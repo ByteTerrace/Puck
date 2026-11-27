@@ -330,20 +330,28 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             builder.WriteText(x, y, current.State == PresentationReadingState.Absent ? "absent" : "unmeasured", OverlayFrameBuilder.CellHeight(sizePx: Math.Min(h, 16)), OverlayColorRole.TextPrimary, maxChars: TextRunChars, alpha: m_panelAlpha);
         }
     }
-    private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
-        var rect = panel.Rect;
-
+    private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) => EmitClipped(
+        builder: builder,
+        clip: panel.Rect,
+        panel: in panel,
+        placeInClip: false,
+        seat: panel.Seat
+    );
+    // One panel inside one clip scope, `clip` screen-normalized: a world-scope panel clips to its own rect and is placed
+    // in the whole frame, a seat-scope one clips to its seat's viewport and is placed in it (placeInClip). Its bindings
+    // resolve for `seat`.
+    private void EmitClipped(OverlayFrameBuilder builder, in OverlayHudPanel panel, OverlayHudRect clip, bool placeInClip, int seat) {
         if (
-            (rect.Width <= 0f) ||
-            (rect.Height <= 0f)
+            (clip.Width <= 0f) ||
+            (clip.Height <= 0f)
         ) {
             return;
         }
 
-        var x = (rect.X * builder.Width);
-        var y = (rect.Y * builder.Height);
-        var w = (rect.Width * builder.Width);
-        var h = (rect.Height * builder.Height);
+        var x = (clip.X * builder.Width);
+        var y = (clip.Y * builder.Height);
+        var w = (clip.Width * builder.Width);
+        var h = (clip.Height * builder.Height);
 
         builder.BeginClip(
             h: h,
@@ -352,14 +360,14 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             y: y
         );
 
-        m_seat = panel.Seat;
+        m_seat = seat;
         EmitPanelInto(
             builder: builder,
-            originX: 0f,
-            originY: 0f,
+            originX: (placeInClip ? x : 0f),
+            originY: (placeInClip ? y : 0f),
             panel: in panel,
-            spanH: builder.Height,
-            spanW: builder.Width
+            spanH: (placeInClip ? h : builder.Height),
+            spanW: (placeInClip ? w : builder.Width)
         );
         m_seat = -1;
 
@@ -414,41 +422,15 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         }
     }
     private void EmitSeatPanel(OverlayFrameBuilder builder, in OverlayHudSeatPanel seat) {
-        var viewport = seat.Viewport;
-
-        if (
-            (viewport.Width <= 0f) ||
-            (viewport.Height <= 0f)
-        ) {
-            return;
-        }
-
-        var vx = (viewport.X * builder.Width);
-        var vy = (viewport.Y * builder.Height);
-        var vw = (viewport.Width * builder.Width);
-        var vh = (viewport.Height * builder.Height);
-
-        builder.BeginClip(
-            h: vh,
-            w: vw,
-            x: vx,
-            y: vy
-        );
-
         var panel = seat.Panel;
 
-        m_seat = seat.Seat;
-        EmitPanelInto(
+        EmitClipped(
             builder: builder,
-            originX: vx,
-            originY: vy,
+            clip: seat.Viewport,
             panel: in panel,
-            spanH: vh,
-            spanW: vw
+            placeInClip: true,
+            seat: seat.Seat
         );
-        m_seat = -1;
-
-        builder.EndClip();
     }
     private void EmitText(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float h) {
         ReadOnlySpan<char> text = element.Text;

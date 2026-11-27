@@ -442,7 +442,7 @@ display she stands at:
 
 | Line | What it does |
 |---|---|
-| `shape <exhibit>` | Shows an exhibit (its prototype name) on this display's turntable, as a tap on its row does. |
+| `show <exhibit>`, `shape <exhibit>` | Shows an exhibit (its prototype name) on this display's turntable, as a tap on its row does. |
 | `list` | Names the groups. |
 | `list <group>` | Names a group's exhibits. |
 | `turntable on`, `turntable off` | Sets the turntable turning, or stops it. |
