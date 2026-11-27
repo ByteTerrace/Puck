@@ -286,14 +286,11 @@ public sealed class ReductionOperand : RuleOperand {
     public override void CollectReads(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (RowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new CellAccess(
-                Key: default,
-                RowOrdinal: RowOrdinal
-            ));
-        }
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: RowFrom,
+            rowOrdinal: RowOrdinal
+        );
         if (FilterOrdinal >= 0) {
             into.Add(item: new CellAccess(
                 Key: default,
@@ -390,14 +387,11 @@ public sealed class PositionOperand : RuleOperand, IStateAddressedOperand {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         // A position moves when any cell of the row is added, removed or reordered, so the read spans the row.
-        if (RowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new CellAccess(
-                Key: default,
-                RowOrdinal: RowOrdinal
-            ));
-        }
+        LiveRow.CollectWholeRowReads(
+            into: into,
+            live: RowFrom,
+            rowOrdinal: RowOrdinal
+        );
 
         CompiledCellRef.CollectReference(
             into: into,
