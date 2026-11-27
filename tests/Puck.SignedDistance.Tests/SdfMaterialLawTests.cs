@@ -400,11 +400,13 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: [float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity], actual: Enumerable.Range(count: 3, start: (first + 28)).Select(selector: Lane));
 
         var second = ((paintVector + SdfAppearance.PaintVectorsPerEntry) * 4);
+        // The plane has no side table, so the sweep's starts where the two fixed entries end.
+        var sweepTable = (paintVector + (2 * SdfAppearance.PaintVectorsPerEntry));
 
         Assert.Equal(expected: ((uint)SdfShapeType.Sweep), actual: program.CopyWords()[(second + 3)]);
-        Assert.Equal(expected: ((uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 9)), actual: program.CopyWords()[(second + 12)]);
+        Assert.Equal(expected: ((uint)sweepTable), actual: program.CopyWords()[(second + 12)]);
         Assert.Equal(expected: 5u, actual: program.CopyWords()[(second + 24)]);
-        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(count: 12, start: (second + 36)).Select(selector: Lane));
+        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(count: 12, start: (sweepTable * 4)).Select(selector: Lane));
         foreach (var paint in new[] {
             plane with { Rotation = default }, plane with { Stroke = -1f },
             plane with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, plane with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
@@ -450,7 +452,8 @@ public sealed class SdfMaterialLawTests {
         // Bounds: the canonical box at the scale, a revolve's reach on every axis, a sweep's control points widened by
         // its radius, and a plane unbounded.
         Assert.Equal(expected: (SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Torus).HalfExtents * new Vector3(x: 1f, y: 2f, z: 3f)), actual: torus.Bound.HalfExtents);
-        Assert.Equal(expected: new Vector3(value: (0.5f * 1.0001f)), actual: polygon.Bound.HalfExtents);
+        // The prism's canonical extent is the unit box exactly: no profile builder widens past it.
+        Assert.Equal(expected: new Vector3(value: 0.5f), actual: polygon.Bound.HalfExtents);
         var revolve = SdfPaintShape.Of(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism);
 
         Assert.Equal(expected: new Vector3(value: SdfSolidGeometry.Reach(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism)), actual: revolve.Bound.HalfExtents);

@@ -224,10 +224,13 @@ public static class FixedGradients {
     public static FixedGradient Max(FixedGradient a, FixedQ4816 b) => ((b > a.Value) ? b : a);
     /// <summary>Returns the greater of a constant and an operand.</summary><param name="a">The first operand.</param><param name="b">The second.</param><returns>The greater.</returns>
     public static FixedGradient Max(FixedQ4816 a, FixedGradient b) => ((b.Value > a) ? b : a);
-    /// <summary>Clamps between constants.</summary><param name="a">The operand.</param><param name="low">The least value.</param><param name="high">The greatest value.</param><returns>The clamped operand.</returns>
-    public static FixedGradient Clamp(FixedGradient a, FixedQ4816 low, FixedQ4816 high) => Min(a: Max(a: a, b: low), b: high);
-    /// <summary>Clamps between operands.</summary><param name="a">The operand.</param><param name="low">The least value.</param><param name="high">The greatest value.</param><returns>The clamped operand.</returns>
-    public static FixedGradient Clamp(FixedGradient a, FixedGradient low, FixedGradient high) => Min(a: Max(a: a, b: low), b: high);
+    // A clamp's value is min(max(a, low), high); its derivative is the operand's only strictly between the bounds and a
+    // bound's on a tie, so a clamp to a degenerate interval is constant everywhere and p - clamp(p, -0, 0) (an Elongate's
+    // zero extent) is the identity at p = 0 too. sdfdClamp (field/sdf-dual.hlsli) keeps the same rule.
+    /// <summary>Clamps between constants; a tie with a bound takes the bound.</summary><param name="a">The operand.</param><param name="low">The least value.</param><param name="high">The greatest value.</param><returns>The clamped operand.</returns>
+    public static FixedGradient Clamp(FixedGradient a, FixedQ4816 low, FixedQ4816 high) => Min(a: high, b: Max(a: low, b: a));
+    /// <summary>Clamps between operands; a tie with a bound takes the bound.</summary><param name="a">The operand.</param><param name="low">The least value.</param><param name="high">The greatest value.</param><returns>The clamped operand.</returns>
+    public static FixedGradient Clamp(FixedGradient a, FixedGradient low, FixedGradient high) => Min(a: high, b: Max(a: low, b: a));
     /// <summary>Clamps between constants componentwise.</summary><param name="a">The operand.</param><param name="low">The least values.</param><param name="high">The greatest values.</param><returns>The clamped operand.</returns>
     public static FixedGradient3 Clamp(FixedGradient3 a, FixedVector3 low, FixedVector3 high) =>
         new(X: Clamp(a: a.X, high: high.X, low: low.X), Y: Clamp(a: a.Y, high: high.Y, low: low.Y), Z: Clamp(a: a.Z, high: high.Z, low: low.Z));
