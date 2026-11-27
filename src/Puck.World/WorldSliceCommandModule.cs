@@ -103,12 +103,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return false;
             }
 
-            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-            var position = frame.Position;
-            var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
-            var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
-
-            half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: frame.Scale));
+            (var position, half) = PlacementFrame(definition: definition, placement: placement);
             if (!float.IsFinite(f: half) || !(half > 0f)) {
                 refusal = CommandResult.Error(output: $"[{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {forms.Form}]");
                 return false;
@@ -274,6 +269,15 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         }
 
         return nearest;
+    }
+    // A placement's position and the half side of the square its slices frame: PlacementMargin times its creation's reach
+    // at its scale, infinite for a creation no finite bound frames.
+    private static (Vector3 Position, float Half) PlacementFrame(WorldDefinition definition, WorldPlacement placement) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
+        var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
+
+        return (frame.Position, ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: frame.Scale)));
     }
     // A creation's reach; an unbounded lattice clipped by a creation-wide intersection is bounded by its clip, which only
     // the composed bound sees (a scope-free creation's shapes are not one field, so their blends bound nothing).

@@ -338,10 +338,11 @@ public sealed partial class SdfWorldTables {
                     hash.Add(value: m_fieldViewRevision);
                 }
                 break;
-            // The field pass evaluates the field the program and transforms hold, over the entries and plane it was staged
-            // with.
+            // The field pass evaluates the field the program and every live transform hold, in or out of the view's scope,
+            // over the entries and plane it was staged with.
             case SdfWorldPackage.Parts.Field:
                 hash.Add(value: m_fieldViewRevision);
+                hash.Add(value: unchecked((ulong)m_dynamicTransformRevision));
                 hash.Add(value: inputs.Composite);
                 break;
         }

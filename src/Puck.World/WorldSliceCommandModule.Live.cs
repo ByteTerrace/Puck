@@ -125,13 +125,11 @@ public sealed partial class WorldSliceCommandModule {
                     return false;
                 }
 
-                var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-                var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
-                var reach = (((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument)) * MathF.Abs(x: frame.Scale) * WorldSliceRequest.PlacementMargin);
+                var (position, half) = PlacementFrame(definition: definition, placement: placement);
 
                 normal = AxisNormal(axis: placementAxis);
-                offset = frame.Position[((int)placementAxis)];
-                if (float.IsFinite(f: reach) && (reach > 0f)) { band = (reach / WorldSliceRequest.DefaultBandsPerHalf); }
+                offset = position[((int)placementAxis)];
+                if (float.IsFinite(f: half) && (half > 0f)) { band = (half / WorldSliceRequest.DefaultBandsPerHalf); }
                 next = 2;
                 if ((args.Count > (next + 1)) && string.Equals(a: args[next], b: "offset", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     if (!TryNumber(token: args[(next + 1)], value: out var shift)) {
