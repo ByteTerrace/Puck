@@ -87,7 +87,7 @@ the memo:
    adoption asks `HomeIdentity`, which answers only for a non-peer arrival, and
    every reservation decoded from the federation wire is a peer admission
    ([puck-today, section 2](puck-today.md#2-write-back-and-the-travelling-projection)).
-   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1684-1685`):
+   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1693-1694`):
 
    ```csharp
    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
@@ -308,7 +308,7 @@ assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 ```
 
 The destination's consumed-epoch fence is real and per destination
-**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2463-2465`):
+**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2472-2474`):
 
 ```csharp
                 (knownEpoch >= mobility.Epoch)
@@ -490,7 +490,7 @@ gates on is forgeable by its owner (A1) and writable by any colocated world
 
 **What exists.** `TryAdopt` writes every carried fact and crossing pool through
 the identity's own write door and nothing else, skipping a home-scoped name
-**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:228-232`):
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:241-245`):
 
 ```csharp
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
@@ -502,7 +502,7 @@ the identity's own write door and nothing else, skipping a home-scoped name
 
 `Decide` is the other door, deny by default on a grant naming the source
 document, `Mutate` and the slot, with a required write mask **[opened]**
-(`src/Puck.World.Server/WorldOwnedWorlds.cs:407-412`):
+(`src/Puck.World.Server/WorldOwnedWorlds.cs:420-425`):
 
 ```csharp
         var principal = Grantee.Document(id: submission.SourceDocumentId);

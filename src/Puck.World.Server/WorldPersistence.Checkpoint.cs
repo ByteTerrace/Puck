@@ -631,7 +631,7 @@ public sealed partial class WorldPersistence {
         Host.Population.Restore(
             continuingFederatedBodies: server.FederatedInputs.Select(selector: static input => input.Index).ToHashSet(),
             checkpoint: checkpoint.Population,
-            defaults: Host.Document.Definition.PlayerDefaults,
+            definition: Host.Document.Definition,
             tick: Host.Tick.CompletedTick
         );
         // Restore reconstructs captured geometry before its latches. Catch up only register writes that were still

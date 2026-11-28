@@ -1589,6 +1589,17 @@ public sealed partial class WorldTransferEscrow {
             (arrival.Request.Members[index].Companion is null) &&
             (m_server.Account.FindById(id: projection.Id) is { Document: not null } owned)
         ) {
+            // Live, the owned identity is the one the traveller left as, so it already holds what the projection carries.
+            // A replay's account copy stands as it did when this authority's replay started; what another row wrote to
+            // the traveller's facts and crossing pools since then (a mark left at home) reaches it as the projection
+            // carried it, so the copy adopts that before the traveller binds it.
+            // A copy that already holds what was carried adopts nothing, so it keeps the revision the live identity kept.
+            if (m_server.Account.IsReplayCopy &&
+                (WorldIdentity.FromProjection(defaults: m_server.Definition.PlayerDefaults, projection: in projection) is var carried) &&
+                !owned.HoldsWhatCarries(carried: carried)) {
+                _ = owned.TryAdopt(carried: carried, reason: out _);
+            }
+
             return owned;
         }
 
