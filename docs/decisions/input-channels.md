@@ -271,12 +271,13 @@ own. Neither the engine nor an overlay strips them implicitly, and the bar's
 layout, model and scale stay the player's preference.
 
 The pad's Menu button and the keyboard's Escape are ordinary bindings, not
-reservations (the owner's ruling that the menu is the journal and the world does
-not pause, [play decisions](play.md#the-game)): the standard's menu overlay binds
-them, with I and the View page's West, to the `menu` channel that opens the menu.
-An engaged machine reads the Menu button as its own Start because the seat's mode
-offers `start` there and not `menu`; the overlay binds the button to both, and
-the mode decides ([hub plan](../plans/hub-and-saves.md#11-menu-routing)).
+reservations (the owner's ruling that the menu is the journal,
+[play decisions](play.md#the-game)): the standard's menu overlay binds them, with
+I and the View page's West, to the `menu` channel that opens the menu. An engaged
+machine reads a tap of the Menu button as its own Start and a hold of about a
+second opens the menu; the overlay binds the button to both channels, the seat's
+mode decides, and a rule over the held `start` level takes the hold
+([hub plan](../plans/hub-and-saves.md#11-menu-routing)).
 
 ## Switching releases input
 

@@ -12,8 +12,10 @@
 //   glance    the body moves (a movement key held, or it is in the air): the arm comes up part way (`glance`) and the
 //             camera focuses in as far, a look at the screen while moving
 //
-// The world keeps running either way, and the body keeps every movement control while the menu is open. The step keys
-// (the arrows' up and down, the d-pad's) move the mark on a page and the page keys (the arrows' left and right, the
+// Whether the world pauses while the menu is open is the world's pause policy (docs/plans/hub-and-saves.md, gap 10), not
+// this library's; the body keeps every movement control while it is open. At a machine the pad's Menu button is the
+// machine's Start, and holding it for `hold` opens the menu (docs/decisions/play.md, "Menu and an emulated console's
+// Start"). The step keys (the arrows' up and down, the d-pad's) move the mark on a page and the page keys (the arrows' left and right, the
 // d-pad's) turn the pages; confirm (Enter, the pad's South) acts on the marked line.
 //
 // The screen's arm, cover and camera are presentation: the rules write aims keyed by body, each eased by a dynamics row,
@@ -51,8 +53,8 @@
 //   // in the avatar's or suit's creation, the worn screen (worn-screen.puck), whose glass wears `menuScreenPaints`
 //   // in a world with input modes: families [menuFamily(), ...] and `menu` among a family's channels
 //
-// The state also holds `wornScreenSideAsk` and the marks the screen's texts are copied by (`menuShownPage`,
-// `menuShownLines`, `menuCompanionCode<i>`, `menuCompanionShown<i>`). Every rule sweeps `$players`, and each carries as
+// The state also holds `wornScreenSideAsk`, the due tick of a hold (`menuHoldDue`) and the marks the screen's texts are
+// copied by (`menuShownPage`, `menuShownLines`, `menuCompanionCode<i>`, `menuCompanionShown<i>`). Every rule sweeps `$players`, and each carries as
 // few effects as it can: a rule is priced by its effects times the players it may fire for.
 
 // The screen's look: a deep plum field the interface glows on, a mint for the companion with you, an amber for the mark,
@@ -197,8 +199,8 @@ function menuScreenText(parent, half, box, template, ink, em, align, markup, wra
 // `pageNextSources` and `pagePreviousSources` move the mark and turn the pages, `pickSources` confirm and `backSources`
 // close. An engaged machine reads the pad's Menu button as its own Start, and a mode offers a seat only one of the two
 // channels, so `startSources` keeps that button bound to `start` beside `menu` (the page lists both; the seat's mode
-// decides which one answers).
-template menuPlay(kinds, pages = menuPages, glance = 0.55, moving = 0.2, seats = 4, capacity = 16, openSources = [
+// decides which one answers). `hold` is how long `start` is held at a machine to open the menu.
+template menuPlay(kinds, pages = menuPages, glance = 0.55, moving = 0.2, hold = 1s, seats = 4, capacity = 16, openSources = [
   "keyboard.i"
   "keyboard.escape"
   "gamepad.start"
@@ -236,7 +238,7 @@ template menuPlay(kinds, pages = menuPages, glance = 0.55, moving = 0.2, seats =
       { name: "wornScreenSide", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
     ]
     world {
-      for name in ["menuOpen", "menuPage"] {
+      for name in ["menuOpen", "menuPage", "menuHoldDue"] {
         row {
           name: name
           kind: Int
@@ -327,6 +329,27 @@ template menuPlay(kinds, pages = menuPages, glance = 0.55, moving = 0.2, seats =
     local open = menuOpen[$each] ?? 0
     when channel(each, menu) >= 1 or (channel(each, cancel) >= 1 and open == 1)
     mode: Edge
+    menuOpen[$each] = 1 - open
+    setBodyState(key: $each, state: "menu", expression: 1 - open)
+  }
+
+  // A seat engaged at a machine holds `start` (the pad's Menu button) for `hold` to open the menu, or to close it: a
+  // press arms the due tick and a seat still holding `start` when it passes toggles the menu as the menu key does. A
+  // tap is only the machine's Start. `start` is offered only where a machine reads it, so a seat that walks never
+  // arms this. The machine still reads the press itself (docs/plans/hub-and-saves.md, gap 11).
+  rule "menu-hold-arm" {
+    forEach: $players
+    when channel(each, start) >= 1
+    mode: Edge
+    schedule menuHoldDue[$each] in hold
+  }
+  rule "menu-hold" {
+    forEach: $players
+    local open = menuOpen[$each] ?? 0
+    local due = menuHoldDue[$each] ?? 0
+    when channel(each, start) >= 1 and due > 0 and $tick >= due
+    mode: Level
+    menuHoldDue[$each] = 0
     menuOpen[$each] = 1 - open
     setBodyState(key: $each, state: "menu", expression: 1 - open)
   }

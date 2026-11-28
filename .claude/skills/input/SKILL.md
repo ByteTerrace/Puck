@@ -222,8 +222,13 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   closes an open console (`ConsoleInputSink`).
 - The menu is no reserved gesture: the pad's Menu (`gamepad.start`), Escape and
   I are ordinary rows of the standard's menu overlay (`worlds/standard/menu.puck`,
-  `menuPlay`), and an engaged machine reads the pad's Menu button as its Start
-  because the seat's mode offers `start` there and not `menu`
+  `menuPlay`). An engaged machine reads the pad's Menu button as its Start (the
+  seat's mode offers `start` there and not `menu`), and holding it for `hold`
+  opens the menu through a rule over the `start` level and a deadline cell, not a
+  pattern. The machine still receives the hold's Start press: withholding it
+  needs a held-for-time pattern term and the matcher on the seat's own host
+  (hub plan H4b). Whether a menu pauses the world is the world's pause policy
+  (hub plan gap 10, H6)
   ([play decisions](../../../docs/decisions/play.md#the-game)).
 
 ## Devices and haptics
@@ -286,12 +291,12 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 - **A hold completes with no closing event.** A pattern stage is satisfied
   only by an event, so a hold of N seconds cannot be pattern data; a term
   satisfied by time with the action still held (or a tick event closing the
-  stage) has no user in the tree today.
+  stage) is the hub plan's H4b work.
 - **The matcher runs only in the authority.** `WorldInputOwner` lives in
   `Puck.World.Server` and only `WorldRuleHost` calls `TryMatch`; the
   always-active plane runs no matcher, so a remote authority decides every
-  pattern. Running the one matcher on the plane over its local events has no
-  user in the tree today.
+  pattern. Running the one matcher on the seat's own host over its local events
+  is the hub plan's H4b work.
 - **Cartridge rumble is unwired.** `WorldHapticDirector` drives
   `IGamepadOutput.Rumble` from authored `haptics` rows
   (`worlds/standard/instrument.puck` pulses on the beat), while a cartridge's

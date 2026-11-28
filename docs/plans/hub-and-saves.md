@@ -5,8 +5,9 @@ starts, what a player keeps, how a character moves between worlds, and how
 the Menu button reaches the menu. It answers the [fourteen gaps](#the-fourteen-gaps) between what Puck persists
 today and what the release needs, under
 [the owner's rulings](../decisions/play.md#the-game): the release launches from
-a hub, one menu opens on the Menu button and never pauses the world, a
-character claims and a world clamps, and
+a hub, one menu opens on the Menu button and pauses a world whose players are
+all local (the world's pause policy decides), a character claims and a world
+clamps, and
 exit to menu goes to the hub world. It is design
 only; a builder re-reads every citation before building from it, since
 `file:line` references describe today's tree.
@@ -37,14 +38,17 @@ the proving ground, shows of each step.
   queues the same transfer a painting or `world.transfer` does.
 - **One menu.** The keyboard's Escape, I and the pad's Menu button open it for
   the pressing seat, as ordinary rows of the standard's menu overlay
-  (`worlds/standard/menu.puck`); nothing is reserved to the host. An engaged
-  machine reads the pad's Menu button as its own Start, because the seat's input
-  mode offers `start` there and not `menu`. The standard authors its entries and
-  look; the engine composes Exit to hub and Exit to desktop into every menu, so
-  no world can keep a player from leaving. Apart from closing the window, Exit
-  to desktop is the only door to quitting.
-- **The world never pauses for the menu.** It opens while every instance this
-  host runs keeps stepping.
+  (`worlds/standard/menu.puck`); nothing is reserved to the host. While a seat
+  is engaged at a machine, a tap of the pad's Menu button is the machine's Start
+  and a hold of about a second opens the menu. The standard authors its entries
+  and look; the engine composes Exit to hub and Exit to desktop into every
+  menu, so no world can keep a player from leaving. Apart from closing the
+  window, Exit to desktop is the only door to quitting.
+- **Pause is a world policy, derived and never latched.** A world authors
+  `none`, `local` or `shared`; a world with the policy in force holds every
+  instance this host runs while a seat's menu is open, and the hold lifts the
+  frame the condition fails. Local and co-op play pause by default, a persistent
+  world never does, and an instance it federates to may allow it.
 - **Durable images make places last.** A persisted world's durable identity
   is its resolved scope key and its referenced document, never a door's name
   or a process-local instance name. The desktop host writes one image per
@@ -67,8 +71,10 @@ stops. Where nothing enforces one yet, the build step that adds it is named.
 | I4 | A foreign document writes an identity only through the identity's own grants, only in its own package's namespace, and never a home-scoped class. | One authorisation, `WorldIdentityWriter.Admits`, which every identity write passes: `WorldIdentity.TrySetFact` and each `WorldIdentityStage` mutator take the writer, so no fact or record write exists without one. A rule's host builds the writer from the executing document's package (`WorldPackageManifest.IdentityNamespaceOf`); the compiler qualifies a rule's bare fact with that namespace, so a rule never names the namespace it writes; the console writes as `WorldIdentityWriter.Home`. `WorldIdentity.TryAdopt` adopts no home-scoped name from what a body carried home (built for facts and records; `Decide`'s grant door stands beside it for durable slots). | Reads are not namespaced: any world the projection reaches sees every fact the identity carries, as today. Across machines the rule binds a package to an authority only once write-back is signed ([remote home adoption](records-and-pools.md#remote-home-adoption)). |
 | I5 | A binding moves only the seat that pressed it, out of the world it stands in, to a destination that world offers or to `hub`. | `player.travel` resolves its one argument against the current authority's `destinations` rows marked as offered, plus the reserved `hub`; it takes no source, traveller or path (H3). | A world may still move its own inhabitants anywhere its own rules and portals reach; that is the world's authority (invariant 6 of [the model](../architecture/worlds.md#invariants)). |
 | I6 | Nothing a document authors ends the host process. | `quit` stays `CommandBindability.Unbindable`, and `CommandRegistry.CheckAuthored` keeps authored commands to bindable verbs; the only other way to quit is the menu's Exit to desktop, an entry the engine composes and only a local seat's own press chooses (H5). | Closing the window remains the host's. |
-| I7 | The menu opens from the seat's own press and never holds a world. | The menu key is an ordinary binding of the standard's menu overlay and opening it is a mode switch on the seat's input owner; no host plane, pause hold or second hold reason exists (gap 10, gap 11). | A world that rebinds every source that opens the menu removes its own way to it; the engine's Exit entries stop at the menu. A platform overlay that swallows the input first (a guide menu) is outside Puck. While a passthrough source holds the keyboard its Escape is the source's, and the reserved Control+Alt+Escape (`SourceFocus`) returns the keyboard first; while a seat's console is open, Escape closes the console (`ConsoleInputSink`). |
+| I7 | The menu opens from the seat's own press. | The menu key is an ordinary binding of the standard's menu overlay and opening it is a mode switch on the seat's input owner; a hold of the pad's Menu button at a machine opens it through a rule over the `start` channel, so no host plane stands between the press and the menu (gap 11). | A world that rebinds every source that opens the menu removes its own way to it; the engine's Exit entries stop at the menu. A platform overlay that swallows the input first (a guide menu) is outside Puck. While a passthrough source holds the keyboard its Escape is the source's, and the reserved Control+Alt+Escape (`SourceFocus`) returns the keyboard first; while a seat's console is open, Escape closes the console (`ConsoleInputSink`). |
 | I8 | Every menu offers Exit to hub and Exit to desktop. | The one door that opens a seat's menu composes both after the authored entries; the validator refuses an authored entry under their reserved ids; a world that authors no menu gets one holding Resume and both, in the neutral theme (H5). | Readability is not enforced: a world's skin styles these entries with the rest of its menu. Their place is fixed (last), so a player who cannot read them still reaches them. |
+| I9 | A world holds only while its pause policy says it may, and a hold never outlives the open menu or that condition. | Not built: one derived value per frame in `WorldInstanceHost`, a second hold reason beside the operator's `WorldInstance.IsPaused`, held exactly while a seat's menu is open and the world's policy admits the pause (gap 10); no latched flag (H6). | A solo player's own in-process services that count wall time (none in simulation) are not held. |
+| I10 | A hold never changes simulation state. | The hold acts only on each instance's accumulator, through the lever `world.rate pause` already uses (`WorldInstanceHost.TryPause`); ticks are counted in steps, so a held span inserts none (H6). | Presentation clocks are held by policy, not by this invariant. |
 | I11 | A durable image is written only by the authority that runs the world, at the one location its durable identity names, independent of activation order, of the door it was reached through and of the filesystem's case rules. | The row carries its `WorldDurableIdentity` (scope key, referenced document identity), assigned once at `TryStartCore` or `AdmitBoot`; the store derives the path from the identity's content hash alone and refuses an image whose header names another identity (H7a). | A crash loses the world state since the last cadence image; identity writes are immediate and are not lost. |
 | I15 | Restoring an image never replaces the current source's definition: the row runs the document its source composes, and the image supplies state. | The image's embedded documents reach no install path: `RestoreContinuation` takes the row's live definition and compilation and verifies the continuation key before it applies anything (H7b); H7e removes the embedded documents from the codec, so nothing can install them. | A source whose edit changes the compiled layout drops the exact continuation to durable rows; the durable rows are what survives any source change. |
 | I16 | A restore that cannot apply leaves the row as its source built it, sets the image aside and starts the row through the same door every activation uses. | One private ladder, `RestoreImage` on `WorldInstanceHost`, whose only callers are `TryStartCore` and `AdmitBoot`; its tiers cannot half-apply because the restore core is two-phase, preparing everything that can refuse before it applies anything (H7b). | A refusal the core throws after its apply point is a defect the fault-injection law catches, never a silent half-restore. |
@@ -458,24 +464,78 @@ release: its hub document.
 
 **Authority.** The local host is the authority of the hub `hub` names.
 
-### 10. The world does not pause
+### 10. Pause is a world policy
 
-**Design.** Opening the menu never holds a world, solo or shared (the owner's
-ruling, [play decisions](../decisions/play.md#the-game)). The menu opens while
-every instance this host runs keeps stepping, so no `Local`, `Solo` or `Pauses`
-decision, no second hold reason beside `world.rate pause` and no hold on
-presentation clocks or audio exist. Opening the menu releases the seat's held
-input, so the body stands idle rather than walking on a held stick
-([switching releases input](../decisions/input-channels.md#switching-releases-input)),
-and a body that is moving at the time reads the menu as a glance.
+**The ruling** ([play decisions](../decisions/play.md#the-game)): local and
+co-op play pause by default; a world authors a policy of `none`, `local` or
+`shared`; a persistent world (the MMO) never pauses, and a world it federates to
+may allow pausing, so an instance's run can be less stressful.
 
-**Rejected.** The earlier design held every instance while a solo or all-local
-session's menu was open, as a single-player pause menu does. The owner retired
-it with the ruling that the menu is worn in the world and the world keeps
-running.
+**Design.** The policy is an authored member of the world's `simulation`
+section with a neutral engine default of `none`; the standard and the world
+choose (the debug world authors `local`; an instance that lets any player pause
+for everyone authors `shared`, with whatever limits it authors as rules over its
+own state). The engine adds no menu concept: the policy names the state row
+whose nonzero cell for a local seat's body asks for a pause (the standard's
+`menuOpen`), so any author's pause trigger works the same way.
 
-**Determinism.** Opening the menu is a mode switch on the seat's input owner and
-a write of the menu's own state, so it is ordinary taped input.
+`Local` holds when, across every instance this host runs, no network peer is
+admitted (`world.peers`), no traveller has arrived from another host, the seat's
+world is locally authoritative, and no external participant (an MCP Participant)
+is embodied. It is computed each frame from the population, never latched.
+Companions and other authored bodies do not count: they are not players
+([companions](../decisions/companions.md#the-owners-rulings)).
+
+- `none`: the request never holds anything.
+- `local`: a seat's request holds every instance this host runs while `Local`
+  holds, solo or couch co-op alike.
+- `shared`: a request from any player in the world holds it for everyone, a
+  session shared over a network included; the author's rules decide who may
+  request it and for how long.
+
+The hold is derived: every instance this host runs holds its accumulator
+exactly while a request stands and the policy admits it. It uses the lever
+`world.rate pause` arms (`WorldInstanceHost.TryPause`, `WorldInstance.IsPaused`)
+as a second hold reason beside the operator's, under one stated rule: an
+instance steps when no reason holds it. Presentation clocks (`world.timeline`)
+and audio follow the hold. If a peer connects while the request stands under
+`local`, the hold lifts that frame; admission never waits on a pause.
+
+Where the policy does not admit the pause, the menu opens while the world runs.
+Opening it releases the seat's held input, so the body stands idle rather than
+walking on a held stick ([switching releases
+input](../decisions/input-channels.md#switching-releases-input)).
+
+**What exists and what is built.** `WorldInstanceHost.TryPause` and `TryResume`
+are the lever, an operator verb (`world.rate pause|resume`) that refuses a
+rate-0 world; `WorldSimulationDefaults` (`rateHz`, `stepsAt`) is the section the
+policy joins. Nothing else exists: no policy member, no request row, no `Local`
+derivation, no derived hold and no presentation-clock hold. The build is the
+schema member and its validator and `puck schema --bootstrap` products, the
+`Local` derivation, the per-frame hold in `WorldInstanceHost`, and the debug
+world authoring `local` with its `menuOpen` row. It spans the schema, server and
+presentation projects, so it is its own step (H6), and until it lands the menu
+never pauses a world.
+
+**Rejected.** Pausing only the seat's own instance leaves the rest of the
+session (the hub behind a painting, a companion's world) running in a session
+that is supposed to be paused. A flag set on open goes stale when a peer joins.
+Stopping the tick thread stops network and loading work the host still owes.
+Naming the menu in the engine makes a second implementation of what a policy row
+expresses.
+
+**Engine and standard.** Engine: the policy member with its `none` default,
+`Local`, the hold and its refusal in a shared session. Standard: the request row
+(`menuOpen`) and the `local` choice. Each world: its policy.
+
+**Determinism.** A hold inserts no step, so state at every tick is unchanged.
+The tape already records the boot row's pause and resume as ordered rate-lever
+events (`WorldRateCommandModule`); the menu hold rides the same event, and H6
+checks the state hash with and without a pause.
+
+**Authority.** The hold is refused under `local` whenever a person on another
+host shares any world this host runs, so no one's world stops for someone
+else's menu.
 
 ### 11. Menu routing
 
@@ -488,30 +548,44 @@ the next closes it, as `cancel` does. An author overrides or replaces these rows
 by id like any other binding, so no always-active plane answers them, no `menu`
 verb exists and `BindingProfile.Compile` refuses neither source.
 
-An engaged machine reads the pad's Menu button as its own Start. The overlay
-binds the button to both `menu` and `start`, and the seat's input mode decides:
-the engagement family's `machine` state offers `start`, and the families that
-offer `menu` are suspended while the seat is engaged anywhere
-(`worlds/debug/input-modes.puck`), so a tap of Menu at a machine reaches the
-machine and a tap elsewhere opens the menu. No held-for-time decision is needed.
+An engaged machine reads the pad's Menu button as its own Start, and the owner's
+ruling ([play decisions](../decisions/play.md#the-game)) is that a tap is Start
+and a hold of about a second opens the menu. The overlay binds the button to
+both `menu` and `start`; the seat's input mode offers `start` at a machine and
+`menu` elsewhere. The hold is a rule of `menuPlay` over the `start` channel: a
+press arms a due tick (`schedule menuHoldDue in hold`), and a seat still holding
+`start` when it passes toggles the menu through the same writes the menu key
+makes. The menu family stays offered at a machine, so its pages take the seat's
+controls and `cancel` closes it. Reading the held level, never a per-seat input
+history, keeps the rule one sweep over `$players`.
 
-Two authored rows needed no change: the standard's `start` row keeps Enter and
-the overlay re-binds the pad button to it, and the tabletop's cancel row keeps
-Escape because a seated seat's mode offers `cancel`, not `menu`.
+What the rule cannot do is withhold Start from the machine during a hold: the
+machine reads `start` on the press. Sending Start on a tap's release and nothing
+on a hold needs the input layer to decide before the seat submits, and a
+held-for-time term the pattern matcher does not have (a pattern stage is
+satisfied only by an event) running on the seat's own host: the matcher runs in
+the authority today (`WorldInputOwner`, `WorldRuleHost`). That engine step
+remains (H4b); the tap-versus-hold decision it makes is two input patterns in
+one consumption group, ticks and never a wall clock.
+
+The standard's `start` row keeps Enter and the overlay re-binds the pad button
+to it. The tabletop's cancel row keeps Escape because a seated seat's mode
+offers `cancel`, not `menu`.
 
 View (Select) stays bindable. An unmapped pad's first touch, Menu included,
 joins it to the roster as any first touch does (`PlayerRoster`).
 
-**Rejected.** Reserving Menu and Escape to a host plane, with a compile refusal
-and a tap-or-hold split for an engaged machine's Start: the owner ruled that the
-journal is the menu and that the world does not pause, which removes the second
-menu the reservation protected. The pad's guide button: the platform overlays
+**Rejected.** Reserving Menu and Escape to a host plane with a compile refusal:
+the owner ruled that the journal is the menu, so the reservation protected a
+second menu that no longer exists. The pad's guide button: the platform overlays
 (Steam, Game Bar) take it first.
 
-**Engine and standard.** Engine: nothing. Standard: the overlay's rows, the
+**Engine and standard.** Engine: nothing today; H4b adds the layer that
+withholds a hold's Start. Standard: the overlay's rows, the hold rule, the
 channels (`worlds/standard/inputs.puck`) and the families.
 
-**Determinism.** Binding resolution stays input-side.
+**Determinism.** Binding resolution stays input-side; the hold is a deadline
+cell the rules own, replayed with the tape.
 
 **Authority.** Per local seat.
 
@@ -1009,8 +1083,10 @@ plan's tree; "tree" means it waits for the UI plan's steps 3 and 4.
 |---|---|---|---|---|---|
 | H2 | What remains of H1 and H2 (the template, one account per process, the first character minted from the template, images without owned documents and the read-only second process are built): delete the roster's stand-in for a world whose account holds no character, which needs `PlayerRoster`'s empty-catalog paths (`FirstUnusedProfile`) to answer no profile | 2 | A test world naming no template and no seeds seats with no stand-in and `world.players` lists no `seat1` | none | none |
 | H3 | `player.travel`, offered destinations, the reserved `hub`, boot as travel | 8, 9 | Headless: a bound `player.travel garden` refuses until the row is offered, then lands; `player.travel hub` from the garden lands in the boot world; an authored command naming `quit` still refuses at `CheckAuthored` | Leaving the garden without walking back through its frame | interim |
-| H4 | The menu key on the standard's resting page: `menuPlay`'s `openSources` (I, Escape, the pad's Menu button) and `startSources` | 11 | Headless: `player.signal` of `gamepad.start` and of `keyboard.escape` on the resting page each open the seat's menu and a second press closes it; engaged at a device, the pad's Menu button reaches the emulated Start and opens no menu | The menu from anywhere the seat's mode offers it; at a device, the pad's Menu button is the console's Start | built |
+| H4 | The menu key on the standard's resting page: `menuPlay`'s `openSources` (I, Escape, the pad's Menu button), `startSources` and the hold rule | 11 | Headless: `player.signal` of `gamepad.start` and of `keyboard.escape` on the resting page each open the seat's menu and a second press closes it; engaged at a device, a tap of the pad's Menu button reaches the emulated Start, and a hold of about a second opens the menu | The menu from anywhere, a seated machine included | built |
+| H4b | The input layer withholds a hold's Start from a machine and sends a tap's on release: the held-for-time pattern term and the matcher on the seat's own host | 11 | Engaged at a device, a hold of about a second opens the menu and sends the machine no Start; a tap reaches the emulated Start | A hold is not a Start | none |
 | H5 | The menu: the standard's entries, the composed Exit to hub and Exit to desktop, the neutral fallback, the focus release and the interim overlay draw | 12, 13 | A world authoring no menu and a test world authoring an empty one each list Resume, Exit to hub and Exit to desktop (`menu` read-back); an entry under a reserved id is refused by name; opening the menu while walking leaves the body idle; from a seated board, Exit to hub lands in the boot world; Exit to desktop exits after the rows' final images (`[quit: exiting]`) | Exit to the hub from a seated board game | interim |
+| H6 | The pause policy: the `simulation` member (`none`, `local`, `shared`; default `none`), its request row, `Local`, the derived hold and its presentation-clock follow; the debug world authors `local` with `menuOpen` | 10 | Under `local`, the menu open holds every instance (`world.instance.status`), also on a couch with `player.join 2`; a second World joined over `host.listen` never holds under `local` and holds under `shared`; `none` never holds; a scenario with a mid-run menu pause gives the same state hash as without (`puck test --reproduce`) | The debug world freezes behind the menu alone or on a couch, never with a remote player | none |
 | H7 | Durable images on the desktop, in five steps H7a to H7e ([durable images](#steps)): identity and store, the restore ladder over a two-phase restore core, durable rows across a changed source, cadence and quit, the embedded documents out of the codec; and a durable crossing log on any desktop that is a destination (`WorldServer.InstallCrossingLog`, which only the silo calls today), persisting allocated ids, authority incarnation, arrivals, departures, terminal outcomes and consumed epochs and acknowledging only after the durable write, with a qualified generation identity once a host both restores images and spawns resolver instances (the MMO round's step 7, [the decision](../decisions/worlds-and-federation.md#epochs-survive-restart)) | 6 | The checks of each step, and together: set a row in the garden, quit, reboot on the same root, travel to the garden: the row is restored; edit the garden's source between the runs and it still is; two characters hold two images of a `user`-scoped test place; an ephemeral row writes none; killed after a cadence image, the garden restores to it. The log: cross the garden seam and restart after each durable step, retrying the same operation: one terminal outcome per operation, a monotonic epoch, no duplicate credit; commit a traveller into a desktop destination, kill it, resend the same reservation and commit: refused as consumed | The garden as you left it, through an edit | none |
 | H8 | Battery RAM in images; machine modes; cores without file I/O ([batteries](#batteries-h8)) | 7 | A committed homebrew cartridge with battery RAM on a debug-world device writes its RAM; after quit and reboot it reads it back in `battery` and resumes in `resume`; a search finds no file I/O in the four engines' hosting; `puck test --reproduce` over a run that starts from saved RAM; an edited source around the cabinet keeps the battery | A handheld game's save surviving a restart | none |
 | H9 | What remains of the write door (package namespaces and home-scoped names for facts and records are built: `WorldIdentityWriter`, the compiler's qualification, identity pools of any capacity with travel classes, the four record effects, and the rule reads of an identity's records, versioned by its revision: `IdentityRecordOperand`, [the reads](../reference/state/worlds.md#owned-identity-records)): a package declaring identity pools of its own, minted onto a character under `<package>$<pool>` on first claim; the debug world's first fact-gated door | 6 | Rules authored first (neither `night.puck` nor `garden.puck` authors a `rules` or `state` block today) and a second package: the night field's rule writes its namespaced fact and the hall door opens on return; a rule in a world of the second package writing a debug-package fact is refused by name at compile, and its own-namespace fact is admitted (the night field and the garden are one package, so they share a namespace) | The port row's fact-gated door | none |

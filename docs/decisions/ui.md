@@ -105,8 +105,8 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
   the last good tree, and a generated Rust SDK. UI grants are separate from
   observing or changing state.
 - **The menu opens from the Menu button, Escape and I**, as the standard's own
-  bindings, and from the bar. While a cartridge is engaged, the Menu button is the
-  emulated console's Start ([play decisions](play.md#the-game)). It is the one menu
+  bindings, and from the bar. While a cartridge is engaged, a tap of the Menu button is the
+  emulated console's Start and a hold opens the menu ([play decisions](play.md#the-game)). It is the one menu
   ([play decisions](play.md#the-game)): the standard authors its entries and
   look, and the engine composes the entries no world or mod may remove: exit
   to the hub and exit to the desktop now, the Mods surface, settings and focus

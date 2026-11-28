@@ -82,7 +82,15 @@ inputModes {
     conversationFamily(
       suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, { family: "terminal", states ["engaged"] }]
     )
-    // Her menu's page and mark keys while it is open (avatars/moth.puck), none while she is engaged anywhere.
-    menuFamily(suspendedBy: engagedAnywhere)
+    // Her menu's page and mark keys while it is open (avatars/moth.puck): none while she is engaged anywhere but at a
+    // machine, where holding the pad's Menu button opens the menu over the running screen (standard/menu.puck).
+    menuFamily(
+      suspendedBy: [
+        { family: "engagement", states ["tabletop", "screen", "body"] }
+        { family: "typing", states ["seated"] }
+        { family: "terminal", states ["engaged"] }
+        talking
+      ]
+    )
   ]
 }

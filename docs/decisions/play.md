@@ -60,19 +60,19 @@ that whole shape, abstractly, never from the one world at hand.
 **One menu opens on the Menu button and Escape (the owner's ruling).** Asked
 which pad buttons should open which menus, the owner answered: "I feel like
 this is being overcomplicated. All I really want is a basic ass pause menu that
-would exist in any game!", and later ruled that the journal is the menu and
-that the world does not pause. There is one menu, the player's menu (the
-standard's `menu.puck`), made of pages (companions, quests, marks, notes) that a
-screen worn on the body shows.
+would exist in any game! In an MMO, pause menu doesn't pause the server (same
+with a competitive FPS or really any multiplayer game). Single player pause
+menus are 'true' pauses.", and later ruled that the journal is the menu. There
+is one menu, the player's menu (the standard's `menu.puck`), made of pages
+(companions, quests, marks, notes) that a screen worn on the body shows.
 - The pad's Menu button, the keyboard's Escape and I open the menu for the seat
   that pressed them, and the View page's West on a pad does too (LT+X). They are
   ordinary rows of the standard's `menuPlay` overlay, which an author overrides
   by id like any other binding. No source is reserved to the host and no second
   menu exists beneath this one.
-- The world never pauses for a menu, solo or shared. The menu opens while the
-  world runs on, and the seat's held input releases as its mode switches. The
-  earlier rulings that a solo session truly pauses and that a couch pauses by
-  default are retired.
+- Whether opening the menu pauses the world is the world's pause policy (the
+  owner's ruling, below). Pause or not, the seat's held input releases as its
+  mode switches.
 - It offers exit to the hub and exit to the desktop, plus swapping worlds
   wherever the release or an author supports it.
 - The menu is authored in the standard package and styled by the skin. The
@@ -92,12 +92,42 @@ skin styles these entries with the rest of its menu. [The hub
 plan](../plans/hub-and-saves.md#12-the-menu) builds the entries (step H5);
 nothing enforces them yet.
 
-**Menu and an emulated console's Start.** An engaged machine reads the pad's
-Menu button as its own Start, and the button opens the menu everywhere else. The
-seat's input mode decides which: an engaged machine's family offers `start` and
-not `menu`, and the standard's menu overlay binds the button to both channels
-(`startSources` in `menuPlay`). No input pattern or held-for-time decision is
-involved. Stepping back from the machine returns the menu to the seat.
+**Pause is a world policy (the owner's ruling).** The owner: "when in
+local/co-op mode pause is the default behavior. Worlds can define a shared pause
+if authors like (think like StarCraft allows), but our MMO follows standard no
+pause because it's persistent. The MMO world might even federate to such worlds,
+imagine an instance where we allow pauses to make runs less stressful."
+- **Local and co-op play pause by default.** Opening the menu pauses a world
+  whose players are all local to the machine, couch co-op included.
+- **Pause is a policy an author sets on the world:** `none` (a persistent world
+  such as the MMO), `local` (the default for local play) or `shared` (any player
+  may pause for everyone, as StarCraft allows, with whatever limits the author
+  authors).
+- **A persistent world never pauses.** A world it federates to, an instance for
+  example, may allow pausing under its own policy, so a run can be less
+  stressful.
+- A session another person shares over a network is a shared session: `local`
+  never pauses it, and only a `shared` policy lets a player pause it.
+  [The hub plan](../plans/hub-and-saves.md#10-pause-is-a-world-policy) designs
+  it and records what is built.
+
+**Menu and an emulated console's Start** (the owner's ruling). An engaged
+machine reads the pad's Menu button as its own Start, so Start would have had to
+move off the button that opens the menu. The owner chose: "Hold Menu for pause:
+while a cartridge is engaged, a tap of Menu is the emulated console's Start and
+holding it (about a second) opens the pause menu; elsewhere a tap opens the pause
+menu." The menu is the one menu above.
+- Outside an engaged machine a tap of Menu opens the menu. I, Escape and the View
+  page's West open it from every state their input mode offers them.
+- While a seat is engaged at a machine, a tap of Menu is the machine's Start and
+  a hold of about a second opens the menu (the standard's `menuPlay` takes the
+  hold as `hold`; a second hold closes it). The standard's menu overlay binds the
+  button to both channels (`startSources`), and the seat's input mode decides
+  which one answers: an engaged machine's family offers `start`, and the menu
+  family stays offered there so its pages take the seat's controls.
+- The machine still receives the Start press of a hold. Sending it Start only on a
+  tap's release, and nothing on a hold, is the engine's input step recorded in the
+  hub plan (gap 11).
 
 The owner's further rulings on the shape:
 - **A character claims, a world clamps.** A player's identity carries its own
@@ -258,7 +288,7 @@ the right (her anatomy keeps its own names, such as `mothWristMount`). Its look
 is minimalist and suits the mecha-cartoon style, yet distinctive and full of
 character, as the Pip-Boy is without its clutter. Opening it raises the arm and
 the camera focuses in slightly, tastefully and smoothly animated, in the two
-reads. The world keeps running while it is open.
+reads. Whether the world pauses while it is open is the world's pause policy.
 
 **Companions live on the menu's companions page (the owner's ruling).** The
 player keeps companions in a roster, a page of the menu, and swaps the active
