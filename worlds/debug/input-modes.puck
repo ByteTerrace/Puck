@@ -10,7 +10,8 @@ import "../standard/contexts/terminal-console"
 import "../standard/contexts/conversation"
 
 let movement = movementChannels
-let controls = ["jump", "suit", "noclip"]
+// The lock-on and marks keys (targeting.puck) are hers in every form she walks or flies in.
+let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 let talking = { family: "conversation", states ["talking"] }
 // A seat engaged anywhere, at a bench, at a terminal or talking with a steward, has none of the families that move her

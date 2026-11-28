@@ -147,7 +147,7 @@ Puck.World extends the rule compiler the way any host does (see
   `$population`, `$physics:quiescent` (optionally scoped to a keyed placement
   roster or a replay scope's stable bodies), `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyPosition:`, `$kinematics:`, `$engaged:`, `$bodyState:`, `$identity:`, `$identityRecord:`, `$identityFind:`, `$identityCount:`, `$identityFree:`, `$inGroup:`, `$bodyIndex:`, `$nav:`, `$producer:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$bodyPosition:`, `$kinematics:`, `$engaged:`, `$bodyState:`, `$identity:`, `$record:`, `$recordFind:`, `$recordCount:`, `$recordFree:`, `$inGroup:`, `$bodyIndex:`, `$nav:`, `$producer:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
   `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
   [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
@@ -408,30 +408,35 @@ journal rewinds and its commit installs through the account's one door,
 `WorldOwnedWorlds.TryCommit`, under the writer the executing world's package
 names (`WorldIdentityWriter`): a package writes a shared pool or one it
 qualifies with its own name (`<package>$<pool>`), never another package's or a
-name the template lists in `identity.homeScoped`. `WorldIdentity.TryReadRecord`
-and `CountRecords` read the store as it stands.
+name the template lists in `identity.homeScoped`. A field's expression is read
+in fixed point, so a Fixed field keeps its fraction and an Int field refuses a
+value with one. `WorldIdentity.TryReadRecord` and `CountRecords` read the store
+as it stands.
 
 A rule reads the store of the identity a body drives under through four reserved
-channels (`IdentityRecordOperand`), each answering nothing (`0` for a field or
-a count, `-1` for a slot) when the body drives under no identity or the store
-holds no such pool, field or instance:
+channels, one operand (`IdentityRecordOperand`):
 
 | Spelling | Reads |
 |---|---|
-| `identityRecord(each, quests, 3, step)` | a field of the live instance in a literal slot |
-| `identityFind(each, quests, quest, lanternLit, step)` | a field of the lowest live instance whose key field holds the literal, or its slot with no field named |
-| `identityCount(each, quests)`, `identityCount(each, quests, status, 2)` | the live instances, or those whose key field holds the literal |
-| `identityFree(each, questShares)` | the slot the next claim takes |
+| `record(body, 0, marks, $each, x)`, `record(each, marks, 0, world, debug)` | a field of the live instance in a slot, a literal or `$each` (the swept key read as a slot index), a text field compared with the trailing text |
+| `recordFind(each, quests, quest, lanternLit, step)` | a field of the lowest live instance whose key field holds the literal, or its slot (`-1` for none) with no field named |
+| `recordCount(each, quests)`, `recordCount(each, quests, status, 2)` | the live instances, or those whose key field holds the literal |
+| `recordFree(each, questShares)` | the slot the next claim takes, or `-1` |
 
-The literal is read as the key field's own kind, so a text field matches text and
-an integer field a number (`WorldIdentityRecordLiteral`). A field reads as a
-number: an integer as written, a flag as `0` or `1`, a fixed-point value as its
-whole part in an integer context, and a text field as `0`, since text is matched,
-never computed. A pool and its fields live on the identity's document, which a
+A field reads in fixed point: an integer as itself, a fixed-point value exactly,
+a flag as `0` or `1`, and a text field compared with the trailing text as `1`
+or `0`. A field read is absent for a body under no identity, an empty slot, or a
+pool or field the store does not hold, so a rule writes `?? 0` where it wants a
+number; a count of nothing reads `0`. A match's literal is read as the key
+field's own kind, so a text field matches text and an integer field a number
+(`WorldIdentityRecordLiteral`). The standard's marks (`worlds/standard/marks.puck`)
+read a character's marks with `record`, and its quests read theirs with
+`recordFind`. A pool and its fields live on the identity's document, which a
 world's compile cannot read, so they are checked as names when the rule compiles
-and against the store when it runs. A read that walks a pool's live instances is
-priced at `WorldIdentityRecords.StoreWalkWork`, the bound the record effects
-use. The host versions each read for a literal body or the one `` binds by
+and against the store when it runs. A field read is priced at 16 units; a read
+that walks a pool's live instances (a match, a filtered count, the free slot) at
+`WorldIdentityRecords.StoreWalkWork`, the bound the record effects use. The host
+versions each read for a literal body or the one `$each` binds by
 the identity the body drives under and that identity's revision
 (`WorldRuleHost`'s identity source), which every installed stage and fact
 write moves, so a rule judged by change wakes when a record it reads moves, the

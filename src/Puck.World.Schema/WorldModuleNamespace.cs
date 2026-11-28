@@ -1160,6 +1160,22 @@ public static class WorldModuleNamespace {
             }
         }
 
+        // target:<bodyRef>:<row>:<range>:<halfAngle>[:<bodyRef>] — the origin, the tag row, two numbers and the body it
+        // cycles from.
+        public void Target() {
+            var start = BodyReference(start: 0);
+
+            if (start < arguments.Count) {
+                Name(
+                    index: start,
+                    kind: WorldNameKind.State
+                );
+            }
+            for (var index = (start + 1); ((index < (start + 3)) && (index < arguments.Count)); index++) {
+                Word(index: index);
+            }
+            BodyReferences(start: (start + 3));
+        }
         // One body reference: cell:<row>:<key> and argmax:<row>/argmin:<row> name a row, placement:<id> a placement,
         // and body:<n> and a bound each/left/right name nothing. Returns how many arguments it spanned.
         private int BodyReference(int start) {
@@ -1249,16 +1265,17 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.FactPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A position axis and a body-state slot are engine names, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.BodyPositionPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.BodyForwardPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.KinematicsPrefix), static read => read.BodyReferenceThen(rows: null)),
         // A screen index is the document's own, which no module renames.
         (ChannelName(spelling: WorldRuleFacts.EngagedPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.BodyStatePrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.IdentityPrefix), static read => read.BodyReferenceThen(rows: null)),
         // An identity's pools and fields live on its own document, and a group id is the world's: no module renames them.
-        (ChannelName(spelling: WorldRuleFacts.IdentityRecordPrefix), static read => read.BodyReferenceThen(rows: null)),
-        (ChannelName(spelling: WorldRuleFacts.IdentityFindPrefix), static read => read.BodyReferenceThen(rows: null)),
-        (ChannelName(spelling: WorldRuleFacts.IdentityCountPrefix), static read => read.BodyReferenceThen(rows: null)),
-        (ChannelName(spelling: WorldRuleFacts.IdentityFreePrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordFindPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordCountPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordFreePrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.InGroupPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.BodyIndexPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.NavigationPrefix), static read => read.BodyReferenceThen(rows: null)),
@@ -1266,6 +1283,7 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.ParkedPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.UprightPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.NearestPrefix), static read => read.BodyReferenceThen(rows: WorldNameKind.State)),
+        (ChannelName(spelling: WorldRuleFacts.TargetPrefix), static read => read.Target()),
         // A seat, then the input channel it reads.
         (ChannelName(spelling: WorldRuleFacts.ChannelPrefix), static read => {
             read.Word(index: 0);

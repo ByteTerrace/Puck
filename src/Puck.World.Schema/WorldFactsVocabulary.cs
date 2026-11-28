@@ -509,14 +509,11 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
                         ruleName: ruleName
                     );
 
-                    // A key a sweep binds (`cell:<row>:$each`) is the binding's, read at each evaluation: the reference
-                    // carries the binding in its index and no literal key.
-                    var keyBound = (cell.InnerKeyBinding != BoundKey.None);
-
                     return new CompiledBodyRef(
                         Handle: Catalog.Descriptors[cell.RowOrdinal].Handle,
-                        Index: (keyBound ? ((int)cell.InnerKeyBinding) : -1),
-                        Key: (keyBound ? null : KeyName(key: cell.Key)),
+                        Index: -1,
+                        Key: ((cell.InnerKeyBinding == BoundKey.None) ? KeyName(key: cell.Key) : null),
+                        KeyBinding: cell.InnerKeyBinding,
                         Kind: CompiledBodyRefKind.Cell,
                         Row: Catalog.Descriptors[cell.RowOrdinal].Name
                     );
@@ -628,6 +625,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             ? resolved
             : default),
         Kind: body.Kind,
+        KeyBinding: body.KeyBinding,
         PlacementOrdinals: body.PlacementOrdinals,
         RowOrdinal: (body.Handle.IsValid
             ? body.Handle.Ordinal

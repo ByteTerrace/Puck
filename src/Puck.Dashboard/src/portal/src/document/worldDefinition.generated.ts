@@ -1047,6 +1047,12 @@ export type BloomQuality = "Off" | "Low" | "High";
  */
 export type BoardCombineOp = "Copy" | "Fill" | "Clear" | "And" | "Or" | "Xor" | "AndNot" | "Not" | "Shift" | "Image";
 
+export type BodyFaceSlots = {
+  active: string;
+  x: string;
+  z: string;
+};
+
 export type BodyHoldBond = "Surface" | "Free" | "Medium";
 
 export type BodyHoldForward = "Heading" | "Intent" | "Velocity" | "Surface";
@@ -1082,6 +1088,10 @@ export type BodyMotionProgram = {
    * The parameters of ComputePlanarTargetVelocity, or null for a target at the full move speed in every direction.
    */
   planarTarget?: BodyPlanarTarget | null;
+  /**
+   * The body-state counters SnapYawToPlanarIntent faces a world point from while their active counter reads nonzero (a lock-on's target), or null.
+   */
+  face?: BodyFaceSlots | null;
 };
 
 export type BodyPlanarTarget = {
@@ -6963,6 +6973,10 @@ export type WorldCameraProgramOpOrbit = {
    */
   pivotOffset?: DocumentVector3;
   /**
+   * Whether a seat's live look turns this orbit, adding to its yaw and pitch. False holds the orbit at its authored angles while the seat looks around, for a framing the rules aim (a lock-on that keeps the eye behind the body, facing its target).
+   */
+  look?: boolean | null;
+  /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
   opcode?: string | null;
@@ -7027,12 +7041,31 @@ export type WorldCameraSelectCase = {
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose is its rest pose (Puck.World.Client.WorldAnchorPoses.TryRestPlacement), the document-only branch of the resolver a placeable camera's own anchor and a speaker read live.
  */
-export type WorldCameraSubject = WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint | null;
+export type WorldCameraSubject = WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint | WorldCameraSubjectBoundPoint | null;
+
+/**
+ * A world-space point whose axes are each a literal or a state.<row>[.<key>] binding, read from the state mirror every frame as presented (eased between ticks), so a program aims at something the rules place: a locked target, a point between two bodies. A $body key reads the body the program frames.
+ */
+export type WorldCameraSubjectBoundPoint = {
+  $type?: "boundPoint";
+  /**
+   * The x axis, in metres.
+   */
+  x: BindableScalar;
+  /**
+   * The y axis, in metres.
+   */
+  y: BindableScalar;
+  /**
+   * The z axis, in metres.
+   */
+  z: BindableScalar;
+};
 
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose is its rest pose (Puck.World.Client.WorldAnchorPoses.TryRestPlacement), the document-only branch of the resolver a placeable camera's own anchor and a speaker read live.
  */
-export type WorldCameraSubjectNullable = WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint | null;
+export type WorldCameraSubjectNullable = WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint | WorldCameraSubjectBoundPoint | null;
 
 /**
  * Rides a placement's authored stamped transform (position only — a placement carries no live facing through this static resolve, the same limitation a placeable camera's own Placement arm and a speaker share).
@@ -9749,7 +9782,7 @@ export type WorldIdentityPool = {
 };
 
 /**
- * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.
+ * One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own kind: an integer, a fixed-point value, or a flag of 0 or 1), a numeric expression evaluated in fixed point when the effect fires (a Fixed field keeps its fraction, an Int field refuses a value with one, a flag reads nonzero as 1), a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.
  */
 export type WorldIdentityRecordValue = {
   /**
@@ -9761,7 +9794,7 @@ export type WorldIdentityRecordValue = {
    */
   value?: number | null;
   /**
-   * The integer expression.
+   * The numeric expression.
    */
   expression?: ExpressionProgramNonNullable2;
   /**
@@ -15298,6 +15331,10 @@ export type WorldSeatViewControl = {
    * The frame the seat's movement resolves in while its body holds a face it cannot stand on.
    */
   faceFrame?: WorldSeatFaceFrame;
+  /**
+   * A literal or state.<row>[.<key>] binding (a $body key reads the seat's body) that, while it reads nonzero, resolves the seat's movement in its body's heading and lets no travel turn that heading, as a held face under Body does: a body the rules keep facing a locked target then strafes round it whichever way the camera looks. null never does.
+   */
+  headingFrame?: BindableScalar;
 };
 
 export type WorldSeatYawReference = "World" | "Body";

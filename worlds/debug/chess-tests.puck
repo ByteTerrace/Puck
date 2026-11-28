@@ -130,3 +130,38 @@ test "a game switch releases the pieces and stands the cards" {
     holodeckShown["0"] == 1
   }
 }
+
+// Showing chess again stands the pool on the same write that put it away, posed afresh on the squares the game left
+// them on: once they settle the board reads the starting position again, no arrangement is judged illegal, and seat 1
+// can still lift e2 and set it on e4.
+test "a switch away and back stands every piece on its square again" {
+  when {
+    ticks 240
+    seat1: world.state.cell.set gameStationGame station 1
+    ticks 60
+    seat1: world.state.cell.set gameStationGame station 0
+    ticks 300
+    seat1: body.press interact
+    ticks 5
+    seat1: source.pointer.origin -0.075 3 -0.335
+    seat1: source.pointer.direction 0 -1 0
+    ticks 3
+    seat1: body.press confirm
+    ticks 10
+    seat1: source.pointer.origin -0.075 3 -0.035
+    ticks 3
+    seat1: body.press confirm
+    ticks 450
+  }
+  expect {
+    station.holodeckShown.pieces == 1
+    holodeckShown["0"] == 0
+    station.chessHold == 0
+    station.boardCollisions == 0
+    station.illegalCount == 0
+    station.board[27] == 1
+    station.board[11] == 0
+    station.board[1] == 2
+    station.chessStationPlies == 2
+  }
+}

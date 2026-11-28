@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Maths;
 using Puck.Commands;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
@@ -60,14 +61,14 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
             $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:x|y|z",
+            $"{WorldRuleFacts.BodyForwardPrefix}<bodyRef>:x|y|z",
             $"{WorldRuleFacts.KinematicsPrefix}<bodyRef>:<witness>",
             $"{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
-            $"{WorldRuleFacts.IdentityRecordPrefix}<bodyRef>:<pool>:<slot>:<field>",
-            $"{WorldRuleFacts.IdentityFindPrefix}<bodyRef>:<pool>:<keyField>:<value>[:<field>]",
-            $"{WorldRuleFacts.IdentityCountPrefix}<bodyRef>:<pool>[:<keyField>:<value>]",
-            $"{WorldRuleFacts.IdentityFreePrefix}<bodyRef>:<pool>",
+            $"{WorldRuleFacts.RecordFindPrefix}<bodyRef>:<pool>:<keyField>:<value>[:<field>]",
+            $"{WorldRuleFacts.RecordCountPrefix}<bodyRef>:<pool>[:<keyField>:<value>]",
+            $"{WorldRuleFacts.RecordFreePrefix}<bodyRef>:<pool>",
             $"{WorldRuleFacts.InGroupPrefix}<bodyRef>:<group>",
             $"{WorldRuleFacts.BodyIndexPrefix}<bodyRef>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
@@ -78,6 +79,8 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>|<placement>:x|y|on|press:<channelName>|region:<id>|row:<id>",
             "$contact:each:seat|device|id|phase|x|y",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
+            $"{WorldRuleFacts.TargetPrefix}<bodyRef>:<row>:<range>:<halfAngleDegrees>[:<currentBodyRef>]",
+            $"{WorldRuleFacts.RecordPrefix}<bodyRef>:<pool>:<slot>|$each:<field>[:<text>]",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseErrorAt|beatAt|barAt|beatInBarAt:<owner>:<channel>:<kind>:<occurrence>",
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
@@ -374,60 +377,68 @@ public static partial class WorldFactsVocabulary {
         }
 
         private static readonly (string Prefix, IdentityRecordRead Read)[] IdentityRecordPrefixes = [
-            (WorldRuleFacts.IdentityRecordPrefix, IdentityRecordRead.Field),
-            (WorldRuleFacts.IdentityFindPrefix, IdentityRecordRead.Find),
-            (WorldRuleFacts.IdentityCountPrefix, IdentityRecordRead.Count),
-            (WorldRuleFacts.IdentityFreePrefix, IdentityRecordRead.Free),
+            (WorldRuleFacts.RecordPrefix, IdentityRecordRead.Field),
+            (WorldRuleFacts.RecordFindPrefix, IdentityRecordRead.Find),
+            (WorldRuleFacts.RecordCountPrefix, IdentityRecordRead.Count),
+            (WorldRuleFacts.RecordFreePrefix, IdentityRecordRead.Free),
         ];
 
         // One read of the record store on the identity a body drives under. The pool and its fields live on the
         // identity's own document, which a world's compile cannot read, so they are checked as names here and answer
         // nothing when the store does not hold them. A read that walks the pool's live instances is priced at the fixed
-        // bound the record effects use; a field or a whole-pool count reads one cell.
+        // bound the record effects use; a field read resolves one slot, and a whole-pool count reads one cell.
         private static WorldBodyFactOperand IdentityRecordFact(string name, IdentityRecordRead read, string ruleName, string[] tokens, WorldFactsCompileContext world) {
             var width = WorldFactsCompileContext.BodyRefTokenWidth(start: 0, tokens: tokens);
             var rest = (tokens.Length - width);
             var (prefix, shape, fits) = read switch {
-                IdentityRecordRead.Field => (WorldRuleFacts.IdentityRecordPrefix, "<pool>:<slot>:<field>", (rest == 3)),
-                IdentityRecordRead.Find => (WorldRuleFacts.IdentityFindPrefix, "<pool>:<keyField>:<value>[:<field>]", (rest is 3 or 4)),
-                IdentityRecordRead.Count => (WorldRuleFacts.IdentityCountPrefix, "<pool>[:<keyField>:<value>]", (rest is 1 or 3)),
-                _ => (WorldRuleFacts.IdentityFreePrefix, "<pool>", (rest == 1)),
+                IdentityRecordRead.Field => (WorldRuleFacts.RecordPrefix, "<pool>:<slot>:<field>[:<text>]", (rest is 3 or 4)),
+                IdentityRecordRead.Find => (WorldRuleFacts.RecordFindPrefix, "<pool>:<keyField>:<value>[:<field>]", (rest is 3 or 4)),
+                IdentityRecordRead.Count => (WorldRuleFacts.RecordCountPrefix, "<pool>[:<keyField>:<value>]", (rest is 1 or 3)),
+                _ => (WorldRuleFacts.RecordFreePrefix, "<pool>", (rest == 1)),
             };
-            var slot = -1;
+            var slot = IdentityRecordOperand.EachSlot;
+            var pool = default(CellName);
             CellName? field = null;
             CellName? keyField = null;
             string? keyValue = null;
-            var pool = default(CellName);
+            string? text = null;
             var spelled = (fits && CellName.TryParse(candidate: tokens[width], name: out pool, reason: out _));
 
             if (spelled && (read == IdentityRecordRead.Field)) {
-                spelled = int.TryParse(s: tokens[width + 1], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out slot) && TryName(token: tokens[width + 2], name: out field);
+                var slotToken = tokens[width + 1];
+
+                spelled = ((slotToken is "$each" or "each") || (int.TryParse(s: slotToken, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out slot) && (slot >= 0))) &&
+                    TryName(token: tokens[width + 2], name: out field);
+                text = ((rest == 4) ? tokens[width + 3] : null);
             } else if (spelled && (rest >= 3)) {
                 keyValue = tokens[width + 2];
                 spelled = TryName(token: tokens[width + 1], name: out keyField) && ((rest == 3) || TryName(token: tokens[width + 3], name: out field));
             }
             if (!spelled) {
                 throw new RuleException(
-                    detail: $"'{name}' does not spell '{prefix}<bodyRef>:{shape}' ({WorldFactsCompileContext.BodyRefVocabulary}, then a pool and fields of the identity's record store)",
+                    detail: $"'{name}' does not spell '{prefix}<bodyRef>:{shape}' ({WorldFactsCompileContext.BodyRefVocabulary}, then a pool of the identity's record store, its fields as names, a slot as a non-negative literal or $each, and a match or comparison as a literal)",
                     refusal: WorldRuleRefusal.IdentityRecordReadMalformed,
                     ruleName: ruleName
                 );
             }
+            if ((read == IdentityRecordRead.Field) && (slot == IdentityRecordOperand.EachSlot)) {
+                RuleCompiler.RequireBindingInScope(binding: BoundKey.Each, context: world, ruleName: ruleName, spelled: tokens[width + 1], where: $"'{name}'");
+            }
 
             var body = world.ResolveBodyRef(channel: name, ruleName: ruleName, start: 0, tokens: tokens);
-            var operand = new IdentityRecordOperand(body: body, field: field, keyField: keyField, keyValue: keyValue, pool: pool, read: read, slot: slot);
+            var operand = new IdentityRecordOperand(body: body, field: field, keyField: keyField, keyValue: keyValue, pool: pool, read: read, slot: slot, text: text);
             var walks = ((read is IdentityRecordRead.Find or IdentityRecordRead.Free) || (keyField is not null));
 
             return BodyFact(
                 bodyA: body,
                 bodyB: default,
-                cost: (walks ? WorldIdentityRecords.StoreWalkWork : 1L),
+                cost: (walks ? WorldIdentityRecords.StoreWalkWork : 16L),
                 describe: name,
                 reach: WorldDisclosureReach.Bodies,
                 payload: operand,
                 read: facet => facet.Read(operand: operand),
                 rowOrdinal: -1,
-                valueKind: CellKind.Int,
+                valueKind: operand.ValueKind,
                 world: world
             );
 
@@ -1028,6 +1039,9 @@ public static partial class WorldFactsVocabulary {
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.BodyPositionPrefix
+            ) || name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.BodyForwardPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
                     key: cell,
@@ -1036,6 +1050,9 @@ public static partial class WorldFactsVocabulary {
                     ruleName: ruleName
                 );
 
+                var axisBase = (name.StartsWith(comparisonType: StringComparison.Ordinal, value: WorldRuleFacts.BodyForwardPrefix)
+                    ? BodyPositionOperand.ForwardAxis
+                    : 0);
                 var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
@@ -1066,7 +1083,7 @@ public static partial class WorldFactsVocabulary {
                     tokens: tokens
                 );
                 var operand = new BodyPositionOperand(
-                    axis: axis,
+                    axis: (axisBase + axis),
                     body: body
                 );
 
@@ -1654,6 +1671,9 @@ public static partial class WorldFactsVocabulary {
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.NearestPrefix
+            ) || name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.TargetPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
                     key: cell,
@@ -1662,15 +1682,34 @@ public static partial class WorldFactsVocabulary {
                     ruleName: ruleName
                 );
 
+                var targets = name.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: WorldRuleFacts.TargetPrefix
+                );
                 var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
                 );
+                var currentWidth = ((targets && (tokens.Length > (width + 3)))
+                    ? WorldFactsCompileContext.BodyRefTokenWidth(start: (width + 3), tokens: tokens)
+                    : 0);
+                var range = 0m;
+                var halfAngle = 0m;
 
-                if (tokens.Length != (width + 1)) {
+                if (targets
+                    ? ((tokens.Length < (width + 3)) ||
+                        (tokens.Length != (width + 3 + currentWidth)) ||
+                        !decimal.TryParse(s: tokens[width + 1], style: NumberStyles.Number, provider: CultureInfo.InvariantCulture, result: out range) ||
+                        !decimal.TryParse(s: tokens[width + 2], style: NumberStyles.Number, provider: CultureInfo.InvariantCulture, result: out halfAngle) ||
+                        (range <= 0m) ||
+                        (halfAngle <= 0m) ||
+                        (halfAngle > 180m))
+                    : (tokens.Length != (width + 1))) {
                     throw new RuleException(
-                        detail: $"'{name}' does not spell '{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>' ({WorldFactsCompileContext.BodyRefVocabulary}, then the keyed tag row)",
+                        detail: (targets
+                            ? $"'{name}' does not spell '{WorldRuleFacts.TargetPrefix}<bodyRef>:<row>:<range>:<halfAngleDegrees>[:<currentBodyRef>]' ({WorldFactsCompileContext.BodyRefVocabulary}, then the keyed tag row, a positive range in metres, a half-angle in (0, 180] degrees and an optional body to cycle from)"
+                            : $"'{name}' does not spell '{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>' ({WorldFactsCompileContext.BodyRefVocabulary}, then the keyed tag row)"),
                         refusal: WorldRuleRefusal.SpatialChannelMalformed,
                         ruleName: ruleName
                     );
@@ -1696,16 +1735,33 @@ public static partial class WorldFactsVocabulary {
                     context: world,
                     name: tokens[width]
                 );
+                var current = ((currentWidth > 0)
+                    ? world.ResolveBodyRef(
+                        channel: name,
+                        ruleName: ruleName,
+                        start: (width + 3),
+                        tokens: tokens
+                    )
+                    : (CompiledBodyRef?)null);
                 var operand = new NearestOperand(
                     bodyA: from,
+                    envelope: (targets
+                        ? new WorldTargetEnvelope(
+                            Current: current,
+                            HalfAngle: FixedQ4816.FromDegrees(degrees: (double)halfAngle),
+                            Range: FixedQ4816.FromDouble(value: (double)range)
+                        )
+                        : null),
                     row: tokens[width],
                     stateHandle: world.Catalog.Descriptors[rowOrdinal].Handle
                 );
 
+                // The walk visits the tag row's held cells, so it is priced at the most the row can hold, never the
+                // population's capacity.
                 fact = BodyFact(
                     bodyA: from,
-                    bodyB: default,
-                    cost: world.Definition.Population.Capacity,
+                    bodyB: (current ?? default),
+                    cost: Math.Min(world.RowCapacity(rowOrdinal: rowOrdinal), world.Definition.Population.Capacity),
                     describe: name,
                     reach: WorldDisclosureReach.Bodies,
                     payload: operand,

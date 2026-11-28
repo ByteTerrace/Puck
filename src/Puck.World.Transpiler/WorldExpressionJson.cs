@@ -11,10 +11,9 @@ namespace Puck.World.Transpiler;
 /// PUCK002 rather than lowered to an empty program, so a lowering arm that writes something the expression grammar
 /// cannot read is refused where it is written.</remarks>
 public static class WorldExpressionJson {
-    // Which members of a lowered object the document model types as ExpressionProgram. Some are decided by more than
-    // the member's own name: "left"/"right" are programs on a compareValue predicate and a claimIdentityPair effect,
-    // "slot"/"generation" on the identity record write and release, and something else everywhere else; "value" is a
-    // pattern row's.
+    // Which members of a lowered object the document model types as ExpressionProgram. Two of them are decided by
+    // more than the member's own name: "left"/"right" are programs on a compareValue predicate and something else
+    // everywhere else, and "value" is a pattern row's.
     private static void LowerProgramMembers(JsonObject obj, string? array, DiagnosticBag? diagnostics) {
         LowerProgramMember(diagnostics: diagnostics, member: "expression", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "cohesionAffinity", obj: obj);
@@ -23,17 +22,18 @@ public static class WorldExpressionJson {
         LowerProgramMember(diagnostics: diagnostics, member: "pointX", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "pointY", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "pointZ", obj: obj);
-        switch ((obj["$type"] as JsonValue)?.GetValue<string>()) {
-            case "compareValue":
-            case "claimIdentityPair":
-                LowerProgramMember(diagnostics: diagnostics, member: "left", obj: obj);
-                LowerProgramMember(diagnostics: diagnostics, member: "right", obj: obj);
-                break;
-            case "setIdentityRecord":
-            case "releaseIdentityRecord":
-                LowerProgramMember(diagnostics: diagnostics, member: "slot", obj: obj);
-                LowerProgramMember(diagnostics: diagnostics, member: "generation", obj: obj);
-                break;
+        var type = ((obj["$type"] is JsonValue discriminator) && (discriminator.GetValueKind() == System.Text.Json.JsonValueKind.String))
+            ? discriminator.GetValue<string>()
+            : null;
+
+        if (type is "compareValue" or "claimIdentityPair") {
+            LowerProgramMember(diagnostics: diagnostics, member: "left", obj: obj);
+            LowerProgramMember(diagnostics: diagnostics, member: "right", obj: obj);
+        }
+        // An identity record write or release names its slot and the lifetime it expects as programs.
+        if (type is "setIdentityRecord" or "releaseIdentityRecord") {
+            LowerProgramMember(diagnostics: diagnostics, member: "slot", obj: obj);
+            LowerProgramMember(diagnostics: diagnostics, member: "generation", obj: obj);
         }
         if (array == "patterns") {
             LowerProgramMember(diagnostics: diagnostics, member: "value", obj: obj);

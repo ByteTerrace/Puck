@@ -16,12 +16,12 @@ public enum WorldIdentityRecordOp : byte {
     /// <summary>Releases the live instance in a slot.</summary>
     Release,
 }
-/// <summary>One field a compiled identity record effect writes: a numeric literal stored as the field's own kind, an
-/// integer source read at firing, a text literal, or the id of the identity another body drives under.</summary>
+/// <summary>One field a compiled identity record effect writes: a numeric literal stored as the field's own kind, a
+/// fixed-point source read at firing, a text literal, or the id of the identity another body drives under.</summary>
 /// <param name="Field">The record field.</param>
-/// <param name="Source">The integer source, or a literal's placeholder when <paramref name="Literal"/> or
+/// <param name="Source">The fixed-point source, or a literal's placeholder when <paramref name="Literal"/> or
 /// <paramref name="Text"/> is set.</param>
-/// <param name="Position">The position among the effect's sources of the integer source, or of the body an identity id
+/// <param name="Position">The position among the effect's sources of the fixed-point source, or of the body an identity id
 /// is read from; -1 when it reads none.</param>
 /// <param name="Literal">The numeric literal, or <see langword="null"/>.</param>
 /// <param name="Text">The text literal, or <see langword="null"/>.</param>
@@ -73,6 +73,7 @@ public readonly record struct WorldIdentityRecordInput(CellName Field, CompiledV
             return true;
         }
 
+        // The expression is read in fixed point (WorldFactsCompiler.ResolveIdentityRecord).
         long raw;
 
         if (Source.IsLiteral) {
@@ -81,18 +82,24 @@ public readonly record struct WorldIdentityRecordInput(CellName Field, CompiledV
             reason = $"field '{Field}''s expression names no number";
             return false;
         }
+
+        var number = FixedQ4816.FromRawBits(value: raw);
+
         switch (kind) {
-            case CellKind.Int:
-                value = CellValue.Int(value: raw);
+            case CellKind.Int when (number.Value & ((1L << FixedQ4816.FractionBitCount) - 1L)) == 0L:
+                value = CellValue.Int(value: (raw >> FixedQ4816.FractionBitCount));
                 break;
+            case CellKind.Int:
+                reason = $"field '{Field}' is Int and the expression gives {number}, which has a fraction";
+                return false;
             case CellKind.Fixed:
-                value = CellValue.Fixed(rawBits: FixedQ4816.FromInteger(value: raw).Value);
+                value = CellValue.Fixed(rawBits: raw);
                 break;
             case CellKind.Bool:
                 value = CellValue.Bool(value: (raw != 0L));
                 break;
             default:
-                reason = $"field '{Field}' ({kind}) cannot hold an integer";
+                reason = $"field '{Field}' ({kind}) cannot hold a number";
                 return false;
         }
         reason = string.Empty;
@@ -193,7 +200,7 @@ public sealed class WorldIdentityRecordEffect : WorldFactEffect {
                 : new WorldIdentityRecordInput(
                     Field: field.Field,
                     Literal: field.Literal,
-                    Position: (((field.Literal is null) && (field.Text is null)) ? Append(sources: sources, source: field.Source) : -1),
+                    Position: (((field.Literal is null) && (field.Text is null)) ? Append(sources: sources, source: field.Source, kind: CellKind.Fixed) : -1),
                     Source: field.Source,
                     Text: field.Text
                 ));
@@ -268,9 +275,10 @@ public sealed class WorldIdentityRecordEffect : WorldFactEffect {
         sources.Add(item: EffectSource.Key(keyFrom: body.KeyFrom, literal: body.Key));
         return (sources.Count - 1);
     }
-    // Appends a non-literal source and answers its position, or -1 for a literal the arm reads raw.
-    private static int Append(List<EffectSource> sources, in CompiledValueSource source) {
-        if (source.AsEffectSource(kind: CellKind.Int) is not { } read) {
+    // Appends a non-literal source, read in its compiled kind, and answers its position, or -1 for a literal the arm
+    // reads raw.
+    private static int Append(List<EffectSource> sources, in CompiledValueSource source, CellKind kind = CellKind.Int) {
+        if (source.AsEffectSource(kind: kind) is not { } read) {
             return -1;
         }
         sources.Add(item: read);
@@ -279,7 +287,7 @@ public sealed class WorldIdentityRecordEffect : WorldFactEffect {
 }
 /// <summary>One authored field of an identity record effect, compiled: its source, or a literal.</summary>
 /// <param name="Field">The record field.</param>
-/// <param name="Source">The integer source, or a zero constant for a literal.</param>
+/// <param name="Source">The fixed-point source, or a zero constant for a literal.</param>
 /// <param name="Literal">The numeric literal, or <see langword="null"/>.</param>
 /// <param name="Text">The text literal, or <see langword="null"/>.</param>
 /// <param name="IdentityOf">The body whose identity's id the field holds, or <see langword="null"/>.</param>

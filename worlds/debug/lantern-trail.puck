@@ -11,20 +11,19 @@
 // others, and each joins at the farthest part it qualifies for. lantern-trail-tests.puck plays the crossing.
 
 import "../standard/quests"
+import "../standard/reach"
+import "../standard/place"
 
 // Where the trail starts and ends at home: the floor before the garden painting, which faces the wing from its south
-// wall (paintings.puck); a body walking +Z from here passes through its glass into the garden.
-let lanternTrailStart = { x: 57, z: 36.3, reach: 1.5 }
-let lanternTrailHome = { x: 57, near: 38, far: 41, halfWidth: 2 }
+// wall (paintings.puck); a body walking +Z from the start passes through its glass into the garden, and one coming back
+// out of the painting steps onto the home floor. Each is a region, so a rule over it binds only the bodies standing there.
+placements {
+  reach(id: "lantern-trail-start", box: { x0: 55.5, x1: 58.5, y0: -0.5, y1: 2.5, z0: 34.8, z1: 37.2 })
+  reach(id: "lantern-trail-home", box: { x0: 55, x1: 59, y0: -0.5, y1: 2.5, z0: 38, z1: 41 })
+}
 
-function nearLanternStart() = (((bodyPosition(each, x) - lanternTrailStart.x) *
-  (bodyPosition(each, x) - lanternTrailStart.x)) +
-  ((bodyPosition(each, z) - lanternTrailStart.z) * (bodyPosition(each, z) - lanternTrailStart.z))) <
-  (lanternTrailStart.reach * lanternTrailStart.reach)
-function backFromTheGarden() = (bodyPosition(each, z) > lanternTrailHome.near) and
-  (bodyPosition(each, z) < lanternTrailHome.far) and
-  ((bodyPosition(each, x) - lanternTrailHome.x) < lanternTrailHome.halfWidth) and
-  ((lanternTrailHome.x - bodyPosition(each, x)) < lanternTrailHome.halfWidth)
+// Whether the body a region binds plays under a character, which alone can hold a quest.
+function playsACharacter() = recordFree(each, quests) >= 0
 
 groups {
   kinds [
@@ -54,22 +53,22 @@ questChain(
 )
 
 rule "lantern-trail-take-up" {
-  forEach: $players
-  when nearLanternStart() and questStatus("lanternLit") == 0
+  forEach: region("lantern-trail-start")
+  when playsACharacter() and questStatus("lanternLit") == 0
   mode: Edge
   questStart(questId: "lanternLit", chain: "lanternTrail", part: 0)
 }
 
 rule "lantern-trail-home" {
-  forEach: $players
-  when backFromTheGarden() and questAt("lanternLit", 1)
+  forEach: region("lantern-trail-home")
+  when questAt("lanternLit", 1)
   mode: Edge
   questAdvance(questId: "lanternLit", fromStep: 1, steps: 2)
 }
 
 rule "lantern-trail-keep" {
-  forEach: $players
-  when nearLanternStart() and questStatus("lanternLit") == questDone and questStatus("lanternKept") == 0
+  forEach: region("lantern-trail-start")
+  when questStatus("lanternLit") == questDone and questStatus("lanternKept") == 0
   mode: Edge
   questStart(questId: "lanternKept", chain: "lanternTrail", part: 1)
 }

@@ -24,10 +24,10 @@ test "the lantern trail starts in the gallery, advances in the garden and finish
   }
   expect {
     garden {
-      identityFind(body, 0, quests, quest, lanternLit, step) == 1
+      recordFind(body, 0, quests, quest, lanternLit, step) == 1
     }
-    identityFind(body, 0, quests, quest, lanternLit, status) == questDone
-    identityFind(body, 0, quests, quest, lanternLit, step) == 2
+    recordFind(body, 0, quests, quest, lanternLit, status) == questDone
+    recordFind(body, 0, quests, quest, lanternLit, step) == 2
     bodyPosition(body, 0, z) > 38
   }
 }
@@ -41,7 +41,7 @@ test "the trail's second part is not taken up before the first is done" {
     ticks 10
   }
   expect {
-    identityFind(body, 0, quests, quest, lanternLit, status) == questActive
-    identityFind(body, 0, quests, quest, lanternKept) == -1
+    recordFind(body, 0, quests, quest, lanternLit, status) == questActive
+    recordFind(body, 0, quests, quest, lanternKept) == -1
   }
 }

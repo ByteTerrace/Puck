@@ -49,6 +49,20 @@ pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
 `companionUnlock` and `companionSight` keep what it learns on its owner's
 identity. The debug world's faerie is one (`../debug/companion.puck`).
 
+[lockon.puck](lockon.puck) is lock-on targeting: `lockOn(targets)` declares what
+can be targeted (the `lockable` row), the lock and cycle keys, the rules that pick
+a target with the engine's target query (`target(…)`), and a seat framing that
+holds the camera behind the body facing its target while the seat moves in its
+body's heading. The standard walker faces the target through its `faceAt`
+counters ([motion.puck](motion.puck)), so a sideways push strafes round it.
+`companionLock(owner)` sends that owner's companion to the locked target.
+[marks.puck](marks.puck) is players' marks: `playerMarks(place)` gives a ping the
+group sees and a placed mark kept in the character's `marks` crossing pool
+([identity.puck](identity.puck)), read back with `record(…)` into rows only the
+group reads (`audience: "public"` lets everyone), and `companionMarks(owner)`
+flies the companion to the group's pings. The debug world expands both in
+`../debug/targeting.puck`.
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 

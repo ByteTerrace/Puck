@@ -3,7 +3,7 @@
 // it; a chain of quests is shared with a group, and each member joins at the farthest part they qualify for.
 //
 // A quest is one record: its id, the chain it belongs to and its part there, the step it has reached, and its status.
-// The engine holds only the store and its reads (`identityFind`, `identityCount`, `identityFree`, `inGroup`); what a
+// The engine holds only the store and its reads (`record`, `recordFind`, `recordCount`, `recordFree`, `inGroup`); what a
 // quest is and how sharing works is written here.
 //
 // Rules over quests sweep the players (`forEach: $players`) and read the quest of the body bound to `$each`, so one rule
@@ -19,16 +19,17 @@ let shareAccepted = 1
 let shareCompleted = 2
 let shareUnqualified = 3
 
-// The status of a quest on the character bound to `$each`: 0 while it holds none of that id.
-function questStatus(questId) = identityFind(each, quests, quest, questId, status)
+// The status of a quest on the character bound to `$each`: 0 while it holds none of that id (a field read of a record the
+// store does not hold is absent).
+function questStatus(questId) = recordFind(each, quests, quest, questId, status) ?? 0
 // Whether the character bound to `$each` follows a quest and has reached a step of it.
 function questAt(questId, atStep) = (questStatus(questId) == questActive) and
-  (identityFind(each, quests, quest, questId, step) == atStep)
+  ((recordFind(each, quests, quest, questId, step) ?? -1) == atStep)
 
 // Starts a quest on the character bound to `$each`, at step 0, unless the character already holds it (active, done or
 // set aside). `chain` and `part` place it in a chain; a quest taken up alone is a chain of one.
 rule template questStart(questId, chain, part = 0) {
-  if identityFind(each, quests, quest, questId) < 0 {
+  if recordFind(each, quests, quest, questId) < 0 {
     claimIdentityRecord(key: $each, pool: "quests", fields: [
       { field: "quest", text: questId }
       { field: "chain", text: chain }
@@ -44,7 +45,7 @@ rule template questStart(questId, chain, part = 0) {
 // this wherever the step's condition holds.
 rule template questAdvance(questId, fromStep, steps) {
   if questAt(questId, fromStep) {
-    setIdentityRecord(key: $each, pool: "quests", slot: identityFind(each, quests, quest, questId), fields: [
+    setIdentityRecord(key: $each, pool: "quests", slot: recordFind(each, quests, quest, questId), fields: [
       { field: "step", value: fromStep + 1 }
       { field: "status", value: ((fromStep + 1) >= steps) ? questDone : questActive }
     ])
@@ -54,7 +55,7 @@ rule template questAdvance(questId, fromStep, steps) {
 // Sets a quest the character bound to `$each` follows aside; `questStart` will not start it again.
 rule template questSetAsideNow(questId) {
   if questStatus(questId) == questActive {
-    setIdentityRecord(key: $each, pool: "quests", slot: identityFind(each, quests, quest, questId), fields: [
+    setIdentityRecord(key: $each, pool: "quests", slot: recordFind(each, quests, quest, questId), fields: [
       { field: "status", value: questSetAside }
     ])
   }
@@ -77,7 +78,7 @@ template questChain(id, parts, group, requires = []) {
     quest: parts[k].quest
     steps: parts[k].steps
     index: k
-    prev: parts[(k > 0) ? (k - 1) : 0].quest
+    prevIndex: (k > 0) ? (k - 1) : 0
   })
 
   state {
@@ -96,24 +97,27 @@ template questChain(id, parts, group, requires = []) {
 
   rule $"{id}-share" {
     forEach: $players
-    // The part the sharer follows, the farthest part this recipient qualifies for up to it, and what it already holds
-    // of that part.
-    local sharerPart = maximum(
-      indexed,
-      p => (identityFind(cell, $"{id}Share", from, quests, quest, p.quest, status) == questActive) ? p.index : -1
-    )
-    local entryOk = all(requires, q => identityFind(each, quests, quest, q, status) == questDone)
-    local joinPart = maximum(
-      indexed,
-      p => (
-        (p.index <= sharerPart) and
-        ((p.index == 0) ? entryOk : (identityFind(each, quests, quest, p.prev, status) == questDone))
-      ) ?
-          p.index :
-        -1
-    )
-    local held = maximum(indexed, p => (p.index == joinPart) ? identityFind(each, quests, quest, p.quest, status) : 0)
-    local shareSlot = identityFree(cell, $"{id}Share", from, questShares)
+    // Each part's status on this recipient and on the sharer, read once (a store walk each). Then, part by part: the
+    // part the sharer follows, the farthest part this recipient qualifies for up to it (the first part needs `requires`
+    // done, every other the part before it), and what it already holds of that part.
+    local entryOk = all(requires, q => questStatus(q) == questDone)
+    for (partQuest, k) in questIds {
+      local $"mine{k}" = questStatus(partQuest)
+      local $"done{k}" = ($"mine{k}" == questDone) ? 1 : 0
+      local $"follows{k}" = (
+        ((recordFind(cell, $"{id}Share", from, quests, quest, partQuest, status) ?? 0) == questActive) ? k : -1
+      )
+    }
+    local sharerPart = maximum(map(range(0, count), k => $"follows{k}"), name => name)
+    for (opens, k) in map(range(0, count), k => (k == 0) ? "entryOk" : $"done{k - 1}") {
+      local $"joins{k}" = ((k <= sharerPart) and ($"{opens}" == 1)) ? k : -1
+    }
+    local joinPart = maximum(map(range(0, count), k => $"joins{k}"), name => name)
+    for k in range(0, count) {
+      local $"holds{k}" = (joinPart == k) ? $"mine{k}" : 0
+    }
+    local held = maximum(map(range(0, count), k => $"holds{k}"), name => name)
+    local shareSlot = recordFree(cell, $"{id}Share", from, questShares)
     // The gate reads only what moves with a share, so the store reads above run when a share fires, not every tick.
     when $"{id}Share".from >= 0 and bodyIndex(each) != $"{id}Share".from and inGroup(each, group) == 1
     mode: Level
@@ -159,16 +163,17 @@ template questChain(id, parts, group, requires = []) {
   // turns to completed.
   rule $"{id}-share-completed" {
     forEach: $players
-    local finished = any(
-      indexed,
-      p => ($"{id}SharedPart"[$each] == p.index) and (identityFind(each, quests, quest, p.quest, status) == questDone)
-    )
+    local finished = any(indexed, p => ($"{id}SharedPart"[$each] == p.index) and (questStatus(p.quest) == questDone))
     local shareSlot = $"{id}ShareSlot"[$each]
-    when $"{id}SharedBy"[$each] >= 0 and finished == 1 and inGroup(cell, $"{id}SharedBy", $each, group) == 1
+    // The gate reads rows and this body's own quests, which rest; the sharer is checked, and the record written, only
+    // when it opens, so a sharer that left or a body index another player took is never written.
+    when $"{id}SharedBy"[$each] >= 0 and finished == 1
     mode: Level
-    setIdentityRecord(key: $"{id}SharedBy"[$each], pool: "questShares", slot: shareSlot + 0, fields: [
-      { field: "outcome", value: shareCompleted }
-    ])
+    if inGroup(cell, $"{id}SharedBy", $each, group) == 1 {
+      setIdentityRecord(key: $"{id}SharedBy"[$each], pool: "questShares", slot: shareSlot, fields: [
+        { field: "outcome", value: shareCompleted }
+      ])
+    }
     $"{id}SharedBy"[$each] = -1
   }
 }

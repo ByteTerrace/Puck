@@ -96,7 +96,7 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact; absent when no contact event is bound.</returns>
     Fact Read(ContactOperand operand);
-    /// <summary>Returns the nearest body carrying a tag-row cell.</summary>
+    /// <summary>Returns the body a tag-row walk chooses: the nearest tagged body, or a target query's pick.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(NearestOperand operand);

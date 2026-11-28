@@ -2,7 +2,7 @@
 // worlds/debug/quests-tests.puck --reproduce`. Seat 1 plays Ada and seat 2 Bram, both members of the fellowship. A seat
 // asks for one quest action by writing its own body's `questAsk` cell (the codes below), which the rule for that code
 // answers through the standard's templates and clears; a seat shares the trail by writing its body index into
-// `trailShare.from`. Expectations read each character's record store: `identityFind(body, <n>, quests, quest, <id>,
+// `trailShare.from`. Expectations read each character's record store: `recordFind(body, <n>, quests, quest, <id>,
 // <field>)` is a quest's field (0 while the character holds none), and a share's record sits in the sharer's
 // `questShares` pool keyed by the recipient's id.
 //
@@ -134,10 +134,10 @@ test "a quest starts at its first step and advances one step at a time" {
     ticks 2
   }
   expect {
-    identityCount(body, 0, quests) == 1
-    identityFind(body, 0, quests, quest, trailA, step) == 1
-    identityFind(body, 0, quests, quest, trailA, status) == questActive
-    identityCount(body, 1, quests) == 0
+    recordCount(body, 0, quests) == 1
+    recordFind(body, 0, quests, quest, trailA, step) == 1
+    recordFind(body, 0, quests, quest, trailA, status) == questActive
+    recordCount(body, 1, quests) == 0
   }
 }
 
@@ -153,9 +153,9 @@ test "a quest past its last step is done, and starting it again changes nothing"
     ticks 2
   }
   expect {
-    identityCount(body, 0, quests) == 1
-    identityFind(body, 0, quests, quest, trailA, step) == 2
-    identityFind(body, 0, quests, quest, trailA, status) == questDone
+    recordCount(body, 0, quests) == 1
+    recordFind(body, 0, quests, quest, trailA, step) == 2
+    recordFind(body, 0, quests, quest, trailA, status) == questDone
   }
 }
 
@@ -176,12 +176,12 @@ test "a recipient joins the chain at the farthest part it qualifies for" {
     ticks 2
   }
   expect {
-    identityFind(body, 1, quests, quest, trailB, status) == questActive
-    identityFind(body, 1, quests, quest, trailB, part) == 1
-    identityFind(body, 1, quests, quest, trailC) == -1
-    identityCount(body, 0, questShares) == 1
-    identityFind(body, 0, questShares, recipient, bram, outcome) == shareAccepted
-    identityFind(body, 0, questShares, recipient, bram, part) == 1
+    recordFind(body, 1, quests, quest, trailB, status) == questActive
+    recordFind(body, 1, quests, quest, trailB, part) == 1
+    recordFind(body, 1, quests, quest, trailC) == -1
+    recordCount(body, 0, questShares) == 1
+    recordFind(body, 0, questShares, recipient, bram, outcome) == shareAccepted
+    recordFind(body, 0, questShares, recipient, bram, part) == 1
     trailShare.from == -1
   }
 }
@@ -198,8 +198,8 @@ test "a recipient that lacks the chain's prerequisite does not qualify" {
     ticks 2
   }
   expect {
-    identityCount(body, 1, quests) == 0
-    identityFind(body, 0, questShares, recipient, bram, outcome) == shareUnqualified
+    recordCount(body, 1, quests) == 0
+    recordFind(body, 0, questShares, recipient, bram, outcome) == shareUnqualified
   }
 }
 
@@ -220,8 +220,8 @@ test "the sharer sees the recipient complete the part it joined" {
     ticks 2
   }
   expect {
-    identityFind(body, 1, quests, quest, trailB, status) == questDone
-    identityFind(body, 0, questShares, recipient, bram, outcome) == shareCompleted
+    recordFind(body, 1, quests, quest, trailB, status) == questDone
+    recordFind(body, 0, questShares, recipient, bram, outcome) == shareCompleted
   }
 }
 
@@ -236,6 +236,6 @@ test "a share reaches only the group's members" {
     ticks 2
   }
   expect {
-    identityCount(body, 0, questShares) == 1
+    recordCount(body, 0, questShares) == 1
   }
 }
