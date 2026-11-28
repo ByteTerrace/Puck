@@ -30,6 +30,14 @@ The owner walked the gallery and ruled its shape:
    the south wall and six on the north, one to a bay (`galleryPortalBays`).
 6. **The board game room stays on level 2, with twelve game stations** in place
    of its old tables ([the board game room](#the-board-game-room)).
+7. **Every part of the gallery is a module**: the building shell, the tree, the
+   climbing wall, the lifts, the portals, the game stations, the gaming devices,
+   the shape displays and the play floor's nets. A floor composes the features
+   it enables, so the shell and its theme can be judged alone and each feature
+   judged in place, and an artist can reuse any of them in another building. The
+   aim is a standardized system that pushes the Puck language, finds engine
+   gaps, makes performance follow from composition (a feature left out costs
+   nothing), and leaves artists free to compose.
 
 ## The plan
 
