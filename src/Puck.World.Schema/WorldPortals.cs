@@ -171,27 +171,10 @@ public sealed record WorldFaceRoutes(
     public int Pick(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (
-            !WorldStateReader.TryRead(
-                arena: arena,
-                definition: definition,
-                engineTick: engineTick,
-                key: Key,
-                rawValue: out var raw,
-                row: out var row,
-                rowName: State,
-                text: out _,
-                tick: tick
-            ) ||
-            (raw is not { } rawValue)
-        ) {
-            return Closed;
-        }
-
-        // A Fixed cell holds Q48.16; its whole part chooses.
-        var whole = ((row.Kind == CellKind.Fixed) ? (rawValue >> 16) : rawValue);
-
-        return (((whole >= 0L) && (whole < Entries.Count)) ? ((int)whole) : Closed);
+        return (WorldStateReader.TryReadWhole(arena: arena, definition: definition, engineTick: engineTick, key: Key, rowName: State, tick: tick, whole: out var whole) &&
+            (whole >= 0L) && (whole < Entries.Count))
+            ? ((int)whole)
+            : Closed;
     }
 }
 /// <summary>One of a face's <see cref="WorldFaceRoutes"/>: where the face leads and what its window shows while the

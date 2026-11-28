@@ -123,25 +123,8 @@ public sealed record WorldMachineContentSelector(
     public int Read(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (
-            !WorldStateReader.TryRead(arena: arena,
-            definition: definition,
-            rowName: State,
-            key: Key,
-            tick: tick,
-            engineTick: engineTick,
-            row: out var row,
-            rawValue: out var raw,
-            text: out _
-        ) ||
-            (raw is not { } rawValue)
-        ) {
-            return 0;
-        }
-
-        // A Fixed cell holds Q48.16; its whole part selects.
-        var whole = ((row.Kind == CellKind.Fixed) ? (rawValue >> 16) : rawValue);
-
-        return (int)Math.Clamp(value: whole, min: 0L, max: int.MaxValue);
+        return (WorldStateReader.TryReadWhole(arena: arena, definition: definition, engineTick: engineTick, key: Key, rowName: State, tick: tick, whole: out var whole)
+            ? (int)Math.Clamp(value: whole, min: 0L, max: int.MaxValue)
+            : 0);
     }
 }

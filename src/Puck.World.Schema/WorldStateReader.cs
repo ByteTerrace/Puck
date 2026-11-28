@@ -80,6 +80,30 @@ public static class WorldStateReader {
         return resolved;
     }
 
+    /// <summary>Reads a numeric cell as a whole number: an integer cell's value, or a <c>Fixed</c> cell's whole part, the
+    /// one reading a selector cell (a machine's title, a door's route) takes.</summary>
+    /// <param name="definition">The document whose arena is read.</param>
+    /// <param name="rowName">The state row.</param>
+    /// <param name="key">The cell, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick to read as of.</param>
+    /// <param name="engineTick">The engine tick to read as of.</param>
+    /// <param name="whole">The cell's whole value, when it holds a number.</param>
+    /// <param name="arena">The live store, or <see langword="null"/> for the one bound to
+    /// <paramref name="definition"/>.</param>
+    /// <returns><see langword="true"/> when the cell holds a number.</returns>
+    public static bool TryReadWhole(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick, out long whole, StateArena? arena = null) {
+        if (!TryRead(arena: arena, definition: definition, engineTick: engineTick, key: key, rawValue: out var raw, row: out var row, rowName: rowName, text: out _, tick: tick) ||
+            (raw is not { } rawValue)) {
+            whole = 0L;
+
+            return false;
+        }
+
+        // A Fixed cell holds Q48.16; its whole part is the number.
+        whole = ((row.Kind == CellKind.Fixed) ? (rawValue >> 16) : rawValue);
+
+        return true;
+    }
     /// <summary>Reads a <c>Fixed</c> cell by name, for a consumer that binds a number to a row and keeps its own value
     /// where the row does not answer.</summary>
     /// <param name="definition">The document whose arena is read.</param>
