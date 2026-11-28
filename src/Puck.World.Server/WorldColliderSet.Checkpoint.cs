@@ -37,8 +37,9 @@ public sealed partial class WorldColliderSet {
     public void RestoreAttached(IReadOnlyList<WorldAttachedSolidCheckpoint> rows) {
         ValidateAttached(rows: rows);
         m_attachedColliders.Clear(); m_attachedColliderRows.Clear();
-        m_movingHoldable.Clear(); m_movingGripOverrides.Clear();
+        m_movingHoldable.Clear(); m_movingHoldableRows.Clear(); m_movingGripOverrides.Clear();
         m_previousAttachedColliders.Clear(); m_previousAttachedColliderRows.Clear();
+        m_previousAttachedSet.Refresh(colliders: []);
         Array.Clear(array: m_previousAttachedResolved);
         Array.Clear(array: m_liveFields);
         m_refreshHash = Fnv1aHash.Create();
@@ -54,16 +55,83 @@ public sealed partial class WorldColliderSet {
         m_attachedHash = m_refreshHash.Value;
         m_holdableRevision++;
         m_attachedMoves = default;
-        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
-        m_movingHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable));
+        PublishAttached();
         RefreshExcluded();
     }
 
+    // Each attached row's colliders at its latest posing, each with whether bodies meet it and whether a hold takes it,
+    // with what they were posed from, and their fold.
+    private sealed class PosedRow {
+        public readonly List<FixedStaticCollider> Colliders = [];
+        public readonly List<byte> Kinds = [];
+        public FixedVector3 Origin;
+        public FixedQuaternion Rotation;
+        public FixedQ4816 Scale;
+        public WorldNets.Panel? Panel;
+        public int NetRevision;
+        public ulong Hash;
+        public FixedStaticCollider? LiveField;
+        public bool Posed;
+
+        public void Record(in FixedStaticCollider collider, bool contact, bool holdable) {
+            Colliders.Add(item: collider);
+            Kinds.Add(item: (byte)((contact ? ContactKind : 0) | (holdable ? HoldableKind : 0)));
+        }
+    }
+    private const byte ContactKind = 1;
+    private const byte HoldableKind = 2;
+    // The posing being recorded, while RestoreAttachedRow poses a row afresh.
+    private PosedRow? m_capturing;
+    // Invariant: a row's colliders are a function of its placement and creation (fixed for this set), its origin,
+    // rotation and size, and for a net row its net's panel and revision (WorldNets' invariant). PoseAttachedRow is the one
+    // door that records a row's colliders, and it replays a row's last posing whenever all of those stand, so a row that
+    // stood still since the last refresh costs a copy rather than another emission of its creation.
+    private readonly PosedRow[] m_posedRows;
+
     private void RestoreAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale) {
-        var (placement, creation, _, _, reflection) = m_attachedRows[row];
         m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true; m_attachedScales[row] = scale;
         if (scale <= FixedQ4816.Zero) { return; }
-        m_refreshMargin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * scale); m_refreshRow = row;
+        m_refreshRow = row;
+
+        var posed = m_posedRows[row];
+        var panel = ((m_attachedRows[row].Placement.Net is not null) && Nets.TryPanel(id: m_attachedRows[row].Placement.Id, panel: out var found)) ? found : null;
+        var revision = (panel?.Net.Revision ?? 0);
+
+        if (posed.Posed && (posed.Origin == origin) && (posed.Rotation == rotation) && (posed.Scale == scale) &&
+            ReferenceEquals(objA: posed.Panel, objB: panel) && (posed.NetRevision == revision)) {
+            for (var index = 0; (index < posed.Colliders.Count); index++) {
+                var kind = posed.Kinds[index];
+
+                RecordAttachedCollider(attached: posed.Colliders[index], contact: ((kind & ContactKind) != 0), holdable: ((kind & HoldableKind) != 0));
+            }
+            m_liveFields[row] = posed.LiveField;
+            m_attachedNetRevisions[row] = revision;
+            m_refreshHash.Add(value: posed.Hash);
+            return;
+        }
+        posed.Colliders.Clear();
+        posed.Kinds.Clear();
+        m_capturing = posed;
+        try {
+            PoseAttachedRow(origin: origin, rotation: rotation, row: row, scale: scale);
+        } finally {
+            m_capturing = null;
+        }
+
+        var hash = Fnv1aHash.Create();
+
+        for (var index = 0; (index < posed.Colliders.Count); index++) {
+            FoldCollider(collider: posed.Colliders[index], hash: ref hash);
+            hash.Add(value: posed.Kinds[index]);
+        }
+        (posed.Origin, posed.Rotation, posed.Scale, posed.Panel, posed.NetRevision) = (origin, rotation, scale, panel, revision);
+        (posed.Hash, posed.LiveField, posed.Posed) = (hash.Value, m_liveFields[row], true);
+        m_refreshHash.Add(value: posed.Hash);
+    }
+    private void PoseAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale) {
+        var (placement, creation, _, _, reflection) = m_attachedRows[row];
+
+        m_refreshMargin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * scale);
         // Before the creation's own colliders, so a field row's early return below keeps them.
         if (placement.Net is { } net) { RecordNetColliders(facet: net, row: row, scale: scale); }
         m_liveFields[row] = PosedAttachedField(origin: origin, rotation: rotation, row: row, scale: scale);

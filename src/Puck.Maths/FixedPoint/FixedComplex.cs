@@ -153,6 +153,39 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             Real: cos
         );
     }
+    /// <summary>Creates the unit rotation of <paramref name="angle"/>, exact at the cardinal angles: an angle within
+    /// sixteen raw units (about 0.014°) of a whole number of quarter turns <c>k·π/2</c> answers the exact unit
+    /// <c>(1, 0)</c>, <c>(0, 1)</c>, <c>(−1, 0)</c> or <c>(0, −1)</c>, so a rotation by quarter turns carries a lattice
+    /// onto itself with no rounding at all; any other angle answers <see cref="FromAngle"/>.</summary>
+    /// <param name="angle">The rotation angle in radians; positive angles rotate counterclockwise.</param>
+    /// <returns>The unit complex number <c>cos θ + i·sin θ</c>, exact at the cardinal angles.</returns>
+    /// <remarks>An angle composed from several rounded quarter turns (a parent's 90° and a child's 90°, each the
+    /// nearest raw to its exact radians) lands half a raw per term from the exact multiple, a distance
+    /// <see cref="FromAngle"/> alone may carry into a unit-raw sine; the tolerance absorbs a chain of thirty-two such
+    /// terms. The nearest quarter count is found against <see cref="FixedQ4816.HalfPi"/> and checked against the
+    /// exact <c>k·π/2</c> (<see cref="FixedQ4816.FromDegrees(double)"/>), so the answer is the exact cardinal only
+    /// for an angle that truly lies there; past 2²⁰ quarter turns the angle takes <see cref="FromAngle"/>.</remarks>
+    public static FixedComplex FromAngleCardinal(FixedQ4816 angle) {
+        const long ToleranceRaw = 16L;
+        const long MaximumQuarters = (1L << 20);
+        var halfPi = FixedQ4816.HalfPi.Value;
+        var quarters = (((Int128)angle.Value) + (halfPi / 2L)).FloorDivide(divisor: ((Int128)halfPi));
+
+        if (Int128.Abs(value: quarters) <= MaximumQuarters) {
+            var exact = FixedQ4816.FromDegrees(degrees: (90d * ((double)quarters)));
+
+            if (long.Abs(value: (angle.Value - exact.Value)) <= ToleranceRaw) {
+                return ((((long)quarters) & 3L) switch {
+                    0L => MultiplicativeIdentity,
+                    1L => new(Real: FixedQ4816.Zero, Imaginary: FixedQ4816.One),
+                    2L => new(Real: -FixedQ4816.One, Imaginary: FixedQ4816.Zero),
+                    _ => new(Real: FixedQ4816.Zero, Imaginary: -FixedQ4816.One),
+                });
+            }
+        }
+
+        return FromAngle(angle: angle);
+    }
     /// <summary>Creates the rotation taking the direction of <paramref name="from"/> to the direction of
     /// <paramref name="to"/> — the normalized geometric product <c>(from·to, from∧to)</c>.</summary>
     /// <param name="from">The start direction; any non-zero magnitude.</param>
@@ -267,6 +300,17 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)Real.Value) * vector.X.Value) - (((Int128)Imaginary.Value) * vector.Y.Value))))),
             Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)Real.Value) * vector.Y.Value) + (((Int128)Imaginary.Value) * vector.X.Value)))))
         );
+    }
+    /// <summary>Rotates a 3D vector about +Y by this complex number, which must be unit length: the yaw of
+    /// <see cref="FixedQuaternion.FromAxisAngle"/> about <see cref="FixedVector3.UnitY"/> at this number's angle, so
+    /// <c>x' = x·cos θ + z·sin θ</c>, <c>z' = z·cos θ − x·sin θ</c> and Y is unchanged.</summary>
+    /// <param name="vector">The vector to rotate.</param>
+    /// <returns>The rotated vector: <see cref="Rotate"/> over the pair (Z, X), one rounding per component, and exact
+    /// when this number is a cardinal unit (<see cref="FromAngleCardinal"/>).</returns>
+    public FixedVector3 RotateAboutY(FixedVector3 vector) {
+        var turned = Rotate(vector: new FixedVector2(X: vector.Z, Y: vector.X));
+
+        return new FixedVector3(X: turned.Y, Y: vector.Y, Z: turned.X);
     }
     /// <summary>Converts to a double-precision <see cref="Complex"/> for presentation.</summary>
     /// <returns>The nearest double-precision complex number.</returns>

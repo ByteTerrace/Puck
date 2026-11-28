@@ -1558,8 +1558,12 @@ laws exercise that boundary.
   the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Remap`: the decode reads the entry in the first taker's ids, or in the stored ids when one collides); otherwise
   the store's canonical ids are held. A restore the store cannot answer loses the geometry
   (`SdfMeshLibrary.Lose`): the library forgets it, `LostRevision` moves, and each bake holding the library restarts on
-  its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the
-  baked mesh, which keeps its parts.
+  its program, baking again the groups whose meshes were lost (`Keeps`). A geometry turns lost on whichever thread
+  first holds the mesh, before its `Lose` reaches the library's gate, so `SdfMeshLibrary.TryTake` is the one door that
+  judges it: a held mesh that reads lost, or a renumbering whose source turned lost (`SdfMesh.TryRenumberNative`), is a
+  miss counted in `sdf.mesh-cache.takes-lost`, and the taking group (a retier, a replacement, a placement, a load) reads
+  its entry again or bakes. Under host-memory pressure a restore refused workspace memory loses its geometry this
+  way. A write the store refuses publishes the baked mesh, which keeps its parts.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache). `SdfMeshBakeIdentity` derives keys for sampling, contouring,
   simplification and landing. The final mesh is tried first. On a miss,

@@ -1,4 +1,3 @@
-using System.Numerics;
 using Xunit;
 using Puck.Assets.Documents;
 using Puck.Maths;
@@ -125,8 +124,7 @@ public sealed class GraphTopologyLawTests {
             userMessage: reason
         );
         var topology = TopologyCompilation.Compile(
-            topology: graph,
-            anchorOffset: Vector3.Zero
+            topology: graph
         );
 
         Assert.Equal(
@@ -221,11 +219,7 @@ public sealed class GraphTopologyLawTests {
     public void PositionsResolveToTheNearestCentreWithinHalfACellSize() {
         var topology = TopologyCompilation.Compile(
             topology: Star(),
-            anchorOffset: new Vector3(
-                x: 1f,
-                y: 0f,
-                z: 0f
-            )
+            anchorPosition: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)
         );
 
         var east = topology.CellCentre(cell: 2);

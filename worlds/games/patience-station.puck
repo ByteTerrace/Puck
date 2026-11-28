@@ -156,8 +156,11 @@ function patienceStationPool(station) = map(range(0, 52), k => {
   id: $"{station.id}-card{k}"
   prototype: patienceFaces[k]
   look: patienceFaces[k]
-  at [station.at[0], (station.at[1] + gameStationSurface - 0.03), station.at[2]]
+  at: patienceHome(station)
+  yaw: gameStationYaw(station)
 })
+// Where every body of a station is placed: at the station's centre, just under its glass, turned with it.
+function patienceHome(station) = gameStationPoint(station, [0, (gameStationSurface - 0.03), 0])
 
 // One station's bodies: its cursor and held outlines, which stand always and lie inside its table's cap while no patience
 // game is shown there, and its cards, a holodeck pool keyed by the station's place in the list, `index` (or, with
@@ -190,7 +193,8 @@ template patienceStationCards(station, index = 0, holodeck = true) {
           look: body.look
           source: "Idle"
         }
-        position [station.at[0], (station.at[1] + gameStationSurface - 0.03), station.at[2]]
+        position: patienceHome(station)
+        yawDegrees: gameStationYaw(station)
       }
     }
   }
@@ -247,6 +251,7 @@ template patienceStationSpots(station, index) {
     placement $"{station.id}-spot-k{z}" {
       prototype: "patienceSpot"
       position: gameStationWorld(station, kSlotX[z], (kTopRow[z] == 1 ? patienceTopRowZ : patienceTableauZ))
+      yawDegrees: gameStationYaw(station)
       respond [
         {
           when: state(state: solitaireTable, key: $"{index}", comparison: NotEqual, value: 1)
@@ -259,6 +264,7 @@ template patienceStationSpots(station, index) {
     placement $"{station.id}-spot-f{z}" {
       prototype: "patienceSpotHidden"
       position: gameStationWorld(station, fSlotX[z], (z < 8 ? patienceTopRowZ : patienceTableauZ))
+      yawDegrees: gameStationYaw(station)
       respond [
         {
           when: state(state: solitaireTable, key: $"{index}", comparison: Equal, value: 2)

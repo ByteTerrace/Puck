@@ -31,7 +31,7 @@ public static class LeasedAdmission {
             clock: clock, wait: bound, ancestor: ProcessInspection.IsAncestor, cancellationToken: cancellationToken,
             admission: admit is null ? null : (reserve, remaining, token) => {
                 stage?.Invoke("host-admission");
-                return admit(checkout, step, device, heavySuite, profile, remaining, reserve, progress, stage, token);
+                return admit(checkout, step, device, heavySuite, profile, remaining, reserve, progress, stage, token, null);
             }, profile: profile, device: device, exclusive: exclusive);
 }
 

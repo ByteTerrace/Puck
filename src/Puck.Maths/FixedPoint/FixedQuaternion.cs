@@ -172,6 +172,14 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             val2: FusedArithmetic.RawMagnitude(value: vector.Z.Value)
         );
 
+    /// <summary>Folds the quaternion's raw components into a running hash, X, Y, Z then W.</summary>
+    /// <param name="hash">The running hash, advanced in place.</param>
+    public void AppendHash(ref Fnv1aHash hash) {
+        hash.Add(value: X.Value);
+        hash.Add(value: Y.Value);
+        hash.Add(value: Z.Value);
+        hash.Add(value: W.Value);
+    }
     /// <summary>Returns the conjugate — the inverse rotation for a unit quaternion.</summary>
     /// <returns>The quaternion with the vector part negated.</returns>
     public FixedQuaternion Conjugate() =>

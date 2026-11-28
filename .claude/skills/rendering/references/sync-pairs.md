@@ -271,7 +271,11 @@ owner while either publication names a borrowed allocation. An installed package
 retaining the same buffer object takes over that owner obligation without holding
 redundant old graphs; raw handles and external bindings do not. After actual
 displacement, the existing reader lag and fence retire those recorders. The graph
-never disposes the borrowed buffer directly. The reader lag retires displaced owned slots;
+never disposes the borrowed buffer directly; it holds a loan on each lent allocation
+it adopts (`GpuLentBuffer.Lend`, in `ShaderPipelineRenderNode` at installation and in
+`RefreshBorrowedBuffers`), which its retirement returns, so a package's own disposal
+(the SDF environment's tables, at a park) never frees a buffer a recording or a
+publication still names. The reader lag retires displaced owned slots;
 reset and device release withdraw both snapshots.
 
 ## Image sources

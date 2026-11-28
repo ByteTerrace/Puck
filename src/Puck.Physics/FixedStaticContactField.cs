@@ -31,6 +31,8 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
 
     [ThreadStatic]
     private static List<int>? CandidateScratch;
+    [ThreadStatic]
+    private static List<int>? DynamicCandidateScratch;
 
     private readonly FixedStaticCollider[] m_colliders;
     private readonly FixedColliderGrid m_grid;
@@ -54,16 +56,19 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <summary>Gets the relaxation solver's tuning.</summary>
     public FixedStaticContactSolver Solver => m_solver;
 
-    /// <summary>Lists the colliders a move can reach: those near the volumes' bounds at both ends of the move, grown by
-    /// a margin for the pushes met on the way.</summary>
+    /// <summary>Lists the colliders a move can reach, of this field and of the per-tick colliders beside it: those near
+    /// the volumes' bounds at both ends of the move, grown by a margin for the pushes met on the way. Each list reads its
+    /// own thread's scratch until the next call on that thread.</summary>
     /// <param name="previousPosition">The foot point the move starts from.</param>
     /// <param name="position">The foot point the move ends at.</param>
     /// <param name="orientation">The body orientation.</param>
     /// <param name="volumes">The body volumes.</param>
-    /// <param name="scratch">The caller's list the indices are written into; the result reads it until the next call.</param>
+    /// <param name="dynamicColliders">The per-tick colliders.</param>
+    /// <param name="dynamicCandidates">The per-tick colliders the move can reach, or the default value (every one).</param>
     /// <returns>The candidates, or the default value (every collider) for no volumes or a region too large to grid.</returns>
     private FixedColliderCandidates Candidates(in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, List<int> scratch) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, FixedStaticColliderSet dynamicColliders, out FixedColliderCandidates dynamicCandidates) {
+        dynamicCandidates = default;
         if (volumes.IsEmpty) { return default; }
         var swept = FixedAabb.Empty;
 
@@ -71,7 +76,10 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
             swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: previousPosition, volume: in volume));
             swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume));
         }
-        return m_grid.Candidates(boxes: Set.Boxes, region: swept.Grow(margin: RegionMargin), scratch: scratch, skin: m_solver.ContactReach);
+        var region = swept.Grow(margin: RegionMargin);
+
+        dynamicCandidates = dynamicColliders.Candidates(region: region, scratch: (DynamicCandidateScratch ??= []), skin: m_solver.ContactReach);
+        return m_grid.Candidates(boxes: Set.Boxes, region: region, scratch: Scratch(), skin: m_solver.ContactReach);
     }
 
     /// <inheritdoc/>
@@ -99,10 +107,13 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick, solved beside these.</param>
     /// <returns>The grounded verdict, the surface it grounded on, and the last resolved non-walkable contact normal.</returns>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedStaticColliderSet dynamicColliders) =>
-        m_solver.Resolve(colliders: Set, dynamicColliders: dynamicColliders, orientation: in orientation, position: ref position,
-            up: in up, velocity: ref velocity, volumes: volumes,
-            candidates: Candidates(orientation: in orientation, position: position, previousPosition: position, scratch: Scratch(), volumes: volumes));
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedStaticColliderSet dynamicColliders) {
+        var candidates = Candidates(dynamicCandidates: out var dynamicCandidates, dynamicColliders: dynamicColliders, orientation: in orientation,
+            position: position, previousPosition: position, volumes: volumes);
+
+        return m_solver.Resolve(colliders: Set, dynamicColliders: dynamicColliders, orientation: in orientation, position: ref position,
+            up: in up, velocity: ref velocity, volumes: volumes, candidates: candidates, dynamicCandidates: dynamicCandidates);
+    }
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
@@ -118,10 +129,14 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick, solved beside these.</param>
     /// <returns>The grounded verdict, the surface it grounded on, and the last resolved non-walkable contact normal.</returns>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
-        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedStaticColliderSet dynamicColliders) =>
-        m_solver.ResolveSweep(colliders: Set, dynamicColliders: dynamicColliders, previousPosition: in previousPosition,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedStaticColliderSet dynamicColliders) {
+        var candidates = Candidates(dynamicCandidates: out var dynamicCandidates, dynamicColliders: dynamicColliders, orientation: in orientation,
+            position: position, previousPosition: in previousPosition, volumes: volumes);
+
+        return m_solver.ResolveSweep(colliders: Set, dynamicColliders: dynamicColliders, previousPosition: in previousPosition,
             position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up,
-            candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, scratch: Scratch(), volumes: volumes));
+            candidates: candidates, dynamicCandidates: dynamicCandidates);
+    }
     /// <inheritdoc/>
     public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
         Span<FixedSurfaceContact> destination) =>
@@ -138,10 +153,11 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
         Span<FixedSurfaceContact> destination, FixedStaticColliderSet dynamicColliders) {
         var reach = new FixedVector3(X: margin, Y: margin, Z: margin);
+        var candidates = Candidates(dynamicCandidates: out var dynamicCandidates, dynamicColliders: dynamicColliders, orientation: in orientation,
+            position: (position + reach), previousPosition: (position - reach), volumes: [volume]);
 
         return m_solver.CollectContacts(colliders: Set, dynamicColliders: dynamicColliders, destination: destination, margin: margin,
-            orientation: in orientation, position: position, volume: in volume,
-            candidates: Candidates(orientation: in orientation, position: (position + reach), previousPosition: (position - reach), scratch: Scratch(), volumes: [volume]));
+            orientation: in orientation, position: position, volume: in volume, candidates: in candidates, dynamicCandidates: in dynamicCandidates);
     }
     /// <inheritdoc/>
     public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
@@ -176,10 +192,13 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick, searched beside these.</param>
     /// <returns><see langword="true"/> when a surface is met within the reach.</returns>
     public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
-        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent, FixedStaticColliderSet dynamicColliders) =>
-        m_solver.TrySupportDistance(colliders: Set, dynamicColliders: dynamicColliders, position: in position, orientation: in orientation,
-            volumes: volumes, up: in up, reach: reach, descent: out descent,
-            candidates: Candidates(orientation: in orientation, position: (position - (up * reach)), previousPosition: in position, scratch: Scratch(), volumes: volumes));
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent, FixedStaticColliderSet dynamicColliders) {
+        var candidates = Candidates(dynamicCandidates: out var dynamicCandidates, dynamicColliders: dynamicColliders, orientation: in orientation,
+            position: (position - (up * reach)), previousPosition: in position, volumes: volumes);
+
+        return m_solver.TrySupportDistance(colliders: Set, dynamicColliders: dynamicColliders, position: in position, orientation: in orientation,
+            volumes: volumes, up: in up, reach: reach, descent: out descent, candidates: candidates, dynamicCandidates: dynamicCandidates);
+    }
     /// <summary>Casts a ray to the first surface of these colliders and per-tick ones it meets
     /// (<see cref="FixedSurfaceQuery.TryCast"/>), tracing only the colliders the grid finds near the ray.</summary>
     /// <param name="origin">The world-space ray origin, in open space.</param>
@@ -191,10 +210,29 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.</returns>
     public bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedStaticColliderSet dynamicColliders,
         out FixedSurfaceAttachCandidate candidate) =>
-        FixedSurfaceQuery.TryCast(candidate: out candidate, colliders: Set, direction: in direction, dynamicColliders: dynamicColliders,
+        TryCast(candidate: out candidate, direction: in direction, dynamicColliders: dynamicColliders, filter: default(KeepsEveryGroup),
+            maxDistance: maxDistance, origin: in origin);
+    /// <summary>Casts a ray to the first surface of these colliders and of the per-tick groups a filter keeps
+    /// (<see cref="TryCast(in FixedVector3, in FixedVector3, FixedQ4816, FixedStaticColliderSet, out FixedSurfaceAttachCandidate)"/>):
+    /// a refused group's colliders are not there for this ray, so it meets what stands behind them.</summary>
+    /// <typeparam name="TFilter">The filter's type.</typeparam>
+    /// <param name="origin">The world-space ray origin, in open space.</param>
+    /// <param name="direction">The ray direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative length of the ray, in metres.</param>
+    /// <param name="dynamicColliders">The colliders the caller recomputes per tick, grouped by its keys.</param>
+    /// <param name="filter">The filter choosing the per-tick groups the ray may meet.</param>
+    /// <param name="candidate">The surface the ray meets, or <see langword="default"/> when it meets none.</param>
+    /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.</returns>
+    public bool TryCast<TFilter>(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedStaticColliderSet dynamicColliders,
+        TFilter filter, out FixedSurfaceAttachCandidate candidate) where TFilter : struct, IColliderGroupFilter {
+        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
+        var region = FixedSurfaceQuery.CastReach(direction: in direction, maxDistance: maxDistance, origin: in origin);
+
+        return FixedSurfaceQuery.TryCast(candidate: out candidate, colliders: Set, direction: in direction, dynamicColliders: dynamicColliders,
             maxDistance: maxDistance, origin: in origin,
-            candidates: m_grid.Candidates(boxes: Set.Boxes, region: FixedSurfaceQuery.CastReach(direction: in direction, maxDistance: maxDistance, origin: in origin),
-                scratch: Scratch(), skin: FixedQ4816.Zero));
+            candidates: m_grid.Candidates(boxes: Set.Boxes, region: region, scratch: Scratch(), skin: FixedQ4816.Zero),
+            dynamicCandidates: dynamicColliders.Candidates(filter: filter, region: region, scratch: (DynamicCandidateScratch ??= []), skin: FixedQ4816.Zero));
+    }
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         up = FixedVector3.UnitY;

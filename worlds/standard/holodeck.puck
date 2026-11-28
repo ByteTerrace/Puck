@@ -6,9 +6,10 @@
 // body stands for which token, where it stands and when it is wanted are the game's (../games/chess-station.puck's
 // chess, ../games/patience-station.puck's cards).
 //
-// A pool is a list of bodies, each `{ id, prototype, look, at }`: `id` names its placement and keys its cells in the
+// A pool is a list of bodies, each `{ id, prototype, look, at, yaw }`: `id` names its placement and keys its cells in the
 // pool's rows, `prototype` the creation its placement names, `look` the look it wears (the prototype's own look, or one
-// of `holodeckLooks` when the game changes it) and `at` its spawn point (in its parent's frame when the pool has one).
+// of `holodeckLooks` when the game changes it), `at` its spawn point and `yaw` its placement's yaw in degrees (absent for
+// none), both in its parent's frame when the pool has one.
 // Each pool is named by a key of its own (`pool`), which keys its cells in the pool rows. A body is an inhabited
 // placement admitted by its pool's cell of `holodeckShown` (WorldPlacementInhabit.Pool) and counted by its own cell of
 // `holodeckLive` over a one-sample disc: the population stands it while both are 1 and retires it otherwise
@@ -121,6 +122,9 @@ template holodeckPool(bodies, kit, pool, parent = null, rows = holodeckRows) {
         parent: parent
       }
       position: body.at
+      if body.yaw != null {
+        yawDegrees: body.yaw
+      }
     }
   }
 }

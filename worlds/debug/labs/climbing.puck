@@ -96,7 +96,7 @@ template climbFace(name, height) {
 
 // The face's and frame's palette: the standard's slots in the gallery's look.
 let climbPalette = climbingPalette(lookClimb.panels, lookClimb.seam, lookClimb.frame, lookClimb.coping)
-let climbNetLook = lookToyLattice(1)
+let climbNetLook = lookToyNet(1)
 
 prototypes {
   climbFace(name: "climb-practice", height: climbPracticeHeight)
@@ -106,15 +106,15 @@ prototypes {
     document {
       name: "climb-net-frame"
       schema: "puck.creation.v2"
-      palette: latticePalette(climbNetLook.frame, climbNetLook.bar, climbNetLook.rail)
+      palette: latticeNetPalette(climbNetLook.frame, climbNetLook.bar, climbNetLook.rail, climbNetLook.knot)
       lattice(
         base: 0,
         cells: climbNetCells,
         pitch: toyLatticePitch,
         height: climbNetHeight,
         bar: toyLatticeBar,
-        net: toyLatticeNet,
-        pane: 0
+        sill: 0,
+        net: toyLatticeNet
       )
     }
   }
@@ -222,7 +222,7 @@ placements {
     grip {
       holdable: true
     }
-    net: latticeNet(cells: climbNetCells, pitch: toyLatticePitch, height: climbNetHeight)
+    net: latticeNet(cells: climbNetCells, pitch: toyLatticePitch, height: climbNetHeight, net: toyLatticeNet, sill: 0)
   }
   // The wall as the gallery places it: the face holds a climber and nothing else of the wall does; the pad reaches under
   // the face's backing to the frame's body.
@@ -284,7 +284,8 @@ placements {
 // The two climbs as a player makes them, through seat 1's own controls (standard/benchmark.puck's `walker`): the wall
 // from the floor onto the pad, up the face with the stick held forward, over the ledge by the climb's mantle and onto
 // the landing; the net from 1.5 m before it, taking it by walking into it, climbing a metre and more, hanging a moment,
-// then running back, which lets go. The climb is a crossing whose arrival is a place, since a body on a face gains no
+// then running back, which lets go. `net-slip` walks a body straight at the net's side half and on 3 m: one at Alice's
+// size slips through the mesh, and a full-size one is held (and takes the climb). The climb is a crossing whose arrival is a place, since a body on a face gains no
 // ground toward any point.
 routes [
   {
@@ -306,6 +307,21 @@ routes [
       {
         name: "the ledge onto the landing"
         steps [{ $type: "go", point: climbLabWallLanding, pace: "walk", direct: true, within: 0.4 }]
+      }
+    ]
+  }
+  {
+    name: "net-slip"
+    program: "walker"
+    chapters [
+      {
+        name: "through the rope net"
+        steps [
+          { $type: "pose", point: climbLabNetSlipBefore, yawDegrees: 180 }
+          { $type: "rest", seconds: 1.5 }
+          { $type: "cross", headingDegrees: 180, pace: "walk", metres: 3 }
+          { $type: "rest", seconds: 1 }
+        ]
       }
     ]
   }

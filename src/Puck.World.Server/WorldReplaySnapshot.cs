@@ -2140,13 +2140,8 @@ public sealed partial class WorldReplaySnapshot {
             var orientation = body.FixedOrientation;
 
             hash.Add(value: ((uint)index));
-            hash.Add(value: position.X.Value);
-            hash.Add(value: position.Y.Value);
-            hash.Add(value: position.Z.Value);
-            hash.Add(value: orientation.X.Value);
-            hash.Add(value: orientation.Y.Value);
-            hash.Add(value: orientation.Z.Value);
-            hash.Add(value: orientation.W.Value);
+            position.AppendHash(hash: ref hash);
+            orientation.AppendHash(hash: ref hash);
             // The heading scalar rides beside the quaternion rather than being replaced by it: under the grounded
             // program m_yaw is authoritative and the quaternion is built from it, so an edit too small to survive that
             // construction would otherwise go unhashed. Under the free program this lane is redundant with the
@@ -2157,12 +2152,8 @@ public sealed partial class WorldReplaySnapshot {
             // two identical poses and velocities with different hold-tick counts diverge the tick the rest latch
             // closes early or late. Its contact manifolds ride the continuation hash. Zero/false for a locomotion
             // body, costing one fold each.
-            hash.Add(value: body.RigidVelocity.X.Value);
-            hash.Add(value: body.RigidVelocity.Y.Value);
-            hash.Add(value: body.RigidVelocity.Z.Value);
-            hash.Add(value: body.RigidAngularVelocity.X.Value);
-            hash.Add(value: body.RigidAngularVelocity.Y.Value);
-            hash.Add(value: body.RigidAngularVelocity.Z.Value);
+            body.RigidVelocity.AppendHash(hash: ref hash);
+            body.RigidAngularVelocity.AppendHash(hash: ref hash);
             hash.Add(value: (body.Resting
                 ? 1UL
                 : 0UL));

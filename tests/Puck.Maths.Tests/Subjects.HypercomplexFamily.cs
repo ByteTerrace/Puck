@@ -493,6 +493,77 @@ internal static partial class Subjects {
             return accumulator;
         }
     }
+    /// <summary>Proves the cardinal yaw pair: <see cref="FixedComplex.FromAngleCardinal"/> snaps to the exact cardinal
+    /// unit within its tolerance and is <see cref="FixedComplex.FromAngle"/> past it, <see cref="FixedComplex.RotateAboutY"/>
+    /// by a cardinal unit permutes coordinates exactly, and at any angle it turns as the placement frames' quaternion
+    /// does.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ComplexCardinalYaw() {
+        FixedComplex[] units = [
+            FixedComplex.MultiplicativeIdentity,
+            new(Real: FixedQ4816.Zero, Imaginary: FixedQ4816.One),
+            new(Real: -FixedQ4816.One, Imaginary: FixedQ4816.Zero),
+            new(Real: FixedQ4816.Zero, Imaginary: -FixedQ4816.One),
+        ];
+
+        for (var quarters = -8L; (quarters <= 8L); quarters++) {
+            var exact = FixedQ4816.FromDegrees(degrees: (90d * quarters)).Value;
+            var unit = units[(int)(quarters & 3L)];
+
+            foreach (var offset in (ReadOnlySpan<long>)[-16L, -1L, 0L, 1L, 16L]) {
+                if (FixedComplex.FromAngleCardinal(angle: Raw(value: (exact + offset))) != unit) { return $"FromAngleCardinal({exact + offset}) at {quarters} quarter turns is not the exact cardinal"; }
+            }
+            foreach (var offset in (ReadOnlySpan<long>)[-17L, 17L]) {
+                var angle = Raw(value: (exact + offset));
+
+                if (FixedComplex.FromAngleCardinal(angle: angle) != FixedComplex.FromAngle(angle: angle)) { return $"FromAngleCardinal({exact + offset}) past the tolerance is not FromAngle"; }
+            }
+        }
+
+        var quarter = FixedQ4816.FromDegrees(degrees: 90d);
+
+        if (FixedComplex.FromAngleCardinal(angle: ((quarter + quarter) + quarter)) != units[3]) { return "three rounded quarter turns do not snap to the exact three-quarter unit"; }
+
+        FixedVector3[] vectors = [
+            new(X: Raw(value: 65536L), Y: Raw(value: 3L), Z: Raw(value: -7L)),
+            new(X: Raw(value: -123457L), Y: Raw(value: 99L), Z: Raw(value: 2_000_001L)),
+            new(X: Raw(value: 1L), Y: Raw(value: -1L), Z: Raw(value: 1L)),
+            new(X: Raw(value: (1L << 40)), Y: Raw(value: 0L), Z: Raw(value: -(1L << 39))),
+            new(X: Raw(value: 1769L), Y: Raw(value: 98304L), Z: Raw(value: 52429L)),
+        ];
+
+        foreach (var vector in vectors) {
+            FixedVector3[] expected = [
+                vector,
+                new(X: vector.Z, Y: vector.Y, Z: -vector.X),
+                new(X: -vector.X, Y: vector.Y, Z: -vector.Z),
+                new(X: -vector.Z, Y: vector.Y, Z: vector.X),
+            ];
+
+            for (var index = 0; (index < units.Length); index++) {
+                if (units[index].RotateAboutY(vector: vector) != expected[index]) { return $"RotateAboutY by cardinal {index} does not permute {vector} exactly"; }
+            }
+        }
+
+        foreach (var angleRaw in (ReadOnlySpan<long>)[1L, 19661L, 51472L, 102944L, -77208L, 205887L, 300000L]) {
+            var angle = Raw(value: angleRaw);
+            var rotor = FixedComplex.FromAngle(angle: angle);
+            var quaternion = FixedQuaternion.FromAxisAngle(axis: FixedVector3.UnitY, angle: angle);
+
+            foreach (var vector in (ReadOnlySpan<FixedVector3>)[vectors[0], vectors[2], vectors[4]]) {
+                var turned = rotor.RotateAboutY(vector: vector);
+                var reference = quaternion.Rotate(vector: vector);
+
+                if (
+                    (Math.Abs(value: (turned.X.Value - reference.X.Value)) > 8L) ||
+                    (turned.Y != vector.Y) ||
+                    (Math.Abs(value: (turned.Z.Value - reference.Z.Value)) > 8L)
+                ) { return $"RotateAboutY({angleRaw}) of {vector} is {turned}, the quaternion's is {reference}"; }
+            }
+        }
+
+        return null;
+    }
     /// <summary>Proves the planar transcendental seam on hand-derived constant ladders: the eighteen-row angle ladder,
     /// the sixteen-row argument ladder, the exact poles at both ends of the seam, the REALIZED closed raw range, and the
     /// two points where the rotation semantics are exact.</summary>

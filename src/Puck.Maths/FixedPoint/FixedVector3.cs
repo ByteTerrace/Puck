@@ -652,6 +652,13 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             y: ((float)Y),
             z: ((float)Z)
         );
+    /// <summary>Folds the vector's raw components into a running hash, X, Y then Z.</summary>
+    /// <param name="hash">The running hash, advanced in place.</param>
+    public void AppendHash(ref Fnv1aHash hash) {
+        hash.Add(value: X.Value);
+        hash.Add(value: Y.Value);
+        hash.Add(value: Z.Value);
+    }
     /// <summary>Returns whether the vector lies within a sphere of the given radius: the exact predicate
     /// <c>|d|² ≤ r²</c> on the raw sums of squares, without a square root and without rounding.</summary>
     /// <param name="radius">The sphere's radius.</param>

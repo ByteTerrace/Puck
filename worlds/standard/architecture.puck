@@ -1681,64 +1681,83 @@ template lounge(base) {
 // A construction lattice that runs along X, a toy building set's panel: a frame of square members `frame` thick round a
 // panel `cells × pitch` long and `height` tall standing on y 0, an upright bar `bar` square every `pitch` between its two
 // posts, and crossbars `rail` square that divide its height into `rails` equal courses. Its palette slots from `base`
-// are the frame, the uprights and the crossbars (`latticePalette` gives three plain ones from their colours). The
-// uprights are one bar folded by a repeat and the crossbars another, so `cells` and `rails` are even (an odd number of
-// copies centres a fold) and `cells` is at most 64, the copies a solid's fold expands to for contact. Every shape is a
-// box joined by union, so the panel collides as drawn: no body wider than the gap between two uprights, `pitch - bar`,
-// passes it, while the gaps leave most of the panel open to the eye. `upright: 0` leaves the uprights out and `sill: 0`
-// the frame's bottom member: an open panel whose courses pass only what fits between its crossbars.
+// are the frame, the uprights, the crossbars and a net's knots (`latticePalette` gives plain ones from their colours,
+// `latticeNetPalette` a rope net's). The uprights are one bar folded by a repeat and the crossbars another, so `cells`
+// and `rails` are even (an odd number of copies centres a fold) and `cells` is at most 64, the copies a solid's fold
+// expands to for contact. Every shape is a box joined by union, so the panel collides as drawn: no body wider than the
+// gap between two uprights, `pitch - bar`, passes it, while the gaps leave most of the panel open to the eye.
+// `upright: 0` leaves the uprights out and `sill: 0` the frame's bottom member: an open panel whose courses pass only
+// what fits between its crossbars.
 let latticeFrame = 0
 let latticeBar = 1
 let latticeRail = 2
-let latticeGlass = 3
-function latticePalette(frame, bar, rail) = [
+let latticeKnot = 3
+function latticePalette(frame, bar, rail, knot = null) = [
   { color: frame, roughness: 0.4, specular: 0.05 }
   { color: bar, roughness: 0.4, specular: 0.05 }
   { color: rail, roughness: 0.4, specular: 0.05 }
-  { color: "#EEF6F8", roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
+  { color: ((knot == null) ? frame : knot), roughness: 0.4, specular: 0.05 }
 ]
-// `net`, when set, fills the frame with a net instead of bars and rails: a clear pane holds every body, and over it a
-// diamond net of rope strands `net.strand` thick, knot to knot `net.pitch` apart, the two sets in the bar and rail
-// colours with a knot in the frame colour where they cross. The strands are drawn only (`detail`); the pane collides.
-// `pane: 0` leaves the pane out, for a frame whose placement carries a net facet (`latticeNet`): the facet's nodes then
-// collide, give and climb, and the drawn strands move with them.
-template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1, net = null, pane = 1) {
+// A rope net's lattice palette: the frame in glossy toy plastic, and the two strand sets and the knots in matte rope.
+function latticeNetPalette(frame, strand, crossStrand, knot) = [
+  { color: frame, roughness: 0.4, specular: 0.05 }
+  { color: strand, roughness: 0.85, specular: 0.02 }
+  { color: crossStrand, roughness: 0.85, specular: 0.02 }
+  { color: knot, roughness: 0.8, specular: 0.02 }
+]
+// A lattice net's mesh: `columns` by `rows` knots from post to post and from the net's foot (the sill's middle, or the
+// floor with no sill) to the head's middle. The strands across stand no further apart than `net.across`, so every opening
+// is at most that wide less a strand, and the strands up stand as near `net.up` apart as an odd count allows. Both counts
+// are odd, so the knots between the frame's members fold about the panel's middle.
+function latticeNetGrid(cells, pitch, height, net, frame = 0.09, sill = 1) = {
+  columns: ((2 * ceiling(((cells * pitch) / (2 * net.across)))) + 1)
+  rows: ((2 * round((((height - (frame / 2)) - ((sill == 1) ? (frame / 2) : 0)) / (2 * net.up)))) + 1)
+  foot: ((sill == 1) ? (frame / 2) : 0)
+  top: (height - (frame / 2))
+}
+// `net`, when set, fills the frame with a rope net instead of bars and rails, for a placement that carries the matching
+// net facet (`latticeNet`), which collides, gives and climbs: strands `net.strand` thick along the knot lines of its mesh
+// (`latticeNetGrid`), the upright set in the bar colour and the level set in the rail colour, a knot in the knot colour
+// where they cross, and with no sill a strand along the floor. The strands are drawn only (`detail`); drawn along the
+// lines between knots, they move with the facet's nodes.
+template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1, net = null) {
   let length = (cells * pitch)
   if (net != null) and (upright == 1) and (net.strand > 0) {
-    // The strands lie along the diagonals of a P4M fold's square cells, which are its mirrors, so one cell's diagonal
-    // draws the whole net: the diagonals join cell to cell into two sets of straight lines at right angles, `cell`·√2
-    // apart. The fold's checkerboard parity takes the two sets to the bar and rail colours (`materialStride`). Its
-    // cells centre on the creation root, so the limits reach the panel's ends and top, and the clip after cuts the net
-    // to the posts' and the sill's and head's middles, where they hide its ends. The net comes before every other shape,
-    // so its intersection clips the net alone.
-    let cell = (net.pitch * 0.70710678)
-    let fold = { cell [cell, cell], limit [ceiling(((length / 2) / cell)), ceiling((height / cell))] }
-    shape Box "lattice-net-strand" {
+    let grid = latticeNetGrid(cells: cells, pitch: pitch, height: height, net: net, frame: frame, sill: sill)
+    let middle = ((grid.foot + grid.top) / 2)
+    let across = (length / (grid.columns - 1))
+    let rise = ((grid.top - grid.foot) / (grid.rows - 1))
+    shape Box "lattice-net-upright" {
       material: (base + latticeBar)
-      rotation: compose(rotate([0, 1, 0], 180), rotate([0, 0, 1], 45deg))
-      scale [(cell * 0.72), (net.strand / 2), (net.strand / 2)]
+      position [0, middle, 0]
+      scale [(net.strand / 2), ((grid.top - grid.foot) / 2), (net.strand / 2)]
       rounding: (net.strand * 0.45)
-      domain [
-        wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit, materialStride: (latticeRail - latticeBar))
-      ]
+      domain [repeat(spacing: [across, 1, 1], limit: [((grid.columns - 3) / 2), 0, 0])]
       detail: true
     }
-    for corner in [-1, 1] {
-      shape Sphere $"lattice-net-knot-{corner}" {
-        material: (base + latticeFrame)
-        position [(0 - ((corner * cell) / 2)), ((corner * cell) / 2), 0]
-        rotation: rotate([0, 1, 0], 180)
-        scale [(net.strand * 0.8), (net.strand * 0.8), (net.strand * 0.8)]
-        domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit)]
+    shape Box "lattice-net-course" {
+      material: (base + latticeRail)
+      position [0, middle, 0]
+      scale [(length / 2), (net.strand / 2), (net.strand / 2)]
+      rounding: (net.strand * 0.45)
+      domain [repeat(spacing: [1, rise, 1], limit: [0, ((grid.rows - 3) / 2), 0], origin: [0, middle, 0])]
+      detail: true
+    }
+    shape Sphere "lattice-net-knot" {
+      material: (base + latticeKnot)
+      position [0, middle, 0]
+      scale [(net.strand * 0.85), (net.strand * 0.85), (net.strand * 0.85)]
+      domain [repeat(spacing: [across, rise, 1], limit: [((grid.columns - 3) / 2), ((grid.rows - 3) / 2), 0], origin: [0, middle, 0])]
+      detail: true
+    }
+    if sill == 0 {
+      shape Box "lattice-net-foot" {
+        material: (base + latticeRail)
+        position [0, (net.strand / 2), 0]
+        scale [(length / 2), (net.strand / 2), (net.strand / 2)]
+        rounding: (net.strand * 0.45)
         detail: true
       }
-    }
-    shape Box "lattice-net-clip" {
-      blend: Intersection
-      material: (base + latticeBar)
-      position [0, (height / 2), 0]
-      scale [(length / 2), ((height - frame) / 2), frame]
-      detail: true
     }
   }
   for side in [-1, 1] {
@@ -1765,14 +1784,6 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
       rounding: (frame / 6)
     }
   }
-  if (net != null) and (upright == 1) and (pane == 1) {
-    // A clear pane holds every body; the net threaded through it is drawn only.
-    shape Box "lattice-pane" {
-      material: (base + latticeGlass)
-      position [0, (height / 2), 0]
-      scale [(length / 2), (height / 2), 0.004]
-    }
-  }
   if (net == null) and (upright == 1) {
     shape Box "lattice-upright" {
       material: (base + latticeBar)
@@ -1794,33 +1805,44 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
-// A rope net's material, a placement net facet's members (WorldPlacementNet): a park climbing net's 16 mm rope hung with
-// a little slack, so it drapes a touch at rest, bellies out under a climber's hands and in under her feet, gives a third
-// of a metre at most to a climber's weight or a body leaning on it, and settles in a second.
-// `strand` is the thickness it collides at, about a body's hand round a rope; `bodyMass` the mass a full-size body loads
-// it with while holding it (a shrunk body loads it with the cube of its size). Override any member with `with`.
+// A rope net's material, a placement net facet's members (WorldPlacementNet): a park climbing net's rope strung taut
+// (`sag` below zero: each strand three per cent short of its spacing), so a climber's weight bellies it by as much as
+// its strands give, about a fifth of a metre under a full-size climber and in proportion to the weight (half the mass,
+// half the belly; a shrunk body barely dimples it), bouncing once under her before it settles. It gives a third of a
+// metre at most, to any weight or a body leaning on it, and comes to rest in a second. Eight slices a step converge its
+// strands at this stiffness.
+// `strand` is the thickness a body meets each strand at; `bodyMass` the mass a full-size body loads it with while
+// holding it (a shrunk body loads it with the cube of its size). Override any member with `with`.
 let ropeNet = {
   nodeMass: 0.25
-  stiffness: 3000
-  damping: 3
-  sag: 0.03
+  stiffness: 20000
+  damping: 6
+  sag: -0.03
   reach: 0.35
-  iterations: 4
-  strand: 0.035
+  substeps: 8
+  strand: 0.04
   bodyMass: 60
   restSpeed: 0.01
   sleepSeconds: 1
   gravity: 9.81
 }
-// The net facet over a `lattice` frame's opening, for its placement: `columns` by `rows` nodes from post to post and from
-// the sill's middle to the head's, pinned along all four members, of `rope`'s material. Pair it with the frame built
-// with `pane: 0`, whose drawn strands then move with the nodes.
-function latticeNet(cells, pitch, height, frame = 0.09, columns = 12, rows = 9, rope = ropeNet) = rope with {
-  columns: columns
-  rows: rows
-  origin [(0 - ((cells * pitch) / 2)), (frame / 2), 0]
-  across [(cells * pitch), 0, 0]
-  up [0, (height - frame), 0]
+// The net facet over a `lattice` frame's opening, for its placement: the knots of `net`'s mesh (`latticeNetGrid`, the
+// same the frame draws its strands along), pinned along the frame, of `rope`'s material with `net`'s strand. Every knot
+// is a node, so a body meets the strands between them and passes an opening it fits. Pair it with the frame built with
+// the same `net` and `sill`.
+function latticeNet(cells, pitch, height, net, frame = 0.09, sill = 1, rope = ropeNet) = latticeNetOver(
+  length: (cells * pitch),
+  grid: latticeNetGrid(cells: cells, pitch: pitch, height: height, net: net, frame: frame, sill: sill),
+  strand: net.strand,
+  rope: rope
+)
+function latticeNetOver(length, grid, strand, rope) = rope with {
+  columns: grid.columns
+  rows: grid.rows
+  strand: strand
+  origin [(0 - (length / 2)), grid.foot, 0]
+  across [length, 0, 0]
+  up [0, (grid.top - grid.foot), 0]
 }
 
 // The outline of an arch, as a Convex prism profile's vertices: a half circle `radius` either side of its axis springing

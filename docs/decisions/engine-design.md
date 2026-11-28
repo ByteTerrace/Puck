@@ -499,12 +499,21 @@ A rope net (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a
 sail) is a placement's `net` facet (`WorldPlacementNet`), never a creation of
 its own kind. The authority keeps a coarse grid of point masses over a
 parallelogram in the row's frame (`FixedNet`) and steps it in fixed point after
-the tick's bodies move: gravity, the weight of the bodies holding it at their
-holds' anchors, the nodes pushed out of the capsules leaning on it, a few
-compliant passes over every strand's cap (`FixedTetherConstraint.SolvePair`, a
-rope that may go slack but stretches only as its stiffness allows), and a final
-hold of every node within its reach of rest (`FixedTetherConstraint.Solve`). An
-untouched net sleeps and its step costs nothing. Its nodes ride the population's
+the tick's bodies move, in small slices of the step: gravity, the mass and
+weight of the bodies holding it at their holds' anchors, the nodes pushed out of
+the capsules leaning on it, one compliant pass over every strand's cap a slice
+(`FixedTetherConstraint.SolvePair`, a rope that may go slack but stretches only
+as its stiffness allows), and a hold of every node within its reach of rest
+(`FixedTetherConstraint.Solve`). A body holding the net presses it only through
+that load: its hold keeps it its standoff from the face it rides, so letting
+its volumes push the nodes as well would ratchet the face away a tick at a time
+until the nodes met their reach, whatever the body weighed. A net whose touch
+stays the same sleeps, held or not, and its step costs nothing. Bodies meet
+its strands, not a sheet, so its mesh is real: a body narrower than an opening
+passes through, brushing aside a strand it touches (a push only moves strands
+across the net's plane, never along it, so leaning never spreads them), and a
+hold takes the net through a sheet over its cells only for a body too wide for
+its opening. Its nodes ride the population's
 checkpoint and the authoritative hash (`WorldNets`), reach every client on the
 snapshot (`WorldSnapshot.Nets`), and collide as a sheet of thin rounded boxes
 over its cells, posed every tick in the analytic provider's live set. A body

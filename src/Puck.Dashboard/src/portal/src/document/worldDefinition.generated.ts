@@ -11697,7 +11697,7 @@ export type WorldPlacementNet = {
    */
   damping?: number;
   /**
-   * The slack each strand carries past its rest spacing, as a share of it, in [0, 1].
+   * The slack each strand carries past its rest spacing, as a share of it, in [−0.5, 1]: positive hangs the net loose, so it gives freely until its strands draw taut; negative strings it taut, each strand that share shorter than the spacing, so a load bellies it in proportion to its weight.
    */
   sag?: number;
   /**
@@ -11705,9 +11705,9 @@ export type WorldPlacementNet = {
    */
   reach?: number;
   /**
-   * The projection passes a step makes over every strand, 1 to MaxIterations.
+   * The slices a step is cut into, each solving every strand once, 1 to MaxSubsteps: more converge a stiffer net, at a strand solve each per strand.
    */
-  iterations?: number;
+  substeps?: number;
   /**
    * The thickness the net collides at, in metres before the row's scale: each node cell is a box this thick about the nodes' surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box's face; positive.
    */
@@ -16416,7 +16416,7 @@ export type WorldTabletopEngage = {
  */
 export type WorldTabletopSeat = {
   /**
-   * The chair's facing, in the convention of a spawn point's and a body's yaw: 0 faces -Z (the chair stands at the board's +Z edge), 90 faces -X, 180 faces +Z and 270 faces +X. A board's topology is world-axis-aligned, so a chair faces across one of its four edges: a whole number of quarter turns.
+   * The chair's facing relative to the board, in the convention of a spawn point's and a body's yaw: 0 faces the board's -Z (the chair stands at its +Z edge), 90 faces its -X, 180 its +Z and 270 its +X. The board turns with the placement that carries it, so a chair's world facing is this plus that placement's yaw, and a chair faces across one of the board's four edges: a whole number of quarter turns.
    */
   yawDegrees: number;
 };

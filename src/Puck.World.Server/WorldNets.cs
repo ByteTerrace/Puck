@@ -16,7 +16,8 @@ public sealed record WorldNetCheckpoint(string Placement, FixedNetState State);
 /// carries every node.
 /// </summary>
 /// <remarks>Invariant: a panel's colliders are a function of its net's nodes and its strand, cached by the net's
-/// <see cref="FixedNet.Revision"/>, which every writer of a node moves; <see cref="Panel.Colliders"/> is the one reader.</remarks>
+/// <see cref="FixedNet.Revision"/>, which every writer of a node moves; <see cref="Panel.Colliders"/> and
+/// <see cref="Panel.HoldColliders"/> are the readers.</remarks>
 public sealed class WorldNets {
     private readonly Panel[] m_panels;
     private readonly Dictionary<string, int> m_byId;
@@ -25,8 +26,10 @@ public sealed class WorldNets {
     public sealed class Panel {
         private FixedStaticCollider[] m_colliders = [];
         private int m_collidersRevision = -1;
+        private FixedStaticCollider[] m_holdColliders = [];
+        private int m_holdCollidersRevision = -1;
 
-        internal Panel(WorldPlacement placement, WorldPlacementNet facet, FixedNet net) {
+        internal Panel(WorldPlacement placement, WorldPlacementNet facet, FixedNet net, FixedQ4816 contactReach) {
             Id = placement.Id;
             Facet = facet;
             Net = net;
@@ -35,6 +38,8 @@ public sealed class WorldNets {
 
             Strand = (FixedQ4816.FromDouble(value: facet.Strand) * scale);
             Gravity = new FixedVector3(X: FixedQ4816.Zero, Y: -FixedQ4816.FromDouble(value: facet.Gravity), Z: FixedQ4816.Zero);
+            Near = net.RestBox.Grow(margin: ((net.Spec.Reach + Strand) + contactReach));
+            Opening = FixedQ4816.Max(x: FixedQ4816.Zero, y: net.Opening(strand: Strand));
         }
 
         /// <summary>Gets the placement's id.</summary>
@@ -45,13 +50,32 @@ public sealed class WorldNets {
         public FixedNet Net { get; }
         /// <summary>Gets the thickness the net collides at, in metres, the row's scale applied.</summary>
         public FixedQ4816 Strand { get; }
+        /// <summary>Gets the widest a body may be and pass through the net's mesh at rest, in metres
+        /// (<see cref="FixedNet.Opening"/>): a body that narrow meets the openings between the strands, and no hold
+        /// takes the net for it.</summary>
+        public FixedQ4816 Opening { get; }
         /// <summary>Gets the acceleration the net's free nodes fall at.</summary>
         public FixedVector3 Gravity { get; }
+        /// <summary>Gets the box a body's foot point lies in, grown by the body's broadphase radius, whenever the body can
+        /// touch the net: the rest layout grown by the reach, the strand and the contact band.</summary>
+        public FixedAabb Near { get; }
         /// <summary>Gets how many bodies held the net at its latest step.</summary>
         public int Holders { get; internal set; }
+        // How many bodies the step being gathered found holding the net; its loads hold a hand and a foot load each.
+        internal int Holding { get; set; }
         /// <summary>Gets how many body volumes leaned on the net at its latest step.</summary>
         public int Pushers { get; internal set; }
         internal List<FixedNetLoad> Loads { get; } = [];
+        /// <summary>Returns a point's place on the net's grid, whatever its height off the net, when it lies over the
+        /// grid.</summary>
+        /// <param name="point">The point.</param>
+        /// <param name="column">The grid column, in node units.</param>
+        /// <param name="row">The grid row, in node units.</param>
+        /// <returns>Whether the point lies over the grid.</returns>
+        public bool TryLocateOnGrid(in FixedVector3 point, out FixedQ4816 column, out FixedQ4816 row) =>
+            (Net.TryGrid(column: out column, height: out _, point: in point, row: out row) && OnGrid(column: column, row: row));
+        private bool OnGrid(FixedQ4816 column, FixedQ4816 row) => ((column >= FixedQ4816.Zero) && (row >= FixedQ4816.Zero) &&
+            (column <= FixedQ4816.FromInteger(value: (Net.Spec.Columns - 1))) && (row <= FixedQ4816.FromInteger(value: (Net.Spec.Rows - 1))));
         internal List<FixedNetPusher> Pushing { get; } = [];
 
         /// <summary>Returns whether a point lies on the net: over its grid, and within its reach, its strand and the contact
@@ -62,33 +86,43 @@ public sealed class WorldNets {
         /// <param name="row">The grid row, in node units.</param>
         /// <returns>Whether the point lies on the net.</returns>
         public bool TryLocate(in FixedVector3 point, FixedQ4816 contactReach, out FixedQ4816 column, out FixedQ4816 row) {
-            if (!Net.TryGrid(column: out column, height: out var height, point: in point, row: out row)) { return false; }
-            if ((column < FixedQ4816.Zero) || (row < FixedQ4816.Zero) ||
-                (column > FixedQ4816.FromInteger(value: (Net.Spec.Columns - 1))) || (row > FixedQ4816.FromInteger(value: (Net.Spec.Rows - 1)))) {
-                return false;
-            }
+            if (!Net.TryGrid(column: out column, height: out var height, point: in point, row: out row) || !OnGrid(column: column, row: row)) { return false; }
             var surface = FixedVector3.Dot(left: Net.OffsetAt(column: column, row: row), right: Net.Normal);
 
             return (FixedQ4816.Abs(value: (height - surface)) <= ((Net.Spec.Reach + Strand) + contactReach));
         }
 
-        /// <summary>Returns the net's cell colliders as it stands (<see cref="FixedNet.CellColliders"/>), each rounded by
-        /// half the strand, recomputed only when a node moved.</summary>
+        /// <summary>Returns the colliders bodies meet as the net stands: its strands (<see cref="FixedNet.StrandColliders"/>),
+        /// each rounded by half the strand, recomputed only when a node moved.</summary>
+        /// <returns>The colliders, in strand order, borrowed until the net next moves.</returns>
+        public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true);
+        /// <summary>Returns the surface a hold takes as the net stands: a sheet over its cells (<see cref="FixedNet.CellColliders"/>),
+        /// so a climber's hands find the net between its strands as on them, recomputed only when a node moved. Bodies
+        /// do not meet it.</summary>
         /// <returns>The colliders, row by row, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> Colliders() {
-            if (m_collidersRevision != Net.Revision) {
-                if (m_colliders.Length != Net.CellCount) { m_colliders = new FixedStaticCollider[Net.CellCount]; }
-                Net.CellColliders(destination: m_colliders, radius: (Strand / FixedQ4816.FromInteger(value: 2)));
-                m_collidersRevision = Net.Revision;
+        public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false);
+        // One of the net's collider sets as it stands, rounded by half the strand, posed again only when a node moved.
+        private ReadOnlySpan<FixedStaticCollider> Posed(ref FixedStaticCollider[] cache, ref int revision, bool strands) {
+            if (revision != Net.Revision) {
+                var count = (strands ? Net.FreeStrandCount : Net.CellCount);
+                var radius = (Strand / FixedQ4816.FromInteger(value: 2));
+
+                if (cache.Length != count) { cache = new FixedStaticCollider[count]; }
+                if (strands) { Net.StrandColliders(destination: cache, radius: radius); } else { Net.CellColliders(destination: cache, radius: radius); }
+                revision = Net.Revision;
             }
-            return m_colliders;
+            return cache;
         }
     }
 
     private WorldNets(Panel[] panels) {
         m_panels = panels;
         m_byId = new Dictionary<string, int>(capacity: panels.Length, comparer: StringComparer.Ordinal);
-        for (var index = 0; (index < panels.Length); index++) { m_byId[panels[index].Id] = index; }
+        Near = FixedAabb.Empty;
+        for (var index = 0; (index < panels.Length); index++) {
+            m_byId[panels[index].Id] = index;
+            Near = Near.Enclose(other: panels[index].Near);
+        }
     }
 
     /// <summary>Gets a set of no nets.</summary>
@@ -96,6 +130,9 @@ public sealed class WorldNets {
 
     /// <summary>Gets the nets, in document order.</summary>
     public ReadOnlySpan<Panel> Panels => m_panels;
+    /// <summary>Gets the box every net's <see cref="Panel.Near"/> lies in: a body outside it, grown by its broadphase
+    /// radius, touches no net.</summary>
+    public FixedAabb Near { get; }
     /// <summary>Gets how many nets are awake.</summary>
     public int AwakeCount {
         get {
@@ -120,9 +157,11 @@ public sealed class WorldNets {
     /// settles into its sag before it first sleeps.</summary>
     /// <param name="definition">The document.</param>
     /// <param name="previous">The nets before, or <see langword="null"/>.</param>
+    /// <param name="contactReach">The contact band a body acts across (<c>FixedWorldCollision.ContactReach</c>), in
+    /// metres, which each net's <see cref="Panel.Near"/> box reaches.</param>
     /// <returns>The nets.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldNets Build(WorldDefinition definition, WorldNets? previous) {
+    public static WorldNets Build(WorldDefinition definition, WorldNets? previous, FixedQ4816 contactReach) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         List<Panel>? panels = null;
@@ -138,7 +177,7 @@ public sealed class WorldNets {
                 // A new net starts awake, so it settles into its rest sag under gravity before it first sleeps.
                 net.Wake();
             }
-            (panels ??= []).Add(item: new Panel(facet: facet, net: net, placement: placement));
+            (panels ??= []).Add(item: new Panel(contactReach: contactReach, facet: facet, net: net, placement: placement));
         }
         return ((panels is null) ? Empty : new WorldNets(panels: [.. panels]));
     }
