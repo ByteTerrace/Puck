@@ -127,12 +127,14 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: _ => color, endpoint: north, hostFrame: static () => null);
         // A source writes one frame object again for each capture, so each capture's program is taken as it is captured.
         var first = Capture(source: scene.FrameSource).Program;
+        // The composition lets a replaced program's storage go, so its words are read while it is held.
+        var firstWords = first.CopyWords();
 
         color = Vector3.UnitY;
         var second = Capture(source: scene.FrameSource).Program;
 
         Assert.NotSame(actual: second, expected: first);
-        Assert.False(condition: first.CopyWords().AsSpan().SequenceEqual(other: second.CopyWords()));
+        Assert.False(condition: firstWords.AsSpan().SequenceEqual(other: second.CopyWords()));
         var steady = Capture(source: scene.FrameSource).Program;
 
         Assert.Same(actual: steady, expected: second);

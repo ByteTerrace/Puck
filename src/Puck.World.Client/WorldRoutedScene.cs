@@ -24,7 +24,7 @@ namespace Puck.World.Client;
 /// </list>
 /// The world's text screens draw through its own font catalog (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>).
 /// </summary>
-public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
+public sealed class WorldRoutedScene : ISdfFrameDresser, ISdfRefitDresser, IDisposable {
     /// <summary>Releases this scene's delivered-tick subscription, and the claims its composition and its frame hold on
     /// the programs they carry (<see cref="SdfProgram.Exchange"/>).</summary>
     public void Dispose() {
@@ -271,7 +271,91 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         // The scene's one frame, written again for each capture from the emitter's, which the emitter writes again too.
         _ = m_frameWriter.Write(content: in content, settings: (Interest(settings: frame.Settings) with { DiagnosticSource = m_diagnosticSource }));
 
-        return m_emitter.TakeLevers(frame: m_frameWriter, height: height, host: host, views: m_frameViews, width: width);
+        var dressed = m_emitter.TakeLevers(frame: m_frameWriter, height: height, host: host, views: m_frameViews, width: width);
+
+        // The world as the capture found it when it began (Follow), so a delivery that arrived while it packed or dressed
+        // differs from the record and the next frame captures it.
+        m_dressRecord = m_followRecord;
+        m_dressedDocument = m_followDocument;
+        return dressed;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Answers only for a scene shown through windows alone, each with the view its holder fitted this frame
+    /// (<see cref="WorldRoutedWindow.View"/>), whose world has not moved since its latest dress: no definition, composition
+    /// or state delivery changed a value, no body moved or is left moving (<see cref="WorldSessionMirror.BodyRevision"/>,
+    /// <see cref="WorldSessionMirror.MovingBodyCount"/>), the stamp pool rests past one period of the hold
+    /// (<see cref="WorldCreationInstances.Rests"/>), the presentation's levers stand, and the presentation is neither
+    /// tick-locked nor converging. The views are the windows' then the cameras <see cref="Film"/> adds, with the sky layers
+    /// fitted to them (<see cref="FitSkyViews"/>) against the held sky; the settings are the held frame's under this
+    /// frame's interest. A scene a seat is presented in, or a second scene of the presentation's own world
+    /// (<see cref="HostDemand"/>), never answers.</remarks>
+    public bool TryRefit(SdfFrame held, uint width, uint height, out IReadOnlyList<SdfViewSnapshot> views, out SdfFrameSettings settings) {
+        ArgumentNullException.ThrowIfNull(argument: held);
+
+        views = m_frameViews;
+        settings = default;
+        if ((m_latchedSeatCount != 0) || (m_latchedWindows.Count == 0) || (HostDemand is not null) || (m_hostFrame() is not { TickLocked: false, ConvergesLighting: false } host) ||
+            !ReferenceEquals(objA: Mirror.Document, objB: m_dressedDocument) || (RecordOf() != m_dressRecord) || (Mirror.MovingBodyCount != 0) ||
+            !BodyStamps.Rests(seconds: (1d / Puck.SdfVm.SdfWorldResidency.ContentHoldHertz)) ||
+            (host.EnableCadenceGate != held.EnableCadenceGate) || (host.MeshCull != held.MeshCull) || (host.MeshDetail != held.MeshDetail) ||
+            (host.UpdateRates != held.UpdateRates) || !ReferenceEquals(objA: host.RateCounts, objB: held.RateCounts) ||
+            !ReferenceEquals(objA: host.RateIntervals, objB: held.RateIntervals)) {
+            return false;
+        }
+        foreach (var window in m_latchedWindows) {
+            if (window.View is null) { return false; }
+        }
+
+        m_frameViews.Clear();
+        foreach (var window in m_latchedWindows) { m_frameViews.Add(item: window.View!.Value); }
+        Film?.Invoke(obj: m_frameViews);
+        FitSkyViews?.Invoke(m_frameViews, held.Sky, width, height);
+        settings = Interest(settings: held.Settings);
+        return true;
+    }
+
+    // What a dress of the scene reads that can start a change in its world, beside the views and the presentation's
+    // levers: the delivered document (by reference, m_dressedDocument) and its revisions, the state mirror's counters, the
+    // bodies' delivery counter and the session's levers. The latest dress's (m_dressRecord) is compared by value with this
+    // frame's (TryRefit); a record struct, so a value it gains is compared with it. The state mirror is a class compared by
+    // reference.
+    private readonly record struct DressRecord(
+        bool Dressed, int Definition, int Composing, int Snapshot, int Bodies,
+        WorldStateMirror? State, int StateRevision, int StateColors, int StateGeneration, int Session, int Sky);
+
+    private DressRecord m_dressRecord;
+    private Puck.World.Protocol.WorldDeliveredDocument? m_dressedDocument;
+    // The record Follow took as this frame's capture began, which a dress keeps as its own.
+    private DressRecord m_followRecord;
+    private Puck.World.Protocol.WorldDeliveredDocument? m_followDocument;
+
+    /// <summary>Brings the scene's state mirror up to the latest delivery as a residency's capture of the scene begins, and
+    /// notes what the capture is about to read of the world, which a later frame's <see cref="TryRefit"/> compares with.
+    /// The composition's packers can follow the mirror on a worker, so the state they read is published here. Called on the
+    /// frame thread, from the residency's film gate, once a frame.</summary>
+    public void Follow() {
+        _ = Mirror.FollowState();
+        m_followDocument = Mirror.Document;
+        m_followRecord = RecordOf();
+    }
+
+    private DressRecord RecordOf() {
+        var state = Mirror.FollowState();
+
+        return new DressRecord(
+            Bodies: Mirror.BodyRevision,
+            Composing: Mirror.ComposingRevision,
+            Definition: Mirror.DefinitionRevision,
+            Dressed: true,
+            Session: (m_emitter.Session?.Revision ?? 0),
+            Sky: (m_emitter.SkyLayers?.Revision ?? 0),
+            Snapshot: Mirror.SnapshotRevision,
+            State: state,
+            StateColors: state.ColorRevision,
+            StateGeneration: state.Generation,
+            StateRevision: state.Revision
+        );
     }
 
     // Puts the frame under the interest its views show: a scene a seat is presented in fills the display, and one shown

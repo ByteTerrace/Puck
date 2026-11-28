@@ -54,6 +54,19 @@ public static class SdfCaptureWork {
     /// upload, a held frame or a budget hold the passing of time lifts.</summary>
     public static readonly WorkKind Pumped = new(name: "sdf.captures.pumped", unit: "residencies", workClass: WorkClass.Pacing);
 
+    /// <summary>Counts the captures a residency stood on its held frame because its world's content stands
+    /// (<see cref="SdfWorldResidency.ContentHoldHertz"/>): no view moved, so it neither captured, packed nor dressed.
+    /// Each is a capture <see cref="Run"/> does not count.</summary>
+    public static readonly WorkKind ContentHeld = new(name: "sdf.captures.content-held", unit: "captures", workClass: WorkClass.Pacing);
+    /// <summary>Counts the captures a residency answered with its held content and this frame's views
+    /// (<see cref="ISdfRefitDresser"/>): its world's content stands while a view moved, so the views were fitted again
+    /// and the composition was not asked. Each is a capture <see cref="Run"/> does not count.</summary>
+    public static readonly WorkKind ContentRefit = new(name: "sdf.captures.content-refit", unit: "captures", workClass: WorkClass.Pacing);
+    /// <summary>Counts the full captures that found their world's content where the capture before left it, which arms
+    /// the next frames' holds; against <see cref="Run"/>, the share of captures a still world spends confirming it
+    /// stands.</summary>
+    public static readonly WorkKind ContentStill = new(name: "sdf.captures.content-still", unit: "captures", workClass: WorkClass.Pacing);
+
     /// <summary>Gets the process's capture counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, PackedAhead, PackAheadWaits, UploadedBeside, UploadedOnWorker, CopiesStaged, Pumped]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, PackedAhead, PackAheadWaits, UploadedBeside, UploadedOnWorker, CopiesStaged, Pumped, ContentHeld, ContentRefit, ContentStill]);
 }

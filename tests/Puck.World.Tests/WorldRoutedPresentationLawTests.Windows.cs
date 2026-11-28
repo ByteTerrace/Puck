@@ -193,7 +193,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Names(refusing: () => _ = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, domains: null!, endpoint: north, hostFrame: static () => null));
 
         // The two roots that take a long list of services refuse the guard before anything else.
-        foreach (var type in new[] { typeof(WorldFramePresenter), Assert.IsAssignableFrom<Type>(@object: Type.GetType(typeName: "Puck.World.WorldScreenBinder, Puck.World")) }) {
+        foreach (var type in new[] { typeof(WorldFramePresenter), Assert.IsAssignableFrom<Type>(@object: Type.GetType(typeName: "Puck.World.WorldScreenBinder, Puck.World.Presentation")) }) {
             var constructor = Assert.Single(collection: type.GetConstructors());
             var arguments = constructor.GetParameters().Select(selector: static parameter => (parameter.ParameterType.IsValueType
                 ? Activator.CreateInstance(type: parameter.ParameterType)

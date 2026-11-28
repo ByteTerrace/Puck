@@ -51,6 +51,24 @@ public interface ISdfFrameDresser {
     /// default, for none.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => null;
 }
+/// <summary>A dresser whose frame's views a residency can fit again on content it holds, so a world whose content stands
+/// is not composed again for each view that moves (<see cref="SdfWorldResidency.ContentHoldHertz"/>).</summary>
+public interface ISdfRefitDresser {
+    /// <summary>Returns the views and settings a dress now would give a frame of <paramref name="held"/>'s content, or
+    /// <see langword="false"/> when anything a dress reads beside the views and the settings (the world's delivered
+    /// state, its bodies, its replay cursors, the presentation's levers, the frame's interest) may have moved since the
+    /// dress that made <paramref name="held"/>'s content. Called on the frame thread in place of a capture, after the
+    /// residency's film gate; a <see langword="true"/> answer has run every per-frame step of a dress that places views
+    /// (the filmed cameras, the fitted sky layers) and nothing that composes content.</summary>
+    /// <param name="held">The frame the residency holds, the latest it captured or fitted again.</param>
+    /// <param name="width">The render width, in pixels.</param>
+    /// <param name="height">The render height, in pixels.</param>
+    /// <param name="views">The views, when this returns <see langword="true"/>: a list the dresser writes again at its
+    /// next dress or fit.</param>
+    /// <param name="settings">The settings, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the views and settings answer for a dress of the held content.</returns>
+    bool TryRefit(SdfFrame held, uint width, uint height, out IReadOnlyList<SdfViewSnapshot> views, out SdfFrameSettings settings);
+}
 /// <summary>Composes geometry sources, allocating their actual encoded transforms and rigid-copy roots. Only geometry revisions rebuild the field program; copy membership and poses do not.</summary>
 public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDisposable {
     /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
@@ -704,6 +722,46 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDispos
         if (!PrepareCapture(deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha, rebuilt: out var rebuilt)) { return null; }
         PackCapture(rebuilt: rebuilt);
         return FinishCapture(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+    }
+
+    /// <summary>Gets whether the composition's dresser fits views again on held content (<see cref="ISdfRefitDresser"/>),
+    /// which <see cref="TryRefit"/> needs before anything else.</summary>
+    internal bool Refits => (m_dresser is ISdfRefitDresser);
+    /// <summary>Returns the views and settings a capture now would give a frame of <paramref name="held"/>'s content, in
+    /// place of the capture, when the composition would compose that same content: its dresser fits views again
+    /// (<see cref="ISdfRefitDresser"/>), no build is in flight, the held frame carries the program the composition holds
+    /// under the current slot layout, and every emitter, prepared for the frame, writes the revision components the held
+    /// program was built from. Prepares every emitter for the frame (<see cref="ISdfSceneEmitter.PrepareFrame"/>), as a
+    /// capture does first; a capture that follows a <see langword="false"/> answer prepares them again, which finds them
+    /// prepared.</summary>
+    /// <param name="held">The frame the residency holds.</param>
+    /// <param name="width">The render width, in pixels.</param>
+    /// <param name="height">The render height, in pixels.</param>
+    /// <param name="views">The views, when this returns <see langword="true"/>.</param>
+    /// <param name="settings">The settings, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the held content answers for a capture.</returns>
+    internal bool TryRefit(SdfFrame held, uint width, uint height, out IReadOnlyList<SdfViewSnapshot> views, out SdfFrameSettings settings) {
+        ArgumentNullException.ThrowIfNull(argument: held);
+
+        views = [];
+        settings = default;
+        if (m_disposed || (m_dresser is not ISdfRefitDresser refit) || (m_building is not null) || !m_transformsPacked ||
+            (m_program is not { } program) || !ReferenceEquals(objA: program, objB: held.Program) || (m_programLayout != m_layout)) {
+            return false;
+        }
+        for (var index = 0; (index < m_emitters.Count); index++) { m_emitters[index].PrepareFrame(); }
+
+        var slots = 0;
+        var roots = 0;
+
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            if (m_slotBases[index] != slots) { return false; }
+            slots += m_emitters[index].DynamicSlotCount;
+            roots += m_emitters[index].MeshInstances.Count;
+        }
+
+        return ((slots == m_programSlots) && (m_transforms.Length == (slots + roots)) && !CaptureRevisions() &&
+            refit.TryRefit(held: held, height: height, settings: out settings, views: out views, width: width));
     }
 
     // Program adoption and emitter preparation run before a fork. The host may latch shared presentation inputs here.

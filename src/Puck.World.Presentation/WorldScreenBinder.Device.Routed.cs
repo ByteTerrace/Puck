@@ -145,7 +145,7 @@ public sealed partial class WorldScreenBinder {
 
                 FitRoutedWindows(scene: scene);
                 // The composition's packers can follow this mirror on a worker. Publish the state they read here.
-                _ = scene.Mirror.FollowState();
+                scene.Follow();
 
                 return true;
             },
